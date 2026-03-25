@@ -103,6 +103,25 @@ public class ImageReferenceTests
     }
 
     [Fact]
+    public void Text_to_video_workflows_force_generated_image_reference()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        T2IParamInput input = BuildInput(new JArray(
+            MakeStage(models.VideoModel.Name, "Base"),
+            MakeStage(models.VideoModel.Name, "Refiner")
+        ).ToString());
+        input.Set(T2IParamTypes.Model, models.VideoModel);
+        input.Set(T2IParamTypes.Text2VideoFrames, 25);
+
+        List<JsonParser.StageSpec> stages = ParseStages(input);
+
+        Assert.Equal(2, stages.Count);
+        Assert.All(stages, stage => Assert.Equal("Generated", stage.ImageReference));
+    }
+
+    [Fact]
     public void Invalid_json_is_ignored_safely()
     {
         List<JsonParser.StageSpec> stages = ParseStages("{ definitely-not-json");

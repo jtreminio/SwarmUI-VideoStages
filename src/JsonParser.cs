@@ -116,7 +116,7 @@ public class JsonParser(WorkflowGenerator g)
         );
     }
 
-    private static bool TryParseStage(JObject stage, int index, StageDefaults defaults, out StageSpec parsedStage)
+    private bool TryParseStage(JObject stage, int index, StageDefaults defaults, out StageSpec parsedStage)
     {
         parsedStage = null;
         string model = GetOptionalString(stage, "Model", defaultValue: null, index, allowEmpty: false);
@@ -151,8 +151,22 @@ public class JsonParser(WorkflowGenerator g)
         return true;
     }
 
-    private static string NormalizeImageReference(string rawValue, int index)
+    private string NormalizeImageReference(string rawValue, int index)
     {
+        if (IsTextToVideoRootWorkflow())
+        {
+            if (!string.IsNullOrWhiteSpace(rawValue))
+            {
+                string rawCompact = rawValue.Trim().Replace(" ", "");
+                if (!string.Equals(rawCompact, DefaultGeneratedReference, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logs.Warning($"VideoStages: Stage {index} uses ImageReference '{rawValue}' on a text-to-video workflow. Using '{DefaultGeneratedReference}' instead.");
+                }
+            }
+
+            return DefaultGeneratedReference;
+        }
+
         string defaultReference = GetDefaultImageReference(index);
         if (string.IsNullOrWhiteSpace(rawValue))
         {
@@ -189,6 +203,17 @@ public class JsonParser(WorkflowGenerator g)
 
         Logs.Warning($"VideoStages: Stage {index} has invalid ImageReference '{rawValue}'. Using '{defaultReference}' instead.");
         return defaultReference;
+    }
+
+    private bool IsTextToVideoRootWorkflow()
+    {
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
+        {
+            return false;
+        }
+
+        return g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
+            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
     }
 
     private static string GetDefaultImageReference(int index)

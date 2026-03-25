@@ -69,6 +69,30 @@ public partial class StageFlowTests
         return input;
     }
 
+    private static T2IParamInput BuildTextToVideoInput(
+        T2IModel videoModel,
+        string stagesJson,
+        bool enableVideoStages = true,
+        string prompt = "unit test prompt")
+    {
+        _ = WorkflowTestHarness.VideoStagesSteps();
+        T2IParamInput input = new(null);
+        input.Set(T2IParamTypes.Prompt, prompt);
+        input.Set(T2IParamTypes.Seed, 1L);
+        input.Set(T2IParamTypes.Width, 512);
+        input.Set(T2IParamTypes.Height, 512);
+        input.Set(T2IParamTypes.Model, videoModel);
+        input.Set(VideoStagesExtension.EnableVideoStages, enableVideoStages);
+        input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
+        input.Set(T2IParamTypes.Text2VideoFrames, 25);
+        if (Program.T2IModelSets.TryGetValue("Clip", out T2IModelHandler clipHandler)
+            && clipHandler.Models.TryGetValue("gemma_3_12B_it.safetensors", out T2IModel gemmaModel))
+        {
+            input.Set(T2IParamTypes.GemmaModel, gemmaModel);
+        }
+        return input;
+    }
+
     private static WorkflowNode RequireRetargetedSeparateNode(JObject workflow, WorkflowNode videoDecode)
     {
         JArray videoLatents = WorkflowAssertions.RequireConnectionInput(videoDecode.Node, "samples");
@@ -470,6 +494,75 @@ public partial class StageFlowTests
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeSteps(bool attachAudioToCurrentMedia) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia)])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static WorkflowGenerator.WorkflowGenStep SeedTextToVideoLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
+        new(g =>
+        {
+            T2IModel videoModel = g.UserInput.Get(T2IParamTypes.Model, null);
+            g.FinalLoadedModel = videoModel;
+            g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
+
+            string videoModelNode = g.CreateNode("UnitTest_VideoModel", new JObject(), id: "103", idMandatory: false);
+            g.CurrentModel = new WGNodeData([videoModelNode, 0], g, WGNodeData.DT_MODEL, g.CurrentCompat());
+            g.CurrentTextEnc = new WGNodeData([videoModelNode, 1], g, WGNodeData.DT_TEXTENC, g.CurrentCompat());
+
+            string videoVaeNode = g.CreateNode("UnitTest_VideoVae", new JObject(), id: "104", idMandatory: false);
+            g.CurrentVae = new WGNodeData([videoVaeNode, 0], g, WGNodeData.DT_VAE, g.CurrentCompat());
+
+            string audioVaeNode = g.CreateNode("UnitTest_AudioVae", new JObject(), id: "105", idMandatory: false);
+            g.CurrentAudioVae = new WGNodeData([audioVaeNode, 0], g, WGNodeData.DT_AUDIOVAE, g.CurrentCompat());
+
+            string avLatent = g.CreateNode("UnitTest_InitialAvLatent", new JObject(), id: "200", idMandatory: false);
+            string separate = g.CreateNode("LTXVSeparateAVLatent", new JObject()
+            {
+                ["av_latent"] = new JArray(avLatent, 0)
+            }, id: "201", idMandatory: false);
+
+            string videoDecode = g.CreateNode("VAEDecodeTiled", new JObject()
+            {
+                ["vae"] = new JArray(videoVaeNode, 0),
+                ["samples"] = new JArray(separate, 0),
+                ["tile_size"] = 2048,
+                ["overlap"] = 256,
+                ["temporal_size"] = 64,
+                ["temporal_overlap"] = 16
+            }, id: "202", idMandatory: false);
+
+            string audioDecode = g.CreateNode("LTXVAudioVAEDecode", new JObject()
+            {
+                ["audio_vae"] = new JArray(audioVaeNode, 0),
+                ["samples"] = new JArray(separate, 1)
+            }, id: "203", idMandatory: false);
+
+            _ = g.CreateNode("SwarmSaveAnimationWS", new JObject()
+            {
+                ["images"] = new JArray(videoDecode, 0),
+                ["audio"] = new JArray(audioDecode, 0),
+                ["fps"] = 24,
+                ["lossless"] = false,
+                ["quality"] = 95,
+                ["method"] = "default",
+                ["format"] = "h264-mp4"
+            }, id: "9", idMandatory: false);
+
+            g.CurrentMedia = new WGNodeData([videoDecode, 0], g, WGNodeData.DT_VIDEO, g.CurrentCompat())
+            {
+                Width = 512,
+                Height = 512,
+                Frames = 25,
+                FPS = 24
+            };
+
+            if (attachAudioToCurrentMedia)
+            {
+                g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+            }
+        }, 11);
+
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildTextToVideoSteps(bool attachAudioToCurrentMedia) =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedTextToVideoLtxVideoChainStep(attachAudioToCurrentMedia)])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithCurrentVaeMismatch(T2IModel baseModel, bool attachAudioToCurrentMedia) =>

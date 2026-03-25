@@ -83,6 +83,33 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Text_to_video_root_model_without_video_model_still_runs_configured_stage()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Base", steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildTextToVideoSteps(attachAudioToCurrentMedia: true));
+
+        IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
+        Assert.Single(samplers);
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+
+        StageRefStore store = new(generator);
+        Assert.NotNull(store.Generated);
+    }
+
+    [Fact]
     public void Two_stages_on_native_video_workflow_add_two_samplers_and_keep_single_final_save()
     {
         using SwarmUiTestContext _ = new();

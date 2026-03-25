@@ -96,14 +96,57 @@ class VideoStageEditor {
     getStagesInput() {
         return VideoStageUtils.getInputElement("input_videostages");
     }
+    getEnableToggle() {
+        return VideoStageUtils.getInputElement("input_enableadditionalvideostages")
+            ?? VideoStageUtils.getInputElement("input_enablevideostages");
+    }
+    getRootModelInput() {
+        return VideoStageUtils.getInputElement("input_model");
+    }
+    isRootTextToVideoModel() {
+        let modelName = `${this.getRootModelInput()?.value ?? ""}`.trim();
+        if (!modelName) {
+            return false;
+        }
+        if (typeof modelsHelpers != "undefined"
+            && modelsHelpers
+            && typeof modelsHelpers.getDataFor == "function") {
+            let modelData = modelsHelpers.getDataFor("Stable-Diffusion", modelName);
+            if (modelData?.modelClass?.compatClass?.isText2Video) {
+                return true;
+            }
+        }
+        if (typeof currentModelHelper != "undefined"
+            && currentModelHelper
+            && currentModelHelper.curCompatClass
+            && typeof modelsHelpers != "undefined"
+            && modelsHelpers
+            && modelsHelpers.compatClasses) {
+            let compatClass = modelsHelpers.compatClasses[currentModelHelper.curCompatClass];
+            return !!compatClass?.isText2Video;
+        }
+        return false;
+    }
+    getDefaultStageModel(modelValues) {
+        if (this.isRootTextToVideoModel()) {
+            let modelName = `${this.getRootModelInput()?.value ?? ""}`.trim();
+            if (modelName) {
+                return modelName;
+            }
+        }
+        return this.firstValue(modelValues, "");
+    }
     getRootDefaults() {
         let model = VideoStageUtils.getSelectElement("input_videomodel");
+        if ((!model || model.options.length == 0) && this.isRootTextToVideoModel()) {
+            model = VideoStageUtils.getSelectElement("input_model");
+        }
         let vae = VideoStageUtils.getSelectElement("input_vae");
         let sampler = VideoStageUtils.getSelectElement("input_sampler");
         let scheduler = VideoStageUtils.getSelectElement("input_scheduler");
         let upscaleMethod = VideoStageUtils.getSelectElement("input_refinerupscalemethod");
-        let steps = VideoStageUtils.getInputElement("input_videosteps");
-        let cfgScale = VideoStageUtils.getInputElement("input_videocfg");
+        let steps = VideoStageUtils.getInputElement("input_videosteps") ?? VideoStageUtils.getInputElement("input_steps");
+        let cfgScale = VideoStageUtils.getInputElement("input_videocfg") ?? VideoStageUtils.getInputElement("input_cfgscale");
         let allUpscaleMethodValues = VideoStageUtils.getSelectValues(upscaleMethod);
         let allUpscaleMethodLabels = VideoStageUtils.getSelectLabels(upscaleMethod);
         let upscaleMethodValues = allUpscaleMethodValues.filter((value) => value.startsWith("pixel-")
@@ -163,7 +206,7 @@ class VideoStageEditor {
                 : (defaults.upscaleMethodValues.includes("pixel-lanczos")
                     ? "pixel-lanczos"
                     : this.firstValue(defaults.upscaleMethodValues, "pixel-lanczos")),
-            model: previousStage ? previousStage.model : this.firstValue(defaults.modelValues, ""),
+            model: previousStage ? previousStage.model : this.getDefaultStageModel(defaults.modelValues),
             vae: previousStage ? previousStage.vae : this.firstValue(defaults.vaeValues, ""),
             steps: previousStage ? previousStage.steps : defaults.steps,
             cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
@@ -241,12 +284,15 @@ class VideoStageEditor {
         this.saveStages([this.buildDefaultStage(0, null)]);
     }
     isVideoStagesEnabled() {
-        let toggler = VideoStageUtils.getInputElement("input_enablevideostages");
+        let toggler = this.getEnableToggle();
         return toggler ? toggler.checked : false;
     }
     hasRootVideoModel() {
         let videoModel = VideoStageUtils.getInputElement("input_videomodel");
-        return !!videoModel?.value;
+        if (videoModel?.value) {
+            return true;
+        }
+        return this.isRootTextToVideoModel();
     }
     validateStages(stages) {
         let errors = [];
@@ -577,12 +623,22 @@ class VideoStageEditor {
         return this.normalizeStage(stage, stageIndex, previousStage);
     }
     buildImageReferenceOptions(_stageIndex, currentValue) {
+        if (this.isRootTextToVideoModel()) {
+            return {
+                values: ["Generated"],
+                labels: ["Generated Output"],
+                selected: "Generated"
+            };
+        }
         let values = ["Generated", "Base", "Refiner"];
         let labels = ["Generated Output", "Base Output", "Refiner Output"];
         let selected = this.normalizeImageReference(currentValue, 0);
         return { values, labels, selected };
     }
     normalizeImageReference(value, _stageIndex) {
+        if (this.isRootTextToVideoModel()) {
+            return "Generated";
+        }
         let raw = `${value || ""}`.trim();
         if (!raw) {
             return "Generated";

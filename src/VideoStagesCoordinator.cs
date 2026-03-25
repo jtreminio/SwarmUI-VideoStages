@@ -73,7 +73,23 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     private bool HasRootVideoModel()
     {
-        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel rootVideoModel) && rootVideoModel is not null;
+        return GetRootVideoModel() is not null;
+    }
+
+    private T2IModel GetRootVideoModel()
+    {
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
+        {
+            return imageToVideoModel;
+        }
+
+        if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
+            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true)
+        {
+            return textToVideoModel;
+        }
+
+        return null;
     }
 
     private bool IsVideoStagesEnabledForVideo()
