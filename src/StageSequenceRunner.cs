@@ -1,0 +1,116 @@
+using System;
+using System.Collections.Generic;
+using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
+using VideoStages.LTX2;
+
+namespace VideoStages;
+
+public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IReadOnlyList<JsonParser.StageSpec> stages)
+{
+    private const int IntermediateStageSaveId = 52100;
+
+    private readonly StageRunner _singleStageRunner = new(g);
+
+    public void Run()
+    {
+        List<int> usedSectionIds = [];
+        try
+        {
+            CaptureReference(StageRefStore.StageKind.Generated);
+            foreach (JsonParser.StageSpec stage in stages)
+            {
+                StageRefStore.StageRef guideRef = ResolveGuideReference(stage);
+
+                int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
+                usedSectionIds.Add(sectionId);
+                PrepareStageOverrides(stage, sectionId);
+                _singleStageRunner.RunStage(stage, sectionId, guideRef);
+                CaptureReference(StageRefStore.StageKind.Stage, stage.Id);
+
+                if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false) && stage.Id < stages.Count - 1)
+                {
+                    g.CurrentMedia.SaveOutput(g.CurrentVae, g.CurrentAudioVae, g.GetStableDynamicID(IntermediateStageSaveId, stage.Id));
+                }
+            }
+        }
+        finally
+        {
+            foreach (int sectionId in usedSectionIds)
+            {
+                g.UserInput.SectionParamOverrides.Remove(sectionId);
+            }
+        }
+    }
+
+    private void CaptureReference(StageRefStore.StageKind kind, int? index = null)
+    {
+        WGNodeData referenceMedia = g.CurrentMedia;
+        WGNodeData referenceVae = g.CurrentVae;
+        PostVideoChain postVideoChain = PostVideoChain.TryCapture(g);
+        if (postVideoChain is not null)
+        {
+            referenceMedia = postVideoChain.CreateStageInput();
+            referenceVae = postVideoChain.CreateStageInputVae();
+        }
+        store.Capture(kind, index, referenceMedia, referenceVae);
+    }
+
+    private void PrepareStageOverrides(JsonParser.StageSpec stage, int sectionId)
+    {
+        g.UserInput.SectionParamOverrides.Remove(sectionId);
+        g.UserInput.Set(T2IParamTypes.VideoModel.Type, stage.Model, sectionId);
+        g.UserInput.Set(T2IParamTypes.VideoSteps, stage.Steps, sectionId);
+        g.UserInput.Set(T2IParamTypes.Steps, stage.Steps, sectionId);
+        g.UserInput.Set(T2IParamTypes.VideoCFG, stage.CfgScale, sectionId);
+        g.UserInput.Set(T2IParamTypes.CFGScale, stage.CfgScale, sectionId);
+        g.UserInput.Set(ComfyUIBackendExtension.SamplerParam.Type, stage.Sampler, sectionId);
+        g.UserInput.Set(ComfyUIBackendExtension.SchedulerParam.Type, stage.Scheduler, sectionId);
+        if (JsonParser.IsUsableVaeValue(stage.Vae))
+        {
+            g.UserInput.Set(T2IParamTypes.VAE.Type, stage.Vae, sectionId);
+        }
+    }
+
+    private StageRefStore.StageRef ResolveGuideReference(JsonParser.StageSpec stage)
+    {
+        if (stage.ImageReference.Equals("Base", StringComparison.Ordinal))
+        {
+            return store.Base ?? throw new InvalidOperationException("ImageReference 'Base' requested, but no base reference exists.");
+        }
+        if (stage.ImageReference.Equals("Refiner", StringComparison.Ordinal))
+        {
+            return store.Refiner ?? throw new InvalidOperationException("ImageReference 'Refiner' requested, but no refiner reference exists.");
+        }
+        if (stage.ImageReference.Equals("Generated", StringComparison.Ordinal))
+        {
+            // "Generated" follows the latest generated output entering this stage.
+            if (stage.Id > 0 && store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
+            {
+                return previousGenerated;
+            }
+            return store.Generated ?? throw new InvalidOperationException("ImageReference 'Generated' requested, but no generated reference exists.");
+        }
+        if (stage.ImageReference.Equals("PreviousStage", StringComparison.Ordinal))
+        {
+            if (stage.Id <= 0)
+            {
+                throw new InvalidOperationException("ImageReference 'PreviousStage' cannot be used for the first stage.");
+            }
+            if (!store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousStage))
+            {
+                throw new InvalidOperationException($"ImageReference 'PreviousStage' requested, but stage {stage.Id - 1} does not exist.");
+            }
+            return previousStage;
+        }
+        if (ImageReferenceSyntax.TryParseExplicitStageIndex(stage.ImageReference, out int explicitStage))
+        {
+            if (!store.TryGetStageRef(explicitStage, out StageRefStore.StageRef explicitRef))
+            {
+                throw new InvalidOperationException($"ImageReference '{stage.ImageReference}' requested, but stage {explicitStage} does not exist.");
+            }
+            return explicitRef;
+        }
+        throw new InvalidOperationException($"Unknown ImageReference value '{stage.ImageReference}'.");
+    }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "swarmui-video-stages-extension",
+  "version": "1.0.0",
+  "description": "VideoStages extension for SwarmUI - multi-stage video workflows",
+  "private": true,
+  "scripts": {
+    "build": "npm run clean && node node_modules/typescript/bin/tsc",
+    "clean": "rm -f Assets/video-stages.js Assets/video-stages.js.map"
+  },
+  "devDependencies": {
+    "typescript": "^5.9"
+  }
+}

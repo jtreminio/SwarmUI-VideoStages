@@ -1,0 +1,3 @@
+#videostages_stage_editor .input-group-content > div.auto-input {
+    min-width: calc(max(14rem, 50% - 10px));
+}
