@@ -126,6 +126,7 @@ public partial class StageFlowTests
 
         WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
         Assert.Equal("VAEDecodeTiled", $"{finalVideoDecode.Node["class_type"]}");
+        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         WorkflowNode finalAudioDecode = WorkflowAssertions.RequireNodeById(workflow, "203");
@@ -167,6 +168,7 @@ public partial class StageFlowTests
         IReadOnlyList<WorkflowNode> tiledDecodeNodes = WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled");
         WorkflowNode finalVideoDecode = Assert.Single(tiledDecodeNodes);
         Assert.Equal("202", finalVideoDecode.Id);
+        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
         RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -200,6 +202,57 @@ public partial class StageFlowTests
         JArray preprocessImageInput = WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image");
 
         AssertGuideReferenceResolvesToPreprocessInput(workflow, preprocessImageInput, store.Base);
+    }
+
+    [Fact]
+    public void Native_ltx_stage_uses_hidden_strength_param_for_img_to_video_inplace()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Base", control: 0.5, steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        System.Reflection.FieldInfo strengthField = typeof(VideoStagesExtension).GetField(nameof(VideoStagesExtension.LTXVImgToVideoInplaceStrength));
+        Assert.NotNull(strengthField);
+        T2IRegisteredParam<double> strengthParam = Assert.IsType<T2IRegisteredParam<double>>(strengthField.GetValue(null));
+        Assert.False(strengthParam.Type.VisibleNormally);
+        Assert.True(strengthParam.Type.DoNotPreview);
+        input.Set(strengthParam, 0.35);
+
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
+
+        WorkflowNode imgToVideoNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Equal(0.35, imgToVideoNode.Node["inputs"]?.Value<double>("strength"));
+    }
+
+    [Fact]
+    public void Native_ltx_final_decode_uses_core_vae_tiling_overrides()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(T2IParamTypes.VAETileSize, 960);
+        input.Set(T2IParamTypes.VAETileOverlap, 96);
+        input.Set(T2IParamTypes.VAETemporalTileSize, 512);
+        input.Set(T2IParamTypes.VAETemporalTileOverlap, 12);
+
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
+
+        WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
+        AssertLtxFinalTiledDecodeUsesTiling(finalVideoDecode, 960, 96, 512, 12);
     }
 
     [Fact]
@@ -276,6 +329,7 @@ public partial class StageFlowTests
 
         WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
         Assert.Equal("VAEDecodeTiled", $"{finalVideoDecode.Node["class_type"]}");
+        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         WorkflowNode finalAudioDecode = WorkflowAssertions.RequireNodeById(workflow, "203");

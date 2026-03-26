@@ -15,9 +15,7 @@ namespace VideoStages.LTX2;
 internal sealed class PostVideoChain
 {
     private const string OriginalAudioLatentNodeHelperKey = "videostages.original-audio-latent";
-
-    private readonly WorkflowGenerator _generator;
-
+    private readonly WorkflowGenerator g;
     public readonly WGNodeData CurrentOutputMedia;
     public readonly JArray AvLatentPath;
     public readonly JArray AudioLatentPath;
@@ -40,7 +38,7 @@ internal sealed class PostVideoChain
         JArray decodeOutputPath,
         bool hasPostDecodeWrappers)
     {
-        _generator = generator;
+        g = generator;
         CurrentOutputMedia = currentOutputMedia;
         AvLatentPath = avLatentPath;
         AudioLatentPath = audioLatentPath;
@@ -122,7 +120,7 @@ internal sealed class PostVideoChain
 
     public WGNodeData CreateStageInput()
     {
-        WGNodeData stageInput = new(AvLatentPath, _generator, WGNodeData.DT_LATENT_AUDIOVIDEO, ResolveVideoCompat())
+        WGNodeData stageInput = new(AvLatentPath, g, WGNodeData.DT_LATENT_AUDIOVIDEO, ResolveVideoCompat())
         {
             Width = CurrentOutputMedia.Width,
             Height = CurrentOutputMedia.Height,
@@ -137,10 +135,10 @@ internal sealed class PostVideoChain
     {
         if (VideoVaePath is null || VideoVaePath.Count != 2)
         {
-            return _generator.CurrentVae;
+            return g.CurrentVae;
         }
 
-        return new WGNodeData(new JArray(VideoVaePath[0], VideoVaePath[1]), _generator, WGNodeData.DT_VAE, ResolveVideoCompat());
+        return new WGNodeData(new JArray(VideoVaePath[0], VideoVaePath[1]), g, WGNodeData.DT_VAE, ResolveVideoCompat());
     }
 
     public bool CanReuseCurrentOutputAsStageInput(WGNodeData sourceMedia)
@@ -154,16 +152,16 @@ internal sealed class PostVideoChain
     {
         if (vae?.Path is not JArray vaePath || vaePath.Count != 2)
         {
-            WGNodeData detachedCurrent = CloneMedia(_generator, CurrentOutputMedia);
+            WGNodeData detachedCurrent = CloneMedia(g, CurrentOutputMedia);
             AttachSourceAudio(detachedCurrent);
             return detachedCurrent;
         }
 
-        string detachedSeparate = _generator.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
+        string detachedSeparate = g.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
         {
             ["av_latent"] = new JArray(AvLatentPath[0], AvLatentPath[1])
         });
-        string detachedDecode = _generator.CreateNode(NodeTypes.VAEDecodeTiled, (_, n) =>
+        string detachedDecode = g.CreateNode(NodeTypes.VAEDecodeTiled, (_, n) =>
         {
             n["inputs"] = new JObject()
             {
@@ -175,7 +173,7 @@ internal sealed class PostVideoChain
                 ["temporal_overlap"] = 16
             };
         });
-        WGNodeData detachedGuide = new(new JArray(detachedDecode, 0), _generator, WGNodeData.DT_VIDEO, vae.Compat)
+        WGNodeData detachedGuide = new(new JArray(detachedDecode, 0), g, WGNodeData.DT_VIDEO, vae.Compat)
         {
             Width = CurrentOutputMedia.Width,
             Height = CurrentOutputMedia.Height,
@@ -212,24 +210,24 @@ internal sealed class PostVideoChain
 
     public void SpliceCurrentOutput(WGNodeData vae)
     {
-        if (_generator.CurrentMedia?.Path is not JArray stageOutputPath || stageOutputPath.Count != 2)
+        if (g.CurrentMedia?.Path is not JArray stageOutputPath || stageOutputPath.Count != 2)
         {
             return;
         }
 
-        string newSeparate = _generator.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
+        string newSeparate = g.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
         {
             ["av_latent"] = stageOutputPath
         });
 
-        RetargetVideoDecodeAsTiled(VideoDecodeNodeId, vae?.Path ?? _generator.CurrentVae?.Path, new JArray(newSeparate, 0));
+        RetargetVideoDecodeAsTiled(VideoDecodeNodeId, vae?.Path ?? g.CurrentVae?.Path, new JArray(newSeparate, 0));
         WorkflowUtils.RetargetInputConnections(
-            _generator.Workflow,
+            g.Workflow,
             new JArray($"{AudioLatentPath[0]}", AudioLatentPath[1]),
             new JArray(newSeparate, 1),
             connection => connection.NodeId == AudioDecodeNodeId && connection.InputName == "samples");
-        _generator.CurrentMedia = CloneMedia(_generator, CurrentOutputMedia);
-        AttachSourceAudio(_generator.CurrentMedia);
+        g.CurrentMedia = CloneMedia(g, CurrentOutputMedia);
+        AttachSourceAudio(g.CurrentMedia);
     }
 
     public void RetargetAnimationSaves(JArray newImagePath)
@@ -240,7 +238,7 @@ internal sealed class PostVideoChain
         }
 
         _ = WorkflowUtils.RetargetInputConnections(
-            _generator.Workflow,
+            g.Workflow,
             CurrentOutputMedia.Path,
             newImagePath,
             connection =>
@@ -249,7 +247,7 @@ internal sealed class PostVideoChain
                 {
                     return false;
                 }
-                if (_generator.Workflow[connection.NodeId] is not JObject node)
+                if (g.Workflow[connection.NodeId] is not JObject node)
                 {
                     return false;
                 }
@@ -328,7 +326,7 @@ internal sealed class PostVideoChain
         {
             return new WGNodeData(
                 originalAudioLatentPath,
-                _generator,
+                g,
                 WGNodeData.DT_LATENT_AUDIO,
                 ResolveAudioCompat());
         }
@@ -339,7 +337,7 @@ internal sealed class PostVideoChain
         {
             return new WGNodeData(
                 new JArray(attachedAudioPath[0], attachedAudioPath[1]),
-                _generator,
+                g,
                 CurrentOutputMedia.AttachedAudio.DataType,
                 CurrentOutputMedia.AttachedAudio.Compat)
             {
@@ -357,7 +355,7 @@ internal sealed class PostVideoChain
 
         return new WGNodeData(
             new JArray(AudioLatentPath[0], AudioLatentPath[1]),
-            _generator,
+            g,
             WGNodeData.DT_LATENT_AUDIO,
             ResolveAudioCompat());
     }
@@ -378,7 +376,7 @@ internal sealed class PostVideoChain
     private bool TryGetOriginalAudioLatentPath(out JArray originalAudioLatentPath)
     {
         originalAudioLatentPath = null;
-        if (!_generator.NodeHelpers.TryGetValue(OriginalAudioLatentNodeHelperKey, out string encodedPath)
+        if (!g.NodeHelpers.TryGetValue(OriginalAudioLatentNodeHelperKey, out string encodedPath)
             || string.IsNullOrWhiteSpace(encodedPath))
         {
             return false;
@@ -405,31 +403,36 @@ internal sealed class PostVideoChain
         if (string.IsNullOrWhiteSpace(videoDecodeNodeId)
             || vaeRef is null
             || latentRef is null
-            || !_generator.Workflow.TryGetValue(videoDecodeNodeId, out JToken decodeToken)
+            || !g.Workflow.TryGetValue(videoDecodeNodeId, out JToken decodeToken)
             || decodeToken is not JObject decodeNode)
         {
             return;
         }
 
         decodeNode["class_type"] = NodeTypes.VAEDecodeTiled;
-        decodeNode["inputs"] = new JObject()
+        decodeNode["inputs"] = CreateFinalTiledDecodeInputs(vaeRef, latentRef);
+    }
+
+    private JObject CreateFinalTiledDecodeInputs(JArray vaeRef, JArray latentRef)
+    {
+        return new JObject()
         {
             ["vae"] = new JArray(vaeRef[0], vaeRef[1]),
             ["samples"] = new JArray(latentRef[0], latentRef[1]),
-            ["tile_size"] = 2048,
-            ["overlap"] = 256,
-            ["temporal_size"] = 64,
-            ["temporal_overlap"] = 16
+            ["tile_size"] = g.UserInput.Get(T2IParamTypes.VAETileSize, 768),
+            ["overlap"] = g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
+            ["temporal_size"] = g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
+            ["temporal_overlap"] = g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)
         };
     }
 
     private T2IModelCompatClass ResolveVideoCompat()
     {
-        return T2IModelClassSorter.CompatLtxv2 ?? _generator.CurrentVae?.Compat ?? CurrentOutputMedia?.Compat ?? _generator.CurrentCompat();
+        return T2IModelClassSorter.CompatLtxv2 ?? g.CurrentVae?.Compat ?? CurrentOutputMedia?.Compat ?? g.CurrentCompat();
     }
 
     private T2IModelCompatClass ResolveAudioCompat()
     {
-        return _generator.CurrentAudioVae?.Compat ?? ResolveVideoCompat();
+        return g.CurrentAudioVae?.Compat ?? ResolveVideoCompat();
     }
 }

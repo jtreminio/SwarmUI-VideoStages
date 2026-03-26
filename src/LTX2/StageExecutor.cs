@@ -15,7 +15,6 @@ namespace VideoStages.LTX2;
 internal sealed class StageExecutor(WorkflowGenerator g)
 {
     private const int ImgCompression = 18;
-    private const double ImgToVideoInplaceStrength = 0.8;
     private const int DefaultVideoFps = 24;
     private const int DefaultVideoFrameCount = 97;
     private const double DefaultVideoCfg = 3;
@@ -150,7 +149,9 @@ internal sealed class StageExecutor(WorkflowGenerator g)
                 ["vae"] = genInfo.Vae.Path,
                 ["image"] = preprocessedGuidePath,
                 ["latent"] = stageLatent.Path,
-                ["strength"] = ImgToVideoInplaceStrength,
+                ["strength"] = g.UserInput.Get(
+                    VideoStagesExtension.LTXVImgToVideoInplaceStrength,
+                    VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength),
                 ["bypass"] = false
             });
             g.CurrentMedia = stageLatent.WithPath([imgToVideoNode, 0], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);

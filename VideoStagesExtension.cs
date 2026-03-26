@@ -9,11 +9,13 @@ namespace VideoStages;
 public class VideoStagesExtension : Extension
 {
     public const int SectionID_VideoStages = 48823;
+    public const double DefaultLTXVImgToVideoInplaceStrength = 0.8;
 
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
     public static T2IRegisteredParam<bool> ConnectAudioToVideo;
     public static T2IRegisteredParam<bool> EnableVideoStages;
     public static T2IRegisteredParam<string> VideoStagesJson;
+    public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
 
     public override void OnPreInit()
     {
@@ -86,6 +88,20 @@ public class VideoStagesExtension : Extension
             Default: "",
             VisibleNormally: false,
             IsAdvanced: false,
+            HideFromMetadata: false,
+            DoNotPreview: true,
+            Group: VideoStagesGroup,
+            FeatureFlag: "comfyui"
+        ));
+
+        LTXVImgToVideoInplaceStrength = T2IParamTypes.Register<double>(new T2IParamType(
+            Name: "Video Stages LTXVImgToVideoInplaceStrength",
+            Description: ".",
+            Default: $"{DefaultLTXVImgToVideoInplaceStrength}",
+            Min: 0.1,
+            Max: 1,
+            VisibleNormally: false,
+            IsAdvanced: true,
             HideFromMetadata: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,

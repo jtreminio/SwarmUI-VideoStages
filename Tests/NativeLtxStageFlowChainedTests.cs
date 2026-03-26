@@ -101,6 +101,7 @@ public partial class StageFlowTests
         IReadOnlyList<WorkflowNode> tiledDecodeNodes = WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled");
         WorkflowNode finalVideoDecode = Assert.Single(tiledDecodeNodes);
         Assert.Equal("202", finalVideoDecode.Id);
+        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
         RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -172,6 +173,7 @@ public partial class StageFlowTests
 
         WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
         Assert.Equal("VAEDecodeTiled", $"{finalVideoDecode.Node["class_type"]}");
+        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         WorkflowNode finalAudioDecode = WorkflowAssertions.RequireNodeById(workflow, "203");
