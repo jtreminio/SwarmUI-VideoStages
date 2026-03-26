@@ -29,6 +29,8 @@ class VideoStageEditor {
     genWrapInterval = null;
     changeListenerElem = null;
     stageSyncTimer = null;
+    sourceDropdownObserver = null;
+    stageRefreshTimer = null;
     /**
      * Initializes the VideoStages editor after the parameter UI exists.
      */
@@ -38,6 +40,7 @@ class VideoStageEditor {
         this.wrapGenerateWithValidation();
         this.showStages();
         this.installStageChangeListener();
+        this.installSourceDropdownObserver();
     }
     /**
      * Keeps custom stage containers from inheriting flex min-width overflow from the parent group.
@@ -142,8 +145,8 @@ class VideoStageEditor {
             model = VideoStageUtils.getSelectElement("input_model");
         }
         let vae = VideoStageUtils.getSelectElement("input_vae");
-        let sampler = VideoStageUtils.getSelectElement("input_sampler");
-        let scheduler = VideoStageUtils.getSelectElement("input_scheduler");
+        let sampler = this.getDropdownOptions("sampler", "input_sampler");
+        let scheduler = this.getDropdownOptions("scheduler", "input_scheduler");
         let upscaleMethod = VideoStageUtils.getSelectElement("input_refinerupscalemethod");
         let steps = VideoStageUtils.getInputElement("input_videosteps") ?? VideoStageUtils.getInputElement("input_steps");
         let cfgScale = VideoStageUtils.getInputElement("input_videocfg") ?? VideoStageUtils.getInputElement("input_cfgscale");
@@ -172,10 +175,10 @@ class VideoStageEditor {
             modelLabels: VideoStageUtils.getSelectLabels(model),
             vaeValues: VideoStageUtils.getSelectValues(vae),
             vaeLabels: VideoStageUtils.getSelectLabels(vae),
-            samplerValues: VideoStageUtils.getSelectValues(sampler),
-            samplerLabels: VideoStageUtils.getSelectLabels(sampler),
-            schedulerValues: VideoStageUtils.getSelectValues(scheduler),
-            schedulerLabels: VideoStageUtils.getSelectLabels(scheduler),
+            samplerValues: sampler.values,
+            samplerLabels: sampler.labels,
+            schedulerValues: scheduler.values,
+            schedulerLabels: scheduler.labels,
             upscaleMethodValues: upscaleMethodValues.length > 0 ? upscaleMethodValues : fallbackUpscaleMethods,
             upscaleMethodLabels: upscaleMethodLabels.length > 0 ? upscaleMethodLabels : fallbackUpscaleMethods,
             control: 1,
@@ -212,7 +215,23 @@ class VideoStageEditor {
             cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
             sampler: previousStage ? previousStage.sampler : this.firstValue(defaults.samplerValues, "euler"),
             scheduler: previousStage ? previousStage.scheduler : this.firstValue(defaults.schedulerValues, "normal"),
-            imageReference: "Generated"
+            imageReference: previousStage ? previousStage.imageReference : "Generated"
+        };
+    }
+    getDropdownOptions(paramId, fallbackSelectId) {
+        if (typeof getParamById == "function") {
+            let param = getParamById(paramId);
+            if ((param?.values) && Array.isArray(param.values) && param.values.length > 0) {
+                let labels = Array.isArray(param.value_names) && param.value_names.length == param.values.length
+                    ? [...param.value_names]
+                    : [...param.values];
+                return { values: [...param.values], labels: labels };
+            }
+        }
+        let select = VideoStageUtils.getSelectElement(fallbackSelectId);
+        return {
+            values: VideoStageUtils.getSelectValues(select),
+            labels: VideoStageUtils.getSelectLabels(select)
         };
     }
     normalizeStage(rawStage, stageIndex, previousStage) {
@@ -382,6 +401,31 @@ class VideoStageEditor {
         this.editor.addEventListener("change", handler, true);
         this.changeListenerElem = this.editor;
     }
+    installSourceDropdownObserver() {
+        if (this.sourceDropdownObserver || typeof MutationObserver == "undefined") {
+            return;
+        }
+        let observer = new MutationObserver((mutations) => {
+            if (!mutations.some((mutation) => mutation.type == "childList")) {
+                return;
+            }
+            this.scheduleStageRefresh();
+        });
+        let hasObservedSource = false;
+        for (let sourceId of ["input_videomodel", "input_model", "input_vae", "input_sampler", "input_scheduler", "input_refinerupscalemethod"]) {
+            let source = VideoStageUtils.getSelectElement(sourceId);
+            if (!source) {
+                continue;
+            }
+            observer.observe(source, { childList: true });
+            hasObservedSource = true;
+        }
+        if (!hasObservedSource) {
+            observer.disconnect();
+            return;
+        }
+        this.sourceDropdownObserver = observer;
+    }
     scheduleStageSyncFromUi() {
         if (this.stageSyncTimer) {
             clearTimeout(this.stageSyncTimer);
@@ -394,6 +438,24 @@ class VideoStageEditor {
             catch {
             }
         }, 125);
+    }
+    scheduleStageRefresh() {
+        if (this.stageRefreshTimer) {
+            clearTimeout(this.stageRefreshTimer);
+        }
+        this.stageRefreshTimer = setTimeout(() => {
+            this.stageRefreshTimer = null;
+            try {
+                this.serializeStagesFromUi();
+            }
+            catch {
+            }
+            try {
+                this.showStages();
+            }
+            catch {
+            }
+        }, 0);
     }
     showStages() {
         let stages = this.getStages();
