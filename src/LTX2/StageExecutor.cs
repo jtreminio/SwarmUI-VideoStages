@@ -27,6 +27,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         bool skipGuideReinjection,
+        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         PostVideoChain postVideoChain)
     {
         postVideoChain?.AttachSourceAudio(sourceMedia);
@@ -40,7 +41,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             }
 
             PrepareModelAndConditioning(genInfo, sourceMedia);
-            PrepareConditioning(genInfo, stage, sourceMedia, guideMedia, skipGuideReinjection, postVideoChain);
+            PrepareConditioning(genInfo, stage, sourceMedia, guideMedia, skipGuideReinjection, applySourceVideoLatent, postVideoChain);
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
 
             foreach (Action<WorkflowGenerator.ImageToVideoGenInfo> handler in WorkflowGenerator.AltImageToVideoPostHandlers)
@@ -116,16 +117,14 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         bool skipGuideReinjection,
+        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         PostVideoChain postVideoChain)
     {
         WGNodeData stageLatent = BuildStageLatent(genInfo, stage, sourceMedia, postVideoChain);
         if (stageLatent is null)
         {
             genInfo.PrepFullCond(g, guideMedia);
-            if (genInfo.AltLatent is not null)
-            {
-                genInfo.AltLatent(genInfo);
-            }
+            applySourceVideoLatent?.Invoke(genInfo);
             return;
         }
 

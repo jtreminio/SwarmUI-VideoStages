@@ -14,6 +14,10 @@ internal class StageRunner(WorkflowGenerator g)
 {
     private readonly StageExecutor _stageExecutor = new(g);
 
+    private sealed record StageGenerationPlan(
+        WorkflowGenerator.ImageToVideoGenInfo GenInfo,
+        Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
+
     /// <summary>
     /// Runs one image-to-video stage using the current generator state as input.
     /// </summary>
@@ -27,7 +31,8 @@ internal class StageRunner(WorkflowGenerator g)
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         PostVideoChain postVideoChain = PostVideoChain.TryCapture(g);
         WGNodeData sourceMedia = ApplyStageUpscaleIfNeeded(stage, sectionId);
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(stage, sectionId, sourceMedia);
+        StageGenerationPlan generationPlan = BuildGenInfo(stage, sectionId, sourceMedia);
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
         bool useLocalLtxv2Path = ShouldUseLocalLtxv2Path(genInfo, sourceMedia);
         bool skipGuideReinjection = useLocalLtxv2Path
             && ShouldSkipGeneratedGuideReinjection(stage, sourceMedia, guideReference, genInfo, postVideoChain);
@@ -38,27 +43,51 @@ internal class StageRunner(WorkflowGenerator g)
 
         if (useLocalLtxv2Path)
         {
-            _stageExecutor.RunStage(stage, genInfo, sourceMedia, guideMedia, skipGuideReinjection, postVideoChain);
+            _stageExecutor.RunStage(stage, genInfo, sourceMedia, guideMedia, skipGuideReinjection, generationPlan.ApplySourceVideoLatent, postVideoChain);
             return;
         }
 
-        RunNativeStage(genInfo, sourceMedia, guideMedia, priorOutputPath);
+        RunNativeStage(generationPlan, sourceMedia, guideMedia, priorOutputPath);
     }
 
     private void RunNativeStage(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageGenerationPlan generationPlan,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         JArray priorOutputPath)
     {
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
         g.CurrentMedia = guideMedia ?? sourceMedia;
-        g.CreateImageToVideo(genInfo);
+        Action<WorkflowGenerator.ImageToVideoGenInfo> postHandler = null;
+        if (generationPlan.ApplySourceVideoLatent is not null)
+        {
+            postHandler = currentGenInfo =>
+            {
+                if (!ReferenceEquals(currentGenInfo, genInfo))
+                {
+                    return;
+                }
+                generationPlan.ApplySourceVideoLatent(currentGenInfo);
+            };
+            WorkflowGenerator.AltImageToVideoPostHandlers.Add(postHandler);
+        }
+        try
+        {
+            g.CreateImageToVideo(genInfo);
+        }
+        finally
+        {
+            if (postHandler is not null)
+            {
+                _ = WorkflowGenerator.AltImageToVideoPostHandlers.Remove(postHandler);
+            }
+        }
         g.CurrentVae = genInfo.Vae;
         StampCurrentMediaMetadata(sourceMedia, genInfo);
         RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
     }
 
-    private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(
+    private StageGenerationPlan BuildGenInfo(
         JsonParser.StageSpec stage,
         int sectionId,
         WGNodeData sourceMedia)
@@ -88,7 +117,7 @@ internal class StageRunner(WorkflowGenerator g)
         }
 
         bool sourceIsVideo = sourceMedia.DataType == WGNodeData.DT_VIDEO;
-        Action<WorkflowGenerator.ImageToVideoGenInfo> altLatent = null;
+        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent = null;
         int batchIndex = -1;
         int batchLen = -1;
         if (sourceIsVideo)
@@ -97,7 +126,7 @@ internal class StageRunner(WorkflowGenerator g)
             batchLen = 1;
             if (!shouldUseLocalLtxv2Path)
             {
-                altLatent = genInfo =>
+                applySourceVideoLatent = genInfo =>
                 {
                     if (!genInfo.Frames.HasValue)
                     {
@@ -118,7 +147,7 @@ internal class StageRunner(WorkflowGenerator g)
             }
         }
 
-        return new WorkflowGenerator.ImageToVideoGenInfo()
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
         {
             Generator = g,
             VideoModel = videoModel,
@@ -133,12 +162,12 @@ internal class StageRunner(WorkflowGenerator g)
             NegativePrompt = g.UserInput.Get(T2IParamTypes.NegativePrompt, ""),
             Steps = stage.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.Id,
-            AltLatent = altLatent,
             BatchIndex = batchIndex,
             BatchLen = batchLen,
             ContextID = sectionId,
             VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
         };
+        return new StageGenerationPlan(genInfo, applySourceVideoLatent);
     }
 
     private static bool ShouldUseLocalLtxv2Path(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
