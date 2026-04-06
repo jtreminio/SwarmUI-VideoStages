@@ -10,3 +10,12 @@ declare function getHtmlForParam(param: Record<string, any>, prefix: string): { 
 declare function getParamById(id: string): { values?: string[]; value_names?: string[] } | null;
 
 declare let postParamBuildSteps: (() => void)[] | undefined;
+
+declare const modelsHelpers: {
+    getDataFor?: (category: string, modelName: string) => { modelClass?: { compatClass?: { isText2Video?: boolean } } } | null;
+    compatClasses?: Record<string, { isText2Video?: boolean }>;
+} | undefined;
+
+declare const currentModelHelper: {
+    curCompatClass?: string;
+} | undefined;

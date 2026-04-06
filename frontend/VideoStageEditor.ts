@@ -49,6 +49,9 @@ class VideoStageEditor
     private stageSyncTimer: ReturnType<typeof setTimeout> | null = null;
     private sourceDropdownObserver: MutationObserver | null = null;
     private stageRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    private stageInputSyncInterval: ReturnType<typeof setInterval> | null = null;
+    private lastKnownStagesJson = "";
+    private pendingStageRefreshSerialize = false;
 
     /**
      * Initializes the VideoStages editor after the parameter UI exists.
@@ -56,6 +59,7 @@ class VideoStageEditor
     public init(): void
     {
         this.createEditor();
+        this.startStagesInputSync();
         this.ensureStagesSeeded();
         this.wrapGenerateWithValidation();
         this.showStages();
@@ -359,7 +363,9 @@ class VideoStageEditor
             return;
         }
 
-        input.value = JSON.stringify(stages);
+        let serialized = JSON.stringify(stages);
+        input.value = serialized;
+        this.lastKnownStagesJson = serialized;
         triggerChangeFor(input);
     }
 
@@ -507,7 +513,7 @@ class VideoStageEditor
                 return;
             }
 
-            this.scheduleStageRefresh();
+            this.scheduleStageRefresh(true);
         });
 
         let hasObservedSource = false;
@@ -529,6 +535,42 @@ class VideoStageEditor
         this.sourceDropdownObserver = observer;
     }
 
+    /**
+     * The hidden JSON input can be populated after the custom editor first renders.
+     * Poll it so the visible stage list always catches up to the real source of truth.
+     */
+    private startStagesInputSync(): void
+    {
+        if (this.stageInputSyncInterval) {
+            return;
+        }
+
+        this.lastKnownStagesJson = this.getStagesInput()?.value ?? "";
+        this.stageInputSyncInterval = setInterval(() => {
+            let currentValue = this.getStagesInput()?.value ?? "";
+            if (currentValue == this.lastKnownStagesJson) {
+                return;
+            }
+
+            this.lastKnownStagesJson = currentValue;
+            this.cancelPendingUiStageSync();
+            this.scheduleStageRefresh();
+        }, 150);
+    }
+
+    private cancelPendingUiStageSync(): void
+    {
+        if (this.stageSyncTimer) {
+            clearTimeout(this.stageSyncTimer);
+            this.stageSyncTimer = null;
+        }
+        if (this.stageRefreshTimer) {
+            clearTimeout(this.stageRefreshTimer);
+            this.stageRefreshTimer = null;
+        }
+        this.pendingStageRefreshSerialize = false;
+    }
+
     private scheduleStageSyncFromUi(): void
     {
         if (this.stageSyncTimer) {
@@ -545,16 +587,23 @@ class VideoStageEditor
         }, 125);
     }
 
-    private scheduleStageRefresh(): void
+    private scheduleStageRefresh(serializeFromUi = false): void
     {
+        if (serializeFromUi) {
+            this.pendingStageRefreshSerialize = true;
+        }
         if (this.stageRefreshTimer) {
             clearTimeout(this.stageRefreshTimer);
         }
 
         this.stageRefreshTimer = setTimeout(() => {
             this.stageRefreshTimer = null;
+            let shouldSerialize = this.pendingStageRefreshSerialize;
+            this.pendingStageRefreshSerialize = false;
             try {
-                this.serializeStagesFromUi();
+                if (shouldSerialize) {
+                    this.serializeStagesFromUi();
+                }
             }
             catch {
             }
@@ -564,6 +613,8 @@ class VideoStageEditor
             }
             catch {
             }
+
+            this.lastKnownStagesJson = this.getStagesInput()?.value ?? "";
         }, 0);
     }
 

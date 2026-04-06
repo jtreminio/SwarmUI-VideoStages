@@ -31,11 +31,15 @@ class VideoStageEditor {
     stageSyncTimer = null;
     sourceDropdownObserver = null;
     stageRefreshTimer = null;
+    stageInputSyncInterval = null;
+    lastKnownStagesJson = "";
+    pendingStageRefreshSerialize = false;
     /**
      * Initializes the VideoStages editor after the parameter UI exists.
      */
     init() {
         this.createEditor();
+        this.startStagesInputSync();
         this.ensureStagesSeeded();
         this.wrapGenerateWithValidation();
         this.showStages();
@@ -221,7 +225,7 @@ class VideoStageEditor {
     getDropdownOptions(paramId, fallbackSelectId) {
         if (typeof getParamById == "function") {
             let param = getParamById(paramId);
-            if ((param?.values) && Array.isArray(param.values) && param.values.length > 0) {
+            if (param?.values && Array.isArray(param.values) && param.values.length > 0) {
                 let labels = Array.isArray(param.value_names) && param.value_names.length == param.values.length
                     ? [...param.value_names]
                     : [...param.values];
@@ -292,7 +296,9 @@ class VideoStageEditor {
         if (!input) {
             return;
         }
-        input.value = JSON.stringify(stages);
+        let serialized = JSON.stringify(stages);
+        input.value = serialized;
+        this.lastKnownStagesJson = serialized;
         triggerChangeFor(input);
     }
     ensureStagesSeeded() {
@@ -409,7 +415,7 @@ class VideoStageEditor {
             if (!mutations.some((mutation) => mutation.type == "childList")) {
                 return;
             }
-            this.scheduleStageRefresh();
+            this.scheduleStageRefresh(true);
         });
         let hasObservedSource = false;
         for (let sourceId of ["input_videomodel", "input_model", "input_vae", "input_sampler", "input_scheduler", "input_refinerupscalemethod"]) {
@@ -426,6 +432,36 @@ class VideoStageEditor {
         }
         this.sourceDropdownObserver = observer;
     }
+    /**
+     * The hidden JSON input can be populated after the custom editor first renders.
+     * Poll it so the visible stage list always catches up to the real source of truth.
+     */
+    startStagesInputSync() {
+        if (this.stageInputSyncInterval) {
+            return;
+        }
+        this.lastKnownStagesJson = this.getStagesInput()?.value ?? "";
+        this.stageInputSyncInterval = setInterval(() => {
+            let currentValue = this.getStagesInput()?.value ?? "";
+            if (currentValue == this.lastKnownStagesJson) {
+                return;
+            }
+            this.lastKnownStagesJson = currentValue;
+            this.cancelPendingUiStageSync();
+            this.scheduleStageRefresh();
+        }, 150);
+    }
+    cancelPendingUiStageSync() {
+        if (this.stageSyncTimer) {
+            clearTimeout(this.stageSyncTimer);
+            this.stageSyncTimer = null;
+        }
+        if (this.stageRefreshTimer) {
+            clearTimeout(this.stageRefreshTimer);
+            this.stageRefreshTimer = null;
+        }
+        this.pendingStageRefreshSerialize = false;
+    }
     scheduleStageSyncFromUi() {
         if (this.stageSyncTimer) {
             clearTimeout(this.stageSyncTimer);
@@ -439,14 +475,21 @@ class VideoStageEditor {
             }
         }, 125);
     }
-    scheduleStageRefresh() {
+    scheduleStageRefresh(serializeFromUi = false) {
+        if (serializeFromUi) {
+            this.pendingStageRefreshSerialize = true;
+        }
         if (this.stageRefreshTimer) {
             clearTimeout(this.stageRefreshTimer);
         }
         this.stageRefreshTimer = setTimeout(() => {
             this.stageRefreshTimer = null;
+            let shouldSerialize = this.pendingStageRefreshSerialize;
+            this.pendingStageRefreshSerialize = false;
             try {
-                this.serializeStagesFromUi();
+                if (shouldSerialize) {
+                    this.serializeStagesFromUi();
+                }
             }
             catch {
             }
@@ -455,6 +498,7 @@ class VideoStageEditor {
             }
             catch {
             }
+            this.lastKnownStagesJson = this.getStagesInput()?.value ?? "";
         }, 0);
     }
     showStages() {
