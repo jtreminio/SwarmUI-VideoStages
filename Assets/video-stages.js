@@ -48,7 +48,7 @@ class VideoStageEditor {
         this.installStageChangeListener();
         this.installSourceDropdownObserver();
         this.installBase2EditStageChangeListener();
-        this.installRootGuideImageReferenceListener();
+        this.installRootGuideReferenceListeners();
     }
     /**
      * Keeps custom stage containers from inheriting flex min-width overflow from the parent group.
@@ -117,6 +117,23 @@ class VideoStageEditor {
     getRootGuideImageReferenceInput() {
         return VideoStageUtils.getSelectElement("input_guideimagereference");
     }
+    getRootGuideLastFrameReferenceInput() {
+        return VideoStageUtils.getSelectElement("input_guidelastframereference");
+    }
+    getRootGuideReferenceInputs() {
+        return [
+            {
+                select: this.getRootGuideImageReferenceInput(),
+                errorId: "videostages_root_guideimagereference_error",
+                errorLabel: "Root guide image reference"
+            },
+            {
+                select: this.getRootGuideLastFrameReferenceInput(),
+                errorId: "videostages_root_guidelastframereference_error",
+                errorLabel: "Root guide last frame reference"
+            }
+        ];
+    }
     parseBase2EditStageIndex(value) {
         let match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
         if (!match) {
@@ -155,10 +172,12 @@ class VideoStageEditor {
             this.scheduleStageRefresh(true, true);
         });
     }
-    installRootGuideImageReferenceListener() {
-        this.getRootGuideImageReferenceInput()?.addEventListener("change", () => {
-            this.refreshGuideReferenceValidation(this.getStages());
-        });
+    installRootGuideReferenceListeners() {
+        for (let entry of this.getRootGuideReferenceInputs()) {
+            entry.select?.addEventListener("change", () => {
+                this.refreshGuideReferenceValidation(this.getStages());
+            });
+        }
     }
     isRootTextToVideoModel() {
         let modelName = `${this.getRootModelInput()?.value ?? ""}`.trim();
@@ -374,9 +393,11 @@ class VideoStageEditor {
         if (!this.hasRootVideoModel()) {
             errors.push("VideoStages requires a root Video Model.");
         }
-        let rootGuideError = this.getRootGuideImageReferenceError(`${this.getRootGuideImageReferenceInput()?.value ?? "Default"}`);
-        if (rootGuideError) {
-            errors.push(rootGuideError);
+        for (let entry of this.getRootGuideReferenceInputs()) {
+            let rootGuideError = this.getRootGuideReferenceError(`${entry.select?.value ?? "Default"}`, entry.errorLabel);
+            if (rootGuideError) {
+                errors.push(rootGuideError);
+            }
         }
         if (stages.length < 1) {
             errors.push("VideoStages requires at least one stage.");
@@ -835,7 +856,7 @@ class VideoStageEditor {
         }
         return this.getDefaultStageImageReference(stageIndex);
     }
-    canonicalizeRootGuideImageReference(value) {
+    canonicalizeRootGuideReference(value) {
         if (this.isRootTextToVideoModel()) {
             return "Default";
         }
@@ -916,7 +937,7 @@ class VideoStageEditor {
         }
         return { values, labels, selected, disabledValues };
     }
-    buildRootGuideImageReferenceOptions(currentValue) {
+    buildRootGuideReferenceOptions(currentValue) {
         if (this.isRootTextToVideoModel()) {
             return {
                 values: ["Default"],
@@ -931,7 +952,7 @@ class VideoStageEditor {
             values.push(base2EditRef);
             labels.push(this.describeImageReference(base2EditRef));
         }
-        let selected = this.canonicalizeRootGuideImageReference(currentValue);
+        let selected = this.canonicalizeRootGuideReference(currentValue);
         let disabledValues = [];
         if (selected && !values.includes(selected)) {
             let isMissingBase2EditRef = this.parseBase2EditStageIndex(selected) != null;
@@ -954,12 +975,12 @@ class VideoStageEditor {
         }
         return null;
     }
-    getRootGuideImageReferenceError(value) {
-        if (this.canonicalizeRootGuideImageReference(value) != value) {
-            return `VideoStages: Root guide image reference "${value}" is invalid.`;
+    getRootGuideReferenceError(value, errorLabel) {
+        if (this.canonicalizeRootGuideReference(value) != value) {
+            return `VideoStages: ${errorLabel} "${value}" is invalid.`;
         }
         if (this.parseBase2EditStageIndex(value) != null && !this.isAvailableBase2EditReference(value)) {
-            return `VideoStages: Root guide image reference "${value}" points to a missing Base2Edit stage.`;
+            return `VideoStages: ${errorLabel} "${value}" points to a missing Base2Edit stage.`;
         }
         return null;
     }
@@ -987,11 +1008,13 @@ class VideoStageEditor {
         }
     }
     syncRootGuideImageReferenceOptions() {
-        let select = this.getRootGuideImageReferenceInput();
-        if (!select) {
-            return;
+        for (let entry of this.getRootGuideReferenceInputs()) {
+            let select = entry.select;
+            if (!select) {
+                continue;
+            }
+            this.applySelectOptions(select, this.buildRootGuideReferenceOptions(`${select.value || "Default"}`));
         }
-        this.applySelectOptions(select, this.buildRootGuideImageReferenceOptions(`${select.value || "Default"}`));
     }
     setInputValidationState(input, errorId, error) {
         if (!input) {
@@ -1016,10 +1039,12 @@ class VideoStageEditor {
     }
     refreshGuideReferenceValidation(stages) {
         let errors = [];
-        let rootGuideError = this.getRootGuideImageReferenceError(`${this.getRootGuideImageReferenceInput()?.value ?? "Default"}`);
-        this.setInputValidationState(this.getRootGuideImageReferenceInput(), "videostages_root_guideimagereference_error", rootGuideError);
-        if (rootGuideError) {
-            errors.push(rootGuideError);
+        for (let entry of this.getRootGuideReferenceInputs()) {
+            let rootGuideError = this.getRootGuideReferenceError(`${entry.select?.value ?? "Default"}`, entry.errorLabel);
+            this.setInputValidationState(entry.select, entry.errorId, rootGuideError);
+            if (rootGuideError) {
+                errors.push(rootGuideError);
+            }
         }
         for (let i = 0; i < stages.length; i++) {
             let error = this.getStageImageReferenceError(stages[i].imageReference, i);

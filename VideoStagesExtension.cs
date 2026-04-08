@@ -17,6 +17,7 @@ public class VideoStagesExtension : Extension
     public static T2IRegisteredParam<int> RootStageWidth;
     public static T2IRegisteredParam<int> RootStageHeight;
     public static T2IRegisteredParam<string> RootGuideImageReference;
+    public static T2IRegisteredParam<string> RootGuideLastFrameReference;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
 
@@ -126,6 +127,20 @@ public class VideoStagesExtension : Extension
             Description: "Which earlier image should be used as the root video guide image before the first video pass. 'Default' keeps the current root image behavior; 'Base', 'Refiner', and 'editN' options can be selected from the frontend when available.",
             Default: "Default",
             GetValues: (_) => ["Default", "Base", "Refiner"],
+            ValidateValues: false,
+            Group: VideoStagesGroup,
+            OrderPriority: OrderPriority,
+            FeatureFlag: "comfyui",
+            DoNotPreview: true
+        ));
+        OrderPriority += 1;
+
+        RootGuideLastFrameReference = T2IParamTypes.Register<string>(new T2IParamType(
+            Name: "Guide Last Frame Reference",
+            Description: "Which earlier image should be used as the root video last-frame guide on LTX-2 first/last-frame runs. 'Default' disables the extra last-frame guide; 'Base', 'Refiner', and 'editN' options can be selected from the frontend when available.",
+            Default: "Default",
+            GetValues: (_) => ["Default", "Base", "Refiner"],
+            ValidateValues: false,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
             FeatureFlag: "comfyui",

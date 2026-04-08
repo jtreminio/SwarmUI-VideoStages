@@ -171,6 +171,226 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Root_stage_resolution_updates_native_ltxv2_empty_latent_dimensions_even_when_additional_stages_disabled()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
+        input.Set(VideoStagesExtension.RootStageWidth, 768);
+        input.Set(VideoStagesExtension.RootStageHeight, 448);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+
+        WorkflowNode emptyLatentNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
+        Assert.Equal(768, emptyLatentNode.Node["inputs"]?.Value<int>("width"));
+        Assert.Equal(448, emptyLatentNode.Node["inputs"]?.Value<int>("height"));
+    }
+
+    [Fact]
+    public void Root_guide_last_frame_reference_edit_stage_adds_resized_ltxv2_last_frame_guide()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootGuideLastFrameReference, "edit0");
+        input.Set(VideoStagesExtension.RootStageWidth, 768);
+        input.Set(VideoStagesExtension.RootStageHeight, 448);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        List<WorkflowNode> conditioningNodes = WorkflowUtils.NodesOfType(workflow, "LTXVConditioning")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        WorkflowNode rootConditioning = conditioningNodes[0];
+        List<WorkflowNode> addGuideNodes = WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        WorkflowNode addGuideNode = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(rootConditioning.Id, 0)));
+        Assert.Equal(2, addGuideNodes.Count);
+
+        WorkflowNode preprocessNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "image")[0]}");
+        Assert.Equal("LTXVPreprocess", $"{preprocessNode.Node["class_type"]}");
+        Assert.Equal(18, preprocessNode.Node["inputs"]?.Value<int>("img_compression"));
+
+        WorkflowNode resizeNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image")[0]}");
+        Assert.Equal("ResizeImageMaskNode", $"{resizeNode.Node["class_type"]}");
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(resizeNode.Node, "input"),
+            new JArray("60", 0)));
+        Assert.Equal("scale dimensions", $"{resizeNode.Node["inputs"]?["resize_type"]}");
+        Assert.Equal(768, resizeNode.Node["inputs"]?.Value<int>("resize_type.width"));
+        Assert.Equal(448, resizeNode.Node["inputs"]?.Value<int>("resize_type.height"));
+        Assert.Equal("center", $"{resizeNode.Node["inputs"]?["resize_type.crop"]}");
+        Assert.Equal("nearest-exact", $"{resizeNode.Node["inputs"]?["scale_method"]}");
+
+        Assert.Equal(-1, addGuideNode.Node["inputs"]?.Value<int>("frame_idx"));
+        Assert.Equal(0.7, addGuideNode.Node["inputs"]?.Value<double>("strength"));
+        Assert.Contains(
+            WorkflowUtils.FindInputConnections(workflow, new JArray(addGuideNode.Id, 0)),
+            connection => connection.InputName == "positive");
+        Assert.Contains(
+            WorkflowUtils.FindInputConnections(workflow, new JArray(addGuideNode.Id, 1)),
+            connection => connection.InputName == "negative");
+    }
+
+    [Fact]
+    public void Root_guide_last_frame_reference_edit_stage_applies_even_when_additional_stages_disabled()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
+        input.Set(VideoStagesExtension.RootGuideLastFrameReference, "edit0");
+        input.Set(VideoStagesExtension.RootStageWidth, 768);
+        input.Set(VideoStagesExtension.RootStageHeight, 448);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        WorkflowNode resizeNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ResizeImageMaskNode"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "input"),
+                new JArray("60", 0)));
+        Assert.Equal("scale dimensions", $"{resizeNode.Node["inputs"]?["resize_type"]}");
+        Assert.Equal(768, resizeNode.Node["inputs"]?.Value<int>("resize_type.width"));
+        Assert.Equal(448, resizeNode.Node["inputs"]?.Value<int>("resize_type.height"));
+        Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide"));
+    }
+
+    [Fact]
+    public void Root_guide_last_frame_reference_runs_on_all_ltx_stages_after_additional_video_stages()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(
+                models.VideoModel.Name,
+                "Refiner",
+                upscale: 1.5,
+                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
+                steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootGuideImageReference, "Refiner");
+        input.Set(VideoStagesExtension.RootGuideLastFrameReference, "edit0");
+        input.Set(VideoStagesExtension.RootStageWidth, 384);
+        input.Set(VideoStagesExtension.RootStageHeight, 640);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        List<WorkflowNode> conditioningNodes = WorkflowUtils.NodesOfType(workflow, "LTXVConditioning")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        WorkflowNode rootConditioning = conditioningNodes[0];
+        WorkflowNode finalConditioning = conditioningNodes[^1];
+        List<WorkflowNode> addGuideNodes = WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(2, addGuideNodes.Count);
+        WorkflowNode rootAddGuide = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(rootConditioning.Id, 0)));
+        WorkflowNode addGuideNode = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(finalConditioning.Id, 0)));
+
+        WorkflowNode rootPreprocessNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(rootAddGuide.Node, "image")[0]}");
+        WorkflowNode rootResizeNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(rootPreprocessNode.Node, "image")[0]}");
+        Assert.Equal("ResizeImageMaskNode", $"{rootResizeNode.Node["class_type"]}");
+        Assert.Equal("scale dimensions", $"{rootResizeNode.Node["inputs"]?["resize_type"]}");
+        Assert.Equal(384, rootResizeNode.Node["inputs"]?.Value<int>("resize_type.width"));
+        Assert.Equal(640, rootResizeNode.Node["inputs"]?.Value<int>("resize_type.height"));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(rootResizeNode.Node, "input"),
+            new JArray("60", 0)));
+
+        WorkflowNode stagePreprocessNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "image")[0]}");
+        WorkflowNode stageResizeNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(stagePreprocessNode.Node, "image")[0]}");
+        Assert.Equal("ResizeImageMaskNode", $"{stageResizeNode.Node["class_type"]}");
+        Assert.Equal("scale dimensions", $"{stageResizeNode.Node["inputs"]?["resize_type"]}");
+        Assert.Equal(576, stageResizeNode.Node["inputs"]?.Value<int>("resize_type.width"));
+        Assert.Equal(960, stageResizeNode.Node["inputs"]?.Value<int>("resize_type.height"));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(stageResizeNode.Node, "input"),
+            new JArray("60", 0)));
+
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "positive"),
+            new JArray(finalConditioning.Id, 0)));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "negative"),
+            new JArray(finalConditioning.Id, 1)));
+
+        List<WorkflowNode> imgToVideoNodes = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        WorkflowNode rootImgToVideoNode = imgToVideoNodes[0];
+        WorkflowNode finalImgToVideoNode = imgToVideoNodes[^1];
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(rootAddGuide.Node, "latent"),
+            new JArray(rootImgToVideoNode.Id, 0)));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "latent"),
+            new JArray(finalImgToVideoNode.Id, 0)));
+
+        List<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        WorkflowNode rootSampler = samplers[0];
+        WorkflowNode finalSampler = samplers[^1];
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(rootSampler.Node, "positive"),
+            new JArray(rootAddGuide.Id, 0)));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(rootSampler.Node, "negative"),
+            new JArray(rootAddGuide.Id, 1)));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(finalSampler.Node, "positive"),
+            new JArray(addGuideNode.Id, 0)));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(finalSampler.Node, "negative"),
+            new JArray(addGuideNode.Id, 1)));
+    }
+
+    [Fact]
     public void Root_stage_resolution_updates_native_ltxv2_audio_noise_mask_dimensions()
     {
         using SwarmUiTestContext _ = new();
@@ -209,6 +429,28 @@ public partial class StageFlowTests
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(concatNode.Node, "audio_latent"),
             new JArray(setMaskNode.Id, 0)));
+    }
+
+    [Fact]
+    public void Root_guide_last_frame_reference_default_skips_native_ltxv2_last_frame_guide()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootGuideLastFrameReference, "Default");
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ResizeImageMaskNode"));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide"));
     }
 
     [Fact]
@@ -283,6 +525,73 @@ public partial class StageFlowTests
         Assert.Equal(448, scaleNode.Node["inputs"]?.Value<int>("height"));
         Assert.Equal("lanczos", $"{scaleNode.Node["inputs"]?["upscale_method"]}");
         Assert.Equal("center", $"{scaleNode.Node["inputs"]?["crop"]}");
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
+            new JArray(scaleNode.Id, 0)));
+    }
+
+    [Fact]
+    public void Root_guide_image_reference_edit_stage_applies_even_when_additional_stages_disabled()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
+        input.Set(VideoStagesExtension.RootGuideImageReference, "edit0");
+        input.Set(VideoStagesExtension.RootStageWidth, 768);
+        input.Set(VideoStagesExtension.RootStageHeight, 448);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        WorkflowNode scaleNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray("60", 0)));
+        WorkflowNode imageFromBatch = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray(scaleNode.Id, 0)));
+        Assert.Equal(768, scaleNode.Node["inputs"]?.Value<int>("width"));
+        Assert.Equal(448, scaleNode.Node["inputs"]?.Value<int>("height"));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
+            new JArray(scaleNode.Id, 0)));
+    }
+
+    [Fact]
+    public void Root_guide_image_reference_refiner_applies_even_when_additional_stages_disabled()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
+        input.Set(VideoStagesExtension.RootGuideImageReference, "Refiner");
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithEditedCurrentImage());
+
+        WorkflowNode scaleNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray("12", 0)));
+        WorkflowNode imageFromBatch = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray(scaleNode.Id, 0)));
+        Assert.DoesNotContain(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray("70", 0)));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
             new JArray(scaleNode.Id, 0)));

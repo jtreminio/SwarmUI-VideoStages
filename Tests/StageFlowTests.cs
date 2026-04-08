@@ -367,6 +367,11 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithEditedCurrentImage() =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedRefinerImageStep(), SeedEditedCurrentImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(int editStageIndex) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 10.9), WorkflowTestHarness.CoreImageToVideoStep()])
@@ -382,6 +387,17 @@ public partial class StageFlowTests
                 Height = 512
             };
         }, 5.0);
+
+    private static WorkflowGenerator.WorkflowGenStep SeedEditedCurrentImageStep() =>
+        new(g =>
+        {
+            string editedImage = g.CreateNode("UnitTest_EditedImage", new JObject(), id: "70", idMandatory: false);
+            g.CurrentMedia = new WGNodeData([editedImage, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat())
+            {
+                Width = 512,
+                Height = 512
+            };
+        }, 10.8);
 
     private static WorkflowGenerator.WorkflowGenStep SeedPublishedBase2EditImageRefStep(int editStageIndex, double priority) =>
         new(g =>

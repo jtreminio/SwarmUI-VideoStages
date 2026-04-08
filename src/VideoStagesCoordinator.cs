@@ -11,7 +11,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     public void CaptureBase()
     {
-        if (!HasConfiguredStages())
+        if (!ShouldCaptureStageRefs())
         {
             return;
         }
@@ -21,7 +21,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     public void CaptureRefiner()
     {
-        if (!HasConfiguredStages())
+        if (!ShouldCaptureStageRefs())
         {
             return;
         }
@@ -119,6 +119,25 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         }
 
         return json.Trim() != "[]";
+    }
+
+    private bool ShouldCaptureStageRefs()
+    {
+        if (!HasRootVideoModel())
+        {
+            return false;
+        }
+
+        return HasConfiguredStages()
+            || HasConfiguredRootGuideReference(VideoStagesExtension.RootGuideImageReference)
+            || HasConfiguredRootGuideReference(VideoStagesExtension.RootGuideLastFrameReference);
+    }
+
+    private bool HasConfiguredRootGuideReference(T2IRegisteredParam<string> param)
+    {
+        string compact = ImageReferenceSyntax.Compact(g.UserInput.Get(param, "Default"));
+        return !string.IsNullOrWhiteSpace(compact)
+            && !string.Equals(compact, "Default", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private void EnsureFinalStageOutputSaved()

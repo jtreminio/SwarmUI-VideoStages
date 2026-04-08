@@ -9,8 +9,11 @@ namespace VideoStages;
 internal static class RootVideoStageResizer
 {
     private const string DefaultRootGuideReference = "Default";
+    private const string RootGuideReferenceHelperKey = "videostages.root.guide.reference";
+    private const string RootGuideLastFrameReferenceHelperKey = "videostages.root.guide.lastframe.reference";
+    private const int LtxvGuideImgCompression = 18;
     private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PreHandler = ApplyIfNeeded;
-    private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PostHandler = ApplyLatentDimensionsIfNeeded;
+    private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PostHandler = ApplyPostIfNeeded;
 
     public static void EnsureRegistered()
     {
@@ -28,14 +31,35 @@ internal static class RootVideoStageResizer
     {
         WorkflowGenerator g = genInfo?.Generator;
         if (g is null
-            || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !HasConfiguredStages(g))
+            || genInfo.ContextID != T2IParamInput.SectionID_Video)
         {
             return;
         }
 
-        ApplyRootGuideReferenceIfNeeded(genInfo);
-        if (!TryGetRootStageResolution(g.UserInput, out int width, out int height))
+        string rootGuideReference = GetNormalizedRootGuideReference(
+            g,
+            RootGuideReferenceHelperKey,
+            VideoStagesExtension.RootGuideImageReference,
+            "Root guide image reference");
+        string rootLastFrameReference = GetNormalizedRootGuideReference(
+            g,
+            RootGuideLastFrameReferenceHelperKey,
+            VideoStagesExtension.RootGuideLastFrameReference,
+            "Root guide last frame reference");
+        bool hasRootResolution = TryGetRootStageResolution(g.UserInput, out int width, out int height);
+        if (!hasRootResolution
+            && IsDefaultRootGuideReference(rootGuideReference)
+            && IsDefaultRootGuideReference(rootLastFrameReference))
+        {
+            return;
+        }
+        if (ShouldApplyLtxv2RootLastFrameGuide(genInfo, rootLastFrameReference))
+        {
+            genInfo.VideoEndFrame = null;
+        }
+
+        ApplyRootGuideReferenceIfNeeded(genInfo, rootGuideReference);
+        if (!hasRootResolution)
         {
             return;
         }
@@ -66,7 +90,7 @@ internal static class RootVideoStageResizer
         g.CurrentMedia.Height = height;
     }
 
-    private static void ApplyRootGuideReferenceIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    private static void ApplyRootGuideReferenceIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo, string guideReference)
     {
         WorkflowGenerator g = genInfo?.Generator;
         if (g is null)
@@ -74,18 +98,12 @@ internal static class RootVideoStageResizer
             return;
         }
 
-        string guideReference = NormalizeRootGuideImageReference(g);
-        if (guideReference == DefaultRootGuideReference)
+        if (IsDefaultRootGuideReference(guideReference))
         {
             return;
         }
 
-        StageRefStore.StageRef stageRef = ResolveRootGuideReference(g, guideReference);
-        WGNodeData guideImage = Base2EditPublishedStageRefs.ResolveToRawImage(stageRef);
-        if (guideImage is null)
-        {
-            throw new InvalidOperationException($"Root Guide Image Reference '{guideReference}' could not be resolved to an image.");
-        }
+        WGNodeData guideImage = ResolveRootGuideImage(g, guideReference, "Root guide image reference");
 
         if (TryUpdateExistingScaleNode(g, imagePath: guideImage.Path))
         {
@@ -103,12 +121,70 @@ internal static class RootVideoStageResizer
         g.CurrentMedia = g.CurrentMedia.WithPath([scaleNode, 0]);
     }
 
+    private static void ApplyPostIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        ApplyLtxv2RootLastFrameGuideIfNeeded(genInfo);
+        ApplyLatentDimensionsIfNeeded(genInfo);
+    }
+
+    private static void ApplyLtxv2RootLastFrameGuideIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        WorkflowGenerator g = genInfo?.Generator;
+        if (g is null
+            || !ShouldApplyLtxv2RootLastFrameGuide(genInfo, GetNormalizedRootGuideReference(
+                g,
+                RootGuideLastFrameReferenceHelperKey,
+                VideoStagesExtension.RootGuideLastFrameReference,
+                "Root guide last frame reference"))
+            || g.CurrentMedia is null
+            || genInfo.PosCond is null
+            || genInfo.NegCond is null
+            || genInfo.Vae is null)
+        {
+            return;
+        }
+
+        string guideReference = g.NodeHelpers[RootGuideLastFrameReferenceHelperKey];
+        WGNodeData guideImage = ResolveRootGuideImage(g, guideReference, "Root guide last frame reference");
+        if (!TryGetRootGuideTargetResolution(genInfo, out int width, out int height))
+        {
+            return;
+        }
+
+        string resizeNode = g.CreateNode("ResizeImageMaskNode", new JObject()
+        {
+            ["input"] = guideImage.Path,
+            ["resize_type"] = "scale dimensions",
+            ["resize_type.width"] = width,
+            ["resize_type.height"] = height,
+            ["resize_type.crop"] = "center",
+            ["scale_method"] = "nearest-exact"
+        });
+        string preprocessNode = g.CreateNode(NodeTypes.LTXVPreprocess, new JObject()
+        {
+            ["image"] = new JArray(resizeNode, 0),
+            ["img_compression"] = LtxvGuideImgCompression
+        });
+        string addedGuide = g.CreateNode("LTXVAddGuide", new JObject()
+        {
+            ["positive"] = genInfo.PosCond,
+            ["negative"] = genInfo.NegCond,
+            ["vae"] = genInfo.Vae.Path,
+            ["latent"] = g.CurrentMedia.Path,
+            ["image"] = new JArray(preprocessNode, 0),
+            ["frame_idx"] = -1,
+            ["strength"] = 0.7
+        });
+        genInfo.PosCond = new JArray(addedGuide, 0);
+        genInfo.NegCond = new JArray(addedGuide, 1);
+        g.CurrentMedia = g.CurrentMedia.WithPath([addedGuide, 2], WGNodeData.DT_LATENT_VIDEO, genInfo.Model?.Compat);
+    }
+
     private static void ApplyLatentDimensionsIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         WorkflowGenerator g = genInfo?.Generator;
         if (g is null
             || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !HasConfiguredStages(g)
             || !TryGetRootStageResolution(g.UserInput, out int width, out int height)
             || g.CurrentMedia is null)
         {
@@ -149,32 +225,48 @@ internal static class RootVideoStageResizer
         solidMaskInputs["height"] = media.Height.Value;
     }
 
-    private static bool HasConfiguredStages(WorkflowGenerator g)
+    private static bool IsDefaultRootGuideReference(string guideReference)
     {
-        if (!g.UserInput.Get(VideoStagesExtension.EnableVideoStages, false))
-        {
-            return false;
-        }
-
-        if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
-            || string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        return json.Trim() != "[]";
+        return string.IsNullOrWhiteSpace(guideReference)
+            || string.Equals(guideReference, DefaultRootGuideReference, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string NormalizeRootGuideImageReference(WorkflowGenerator g)
+    private static bool ShouldApplyLtxv2RootLastFrameGuide(WorkflowGenerator.ImageToVideoGenInfo genInfo, string guideReference)
     {
-        string rawValue = g.UserInput.Get(VideoStagesExtension.RootGuideImageReference, DefaultRootGuideReference);
+        return genInfo?.VideoModel?.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID
+            && !IsDefaultRootGuideReference(guideReference);
+    }
+
+    private static string GetNormalizedRootGuideReference(
+        WorkflowGenerator g,
+        string helperKey,
+        T2IRegisteredParam<string> param,
+        string settingName)
+    {
+        if (g.NodeHelpers.TryGetValue(helperKey, out string cached)
+            && !string.IsNullOrWhiteSpace(cached))
+        {
+            return cached;
+        }
+
+        string normalized = NormalizeRootGuideReference(g, param, settingName);
+        g.NodeHelpers[helperKey] = normalized;
+        return normalized;
+    }
+
+    private static string NormalizeRootGuideReference(
+        WorkflowGenerator g,
+        T2IRegisteredParam<string> param,
+        string settingName)
+    {
+        string rawValue = g.UserInput.Get(param, DefaultRootGuideReference);
         if (IsTextToVideoRootWorkflow(g))
         {
             string compactT2v = ImageReferenceSyntax.Compact(rawValue);
             if (!string.IsNullOrWhiteSpace(compactT2v)
                 && !string.Equals(compactT2v, DefaultRootGuideReference, StringComparison.OrdinalIgnoreCase))
             {
-                Logs.Warning($"VideoStages: Root guide reference '{rawValue}' is invalid on a text-to-video workflow. Using '{DefaultRootGuideReference}' instead.");
+                Logs.Warning($"VideoStages: {settingName} '{rawValue}' is invalid on a text-to-video workflow. Using '{DefaultRootGuideReference}' instead.");
             }
             return DefaultRootGuideReference;
         }
@@ -198,29 +290,40 @@ internal static class RootVideoStageResizer
             return ImageReferenceSyntax.FormatBase2EditStageIndex(editStage);
         }
 
-        Logs.Warning($"VideoStages: Root guide reference '{rawValue}' is invalid. Using '{DefaultRootGuideReference}' instead.");
+        Logs.Warning($"VideoStages: {settingName} '{rawValue}' is invalid. Using '{DefaultRootGuideReference}' instead.");
         return DefaultRootGuideReference;
     }
 
-    private static StageRefStore.StageRef ResolveRootGuideReference(WorkflowGenerator g, string guideReference)
+    private static StageRefStore.StageRef ResolveRootGuideReference(WorkflowGenerator g, string guideReference, string settingName)
     {
         StageRefStore store = new(g);
         if (guideReference == "Base")
         {
-            return store.Base ?? throw new InvalidOperationException("Root Guide Image Reference 'Base' requested, but no base reference exists.");
+            return store.Base ?? throw new InvalidOperationException($"{settingName} 'Base' requested, but no base reference exists.");
         }
         if (guideReference == "Refiner")
         {
-            return store.Refiner ?? throw new InvalidOperationException("Root Guide Image Reference 'Refiner' requested, but no refiner reference exists.");
+            return store.Refiner ?? throw new InvalidOperationException($"{settingName} 'Refiner' requested, but no refiner reference exists.");
         }
         if (ImageReferenceSyntax.TryParseBase2EditStageIndex(guideReference, out int editStage))
         {
             return Base2EditPublishedStageRefs.TryGetStageRef(g, editStage, out StageRefStore.StageRef editRef)
                 ? editRef
-                : throw new InvalidOperationException($"Root Guide Image Reference '{guideReference}' requested, but Base2Edit stage {editStage} does not exist.");
+                : throw new InvalidOperationException($"{settingName} '{guideReference}' requested, but Base2Edit stage {editStage} does not exist.");
         }
 
-        throw new InvalidOperationException($"Unknown Root Guide Image Reference value '{guideReference}'.");
+        throw new InvalidOperationException($"Unknown {settingName} value '{guideReference}'.");
+    }
+
+    private static WGNodeData ResolveRootGuideImage(WorkflowGenerator g, string guideReference, string settingName)
+    {
+        StageRefStore.StageRef stageRef = ResolveRootGuideReference(g, guideReference, settingName);
+        WGNodeData guideImage = Base2EditPublishedStageRefs.ResolveToRawImage(stageRef);
+        if (guideImage is null)
+        {
+            throw new InvalidOperationException($"{settingName} '{guideReference}' could not be resolved to an image.");
+        }
+        return guideImage;
     }
 
     private static bool IsTextToVideoRootWorkflow(WorkflowGenerator g)
@@ -247,8 +350,37 @@ internal static class RootVideoStageResizer
         width = 0;
         height = 0;
         return g is not null
-            && HasConfiguredStages(g)
             && TryGetRootStageResolution(g.UserInput, out width, out height);
+    }
+
+    private static bool TryGetRootGuideTargetResolution(WorkflowGenerator.ImageToVideoGenInfo genInfo, out int width, out int height)
+    {
+        WorkflowGenerator g = genInfo?.Generator;
+        width = g?.CurrentMedia?.Width ?? 0;
+        height = g?.CurrentMedia?.Height ?? 0;
+        if (width > 0 && height > 0)
+        {
+            return true;
+        }
+        width = genInfo?.Width?.Value<int?>() ?? 0;
+        height = genInfo?.Height?.Value<int?>() ?? 0;
+        if (width > 0 && height > 0)
+        {
+            return true;
+        }
+        if (TryGetConfiguredRootStageResolution(g, out width, out height))
+        {
+            return true;
+        }
+
+        if (g is null)
+        {
+            return false;
+        }
+
+        width = g.UserInput.GetImageWidth();
+        height = g.UserInput.GetImageHeight();
+        return width > 0 && height > 0;
     }
 
     private static bool TryUpdateExistingScaleNode(WorkflowGenerator g, JArray imagePath = null, int? width = null, int? height = null, string crop = null)
