@@ -14,6 +14,8 @@ public class VideoStagesExtension : Extension
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
     public static T2IRegisteredParam<bool> ConnectAudioToVideo;
     public static T2IRegisteredParam<bool> EnableVideoStages;
+    public static T2IRegisteredParam<int> RootStageWidth;
+    public static T2IRegisteredParam<int> RootStageHeight;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
 
@@ -28,8 +30,10 @@ public class VideoStagesExtension : Extension
         Logs.Info("VideoStages Extension initializing...");
         RegisterParameters();
         RegisterComfyNodes();
+        RootVideoStageResizer.EnsureRegistered();
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureBase(), -4.2);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureRefiner(), 5.9);
+        WorkflowGenerator.AddStep(RootVideoStageResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo, 11.4);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).RunConfiguredStages(), 11.5);
     }
 
@@ -81,6 +85,39 @@ public class VideoStagesExtension : Extension
             FeatureFlag: "comfyui"
         ));
         OrderPriority += 1;
+
+        RootStageWidth = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Root Width",
+            Description: "Optional width override for the first additional video stage input. When both Root Width and Root Height are set, the first stage input is scaled before extracting frames.",
+            Default: "512",
+            Min: 256,
+            ViewMin: 256,
+            Max: 16384,
+            ViewMax: 2048,
+            Step: 32,
+            Toggleable: true,
+            Group: VideoStagesGroup,
+            OrderPriority: OrderPriority,
+            FeatureFlag: "comfyui",
+            DoNotPreview: true
+        ));
+        OrderPriority += 1;
+
+        RootStageHeight = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Root Height",
+            Description: "Optional height override for the first additional video stage input. When both Root Width and Root Height are set, the first stage input is scaled before extracting frames.",
+            Default: "512",
+            Min: 256,
+            ViewMin: 256,
+            Max: 16384,
+            ViewMax: 2048,
+            Step: 32,
+            Toggleable: true,
+            Group: VideoStagesGroup,
+            OrderPriority: OrderPriority,
+            FeatureFlag: "comfyui",
+            DoNotPreview: true
+        ));
 
         VideoStagesJson = T2IParamTypes.Register<string>(new T2IParamType(
             Name: "Video Stages",

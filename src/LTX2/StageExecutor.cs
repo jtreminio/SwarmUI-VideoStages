@@ -416,6 +416,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         string explicitScheduler = g.UserInput.Get(ComfyUIBackendExtension.SchedulerParam, null, sectionId: genInfo.ContextID, includeBase: false);
 
         g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
+        RootVideoStageResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
         string samplerNode = g.CreateKSampler(
             genInfo.Model.Path,
             genInfo.PosCond,

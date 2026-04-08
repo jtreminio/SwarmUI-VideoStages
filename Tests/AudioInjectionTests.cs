@@ -404,4 +404,28 @@ public class AudioInjectionTests
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
     }
+
+    [Fact]
+    public void Save_audio_stage_uses_root_stage_resolution_for_injected_audio_mask()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(MakeStage(models.VideoModel.Name)).ToString();
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootStageWidth, 384);
+        input.Set(VideoStagesExtension.RootStageHeight, 640);
+
+        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+
+        WorkflowNode setMask = WorkflowAssertions.RequireNodeOfType(workflow, SetLatentNoiseMask);
+        WorkflowNode solidMask = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(setMask.Node, "mask")[0]}");
+
+        Assert.Equal(384, solidMask.Node["inputs"]?.Value<int>("width"));
+        Assert.Equal(640, solidMask.Node["inputs"]?.Value<int>("height"));
+    }
 }

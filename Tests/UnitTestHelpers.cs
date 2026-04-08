@@ -152,6 +152,19 @@ internal static class TestModelFactory
         return CreateBaseAndVideoModels(T2IModelClassSorter.CompatLtxv2, "unit-video-ltxv2", "Unit Video LTXV2");
     }
 
+    public static TestModelBundle CreateBaseAndWan22VideoModels()
+    {
+        CommonModels.Known.TryAdd("wan22-vae", new CommonModels.ModelInfo(
+            "wan22-vae",
+            "Wan 2.2 VAE",
+            "Unit test stub Wan 2.2 VAE entry.",
+            "https://example.com/wan22-vae.safetensors",
+            "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156",
+            "VAE",
+            "Wan/wan2.2_vae.safetensors"));
+        return CreateBaseAndVideoModels(T2IModelClassSorter.CompatWan22_5b, "unit-video-wan22", "Unit Video Wan 2.2");
+    }
+
     private static TestModelBundle CreateBaseAndVideoModels(T2IModelCompatClass videoCompat, string videoClassId, string videoClassName)
     {
         T2IModelHandler sdHandler = new() { ModelType = "Stable-Diffusion" };

@@ -114,11 +114,19 @@ public sealed class AudioInjector(WorkflowGenerator g)
 
     private string CreateAudioMaskNode(JToken encodedAudioPath)
     {
+        int width = g.UserInput.GetImageWidth();
+        int height = g.UserInput.GetImageHeight();
+        if (RootVideoStageResizer.TryGetConfiguredRootStageResolution(g, out int rootWidth, out int rootHeight))
+        {
+            width = rootWidth;
+            height = rootHeight;
+        }
+
         string solidMaskId = g.CreateNode(NodeTypes.SolidMask, new JObject()
         {
             ["value"] = 0.0,
-            ["width"] = g.UserInput.GetImageWidth(),
-            ["height"] = g.UserInput.GetImageHeight()
+            ["width"] = width,
+            ["height"] = height
         }, g.GetStableDynamicID(AudioInjectionIdBase + 200, 0));
         return g.CreateNode(NodeTypes.SetLatentNoiseMask, new JObject()
         {
