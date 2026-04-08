@@ -38,7 +38,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
         TryInjectDetectedAudio();
 
-        List<JsonParser.StageSpec> stages = HasConfiguredStages()
+        List<JsonParser.StageSpec> stages = IsVideoStagesEnabledForVideo()
             ? new JsonParser(g).ParseStages()
             : [];
         if (stages.Count == 0)
@@ -109,16 +109,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             return false;
         }
 
-        T2IParamType type = VideoStagesExtension.VideoStagesJson?.Type;
-        if (type is null
-            || !g.UserInput.TryGetRaw(type, out object rawValue)
-            || rawValue is not string json
-            || string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        return json.Trim() != "[]";
+        return new JsonParser(g).HasConfiguredStages();
     }
 
     private bool ShouldCaptureStageRefs()

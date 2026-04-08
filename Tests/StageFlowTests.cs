@@ -4,7 +4,9 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -97,18 +99,22 @@ public partial class StageFlowTests
     private static WorkflowNode RequireRetargetedSeparateNode(JObject workflow, WorkflowNode videoDecode)
     {
         JArray videoLatents = WorkflowAssertions.RequireConnectionInput(videoDecode.Node, "samples");
-        Assert.False(JToken.DeepEquals(videoLatents, new JArray("201", 0)));
-        WorkflowNode separateNode = WorkflowAssertions.RequireNodeById(workflow, $"{videoLatents[0]}");
+        WorkflowNode cropGuidesNode = WorkflowAssertions.RequireNodeById(workflow, $"{videoLatents[0]}");
+        Assert.Equal("LTXVCropGuides", $"{cropGuidesNode.Node["class_type"]}");
+
+        JArray croppedLatents = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "latent");
+        WorkflowNode separateNode = WorkflowAssertions.RequireNodeById(workflow, $"{croppedLatents[0]}");
         Assert.Equal("LTXVSeparateAVLatent", $"{separateNode.Node["class_type"]}");
+        Assert.NotEqual("201", separateNode.Id);
         return separateNode;
     }
 
-    private static void AssertSamplerConsumesImgToVideoOutput(
+    private static void AssertSamplerConsumesGuideOutput(
         JObject workflow,
-        WorkflowNode imgToVideoNode,
+        WorkflowNode guideNode,
         WorkflowNode samplerNode)
     {
-        WorkflowInputConnection concatConnection = WorkflowUtils.FindInputConnections(workflow, new JArray(imgToVideoNode.Id, 0))
+        WorkflowInputConnection concatConnection = WorkflowUtils.FindInputConnections(workflow, new JArray(guideNode.Id, 2))
             .Single(connection => connection.InputName == "video_latent"
                 && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == "LTXVConcatAVLatent");
         Assert.True(JToken.DeepEquals(
@@ -155,6 +161,14 @@ public partial class StageFlowTests
         foreach (WorkflowNode node in WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled"))
         {
             Assert.NotEmpty(WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 0)));
+        }
+    }
+
+    private static void AssertNoDanglingCropGuides(JObject workflow)
+    {
+        foreach (WorkflowNode node in WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"))
+        {
+            Assert.NotEmpty(WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 2)));
         }
     }
 
@@ -265,7 +279,7 @@ public partial class StageFlowTests
         }
     }
 
-    private static IReadOnlyList<WorkflowNode> AssertLtxConditioningUsesAdvancedEncoders(JObject workflow)
+    private static IReadOnlyList<WorkflowNode> AssertLtxConditioningUsesTextEncoders(JObject workflow)
     {
         List<WorkflowNode> conditioningNodes = WorkflowUtils.NodesOfType(workflow, "LTXVConditioning")
             .OrderBy(node => int.Parse(node.Id))
@@ -275,8 +289,8 @@ public partial class StageFlowTests
         {
             JArray positiveRef = WorkflowAssertions.RequireConnectionInput(conditioningNode.Node, "positive");
             JArray negativeRef = WorkflowAssertions.RequireConnectionInput(conditioningNode.Node, "negative");
-            Assert.Equal("SwarmClipTextEncodeAdvanced", $"{WorkflowAssertions.RequireNodeById(workflow, $"{positiveRef[0]}").Node["class_type"]}");
-            Assert.Equal("SwarmClipTextEncodeAdvanced", $"{WorkflowAssertions.RequireNodeById(workflow, $"{negativeRef[0]}").Node["class_type"]}");
+            Assert.Equal("CLIPTextEncode", $"{WorkflowAssertions.RequireNodeById(workflow, $"{positiveRef[0]}").Node["class_type"]}");
+            Assert.Equal("CLIPTextEncode", $"{WorkflowAssertions.RequireNodeById(workflow, $"{negativeRef[0]}").Node["class_type"]}");
         }
         return conditioningNodes;
     }
@@ -312,6 +326,47 @@ public partial class StageFlowTests
             }
 
             if (!workflow.TryGetValue($"{current[0]}", out JToken nodeToken) || nodeToken is not JObject node || node["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+
+            foreach (JArray upstreamRef in ExtractNodeRefs(inputs))
+            {
+                pending.Enqueue(upstreamRef);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool OutputTracesBackToNodeType(JObject workflow, JArray outputRef, params string[] expectedNodeTypes)
+    {
+        HashSet<string> expectedTypes = [.. expectedNodeTypes];
+        Queue<JArray> pending = new();
+        HashSet<string> visited = [];
+        pending.Enqueue(new JArray(outputRef[0], outputRef[1]));
+
+        while (pending.Count > 0)
+        {
+            JArray current = pending.Dequeue();
+            string key = $"{current[0]}::{current[1]}";
+            if (!visited.Add(key))
+            {
+                continue;
+            }
+
+            if (!workflow.TryGetValue($"{current[0]}", out JToken nodeToken) || nodeToken is not JObject node)
+            {
+                continue;
+            }
+
+            string classType = $"{node["class_type"]}";
+            if (expectedTypes.Contains(classType))
+            {
+                return true;
+            }
+
+            if (node["inputs"] is not JObject inputs)
             {
                 continue;
             }
@@ -372,9 +427,23 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), SeedEditedCurrentImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithLatentBaseCaptureAndDownstreamRefinerDecode() =>
+        new[]
+        {
+            WorkflowTestHarness.MinimalGraphSeedStep(),
+            SeedDownstreamRefinerDecodeFromBaseLatentStep(),
+            WorkflowTestHarness.CoreImageToVideoStep()
+        }
+        .Concat(WorkflowTestHarness.VideoStagesSteps());
+
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(int editStageIndex) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 10.9), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPublishedBase2EditLatentRef(int editStageIndex) =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedRefinerImageStep(), SeedPublishedBase2EditLatentRefStep(editStageIndex, priority: 10.9), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
@@ -382,6 +451,25 @@ public partial class StageFlowTests
         {
             string refinerImage = g.CreateNode("UnitTest_RefinerImage", new JObject(), id: "12", idMandatory: false);
             g.CurrentMedia = new WGNodeData([refinerImage, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat())
+            {
+                Width = 512,
+                Height = 512
+            };
+        }, 5.0);
+
+    private static WorkflowGenerator.WorkflowGenStep SeedDownstreamRefinerDecodeFromBaseLatentStep() =>
+        new(g =>
+        {
+            string refinerSampler = g.CreateNode("UnitTest_RefinerSampler", new JObject()
+            {
+                ["latent_image"] = g.CurrentMedia.Path
+            }, id: "23", idMandatory: true);
+            string refinerDecode = g.CreateNode("VAEDecode", new JObject()
+            {
+                ["vae"] = g.CurrentVae.Path,
+                ["samples"] = new JArray(refinerSampler, 0)
+            }, id: "8", idMandatory: true);
+            g.CurrentMedia = new WGNodeData([refinerDecode, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512
@@ -435,6 +523,51 @@ public partial class StageFlowTests
 
             g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
         }, priority);
+
+    private static WorkflowGenerator.WorkflowGenStep SeedPublishedBase2EditLatentRefStep(int editStageIndex, double priority) =>
+        new(g =>
+        {
+            string latentNode = g.CreateNode("UnitTest_Base2EditPublishedLatent", new JObject(), id: "60", idMandatory: false);
+            _ = g.CreateNode("VAEDecode", new JObject()
+            {
+                ["vae"] = g.CurrentVae.Path,
+                ["samples"] = new JArray(latentNode, 0)
+            }, id: "61", idMandatory: false);
+
+            JObject media = new()
+            {
+                ["path"] = new JArray(latentNode, 0),
+                ["dataType"] = WGNodeData.DT_LATENT_IMAGE,
+                ["width"] = 512,
+                ["height"] = 512
+            };
+            if (!string.IsNullOrWhiteSpace(g.CurrentCompat()?.ID))
+            {
+                media["compatId"] = g.CurrentCompat().ID;
+            }
+
+            JObject payload = new()
+            {
+                ["media"] = media
+            };
+            if (g.CurrentVae?.Path is JArray vaePath && vaePath.Count == 2)
+            {
+                JObject vae = new()
+                {
+                    ["path"] = new JArray(vaePath[0], vaePath[1]),
+                    ["dataType"] = WGNodeData.DT_VAE
+                };
+                if (!string.IsNullOrWhiteSpace(g.CurrentVae.Compat?.ID))
+                {
+                    vae["compatId"] = g.CurrentVae.Compat.ID;
+                }
+                payload["vae"] = vae;
+            }
+
+            g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
+        }, priority);
+
+    private static Image BuildUploadedVideoEndFrame() => new([0x89, 0x50, 0x4E, 0x47], MediaType.ImagePng);
 
     private static WorkflowGenerator.WorkflowGenStep SeedNativeLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
         new(g =>

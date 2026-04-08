@@ -25,6 +25,7 @@ internal sealed class PostVideoChain
     public readonly string AudioDecodeNodeId;
     public readonly JArray DecodeOutputPath;
     public readonly bool HasPostDecodeWrappers;
+    public readonly string FinalCropNodeId;
 
     private PostVideoChain(
         WorkflowGenerator generator,
@@ -36,7 +37,8 @@ internal sealed class PostVideoChain
         string videoDecodeNodeId,
         string audioDecodeNodeId,
         JArray decodeOutputPath,
-        bool hasPostDecodeWrappers)
+        bool hasPostDecodeWrappers,
+        string finalCropNodeId)
     {
         g = generator;
         CurrentOutputMedia = currentOutputMedia;
@@ -48,6 +50,7 @@ internal sealed class PostVideoChain
         AudioDecodeNodeId = audioDecodeNodeId;
         DecodeOutputPath = decodeOutputPath;
         HasPostDecodeWrappers = hasPostDecodeWrappers;
+        FinalCropNodeId = finalCropNodeId;
     }
 
     public static PostVideoChain TryCapture(WorkflowGenerator generator)
@@ -77,6 +80,12 @@ internal sealed class PostVideoChain
         if (samplesRef is null || samplesRef.Count != 2)
         {
             return null;
+        }
+
+        string finalCropNodeId = null;
+        if (TryResolveFinalCropLatent(generator.Workflow, samplesRef, out JArray croppedLatentRef, out finalCropNodeId))
+        {
+            samplesRef = croppedLatentRef;
         }
 
         JArray videoVaeRef = decode.Node["inputs"]?["vae"] as JArray;
@@ -115,7 +124,8 @@ internal sealed class PostVideoChain
             decode.Id,
             audioDecodeId,
             new JArray(decode.Id, 0),
-            !JToken.DeepEquals(mediaPath, new JArray(decode.Id, 0)));
+            !JToken.DeepEquals(mediaPath, new JArray(decode.Id, 0)),
+            finalCropNodeId);
     }
 
     public WGNodeData CreateStageInput()
@@ -208,7 +218,7 @@ internal sealed class PostVideoChain
         media.AttachedAudio = sourceAudio;
     }
 
-    public void SpliceCurrentOutput(WGNodeData vae)
+    public void SpliceCurrentOutput(WGNodeData vae, JArray positiveConditioning, JArray negativeConditioning)
     {
         if (g.CurrentMedia?.Path is not JArray stageOutputPath || stageOutputPath.Count != 2)
         {
@@ -220,7 +230,23 @@ internal sealed class PostVideoChain
             ["av_latent"] = stageOutputPath
         });
 
-        RetargetVideoDecodeAsTiled(VideoDecodeNodeId, vae?.Path ?? g.CurrentVae?.Path, new JArray(newSeparate, 0));
+        JArray retargetedVideoLatent = new JArray(newSeparate, 0);
+        if (positiveConditioning is not null && negativeConditioning is not null)
+        {
+            string cropGuidesNode = FinalCropNodeId;
+            if (!TryRetargetExistingFinalCrop(cropGuidesNode, positiveConditioning, negativeConditioning, new JArray(newSeparate, 0)))
+            {
+                cropGuidesNode = g.CreateNode(NodeTypes.LTXVCropGuides, new JObject()
+                {
+                    ["positive"] = new JArray(positiveConditioning[0], positiveConditioning[1]),
+                    ["negative"] = new JArray(negativeConditioning[0], negativeConditioning[1]),
+                    ["latent"] = new JArray(newSeparate, 0)
+                });
+            }
+            retargetedVideoLatent = new JArray(cropGuidesNode, 2);
+        }
+
+        RetargetVideoDecodeAsTiled(VideoDecodeNodeId, vae?.Path ?? g.CurrentVae?.Path, retargetedVideoLatent);
         WorkflowUtils.RetargetInputConnections(
             g.Workflow,
             new JArray($"{AudioLatentPath[0]}", AudioLatentPath[1]),
@@ -287,6 +313,52 @@ internal sealed class PostVideoChain
         }
 
         return false;
+    }
+
+    private bool TryRetargetExistingFinalCrop(
+        string cropNodeId,
+        JArray positiveConditioning,
+        JArray negativeConditioning,
+        JArray latentPath)
+    {
+        if (string.IsNullOrWhiteSpace(cropNodeId)
+            || positiveConditioning is not { Count: 2 }
+            || negativeConditioning is not { Count: 2 }
+            || latentPath is not { Count: 2 }
+            || !g.Workflow.TryGetValue(cropNodeId, out JToken cropToken)
+            || cropToken is not JObject cropNode
+            || $"{cropNode["class_type"]}" != NodeTypes.LTXVCropGuides)
+        {
+            return false;
+        }
+
+        cropNode["inputs"] = new JObject()
+        {
+            ["positive"] = new JArray(positiveConditioning[0], positiveConditioning[1]),
+            ["negative"] = new JArray(negativeConditioning[0], negativeConditioning[1]),
+            ["latent"] = new JArray(latentPath[0], latentPath[1])
+        };
+        return true;
+    }
+
+    private static bool TryResolveFinalCropLatent(JObject workflow, JArray decodeSamplesRef, out JArray croppedLatentRef, out string cropNodeId)
+    {
+        croppedLatentRef = null;
+        cropNodeId = null;
+        if (decodeSamplesRef is not { Count: 2 }
+            || $"{decodeSamplesRef[1]}" != "2"
+            || !workflow.TryGetValue($"{decodeSamplesRef[0]}", out JToken cropToken)
+            || cropToken is not JObject cropNode
+            || $"{cropNode["class_type"]}" != NodeTypes.LTXVCropGuides
+            || cropNode["inputs"]?["latent"] is not JArray latentRef
+            || latentRef.Count != 2)
+        {
+            return false;
+        }
+
+        cropNodeId = $"{decodeSamplesRef[0]}";
+        croppedLatentRef = new JArray(latentRef[0], latentRef[1]);
+        return true;
     }
 
     private static WGNodeData CloneMedia(WorkflowGenerator generator, WGNodeData media)

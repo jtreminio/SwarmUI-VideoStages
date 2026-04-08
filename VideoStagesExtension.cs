@@ -9,7 +9,7 @@ namespace VideoStages;
 public class VideoStagesExtension : Extension
 {
     public const int SectionID_VideoStages = 48823;
-    public const double DefaultLTXVImgToVideoInplaceStrength = 0.8;
+    public const double DefaultLTXVImgToVideoInplaceStrength = 0.7;
 
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
     public static T2IRegisteredParam<bool> ConnectAudioToVideo;
@@ -137,7 +137,7 @@ public class VideoStagesExtension : Extension
 
         RootGuideLastFrameReference = T2IParamTypes.Register<string>(new T2IParamType(
             Name: "Guide Last Frame Reference",
-            Description: "Which earlier image should be used as the root video last-frame guide on LTX-2 first/last-frame runs. 'Default' disables the extra last-frame guide; 'Base', 'Refiner', and 'editN' options can be selected from the frontend when available.",
+            Description: "Which earlier image should be used as the root video last-frame guide on LTX-2 first/last-frame runs. 'Default' keeps the native Video End Image when one is provided and otherwise disables the extra last-frame guide; 'Base', 'Refiner', and 'editN' options can be selected from the frontend when available.",
             Default: "Default",
             GetValues: (_) => ["Default", "Base", "Refiner"],
             ValidateValues: false,
@@ -162,7 +162,7 @@ public class VideoStagesExtension : Extension
 
         LTXVImgToVideoInplaceStrength = T2IParamTypes.Register<double>(new T2IParamType(
             Name: "Video Stages LTXVImgToVideoInplaceStrength",
-            Description: ".",
+            Description: "Controls the LTX-2 first/last-frame guide strength used by VideoStages.",
             Default: $"{DefaultLTXVImgToVideoInplaceStrength}",
             Min: 0.1,
             Max: 1,

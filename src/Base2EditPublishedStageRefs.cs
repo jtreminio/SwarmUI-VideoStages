@@ -60,6 +60,17 @@ internal static class Base2EditPublishedStageRefs
             return null;
         }
 
+        if (stageRef.Media.Gen?.Workflow is JObject workflow
+            && stageRef.Media.Path is JArray mediaPath
+            && WorkflowUtils.TryResolveNearestDownstreamDecodeOutput(workflow, mediaPath, out JArray decodedPath))
+        {
+            string rawDataType = stageRef.Media.DataType == WGNodeData.DT_LATENT_VIDEO
+                || stageRef.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
+                ? WGNodeData.DT_VIDEO
+                : WGNodeData.DT_IMAGE;
+            return stageRef.Media.WithPath(decodedPath, rawDataType, stageRef.Vae.Compat);
+        }
+
         return stageRef.Media.AsRawImage(stageRef.Vae);
     }
 

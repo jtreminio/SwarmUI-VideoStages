@@ -36,10 +36,10 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
             new JArray("209", 0)));
 
-        WorkflowNode imgToVideoNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        WorkflowNode addGuideNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide"));
         Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
+            WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "image"),
             new JArray("210", 0)));
     }
 
@@ -66,10 +66,10 @@ public partial class StageFlowTests
         WorkflowNode preprocessNode = Assert.Single(preprocessNodes);
         Assert.Equal("210", preprocessNode.Id);
 
-        WorkflowNode imgToVideoNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        WorkflowNode addGuideNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide"));
         Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
+            WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "image"),
             new JArray("210", 0)));
 
         List<WorkflowNode> decodeNodes = WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled")
@@ -101,12 +101,12 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(stagePreprocess.Node, "image"),
             new JArray("24", 0)));
 
-        WorkflowNode imgToVideoNode = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        WorkflowNode addGuideNode = WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide")
             .Single(node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray(stagePreprocess.Id, 0)));
         Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
+            WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "image"),
             new JArray(stagePreprocess.Id, 0)));
     }
 }

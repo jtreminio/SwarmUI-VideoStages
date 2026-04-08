@@ -68,47 +68,8 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             true,
             sectionId: genInfo.ContextID);
 
-        int width = sourceMedia.Width ?? g.UserInput.GetImageWidth();
-        int height = sourceMedia.Height ?? g.UserInput.GetImageHeight();
-        int steps = genInfo.Steps;
-        double guidance = g.UserInput.Get(T2IParamTypes.FluxGuidanceScale, -1);
-        string positivePrompt = ExtractVideoConditioningPrompt(genInfo.Prompt);
-        string negativePrompt = ExtractVideoConditioningPrompt(genInfo.NegativePrompt);
-
-        string posCondNode = g.CreateNode(NodeTypes.SwarmClipTextEncodeAdvanced, new JObject()
-        {
-            ["clip"] = clip.Path,
-            ["steps"] = steps,
-            ["prompt"] = positivePrompt,
-            ["width"] = width,
-            ["height"] = height,
-            ["target_width"] = width,
-            ["target_height"] = height,
-            ["guidance"] = guidance
-        });
-        string negCondNode = g.CreateNode(NodeTypes.SwarmClipTextEncodeAdvanced, new JObject()
-        {
-            ["clip"] = clip.Path,
-            ["steps"] = steps,
-            ["prompt"] = negativePrompt,
-            ["width"] = width,
-            ["height"] = height,
-            ["target_width"] = width,
-            ["target_height"] = height,
-            ["guidance"] = guidance
-        });
-        genInfo.PosCond = new JArray(posCondNode, 0);
-        genInfo.NegCond = new JArray(negCondNode, 0);
-    }
-
-    private static string ExtractVideoConditioningPrompt(string prompt)
-    {
-        PromptRegion regionalizer = new(prompt ?? "");
-        if (!string.IsNullOrWhiteSpace(regionalizer.VideoPrompt))
-        {
-            return regionalizer.VideoPrompt.Trim();
-        }
-        return regionalizer.GlobalPrompt.Trim();
+        genInfo.PosCond = g.CreateConditioning(genInfo.Prompt, clip.Path, genInfo.VideoModel, true, isVideo: true);
+        genInfo.NegCond = g.CreateConditioning(genInfo.NegativePrompt, clip.Path, genInfo.VideoModel, false, isVideo: true);
     }
 
     private void PrepareConditioning(
@@ -135,26 +96,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         genInfo.DefaultSampler = DefaultVideoSampler;
         genInfo.DefaultScheduler = DefaultVideoScheduler;
         stageLatent = ApplyStageUpscaleIfNeeded(stage, genInfo, stageLatent, sourceMedia);
-
-        if (skipGuideReinjection)
-        {
-            g.CurrentMedia = stageLatent;
-        }
-        else
-        {
-            JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path);
-            string imgToVideoNode = g.CreateNode(NodeTypes.LTXVImgToVideoInplace, new JObject()
-            {
-                ["vae"] = genInfo.Vae.Path,
-                ["image"] = preprocessedGuidePath,
-                ["latent"] = stageLatent.Path,
-                ["strength"] = g.UserInput.Get(
-                    VideoStagesExtension.LTXVImgToVideoInplaceStrength,
-                    VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength),
-                ["bypass"] = false
-            });
-            g.CurrentMedia = stageLatent.WithPath([imgToVideoNode, 0], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
-        }
+        g.CurrentMedia = stageLatent;
 
         string conditioningNode = g.CreateNode(NodeTypes.LTXVConditioning, new JObject()
         {
@@ -164,6 +106,28 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         });
         genInfo.PosCond = [conditioningNode, 0];
         genInfo.NegCond = [conditioningNode, 1];
+
+        if (skipGuideReinjection)
+        {
+            g.CurrentMedia = stageLatent;
+        }
+        else
+        {
+            JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path);
+            string addGuideNode = g.CreateNode(NodeTypes.LTXVAddGuide, new JObject()
+            {
+                ["positive"] = genInfo.PosCond,
+                ["negative"] = genInfo.NegCond,
+                ["vae"] = genInfo.Vae.Path,
+                ["image"] = preprocessedGuidePath,
+                ["latent"] = stageLatent.Path,
+                ["frame_idx"] = RootVideoStageResizer.FirstFrameGuideFrameIndex,
+                ["strength"] = RootVideoStageResizer.GetGuideStrength(g)
+            });
+            genInfo.PosCond = [addGuideNode, 0];
+            genInfo.NegCond = [addGuideNode, 1];
+            g.CurrentMedia = stageLatent.WithPath([addGuideNode, 2], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
+        }
     }
 
     private WGNodeData ApplyStageUpscaleIfNeeded(
@@ -474,7 +438,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         bool splicedIntoNativeChain = postVideoChain is not null;
         if (splicedIntoNativeChain)
         {
-            postVideoChain.SpliceCurrentOutput(genInfo.Vae);
+            postVideoChain.SpliceCurrentOutput(genInfo.Vae, genInfo.PosCond, genInfo.NegCond);
             if (postVideoChain.HasPostDecodeWrappers)
             {
                 ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, postVideoChain.CurrentOutputMedia.Frames, postVideoChain.CurrentOutputMedia.FPS);

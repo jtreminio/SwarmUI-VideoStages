@@ -41,6 +41,8 @@ public class JsonParser(WorkflowGenerator g)
         string Scheduler
     );
 
+    public bool HasConfiguredStages() => ParseStages().Count > 0;
+
     public List<StageSpec> ParseStages()
     {
         List<JObject> stages = GetJsonStagesArray();

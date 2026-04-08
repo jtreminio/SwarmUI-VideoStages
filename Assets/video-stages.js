@@ -837,8 +837,13 @@ class VideoStageEditor {
             return this.getDefaultStageImageReference(stageIndex);
         }
         let compact = raw.replace(/\s+/g, "");
-        if (compact == "Generated" || compact == "Base" || compact == "Refiner") {
-            return compact;
+        switch (compact.toLowerCase()) {
+            case "generated":
+                return "Generated";
+            case "base":
+                return "Base";
+            case "refiner":
+                return "Refiner";
         }
         if (stageIndex > 0 && compact.toLowerCase() == "previousstage") {
             return "PreviousStage";
@@ -865,8 +870,13 @@ class VideoStageEditor {
             return "Default";
         }
         let compact = raw.replace(/\s+/g, "");
-        if (compact == "Default" || compact == "Base" || compact == "Refiner") {
-            return compact;
+        switch (compact.toLowerCase()) {
+            case "default":
+                return "Default";
+            case "base":
+                return "Base";
+            case "refiner":
+                return "Refiner";
         }
         let editStage = this.parseBase2EditStageIndex(compact);
         if (editStage != null) {

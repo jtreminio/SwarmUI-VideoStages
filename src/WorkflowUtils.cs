@@ -255,11 +255,35 @@ public static class WorkflowUtils
                     return true;
                 }
 
-                pending.Enqueue(new JArray(connection.NodeId, 0));
+                foreach (JArray equivalentRef in GetTransparentDownstreamRefs(connection, node))
+                {
+                    pending.Enqueue(equivalentRef);
+                }
             }
         }
 
         return false;
+    }
+
+    private static IEnumerable<JArray> GetTransparentDownstreamRefs(WorkflowInputConnection connection, JObject node)
+    {
+        string classType = $"{node["class_type"]}";
+        if (classType == NodeTypes.LTXVConcatAVLatent && connection.InputName == "video_latent")
+        {
+            yield return new JArray(connection.NodeId, 0);
+            yield break;
+        }
+
+        if (classType == NodeTypes.LTXVSeparateAVLatent && connection.InputName == "av_latent")
+        {
+            yield return new JArray(connection.NodeId, 0);
+            yield break;
+        }
+
+        if (classType == NodeTypes.LTXVCropGuides && connection.InputName == "latent")
+        {
+            yield return new JArray(connection.NodeId, 2);
+        }
     }
 
     private static Dictionary<string, List<string>> BuildForwardAdjacency(JObject workflow)

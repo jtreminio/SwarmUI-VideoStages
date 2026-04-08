@@ -5,6 +5,7 @@ internal static class NodeTypes
     public const string VAEDecode = "VAEDecode";
     public const string VAEDecodeTiled = "VAEDecodeTiled";
     public const string VAEEncode = "VAEEncode";
+    public const string CLIPTextEncode = "CLIPTextEncode";
     public const string VAEDecodeAudio = "VAEDecodeAudio";
     public const string SaveImage = "SaveImage";
     public const string SwarmSaveImageWS = "SwarmSaveImageWS";
@@ -21,6 +22,7 @@ internal static class NodeTypes
     public const string EmptyLTXVLatentVideo = "EmptyLTXVLatentVideo";
     public const string LTXVAudioVAEDecode = "LTXVAudioVAEDecode";
     public const string LTXVPreprocess = "LTXVPreprocess";
+    public const string LTXVAddGuide = "LTXVAddGuide";
     public const string LTXVImgToVideoInplace = "LTXVImgToVideoInplace";
     public const string LTXVCropGuides = "LTXVCropGuides";
     public const string LTXVLatentUpsampler = "LTXVLatentUpsampler";

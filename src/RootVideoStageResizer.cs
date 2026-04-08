@@ -12,6 +12,9 @@ internal static class RootVideoStageResizer
     private const string RootGuideReferenceHelperKey = "videostages.root.guide.reference";
     private const string RootGuideLastFrameReferenceHelperKey = "videostages.root.guide.lastframe.reference";
     private const int LtxvGuideImgCompression = 18;
+    private const double LegacyDefaultGuideStrength = 0.8;
+    internal const int FirstFrameGuideFrameIndex = 5;
+    internal const int LastFrameGuideFrameIndex = -2;
     private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PreHandler = ApplyIfNeeded;
     private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PostHandler = ApplyPostIfNeeded;
 
@@ -53,7 +56,7 @@ internal static class RootVideoStageResizer
         {
             return;
         }
-        if (ShouldApplyLtxv2RootLastFrameGuide(genInfo, rootLastFrameReference))
+        if (HasExplicitRootLastFrameGuideReference(rootLastFrameReference))
         {
             genInfo.VideoEndFrame = null;
         }
@@ -123,19 +126,80 @@ internal static class RootVideoStageResizer
 
     private static void ApplyPostIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
+        ApplyLtxv2RootFirstFrameGuideIfNeeded(genInfo);
         ApplyLtxv2RootLastFrameGuideIfNeeded(genInfo);
         ApplyLatentDimensionsIfNeeded(genInfo);
+    }
+
+    private static void ApplyLtxv2RootFirstFrameGuideIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        WorkflowGenerator g = genInfo?.Generator;
+        if (g is null
+            || !ShouldRewriteRootLtxv2GuideChain(genInfo)
+            || g.CurrentMedia is null
+            || genInfo.PosCond is null
+            || genInfo.NegCond is null
+            || genInfo.Vae is null
+            || !TryResolveCurrentGuideChain(g, out string firstGuideNodeId, out JObject firstGuideNode, out string lastGuideNodeId, out JObject lastGuideNode)
+            || !TryGetInputPath(firstGuideNode, "image", out JArray firstGuideImagePath)
+            || !TryGetInputPath(firstGuideNode, "latent", out JArray firstGuideLatentPath))
+        {
+            return;
+        }
+
+        double guideStrength = GetGuideStrength(g);
+        firstGuideNode["class_type"] = NodeTypes.LTXVAddGuide;
+        firstGuideNode["inputs"] = new JObject()
+        {
+            ["positive"] = ClonePath(genInfo.PosCond),
+            ["negative"] = ClonePath(genInfo.NegCond),
+            ["vae"] = ClonePath(genInfo.Vae.Path),
+            ["latent"] = ClonePath(firstGuideLatentPath),
+            ["image"] = ClonePath(firstGuideImagePath),
+            ["frame_idx"] = FirstFrameGuideFrameIndex,
+            ["strength"] = guideStrength
+        };
+
+        genInfo.PosCond = new JArray(firstGuideNodeId, 0);
+        genInfo.NegCond = new JArray(firstGuideNodeId, 1);
+        g.CurrentMedia = g.CurrentMedia.WithPath([firstGuideNodeId, 2], WGNodeData.DT_LATENT_VIDEO, genInfo.Model?.Compat);
+
+        if (lastGuideNode is null || string.IsNullOrWhiteSpace(lastGuideNodeId) || !TryGetInputPath(lastGuideNode, "image", out JArray lastGuideImagePath))
+        {
+            return;
+        }
+
+        lastGuideNode["class_type"] = NodeTypes.LTXVAddGuide;
+        lastGuideNode["inputs"] = new JObject()
+        {
+            ["positive"] = ClonePath(genInfo.PosCond),
+            ["negative"] = ClonePath(genInfo.NegCond),
+            ["vae"] = ClonePath(genInfo.Vae.Path),
+            ["latent"] = new JArray(firstGuideNodeId, 2),
+            ["image"] = ClonePath(lastGuideImagePath),
+            ["frame_idx"] = LastFrameGuideFrameIndex,
+            ["strength"] = guideStrength
+        };
+
+        genInfo.PosCond = new JArray(lastGuideNodeId, 0);
+        genInfo.NegCond = new JArray(lastGuideNodeId, 1);
+        g.CurrentMedia = g.CurrentMedia.WithPath([lastGuideNodeId, 2], WGNodeData.DT_LATENT_VIDEO, genInfo.Model?.Compat);
     }
 
     private static void ApplyLtxv2RootLastFrameGuideIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         WorkflowGenerator g = genInfo?.Generator;
-        if (g is null
-            || !ShouldApplyLtxv2RootLastFrameGuide(genInfo, GetNormalizedRootGuideReference(
-                g,
-                RootGuideLastFrameReferenceHelperKey,
-                VideoStagesExtension.RootGuideLastFrameReference,
-                "Root guide last frame reference"))
+        if (g is null)
+        {
+            return;
+        }
+
+        string guideReference = GetNormalizedRootGuideReference(
+            g,
+            RootGuideLastFrameReferenceHelperKey,
+            VideoStagesExtension.RootGuideLastFrameReference,
+            "Root guide last frame reference");
+        if (!ShouldApplyLtxv2RootLastFrameGuide(genInfo, guideReference)
             || g.CurrentMedia is null
             || genInfo.PosCond is null
             || genInfo.NegCond is null
@@ -144,8 +208,11 @@ internal static class RootVideoStageResizer
             return;
         }
 
-        string guideReference = g.NodeHelpers[RootGuideLastFrameReferenceHelperKey];
-        WGNodeData guideImage = ResolveRootGuideImage(g, guideReference, "Root guide last frame reference");
+        WGNodeData guideImage = ResolveRootLastFrameGuideImage(genInfo, guideReference);
+        if (guideImage is null)
+        {
+            return;
+        }
         if (!TryGetRootGuideTargetResolution(genInfo, out int width, out int height))
         {
             return;
@@ -172,8 +239,8 @@ internal static class RootVideoStageResizer
             ["vae"] = genInfo.Vae.Path,
             ["latent"] = g.CurrentMedia.Path,
             ["image"] = new JArray(preprocessNode, 0),
-            ["frame_idx"] = -1,
-            ["strength"] = 0.7
+            ["frame_idx"] = LastFrameGuideFrameIndex,
+            ["strength"] = GetGuideStrength(g)
         });
         genInfo.PosCond = new JArray(addedGuide, 0);
         genInfo.NegCond = new JArray(addedGuide, 1);
@@ -197,6 +264,7 @@ internal static class RootVideoStageResizer
 
     internal static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
     {
+        EnsureRootFinalGuideCropBeforeSave(g);
         if (!TryGetConfiguredRootStageResolution(g, out int width, out int height))
         {
             return;
@@ -225,16 +293,211 @@ internal static class RootVideoStageResizer
         solidMaskInputs["height"] = media.Height.Value;
     }
 
+    private static void EnsureRootFinalGuideCropBeforeSave(WorkflowGenerator g)
+    {
+        if (g?.CurrentMedia?.DataType != WGNodeData.DT_VIDEO
+            || HasConfiguredStages(g)
+            || g.CurrentMedia.Path is not { Count: 2 } currentMediaPath
+            || !WorkflowUtils.TryResolveNearestUpstreamDecode(g.Workflow, currentMediaPath, out WorkflowNode decodeNode)
+            || !TryGetDecodeLatentPath(decodeNode.Node, out JArray decodeLatentPath)
+            || IsCropGuidesLatentPath(g, decodeLatentPath)
+            || !TryResolveRootFinalGuideCropInputs(g, decodeLatentPath, out JArray positivePath, out JArray negativePath, out JArray videoLatentPath))
+        {
+            return;
+        }
+
+        string cropGuidesNode = g.CreateNode(NodeTypes.LTXVCropGuides, new JObject()
+        {
+            ["positive"] = ClonePath(positivePath),
+            ["negative"] = ClonePath(negativePath),
+            ["latent"] = ClonePath(videoLatentPath)
+        });
+        SetDecodeLatentPath(decodeNode.Node, new JArray(cropGuidesNode, 2));
+    }
+
     private static bool IsDefaultRootGuideReference(string guideReference)
     {
         return string.IsNullOrWhiteSpace(guideReference)
             || string.Equals(guideReference, DefaultRootGuideReference, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool HasExplicitRootLastFrameGuideReference(string guideReference)
+    {
+        return !IsDefaultRootGuideReference(guideReference);
+    }
+
     private static bool ShouldApplyLtxv2RootLastFrameGuide(WorkflowGenerator.ImageToVideoGenInfo genInfo, string guideReference)
     {
         return genInfo?.VideoModel?.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID
-            && !IsDefaultRootGuideReference(guideReference);
+            && (HasExplicitRootLastFrameGuideReference(guideReference)
+                || (genInfo.ContextID != T2IParamInput.SectionID_Video && genInfo.VideoEndFrame is not null));
+    }
+
+    private static bool ShouldRewriteRootLtxv2GuideChain(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        WorkflowGenerator g = genInfo?.Generator;
+        return g is not null
+            && genInfo.ContextID == T2IParamInput.SectionID_Video
+            && genInfo.VideoModel?.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID
+            && (HasConfiguredStages(g)
+                || TryGetConfiguredRootStageResolution(g, out _, out _)
+                || HasNonDefaultRootGuideSetting(g, VideoStagesExtension.RootGuideImageReference)
+                || HasNonDefaultRootGuideSetting(g, VideoStagesExtension.RootGuideLastFrameReference));
+    }
+
+    private static bool HasConfiguredStages(WorkflowGenerator g)
+    {
+        if (g is null || !g.UserInput.Get(VideoStagesExtension.EnableVideoStages, false))
+        {
+            return false;
+        }
+
+        return new JsonParser(g).HasConfiguredStages();
+    }
+
+    private static bool HasNonDefaultRootGuideSetting(WorkflowGenerator g, T2IRegisteredParam<string> param)
+    {
+        if (g is null || param is null)
+        {
+            return false;
+        }
+
+        string compact = ImageReferenceSyntax.Compact(g.UserInput.Get(param, DefaultRootGuideReference));
+        return !string.IsNullOrWhiteSpace(compact)
+            && !string.Equals(compact, DefaultRootGuideReference, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryResolveCurrentGuideChain(
+        WorkflowGenerator g,
+        out string firstGuideNodeId,
+        out JObject firstGuideNode,
+        out string lastGuideNodeId,
+        out JObject lastGuideNode)
+    {
+        firstGuideNodeId = null;
+        firstGuideNode = null;
+        lastGuideNodeId = null;
+        lastGuideNode = null;
+
+        if (g?.CurrentMedia?.Path is not { Count: 2 } currentPath
+            || !TryGetNode(g, $"{currentPath[0]}", out JObject currentNode))
+        {
+            return false;
+        }
+
+        string currentType = $"{currentNode["class_type"]}";
+        if (currentType == NodeTypes.LTXVImgToVideoInplace)
+        {
+            firstGuideNodeId = $"{currentPath[0]}";
+            firstGuideNode = currentNode;
+            return true;
+        }
+
+        if (currentType != NodeTypes.LTXVAddGuide
+            || !TryGetInputPath(currentNode, "latent", out JArray latentPath)
+            || !TryGetNode(g, $"{latentPath[0]}", out JObject latentNode))
+        {
+            return false;
+        }
+
+        firstGuideNodeId = $"{latentPath[0]}";
+        firstGuideNode = latentNode;
+        lastGuideNodeId = $"{currentPath[0]}";
+        lastGuideNode = currentNode;
+        return true;
+    }
+
+    private static bool TryGetNode(WorkflowGenerator g, string nodeId, out JObject node)
+    {
+        node = null;
+        return !string.IsNullOrWhiteSpace(nodeId)
+            && g?.Workflow?.TryGetValue(nodeId, out JToken token) == true
+            && (node = token as JObject) is not null;
+    }
+
+    private static bool TryGetInputPath(JObject node, string inputName, out JArray path)
+    {
+        path = null;
+        return node?["inputs"] is JObject inputs
+            && inputs[inputName] is JArray inputPath
+            && inputPath.Count == 2
+            && (path = inputPath) is not null;
+    }
+
+    private static bool TryGetDecodeLatentPath(JObject decodeNode, out JArray latentPath)
+    {
+        latentPath = null;
+        return TryGetInputPath(decodeNode, "samples", out latentPath)
+            || TryGetInputPath(decodeNode, "latent", out latentPath)
+            || TryGetInputPath(decodeNode, "latents", out latentPath);
+    }
+
+    private static bool IsCropGuidesLatentPath(WorkflowGenerator g, JArray latentPath)
+    {
+        return latentPath is { Count: 2 }
+            && $"{latentPath[1]}" == "2"
+            && g?.Workflow?.TryGetValue($"{latentPath[0]}", out JToken cropToken) == true
+            && cropToken is JObject cropNode
+            && $"{cropNode["class_type"]}" == NodeTypes.LTXVCropGuides;
+    }
+
+    private static bool TryResolveRootFinalGuideCropInputs(
+        WorkflowGenerator g,
+        JArray decodeLatentPath,
+        out JArray positivePath,
+        out JArray negativePath,
+        out JArray videoLatentPath)
+    {
+        positivePath = null;
+        negativePath = null;
+        videoLatentPath = null;
+        if (g?.Workflow is null
+            || decodeLatentPath is not { Count: 2 }
+            || $"{decodeLatentPath[1]}" != "0"
+            || !TryGetNode(g, $"{decodeLatentPath[0]}", out JObject separateNode)
+            || $"{separateNode["class_type"]}" != NodeTypes.LTXVSeparateAVLatent
+            || !TryGetInputPath(separateNode, "av_latent", out JArray avLatentPath)
+            || !TryGetNode(g, $"{avLatentPath[0]}", out JObject samplerNode)
+            || !TryGetInputPath(samplerNode, "positive", out JArray positiveRef)
+            || !TryGetInputPath(samplerNode, "negative", out JArray negativeRef))
+        {
+            return false;
+        }
+
+        positivePath = ClonePath(positiveRef);
+        negativePath = ClonePath(negativeRef);
+        videoLatentPath = ClonePath(decodeLatentPath);
+        return positivePath is not null && negativePath is not null && videoLatentPath is not null;
+    }
+
+    private static void SetDecodeLatentPath(JObject decodeNode, JArray latentPath)
+    {
+        if (decodeNode?["inputs"] is not JObject inputs || latentPath is not { Count: 2 })
+        {
+            return;
+        }
+
+        if (inputs["samples"] is not null)
+        {
+            inputs["samples"] = ClonePath(latentPath);
+        }
+        else if (inputs["latent"] is not null)
+        {
+            inputs["latent"] = ClonePath(latentPath);
+        }
+        else if (inputs["latents"] is not null)
+        {
+            inputs["latents"] = ClonePath(latentPath);
+        }
+        else
+        {
+            inputs["samples"] = ClonePath(latentPath);
+        }
+    }
+
+    private static JArray ClonePath(JArray path)
+    {
+        return path is not { Count: 2 } ? null : new JArray(path[0], path[1]);
     }
 
     private static string GetNormalizedRootGuideReference(
@@ -326,6 +589,24 @@ internal static class RootVideoStageResizer
         return guideImage;
     }
 
+    private static WGNodeData ResolveRootLastFrameGuideImage(WorkflowGenerator.ImageToVideoGenInfo genInfo, string guideReference)
+    {
+        WorkflowGenerator g = genInfo?.Generator;
+        if (g is null)
+        {
+            return null;
+        }
+        if (HasExplicitRootLastFrameGuideReference(guideReference))
+        {
+            return ResolveRootGuideImage(g, guideReference, "Root guide last frame reference");
+        }
+        if (genInfo.ContextID != T2IParamInput.SectionID_Video && genInfo.VideoEndFrame is not null)
+        {
+            return g.LoadImage(genInfo.VideoEndFrame, "${videoendframe}", false);
+        }
+        return null;
+    }
+
     private static bool IsTextToVideoRootWorkflow(WorkflowGenerator g)
     {
         if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
@@ -351,6 +632,22 @@ internal static class RootVideoStageResizer
         height = 0;
         return g is not null
             && TryGetRootStageResolution(g.UserInput, out width, out height);
+    }
+
+    internal static double GetGuideStrength(WorkflowGenerator g)
+    {
+        double strength = g?.UserInput.Get(
+            VideoStagesExtension.LTXVImgToVideoInplaceStrength,
+            VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength)
+            ?? VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+
+        // Older hidden payloads can still carry the previous default of 0.8.
+        if (Math.Abs(strength - LegacyDefaultGuideStrength) < 0.000001d)
+        {
+            return VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+        }
+
+        return strength;
     }
 
     private static bool TryGetRootGuideTargetResolution(WorkflowGenerator.ImageToVideoGenInfo genInfo, out int width, out int height)
@@ -419,7 +716,7 @@ internal static class RootVideoStageResizer
 
     private static void UpdateAllAudioMaskDimensions(WorkflowGenerator g, int width, int height)
     {
-        foreach (var setMaskNode in WorkflowUtils.NodesOfType(g.Workflow, NodeTypes.SetLatentNoiseMask))
+        foreach (WorkflowNode setMaskNode in WorkflowUtils.NodesOfType(g.Workflow, NodeTypes.SetLatentNoiseMask))
         {
             if (!IsAudioNoiseMaskNode(g, setMaskNode.Node)
                 || !TryGetSolidMaskInputsForSetMaskNode(g, setMaskNode.Node, out JObject solidMaskInputs))

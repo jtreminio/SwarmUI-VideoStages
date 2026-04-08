@@ -80,4 +80,39 @@ public class WorkflowUtilsTests
             out JArray decodeOutput));
         Assert.True(JToken.DeepEquals(decodeOutput, new JArray("202", 0)));
     }
+
+    [Fact]
+    public void Downstream_decode_resolution_does_not_cross_sampler_chain()
+    {
+        JObject workflow = new()
+        {
+            ["10"] = new JObject()
+            {
+                ["class_type"] = "UnitTest_Latent"
+            },
+            ["23"] = new JObject()
+            {
+                ["class_type"] = "UnitTest_RefinerSampler",
+                ["inputs"] = new JObject()
+                {
+                    ["latent_image"] = new JArray("10", 0)
+                }
+            },
+            ["8"] = new JObject()
+            {
+                ["class_type"] = "VAEDecode",
+                ["inputs"] = new JObject()
+                {
+                    ["samples"] = new JArray("23", 0),
+                    ["vae"] = new JArray("104", 0)
+                }
+            }
+        };
+
+        Assert.False(WorkflowUtils.TryResolveNearestDownstreamDecodeOutput(
+            workflow,
+            new JArray("10", 0),
+            out JArray decodeOutput));
+        Assert.Null(decodeOutput);
+    }
 }
