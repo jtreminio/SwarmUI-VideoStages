@@ -16,6 +16,7 @@ public class VideoStagesExtension : Extension
     public static T2IRegisteredParam<bool> EnableVideoStages;
     public static T2IRegisteredParam<int> RootStageWidth;
     public static T2IRegisteredParam<int> RootStageHeight;
+    public static T2IRegisteredParam<string> RootGuideImageReference;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
 
@@ -118,6 +119,19 @@ public class VideoStagesExtension : Extension
             FeatureFlag: "comfyui",
             DoNotPreview: true
         ));
+        OrderPriority += 1;
+
+        RootGuideImageReference = T2IParamTypes.Register<string>(new T2IParamType(
+            Name: "Guide Image Reference",
+            Description: "Which earlier image should be used as the root video guide image before the first video pass. 'Default' keeps the current root image behavior; 'Base', 'Refiner', and 'editN' options can be selected from the frontend when available.",
+            Default: "Default",
+            GetValues: (_) => ["Default", "Base", "Refiner"],
+            Group: VideoStagesGroup,
+            OrderPriority: OrderPriority,
+            FeatureFlag: "comfyui",
+            DoNotPreview: true
+        ));
+        OrderPriority += 1;
 
         VideoStagesJson = T2IParamTypes.Register<string>(new T2IParamType(
             Name: "Video Stages",

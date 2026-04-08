@@ -40,6 +40,13 @@ interface Stage {
     imageReference: string;
 }
 
+interface ImageReferenceOptions {
+    values: string[];
+    labels: string[];
+    selected: string;
+    disabledValues: string[];
+}
+
 class VideoStageEditor
 {
     private editor: HTMLElement;
@@ -52,6 +59,8 @@ class VideoStageEditor
     private stageInputSyncInterval: ReturnType<typeof setInterval> | null = null;
     private lastKnownStagesJson = "";
     private pendingStageRefreshSerialize = false;
+    private pendingStageRefreshNotify = false;
+    private lastShownValidationError = "";
 
     /**
      * Initializes the VideoStages editor after the parameter UI exists.
@@ -65,6 +74,8 @@ class VideoStageEditor
         this.showStages();
         this.installStageChangeListener();
         this.installSourceDropdownObserver();
+        this.installBase2EditStageChangeListener();
+        this.installRootGuideImageReferenceListener();
     }
 
     /**
@@ -147,6 +158,65 @@ class VideoStageEditor
     private getRootModelInput(): HTMLInputElement | null
     {
         return VideoStageUtils.getInputElement("input_model");
+    }
+
+    private getRootGuideImageReferenceInput(): HTMLSelectElement | null
+    {
+        return VideoStageUtils.getSelectElement("input_guideimagereference");
+    }
+
+    private parseBase2EditStageIndex(value: string): number | null
+    {
+        let match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
+        if (!match) {
+            return null;
+        }
+        return parseInt(match[1], 10);
+    }
+
+    private getBase2EditStageSnapshot(): Base2EditStageSnapshot
+    {
+        let snapshot = window.base2editStageRegistry?.getSnapshot?.();
+        if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+            return { enabled: false, stageCount: 0, refs: [] };
+        }
+
+        let refs = snapshot.refs
+            .map((value) => {
+                let stageIndex = this.parseBase2EditStageIndex(value);
+                return stageIndex == null ? null : `edit${stageIndex}`;
+            })
+            .filter((value): value is string => !!value);
+        let uniqueRefs = [...new Set(refs)]
+            .sort((left, right) => (this.parseBase2EditStageIndex(left) ?? 0) - (this.parseBase2EditStageIndex(right) ?? 0));
+        return {
+            enabled: true,
+            stageCount: uniqueRefs.length,
+            refs: uniqueRefs
+        };
+    }
+
+    private isAvailableBase2EditReference(value: string): boolean
+    {
+        let stageIndex = this.parseBase2EditStageIndex(value);
+        if (stageIndex == null) {
+            return false;
+        }
+        return this.getBase2EditStageSnapshot().refs.includes(`edit${stageIndex}`);
+    }
+
+    private installBase2EditStageChangeListener(): void
+    {
+        document.addEventListener("base2edit:stages-changed", () => {
+            this.scheduleStageRefresh(true, true);
+        });
+    }
+
+    private installRootGuideImageReferenceListener(): void
+    {
+        this.getRootGuideImageReferenceInput()?.addEventListener("change", () => {
+            this.refreshGuideReferenceValidation(this.getStages());
+        });
     }
 
     private isRootTextToVideoModel(): boolean
@@ -327,7 +397,7 @@ class VideoStageEditor
             normalized.scheduler = fallback.scheduler;
         }
 
-        normalized.imageReference = this.normalizeImageReference(normalized.imageReference, stageIndex);
+        normalized.imageReference = this.canonicalizeStageImageReference(normalized.imageReference, stageIndex);
         return normalized;
     }
 
@@ -401,6 +471,10 @@ class VideoStageEditor
         if (!this.hasRootVideoModel()) {
             errors.push("VideoStages requires a root Video Model.");
         }
+        let rootGuideError = this.getRootGuideImageReferenceError(`${this.getRootGuideImageReferenceInput()?.value ?? "Default"}`);
+        if (rootGuideError) {
+            errors.push(rootGuideError);
+        }
         if (stages.length < 1) {
             errors.push("VideoStages requires at least one stage.");
             return errors;
@@ -418,8 +492,9 @@ class VideoStageEditor
             if (!stage.scheduler) {
                 errors.push(`${label} is missing a scheduler.`);
             }
-            if (!this.isValidImageReference(stage.imageReference, i)) {
-                errors.push(`${label} has an invalid guide image reference "${stage.imageReference}".`);
+            let imageReferenceError = this.getStageImageReferenceError(stage.imageReference, i);
+            if (imageReferenceError) {
+                errors.push(imageReferenceError);
             }
         }
 
@@ -524,6 +599,7 @@ class VideoStageEditor
             }
 
             observer.observe(source, { childList: true });
+            source.addEventListener("change", () => this.scheduleStageRefresh(true, true));
             hasObservedSource = true;
         }
 
@@ -569,6 +645,7 @@ class VideoStageEditor
             this.stageRefreshTimer = null;
         }
         this.pendingStageRefreshSerialize = false;
+        this.pendingStageRefreshNotify = false;
     }
 
     private scheduleStageSyncFromUi(): void
@@ -581,16 +658,20 @@ class VideoStageEditor
             this.stageSyncTimer = null;
             try {
                 this.serializeStagesFromUi();
+                this.refreshGuideReferenceValidation(this.getStages());
             }
             catch {
             }
         }, 125);
     }
 
-    private scheduleStageRefresh(serializeFromUi = false): void
+    private scheduleStageRefresh(serializeFromUi = false, notifyOnInvalid = false): void
     {
         if (serializeFromUi) {
             this.pendingStageRefreshSerialize = true;
+        }
+        if (notifyOnInvalid) {
+            this.pendingStageRefreshNotify = true;
         }
         if (this.stageRefreshTimer) {
             clearTimeout(this.stageRefreshTimer);
@@ -599,7 +680,9 @@ class VideoStageEditor
         this.stageRefreshTimer = setTimeout(() => {
             this.stageRefreshTimer = null;
             let shouldSerialize = this.pendingStageRefreshSerialize;
+            let shouldNotify = this.pendingStageRefreshNotify;
             this.pendingStageRefreshSerialize = false;
+            this.pendingStageRefreshNotify = false;
             try {
                 if (shouldSerialize) {
                     this.serializeStagesFromUi();
@@ -608,17 +691,27 @@ class VideoStageEditor
             catch {
             }
 
+            let errors: string[] = [];
             try {
-                this.showStages();
+                errors = this.showStages();
             }
             catch {
             }
 
+            if (errors.length > 0) {
+                if (shouldNotify && this.lastShownValidationError != errors[0]) {
+                    showError(errors[0]);
+                }
+                this.lastShownValidationError = errors[0];
+            }
+            else {
+                this.lastShownValidationError = "";
+            }
             this.lastKnownStagesJson = this.getStagesInput()?.value ?? "";
         }, 0);
     }
 
-    private showStages(): void
+    private showStages(): string[]
     {
         let stages = this.getStages();
         if (stages.length < 1) {
@@ -666,6 +759,8 @@ class VideoStageEditor
                 catch {
                 }
             }
+
+            this.applyImageReferenceOptionState(`${prefix}imagereference`, stage.imageReference, i);
         }
 
         this.addRemoveButtonListener(list);
@@ -683,6 +778,9 @@ class VideoStageEditor
             this.showStages();
         });
         this.editor.appendChild(addButton);
+
+        this.syncRootGuideImageReferenceOptions();
+        return this.refreshGuideReferenceValidation(stages);
     }
 
     private addRemoveButtonListener(list: HTMLElement): void
@@ -718,7 +816,7 @@ class VideoStageEditor
     private buildFieldsForStage(stage: Stage, prefix: string, stageIndex: number): Array<{ html: string; runnable: () => void }>
     {
         let defaults = this.getRootDefaults();
-        let imageReferenceOptions = this.buildImageReferenceOptions(stageIndex, stage.imageReference);
+        let imageReferenceOptions = this.buildStageImageReferenceOptions(stageIndex, stage.imageReference);
         let modelOptions = this.withCurrentOption(defaults.modelValues, defaults.modelLabels, stage.model, stage.model);
         let vaeOptions = this.withCurrentOption(defaults.vaeValues, defaults.vaeLabels, stage.vae, stage.vae);
         let samplerOptions = this.withCurrentOption(defaults.samplerValues, defaults.samplerLabels, stage.sampler, stage.sampler);
@@ -865,23 +963,12 @@ class VideoStageEditor
         return this.normalizeStage(stage, stageIndex, previousStage);
     }
 
-    private buildImageReferenceOptions(_stageIndex: number, currentValue: string): { values: string[]; labels: string[]; selected: string }
+    private getDefaultStageImageReference(stageIndex: number): string
     {
-        if (this.isRootTextToVideoModel()) {
-            return {
-                values: ["Generated"],
-                labels: ["Generated Output"],
-                selected: "Generated"
-            };
-        }
-
-        let values = ["Generated", "Base", "Refiner"];
-        let labels = ["Generated Output", "Base Output", "Refiner Output"];
-        let selected = this.normalizeImageReference(currentValue, 0);
-        return { values, labels, selected };
+        return stageIndex > 0 ? "PreviousStage" : "Generated";
     }
 
-    private normalizeImageReference(value: string, _stageIndex: number): string
+    private canonicalizeStageImageReference(value: string, stageIndex: number): string
     {
         if (this.isRootTextToVideoModel()) {
             return "Generated";
@@ -889,20 +976,269 @@ class VideoStageEditor
 
         let raw = `${value || ""}`.trim();
         if (!raw) {
-            return "Generated";
+            return this.getDefaultStageImageReference(stageIndex);
         }
 
         let compact = raw.replace(/\s+/g, "");
         if (compact == "Generated" || compact == "Base" || compact == "Refiner") {
             return compact;
         }
+        if (stageIndex > 0 && compact.toLowerCase() == "previousstage") {
+            return "PreviousStage";
+        }
 
-        return "Generated";
+        let stageMatch = compact.match(/^Stage(\d+)$/i);
+        if (stageMatch) {
+            let explicitStage = parseInt(stageMatch[1], 10);
+            return explicitStage < stageIndex
+                ? `Stage${explicitStage}`
+                : this.getDefaultStageImageReference(stageIndex);
+        }
+
+        let editStage = this.parseBase2EditStageIndex(compact);
+        if (editStage != null) {
+            return `edit${editStage}`;
+        }
+
+        return this.getDefaultStageImageReference(stageIndex);
     }
 
-    private isValidImageReference(value: string, stageIndex: number): boolean
+    private canonicalizeRootGuideImageReference(value: string): string
     {
-        return this.normalizeImageReference(value, stageIndex) == value;
+        if (this.isRootTextToVideoModel()) {
+            return "Default";
+        }
+
+        let raw = `${value || ""}`.trim();
+        if (!raw) {
+            return "Default";
+        }
+
+        let compact = raw.replace(/\s+/g, "");
+        if (compact == "Default" || compact == "Base" || compact == "Refiner") {
+            return compact;
+        }
+
+        let editStage = this.parseBase2EditStageIndex(compact);
+        if (editStage != null) {
+            return `edit${editStage}`;
+        }
+
+        return "Default";
+    }
+
+    private describeImageReference(value: string): string
+    {
+        if (value == "Generated") {
+            return "Generated Output";
+        }
+        if (value == "Default") {
+            return "Default";
+        }
+        if (value == "Base") {
+            return "Base Output";
+        }
+        if (value == "Refiner") {
+            return "Refiner Output";
+        }
+        if (value == "PreviousStage") {
+            return "Previous Video Stage Output";
+        }
+        let stageMatch = value.match(/^Stage(\d+)$/);
+        if (stageMatch) {
+            return `Video Stage ${parseInt(stageMatch[1], 10)} Output`;
+        }
+        let editStage = this.parseBase2EditStageIndex(value);
+        if (editStage != null) {
+            return `Base2Edit Edit ${editStage} Output`;
+        }
+        return value;
+    }
+
+    private buildStageImageReferenceOptions(stageIndex: number, currentValue: string): ImageReferenceOptions
+    {
+        if (this.isRootTextToVideoModel()) {
+            return {
+                values: ["Generated"],
+                labels: ["Generated Output"],
+                selected: "Generated",
+                disabledValues: []
+            };
+        }
+
+        let values = ["Generated", "Base", "Refiner"];
+        let labels = ["Generated Output", "Base Output", "Refiner Output"];
+        if (stageIndex > 0) {
+            values.push("PreviousStage");
+            labels.push("Previous Video Stage Output");
+            for (let i = 0; i < stageIndex; i++) {
+                values.push(`Stage${i}`);
+                labels.push(`Video Stage ${i} Output`);
+            }
+        }
+        for (let base2EditRef of this.getBase2EditStageSnapshot().refs) {
+            values.push(base2EditRef);
+            labels.push(this.describeImageReference(base2EditRef));
+        }
+
+        let selected = this.canonicalizeStageImageReference(currentValue, stageIndex);
+        let disabledValues: string[] = [];
+        if (selected && !values.includes(selected)) {
+            let isMissingBase2EditRef = this.parseBase2EditStageIndex(selected) != null;
+            values.unshift(selected);
+            labels.unshift(isMissingBase2EditRef
+                ? `Missing ${this.describeImageReference(selected)}`
+                : this.describeImageReference(selected));
+            if (isMissingBase2EditRef) {
+                disabledValues.push(selected);
+            }
+        }
+
+        return { values, labels, selected, disabledValues };
+    }
+
+    private buildRootGuideImageReferenceOptions(currentValue: string): ImageReferenceOptions
+    {
+        if (this.isRootTextToVideoModel()) {
+            return {
+                values: ["Default"],
+                labels: ["Default"],
+                selected: "Default",
+                disabledValues: []
+            };
+        }
+
+        let values = ["Default", "Base", "Refiner"];
+        let labels = ["Default", "Base Output", "Refiner Output"];
+        for (let base2EditRef of this.getBase2EditStageSnapshot().refs) {
+            values.push(base2EditRef);
+            labels.push(this.describeImageReference(base2EditRef));
+        }
+
+        let selected = this.canonicalizeRootGuideImageReference(currentValue);
+        let disabledValues: string[] = [];
+        if (selected && !values.includes(selected)) {
+            let isMissingBase2EditRef = this.parseBase2EditStageIndex(selected) != null;
+            values.unshift(selected);
+            labels.unshift(isMissingBase2EditRef
+                ? `Missing ${this.describeImageReference(selected)}`
+                : this.describeImageReference(selected));
+            if (isMissingBase2EditRef) {
+                disabledValues.push(selected);
+            }
+        }
+
+        return { values, labels, selected, disabledValues };
+    }
+
+    private getStageImageReferenceError(value: string, stageIndex: number): string | null
+    {
+        if (this.canonicalizeStageImageReference(value, stageIndex) != value) {
+            return `VideoStages: Stage ${stageIndex} has an invalid guide image reference "${value}".`;
+        }
+        if (this.parseBase2EditStageIndex(value) != null && !this.isAvailableBase2EditReference(value)) {
+            return `VideoStages: Stage ${stageIndex} guide image reference "${value}" points to a missing Base2Edit stage.`;
+        }
+        return null;
+    }
+
+    private getRootGuideImageReferenceError(value: string): string | null
+    {
+        if (this.canonicalizeRootGuideImageReference(value) != value) {
+            return `VideoStages: Root guide image reference "${value}" is invalid.`;
+        }
+        if (this.parseBase2EditStageIndex(value) != null && !this.isAvailableBase2EditReference(value)) {
+            return `VideoStages: Root guide image reference "${value}" points to a missing Base2Edit stage.`;
+        }
+        return null;
+    }
+
+    private applySelectOptions(select: HTMLSelectElement, options: ImageReferenceOptions): void
+    {
+        select.innerHTML = "";
+        let disabledValues = new Set(options.disabledValues);
+        for (let i = 0; i < options.values.length; i++) {
+            let option = document.createElement("option");
+            option.value = options.values[i];
+            option.text = options.labels[i];
+            option.disabled = disabledValues.has(option.value);
+            option.selected = option.value == options.selected;
+            select.appendChild(option);
+        }
+        select.value = options.selected;
+    }
+
+    private applyImageReferenceOptionState(inputId: string, currentValue: string, stageIndex: number): void
+    {
+        let select = VideoStageUtils.getSelectElement(inputId);
+        if (!select) {
+            return;
+        }
+
+        let disabledValues = new Set(this.buildStageImageReferenceOptions(stageIndex, currentValue).disabledValues);
+        for (let option of Array.from(select.options)) {
+            option.disabled = disabledValues.has(option.value);
+        }
+    }
+
+    private syncRootGuideImageReferenceOptions(): void
+    {
+        let select = this.getRootGuideImageReferenceInput();
+        if (!select) {
+            return;
+        }
+
+        this.applySelectOptions(select, this.buildRootGuideImageReferenceOptions(`${select.value || "Default"}`));
+    }
+
+    private setInputValidationState(input: HTMLElement | null, errorId: string, error: string | null): void
+    {
+        if (!input) {
+            return;
+        }
+
+        input.classList.remove("is-invalid");
+        document.getElementById(errorId)?.remove();
+        if (!error) {
+            return;
+        }
+
+        input.classList.add("is-invalid");
+        let parent = findParentOfClass(input, "auto-input");
+        if (!parent) {
+            return;
+        }
+
+        let errorElem = document.createElement("div");
+        errorElem.id = errorId;
+        errorElem.className = "text-danger";
+        errorElem.style.marginTop = "4px";
+        errorElem.innerText = error;
+        parent.appendChild(errorElem);
+    }
+
+    private refreshGuideReferenceValidation(stages: Stage[]): string[]
+    {
+        let errors: string[] = [];
+        let rootGuideError = this.getRootGuideImageReferenceError(`${this.getRootGuideImageReferenceInput()?.value ?? "Default"}`);
+        this.setInputValidationState(this.getRootGuideImageReferenceInput(), "videostages_root_guideimagereference_error", rootGuideError);
+        if (rootGuideError) {
+            errors.push(rootGuideError);
+        }
+
+        for (let i = 0; i < stages.length; i++) {
+            let error = this.getStageImageReferenceError(stages[i].imageReference, i);
+            this.setInputValidationState(
+                VideoStageUtils.getSelectElement(`videostages_stage_${i}_imagereference`),
+                `videostages_stage_${i}_imagereference_error`,
+                error
+            );
+            if (error) {
+                errors.push(error);
+            }
+        }
+
+        return errors;
     }
 
     /**
@@ -924,7 +1260,7 @@ class VideoStageEditor
                 }
             }
 
-            stage.imageReference = this.normalizeImageReference(stage.imageReference, i);
+            stage.imageReference = this.canonicalizeStageImageReference(stage.imageReference, i);
         }
     }
 

@@ -250,6 +250,75 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Root_guide_image_reference_edit_stage_retargets_root_scale_input_and_preserves_root_resolution()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootGuideImageReference, "edit0");
+        input.Set(VideoStagesExtension.RootStageWidth, 768);
+        input.Set(VideoStagesExtension.RootStageHeight, 448);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        WorkflowNode scaleNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray("60", 0)));
+        WorkflowNode imageFromBatch = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray(scaleNode.Id, 0)));
+        Assert.Equal(768, scaleNode.Node["inputs"]?.Value<int>("width"));
+        Assert.Equal(448, scaleNode.Node["inputs"]?.Value<int>("height"));
+        Assert.Equal("lanczos", $"{scaleNode.Node["inputs"]?["upscale_method"]}");
+        Assert.Equal("center", $"{scaleNode.Node["inputs"]?["crop"]}");
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
+            new JArray(scaleNode.Id, 0)));
+    }
+
+    [Fact]
+    public void Root_guide_image_reference_default_keeps_current_root_source()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootGuideImageReference, "Default");
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray("12", 0)));
+        Assert.DoesNotContain(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
+                new JArray("60", 0)));
+    }
+
+    [Fact]
     public void Disabled_video_stages_ignores_configured_additional_stages()
     {
         using SwarmUiTestContext _ = new();

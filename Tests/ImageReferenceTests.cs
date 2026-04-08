@@ -75,6 +75,18 @@ public class ImageReferenceTests
     }
 
     [Fact]
+    public void Base2Edit_stage_reference_is_preserved_when_syntax_is_valid()
+    {
+        List<JsonParser.StageSpec> stages = ParseStages(new JArray(
+            MakeStage("UnitTest_Video.safetensors"),
+            MakeStage("UnitTest_Video.safetensors", "edit0")
+        ).ToString());
+
+        Assert.Equal(2, stages.Count);
+        Assert.Equal("edit0", stages[1].ImageReference);
+    }
+
+    [Fact]
     public void Parser_assigns_linear_stage_ids_from_json_order()
     {
         List<JsonParser.StageSpec> stages = ParseStages(new JArray(

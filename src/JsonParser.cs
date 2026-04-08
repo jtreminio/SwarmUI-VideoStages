@@ -173,7 +173,7 @@ public class JsonParser(WorkflowGenerator g)
             return defaultReference;
         }
 
-        string compact = rawValue.Trim().Replace(" ", "");
+        string compact = ImageReferenceSyntax.Compact(rawValue);
         if (string.Equals(compact, "Generated", StringComparison.OrdinalIgnoreCase))
         {
             return DefaultGeneratedReference;
@@ -199,6 +199,10 @@ public class JsonParser(WorkflowGenerator g)
 
             Logs.Warning($"VideoStages: Stage {index} has forward ImageReference '{rawValue}'. Using '{defaultReference}' instead.");
             return defaultReference;
+        }
+        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(compact, out int editStage))
+        {
+            return ImageReferenceSyntax.FormatBase2EditStageIndex(editStage);
         }
 
         Logs.Warning($"VideoStages: Stage {index} has invalid ImageReference '{rawValue}'. Using '{defaultReference}' instead.");

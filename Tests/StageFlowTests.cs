@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
@@ -366,6 +367,11 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(int editStageIndex) =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedRefinerImageStep(), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 10.9), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
         new(g =>
         {
@@ -376,6 +382,43 @@ public partial class StageFlowTests
                 Height = 512
             };
         }, 5.0);
+
+    private static WorkflowGenerator.WorkflowGenStep SeedPublishedBase2EditImageRefStep(int editStageIndex, double priority) =>
+        new(g =>
+        {
+            string imageNode = g.CreateNode("UnitTest_Base2EditPublishedImage", new JObject(), id: "60", idMandatory: false);
+            JObject media = new()
+            {
+                ["path"] = new JArray(imageNode, 0),
+                ["dataType"] = WGNodeData.DT_IMAGE,
+                ["width"] = 512,
+                ["height"] = 512
+            };
+            if (!string.IsNullOrWhiteSpace(g.CurrentCompat()?.ID))
+            {
+                media["compatId"] = g.CurrentCompat().ID;
+            }
+
+            JObject payload = new()
+            {
+                ["media"] = media
+            };
+            if (g.CurrentVae?.Path is JArray vaePath && vaePath.Count == 2)
+            {
+                JObject vae = new()
+                {
+                    ["path"] = new JArray(vaePath[0], vaePath[1]),
+                    ["dataType"] = WGNodeData.DT_VAE
+                };
+                if (!string.IsNullOrWhiteSpace(g.CurrentVae.Compat?.ID))
+                {
+                    vae["compatId"] = g.CurrentVae.Compat.ID;
+                }
+                payload["vae"] = vae;
+            }
+
+            g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
+        }, priority);
 
     private static WorkflowGenerator.WorkflowGenStep SeedNativeLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
         new(g =>
@@ -515,6 +558,11 @@ public partial class StageFlowTests
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeSteps(bool attachAudioToCurrentMedia) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia)])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithPublishedBase2EditImage(int editStageIndex, bool attachAudioToCurrentMedia) =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 11.4)])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static WorkflowGenerator.WorkflowGenStep SeedTextToVideoLtxVideoChainStep(bool attachAudioToCurrentMedia) =>

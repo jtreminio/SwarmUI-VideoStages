@@ -111,6 +111,14 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
             }
             return explicitRef;
         }
+        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(stage.ImageReference, out int editStage))
+        {
+            if (!Base2EditPublishedStageRefs.TryGetStageRef(g, editStage, out StageRefStore.StageRef publishedEditRef))
+            {
+                throw new InvalidOperationException($"ImageReference '{stage.ImageReference}' requested, but Base2Edit stage {editStage} does not exist.");
+            }
+            return publishedEditRef;
+        }
         throw new InvalidOperationException($"Unknown ImageReference value '{stage.ImageReference}'.");
     }
 }

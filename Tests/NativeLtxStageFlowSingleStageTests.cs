@@ -141,6 +141,48 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Native_ltx_stage_can_use_base2edit_edit_stage_as_guide_image()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "edit0", control: 0.5, steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeStepsWithPublishedBase2EditImage(0, attachAudioToCurrentMedia: false));
+
+        WorkflowNode preprocessNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
+            new JArray("60", 0)));
+    }
+
+    [Fact]
+    public void Missing_base2edit_edit_stage_reference_throws_runtime_error()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "edit0", control: 0.5, steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            WorkflowTestHarness.GenerateWithSteps(input, BuildNativeSteps(attachAudioToCurrentMedia: false)));
+        Assert.Contains("Base2Edit stage 0 does not exist", error.Message);
+    }
+
+    [Fact]
     public void Native_ltx_generated_reference_on_live_output_skips_redundant_guide_reinjection()
     {
         using SwarmUiTestContext _ = new();

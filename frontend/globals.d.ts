@@ -11,6 +11,16 @@ declare function getParamById(id: string): { values?: string[]; value_names?: st
 
 declare let postParamBuildSteps: (() => void)[] | undefined;
 
+interface Base2EditStageSnapshot {
+    enabled: boolean;
+    stageCount: number;
+    refs: string[];
+}
+
+interface Base2EditStageRegistry {
+    getSnapshot: () => Base2EditStageSnapshot;
+}
+
 declare const modelsHelpers: {
     getDataFor?: (category: string, modelName: string) => { modelClass?: { compatClass?: { isText2Video?: boolean } } } | null;
     compatClasses?: Record<string, { isText2Video?: boolean }>;
@@ -19,3 +29,7 @@ declare const modelsHelpers: {
 declare const currentModelHelper: {
     curCompatClass?: string;
 } | undefined;
+
+interface Window {
+    base2editStageRegistry?: Base2EditStageRegistry;
+}
