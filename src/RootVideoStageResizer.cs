@@ -13,7 +13,8 @@ internal static class RootVideoStageResizer
     private const string RootGuideLastFrameReferenceHelperKey = "videostages.root.guide.lastframe.reference";
     private const int LtxvGuideImgCompression = 18;
     private const double LegacyDefaultGuideStrength = 0.8;
-    internal const int FirstFrameGuideFrameIndex = 5;
+    internal const double AdditionalStageGuideStrength = 0.5;
+    internal const int FirstFrameGuideFrameIndex = 2;
     internal const int LastFrameGuideFrameIndex = -2;
     private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PreHandler = ApplyIfNeeded;
     private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PostHandler = ApplyPostIfNeeded;
@@ -193,6 +194,7 @@ internal static class RootVideoStageResizer
         {
             return;
         }
+        int? stageId = GetStageIdForContext(genInfo.ContextID);
 
         string guideReference = GetNormalizedRootGuideReference(
             g,
@@ -240,7 +242,7 @@ internal static class RootVideoStageResizer
             ["latent"] = g.CurrentMedia.Path,
             ["image"] = new JArray(preprocessNode, 0),
             ["frame_idx"] = LastFrameGuideFrameIndex,
-            ["strength"] = GetGuideStrength(g)
+            ["strength"] = GetGuideStrength(g, stageId)
         });
         genInfo.PosCond = new JArray(addedGuide, 0);
         genInfo.NegCond = new JArray(addedGuide, 1);
@@ -634,20 +636,33 @@ internal static class RootVideoStageResizer
             && TryGetRootStageResolution(g.UserInput, out width, out height);
     }
 
-    internal static double GetGuideStrength(WorkflowGenerator g)
+    internal static double GetGuideStrength(WorkflowGenerator g, int? stageId = null)
     {
-        double strength = g?.UserInput.Get(
-            VideoStagesExtension.LTXVImgToVideoInplaceStrength,
-            VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength)
-            ?? VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+        double defaultStrength = GetDefaultGuideStrength(stageId);
+        if (g?.UserInput is null
+            || !g.UserInput.TryGet(VideoStagesExtension.LTXVImgToVideoInplaceStrength, out double strength))
+        {
+            return defaultStrength;
+        }
 
         // Older hidden payloads can still carry the previous default of 0.8.
         if (Math.Abs(strength - LegacyDefaultGuideStrength) < 0.000001d)
         {
-            return VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+            return defaultStrength;
         }
 
         return strength;
+    }
+
+    private static double GetDefaultGuideStrength(int? stageId)
+        => stageId.GetValueOrDefault() >= 1
+            ? AdditionalStageGuideStrength
+            : VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+
+    private static int? GetStageIdForContext(int contextId)
+    {
+        int stageId = contextId - VideoStagesExtension.SectionID_VideoStages - 1;
+        return stageId >= 0 ? stageId : null;
     }
 
     private static bool TryGetRootGuideTargetResolution(WorkflowGenerator.ImageToVideoGenInfo genInfo, out int width, out int height)

@@ -466,6 +466,97 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Root_guide_last_frame_reference_uses_later_stage_strength_for_ltx_stage_one_and_above()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(
+                models.VideoModel.Name,
+                "Refiner",
+                upscale: 1.5,
+                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
+                steps: 10),
+            MakeStage(
+                models.VideoModel.Name,
+                "Refiner",
+                upscale: 1.5,
+                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
+                steps: 8)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootGuideImageReference, "Refiner");
+        input.Set(VideoStagesExtension.RootGuideLastFrameReference, "edit0");
+        input.Set(VideoStagesExtension.RootStageWidth, 384);
+        input.Set(VideoStagesExtension.RootStageHeight, 640);
+        input.Set(VideoStagesExtension.LTXVImgToVideoInplaceStrength, 0.8);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
+
+        List<WorkflowNode> conditioningNodes = WorkflowUtils.NodesOfType(workflow, "LTXVConditioning")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(3, conditioningNodes.Count);
+        WorkflowNode rootConditioning = conditioningNodes[0];
+        WorkflowNode stageZeroConditioning = conditioningNodes[1];
+        WorkflowNode stageOneConditioning = conditioningNodes[2];
+
+        List<WorkflowNode> addGuideNodes = WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(6, addGuideNodes.Count);
+
+        WorkflowNode rootFirstGuide = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(rootConditioning.Id, 0))
+                && node.Node["inputs"]?.Value<int>("frame_idx") == RootVideoStageResizer.FirstFrameGuideFrameIndex);
+        WorkflowNode rootLastGuide = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(rootFirstGuide.Id, 0))
+                && node.Node["inputs"]?.Value<int>("frame_idx") == RootVideoStageResizer.LastFrameGuideFrameIndex);
+        WorkflowNode stageZeroFirstGuide = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(stageZeroConditioning.Id, 0))
+                && node.Node["inputs"]?.Value<int>("frame_idx") == RootVideoStageResizer.FirstFrameGuideFrameIndex);
+        WorkflowNode stageZeroLastGuide = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(stageZeroFirstGuide.Id, 0))
+                && node.Node["inputs"]?.Value<int>("frame_idx") == RootVideoStageResizer.LastFrameGuideFrameIndex);
+        WorkflowNode stageOneFirstGuide = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(stageOneConditioning.Id, 0))
+                && node.Node["inputs"]?.Value<int>("frame_idx") == RootVideoStageResizer.FirstFrameGuideFrameIndex);
+        WorkflowNode stageOneLastGuide = Assert.Single(
+            addGuideNodes,
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "positive"),
+                new JArray(stageOneFirstGuide.Id, 0))
+                && node.Node["inputs"]?.Value<int>("frame_idx") == RootVideoStageResizer.LastFrameGuideFrameIndex);
+
+        Assert.Equal(VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength, rootFirstGuide.Node["inputs"]?.Value<double>("strength"));
+        Assert.Equal(VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength, rootLastGuide.Node["inputs"]?.Value<double>("strength"));
+        Assert.Equal(VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength, stageZeroFirstGuide.Node["inputs"]?.Value<double>("strength"));
+        Assert.Equal(VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength, stageZeroLastGuide.Node["inputs"]?.Value<double>("strength"));
+        Assert.Equal(RootVideoStageResizer.AdditionalStageGuideStrength, stageOneFirstGuide.Node["inputs"]?.Value<double>("strength"));
+        Assert.Equal(RootVideoStageResizer.AdditionalStageGuideStrength, stageOneLastGuide.Node["inputs"]?.Value<double>("strength"));
+    }
+
+    [Fact]
     public void Root_stage_resolution_updates_native_ltxv2_audio_noise_mask_dimensions()
     {
         using SwarmUiTestContext _ = new();

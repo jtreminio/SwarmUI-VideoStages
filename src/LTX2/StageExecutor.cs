@@ -122,7 +122,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
                 ["image"] = preprocessedGuidePath,
                 ["latent"] = stageLatent.Path,
                 ["frame_idx"] = RootVideoStageResizer.FirstFrameGuideFrameIndex,
-                ["strength"] = RootVideoStageResizer.GetGuideStrength(g)
+                ["strength"] = RootVideoStageResizer.GetGuideStrength(g, stage.Id)
             });
             genInfo.PosCond = [addGuideNode, 0];
             genInfo.NegCond = [addGuideNode, 1];

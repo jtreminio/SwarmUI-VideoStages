@@ -53,6 +53,10 @@ public partial class StageFlowTests
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, addGuideNodes.Count);
+        Assert.Equal(RootVideoStageResizer.FirstFrameGuideFrameIndex, addGuideNodes[0].Node["inputs"]?.Value<int>("frame_idx"));
+        Assert.Equal(RootVideoStageResizer.FirstFrameGuideFrameIndex, addGuideNodes[1].Node["inputs"]?.Value<int>("frame_idx"));
+        Assert.Equal(VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength, addGuideNodes[0].Node["inputs"]?.Value<double>("strength"));
+        Assert.Equal(RootVideoStageResizer.AdditionalStageGuideStrength, addGuideNodes[1].Node["inputs"]?.Value<double>("strength"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(addGuideNodes[1].Node, "image"),
             new JArray(preprocessNodes[1].Id, 0)));
