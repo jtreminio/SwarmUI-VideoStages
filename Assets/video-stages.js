@@ -1,4 +1,96 @@
 "use strict";
+// Keep toggleable parameter groups from being spuriously activated while
+// "Reuse Parameters" is applying metadata that does not actually use them.
+class ToggleableGroupReuseGuard {
+    options;
+    static guards = [];
+    guardUntil = 0;
+    guardTimer = null;
+    constructor(options) {
+        this.options = options;
+        if (!ToggleableGroupReuseGuard.guards.includes(this)) {
+            ToggleableGroupReuseGuard.guards.push(this);
+        }
+    }
+    tryInstallGroupToggleWrapper() {
+        if (typeof doToggleGroup != "function") {
+            return false;
+        }
+        let wrappedExisting = doToggleGroup;
+        if (wrappedExisting.__toggleableGroupReuseGuardWrapped) {
+            return true;
+        }
+        let prior = doToggleGroup;
+        let wrapped = ((id) => {
+            let toggle = document.getElementById(`${id}_toggle`);
+            let matchingGuards = ToggleableGroupReuseGuard.guards.filter((guard) => guard.matchesGroup(id));
+            let shouldSuppress = !!toggle?.checked
+                && matchingGuards.some((guard) => guard.shouldSuppressGroupActivation(id));
+            if (shouldSuppress && toggle) {
+                toggle.checked = false;
+            }
+            return prior(id);
+        });
+        wrapped.__toggleableGroupReuseGuardWrapped = true;
+        doToggleGroup = wrapped;
+        return true;
+    }
+    enforceInactiveState() {
+        let changed = false;
+        let groupToggle = this.getGroupToggle();
+        if (groupToggle?.checked) {
+            groupToggle.checked = false;
+            if (typeof doToggleGroup == "function") {
+                doToggleGroup(this.options.groupContentId);
+            }
+            changed = true;
+        }
+        let enableToggle = this.options.getEnableToggle();
+        if (enableToggle?.checked) {
+            enableToggle.checked = false;
+            changed = true;
+        }
+        if (this.options.clearInactiveState?.()) {
+            changed = true;
+        }
+        if (changed) {
+            this.options.afterStateChange?.();
+        }
+    }
+    start(durationMs = 1500) {
+        this.stop();
+        this.guardUntil = Date.now() + durationMs;
+        let tick = () => {
+            if (Date.now() >= this.guardUntil) {
+                this.stop();
+                return;
+            }
+            this.enforceInactiveState();
+            this.guardTimer = setTimeout(tick, 25);
+        };
+        this.guardTimer = setTimeout(tick, 25);
+    }
+    stop() {
+        if (this.guardTimer) {
+            clearTimeout(this.guardTimer);
+            this.guardTimer = null;
+        }
+        this.guardUntil = 0;
+    }
+    shouldSuppressGroupActivation(groupId) {
+        if (groupId != this.options.groupContentId || Date.now() >= this.guardUntil) {
+            return false;
+        }
+        return !this.options.getEnableToggle()?.checked;
+    }
+    matchesGroup(groupId) {
+        return groupId == this.options.groupContentId;
+    }
+    getGroupToggle() {
+        return this.options.getGroupToggle?.()
+            ?? document.getElementById(`${this.options.groupContentId}_toggle`);
+    }
+}
 const VideoStageUtils = {
     getInputElement: (id) => {
         return document.getElementById(id);
@@ -23,8 +115,10 @@ const VideoStageUtils = {
         return Number.isFinite(parsed) ? parsed : fallback;
     }
 };
+/// <reference path="./ToggleableGroupReuseGuard.ts" />
 class VideoStageEditor {
     editor;
+    inactiveReuseGuard;
     genButtonWrapped = false;
     genWrapInterval = null;
     changeListenerElem = null;
@@ -36,6 +130,22 @@ class VideoStageEditor {
     pendingStageRefreshSerialize = false;
     pendingStageRefreshNotify = false;
     lastShownValidationError = "";
+    suppressInactiveReseed = false;
+    constructor() {
+        this.inactiveReuseGuard = new ToggleableGroupReuseGuard({
+            groupContentId: "input_group_content_videostages",
+            getEnableToggle: () => this.getEnableToggle(),
+            getGroupToggle: () => this.getGroupToggle(),
+            clearInactiveState: () => this.clearStagesForInactiveReuse(),
+            afterStateChange: () => {
+                if (!this.editor) {
+                    return;
+                }
+                this.cancelPendingUiStageSync();
+                this.scheduleStageRefresh();
+            }
+        });
+    }
     /**
      * Initializes the VideoStages editor after the parameter UI exists.
      */
@@ -49,6 +159,14 @@ class VideoStageEditor {
         this.installSourceDropdownObserver();
         this.installBase2EditStageChangeListener();
         this.installRootGuideImageReferenceListener();
+    }
+    resetForInactiveReuse() {
+        this.suppressInactiveReseed = true;
+        this.inactiveReuseGuard.enforceInactiveState();
+        this.inactiveReuseGuard.start();
+    }
+    tryInstallInactiveReuseGuard() {
+        return this.inactiveReuseGuard.tryInstallGroupToggleWrapper();
     }
     /**
      * Keeps custom stage containers from inheriting flex min-width overflow from the parent group.
@@ -110,6 +228,9 @@ class VideoStageEditor {
     getEnableToggle() {
         return VideoStageUtils.getInputElement("input_enableadditionalvideostages")
             ?? VideoStageUtils.getInputElement("input_enablevideostages");
+    }
+    getGroupToggle() {
+        return VideoStageUtils.getInputElement("input_group_content_videostages_toggle");
     }
     getRootModelInput() {
         return VideoStageUtils.getInputElement("input_model");
@@ -346,14 +467,30 @@ class VideoStageEditor {
         if (!input) {
             return;
         }
+        this.suppressInactiveReseed = false;
         let serialized = JSON.stringify(stages);
         input.value = serialized;
         this.lastKnownStagesJson = serialized;
         triggerChangeFor(input);
     }
+    clearStagesForInactiveReuse() {
+        let input = this.getStagesInput();
+        if (!input || input.value == "") {
+            return false;
+        }
+        input.value = "";
+        this.lastKnownStagesJson = "";
+        return true;
+    }
+    shouldKeepStagesBlankWhileDisabled() {
+        return this.suppressInactiveReseed && !this.isVideoStagesEnabled();
+    }
     ensureStagesSeeded() {
         let stages = this.getStages();
         if (stages.length > 0) {
+            return;
+        }
+        if (this.shouldKeepStagesBlankWhileDisabled()) {
             return;
         }
         this.saveStages([this.buildDefaultStage(0, null)]);
@@ -578,7 +715,9 @@ class VideoStageEditor {
         let stages = this.getStages();
         if (stages.length < 1) {
             stages = [this.buildDefaultStage(0, null)];
-            this.saveStages(stages);
+            if (!this.shouldKeepStagesBlankWhileDisabled()) {
+                this.saveStages(stages);
+            }
         }
         let list = document.createElement("div");
         list.className = "videostages-stage-list";
@@ -1069,11 +1208,29 @@ class VideoStageEditor {
 /// <reference path="./VideoStageEditor.ts" />
 class VideoStages {
     stageEditor;
+    visibleParamIds = [
+        "rootwidth",
+        "rootheight"
+    ];
     constructor(stageEditor) {
         this.stageEditor = stageEditor;
+        if (!this.stageEditor.tryInstallInactiveReuseGuard()) {
+            let interval = setInterval(() => {
+                if (this.stageEditor.tryInstallInactiveReuseGuard()) {
+                    clearInterval(interval);
+                }
+            }, 200);
+        }
         if (!this.tryRegisterStageEditor()) {
             let interval = setInterval(() => {
                 if (this.tryRegisterStageEditor()) {
+                    clearInterval(interval);
+                }
+            }, 200);
+        }
+        if (!this.tryWrapReuseParameters()) {
+            let interval = setInterval(() => {
+                if (this.tryWrapReuseParameters()) {
                     clearInterval(interval);
                 }
             }, 200);
@@ -1093,6 +1250,56 @@ class VideoStages {
             }
         });
         return true;
+    }
+    tryWrapReuseParameters() {
+        if (typeof copy_current_image_params != "function") {
+            return false;
+        }
+        let wrappedExisting = copy_current_image_params;
+        if (wrappedExisting.__videoStagesWrapped) {
+            return true;
+        }
+        let prior = copy_current_image_params;
+        let wrapped = (() => {
+            let metadataUsesVideoStages = this.currentImageUsesVideoStages();
+            prior();
+            if (metadataUsesVideoStages === false) {
+                this.stageEditor.resetForInactiveReuse();
+            }
+        });
+        wrapped.__videoStagesWrapped = true;
+        copy_current_image_params = wrapped;
+        return true;
+    }
+    currentImageUsesVideoStages() {
+        if (!currentMetadataVal) {
+            return null;
+        }
+        try {
+            let metadataFull = JSON.parse(interpretMetadata(currentMetadataVal));
+            let metadata = metadataFull?.sui_image_params;
+            if (!metadata || typeof metadata != "object") {
+                return null;
+            }
+            let enabled = metadata.enableadditionalvideostages ?? metadata.enablevideostages;
+            if (`${enabled}` == "true") {
+                return true;
+            }
+            if (this.visibleParamIds.some((id) => metadata[id] !== undefined && metadata[id] !== null && metadata[id] !== "")) {
+                return true;
+            }
+            let guideReference = `${metadata.guideimagereference ?? ""}`.trim();
+            if (guideReference && guideReference.toLowerCase() != "default") {
+                return true;
+            }
+            // The hidden `videostages` JSON is always seeded locally, so it is not
+            // trustworthy evidence that the reused image truly opted into VideoStages.
+            return false;
+        }
+        catch (error) {
+            console.log("VideoStages: failed to inspect reused image metadata", error);
+            return null;
+        }
     }
 }
 new VideoStages(new VideoStageEditor());

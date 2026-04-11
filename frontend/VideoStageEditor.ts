@@ -1,3 +1,5 @@
+/// <reference path="./ToggleableGroupReuseGuard.ts" />
+
 interface RootDefaults {
     modelValues: string[];
     modelLabels: string[];
@@ -50,6 +52,7 @@ interface ImageReferenceOptions {
 class VideoStageEditor
 {
     private editor: HTMLElement;
+    private inactiveReuseGuard: ToggleableGroupReuseGuard;
     private genButtonWrapped = false;
     private genWrapInterval: ReturnType<typeof setInterval> | null = null;
     private changeListenerElem: HTMLElement | null = null;
@@ -61,6 +64,24 @@ class VideoStageEditor
     private pendingStageRefreshSerialize = false;
     private pendingStageRefreshNotify = false;
     private lastShownValidationError = "";
+    private suppressInactiveReseed = false;
+
+    public constructor()
+    {
+        this.inactiveReuseGuard = new ToggleableGroupReuseGuard({
+            groupContentId: "input_group_content_videostages",
+            getEnableToggle: () => this.getEnableToggle(),
+            getGroupToggle: () => this.getGroupToggle(),
+            clearInactiveState: () => this.clearStagesForInactiveReuse(),
+            afterStateChange: () => {
+                if (!this.editor) {
+                    return;
+                }
+                this.cancelPendingUiStageSync();
+                this.scheduleStageRefresh();
+            }
+        });
+    }
 
     /**
      * Initializes the VideoStages editor after the parameter UI exists.
@@ -76,6 +97,18 @@ class VideoStageEditor
         this.installSourceDropdownObserver();
         this.installBase2EditStageChangeListener();
         this.installRootGuideImageReferenceListener();
+    }
+
+    public resetForInactiveReuse(): void
+    {
+        this.suppressInactiveReseed = true;
+        this.inactiveReuseGuard.enforceInactiveState();
+        this.inactiveReuseGuard.start();
+    }
+
+    public tryInstallInactiveReuseGuard(): boolean
+    {
+        return this.inactiveReuseGuard.tryInstallGroupToggleWrapper();
     }
 
     /**
@@ -153,6 +186,11 @@ class VideoStageEditor
     {
         return VideoStageUtils.getInputElement("input_enableadditionalvideostages")
             ?? VideoStageUtils.getInputElement("input_enablevideostages");
+    }
+
+    private getGroupToggle(): HTMLInputElement | null
+    {
+        return VideoStageUtils.getInputElement("input_group_content_videostages_toggle");
     }
 
     private getRootModelInput(): HTMLInputElement | null
@@ -433,16 +471,37 @@ class VideoStageEditor
             return;
         }
 
+        this.suppressInactiveReseed = false;
         let serialized = JSON.stringify(stages);
         input.value = serialized;
         this.lastKnownStagesJson = serialized;
         triggerChangeFor(input);
     }
 
+    private clearStagesForInactiveReuse(): boolean
+    {
+        let input = this.getStagesInput();
+        if (!input || input.value == "") {
+            return false;
+        }
+
+        input.value = "";
+        this.lastKnownStagesJson = "";
+        return true;
+    }
+
+    private shouldKeepStagesBlankWhileDisabled(): boolean
+    {
+        return this.suppressInactiveReseed && !this.isVideoStagesEnabled();
+    }
+
     private ensureStagesSeeded(): void
     {
         let stages = this.getStages();
         if (stages.length > 0) {
+            return;
+        }
+        if (this.shouldKeepStagesBlankWhileDisabled()) {
             return;
         }
 
@@ -716,7 +775,9 @@ class VideoStageEditor
         let stages = this.getStages();
         if (stages.length < 1) {
             stages = [this.buildDefaultStage(0, null)];
-            this.saveStages(stages);
+            if (!this.shouldKeepStagesBlankWhileDisabled()) {
+                this.saveStages(stages);
+            }
         }
 
         let list = document.createElement("div");
