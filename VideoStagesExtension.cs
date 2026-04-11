@@ -77,16 +77,6 @@ public class VideoStagesExtension : Extension
         ));
         OrderPriority += 1;
 
-        EnableVideoStages = T2IParamTypes.Register<bool>(new T2IParamType(
-            Name: "Enable additional Video Stages",
-            Description: "Enable additional video stages.",
-            Default: "false",
-            Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui"
-        ));
-        OrderPriority += 1;
-
         RootStageWidth = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Root Width",
             Description: "Optional width override for the first additional video stage input. When both Root Width and Root Height are set, the first stage input is scaled before extracting frames.",
@@ -130,6 +120,16 @@ public class VideoStagesExtension : Extension
             OrderPriority: OrderPriority,
             FeatureFlag: "comfyui",
             DoNotPreview: true
+        ));
+        OrderPriority += 1;
+
+        EnableVideoStages = T2IParamTypes.Register<bool>(new T2IParamType(
+            Name: "Enable additional Video Stages",
+            Description: "Enable additional video stages.",
+            Default: "false",
+            Group: VideoStagesGroup,
+            OrderPriority: OrderPriority,
+            FeatureFlag: "comfyui"
         ));
         OrderPriority += 1;
 

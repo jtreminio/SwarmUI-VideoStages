@@ -29,7 +29,7 @@ internal static class RootVideoStageResizer
         WorkflowGenerator g = genInfo?.Generator;
         if (g is null
             || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !HasConfiguredStages(g))
+            || !HasRootStageOverrides(g))
         {
             return;
         }
@@ -108,7 +108,7 @@ internal static class RootVideoStageResizer
         WorkflowGenerator g = genInfo?.Generator;
         if (g is null
             || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !HasConfiguredStages(g)
+            || !HasRootStageOverrides(g)
             || !TryGetRootStageResolution(g.UserInput, out int width, out int height)
             || g.CurrentMedia is null)
         {
@@ -149,20 +149,15 @@ internal static class RootVideoStageResizer
         solidMaskInputs["height"] = media.Height.Value;
     }
 
-    private static bool HasConfiguredStages(WorkflowGenerator g)
+    private static bool HasRootStageOverrides(WorkflowGenerator g)
     {
-        if (!g.UserInput.Get(VideoStagesExtension.EnableVideoStages, false))
-        {
-            return false;
-        }
+        return HasExplicitRootGuideReference(g)
+            || TryGetRootStageResolution(g.UserInput, out _, out _);
+    }
 
-        if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
-            || string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        return json.Trim() != "[]";
+    private static bool HasExplicitRootGuideReference(WorkflowGenerator g)
+    {
+        return g.UserInput.TryGet(VideoStagesExtension.RootGuideImageReference, out string _);
     }
 
     private static string NormalizeRootGuideImageReference(WorkflowGenerator g)
@@ -234,6 +229,12 @@ internal static class RootVideoStageResizer
             && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
     }
 
+    private static bool HasNativeRootVideoModel(WorkflowGenerator g)
+    {
+        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel)
+            && imageToVideoModel is not null;
+    }
+
     private static bool TryGetRootStageResolution(T2IParamInput input, out int width, out int height)
     {
         width = 0;
@@ -247,7 +248,7 @@ internal static class RootVideoStageResizer
         width = 0;
         height = 0;
         return g is not null
-            && HasConfiguredStages(g)
+            && HasNativeRootVideoModel(g)
             && TryGetRootStageResolution(g.UserInput, out width, out height);
     }
 

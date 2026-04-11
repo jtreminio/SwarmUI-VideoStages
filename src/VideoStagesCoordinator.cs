@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -11,7 +12,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     public void CaptureBase()
     {
-        if (!HasConfiguredStages())
+        if (!ShouldCaptureRootReferences())
         {
             return;
         }
@@ -21,7 +22,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     public void CaptureRefiner()
     {
-        if (!HasConfiguredStages())
+        if (!ShouldCaptureRootReferences())
         {
             return;
         }
@@ -76,6 +77,12 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         return GetRootVideoModel() is not null;
     }
 
+    private bool HasNativeRootVideoModel()
+    {
+        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel)
+            && imageToVideoModel is not null;
+    }
+
     private T2IModel GetRootVideoModel()
     {
         if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
@@ -100,6 +107,24 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         }
 
         return HasRootVideoModel();
+    }
+
+    private bool ShouldCaptureRootReferences()
+    {
+        return HasConfiguredStages() || NeedsRootGuideReferenceCapture();
+    }
+
+    private bool NeedsRootGuideReferenceCapture()
+    {
+        if (!HasNativeRootVideoModel()
+            || !g.UserInput.TryGet(VideoStagesExtension.RootGuideImageReference, out string guideReference))
+        {
+            return false;
+        }
+
+        string compact = ImageReferenceSyntax.Compact(guideReference);
+        return string.Equals(compact, "Base", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(compact, "Refiner", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool HasConfiguredStages()
