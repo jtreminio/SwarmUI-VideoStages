@@ -1,4 +1,4 @@
-const VideoStageUtils = {
+export const VideoStageUtils = {
     getInputElement: (id: string): HTMLInputElement | null => {
         return document.getElementById(id) as HTMLInputElement | null;
     },
@@ -18,7 +18,7 @@ const VideoStageUtils = {
         return Array.from(select.options).map((option) => option.label);
     },
     toNumber: (value: string | null | undefined, fallback: number): number => {
-        let parsed = Number(value);
+        const parsed = Number(value);
         return Number.isFinite(parsed) ? parsed : fallback;
-    }
-}
+    },
+};
