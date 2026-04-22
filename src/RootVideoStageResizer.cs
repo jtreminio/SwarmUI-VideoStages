@@ -35,7 +35,7 @@ internal static class RootVideoStageResizer
         }
 
         ApplyRootGuideReferenceIfNeeded(genInfo);
-        if (!TryGetRootStageResolution(g.UserInput, out int width, out int height))
+        if (!TryGetRootStageResolution(g, out int width, out int height))
         {
             return;
         }
@@ -109,7 +109,7 @@ internal static class RootVideoStageResizer
         if (g is null
             || genInfo.ContextID != T2IParamInput.SectionID_Video
             || !HasRootStageOverrides(g)
-            || !TryGetRootStageResolution(g.UserInput, out int width, out int height)
+            || !TryGetRootStageResolution(g, out int width, out int height)
             || g.CurrentMedia is null)
         {
             return;
@@ -152,7 +152,7 @@ internal static class RootVideoStageResizer
     private static bool HasRootStageOverrides(WorkflowGenerator g)
     {
         return HasExplicitRootGuideReference(g)
-            || TryGetRootStageResolution(g.UserInput, out _, out _);
+            || TryGetRootStageResolution(g, out _, out _);
     }
 
     private static bool HasExplicitRootGuideReference(WorkflowGenerator g)
@@ -235,12 +235,37 @@ internal static class RootVideoStageResizer
             && imageToVideoModel is not null;
     }
 
-    private static bool TryGetRootStageResolution(T2IParamInput input, out int width, out int height)
+    /// <summary>
+    /// Returns the resolution to use for the root video stage. With the
+    /// per-clip data model, the first non-skipped clip drives the root
+    /// stage's pre-frame-extract scale; if it doesn't carry both Width
+    /// and Height (e.g. legacy stage-only JSON), the resizer is skipped.
+    /// </summary>
+    private static bool TryGetRootStageResolution(WorkflowGenerator g, out int width, out int height)
     {
         width = 0;
         height = 0;
-        return input.TryGet(VideoStagesExtension.RootStageWidth, out width)
-            && input.TryGet(VideoStagesExtension.RootStageHeight, out height);
+        if (g is null)
+        {
+            return false;
+        }
+
+        JsonParser parser = new(g);
+        foreach (JsonParser.ClipSpec clip in parser.ParseClips())
+        {
+            if (clip.Skipped)
+            {
+                continue;
+            }
+            if (clip.Width.HasValue && clip.Height.HasValue && clip.Width.Value > 0 && clip.Height.Value > 0)
+            {
+                width = clip.Width.Value;
+                height = clip.Height.Value;
+                return true;
+            }
+            return false;
+        }
+        return false;
     }
 
     internal static bool TryGetConfiguredRootStageResolution(WorkflowGenerator g, out int width, out int height)
@@ -249,7 +274,7 @@ internal static class RootVideoStageResizer
         height = 0;
         return g is not null
             && HasNativeRootVideoModel(g)
-            && TryGetRootStageResolution(g.UserInput, out width, out height);
+            && TryGetRootStageResolution(g, out width, out height);
     }
 
     private static bool TryUpdateExistingScaleNode(WorkflowGenerator g, JArray imagePath = null, int? width = null, int? height = null, string crop = null)

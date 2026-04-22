@@ -78,12 +78,10 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootStageWidth, 768);
-        input.Set(VideoStagesExtension.RootStageHeight, 448);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode scaleNode = Assert.Single(
@@ -111,12 +109,13 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", upscale: 2.0, upscaleMethod: "pixel-bicubic", steps: 10)
+            MakeClip(
+                width: 960,
+                height: 544,
+                MakeStage(models.VideoModel.Name, "Generated", upscale: 2.0, upscaleMethod: "pixel-bicubic", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootStageWidth, 960);
-        input.Set(VideoStagesExtension.RootStageHeight, 544);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode rootScaleNode = Assert.Single(
@@ -157,12 +156,10 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootStageWidth, 768);
-        input.Set(VideoStagesExtension.RootStageHeight, 448);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode emptyLatentNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
@@ -179,14 +176,12 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+            MakeClip(width: 384, height: 640, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.Width, 768);
         input.Set(T2IParamTypes.Height, 1280);
-        input.Set(VideoStagesExtension.RootStageWidth, 384);
-        input.Set(VideoStagesExtension.RootStageHeight, 640);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowStepsWithRawAudio());
 
         WorkflowNode setMaskNode = Assert.Single(
@@ -219,9 +214,11 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
-        input.Set(VideoStagesExtension.RootStageWidth, 768);
-        input.Set(VideoStagesExtension.RootStageHeight, 448);
+        // Clip-shaped JSON still drives root resize even when the runner is disabled.
+        string stagesJson = new JArray(
+            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+        ).ToString();
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, enableVideoStages: false);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
@@ -255,11 +252,12 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
+        string stagesJson = new JArray(
+            MakeClip(width: 384, height: 640, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+        ).ToString();
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, enableVideoStages: false);
         input.Set(T2IParamTypes.Width, 768);
         input.Set(T2IParamTypes.Height, 1280);
-        input.Set(VideoStagesExtension.RootStageWidth, 384);
-        input.Set(VideoStagesExtension.RootStageHeight, 640);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowStepsWithRawAudio());
 
         WorkflowNode setMaskNode = Assert.Single(
@@ -293,12 +291,10 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22VideoModels();
 
         string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+            MakeClip(width: 832, height: 480, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootStageWidth, 832);
-        input.Set(VideoStagesExtension.RootStageHeight, 480);
         input.Set(T2IParamTypes.T5XXLModel, models.GemmaModel);
         input.Set(T2IParamTypes.VAE, models.BaseModel);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
@@ -331,13 +327,11 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
+            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(VideoStagesExtension.RootGuideImageReference, "edit0");
-        input.Set(VideoStagesExtension.RootStageWidth, 768);
-        input.Set(VideoStagesExtension.RootStageHeight, 448);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));

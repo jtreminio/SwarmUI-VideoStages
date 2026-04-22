@@ -20,8 +20,6 @@ public class VideoStagesExtension : Extension
     public static T2IRegisteredParam<string> AudioSource;
     public static T2IRegisteredParam<AudioFile> AudioUpload;
     public static T2IRegisteredParam<bool> EnableVideoStages;
-    public static T2IRegisteredParam<int> RootStageWidth;
-    public static T2IRegisteredParam<int> RootStageHeight;
     public static T2IRegisteredParam<string> RootGuideImageReference;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
@@ -92,40 +90,6 @@ public class VideoStagesExtension : Extension
             Name: "VS Audio Upload",
             Description: $"Audio file to connect to the generated video. Only used when VS Audio Source is set to '{AudioSourceUpload}'.",
             Default: null,
-            Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui",
-            DoNotPreview: true
-        ));
-        OrderPriority += 1;
-
-        RootStageWidth = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Root Width",
-            Description: "Optional width override for the first additional video stage input. When both Root Width and Root Height are set, the first stage input is scaled before extracting frames.",
-            Default: "512",
-            Min: 256,
-            ViewMin: 256,
-            Max: 16384,
-            ViewMax: 2048,
-            Step: 32,
-            Toggleable: true,
-            Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui",
-            DoNotPreview: true
-        ));
-        OrderPriority += 1;
-
-        RootStageHeight = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Root Height",
-            Description: "Optional height override for the first additional video stage input. When both Root Width and Root Height are set, the first stage input is scaled before extracting frames.",
-            Default: "512",
-            Min: 256,
-            ViewMin: 256,
-            Max: 16384,
-            ViewMax: 2048,
-            Step: 32,
-            Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
             FeatureFlag: "comfyui",

@@ -2,7 +2,6 @@ import type { VideoStageEditor } from "./VideoStageEditor";
 
 export class VideoStages {
     private stageEditor: VideoStageEditor;
-    private readonly visibleParamIds = ["rootwidth", "rootheight"];
 
     public constructor(stageEditor: VideoStageEditor) {
         this.stageEditor = stageEditor;
@@ -96,23 +95,6 @@ export class VideoStages {
                 metadata.enableadditionalvideostages ??
                 metadata.enablevideostages;
             if (`${enabled}` === "true") {
-                return true;
-            }
-
-            if (
-                this.visibleParamIds.some(
-                    (id) =>
-                        metadata[id] !== undefined &&
-                        metadata[id] !== null &&
-                        metadata[id] !== "",
-                )
-            ) {
-                return true;
-            }
-
-            const guideReference =
-                `${metadata.guideimagereference ?? ""}`.trim();
-            if (guideReference && guideReference.toLowerCase() !== "default") {
                 return true;
             }
 

@@ -1,3 +1,340 @@
-#videostages_stage_editor .input-group-content > div.auto-input {
-    min-width: calc(max(14rem, 50% - 10px));
+/* VideoStages clip editor.
+ *
+ * Styling intentionally stays close to SwarmUI's native panels: borders,
+ * spacing, and surface colors come from the same CSS variables that other
+ * parameter groups use. The only visually distinctive element is the
+ * "+ Add ..." dashed pill button (requested explicitly by the user).
+ */
+
+#videostages_stage_editor {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    color: var(--text);
+}
+
+#videostages_stage_editor *,
+#videostages_stage_editor *::before,
+#videostages_stage_editor *::after {
+    box-sizing: border-box;
+}
+
+#videostages_stage_editor .vs-clip-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* ------------------------------------------------------------------
+ * Clip cards (top-level group per video clip)
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-clip-card {
+    background: var(--background-panel-subtle);
+    border: 1px solid var(--light-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+#videostages_stage_editor .vs-clip-card.vs-skipped {
+    border-style: dashed;
+}
+#videostages_stage_editor .vs-clip-card.vs-skipped > .vs-clip-card-body {
+    opacity: 0.45;
+    pointer-events: none;
+    filter: grayscale(0.6);
+}
+#videostages_stage_editor .vs-clip-card.vs-skipped .vs-clip-card-title {
+    text-decoration: line-through;
+    color: var(--text-soft);
+}
+
+#videostages_stage_editor .vs-clip-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+#videostages_stage_editor .vs-clip-card.vs-collapsed .vs-clip-card-head {
+    margin-bottom: 0;
+}
+
+#videostages_stage_editor .vs-clip-card-title-block {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#videostages_stage_editor .vs-clip-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+#videostages_stage_editor .vs-clip-card-meta {
+    font-size: 11px;
+    color: var(--text-soft);
+    font-family: var(--font-monospace);
+}
+
+#videostages_stage_editor .vs-clip-card-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------
+ * Clip body: per-clip duration / width / height + sub-sections
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-clip-card-body {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#videostages_stage_editor .vs-clip-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+}
+#videostages_stage_editor .vs-clip-grid-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+#videostages_stage_editor .vs-clip-grid-row label {
+    font-size: 10px;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+#videostages_stage_editor .vs-clip-grid-row input {
+    width: 100%;
+}
+
+/* ------------------------------------------------------------------
+ * Sections inside a clip (Reference Images / Stages)
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-section-block {
+    border-top: 1px solid var(--light-border);
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+#videostages_stage_editor .vs-section-block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+#videostages_stage_editor .vs-section-block-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* ------------------------------------------------------------------
+ * Card list (refs and stages share the same row treatment)
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+#videostages_stage_editor .vs-card {
+    background: var(--background-panel);
+    border: 1px solid var(--light-border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    min-width: 0;
+}
+
+#videostages_stage_editor .vs-card.vs-skipped {
+    opacity: 0.5;
+    border-style: dashed;
+}
+#videostages_stage_editor .vs-card.vs-skipped .vs-card-body {
+    pointer-events: none;
+}
+
+#videostages_stage_editor .vs-card-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+#videostages_stage_editor .vs-card-index {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-monospace);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--background-soft);
+}
+
+#videostages_stage_editor .vs-card-summary {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--text-soft);
+    font-family: var(--font-monospace);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#videostages_stage_editor .vs-card-summary strong {
+    color: var(--text);
+    font-weight: 600;
+}
+#videostages_stage_editor .vs-card-summary .vs-card-summary-sep {
+    margin: 0 4px;
+    opacity: 0.5;
+}
+
+#videostages_stage_editor .vs-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+#videostages_stage_editor .vs-card-body {
+    margin-top: 8px;
+}
+
+/* ------------------------------------------------------------------
+ * Field grid inside ref/stage card bodies. Uses SwarmUI's auto-input
+ * naming so individual rows look identical to other parameters.
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-field-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    min-width: 0;
+}
+#videostages_stage_editor .vs-field-grid > .auto-input {
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+#videostages_stage_editor .vs-field-grid > .auto-input.vs-field-full {
+    grid-column: 1 / -1;
+}
+#videostages_stage_editor .vs-field-grid .auto-input-name {
+    font-size: 10px;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+#videostages_stage_editor .vs-field-grid .auto-dropdown,
+#videostages_stage_editor .vs-field-grid .auto-number-box,
+#videostages_stage_editor .vs-field-grid .auto-text-box,
+#videostages_stage_editor .vs-field-grid input,
+#videostages_stage_editor .vs-field-grid select {
+    width: 100%;
+}
+
+/* ------------------------------------------------------------------
+ * Small action buttons in headers (collapse / skip / delete)
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-btn-tiny {
+    height: 22px;
+    min-width: 24px;
+    padding: 0 6px;
+    font-size: 12px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+#videostages_stage_editor .vs-btn-collapse {
+    font-size: 13px;
+}
+
+/* ------------------------------------------------------------------
+ * "+ Add ..." dashed pill - intentionally distinct from native styling
+ * (per the timeline-ui mockup).
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px dashed var(--light-border);
+    background: transparent;
+    color: var(--text-soft);
+    border-radius: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition:
+        border-color 0.15s,
+        color 0.15s,
+        background 0.15s;
+}
+#videostages_stage_editor .vs-add-btn:hover {
+    border-color: var(--emphasis);
+    color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 8%, transparent);
+}
+#videostages_stage_editor .vs-add-btn-clip {
+    height: 36px;
+}
+
+/* ------------------------------------------------------------------
+ * Reference-image inline error
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-field-error {
+    grid-column: 1 / -1;
+    color: var(--bs-danger);
+    font-size: 11px;
+}
+
+/* ------------------------------------------------------------------
+ * Empty state shown when no clips exist
+ * ------------------------------------------------------------------ */
+
+#videostages_stage_editor .vs-empty-card {
+    border: 1px dashed var(--light-border);
+    border-radius: 6px;
+    padding: 18px 12px;
+    background: var(--background-panel);
+    color: var(--text-soft);
+    font-size: 11px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
 }

@@ -70,6 +70,18 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
         {
             g.UserInput.Set(T2IParamTypes.VAE.Type, stage.Vae, sectionId);
         }
+        if (stage.ClipFrames.HasValue && stage.ClipFrames.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.VideoFrames, stage.ClipFrames.Value, sectionId);
+        }
+        if (stage.ClipWidth.HasValue && stage.ClipWidth.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.Width, stage.ClipWidth.Value, sectionId);
+        }
+        if (stage.ClipHeight.HasValue && stage.ClipHeight.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.Height, stage.ClipHeight.Value, sectionId);
+        }
     }
 
     private StageRefStore.StageRef ResolveGuideReference(JsonParser.StageSpec stage)

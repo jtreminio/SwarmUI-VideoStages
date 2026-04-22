@@ -37,6 +37,14 @@ public class AudioInjectionTests
         ["ImageReference"] = "Generated"
     };
 
+    private static JObject MakeClip(int width, int height, params JObject[] stages) => new()
+    {
+        ["Name"] = "Clip 0",
+        ["Width"] = width,
+        ["Height"] = height,
+        ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
+    };
+
     private static JObject Node(string classType, JObject inputs = null) => new()
     {
         ["class_type"] = classType,
@@ -413,10 +421,10 @@ public class AudioInjectionTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(MakeStage(models.VideoModel.Name)).ToString();
+        string stagesJson = new JArray(
+            MakeClip(width: 384, height: 640, MakeStage(models.VideoModel.Name))
+        ).ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootStageWidth, 384);
-        input.Set(VideoStagesExtension.RootStageHeight, 640);
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 

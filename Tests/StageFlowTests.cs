@@ -36,6 +36,21 @@ public partial class StageFlowTests
             ["ImageReference"] = imageReference
         };
 
+    /// <summary>
+    /// Wraps one or more stage objects in a clip that carries width / height
+    /// metadata; the first non-skipped clip's resolution drives the root
+    /// video resizer in the runtime, replacing the legacy Root Width /
+    /// Root Height parameters.
+    /// </summary>
+    private static JObject MakeClip(int width, int height, params JObject[] stages) =>
+        new()
+        {
+            ["Name"] = "Clip 0",
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
+        };
+
     private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, bool enableVideoStages = true, string prompt = "unit test prompt")
     {
         _ = WorkflowTestHarness.VideoStagesSteps();

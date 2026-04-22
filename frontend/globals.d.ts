@@ -14,10 +14,6 @@ declare function findParentOfClass(
     element: Element,
     className: string,
 ): HTMLElement;
-declare function getHtmlForParam(
-    param: Record<string, any>,
-    prefix: string,
-): { html: string; runnable: () => void };
 declare function getParamById(
     id: string,
 ): { values?: string[]; value_names?: string[] } | null;
