@@ -1,5 +1,175 @@
 "use strict";
 (() => {
+  // frontend/Utils.ts
+  var VideoStageUtils = {
+    getInputElement: (id) => {
+      return document.getElementById(id);
+    },
+    getSelectElement: (id) => {
+      return document.getElementById(id);
+    },
+    getSelectValues: (select) => {
+      if (!select) {
+        return [];
+      }
+      return Array.from(select.options).map((option) => option.value);
+    },
+    getSelectLabels: (select) => {
+      if (!select) {
+        return [];
+      }
+      return Array.from(select.options).map((option) => option.label);
+    },
+    toNumber: (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+  };
+
+  // frontend/AudioSourceController.ts
+  var AudioSourceController = () => {
+    const NATIVE_VALUE = "Native";
+    const UPLOAD_VALUE = "Upload";
+    const SWARM_VALUE = "Swarm Audio";
+    const SOURCE_INPUT_ID = "input_vsaudiosource";
+    const UPLOAD_INPUT_ID = "input_vsaudioupload";
+    const TEXT2AUDIO_TOGGLE_ID = "input_group_content_texttoaudio_toggle";
+    const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
+    const getSourceSelect = () => VideoStageUtils.getSelectElement(SOURCE_INPUT_ID);
+    const getUploadContainer = () => {
+      const fileInput = VideoStageUtils.getInputElement(UPLOAD_INPUT_ID);
+      if (!fileInput) {
+        return null;
+      }
+      return findParentOfClass(fileInput, "auto-input");
+    };
+    const isTextToAudioEnabled = () => {
+      const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
+      return !!toggle?.checked;
+    };
+    const getAceStepFunRefs = () => {
+      const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
+      if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+        return [];
+      }
+      const seen = /* @__PURE__ */ new Set();
+      const refs = [];
+      for (const raw of snapshot.refs) {
+        const ref = `${raw || ""}`.trim();
+        if (!ref || seen.has(ref)) {
+          continue;
+        }
+        seen.add(ref);
+        refs.push(ref);
+      }
+      return refs;
+    };
+    const buildOptions = () => {
+      const options = [
+        { value: NATIVE_VALUE, label: NATIVE_VALUE },
+        { value: UPLOAD_VALUE, label: UPLOAD_VALUE }
+      ];
+      if (isTextToAudioEnabled()) {
+        options.push({ value: SWARM_VALUE, label: SWARM_VALUE });
+      }
+      for (const ref of getAceStepFunRefs()) {
+        options.push({ value: ref, label: ref });
+      }
+      return options;
+    };
+    const resolveSelectedValue = (currentValue, options) => {
+      const desired = `${currentValue || ""}`;
+      if (options.some((o) => o.value === desired)) {
+        return desired;
+      }
+      return NATIVE_VALUE;
+    };
+    const applyUploadVisibility = () => {
+      const container = getUploadContainer();
+      if (!container) {
+        return;
+      }
+      const select = getSourceSelect();
+      const showUpload = !!select && `${select.value || ""}` === UPLOAD_VALUE;
+      if (showUpload) {
+        container.style.display = "";
+        delete container.dataset.visible_controlled;
+        return;
+      }
+      container.style.display = "none";
+      container.dataset.visible_controlled = "true";
+    };
+    const refreshOptions = () => {
+      const select = getSourceSelect();
+      if (!select) {
+        return;
+      }
+      const options = buildOptions();
+      const desired = resolveSelectedValue(select.value, options);
+      const newValuesJson = JSON.stringify(options.map((o) => o.value));
+      const currentValuesJson = JSON.stringify(
+        Array.from(select.options).map((o) => o.value)
+      );
+      if (newValuesJson === currentValuesJson && select.value === desired) {
+        return;
+      }
+      select.innerHTML = "";
+      for (const option of options) {
+        const elem = document.createElement("option");
+        elem.value = option.value;
+        elem.text = option.label;
+        elem.selected = option.value === desired;
+        select.appendChild(elem);
+      }
+      select.value = desired;
+      triggerChangeFor(select);
+      applyUploadVisibility();
+    };
+    const onDocumentChange = (event) => {
+      if (event.target?.id === SOURCE_INPUT_ID) {
+        applyUploadVisibility();
+      }
+    };
+    const onDocumentDropdownInteraction = (event) => {
+      if (event.target?.id === SOURCE_INPUT_ID) {
+        refreshOptions();
+      }
+    };
+    let lastBoundText2AudioToggle = null;
+    const bindText2AudioToggle = () => {
+      const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
+      if (!toggle || toggle === lastBoundText2AudioToggle) {
+        return;
+      }
+      toggle.addEventListener("change", refreshOptions);
+      lastBoundText2AudioToggle = toggle;
+    };
+    const runOnEachBuild = () => {
+      try {
+        bindText2AudioToggle();
+        refreshOptions();
+        applyUploadVisibility();
+      } catch (error) {
+        console.log(
+          "AudioSourceController: param build sync failed",
+          error
+        );
+      }
+    };
+    const scheduleInitialSync = () => {
+      if (typeof postParamBuildSteps !== "undefined" && Array.isArray(postParamBuildSteps)) {
+        postParamBuildSteps.push(runOnEachBuild);
+        return;
+      }
+      setTimeout(scheduleInitialSync, 200);
+    };
+    document.addEventListener("change", onDocumentChange, true);
+    document.addEventListener("mousedown", onDocumentDropdownInteraction);
+    document.addEventListener("focusin", onDocumentDropdownInteraction);
+    document.addEventListener(ACESTEPFUN_EVENT, refreshOptions);
+    scheduleInitialSync();
+  };
+
   // frontend/ToggleableGroupReuseGuard.ts
   var ToggleableGroupReuseGuard = class _ToggleableGroupReuseGuard {
     constructor(options) {
@@ -95,32 +265,6 @@
       return this.options.getGroupToggle?.() ?? document.getElementById(
         `${this.options.groupContentId}_toggle`
       );
-    }
-  };
-
-  // frontend/Utils.ts
-  var VideoStageUtils = {
-    getInputElement: (id) => {
-      return document.getElementById(id);
-    },
-    getSelectElement: (id) => {
-      return document.getElementById(id);
-    },
-    getSelectValues: (select) => {
-      if (!select) {
-        return [];
-      }
-      return Array.from(select.options).map((option) => option.value);
-    },
-    getSelectLabels: (select) => {
-      if (!select) {
-        return [];
-      }
-      return Array.from(select.options).map((option) => option.label);
-    },
-    toNumber: (value, fallback) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : fallback;
     }
   };
 
@@ -1495,5 +1639,6 @@
 
   // frontend/main.ts
   new VideoStages(new VideoStageEditor());
+  AudioSourceController();
 })();
 //# sourceMappingURL=video-stages.js.map

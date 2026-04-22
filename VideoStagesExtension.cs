@@ -3,6 +3,7 @@ using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
 
 namespace VideoStages;
 
@@ -11,8 +12,13 @@ public class VideoStagesExtension : Extension
     public const int SectionID_VideoStages = 48823;
     public const double DefaultLTXVImgToVideoInplaceStrength = 0.8;
 
+    public const string AudioSourceNative = "Native";
+    public const string AudioSourceUpload = "Upload";
+    public const string AudioSourceSwarm = "Swarm Audio";
+
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
-    public static T2IRegisteredParam<bool> ConnectAudioToVideo;
+    public static T2IRegisteredParam<string> AudioSource;
+    public static T2IRegisteredParam<AudioFile> AudioUpload;
     public static T2IRegisteredParam<bool> EnableVideoStages;
     public static T2IRegisteredParam<int> RootStageWidth;
     public static T2IRegisteredParam<int> RootStageHeight;
@@ -67,13 +73,29 @@ public class VideoStagesExtension : Extension
 
         double OrderPriority = 0;
 
-        ConnectAudioToVideo = T2IParamTypes.Register<bool>(new T2IParamType(
-            Name: "Connect Audio to Video",
-            Description: "Connect detected audio (if any) to your videos.",
-            Default: "true",
+        AudioSource = T2IParamTypes.Register<string>(new T2IParamType(
+            Name: "VS Audio Source",
+            Description: "Where the audio for your video should come from.\n"
+                + $"'{AudioSourceNative}': auto-detect any audio nodes already present in the workflow (default).\n"
+                + $"'{AudioSourceUpload}': use the audio file you upload below.\n"
+                + $"'{AudioSourceSwarm}': use the Text-To-Audio output (only when Text To Audio is enabled).\n"
+                + "Tracks published by extensions (eg AceStepFun) are also added dynamically when available.",
+            Default: AudioSourceNative,
+            GetValues: (_) => [AudioSourceNative, AudioSourceUpload],
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
             FeatureFlag: "comfyui"
+        ));
+        OrderPriority += 1;
+
+        AudioUpload = T2IParamTypes.Register<AudioFile>(new T2IParamType(
+            Name: "VS Audio Upload",
+            Description: $"Audio file to connect to the generated video. Only used when VS Audio Source is set to '{AudioSourceUpload}'.",
+            Default: null,
+            Group: VideoStagesGroup,
+            OrderPriority: OrderPriority,
+            FeatureFlag: "comfyui",
+            DoNotPreview: true
         ));
         OrderPriority += 1;
 

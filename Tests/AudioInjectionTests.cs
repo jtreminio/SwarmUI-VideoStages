@@ -48,7 +48,7 @@ public class AudioInjectionTests
         T2IModel videoModel,
         string stagesJson,
         bool enableVideoStages = true,
-        bool connectAudioToVideo = true)
+        string audioSource = VideoStagesExtension.AudioSourceNative)
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
@@ -58,7 +58,7 @@ public class AudioInjectionTests
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, baseModel);
         input.Set(T2IParamTypes.RefinerModel, baseModel);
-        input.Set(VideoStagesExtension.ConnectAudioToVideo, connectAudioToVideo);
+        input.Set(VideoStagesExtension.AudioSource, audioSource);
         input.Set(VideoStagesExtension.EnableVideoStages, enableVideoStages);
         input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
         input.Set(T2IParamTypes.VideoModel, videoModel);
@@ -332,7 +332,7 @@ public class AudioInjectionTests
     }
 
     [Fact]
-    public void Save_audio_stage_does_not_inject_audio_when_connect_audio_toggle_disabled()
+    public void Save_audio_stage_does_not_inject_audio_when_audio_source_is_blank()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -344,7 +344,7 @@ public class AudioInjectionTests
             models.VideoModel,
             "[]",
             enableVideoStages: false,
-            connectAudioToVideo: false);
+            audioSource: "");
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 

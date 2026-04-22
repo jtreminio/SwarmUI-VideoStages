@@ -39,6 +39,16 @@ interface Base2EditStageRegistry {
     getSnapshot: () => Base2EditStageSnapshot;
 }
 
+interface AceStepFunTrackSnapshot {
+    enabled: boolean;
+    trackCount: number;
+    refs: string[];
+}
+
+interface AceStepFunTrackRegistry {
+    getSnapshot: () => AceStepFunTrackSnapshot;
+}
+
 declare const modelsHelpers:
     | {
           getDataFor?: (
@@ -59,4 +69,5 @@ declare const currentModelHelper:
 
 interface Window {
     base2editStageRegistry?: Base2EditStageRegistry;
+    acestepfunTrackRegistry?: AceStepFunTrackRegistry;
 }

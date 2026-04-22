@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using VideoStages.LTX2;
 
@@ -53,23 +55,42 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     private void TryInjectDetectedAudio()
     {
-        if (!g.UserInput.Get(VideoStagesExtension.ConnectAudioToVideo, true))
-        {
-            return;
-        }
-
         if (!g.IsLTXV2() || g.CurrentAudioVae is null)
         {
             return;
         }
 
-        AudioStageDetector.Detection detection = new AudioStageDetector(g).Detect();
+        string source = $"{g.UserInput.Get(VideoStagesExtension.AudioSource, VideoStagesExtension.AudioSourceNative)}".Trim();
+        if (string.IsNullOrEmpty(source))
+        {
+            return;
+        }
+
+        AudioStageDetector.Detection detection = string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal)
+            ? BuildUploadDetection()
+            : new AudioStageDetector(g).Detect();
         if (detection is null)
         {
             return;
         }
 
         _ = new AudioInjector(g).TryInject(detection);
+    }
+
+    private AudioStageDetector.Detection BuildUploadDetection()
+    {
+        if (!g.UserInput.TryGet(VideoStagesExtension.AudioUpload, out AudioFile uploaded) || uploaded is null)
+        {
+            return null;
+        }
+
+        string loadNodeId = g.CreateAudioLoadNode(uploaded, "${vsaudioupload}");
+        WGNodeData audio = new(
+            new JArray(loadNodeId, 0),
+            g,
+            WGNodeData.DT_AUDIO,
+            g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
+        return new AudioStageDetector.Detection(audio, loadNodeId, "SwarmLoadAudioB64", loadNodeId, int.MaxValue);
     }
 
     private bool HasRootVideoModel()
