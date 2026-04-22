@@ -198,14 +198,17 @@
 
   // frontend/RenderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var renderOptionList = (options, selected) => options.map((option) => {
-    const value = escapeAttr(option.value);
-    const label = escapeAttr(option.label);
-    const isSelected = option.value === selected ? " selected" : "";
-    const isDisabled = option.disabled ? " disabled" : "";
-    return `<option value="${value}"${isSelected}${isDisabled}>${label}</option>`;
-  }).join("");
   var framesForClip = (durationSeconds, fps) => Math.max(1, Math.round(durationSeconds * Math.max(1, fps)));
+  var clipFieldId = (clipIdx, field) => `vsclip${clipIdx}_${field}`;
+  var refFieldId = (clipIdx, refIdx, field) => `vsclip${clipIdx}_ref${refIdx}_${field}`;
+  var stageFieldId = (clipIdx, stageIdx, field) => `vsclip${clipIdx}_stage${stageIdx}_${field}`;
+  var injectFieldData = (html, dataAttrs) => {
+    const dataAttrString = Object.entries(dataAttrs).map(([key, value]) => `${key}="${escapeAttr(value)}"`).join(" ");
+    return html.replace(
+      /<(input|select|textarea)\s+class="([^"]*)"/g,
+      (_match, tag, classes) => `<${tag} class="${classes} nogrow" ${dataAttrString}`
+    );
+  };
   var snapDurationToFps = (seconds, fps) => {
     if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
       return seconds;
@@ -320,6 +323,12 @@
 
   // frontend/VideoStageEditor.ts
   var REF_FRAME_MIN = 1;
+  var CLIP_DURATION_MIN = 1;
+  var CLIP_DURATION_MAX = 9999;
+  var CLIP_DURATION_SLIDER_MAX = 60;
+  var CLIP_DIMENSION_MIN = 256;
+  var CLIP_DIMENSION_MAX = 16384;
+  var CLIP_DIMENSION_SLIDER_MAX = 4096;
   var VideoStageEditor = class {
     editor = null;
     inactiveReuseGuard;
@@ -546,11 +555,11 @@
         upscaleMethodValues: upscaleMethodValues.length > 0 ? upscaleMethodValues : fallbackUpscaleMethods,
         upscaleMethodLabels: upscaleMethodLabels.length > 0 ? upscaleMethodLabels : fallbackUpscaleMethods,
         width: Math.max(
-          64,
+          CLIP_DIMENSION_MIN,
           Math.round(VideoStageUtils.toNumber(widthInput?.value, 1024))
         ),
         height: Math.max(
-          64,
+          CLIP_DIMENSION_MIN,
           Math.round(VideoStageUtils.toNumber(heightInput?.value, 1024))
         ),
         fps,
@@ -617,7 +626,10 @@
         expanded: true,
         skipped: false,
         duration: snapDurationToFps(
-          defaults.frames / Math.max(1, defaults.fps),
+          Math.max(
+            CLIP_DURATION_MIN,
+            defaults.frames / Math.max(1, defaults.fps)
+          ),
           defaults.fps
         ),
         width: defaults.width,
@@ -725,9 +737,12 @@
         name: typeof rawClip.name === "string" && rawClip.name.length > 0 ? rawClip.name : `Clip ${index}`,
         expanded: rawClip.expanded === void 0 ? true : !!rawClip.expanded,
         skipped: !!rawClip.skipped,
-        duration: snapDurationToFps(Math.max(0.1, rawDuration), fps),
+        duration: snapDurationToFps(
+          Math.max(CLIP_DURATION_MIN, rawDuration),
+          fps
+        ),
         width: Math.max(
-          64,
+          CLIP_DIMENSION_MIN,
           Math.round(
             VideoStageUtils.toNumber(
               `${rawClip.width}`,
@@ -736,7 +751,7 @@
           )
         ),
         height: Math.max(
-          64,
+          CLIP_DIMENSION_MIN,
           Math.round(
             VideoStageUtils.toNumber(
               `${rawClip.height}`,
@@ -1054,56 +1069,88 @@
       addClipButton.innerText = "+ Add Video Clip";
       this.editor.appendChild(addClipButton);
       this.attachEventListeners();
+      enableSlidersIn(this.editor);
       this.restoreFocus(focusSnapshot);
       return this.validateClips(clips);
     }
     renderClipCard(clip, clipIdx, totalClips) {
-      const cardClasses = ["vs-clip-card"];
-      if (clip.skipped) {
-        cardClasses.push("vs-skipped");
-      }
-      if (!clip.expanded) {
-        cardClasses.push("vs-collapsed");
-      }
       const stagesCount = clip.stages.length;
       const refsCount = clip.refs.length;
-      const meta = `${clip.duration.toFixed(1)}s &middot; ${clip.width}&times;${clip.height} &middot; ${stagesCount} stage${stagesCount === 1 ? "" : "s"}`;
       const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
       const skipBtnVariant = clip.skipped ? "btn-warning" : "btn-secondary";
-      const collapseBtnTitle = clip.expanded ? "Collapse" : "Expand";
-      const collapseGlyph = clip.expanded ? "&#9662;" : "&#9656;";
-      const head = `
-            <div class="vs-clip-card-head">
-                <div class="vs-clip-card-title-block">
-                    <div class="vs-clip-card-title">${escapeAttr(clip.name)}</div>
-                    <div class="vs-clip-card-meta">${meta}</div>
-                </div>
-                <div class="vs-clip-card-actions">
-                    <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse" data-clip-action="toggle-collapse" data-clip-idx="${clipIdx}" title="${collapseBtnTitle}">${collapseGlyph}</button>
-                    <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button>
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip" ${totalClips === 1 ? "disabled" : ""}>&times;</button>
-                </div>
-            </div>
-        `;
-      if (!clip.expanded) {
-        return `<section class="${cardClasses.join(" ")}" data-clip-idx="${clipIdx}">${head}</section>`;
+      const collapseGlyph = clip.expanded ? "&#x2B9F;" : "&#x2B9E;";
+      const groupClasses = ["input-group", "vs-clip-card"];
+      groupClasses.push(
+        clip.expanded ? "input-group-open" : "input-group-closed"
+      );
+      if (clip.skipped) {
+        groupClasses.push("vs-skipped");
       }
+      const contentStyle = clip.expanded ? "" : ' style="display: none;"';
+      const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">${escapeAttr(clip.name)}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip" ${totalClips === 1 ? "disabled" : ""}>&times;</button></span></span></span>`;
+      const defaults = this.getRootDefaults();
+      const lengthField = injectFieldData(
+        makeSliderInput(
+          "",
+          clipFieldId(clipIdx, "duration"),
+          "duration",
+          "Length (seconds)",
+          "",
+          clip.duration.toFixed(1),
+          CLIP_DURATION_MIN,
+          CLIP_DURATION_MAX,
+          CLIP_DURATION_MIN,
+          CLIP_DURATION_SLIDER_MAX,
+          Math.max(0.1, 1 / Math.max(1, defaults.fps)),
+          false,
+          false,
+          false
+        ),
+        { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) }
+      );
+      const widthField = injectFieldData(
+        makeSliderInput(
+          "",
+          clipFieldId(clipIdx, "width"),
+          "width",
+          "Width",
+          "",
+          String(clip.width),
+          CLIP_DIMENSION_MIN,
+          CLIP_DIMENSION_MAX,
+          CLIP_DIMENSION_MIN,
+          CLIP_DIMENSION_SLIDER_MAX,
+          8,
+          false,
+          false,
+          false
+        ),
+        { "data-clip-field": "width", "data-clip-idx": String(clipIdx) }
+      );
+      const heightField = injectFieldData(
+        makeSliderInput(
+          "",
+          clipFieldId(clipIdx, "height"),
+          "height",
+          "Height",
+          "",
+          String(clip.height),
+          CLIP_DIMENSION_MIN,
+          CLIP_DIMENSION_MAX,
+          CLIP_DIMENSION_MIN,
+          CLIP_DIMENSION_SLIDER_MAX,
+          8,
+          false,
+          false,
+          false
+        ),
+        { "data-clip-field": "height", "data-clip-idx": String(clipIdx) }
+      );
       const body = `
-            <div class="vs-clip-card-body">
-                <div class="vs-clip-grid">
-                    <div class="vs-clip-grid-row">
-                        <label>Length (seconds)</label>
-                        <input type="number" class="auto-number-box" min="0.1" step="0.1" value="${clip.duration.toFixed(1)}" data-clip-field="duration" data-clip-idx="${clipIdx}">
-                    </div>
-                    <div class="vs-clip-grid-row">
-                        <label>Width</label>
-                        <input type="number" class="auto-number-box" min="64" step="8" value="${clip.width}" data-clip-field="width" data-clip-idx="${clipIdx}">
-                    </div>
-                    <div class="vs-clip-grid-row">
-                        <label>Height</label>
-                        <input type="number" class="auto-number-box" min="64" step="8" value="${clip.height}" data-clip-field="height" data-clip-idx="${clipIdx}">
-                    </div>
-                </div>
+            <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
+                ${lengthField}
+                ${widthField}
+                ${heightField}
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
@@ -1122,7 +1169,7 @@
                 </div>
             </div>
         `;
-      return `<section class="${cardClasses.join(" ")}" data-clip-idx="${clipIdx}">${head}${body}</section>`;
+      return `<div class="${groupClasses.join(" ")}" id="auto-group-vsclip${clipIdx}" data-clip-idx="${clipIdx}">${head}${body}</div>`;
     }
     renderRefRow(clip, ref, clipIdx, refIdx) {
       const sourceLabel = ref.source;
@@ -1140,7 +1187,7 @@
             </div>
         `;
       if (!ref.expanded) {
-        return `<section class="vs-card" data-ref-idx="${refIdx}">${head}</section>`;
+        return `<section class="vs-card vs-ref-card input-group" data-ref-idx="${refIdx}">${head}</section>`;
       }
       const sourceOptions = this.buildRefSourceOptions(ref.source);
       const frameCount = framesForClip(
@@ -1149,39 +1196,92 @@
       );
       const sourceError = this.getRefSourceError(ref.source);
       const errorHtml = sourceError ? `<div class="vs-field-error">${escapeAttr(sourceError)}</div>` : "";
-      const uploadField = ref.source === REF_SOURCE_UPLOAD ? `
-            <div class="auto-input vs-field-full" data-vs-upload-row="true">
-                <span class="auto-input-name">Upload File Name</span>
-                <input type="text" class="auto-text-box" value="${escapeAttr(ref.uploadFileName ?? "")}" placeholder="filename.png" data-ref-field="uploadFileName" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}">
-            </div>
-        ` : "";
-      return `<section class="vs-card" data-ref-idx="${refIdx}">
+      const sourceField = injectFieldData(
+        this.buildNativeDropdown(
+          refFieldId(clipIdx, refIdx, "source"),
+          "source",
+          "Image Source",
+          sourceOptions,
+          ref.source
+        ),
+        {
+          "data-ref-field": "source",
+          "data-ref-idx": String(refIdx),
+          "data-clip-idx": String(clipIdx)
+        }
+      );
+      const uploadField = ref.source === REF_SOURCE_UPLOAD ? injectFieldData(
+        makeTextInput(
+          "",
+          refFieldId(clipIdx, refIdx, "uploadFileName"),
+          "uploadFileName",
+          "Upload File Name",
+          "",
+          ref.uploadFileName ?? "",
+          "normal",
+          "filename.png",
+          false,
+          false,
+          false
+        ),
+        {
+          "data-ref-field": "uploadFileName",
+          "data-ref-idx": String(refIdx),
+          "data-clip-idx": String(clipIdx)
+        }
+      ) : "";
+      const frameField = injectFieldData(
+        makeNumberInput(
+          "",
+          refFieldId(clipIdx, refIdx, "frame"),
+          "frame",
+          `Frame (max ${frameCount})`,
+          "",
+          String(ref.frame),
+          REF_FRAME_MIN,
+          frameCount,
+          1,
+          "small",
+          false,
+          false
+        ),
+        {
+          "data-ref-field": "frame",
+          "data-ref-idx": String(refIdx),
+          "data-clip-idx": String(clipIdx)
+        }
+      );
+      const fromEndField = injectFieldData(
+        makeCheckboxInput(
+          "",
+          refFieldId(clipIdx, refIdx, "fromEnd"),
+          "fromEnd",
+          "Count from last frame",
+          "",
+          ref.fromEnd,
+          false,
+          false,
+          false
+        ),
+        {
+          "data-ref-field": "fromEnd",
+          "data-ref-idx": String(refIdx),
+          "data-clip-idx": String(clipIdx)
+        }
+      );
+      return `<section class="vs-card vs-ref-card input-group" data-ref-idx="${refIdx}">
             ${head}
-            <div class="vs-card-body">
-                <div class="vs-field-grid">
-                    <div class="auto-input vs-field-full">
-                        <span class="auto-input-name">Image Source</span>
-                        <select class="auto-dropdown" data-ref-field="source" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}">${renderOptionList(sourceOptions, ref.source)}</select>
-                    </div>
-                    ${uploadField}
-                    <div class="auto-input">
-                        <span class="auto-input-name">Frame (max ${frameCount})</span>
-                        <input type="number" class="auto-number-box" min="${REF_FRAME_MIN}" max="${frameCount}" step="1" value="${ref.frame}" data-ref-field="frame" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}">
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">From End</span>
-                        <label style="display: flex; align-items: center; gap: 6px; height: 32px;">
-                            <input type="checkbox" data-ref-field="fromEnd" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" ${ref.fromEnd ? "checked" : ""}>
-                            <span style="opacity: 0.75;">Count from last frame</span>
-                        </label>
-                    </div>
-                    ${errorHtml}
-                </div>
+            <div class="vs-card-body input-group-content">
+                ${sourceField}
+                ${uploadField}
+                ${frameField}
+                ${fromEndField}
+                ${errorHtml}
             </div>
         </section>`;
     }
     renderStageRow(clip, stage, clipIdx, stageIdx) {
-      const cardClasses = ["vs-card"];
+      const cardClasses = ["vs-card", "input-group"];
       if (stage.skipped) {
         cardClasses.push("vs-skipped");
       }
@@ -1208,62 +1308,173 @@
         return `<section class="${cardClasses.join(" ")}" data-stage-idx="${stageIdx}">${head}</section>`;
       }
       const defaults = this.getRootDefaults();
+      const stageNumberField = (field, label, value, min, max, step) => injectFieldData(
+        makeNumberInput(
+          "",
+          stageFieldId(clipIdx, stageIdx, field),
+          field,
+          label,
+          "",
+          String(value),
+          min,
+          max,
+          step,
+          "small",
+          false,
+          false
+        ),
+        {
+          "data-stage-field": field,
+          "data-stage-idx": String(stageIdx),
+          "data-clip-idx": String(clipIdx)
+        }
+      );
+      const stageDropdownField = (field, label, values, labels, selected, disabled = false) => {
+        let html = injectFieldData(
+          this.buildNativeDropdown(
+            stageFieldId(clipIdx, stageIdx, field),
+            field,
+            label,
+            this.dropdownOptions(values, labels, selected),
+            selected
+          ),
+          {
+            "data-stage-field": field,
+            "data-stage-idx": String(stageIdx),
+            "data-clip-idx": String(clipIdx)
+          }
+        );
+        if (disabled) {
+          html = html.replace(/<select /, "<select disabled ");
+        }
+        return html;
+      };
+      const modelField = stageDropdownField(
+        "model",
+        "Model",
+        defaults.modelValues,
+        defaults.modelLabels,
+        stage.model
+      );
+      const controlField = stageNumberField(
+        "control",
+        "Control",
+        stage.control,
+        defaults.controlMin,
+        defaults.controlMax,
+        defaults.controlStep
+      );
+      const stepsField = stageNumberField(
+        "steps",
+        "Steps",
+        stage.steps,
+        defaults.stepsMin,
+        defaults.stepsMax,
+        defaults.stepsStep
+      );
+      const cfgScaleField = stageNumberField(
+        "cfgScale",
+        "CFG Scale",
+        stage.cfgScale,
+        defaults.cfgScaleMin,
+        defaults.cfgScaleMax,
+        defaults.cfgScaleStep
+      );
+      const upscaleField = stageNumberField(
+        "upscale",
+        "Upscale",
+        stage.upscale,
+        defaults.upscaleMin,
+        defaults.upscaleMax,
+        defaults.upscaleStep
+      );
+      const upscaleMethodField = stageDropdownField(
+        "upscaleMethod",
+        "Upscale Method",
+        defaults.upscaleMethodValues,
+        defaults.upscaleMethodLabels,
+        stage.upscaleMethod,
+        stage.upscale === 1
+      );
+      const samplerField = stageDropdownField(
+        "sampler",
+        "Sampler",
+        defaults.samplerValues,
+        defaults.samplerLabels,
+        stage.sampler
+      );
+      const schedulerField = stageDropdownField(
+        "scheduler",
+        "Scheduler",
+        defaults.schedulerValues,
+        defaults.schedulerLabels,
+        stage.scheduler
+      );
+      const vaeField = stageDropdownField(
+        "vae",
+        "VAE",
+        defaults.vaeValues,
+        defaults.vaeLabels,
+        stage.vae
+      );
       return `<section class="${cardClasses.join(" ")}" data-stage-idx="${stageIdx}">
             ${head}
-            <div class="vs-card-body">
-                <div class="vs-field-grid">
-                    <div class="auto-input vs-field-full">
-                        <span class="auto-input-name">Model</span>
-                        <select class="auto-dropdown" data-stage-field="model" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">${this.renderDropdown(defaults.modelValues, defaults.modelLabels, stage.model)}</select>
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">Control</span>
-                        <input type="number" class="auto-number-box" min="${defaults.controlMin}" max="${defaults.controlMax}" step="${defaults.controlStep}" value="${stage.control}" data-stage-field="control" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">Steps</span>
-                        <input type="number" class="auto-number-box" min="${defaults.stepsMin}" max="${defaults.stepsMax}" step="${defaults.stepsStep}" value="${stage.steps}" data-stage-field="steps" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">CFG Scale</span>
-                        <input type="number" class="auto-number-box" min="${defaults.cfgScaleMin}" max="${defaults.cfgScaleMax}" step="${defaults.cfgScaleStep}" value="${stage.cfgScale}" data-stage-field="cfgScale" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">Upscale</span>
-                        <input type="number" class="auto-number-box" min="${defaults.upscaleMin}" max="${defaults.upscaleMax}" step="${defaults.upscaleStep}" value="${stage.upscale}" data-stage-field="upscale" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">Upscale Method</span>
-                        <select class="auto-dropdown" data-stage-field="upscaleMethod" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" ${stage.upscale === 1 ? "disabled" : ""}>${this.renderDropdown(defaults.upscaleMethodValues, defaults.upscaleMethodLabels, stage.upscaleMethod)}</select>
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">Sampler</span>
-                        <select class="auto-dropdown" data-stage-field="sampler" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">${this.renderDropdown(defaults.samplerValues, defaults.samplerLabels, stage.sampler)}</select>
-                    </div>
-                    <div class="auto-input">
-                        <span class="auto-input-name">Scheduler</span>
-                        <select class="auto-dropdown" data-stage-field="scheduler" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">${this.renderDropdown(defaults.schedulerValues, defaults.schedulerLabels, stage.scheduler)}</select>
-                    </div>
-                    <div class="auto-input vs-field-full">
-                        <span class="auto-input-name">VAE</span>
-                        <select class="auto-dropdown" data-stage-field="vae" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}">${this.renderDropdown(defaults.vaeValues, defaults.vaeLabels, stage.vae)}</select>
-                    </div>
-                </div>
+            <div class="vs-card-body input-group-content">
+                ${modelField}
+                ${controlField}
+                ${stepsField}
+                ${cfgScaleField}
+                ${upscaleField}
+                ${upscaleMethodField}
+                ${samplerField}
+                ${schedulerField}
+                ${vaeField}
             </div>
         </section>`;
     }
-    renderDropdown(values, labels, selected) {
+    /**
+     * Aligns SwarmUI's `makeDropdownInput` with our value/label pairs and
+     * preserves the selected value even when it is not in the canonical list
+     * (e.g. an unknown model name carried over from a reused image).
+     */
+    buildNativeDropdown(id, paramId, label, options, selected) {
+      const values = options.map((option) => option.value);
+      const labels = options.map((option) => option.label);
+      const html = makeDropdownInput(
+        "",
+        id,
+        paramId,
+        label,
+        "",
+        values,
+        selected,
+        false,
+        false,
+        labels,
+        false
+      );
+      return options.reduce((acc, option) => {
+        if (!option.disabled) {
+          return acc;
+        }
+        const optionValue = escapeAttr(option.value);
+        return acc.replace(
+          new RegExp(`(<option [^>]*value="${optionValue}")`),
+          "$1 disabled"
+        );
+      }, html);
+    }
+    dropdownOptions(values, labels, selected) {
       const finalValues = [...values];
       const finalLabels = [...labels];
       if (selected && !finalValues.includes(selected)) {
         finalValues.unshift(selected);
         finalLabels.unshift(selected);
       }
-      const options = finalValues.map((value, idx) => ({
+      return finalValues.map((value, idx) => ({
         value,
         label: finalLabels[idx] ?? value
       }));
-      return renderOptionList(options, selected);
     }
     attachEventListeners() {
       if (!this.editor) {
@@ -1279,18 +1490,30 @@
         const actionElem = target?.closest(
           "[data-clip-action], [data-stage-action], [data-ref-action]"
         );
-        if (!actionElem) {
+        if (actionElem) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.handleAction(actionElem);
           return;
         }
-        event.preventDefault();
-        this.handleAction(actionElem);
+        const clipHeader = target?.closest(
+          ".vs-clip-card > .input-group-shrinkable"
+        );
+        if (clipHeader) {
+          event.stopPropagation();
+          const group = clipHeader.closest(
+            ".vs-clip-card"
+          );
+          const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
+          this.toggleClipExpanded(clipIdx);
+        }
       });
       editor.addEventListener("change", (event) => {
         this.handleFieldChange(event.target);
       });
       editor.addEventListener("input", (event) => {
         const target = event.target;
-        if (target instanceof HTMLInputElement && target.type === "number") {
+        if (target instanceof HTMLInputElement && (target.type === "number" || target.type === "range")) {
           this.handleFieldChange(target);
         }
       });
@@ -1300,6 +1523,15 @@
         return null;
       }
       return elem;
+    }
+    toggleClipExpanded(clipIdx) {
+      const clips = this.getClips();
+      if (clipIdx < 0 || clipIdx >= clips.length) {
+        return;
+      }
+      clips[clipIdx].expanded = !clips[clipIdx].expanded;
+      this.saveClips(clips);
+      this.scheduleClipsRefresh();
     }
     handleAction(elem) {
       const target = this.getEditorActionTarget(elem);
@@ -1333,12 +1565,6 @@
       }
       if (clipAction === "skip") {
         clip.skipped = !clip.skipped;
-        this.saveClips(clips);
-        this.scheduleClipsRefresh();
-        return;
-      }
-      if (clipAction === "toggle-collapse") {
-        clip.expanded = !clip.expanded;
         this.saveClips(clips);
         this.scheduleClipsRefresh();
         return;
@@ -1410,18 +1636,18 @@
       const refField = target.dataset.refField;
       if (clipField === "duration") {
         const value = parseFloat(target.value);
-        if (Number.isFinite(value) && value > 0) {
+        if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
           clip.duration = snapDurationToFps(value, defaults.fps);
         }
       } else if (clipField === "width") {
         const value = parseFloat(target.value);
-        if (Number.isFinite(value) && value > 0) {
-          clip.width = Math.max(64, Math.round(value));
+        if (Number.isFinite(value) && value >= CLIP_DIMENSION_MIN) {
+          clip.width = Math.max(CLIP_DIMENSION_MIN, Math.round(value));
         }
       } else if (clipField === "height") {
         const value = parseFloat(target.value);
-        if (Number.isFinite(value) && value > 0) {
-          clip.height = Math.max(64, Math.round(value));
+        if (Number.isFinite(value) && value >= CLIP_DIMENSION_MIN) {
+          clip.height = Math.max(CLIP_DIMENSION_MIN, Math.round(value));
         }
       } else if (refField) {
         const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
@@ -1439,7 +1665,8 @@
         return;
       }
       this.saveClips(clips);
-      const needsRerender = clipField === "duration" || refField === "source" || stageField === "upscale";
+      const isSliderDrag = target instanceof HTMLInputElement && target.type === "range";
+      const needsRerender = !isSliderDrag && (clipField === "duration" || refField === "source" || stageField === "upscale");
       if (needsRerender) {
         this.scheduleClipsRefresh();
       }

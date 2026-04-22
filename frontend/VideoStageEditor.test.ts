@@ -214,19 +214,40 @@ describe("VideoStageEditor", () => {
             expect(clips[1].name).toBe("Clip 1");
         });
 
-        it("toggles collapse state for a clip", async () => {
+        it("toggles collapse state for a clip when the native shrinkable header is clicked", async () => {
             const editor = new VideoStageEditor();
             editor.init();
 
-            const collapseBtn = document.querySelector(
-                '[data-clip-action="toggle-collapse"]',
-            ) as HTMLButtonElement;
-            expect(collapseBtn).not.toBeNull();
-            collapseBtn.click();
+            const header = document.querySelector(
+                ".vs-clip-card > .input-group-shrinkable",
+            ) as HTMLElement | null;
+            expect(header).not.toBeNull();
+            header?.click();
             await flushReRender();
 
             const clips = parseStored();
             expect(clips[0].expanded).toBe(false);
+        });
+
+        it("does not collapse the clip when the skip action button inside the header is clicked", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-clip"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+            const skipBtn = document.querySelector(
+                '[data-clip-action="skip"]',
+            ) as HTMLButtonElement;
+            skipBtn.click();
+            await flushReRender();
+
+            const clips = parseStored();
+            expect(clips[0].expanded).toBe(true);
+            expect(clips[0].skipped).toBe(true);
         });
 
         it("toggles skip state for a clip when more than one exists", async () => {
@@ -247,6 +268,25 @@ describe("VideoStageEditor", () => {
 
             const clips = parseStored();
             expect(clips[0].skipped).toBe(true);
+        });
+
+        it("updates clip duration when the slider thumb moves", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(durationSlider).not.toBeNull();
+            if (!durationSlider) {
+                throw new Error("Expected duration slider to exist.");
+            }
+
+            durationSlider.value = "6";
+            durationSlider.dispatchEvent(new Event("input", { bubbles: true }));
+
+            const clips = parseStored();
+            expect(clips[0].duration).toBe(6);
         });
     });
 
