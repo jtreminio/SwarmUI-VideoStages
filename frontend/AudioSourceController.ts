@@ -170,4 +170,31 @@ export const AudioSourceController = () => {
     document.addEventListener(ACESTEPFUN_EVENT, refreshOptions);
 
     scheduleInitialSync();
+
+    return {
+        buildOptions,
+        resolveSelectedValue,
+        applyUploadVisibility,
+        refreshOptions,
+        runOnEachBuild,
+        dispose: (): void => {
+            document.removeEventListener("change", onDocumentChange, true);
+            document.removeEventListener(
+                "mousedown",
+                onDocumentDropdownInteraction,
+            );
+            document.removeEventListener(
+                "focusin",
+                onDocumentDropdownInteraction,
+            );
+            document.removeEventListener(ACESTEPFUN_EVENT, refreshOptions);
+            if (lastBoundText2AudioToggle) {
+                lastBoundText2AudioToggle.removeEventListener(
+                    "change",
+                    refreshOptions,
+                );
+                lastBoundText2AudioToggle = null;
+            }
+        },
+    };
 };
