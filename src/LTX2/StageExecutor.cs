@@ -17,6 +17,8 @@ internal sealed record ResolvedClipRef(WGNodeData Image, JsonParser.RefSpec Spec
 /// </summary>
 internal sealed class StageExecutor(WorkflowGenerator g)
 {
+    private bool _needsLtxvCropGuidesAfterSampler;
+
     private const int ImgCompression = 18;
     private const double DefaultGuideMergeStrength = 1.0;
     private const int DefaultVideoFps = 24;
@@ -38,6 +40,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
     {
         postVideoChain?.AttachSourceAudio(sourceMedia);
 
+        _needsLtxvCropGuidesAfterSampler = false;
         g.IsImageToVideo = true;
         try
         {
@@ -250,6 +253,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
                 ["frame_idx"] = frameIdx,
                 ["strength"] = clipRef.Strength
             });
+            _needsLtxvCropGuidesAfterSampler = true;
             genInfo.PosCond = [addGuideNode, 0];
             genInfo.NegCond = [addGuideNode, 1];
             g.CurrentMedia = g.CurrentMedia.WithPath([addGuideNode, 2], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
@@ -560,6 +564,22 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         g.CurrentMedia = g.CurrentMedia.WithPath([samplerNode, 0]);
         g.CurrentMedia.Frames = genInfo.Frames ?? g.CurrentMedia.Frames;
         g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
+
+        if (_needsLtxvCropGuidesAfterSampler)
+        {
+            string postSamplerCrop = g.CreateNode(NodeTypes.LTXVCropGuides, new JObject()
+            {
+                ["positive"] = genInfo.PosCond,
+                ["negative"] = genInfo.NegCond,
+                ["latent"] = g.CurrentMedia.Path
+            });
+            genInfo.PosCond = [postSamplerCrop, 0];
+            genInfo.NegCond = [postSamplerCrop, 1];
+            // Preserve DT_LATENT_AUDIOVIDEO after concat+sample; forcing DT_LATENT_VIDEO would skip
+            // LTXVSeparateAVLatent in DecodeLatents and feed combined AV samples straight to VAEDecode.
+            g.CurrentMedia = g.CurrentMedia.WithPath([postSamplerCrop, 2], null, genInfo.Model.Compat);
+            _needsLtxvCropGuidesAfterSampler = false;
+        }
 
         if (genInfo.DoFirstFrameLatentSwap is not null)
         {

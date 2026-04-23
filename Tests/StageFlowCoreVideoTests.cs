@@ -422,6 +422,30 @@ public partial class StageFlowTests
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "image"),
             new JArray(preprocessNode.Id, 0)));
+
+        WorkflowNode cropGuidesNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"));
+        JArray cropLatentSource = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "latent");
+        Assert.True(workflow.TryGetValue($"{cropLatentSource[0]}", out JToken upstreamSampler));
+        string upstreamSamplerType = $"{upstreamSampler["class_type"]}";
+        Assert.True(
+            upstreamSamplerType is "SwarmKSampler" or "KSamplerAdvanced",
+            $"LTXVCropGuides.latent must follow the stage sampler (SwarmKSampler or KSamplerAdvanced); got {upstreamSamplerType}.");
+        JArray cropPositiveIn = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "positive");
+        Assert.Equal(addGuideNode.Id, $"{cropPositiveIn[0]}");
+
+        WorkflowNode separateAfterCrop = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "LTXVSeparateAVLatent"),
+            node =>
+            {
+                JArray avIn = WorkflowAssertions.RequireConnectionInput(node.Node, "av_latent");
+                return workflow.TryGetValue($"{avIn[0]}", out JToken upstream)
+                    && $"{upstream["class_type"]}" == "LTXVCropGuides";
+            });
+        Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled"),
+            node => JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(node.Node, "samples"),
+                new JArray(separateAfterCrop.Id, 0)));
     }
 
     [Fact]
@@ -453,6 +477,8 @@ public partial class StageFlowTests
         Assert.Equal(2, addGuideNodes[1].Node["inputs"]?.Value<int>("frame_idx"));
         Assert.Equal(0.55, addGuideNodes[0].Node["inputs"]?.Value<double>("strength"));
         Assert.Equal(0.65, addGuideNodes[1].Node["inputs"]?.Value<double>("strength"));
+
+        Assert.Equal(2, WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides").Count);
     }
 
     [Fact]
