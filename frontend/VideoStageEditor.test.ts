@@ -22,6 +22,10 @@ interface ParsedRef {
     fromEnd?: boolean;
     expanded?: boolean;
     uploadFileName?: string | null;
+    uploadedImage?: {
+        data?: string;
+        fileName?: string | null;
+    } | null;
 }
 
 interface ParsedStage {
@@ -951,7 +955,7 @@ describe("VideoStageEditor", () => {
             expect(refreshedUploadField?.style.display).toBe("");
         });
 
-        it("stores the selected upload image filename for a ref", async () => {
+        it("stores ref upload image payload when Swarm provides filedata on the file input", async () => {
             const editor = new VideoStageEditor();
             editor.init();
 
@@ -979,14 +983,17 @@ describe("VideoStageEditor", () => {
                 throw new Error("Expected ref upload input to exist.");
             }
 
-            const file = new File(["image"], "ref.png", { type: "image/png" });
-            Object.defineProperty(uploadInput, "files", {
-                configurable: true,
-                value: [file],
-            });
+            uploadInput.onchange = null;
+            uploadInput.dataset.filedata = "data:image/png;base64,QUJD";
+            uploadInput.dataset.filename = "ref.png";
             uploadInput.dispatchEvent(new Event("change", { bubbles: true }));
 
-            expect(parseStored()[0].refs?.[0].uploadFileName).toBe("ref.png");
+            const clips = parseStored();
+            expect(clips[0].refs?.[0].uploadFileName).toBe("ref.png");
+            expect(clips[0].refs?.[0].uploadedImage?.data).toBe(
+                "data:image/png;base64,QUJD",
+            );
+            expect(clips[0].refs?.[0].uploadedImage?.fileName).toBe("ref.png");
         });
 
         it("still reveals Upload when the editor DOM is rebuilt", async () => {

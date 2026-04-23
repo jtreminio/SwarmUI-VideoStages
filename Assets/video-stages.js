@@ -755,6 +755,7 @@
         expanded: true,
         source: REF_SOURCE_BASE,
         uploadFileName: null,
+        uploadedImage: null,
         frame: REF_FRAME_MIN,
         fromEnd: false
       };
@@ -839,6 +840,7 @@
       if (!this.editor) {
         return;
       }
+      const clips = this.getClips();
       const uploadInputs = this.editor.querySelectorAll(
         '.vs-ref-upload-field .auto-file[data-ref-field="uploadFileName"]'
       );
@@ -848,18 +850,21 @@
         }
         const clipIdx = parseInt(input.dataset.clipIdx ?? "-1", 10);
         const refIdx = parseInt(input.dataset.refIdx ?? "-1", 10);
+        const persisted = clipIdx >= 0 && clipIdx < clips.length ? clips[clipIdx].refs[refIdx]?.uploadedImage : null;
         const cached = this.refUploadCache.get(
           this.refUploadKey(clipIdx, refIdx)
         );
-        if (!cached) {
+        const src = persisted?.data ?? cached?.src;
+        const name = persisted?.fileName ?? cached?.name;
+        if (!src) {
           continue;
         }
         setMediaFileDirect(
           input,
-          cached.src,
+          src,
           "image",
-          cached.name,
-          cached.name
+          name ?? "Upload Image",
+          name ?? void 0
         );
       }
     }
@@ -890,6 +895,19 @@
           src: reader.result,
           name: file.name
         });
+        const clips = this.getClips();
+        if (clipIdx < 0 || clipIdx >= clips.length) {
+          return;
+        }
+        const ref = clips[clipIdx].refs[refIdx];
+        if (!ref) {
+          return;
+        }
+        ref.uploadedImage = {
+          data: reader.result,
+          fileName: this.normalizeUploadFileName(file.name)
+        };
+        this.saveClips(clips);
       });
       reader.readAsDataURL(file);
     }
@@ -973,6 +991,7 @@
         expanded: rawRef.expanded === void 0 ? true : !!rawRef.expanded,
         source,
         uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
+        uploadedImage: this.normalizeUploadedAudio(rawRef.uploadedImage),
         frame: Math.max(
           REF_FRAME_MIN,
           Math.round(
@@ -1124,6 +1143,7 @@
           expanded: ref.expanded,
           source: ref.source,
           uploadFileName: ref.uploadFileName,
+          uploadedImage: ref.uploadedImage,
           frame: ref.frame,
           fromEnd: ref.fromEnd
         })),
@@ -2173,6 +2193,7 @@
         return;
       }
       clips[clipIdx].refs[refIdx].uploadFileName = null;
+      clips[clipIdx].refs[refIdx].uploadedImage = null;
       this.refUploadCache.delete(this.refUploadKey(clipIdx, refIdx));
       this.saveClips(clips);
     }
@@ -2319,6 +2340,7 @@
         ref.source = target.value || REF_SOURCE_BASE;
         if (ref.source !== REF_SOURCE_UPLOAD) {
           ref.uploadFileName = null;
+          ref.uploadedImage = null;
         }
       } else if (field === "frame") {
         const value = parseInt(target.value, 10);
@@ -2335,11 +2357,29 @@
         if (target instanceof HTMLInputElement && target.type === "file") {
           const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
           const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
-          const fileName = target.files?.[0]?.name ?? null;
-          ref.uploadFileName = this.normalizeUploadFileName(fileName);
-          if (ref.uploadFileName) {
-            this.cacheRefUploadSelection(clipIdx, refIdx, target);
+          if (target.dataset.filedata) {
+            ref.uploadedImage = {
+              data: target.dataset.filedata,
+              fileName: this.normalizeUploadFileName(
+                target.dataset.filename ?? target.files?.[0]?.name ?? null
+              )
+            };
+            ref.uploadFileName = ref.uploadedImage.fileName;
+          } else if (target.files && target.files.length > 0) {
+            const fileName = target.files[0]?.name ?? null;
+            ref.uploadFileName = this.normalizeUploadFileName(fileName);
+            if (ref.uploadFileName) {
+              this.cacheRefUploadSelection(clipIdx, refIdx, target);
+            } else {
+              ref.uploadedImage = null;
+              this.refUploadCache.delete(
+                this.refUploadKey(clipIdx, refIdx)
+              );
+            }
+            return;
           } else {
+            ref.uploadFileName = null;
+            ref.uploadedImage = null;
             this.refUploadCache.delete(
               this.refUploadKey(clipIdx, refIdx)
             );
@@ -2347,6 +2387,9 @@
           return;
         }
         ref.uploadFileName = this.normalizeUploadFileName(target.value);
+        if (!ref.uploadFileName) {
+          ref.uploadedImage = null;
+        }
       }
     }
     applyStageField(stage, field, target) {

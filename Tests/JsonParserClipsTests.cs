@@ -499,6 +499,58 @@ public class JsonParserClipsTests
     }
 
     [Fact]
+    public void ParseClips_RefUpload_ReadsNestedUploadedImagePayload()
+    {
+        const string imageData = "data:image/png;base64,QUJDREVG";
+        JObject uploadRef = new()
+        {
+            ["Source"] = "Upload",
+            ["UploadedImage"] = new JObject
+            {
+                ["Data"] = imageData,
+                ["FileName"] = "guide.png",
+            },
+        };
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip("First",
+                stages: [MakeStage("model-a")],
+                refs: [uploadRef])
+        ));
+        JsonParser parser = BuildParser(json);
+
+        JsonParser.ClipSpec clip = parser.ParseClips().Single();
+        JsonParser.RefSpec r = clip.Refs[0];
+        Assert.Equal("Upload", r.Source);
+        Assert.Equal(imageData, r.Data);
+        Assert.Equal("guide.png", r.UploadFileName);
+    }
+
+    [Fact]
+    public void ParseClips_RefUpload_NestedUploadedImage_OverridesTopLevelData()
+    {
+        JObject uploadRef = new()
+        {
+            ["Source"] = "Upload",
+            ["Data"] = "data:image/png;base64,T1BQ",
+            ["UploadedImage"] = new JObject
+            {
+                ["Data"] = "data:image/png;base64,TkVTVA==",
+                ["FileName"] = "nested.png",
+            },
+        };
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip("First",
+                stages: [MakeStage("model-a")],
+                refs: [uploadRef])
+        ));
+        JsonParser parser = BuildParser(json);
+
+        JsonParser.RefSpec r = parser.ParseClips().Single().Refs[0];
+        Assert.Equal("data:image/png;base64,TkVTVA==", r.Data);
+        Assert.Equal("nested.png", r.UploadFileName);
+    }
+
+    [Fact]
     public void ParseStages_FlattenedStagesIncludeClipRefsAndNormalizedRefStrengths()
     {
         JObject stage = MakeStage("model-a");

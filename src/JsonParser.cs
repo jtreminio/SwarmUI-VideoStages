@@ -385,6 +385,17 @@ public class JsonParser(WorkflowGenerator g)
         }
         string uploadFileName = GetString(refObj, "UploadFileName");
         string data = GetString(refObj, "Data");
+        UploadedAudioSpec embeddedImage = GetEmbeddedUploadSpec(refObj, "UploadedImage");
+        if (embeddedImage is not null)
+        {
+            data = embeddedImage.Data;
+            if (string.IsNullOrWhiteSpace(uploadFileName)
+                && !string.IsNullOrWhiteSpace(embeddedImage.FileName))
+            {
+                uploadFileName = embeddedImage.FileName;
+            }
+        }
+
         return new RefSpec(
             Source: source.Trim(),
             Frame: frame,
@@ -438,15 +449,19 @@ public class JsonParser(WorkflowGenerator g)
         return null;
     }
 
-    private static UploadedAudioSpec GetUploadedAudio(JObject obj)
+    /// <summary>
+    /// Reads a nested upload payload (e.g. <c>uploadedAudio</c> / <c>UploadedAudio</c>,
+    /// <c>uploadedImage</c> / <c>UploadedImage</c>) with <c>Data</c> and optional <c>FileName</c>.
+    /// </summary>
+    private static UploadedAudioSpec GetEmbeddedUploadSpec(JObject parent, string containerPropertyName)
     {
-        JObject uploadedAudio = GetObject(obj, "UploadedAudio");
-        if (uploadedAudio is null)
+        JObject nested = GetObject(parent, containerPropertyName);
+        if (nested is null)
         {
             return null;
         }
 
-        string data = GetString(uploadedAudio, "Data");
+        string data = GetString(nested, "Data");
         if (string.IsNullOrWhiteSpace(data))
         {
             return null;
@@ -454,8 +469,13 @@ public class JsonParser(WorkflowGenerator g)
 
         return new UploadedAudioSpec(
             Data: data.Trim(),
-            FileName: GetString(uploadedAudio, "FileName")?.Trim()
+            FileName: GetString(nested, "FileName")?.Trim()
         );
+    }
+
+    private static UploadedAudioSpec GetUploadedAudio(JObject obj)
+    {
+        return GetEmbeddedUploadSpec(obj, "UploadedAudio");
     }
 
     private (int? Width, int? Height, UploadedAudioSpec UploadedAudio, List<JObject> Entries) GetJsonTopLevelConfig()
