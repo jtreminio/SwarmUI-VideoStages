@@ -2066,7 +2066,8 @@ export class VideoStageEditor {
             target.type === "range";
         const needsRerender =
             !isSliderDrag &&
-            (clipField === "duration" || stageField === "upscale");
+            ((clipField === "duration" && !fromInputEvent) ||
+                stageField === "upscale");
         if (needsRerender) {
             this.scheduleClipsRefresh();
         }

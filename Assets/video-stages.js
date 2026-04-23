@@ -1999,7 +1999,7 @@
       }
       this.saveClips(clips);
       const isSliderDrag = fromInputEvent && target instanceof HTMLInputElement && target.type === "range";
-      const needsRerender = !isSliderDrag && (clipField === "duration" || stageField === "upscale");
+      const needsRerender = !isSliderDrag && (clipField === "duration" && !fromInputEvent || stageField === "upscale");
       if (needsRerender) {
         this.scheduleClipsRefresh();
       }

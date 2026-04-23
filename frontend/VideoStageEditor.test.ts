@@ -323,6 +323,43 @@ describe("VideoStageEditor", () => {
             expect(clips[0].duration).toBe(6);
         });
 
+        it("does not rerender the duration number input while typing", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"][type="number"]',
+            ) as HTMLInputElement | null;
+            expect(durationNumber).not.toBeNull();
+            if (!durationNumber) {
+                throw new Error("Expected duration number input to exist.");
+            }
+
+            const originalDurationNumber = durationNumber;
+            durationNumber.value = "15";
+            durationNumber.dispatchEvent(new Event("input", { bubbles: true }));
+            await flushReRender();
+
+            expect(parseStored()[0].duration).toBe(15);
+            expect(originalDurationNumber.isConnected).toBe(true);
+            expect(
+                document.querySelector(
+                    '[data-clip-field="duration"][type="number"]',
+                ),
+            ).toBe(originalDurationNumber);
+
+            durationNumber.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            await flushReRender();
+
+            expect(
+                document.querySelector(
+                    '[data-clip-field="duration"][type="number"]',
+                ),
+            ).not.toBe(originalDurationNumber);
+        });
+
         it("uses 0.5 second jumps for the duration slider but leaves manual entry unrestricted", () => {
             const editor = new VideoStageEditor();
             editor.init();
