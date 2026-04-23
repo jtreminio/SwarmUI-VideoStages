@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -67,6 +68,26 @@ internal static class RootVideoStageResizer
     {
         if (!TryGetConfiguredRootStageResolution(g, out int width, out int height))
         {
+            return;
+        }
+
+        // When VideoStages takes over the native Image→Video step, CreateImageToVideo is skipped
+        // (VideoModel is temporarily removed at priority 11). If the core priority-10 step already
+        // emitted SwarmSaveImageWS from this same image tensor (willHaveFollowupVideo), adding a
+        // root ImageScale here duplicates the branch: the save stays on the raw decode while the
+        // VideoStages chain reads clip refs / other paths, leaving the new ImageScale output unused.
+        if (RootVideoStageTakeover.ShouldTakeOverRootStage(g)
+            && g.CurrentMedia?.Path is JArray mediaPath
+            && mediaPath.Count == 2
+            && WorkflowUtils.FindInputConnections(g.Workflow, mediaPath)
+                .Any(connection =>
+                    g.Workflow.TryGetValue(connection.NodeId, out JToken nodeToken)
+                    && nodeToken is JObject node
+                    && ($"{node["class_type"]}" == NodeTypes.SwarmSaveImageWS
+                        || $"{node["class_type"]}" == "SaveImage")))
+        {
+            g.CurrentMedia.Width = width;
+            g.CurrentMedia.Height = height;
             return;
         }
 

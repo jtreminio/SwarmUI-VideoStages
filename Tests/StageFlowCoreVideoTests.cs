@@ -203,6 +203,44 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Root_stage_takeover_does_not_leave_orphan_root_resolution_image_scale_after_pre_video_save()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = MakeRootConfig(
+            1280,
+            1024,
+            MakeClipWithRefs(
+                832,
+                1216,
+                [MakeRef("Base"), MakeRef("Base", frame: 2)],
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8)))
+            .ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootWidth, 1280);
+        input.Set(VideoStagesExtension.RootHeight, 1024);
+
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPreVideoSave());
+
+        Assert.Equal(1280, generator.CurrentMedia?.Width);
+        Assert.Equal(1024, generator.CurrentMedia?.Height);
+
+        foreach (WorkflowNode scale in WorkflowUtils.NodesOfType(workflow, "ImageScale"))
+        {
+            IReadOnlyList<WorkflowInputConnection> downstream = WorkflowUtils.FindInputConnections(
+                workflow,
+                new JArray(scale.Id, 0));
+            Assert.NotEmpty(downstream);
+        }
+    }
+
+    [Fact]
     public void Root_stage_resolution_updates_native_ltxv2_empty_latent_dimensions()
     {
         using SwarmUiTestContext _ = new();

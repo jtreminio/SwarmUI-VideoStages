@@ -406,6 +406,16 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    /// <summary>
+    /// Like <see cref="BuildCoreVideoWorkflowSteps"/> but includes the core priority-10
+    /// pre-video save step so <c>willHaveFollowupVideo</c> pins an image save before native
+    /// Image→Video (mirrors full SwarmUI workflows with VideoStages takeover).
+    /// </summary>
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPreVideoSave() =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CorePreVideoSavePrepStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithoutRefiner() =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
