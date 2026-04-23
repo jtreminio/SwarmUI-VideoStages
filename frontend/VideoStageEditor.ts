@@ -2,6 +2,7 @@ import {
     clipFieldId,
     escapeAttr,
     injectFieldData,
+    overrideSliderSteps,
     refFieldId,
     snapDurationToFps,
     stageFieldId,
@@ -23,9 +24,11 @@ const REF_FRAME_MIN = 1;
 const CLIP_DURATION_MIN = 1;
 const CLIP_DURATION_MAX = 9999;
 const CLIP_DURATION_SLIDER_MAX = 60;
+const CLIP_DURATION_SLIDER_STEP = 0.5;
 const CLIP_DIMENSION_MIN = 256;
 const CLIP_DIMENSION_MAX = 16384;
 const CLIP_DIMENSION_SLIDER_MAX = 4096;
+const CLIP_DIMENSION_STEP = 32;
 
 interface CachedRefUpload {
     src: string;
@@ -1234,23 +1237,28 @@ export class VideoStageEditor {
 
         const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">${escapeAttr(clip.name)}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip" ${totalClips === 1 ? "disabled" : ""}>&times;</button></span></span></span>`;
 
-        const defaults = this.getRootDefaults();
         const lengthField = injectFieldData(
-            makeSliderInput(
-                "",
-                clipFieldId(clipIdx, "duration"),
-                "duration",
-                "Length (seconds)",
-                "",
-                clip.duration.toFixed(1),
-                CLIP_DURATION_MIN,
-                CLIP_DURATION_MAX,
-                CLIP_DURATION_MIN,
-                CLIP_DURATION_SLIDER_MAX,
-                Math.max(0.1, 1 / Math.max(1, defaults.fps)),
-                false,
-                false,
-                false,
+            overrideSliderSteps(
+                makeSliderInput(
+                    "",
+                    clipFieldId(clipIdx, "duration"),
+                    "duration",
+                    "Length (seconds)",
+                    "",
+                    clip.duration.toFixed(1),
+                    CLIP_DURATION_MIN,
+                    CLIP_DURATION_MAX,
+                    CLIP_DURATION_MIN,
+                    CLIP_DURATION_SLIDER_MAX,
+                    CLIP_DURATION_SLIDER_STEP,
+                    false,
+                    false,
+                    false,
+                ),
+                {
+                    numberStep: "any",
+                    rangeStep: CLIP_DURATION_SLIDER_STEP,
+                },
             ),
             { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) },
         );
@@ -1266,8 +1274,8 @@ export class VideoStageEditor {
                 CLIP_DIMENSION_MAX,
                 CLIP_DIMENSION_MIN,
                 CLIP_DIMENSION_SLIDER_MAX,
-                8,
-                false,
+                CLIP_DIMENSION_STEP,
+                true,
                 false,
                 false,
             ),
@@ -1285,8 +1293,8 @@ export class VideoStageEditor {
                 CLIP_DIMENSION_MAX,
                 CLIP_DIMENSION_MIN,
                 CLIP_DIMENSION_SLIDER_MAX,
-                8,
-                false,
+                CLIP_DIMENSION_STEP,
+                true,
                 false,
                 false,
             ),

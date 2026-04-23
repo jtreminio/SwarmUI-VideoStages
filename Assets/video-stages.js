@@ -208,6 +208,22 @@
       (_match, tag, classes) => `<${tag} class="${classes} nogrow" ${dataAttrString}`
     );
   };
+  var overrideSliderSteps = (html, config) => {
+    let updated = html;
+    if (config.numberStep !== void 0) {
+      updated = updated.replace(
+        /(<input\b[^>]*type="number"[^>]*\sstep=")[^"]*(")/g,
+        (_match, prefix, suffix) => `${prefix}${String(config.numberStep)}${suffix}`
+      );
+    }
+    if (config.rangeStep !== void 0) {
+      updated = updated.replace(
+        /(<input\b[^>]*type="range"[^>]*\sstep=")[^"]*(")/g,
+        (_match, prefix, suffix) => `${prefix}${String(config.rangeStep)}${suffix}`
+      );
+    }
+    return updated;
+  };
   var snapDurationToFps = (seconds, fps) => {
     if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
       return seconds;
@@ -325,9 +341,11 @@
   var CLIP_DURATION_MIN = 1;
   var CLIP_DURATION_MAX = 9999;
   var CLIP_DURATION_SLIDER_MAX = 60;
+  var CLIP_DURATION_SLIDER_STEP = 0.5;
   var CLIP_DIMENSION_MIN = 256;
   var CLIP_DIMENSION_MAX = 16384;
   var CLIP_DIMENSION_SLIDER_MAX = 4096;
+  var CLIP_DIMENSION_STEP = 32;
   var VideoStageEditor = class {
     editor = null;
     inactiveReuseGuard;
@@ -1277,23 +1295,28 @@
       }
       const contentStyle = clip.expanded ? "" : ' style="display: none;"';
       const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">${escapeAttr(clip.name)}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip" ${totalClips === 1 ? "disabled" : ""}>&times;</button></span></span></span>`;
-      const defaults = this.getRootDefaults();
       const lengthField = injectFieldData(
-        makeSliderInput(
-          "",
-          clipFieldId(clipIdx, "duration"),
-          "duration",
-          "Length (seconds)",
-          "",
-          clip.duration.toFixed(1),
-          CLIP_DURATION_MIN,
-          CLIP_DURATION_MAX,
-          CLIP_DURATION_MIN,
-          CLIP_DURATION_SLIDER_MAX,
-          Math.max(0.1, 1 / Math.max(1, defaults.fps)),
-          false,
-          false,
-          false
+        overrideSliderSteps(
+          makeSliderInput(
+            "",
+            clipFieldId(clipIdx, "duration"),
+            "duration",
+            "Length (seconds)",
+            "",
+            clip.duration.toFixed(1),
+            CLIP_DURATION_MIN,
+            CLIP_DURATION_MAX,
+            CLIP_DURATION_MIN,
+            CLIP_DURATION_SLIDER_MAX,
+            CLIP_DURATION_SLIDER_STEP,
+            false,
+            false,
+            false
+          ),
+          {
+            numberStep: "any",
+            rangeStep: CLIP_DURATION_SLIDER_STEP
+          }
         ),
         { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) }
       );
@@ -1309,8 +1332,8 @@
           CLIP_DIMENSION_MAX,
           CLIP_DIMENSION_MIN,
           CLIP_DIMENSION_SLIDER_MAX,
-          8,
-          false,
+          CLIP_DIMENSION_STEP,
+          true,
           false,
           false
         ),
@@ -1328,8 +1351,8 @@
           CLIP_DIMENSION_MAX,
           CLIP_DIMENSION_MIN,
           CLIP_DIMENSION_SLIDER_MAX,
-          8,
-          false,
+          CLIP_DIMENSION_STEP,
+          true,
           false,
           false
         ),

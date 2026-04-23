@@ -76,6 +76,31 @@ export const injectFieldData = (
     );
 };
 
+export const overrideSliderSteps = (
+    html: string,
+    config: {
+        numberStep?: number | "any";
+        rangeStep?: number | "any";
+    },
+): string => {
+    let updated = html;
+    if (config.numberStep !== undefined) {
+        updated = updated.replace(
+            /(<input\b[^>]*type="number"[^>]*\sstep=")[^"]*(")/g,
+            (_match, prefix, suffix) =>
+                `${prefix}${String(config.numberStep)}${suffix}`,
+        );
+    }
+    if (config.rangeStep !== undefined) {
+        updated = updated.replace(
+            /(<input\b[^>]*type="range"[^>]*\sstep=")[^"]*(")/g,
+            (_match, prefix, suffix) =>
+                `${prefix}${String(config.rangeStep)}${suffix}`,
+        );
+    }
+    return updated;
+};
+
 /**
  * Round up to a whole frame at the given fps, then truncate to 1 decimal.
  * Mirrors the working.html behavior for stable display values.

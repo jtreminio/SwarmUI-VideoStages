@@ -288,6 +288,46 @@ describe("VideoStageEditor", () => {
             const clips = parseStored();
             expect(clips[0].duration).toBe(6);
         });
+
+        it("uses 0.5 second jumps for the duration slider but leaves manual entry unrestricted", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"][type="number"]',
+            ) as HTMLInputElement | null;
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+
+            expect(durationNumber?.step).toBe("any");
+            expect(durationSlider?.step).toBe("0.5");
+        });
+
+        it("uses SwarmUI-style pot slider jumps for clip width and height", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const widthNumber = document.querySelector(
+                '[data-clip-field="width"][type="number"]',
+            ) as HTMLInputElement | null;
+            const widthSlider = document.querySelector(
+                '[data-clip-field="width"][type="range"]',
+            ) as HTMLInputElement | null;
+            const heightNumber = document.querySelector(
+                '[data-clip-field="height"][type="number"]',
+            ) as HTMLInputElement | null;
+            const heightSlider = document.querySelector(
+                '[data-clip-field="height"][type="range"]',
+            ) as HTMLInputElement | null;
+
+            expect(widthNumber?.step).toBe("32");
+            expect(widthSlider?.step).toBe("1");
+            expect(widthSlider?.dataset.ispot).toBe("true");
+            expect(heightNumber?.step).toBe("32");
+            expect(heightSlider?.step).toBe("1");
+            expect(heightSlider?.dataset.ispot).toBe("true");
+        });
     });
 
     describe("ref actions", () => {
