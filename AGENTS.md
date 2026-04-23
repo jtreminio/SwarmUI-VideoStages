@@ -1,3 +1,7 @@
+# Javascript files
+
+Do NOT manually modify Assets/video-stages.js. All Javascript modifications should be applied to the Typescript files in frontend directory (or scripts). It is OK to modify the CSS file(s) within this project directly.
+
 # Run Tests
 
 You are explicitly required to run unit tests for this extension when your changes affect this extension’s code or tests.
