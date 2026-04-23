@@ -51,6 +51,24 @@ public partial class StageFlowTests
             ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
         };
 
+    private static JObject MakeClipWithRefs(int width, int height, IEnumerable<JObject> refs, params JObject[] stages) =>
+        new()
+        {
+            ["Name"] = "Clip 0",
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Refs"] = new JArray((refs ?? []).Cast<JToken>().ToArray()),
+            ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
+        };
+
+    private static JObject MakeRef(string source, int frame = 1, bool fromEnd = false) =>
+        new()
+        {
+            ["Source"] = source,
+            ["Frame"] = frame,
+            ["FromEnd"] = fromEnd
+        };
+
     private static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
         new()
         {
@@ -146,7 +164,9 @@ public partial class StageFlowTests
 
         if (expectedReference.Media.DataType == WGNodeData.DT_IMAGE || expectedReference.Media.DataType == WGNodeData.DT_VIDEO)
         {
-            Assert.True(JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path));
+            Assert.True(
+                JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path)
+                || OutputTracesBackToSource(workflow, actualGuidePath, expectedReference.Media.Path));
             return;
         }
 
@@ -384,6 +404,11 @@ public partial class StageFlowTests
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowSteps() =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithoutRefiner() =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>

@@ -42,23 +42,25 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         JsonParser parser = new(g);
         List<JsonParser.ClipSpec> clips = parser.ParseClips();
         List<JsonParser.StageSpec> stages = parser.ParseStages();
+        bool rootStageTakeover = RootVideoStageTakeover.ShouldTakeOverRootStage(g);
         if (stages.Count == 0)
         {
             TryInjectConfiguredAudio(parser, clips);
             return;
         }
 
-        AudioStageDetector.Detection detectedAudio = (!g.IsLTXV2() || g.CurrentAudioVae is null)
-            ? null
-            : new AudioStageDetector(g).Detect();
+        AudioStageDetector.Detection detectedAudio = new AudioStageDetector(g).Detect();
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
-        AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, uploadedAudios);
-        if (firstClipAudio is not null)
+        if (!rootStageTakeover)
         {
-            _ = new AudioInjector(g).TryInject(firstClipAudio);
+            AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, uploadedAudios);
+            if (firstClipAudio is not null)
+            {
+                _ = new AudioInjector(g).TryInject(firstClipAudio);
+            }
         }
 
-        new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, uploadedAudios).Run();
+        new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, uploadedAudios, rootStageTakeover).Run();
         EnsureFinalStageOutputSaved();
     }
 

@@ -11,18 +11,26 @@ public class StageSequenceRunner(
     StageRefStore store,
     IReadOnlyList<JsonParser.StageSpec> stages,
     AudioStageDetector.Detection detectedAudio = null,
-    IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null)
+    IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null,
+    bool rootStageTakeover = false)
 {
     private const int IntermediateStageSaveId = 52100;
 
     private readonly StageRunner _singleStageRunner = new(g);
+    private readonly AudioStageDetector.Detection _nativeAudioDetection =
+        detectedAudio ?? BuildCurrentMediaAudioDetection(g);
     private int? _preparedClipId = null;
+    private readonly bool _rootStageTakeover = rootStageTakeover;
 
     public void Run()
     {
         List<int> usedSectionIds = [];
         try
         {
+            if (_rootStageTakeover)
+            {
+                RootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia(g);
+            }
             CaptureReference(StageRefStore.StageKind.Generated);
             foreach (JsonParser.StageSpec stage in stages)
             {
@@ -78,7 +86,7 @@ public class StageSequenceRunner(
             }
             return uploadedAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection detection) ? detection : null;
         }
-        return detectedAudio;
+        return _nativeAudioDetection;
     }
 
     private void CaptureReference(StageRefStore.StageKind kind, int? index = null)
@@ -170,5 +178,19 @@ public class StageSequenceRunner(
             return publishedEditRef;
         }
         throw new InvalidOperationException($"Unknown ImageReference value '{stage.ImageReference}'.");
+    }
+
+    private static AudioStageDetector.Detection BuildCurrentMediaAudioDetection(WorkflowGenerator g)
+    {
+        if (g?.CurrentMedia?.AttachedAudio is null)
+        {
+            return null;
+        }
+        return new AudioStageDetector.Detection(
+            g.CurrentMedia.AttachedAudio,
+            "videostages.current-media-audio",
+            "CurrentMediaAttachedAudio",
+            "videostages.current-media-audio",
+            0);
     }
 }

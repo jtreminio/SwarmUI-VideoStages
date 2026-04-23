@@ -11,7 +11,7 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     [Fact]
-    public void Native_ltx_stage_reuses_existing_matching_preprocess_for_refiner_reference()
+    public void Native_ltx_stage_ignores_legacy_refiner_preprocess_when_no_clip_refs_are_defined()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -23,28 +23,35 @@ public partial class StageFlowTests
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false).Concat([SeedExistingRefinerPreprocessStep()]));
+        StageRefStore store = new(generator);
 
         List<WorkflowNode> preprocessNodes = WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
-        WorkflowNode preprocessNode = Assert.Single(preprocessNodes);
-        Assert.Equal("210", preprocessNode.Id);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
-            new JArray("209", 0)));
-
+        Assert.Equal(2, preprocessNodes.Count);
         WorkflowNode imgToVideoNode = Assert.Single(
             WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        WorkflowNode preprocessNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image")[0]}");
+        Assert.Equal("LTXVPreprocess", $"{preprocessNode.Node["class_type"]}");
+        AssertGuideReferenceResolvesToPreprocessInput(
+            workflow,
+            WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
+            store.Generated);
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(WorkflowAssertions.RequireNodeById(workflow, "210").Node, "image"),
+            new JArray("209", 0)));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
-            new JArray("210", 0)));
+            new JArray(preprocessNode.Id, 0)));
     }
 
     [Fact]
-    public void Native_ltx_stage_reuses_existing_base_preprocess_when_base_reference_was_captured_as_latent()
+    public void Native_ltx_stage_ignores_legacy_base_preprocess_when_no_clip_refs_are_defined()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -56,21 +63,28 @@ public partial class StageFlowTests
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeStepsWithLatentBaseCaptureAndExistingPreprocess(attachAudioToCurrentMedia: false));
+        StageRefStore store = new(generator);
 
         List<WorkflowNode> preprocessNodes = WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
-        WorkflowNode preprocessNode = Assert.Single(preprocessNodes);
-        Assert.Equal("210", preprocessNode.Id);
-
+        Assert.Equal(2, preprocessNodes.Count);
         WorkflowNode imgToVideoNode = Assert.Single(
             WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        WorkflowNode preprocessNode = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image")[0]}");
+        Assert.Equal("LTXVPreprocess", $"{preprocessNode.Node["class_type"]}");
+        AssertGuideReferenceResolvesToPreprocessInput(
+            workflow,
+            WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
+            store.Generated);
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
-            new JArray("210", 0)));
+            new JArray(preprocessNode.Id, 0)));
 
         List<WorkflowNode> decodeNodes = WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled")
             .OrderBy(node => int.Parse(node.Id))
@@ -79,7 +93,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Native_ltx_base_reference_does_not_reuse_preprocess_from_downstream_refiner_or_root_video_chain()
+    public void Native_ltx_stage_uses_current_source_instead_of_downstream_reference_preprocess_when_no_clip_refs_are_defined()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -91,20 +105,21 @@ public partial class StageFlowTests
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(attachAudioToCurrentMedia: false));
-
-        WorkflowNode stagePreprocess = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(stagePreprocess.Node, "image"),
-            new JArray("24", 0)));
+        StageRefStore store = new(generator);
 
         WorkflowNode imgToVideoNode = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
-            .Single(node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray(stagePreprocess.Id, 0)));
+            .Single(node => node.Id != "111");
+        WorkflowNode stagePreprocess = WorkflowAssertions.RequireNodeById(
+            workflow,
+            $"{WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image")[0]}");
+        Assert.Equal("LTXVPreprocess", $"{stagePreprocess.Node["class_type"]}");
+        AssertGuideReferenceResolvesToPreprocessInput(
+            workflow,
+            WorkflowAssertions.RequireConnectionInput(stagePreprocess.Node, "image"),
+            store.Generated);
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
             new JArray(stagePreprocess.Id, 0)));

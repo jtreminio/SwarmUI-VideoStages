@@ -35,28 +35,7 @@ internal static class RootVideoStageResizer
 
         genInfo.Width = width;
         genInfo.Height = height;
-        if (g.CurrentMedia is not null)
-        {
-            g.CurrentMedia.Width = width;
-            g.CurrentMedia.Height = height;
-        }
-
-        if (TryUpdateExistingScaleNode(g, imagePath: null, width, height, crop: "center"))
-        {
-            return;
-        }
-
-        string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
-        {
-            ["image"] = g.CurrentMedia.Path,
-            ["width"] = width,
-            ["height"] = height,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "center"
-        });
-        g.CurrentMedia = g.CurrentMedia.WithPath([scaleNode, 0]);
-        g.CurrentMedia.Width = width;
-        g.CurrentMedia.Height = height;
+        ApplyCurrentMediaResolution(g, width, height);
     }
 
     private static void ApplyLatentDimensionsIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
@@ -82,6 +61,16 @@ internal static class RootVideoStageResizer
         }
 
         UpdateAllAudioMaskDimensions(g, width, height);
+    }
+
+    internal static void ApplyConfiguredRootStageResolutionToCurrentMedia(WorkflowGenerator g)
+    {
+        if (!TryGetConfiguredRootStageResolution(g, out int width, out int height))
+        {
+            return;
+        }
+
+        ApplyCurrentMediaResolution(g, width, height);
     }
 
     internal static void ApplyCurrentAudioMaskDimensions(WGNodeData media)
@@ -171,6 +160,33 @@ internal static class RootVideoStageResizer
         return g is not null
             && HasNativeRootVideoModel(g)
             && TryGetRootStageResolution(g, out width, out height);
+    }
+
+    private static void ApplyCurrentMediaResolution(WorkflowGenerator g, int width, int height)
+    {
+        if (g.CurrentMedia is null)
+        {
+            return;
+        }
+
+        g.CurrentMedia.Width = width;
+        g.CurrentMedia.Height = height;
+        if (TryUpdateExistingScaleNode(g, imagePath: null, width, height, crop: "center"))
+        {
+            return;
+        }
+
+        string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
+        {
+            ["image"] = g.CurrentMedia.Path,
+            ["width"] = width,
+            ["height"] = height,
+            ["upscale_method"] = "lanczos",
+            ["crop"] = "center"
+        });
+        g.CurrentMedia = g.CurrentMedia.WithPath([scaleNode, 0]);
+        g.CurrentMedia.Width = width;
+        g.CurrentMedia.Height = height;
     }
 
     private static bool TryUpdateExistingScaleNode(WorkflowGenerator g, JArray imagePath = null, int? width = null, int? height = null, string crop = null)

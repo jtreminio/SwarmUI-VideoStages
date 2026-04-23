@@ -18,6 +18,7 @@ internal sealed record ResolvedClipRef(WGNodeData Image, JsonParser.RefSpec Spec
 internal sealed class StageExecutor(WorkflowGenerator g)
 {
     private const int ImgCompression = 18;
+    private const double DefaultGuideMergeStrength = 1.0;
     private const int DefaultVideoFps = 24;
     private const int DefaultVideoFrameCount = 97;
     private const double DefaultVideoCfg = 3;
@@ -32,7 +33,8 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         PostVideoChain postVideoChain,
-        IReadOnlyList<ResolvedClipRef> clipRefs = null)
+        IReadOnlyList<ResolvedClipRef> clipRefs = null,
+        double guideMergeStrength = DefaultGuideMergeStrength)
     {
         postVideoChain?.AttachSourceAudio(sourceMedia);
 
@@ -44,16 +46,18 @@ internal sealed class StageExecutor(WorkflowGenerator g)
                 handler(genInfo);
             }
 
-            PrepareModelAndConditioning(genInfo, sourceMedia);
+            WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
+            PrepareModelAndConditioning(genInfo, effectiveSourceMedia);
             PrepareConditioning(
                 genInfo,
                 stage,
-                sourceMedia,
+                effectiveSourceMedia,
                 guideMedia,
                 skipGuideReinjection,
                 applySourceVideoLatent,
                 postVideoChain,
-                clipRefs ?? Array.Empty<ResolvedClipRef>());
+                clipRefs ?? Array.Empty<ResolvedClipRef>(),
+                guideMergeStrength);
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
 
             foreach (Action<WorkflowGenerator.ImageToVideoGenInfo> handler in WorkflowGenerator.AltImageToVideoPostHandlers)
@@ -62,7 +66,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             }
 
             ExecuteSampler(genInfo);
-            FinalizeOutput(genInfo, sourceMedia, postVideoChain);
+            FinalizeOutput(genInfo, effectiveSourceMedia, postVideoChain);
         }
         finally
         {
@@ -131,7 +135,8 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         PostVideoChain postVideoChain,
-        IReadOnlyList<ResolvedClipRef> clipRefs)
+        IReadOnlyList<ResolvedClipRef> clipRefs,
+        double guideMergeStrength)
     {
         WGNodeData stageLatent = BuildStageLatent(genInfo, stage, sourceMedia, postVideoChain);
         if (stageLatent is null)
@@ -162,9 +167,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
                 ["vae"] = genInfo.Vae.Path,
                 ["image"] = preprocessedGuidePath,
                 ["latent"] = stageLatent.Path,
-                ["strength"] = g.UserInput.Get(
-                    VideoStagesExtension.LTXVImgToVideoInplaceStrength,
-                    VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength),
+                ["strength"] = guideMergeStrength,
                 ["bypass"] = false
             });
             g.CurrentMedia = stageLatent.WithPath([imgToVideoNode, 0], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
@@ -194,7 +197,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             return -Math.Max(1, spec.Frame);
         }
 
-        return Math.Max(0, spec.Frame - 1);
+        return Math.Max(1, spec.Frame);
     }
 
     private WGNodeData ApplyClipReferenceInplaceMerges(
@@ -278,6 +281,12 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         {
             string latentMethod = stage.UpscaleMethod["latent-".Length..];
             return ApplyLatentUpscale(stageLatent, latentMethod, stage.Upscale, width, height);
+        }
+        if (sourceMedia?.DataType == WGNodeData.DT_IMAGE)
+        {
+            // Pixel/model upscales for image-sourced root stages are applied before
+            // we enter the local LTX-V2 latent path.
+            return stageLatent;
         }
 
         Logs.Warning($"VideoStages: Stage {stage.Id} uses unsupported LTX-V2 video upscale method '{stage.UpscaleMethod}'. Skipping upscale.");
@@ -365,6 +374,27 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         if (!genInfo.Frames.HasValue)
         {
             return null;
+        }
+        if (sourceMedia?.DataType == WGNodeData.DT_IMAGE)
+        {
+            int width = Math.Max(sourceMedia.Width ?? g.UserInput.GetImageWidth(), 16);
+            int height = Math.Max(sourceMedia.Height ?? g.UserInput.GetImageHeight(), 16);
+            string emptyLatent = g.CreateNode(NodeTypes.EmptyLTXVLatentVideo, new JObject()
+            {
+                ["width"] = width,
+                ["height"] = height,
+                ["length"] = genInfo.Frames.Value,
+                ["batch_size"] = 1
+            });
+            WGNodeData imageStageLatent = new([emptyLatent, 0], g, WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat)
+            {
+                Width = width,
+                Height = height,
+                Frames = genInfo.Frames.Value,
+                FPS = genInfo.VideoFPS
+            };
+            imageStageLatent.AttachedAudio = sourceMedia.AttachedAudio;
+            return imageStageLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
         }
 
         WGNodeData sourceSnapshot = sourceMedia;

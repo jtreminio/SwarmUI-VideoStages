@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
@@ -23,6 +24,7 @@ public class VideoStagesExtension : Extension
     public static T2IRegisteredParam<int> RootHeight;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
+    public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
 
     public override void OnPreInit()
     {
@@ -33,13 +35,25 @@ public class VideoStagesExtension : Extension
     public override void OnInit()
     {
         Logs.Info("VideoStages Extension initializing...");
+        CaptureCoreImageToVideoStep();
         RegisterParameters();
         RegisterComfyNodes();
         RootVideoStageResizer.EnsureRegistered();
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureBase(), -4.2);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureRefiner(), 5.9);
+        WorkflowGenerator.AddStep(RootVideoStageTakeover.SuppressCoreRootVideoStage, 10.95);
+        WorkflowGenerator.AddStep(RootVideoStageTakeover.RestoreCoreRootVideoStageModel, 11.05);
         WorkflowGenerator.AddStep(RootVideoStageResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo, 11.4);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).RunConfiguredStages(), 11.5);
+    }
+
+    private static void CaptureCoreImageToVideoStep()
+    {
+        if (CoreImageToVideoStep is not null)
+        {
+            return;
+        }
+        CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(step => step.Priority == 11);
     }
 
     private void RegisterComfyNodes()
