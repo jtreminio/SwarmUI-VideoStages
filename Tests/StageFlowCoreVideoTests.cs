@@ -511,6 +511,44 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Chained_ltx_latent_model_upscale_uses_separated_video_latent_directly()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject stageB = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            upscale: 1.5,
+            upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
+            steps: 12);
+        stageA["refStrengths"] = new JArray(0.55);
+        stageB["refStrengths"] = new JArray(0.65);
+        string stagesJson = new JArray(
+            MakeClipWithRefs(width: 768, height: 448, refs: [MakeRef("Base", frame: 2)], stageA, stageB)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        WorkflowNode upsamplerNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
+        JArray upsamplerSamples = WorkflowAssertions.RequireConnectionInput(upsamplerNode.Node, "samples");
+        WorkflowNode upsamplerSource = WorkflowAssertions.RequireNodeById(workflow, $"{upsamplerSamples[0]}");
+        Assert.Equal("LTXVSeparateAVLatent", $"{upsamplerSource.Node["class_type"]}");
+        Assert.Equal("0", $"{upsamplerSamples[1]}");
+
+        foreach (WorkflowNode cropGuidesNode in WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"))
+        {
+            JArray cropLatentSource = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "latent");
+            WorkflowNode cropLatentSourceNode = WorkflowAssertions.RequireNodeById(workflow, $"{cropLatentSource[0]}");
+            Assert.Contains($"{cropLatentSourceNode.Node["class_type"]}", new[] { "SwarmKSampler", "KSamplerAdvanced" });
+        }
+    }
+
+    [Fact]
     public void Root_stage_resolution_updates_native_ltxv2_audio_noise_mask_dimensions()
     {
         using SwarmUiTestContext _ = new();

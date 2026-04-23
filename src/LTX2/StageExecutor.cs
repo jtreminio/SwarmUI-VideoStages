@@ -320,18 +320,10 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         {
             ["model_name"] = modelName
         });
-        string cropGuidesNode = g.CreateNode(NodeTypes.LTXVCropGuides, new JObject()
-        {
-            ["positive"] = genInfo.PosCond,
-            ["negative"] = genInfo.NegCond,
-            ["latent"] = stageLatent.Path
-        });
-        genInfo.PosCond = [cropGuidesNode, 0];
-        genInfo.NegCond = [cropGuidesNode, 1];
         string upsamplerNode = g.CreateNode(NodeTypes.LTXVLatentUpsampler, new JObject()
         {
             ["vae"] = genInfo.Vae.Path,
-            ["samples"] = new JArray(cropGuidesNode, 2),
+            ["samples"] = stageLatent.Path,
             ["upscale_model"] = new JArray(loaderNode, 0)
         });
         stageLatent = stageLatent.WithPath([upsamplerNode, 0], WGNodeData.DT_LATENT_VIDEO);
@@ -401,6 +393,13 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             return imageStageLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
         }
 
+        if (CanReuseDecodedVideoLatent(sourceMedia, genInfo))
+        {
+            WGNodeData reusedLatent = sourceMedia.AsLatentImage(genInfo.Vae);
+            reusedLatent.Frames = Math.Min(genInfo.Frames.Value, reusedLatent.Frames ?? int.MaxValue);
+            return reusedLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
+        }
+
         WGNodeData sourceSnapshot = sourceMedia;
         if (postVideoChain is not null && ReferencesCurrentOutputPath(sourceMedia, postVideoChain))
         {
@@ -417,6 +416,26 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         stageVideoInput.Frames = Math.Min(genInfo.Frames.Value, stageVideoInput.Frames ?? int.MaxValue);
         WGNodeData encodedLatent = stageVideoInput.AsLatentImage(genInfo.Vae);
         return encodedLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
+    }
+
+    private static bool CanReuseDecodedVideoLatent(
+        WGNodeData sourceMedia,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        (string sourceType, JObject sourceInputs) = sourceMedia?.SourceNodeData ?? (null, null);
+        if (sourceMedia?.DataType != WGNodeData.DT_VIDEO
+            || genInfo?.Vae?.Path is not JArray vaePath
+            || vaePath.Count != 2
+            || !genInfo.Frames.HasValue
+            || sourceMedia.Frames is int sourceFrames && sourceFrames > genInfo.Frames.Value)
+        {
+            return false;
+        }
+        return (sourceType == NodeTypes.VAEDecode || sourceType == NodeTypes.VAEDecodeTiled)
+            && sourceInputs?["samples"] is JArray
+            && sourceInputs["vae"] is JArray decodeVaePath
+            && decodeVaePath.Count == 2
+            && JToken.DeepEquals(decodeVaePath, vaePath);
     }
 
     private static bool ReferencesCurrentOutputPath(WGNodeData media, PostVideoChain postVideoChain)
@@ -704,16 +723,18 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, genInfo.Frames, genInfo.VideoFPS);
         }
 
-        bool shouldApplyTrim = (g.UserInput.TryGet(T2IParamTypes.TrimVideoStartFrames, out _)
-            || g.UserInput.TryGet(T2IParamTypes.TrimVideoEndFrames, out _))
+        int trimStartFrames = g.UserInput.Get(T2IParamTypes.TrimVideoStartFrames, 0);
+        int trimEndFrames = g.UserInput.Get(T2IParamTypes.TrimVideoEndFrames, 0);
+        bool hasRequestedTrim = trimStartFrames != 0 || trimEndFrames != 0;
+        bool shouldApplyTrim = hasRequestedTrim
             && !(splicedIntoNativeChain && postVideoChain.HasPostDecodeWrappers);
         if (shouldApplyTrim)
         {
             string trimNode = g.CreateNode("SwarmTrimFrames", new JObject()
             {
                 ["image"] = g.CurrentMedia.Path,
-                ["trim_start"] = g.UserInput.Get(T2IParamTypes.TrimVideoStartFrames, 0),
-                ["trim_end"] = g.UserInput.Get(T2IParamTypes.TrimVideoEndFrames, 0)
+                ["trim_start"] = trimStartFrames,
+                ["trim_end"] = trimEndFrames
             });
             g.CurrentMedia = g.CurrentMedia.WithPath([trimNode, 0]);
             if (splicedIntoNativeChain && !postVideoChain.HasPostDecodeWrappers && !parallelMultiClip)

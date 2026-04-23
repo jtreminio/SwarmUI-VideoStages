@@ -218,6 +218,28 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Native_ltx_zero_trim_parameters_do_not_insert_noop_trim_wrapper()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 0);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "SwarmTrimFrames"));
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
+    }
+
+    [Fact]
     public void Native_ltx_latent_model_upscale_keeps_core_default_guide_source_when_no_clip_refs_are_defined()
     {
         using SwarmUiTestContext _ = new();
