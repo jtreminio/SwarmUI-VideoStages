@@ -34,7 +34,7 @@ export interface RootDefaults {
 export interface VideoStagesConfig {
     width: number;
     height: number;
-    frames: number;
+    fps: number;
     clips: Clip[];
 }
 

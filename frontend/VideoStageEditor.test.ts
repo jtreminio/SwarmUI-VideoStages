@@ -59,7 +59,7 @@ interface ParsedClip {
 interface ParsedConfig {
     width?: number;
     height?: number;
-    frames?: number;
+    fps?: number;
     clips: ParsedClip[];
 }
 
@@ -85,11 +85,11 @@ const setupParameterPanel = (): void => {
     vsHeightInput.value = "0";
     document.body.appendChild(vsHeightInput);
 
-    const vsFramesInput = document.createElement("input");
-    vsFramesInput.type = "number";
-    vsFramesInput.id = "input_vsframes";
-    vsFramesInput.value = "0";
-    document.body.appendChild(vsFramesInput);
+    const vsFpsInput = document.createElement("input");
+    vsFpsInput.type = "number";
+    vsFpsInput.id = "input_vsfps";
+    vsFpsInput.value = "24";
+    document.body.appendChild(vsFpsInput);
 
     const groupToggle = document.createElement("input");
     groupToggle.type = "checkbox";
@@ -173,7 +173,7 @@ const parseStoredConfig = (): ParsedConfig => {
     return {
         width: parsed.width,
         height: parsed.height,
-        frames: parsed.frames,
+        fps: parsed.fps,
         clips: Array.isArray(parsed.clips) ? parsed.clips : [],
     };
 };
@@ -255,17 +255,17 @@ describe("VideoStageEditor", () => {
             expect(config.height).toBe(864);
         });
 
-        it("prefers registered VideoStages root frames over core video frames", () => {
-            const registeredFramesInput = document.getElementById(
-                "input_vsframes",
+        it("prefers registered VideoStages root FPS over core video FPS", () => {
+            const registeredFpsInput = document.getElementById(
+                "input_vsfps",
             ) as HTMLInputElement;
-            registeredFramesInput.value = "97";
+            registeredFpsInput.value = "32";
 
             const editor = new VideoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
-            expect(config.frames).toBe(97);
+            expect(config.fps).toBe(32);
         });
 
         it("seeds the first stage with the frontend default values", () => {
@@ -1110,7 +1110,7 @@ describe("VideoStageEditor", () => {
             ).toBeNull();
         });
 
-        it("refreshes the reference frame slider max when root frames change", async () => {
+        it("uses the aligned clip duration frame count for the reference frame slider max", async () => {
             const editor = new VideoStageEditor();
             editor.init();
 
@@ -1127,19 +1127,19 @@ describe("VideoStageEditor", () => {
             const frameRange = document.querySelector(
                 '[data-ref-field="frame"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(frameNumber?.max).toBe("48");
-            expect(frameRange?.max).toBe("48");
+            expect(frameNumber?.max).toBe("49");
+            expect(frameRange?.max).toBe("49");
 
-            const rootFramesInput = document.getElementById(
-                "input_videoframes",
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"][type="number"]',
             ) as HTMLInputElement | null;
-            expect(rootFramesInput).not.toBeNull();
-            if (!rootFramesInput) {
-                throw new Error("Expected root video frames input to exist.");
+            expect(durationNumber).not.toBeNull();
+            if (!durationNumber) {
+                throw new Error("Expected clip duration input to exist.");
             }
 
-            rootFramesInput.value = "96";
-            rootFramesInput.dispatchEvent(
+            durationNumber.value = "21.5";
+            durationNumber.dispatchEvent(
                 new Event("change", { bubbles: true }),
             );
             await flushReRender();
@@ -1150,8 +1150,8 @@ describe("VideoStageEditor", () => {
             const refreshedFrameRange = document.querySelector(
                 '[data-ref-field="frame"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(refreshedFrameNumber?.max).toBe("96");
-            expect(refreshedFrameRange?.max).toBe("96");
+            expect(refreshedFrameNumber?.max).toBe("521");
+            expect(refreshedFrameRange?.max).toBe("521");
         });
     });
 

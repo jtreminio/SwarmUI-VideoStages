@@ -180,6 +180,13 @@
     const isDisabled = option.disabled ? " disabled" : "";
     return `<option value="${value}"${isSelected}${isDisabled}>${label}</option>`;
   }).join("");
+  var FRAME_ALIGNMENT = 8;
+  var framesForClip = (durationSeconds, fps) => Math.max(
+    1,
+    Math.ceil(
+      Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / FRAME_ALIGNMENT
+    ) * FRAME_ALIGNMENT + 1
+  );
   var clipFieldId = (clipIdx, field) => `vsclip${clipIdx}_${field}`;
   var refFieldId = (clipIdx, refIdx, field) => `vsclip${clipIdx}_ref${refIdx}_${field}`;
   var stageFieldId = (clipIdx, stageIdx, field) => `vsclip${clipIdx}_stage${stageIdx}_${field}`;
@@ -325,7 +332,7 @@
   var CLIP_DURATION_SLIDER_MAX = 60;
   var CLIP_DURATION_SLIDER_STEP = 0.5;
   var ROOT_DIMENSION_MIN = 256;
-  var ROOT_FRAMES_MIN = 1;
+  var ROOT_FPS_MIN = 4;
   var CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
   var CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
   var CLIP_AUDIO_UPLOAD_DESCRIPTION = "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
@@ -360,7 +367,7 @@
     observedDropdownIds = /* @__PURE__ */ new Set();
     sourceDropdownObserver = null;
     base2EditListenerInstalled = false;
-    rootFramesChangeListenerInstalled = false;
+    rootVideoTimingChangeListenerInstalled = false;
     refSourceFallbackListenerInstalled = false;
     refUploadCache = /* @__PURE__ */ new Map();
     constructor() {
@@ -386,7 +393,7 @@
       this.renderClips();
       this.installSourceDropdownObserver();
       this.installBase2EditStageChangeListener();
-      this.installRootFramesChangeListener();
+      this.installRootVideoTimingChangeListener();
       this.installRefSourceFallbackListener();
     }
     /**
@@ -460,8 +467,8 @@
         field === "width" ? "input_vswidth" : "input_vsheight"
       );
     }
-    getRootFramesParamInput() {
-      return VideoStageUtils.getInputElement("input_vsframes");
+    getRootFpsParamInput() {
+      return VideoStageUtils.getInputElement("input_vsfps");
     }
     getCoreDimensionInput(field) {
       const primaryId = field === "width" ? "input_width" : "input_height";
@@ -476,13 +483,13 @@
       const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
       return value >= ROOT_DIMENSION_MIN ? value : null;
     }
-    getRegisteredRootFrames() {
-      const input = this.getRootFramesParamInput();
+    getRegisteredRootFps() {
+      const input = this.getRootFpsParamInput();
       if (!input) {
         return null;
       }
       const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
-      return value >= ROOT_FRAMES_MIN ? value : null;
+      return value >= ROOT_FPS_MIN ? value : null;
     }
     getCoreDimension(field) {
       const input = this.getCoreDimensionInput(field);
@@ -661,11 +668,11 @@
       const framesInput = VideoStageUtils.getInputElement("input_videoframes") ?? VideoStageUtils.getInputElement("input_text2videoframes");
       const fps = Math.max(
         1,
-        Math.round(VideoStageUtils.toNumber(fpsInput?.value, 24))
+        this.getRegisteredRootFps() ?? Math.round(VideoStageUtils.toNumber(fpsInput?.value, 24))
       );
       const frames = Math.max(
         1,
-        this.getRegisteredRootFrames() ?? Math.round(VideoStageUtils.toNumber(framesInput?.value, 24))
+        Math.round(VideoStageUtils.toNumber(framesInput?.value, 24))
       );
       return {
         modelValues: VideoStageUtils.getSelectValues(model),
@@ -806,6 +813,14 @@
         )
       );
     }
+    normalizeRootFps(value, fallback) {
+      return Math.max(
+        ROOT_FPS_MIN,
+        Math.round(
+          VideoStageUtils.toNumber(`${value ?? fallback}`, fallback)
+        )
+      );
+    }
     refUploadKey(clipIdx, refIdx) {
       return `${clipIdx}:${refIdx}`;
     }
@@ -930,8 +945,15 @@
       });
       reader.readAsDataURL(file);
     }
-    getReferenceFrameMax() {
-      return Math.max(REF_FRAME_MIN, this.getRootDefaults().frames);
+    getReferenceFrameMax(clip) {
+      const defaults = this.getRootDefaults();
+      if (clip) {
+        return Math.max(
+          REF_FRAME_MIN,
+          framesForClip(clip.duration, defaults.fps)
+        );
+      }
+      return Math.max(REF_FRAME_MIN, defaults.frames);
     }
     clamp(value, min, max) {
       return Math.min(Math.max(value, min), max);
@@ -1052,8 +1074,17 @@
     normalizeClip(rawClip, index) {
       const defaults = this.getRootDefaults();
       const audioSourceOptions = buildAudioSourceOptions();
+      const fps = Math.max(1, defaults.fps);
+      const rawDuration = VideoStageUtils.toNumber(
+        `${rawClip.duration}`,
+        defaults.frames / fps
+      );
+      const duration = snapDurationToFps(
+        Math.max(CLIP_DURATION_MIN, rawDuration),
+        fps
+      );
       const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
-      const refFrameMax = this.getReferenceFrameMax();
+      const refFrameMax = this.getReferenceFrameMax({ duration });
       const refs = refsRaw.map(
         (rawRef) => this.normalizeRef(
           rawRef ?? {},
@@ -1076,19 +1107,11 @@
       if (stages.length === 0) {
         stages.push(this.buildDefaultStage(null, refs.length));
       }
-      const fps = Math.max(1, defaults.fps);
-      const rawDuration = VideoStageUtils.toNumber(
-        `${rawClip.duration}`,
-        defaults.frames / fps
-      );
       return {
         name: typeof rawClip.name === "string" && rawClip.name.length > 0 ? rawClip.name : `Clip ${index}`,
         expanded: rawClip.expanded === void 0 ? true : !!rawClip.expanded,
         skipped: !!rawClip.skipped,
-        duration: snapDurationToFps(
-          Math.max(CLIP_DURATION_MIN, rawDuration),
-          fps
-        ),
+        duration,
         audioSource: resolveAudioSourceValue(
           `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
           audioSourceOptions
@@ -1105,7 +1128,7 @@
         return {
           width: defaults.width,
           height: defaults.height,
-          frames: defaults.frames,
+          fps: defaults.fps,
           clips: []
         };
       }
@@ -1138,14 +1161,14 @@
             parsedConfig?.height ?? firstClip?.height,
             defaults.height
           ),
-          frames: this.getRegisteredRootFrames() ?? defaults.frames,
+          fps: this.getRegisteredRootFps() ?? this.normalizeRootFps(parsedConfig?.fps, defaults.fps),
           clips
         };
       } catch {
         return {
           width: defaults.width,
           height: defaults.height,
-          frames: defaults.frames,
+          fps: defaults.fps,
           clips: []
         };
       }
@@ -1215,7 +1238,7 @@
       const serialized = JSON.stringify({
         width: state.width,
         height: state.height,
-        frames: state.frames,
+        fps: state.fps,
         clips: this.serializeClipsForStorage(state.clips)
       });
       input.value = serialized;
@@ -1250,10 +1273,10 @@
         triggerChangeFor(heightInput);
         cleared = true;
       }
-      const framesInput = this.getRootFramesParamInput();
-      if (framesInput && framesInput.value !== "0") {
-        framesInput.value = "0";
-        triggerChangeFor(framesInput);
+      const fpsInput = this.getRootFpsParamInput();
+      if (fpsInput && fpsInput.value !== "24") {
+        fpsInput.value = "24";
+        triggerChangeFor(fpsInput);
         cleared = true;
       }
       return cleared;
@@ -1411,7 +1434,7 @@
       }
       this.sourceDropdownObserver = observer;
     }
-    handleRootFramesCommittedChange() {
+    handleRootVideoTimingCommittedChange() {
       const input = this.getClipsInput();
       if (!input) {
         return;
@@ -1420,7 +1443,7 @@
       const serialized = JSON.stringify({
         width: state.width,
         height: state.height,
-        frames: state.frames,
+        fps: state.fps,
         clips: this.serializeClipsForStorage(state.clips)
       });
       if (serialized !== input.value) {
@@ -1428,20 +1451,20 @@
       }
       this.scheduleClipsRefresh();
     }
-    installRootFramesChangeListener() {
-      if (this.rootFramesChangeListenerInstalled) {
+    installRootVideoTimingChangeListener() {
+      if (this.rootVideoTimingChangeListenerInstalled) {
         return;
       }
-      this.rootFramesChangeListenerInstalled = true;
+      this.rootVideoTimingChangeListenerInstalled = true;
       document.addEventListener("change", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLInputElement)) {
           return;
         }
-        if (target.id !== "input_videoframes" && target.id !== "input_text2videoframes" && target.id !== "input_vsframes") {
+        if (target.id !== "input_videoframes" && target.id !== "input_text2videoframes" && target.id !== "input_videofps" && target.id !== "input_videoframespersecond" && target.id !== "input_vsfps") {
           return;
         }
-        this.handleRootFramesCommittedChange();
+        this.handleRootVideoTimingCommittedChange();
       });
     }
     installRefSourceFallbackListener() {
@@ -1630,7 +1653,7 @@
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Reference Images &middot; ${refsCount}</div>
                     </div>
-                <div class="vs-card-list">${clip.refs.map((ref, refIdx) => this.renderRefRow(ref, clipIdx, refIdx)).join("")}</div>
+                <div class="vs-card-list">${clip.refs.map((ref, refIdx) => this.renderRefRow(ref, clip, clipIdx, refIdx)).join("")}</div>
                     <button type="button" class="vs-add-btn" data-clip-action="add-ref" data-clip-idx="${clipIdx}">+ Add Reference Image</button>
                 </div>
 
@@ -1716,7 +1739,7 @@
       }
       uploadField.style.display = source === AUDIO_SOURCE_UPLOAD ? "" : "none";
     }
-    renderRefRow(ref, clipIdx, refIdx) {
+    renderRefRow(ref, clip, clipIdx, refIdx) {
       const collapseTitle = ref.expanded ? "Collapse" : "Expand";
       const collapseGlyph = ref.expanded ? "&#x2B9F;" : "&#x2B9E;";
       const head = `
@@ -1732,7 +1755,7 @@
         return `<section class="vs-card vs-ref-card input-group" data-ref-idx="${refIdx}">${head}</section>`;
       }
       const sourceOptions = this.buildRefSourceOptions(ref.source);
-      const frameCount = this.getReferenceFrameMax();
+      const frameCount = this.getReferenceFrameMax(clip);
       const sourceError = this.getRefSourceError(ref.source);
       const errorHtml = sourceError ? `<div class="vs-field-error">${escapeAttr(sourceError)}</div>` : "";
       const sourceField = injectFieldData(
@@ -2324,6 +2347,10 @@ ${optionHtml}
         const value = parseFloat(target.value);
         if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
           clip.duration = snapDurationToFps(value, defaults.fps);
+          const frameMax = this.getReferenceFrameMax(clip);
+          for (const ref of clip.refs) {
+            ref.frame = this.clamp(ref.frame, REF_FRAME_MIN, frameMax);
+          }
         }
       } else if (clipField === "audioSource") {
         clip.audioSource = target.value || AUDIO_SOURCE_NATIVE;
@@ -2348,7 +2375,7 @@ ${optionHtml}
         if (refIdx < 0 || refIdx >= clip.refs.length) {
           return;
         }
-        this.applyRefField(clip.refs[refIdx], refField, target);
+        this.applyRefField(clip, clip.refs[refIdx], refField, target);
         if (refField === "source") {
           this.syncRefUploadFieldVisibility(target, target.value);
         }
@@ -2436,7 +2463,7 @@ ${optionHtml}
         clearMediaFileInput(uploadInput);
       }
     }
-    applyRefField(ref, field, target) {
+    applyRefField(clip, ref, field, target) {
       if (field === "source") {
         ref.source = target.value || REF_SOURCE_BASE;
         if (ref.source !== REF_SOURCE_UPLOAD) {
@@ -2449,7 +2476,7 @@ ${optionHtml}
           ref.frame = this.clamp(
             value,
             REF_FRAME_MIN,
-            this.getReferenceFrameMax()
+            this.getReferenceFrameMax(clip)
           );
         }
       } else if (field === "fromEnd") {

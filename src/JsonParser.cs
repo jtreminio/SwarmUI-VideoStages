@@ -16,6 +16,7 @@ public class JsonParser(WorkflowGenerator g)
     private const string DefaultUpscaleMethod = "pixel-lanczos";
     private const string DefaultGeneratedReference = "Generated";
     private const string DefaultPreviousStageReference = "PreviousStage";
+    private const int FrameAlignment = 8;
 
     public sealed record StageSpec(
         int Id,
@@ -35,6 +36,7 @@ public class JsonParser(WorkflowGenerator g)
         int? ClipWidth = null,
         int? ClipHeight = null,
         int? ClipFrames = null,
+        int? ClipFPS = null,
         IReadOnlyList<RefSpec> ClipRefs = null,
         IReadOnlyList<double> RefStrengths = null
     );
@@ -76,7 +78,7 @@ public class JsonParser(WorkflowGenerator g)
     public sealed record VideoStagesSpec(
         int? Width,
         int? Height,
-        int? Frames,
+        int? FPS,
         UploadedAudioSpec UploadedAudio,
         IReadOnlyList<ClipSpec> Clips
     );
@@ -106,10 +108,8 @@ public class JsonParser(WorkflowGenerator g)
         List<ClipSpec> clips = [.. config.Clips];
         int? registeredRootWidth = ResolveRegisteredRootDimension(VideoStagesExtension.RootWidth);
         int? registeredRootHeight = ResolveRegisteredRootDimension(VideoStagesExtension.RootHeight);
-        int? registeredRootFrames = ResolveRegisteredRootFrames();
         int? effectiveRootWidth = registeredRootWidth ?? config.Width;
         int? effectiveRootHeight = registeredRootHeight ?? config.Height;
-        int? effectiveRootFrames = registeredRootFrames ?? config.Frames;
         int fps = ResolveFps();
         List<StageSpec> flattened = [];
         int globalStageIndex = 0;
@@ -120,13 +120,9 @@ public class JsonParser(WorkflowGenerator g)
                 continue;
             }
             int? clipFrames = null;
-            if (effectiveRootFrames.HasValue)
+            if (clip.DurationSeconds > 0 && fps > 0)
             {
-                clipFrames = effectiveRootFrames;
-            }
-            else if (clip.DurationSeconds > 0 && fps > 0)
-            {
-                clipFrames = Math.Max(1, (int)Math.Round(clip.DurationSeconds * fps));
+                clipFrames = CalculateAlignedFrameCount(clip.DurationSeconds, fps);
             }
             foreach (StageSpec stage in clip.Stages)
             {
@@ -142,6 +138,7 @@ public class JsonParser(WorkflowGenerator g)
                     ClipWidth = effectiveRootWidth ?? clip.Width,
                     ClipHeight = effectiveRootHeight ?? clip.Height,
                     ClipFrames = clipFrames,
+                    ClipFPS = fps,
                     ClipRefs = clip.Refs,
                 });
                 globalStageIndex++;
@@ -150,25 +147,34 @@ public class JsonParser(WorkflowGenerator g)
         return flattened;
     }
 
-    private int ResolveFps()
+    public int ResolveFps()
     {
-        if (g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int fps))
+        if (g.UserInput.TryGet(VideoStagesExtension.RootFPS, out int rootFps) && rootFps > 0)
         {
-            return fps;
+            return rootFps;
+        }
+        int? configFps = ParseConfig().FPS;
+        if (configFps.HasValue && configFps.Value > 0)
+        {
+            return configFps.Value;
+        }
+        if (g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int videoFps))
+        {
+            return videoFps;
         }
         return 24;
+    }
+
+    private static int CalculateAlignedFrameCount(double durationSeconds, int fps)
+    {
+        int rawFrames = Math.Max(0, (int)Math.Ceiling(durationSeconds * fps));
+        int alignedFrames = (int)Math.Ceiling(rawFrames / (double)FrameAlignment) * FrameAlignment;
+        return Math.Max(1, alignedFrames + 1);
     }
 
     private int? ResolveRegisteredRootDimension(T2IRegisteredParam<int> param)
     {
         return g.UserInput.TryGet(param, out int value) && value >= VideoStagesExtension.RootDimensionMin
-            ? value
-            : null;
-    }
-
-    private int? ResolveRegisteredRootFrames()
-    {
-        return g.UserInput.TryGet(VideoStagesExtension.RootFrames, out int value) && value > 0
             ? value
             : null;
     }
@@ -180,10 +186,10 @@ public class JsonParser(WorkflowGenerator g)
     /// </summary>
     public VideoStagesSpec ParseConfig()
     {
-        (int? width, int? height, int? frames, UploadedAudioSpec uploadedAudio, List<JObject> rawEntries) = GetJsonTopLevelConfig();
+        (int? width, int? height, int? fps, UploadedAudioSpec uploadedAudio, List<JObject> rawEntries) = GetJsonTopLevelConfig();
         if (rawEntries.Count == 0)
         {
-            return new VideoStagesSpec(width, height, frames, uploadedAudio, []);
+            return new VideoStagesSpec(width, height, fps, uploadedAudio, []);
         }
 
         bool isClipShaped = rawEntries.Any(IsClipShape);
@@ -197,7 +203,7 @@ public class JsonParser(WorkflowGenerator g)
             {
                 parsed.Add(legacyClip);
             }
-            return new VideoStagesSpec(width, height, frames, uploadedAudio, parsed);
+            return new VideoStagesSpec(width, height, fps, uploadedAudio, parsed);
         }
 
         for (int i = 0; i < rawEntries.Count; i++)
@@ -209,7 +215,7 @@ public class JsonParser(WorkflowGenerator g)
                 parsed.Add(clip);
             }
         }
-        return new VideoStagesSpec(width, height, frames, uploadedAudio, parsed);
+        return new VideoStagesSpec(width, height, fps, uploadedAudio, parsed);
     }
 
     /// <summary>
@@ -492,7 +498,7 @@ public class JsonParser(WorkflowGenerator g)
         return GetEmbeddedUploadSpec(obj, "UploadedAudio");
     }
 
-    private (int? Width, int? Height, int? Frames, UploadedAudioSpec UploadedAudio, List<JObject> Entries) GetJsonTopLevelConfig()
+    private (int? Width, int? Height, int? FPS, UploadedAudioSpec UploadedAudio, List<JObject> Entries) GetJsonTopLevelConfig()
     {
         if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
             || string.IsNullOrWhiteSpace(json))
@@ -512,7 +518,7 @@ public class JsonParser(WorkflowGenerator g)
                 return (
                     GetOptionalNullableInt(obj, "Width"),
                     GetOptionalNullableInt(obj, "Height"),
-                    GetOptionalNullableInt(obj, "Frames"),
+                    GetOptionalNullableInt(obj, "FPS"),
                     GetUploadedAudio(obj),
                     GetObjectArray(obj, "Clips")
                 );

@@ -167,6 +167,10 @@ public class StageSequenceRunner(
         {
             g.UserInput.Set(T2IParamTypes.VideoFrames, stage.ClipFrames.Value, sectionId);
         }
+        if (stage.ClipFPS.HasValue && stage.ClipFPS.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.VideoFPS, stage.ClipFPS.Value, sectionId);
+        }
         if (stage.ClipWidth.HasValue && stage.ClipWidth.Value > 0)
         {
             g.UserInput.Set(T2IParamTypes.Width, stage.ClipWidth.Value, sectionId);

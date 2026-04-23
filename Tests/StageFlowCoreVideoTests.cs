@@ -278,10 +278,10 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode emptyLatentNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
-        Assert.Equal(720, emptyLatentNode.Node["inputs"]?.Value<int>("length"));
+        Assert.Equal(721, emptyLatentNode.Node["inputs"]?.Value<int>("length"));
         Assert.All(
             WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
-            node => Assert.Equal(720, node.Node["inputs"]?.Value<int>("length")));
+            node => Assert.Equal(721, node.Node["inputs"]?.Value<int>("length")));
     }
 
     [Fact]

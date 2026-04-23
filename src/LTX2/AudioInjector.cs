@@ -67,7 +67,11 @@ public sealed class AudioInjector(WorkflowGenerator g)
 
     private int ResolveFps(int? workflowFps)
     {
-        int fps = workflowFps ?? g.Text2VideoFPS();
+        int fps = new JsonParser(g).ResolveFps();
+        if (fps <= 0)
+        {
+            fps = workflowFps ?? g.Text2VideoFPS();
+        }
         if (fps <= 0)
         {
             fps = g.UserInput.Get(T2IParamTypes.VideoFPS, 24);

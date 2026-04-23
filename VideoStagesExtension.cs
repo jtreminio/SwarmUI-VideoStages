@@ -22,7 +22,7 @@ public class VideoStagesExtension : Extension
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
     public static T2IRegisteredParam<int> RootWidth;
     public static T2IRegisteredParam<int> RootHeight;
-    public static T2IRegisteredParam<int> RootFrames;
+    public static T2IRegisteredParam<int> RootFPS;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
@@ -126,15 +126,15 @@ public class VideoStagesExtension : Extension
         ));
         OrderPriority += 1;
 
-        RootFrames = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages Frames",
-            Description: "How many frames each VideoStages clip should generate. This lets VideoStages drive image-to-video without enabling SwarmUI's Image To Video group.",
-            Default: "0",
-            Min: 0,
-            Max: 1000,
-            ViewMin: 1,
-            ViewMax: 257,
-            Step: 1,
+        RootFPS = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Video Stages FPS",
+            Description: "Frames per second for VideoStages clips. Clip duration controls total frame count.",
+            Default: "24",
+            Min: 4,
+            Max: 60,
+            ViewMin: 4,
+            ViewMax: 60,
+            Step: 4,
             ViewType: ParamViewType.SLIDER,
             HideFromMetadata: false,
             DoNotPreview: true,

@@ -363,7 +363,7 @@ public class JsonParserClipsTests
         Assert.Equal(VideoStagesExtension.AudioSourceNative, stages[0].ClipAudioSource);
         Assert.Equal(1280, stages[0].ClipWidth);
         Assert.Equal(720, stages[0].ClipHeight);
-        Assert.Equal(96, stages[0].ClipFrames);
+        Assert.Equal(97, stages[0].ClipFrames);
     }
 
     [Fact]
@@ -392,11 +392,11 @@ public class JsonParserClipsTests
         Assert.Single(stages);
         Assert.Equal(1536, stages[0].ClipWidth);
         Assert.Equal(864, stages[0].ClipHeight);
-        Assert.Equal(96, stages[0].ClipFrames);
+        Assert.Equal(97, stages[0].ClipFrames);
     }
 
     [Fact]
-    public void ParseStages_RegisteredRootFrames_OverrideClipDurationFrames()
+    public void ParseStages_RegisteredRootFps_OverridesCoreVideoFpsForClipDurationFrames()
     {
         string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
@@ -410,7 +410,7 @@ public class JsonParserClipsTests
                     height: 600)
             ]));
         T2IParamInput input = BuildInputWithJson(json);
-        input.Set(VideoStagesExtension.RootFrames, 33);
+        input.Set(VideoStagesExtension.RootFPS, 32);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
         JsonParser parser = new(generator);
@@ -418,7 +418,8 @@ public class JsonParserClipsTests
         List<JsonParser.StageSpec> stages = parser.ParseStages();
 
         Assert.Single(stages);
-        Assert.Equal(33, stages[0].ClipFrames);
+        Assert.Equal(129, stages[0].ClipFrames);
+        Assert.Equal(32, stages[0].ClipFPS);
     }
 
     [Fact]
@@ -498,10 +499,37 @@ public class JsonParserClipsTests
         Assert.Equal(2, stages.Count);
         Assert.Equal(800, stages[0].ClipWidth);
         Assert.Equal(600, stages[0].ClipHeight);
-        Assert.Equal(96, stages[0].ClipFrames);
+        Assert.Equal(97, stages[0].ClipFrames);
         Assert.Equal(1920, stages[1].ClipWidth);
         Assert.Equal(1080, stages[1].ClipHeight);
-        Assert.Equal(48, stages[1].ClipFrames);
+        Assert.Equal(49, stages[1].ClipFrames);
+    }
+
+    [Theory]
+    [InlineData(10.0, 241)]
+    [InlineData(21.5, 521)]
+    public void ParseStages_ClipDurationFrames_AreAlignedUpToEightPlusOne(double duration, int expectedFrames)
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1280,
+            height: 720,
+            clips: [
+                MakeClip(
+                    "First",
+                    stages: [MakeStage("model-a")],
+                    duration: duration,
+                    width: 800,
+                    height: 600)
+            ]));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(T2IParamTypes.VideoFPS, 24);
+        WorkflowGenerator generator = new() { UserInput = input };
+        JsonParser parser = new(generator);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        Assert.Single(stages);
+        Assert.Equal(expectedFrames, stages[0].ClipFrames);
     }
 
     [Fact]

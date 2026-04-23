@@ -24,8 +24,18 @@ export const renderOptionList = (
 export const clipColorIndex = (clipIndex: number): number =>
     (clipIndex % 4) + 1;
 
+const FRAME_ALIGNMENT = 8;
+
 export const framesForClip = (durationSeconds: number, fps: number): number =>
-    Math.max(1, Math.round(durationSeconds * Math.max(1, fps)));
+    Math.max(
+        1,
+        Math.ceil(
+            Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) /
+                FRAME_ALIGNMENT,
+        ) *
+            FRAME_ALIGNMENT +
+            1,
+    );
 
 /**
  * Builds a unique field id for a clip-level field.
