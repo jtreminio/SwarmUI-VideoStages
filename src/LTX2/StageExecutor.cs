@@ -671,9 +671,24 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         int outputWidth = g.CurrentMedia?.Width ?? sourceMedia.Width ?? g.UserInput.GetImageWidth();
         int outputHeight = g.CurrentMedia?.Height ?? sourceMedia.Height ?? g.UserInput.GetImageHeight();
         bool splicedIntoNativeChain = postVideoChain is not null;
+        bool parallelMultiClip = g.NodeHelpers.TryGetValue(MultiClipParallelWorkflowFlags.NodeHelperKey, out string parallelFlag)
+            && string.Equals(parallelFlag, "1", StringComparison.Ordinal);
         if (splicedIntoNativeChain)
         {
-            postVideoChain.SpliceCurrentOutput(genInfo.Vae);
+            if (parallelMultiClip)
+            {
+                postVideoChain.SpliceCurrentOutputToDedicatedBranch(
+                    genInfo.Vae,
+                    outputWidth,
+                    outputHeight,
+                    genInfo.Frames,
+                    genInfo.VideoFPS);
+            }
+            else
+            {
+                postVideoChain.SpliceCurrentOutput(genInfo.Vae);
+            }
+
             if (postVideoChain.HasPostDecodeWrappers)
             {
                 ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, postVideoChain.CurrentOutputMedia.Frames, postVideoChain.CurrentOutputMedia.FPS);
@@ -701,7 +716,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
                 ["trim_end"] = g.UserInput.Get(T2IParamTypes.TrimVideoEndFrames, 0)
             });
             g.CurrentMedia = g.CurrentMedia.WithPath([trimNode, 0]);
-            if (splicedIntoNativeChain && !postVideoChain.HasPostDecodeWrappers)
+            if (splicedIntoNativeChain && !postVideoChain.HasPostDecodeWrappers && !parallelMultiClip)
             {
                 postVideoChain.RetargetAnimationSaves(g.CurrentMedia.Path);
             }

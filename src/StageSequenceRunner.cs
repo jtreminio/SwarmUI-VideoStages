@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.LTX2;
@@ -25,6 +27,8 @@ public class StageSequenceRunner(
     public void Run()
     {
         List<int> usedSectionIds = [];
+        bool parallelMultiClip = stages.Count > 0 && stages.Select(s => s.ClipId).Distinct().Count() > 1;
+        List<WGNodeData> clipParallelOutputs = [];
         try
         {
             if (_rootStageTakeover)
@@ -32,8 +36,32 @@ public class StageSequenceRunner(
                 RootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia(g);
             }
             CaptureReference(StageRefStore.StageKind.Generated);
-            foreach (JsonParser.StageSpec stage in stages)
+            WGNodeData parallelClipSourceMedia = g.CurrentMedia?.Duplicate();
+            WGNodeData parallelClipSourceVae = g.CurrentVae?.Duplicate();
+            if (parallelMultiClip)
             {
+                g.NodeHelpers[MultiClipParallelWorkflowFlags.NodeHelperKey] = "1";
+            }
+
+            for (int i = 0; i < stages.Count; i++)
+            {
+                JsonParser.StageSpec stage = stages[i];
+                if (parallelMultiClip
+                    && i > 0
+                    && stage.ClipId != stages[i - 1].ClipId)
+                {
+                    if (parallelClipSourceMedia is null)
+                    {
+                        throw new InvalidOperationException("VideoStages: parallel clips require root media before the first stage.");
+                    }
+
+                    g.CurrentMedia = parallelClipSourceMedia.Duplicate();
+                    if (parallelClipSourceVae is not null)
+                    {
+                        g.CurrentVae = parallelClipSourceVae.Duplicate();
+                    }
+                }
+
                 PrepareClipAudio(stage);
                 StageRefStore.StageRef guideRef = ResolveGuideReference(stage);
 
@@ -43,14 +71,33 @@ public class StageSequenceRunner(
                 _singleStageRunner.RunStage(stage, sectionId, guideRef, store);
                 CaptureReference(StageRefStore.StageKind.Stage, stage.Id);
 
+                if (parallelMultiClip
+                    && (i == stages.Count - 1 || stages[i + 1].ClipId != stage.ClipId))
+                {
+                    clipParallelOutputs.Add(g.CurrentMedia.Duplicate());
+                }
+
                 if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false) && stage.Id < stages.Count - 1)
                 {
                     g.CurrentMedia.SaveOutput(g.CurrentVae, g.CurrentAudioVae, g.GetStableDynamicID(IntermediateStageSaveId, stage.Id));
                 }
             }
+
+            if (parallelMultiClip && clipParallelOutputs.Count > 1)
+            {
+                JArray rootVideoPath = parallelClipSourceMedia?.Path is JArray rp && rp.Count == 2
+                    ? new JArray(rp[0], rp[1])
+                    : null;
+                MultiClipParallelMerger.Apply(g, clipParallelOutputs, rootVideoPath);
+            }
         }
         finally
         {
+            if (parallelMultiClip)
+            {
+                _ = g.NodeHelpers.Remove(MultiClipParallelWorkflowFlags.NodeHelperKey);
+            }
+
             foreach (int sectionId in usedSectionIds)
             {
                 g.UserInput.SectionParamOverrides.Remove(sectionId);

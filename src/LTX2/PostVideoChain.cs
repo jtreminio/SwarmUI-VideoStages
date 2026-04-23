@@ -236,6 +236,60 @@ internal sealed class PostVideoChain
         AttachSourceAudio(g.CurrentMedia);
     }
 
+    /// <summary>
+    /// Like <see cref="SpliceCurrentOutput"/> but wires a new decode branch so later clips
+    /// do not retarget the shared root VAEDecode / audio decode nodes (required for parallel clips).
+    /// </summary>
+    public void SpliceCurrentOutputToDedicatedBranch(
+        WGNodeData vae,
+        int outputWidth,
+        int outputHeight,
+        int? outputFrames,
+        int? outputFps)
+    {
+        if (g.CurrentMedia?.Path is not JArray stageOutputPath || stageOutputPath.Count != 2)
+        {
+            return;
+        }
+
+        if (AudioVaePath is null || AudioVaePath.Count != 2)
+        {
+            return;
+        }
+
+        string newSeparate = g.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
+        {
+            ["av_latent"] = stageOutputPath
+        });
+
+        JArray vaeRef = vae?.Path ?? g.CurrentVae?.Path;
+        if (vaeRef is null || vaeRef.Count != 2)
+        {
+            return;
+        }
+
+        string dedicatedVideoDecode = g.CreateNode(NodeTypes.VAEDecodeTiled, (_, n) =>
+        {
+            n["inputs"] = CreateFinalTiledDecodeInputs(vaeRef, new JArray(newSeparate, 0));
+        });
+        string dedicatedAudioDecode = g.CreateNode(NodeTypes.LTXVAudioVAEDecode, new JObject()
+        {
+            ["audio_vae"] = new JArray(AudioVaePath[0], AudioVaePath[1]),
+            ["samples"] = new JArray(newSeparate, 1)
+        });
+
+        WGNodeData decodedVideo = new(new JArray(dedicatedVideoDecode, 0), g, WGNodeData.DT_VIDEO, ResolveVideoCompat())
+        {
+            Width = outputWidth,
+            Height = outputHeight,
+            Frames = outputFrames ?? CurrentOutputMedia.Frames,
+            FPS = outputFps ?? CurrentOutputMedia.FPS
+        };
+        WGNodeData decodedAudio = new(new JArray(dedicatedAudioDecode, 0), g, WGNodeData.DT_AUDIO, ResolveAudioCompat());
+        decodedVideo.AttachedAudio = decodedAudio;
+        g.CurrentMedia = decodedVideo;
+    }
+
     public void RetargetAnimationSaves(JArray newImagePath)
     {
         if (newImagePath is null || newImagePath.Count != 2)

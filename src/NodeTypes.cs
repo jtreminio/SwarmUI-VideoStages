@@ -10,6 +10,12 @@ internal static class NodeTypes
     public const string SwarmSaveImageWS = "SwarmSaveImageWS";
     public const string SwarmSaveAudioWS = "SwarmSaveAudioWS";
     public const string SwarmSaveAnimationWS = "SwarmSaveAnimationWS";
+    /// <summary>Comfy core node; UI display name is "Batch Images" (two inputs only).</summary>
+    public const string ImageBatch = "ImageBatch";
+    /// <summary>Comfy extras autogrow node; UI display name is "Batch Images" (<c>images.image0</c>…).</summary>
+    public const string BatchImagesNode = "BatchImagesNode";
+    /// <summary>Comfy extras node; UI display name is "Audio Concat".</summary>
+    public const string AudioConcat = "AudioConcat";
     public const string ImageScale = "ImageScale";
     public const string UpscaleModelLoader = "UpscaleModelLoader";
     public const string ImageUpscaleWithModel = "ImageUpscaleWithModel";
