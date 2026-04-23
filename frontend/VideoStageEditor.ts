@@ -337,11 +337,11 @@ export class VideoStageEditor {
             VideoStageUtils.getInputElement("input_videocfg") ??
             VideoStageUtils.getInputElement("input_cfgscale");
         const widthInput =
-            VideoStageUtils.getInputElement("input_aspectratiowidth") ??
-            VideoStageUtils.getInputElement("input_width");
+            VideoStageUtils.getInputElement("input_width") ??
+            VideoStageUtils.getInputElement("input_aspectratiowidth");
         const heightInput =
-            VideoStageUtils.getInputElement("input_aspectratioheight") ??
-            VideoStageUtils.getInputElement("input_height");
+            VideoStageUtils.getInputElement("input_height") ??
+            VideoStageUtils.getInputElement("input_aspectratioheight");
         const fpsInput =
             VideoStageUtils.getInputElement("input_videofps") ??
             VideoStageUtils.getInputElement("input_videoframespersecond");
@@ -393,10 +393,7 @@ export class VideoStageEditor {
             upscaleMin: 0.25,
             upscaleMax: 4,
             upscaleStep: 0.25,
-            steps: Math.max(
-                1,
-                Math.round(VideoStageUtils.toNumber(steps?.value, 20)),
-            ),
+            steps: 8,
             stepsMin: Math.max(
                 1,
                 Math.round(VideoStageUtils.toNumber(steps?.min, 1)),
@@ -412,7 +409,7 @@ export class VideoStageEditor {
                 1,
                 Math.round(VideoStageUtils.toNumber(steps?.step, 1)),
             ),
-            cfgScale: VideoStageUtils.toNumber(cfgScale?.value, 7),
+            cfgScale: 1,
             cfgScaleMin: VideoStageUtils.toNumber(cfgScale?.min, 0),
             cfgScaleMax: Math.min(
                 10,
@@ -1502,7 +1499,7 @@ export class VideoStageEditor {
                 "",
                 refFieldId(clipIdx, refIdx, "fromEnd"),
                 "fromEnd",
-                "Count from last frame",
+                "Count in reverse from end",
                 "",
                 ref.fromEnd,
                 false,

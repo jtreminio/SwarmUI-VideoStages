@@ -26,6 +26,7 @@ interface ParsedRef {
 
 interface ParsedStage {
     model: string;
+    control?: number;
     steps?: number;
     cfgScale?: number;
     upscale?: number;
@@ -151,6 +152,38 @@ describe("VideoStageEditor", () => {
             expect(clips[0].stages).toHaveLength(1);
             expect(clips[0].refs).toEqual([]);
             expect(clips[0].name).toBe("Clip 0");
+        });
+
+        it("seeds default clip dimensions from SwarmUI core width and height fields", () => {
+            const coreWidthInput = document.createElement("input");
+            coreWidthInput.type = "number";
+            coreWidthInput.id = "input_width";
+            coreWidthInput.value = "1344";
+            document.body.appendChild(coreWidthInput);
+
+            const coreHeightInput = document.createElement("input");
+            coreHeightInput.type = "number";
+            coreHeightInput.id = "input_height";
+            coreHeightInput.value = "832";
+            document.body.appendChild(coreHeightInput);
+
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const clips = parseStored();
+            expect(clips[0].width).toBe(1344);
+            expect(clips[0].height).toBe(832);
+        });
+
+        it("seeds the first stage with the frontend default values", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const defaultStage = parseStored()[0].stages?.[0];
+            expect(defaultStage?.control).toBe(1);
+            expect(defaultStage?.steps).toBe(8);
+            expect(defaultStage?.cfgScale).toBe(1);
+            expect(defaultStage?.upscale).toBe(1);
         });
 
         it("renders an editor div with a clip stack and add-clip button", () => {
@@ -346,6 +379,24 @@ describe("VideoStageEditor", () => {
             const clips = parseStored();
             expect(clips[0].refs).toHaveLength(1);
             expect(clips[0].refs?.[0].source).toBe("Base");
+        });
+
+        it("uses the updated reverse frame count label", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const refCard = document.querySelector(
+                ".vs-ref-card",
+            ) as HTMLElement | null;
+            expect(refCard?.textContent).toContain("Count in reverse from end");
+            expect(refCard?.textContent).not.toContain("Count from last frame");
         });
 
         it("adds a default ref strength slider for each stage when a ref is added", async () => {
