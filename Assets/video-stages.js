@@ -325,6 +325,7 @@
   var CLIP_DURATION_SLIDER_MAX = 60;
   var CLIP_DURATION_SLIDER_STEP = 0.5;
   var ROOT_DIMENSION_MIN = 256;
+  var ROOT_FRAMES_MIN = 1;
   var CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
   var CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
   var CLIP_AUDIO_UPLOAD_DESCRIPTION = "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
@@ -459,6 +460,9 @@
         field === "width" ? "input_vswidth" : "input_vsheight"
       );
     }
+    getRootFramesParamInput() {
+      return VideoStageUtils.getInputElement("input_vsframes");
+    }
     getCoreDimensionInput(field) {
       const primaryId = field === "width" ? "input_width" : "input_height";
       const fallbackId = field === "width" ? "input_aspectratiowidth" : "input_aspectratioheight";
@@ -471,6 +475,14 @@
       }
       const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
       return value >= ROOT_DIMENSION_MIN ? value : null;
+    }
+    getRegisteredRootFrames() {
+      const input = this.getRootFramesParamInput();
+      if (!input) {
+        return null;
+      }
+      const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+      return value >= ROOT_FRAMES_MIN ? value : null;
     }
     getCoreDimension(field) {
       const input = this.getCoreDimensionInput(field);
@@ -653,7 +665,7 @@
       );
       const frames = Math.max(
         1,
-        Math.round(VideoStageUtils.toNumber(framesInput?.value, 24))
+        this.getRegisteredRootFrames() ?? Math.round(VideoStageUtils.toNumber(framesInput?.value, 24))
       );
       return {
         modelValues: VideoStageUtils.getSelectValues(model),
@@ -1093,6 +1105,7 @@
         return {
           width: defaults.width,
           height: defaults.height,
+          frames: defaults.frames,
           clips: []
         };
       }
@@ -1125,12 +1138,14 @@
             parsedConfig?.height ?? firstClip?.height,
             defaults.height
           ),
+          frames: this.getRegisteredRootFrames() ?? defaults.frames,
           clips
         };
       } catch {
         return {
           width: defaults.width,
           height: defaults.height,
+          frames: defaults.frames,
           clips: []
         };
       }
@@ -1200,6 +1215,7 @@
       const serialized = JSON.stringify({
         width: state.width,
         height: state.height,
+        frames: state.frames,
         clips: this.serializeClipsForStorage(state.clips)
       });
       input.value = serialized;
@@ -1234,6 +1250,12 @@
         triggerChangeFor(heightInput);
         cleared = true;
       }
+      const framesInput = this.getRootFramesParamInput();
+      if (framesInput && framesInput.value !== "0") {
+        framesInput.value = "0";
+        triggerChangeFor(framesInput);
+        cleared = true;
+      }
       return cleared;
     }
     shouldKeepClipsBlankWhileDisabled() {
@@ -1254,18 +1276,8 @@
       const toggler = this.getGroupToggle();
       return toggler ? toggler.checked : false;
     }
-    hasRootVideoModel() {
-      const videoModel = VideoStageUtils.getInputElement("input_videomodel");
-      if (videoModel?.value) {
-        return true;
-      }
-      return this.isRootTextToVideoModel();
-    }
     validateClips(clips) {
       const errors = [];
-      if (!this.hasRootVideoModel()) {
-        errors.push("VideoStages requires a root Video Model.");
-      }
       if (clips.length === 0) {
         errors.push("VideoStages requires at least one clip.");
         return errors;
@@ -1408,6 +1420,7 @@
       const serialized = JSON.stringify({
         width: state.width,
         height: state.height,
+        frames: state.frames,
         clips: this.serializeClipsForStorage(state.clips)
       });
       if (serialized !== input.value) {
@@ -1425,7 +1438,7 @@
         if (!(target instanceof HTMLInputElement)) {
           return;
         }
-        if (target.id !== "input_videoframes" && target.id !== "input_text2videoframes") {
+        if (target.id !== "input_videoframes" && target.id !== "input_text2videoframes" && target.id !== "input_vsframes") {
           return;
         }
         this.handleRootFramesCommittedChange();

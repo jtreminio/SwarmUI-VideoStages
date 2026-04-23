@@ -59,6 +59,7 @@ interface ParsedClip {
 interface ParsedConfig {
     width?: number;
     height?: number;
+    frames?: number;
     clips: ParsedClip[];
 }
 
@@ -83,6 +84,12 @@ const setupParameterPanel = (): void => {
     vsHeightInput.id = "input_vsheight";
     vsHeightInput.value = "0";
     document.body.appendChild(vsHeightInput);
+
+    const vsFramesInput = document.createElement("input");
+    vsFramesInput.type = "number";
+    vsFramesInput.id = "input_vsframes";
+    vsFramesInput.value = "0";
+    document.body.appendChild(vsFramesInput);
 
     const groupToggle = document.createElement("input");
     groupToggle.type = "checkbox";
@@ -166,6 +173,7 @@ const parseStoredConfig = (): ParsedConfig => {
     return {
         width: parsed.width,
         height: parsed.height,
+        frames: parsed.frames,
         clips: Array.isArray(parsed.clips) ? parsed.clips : [],
     };
 };
@@ -245,6 +253,19 @@ describe("VideoStageEditor", () => {
             const config = parseStoredConfig();
             expect(config.width).toBe(1536);
             expect(config.height).toBe(864);
+        });
+
+        it("prefers registered VideoStages root frames over core video frames", () => {
+            const registeredFramesInput = document.getElementById(
+                "input_vsframes",
+            ) as HTMLInputElement;
+            registeredFramesInput.value = "97";
+
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const config = parseStoredConfig();
+            expect(config.frames).toBe(97);
         });
 
         it("seeds the first stage with the frontend default values", () => {

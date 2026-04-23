@@ -35,6 +35,7 @@ const CLIP_DURATION_MAX = 9999;
 const CLIP_DURATION_SLIDER_MAX = 60;
 const CLIP_DURATION_SLIDER_STEP = 0.5;
 const ROOT_DIMENSION_MIN = 256;
+const ROOT_FRAMES_MIN = 1;
 const CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
 const CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
 const CLIP_AUDIO_UPLOAD_DESCRIPTION =
@@ -206,6 +207,10 @@ export class VideoStageEditor {
         );
     }
 
+    private getRootFramesParamInput(): HTMLInputElement | null {
+        return VideoStageUtils.getInputElement("input_vsframes");
+    }
+
     private getCoreDimensionInput(
         field: "width" | "height",
     ): HTMLInputElement | null {
@@ -229,6 +234,15 @@ export class VideoStageEditor {
         }
         const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
         return value >= ROOT_DIMENSION_MIN ? value : null;
+    }
+
+    private getRegisteredRootFrames(): number | null {
+        const input = this.getRootFramesParamInput();
+        if (!input) {
+            return null;
+        }
+        const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+        return value >= ROOT_FRAMES_MIN ? value : null;
     }
 
     private getCoreDimension(field: "width" | "height"): number | null {
@@ -492,7 +506,8 @@ export class VideoStageEditor {
         );
         const frames = Math.max(
             1,
-            Math.round(VideoStageUtils.toNumber(framesInput?.value, 24)),
+            this.getRegisteredRootFrames() ??
+                Math.round(VideoStageUtils.toNumber(framesInput?.value, 24)),
         );
 
         return {
@@ -1057,6 +1072,7 @@ export class VideoStageEditor {
             return {
                 width: defaults.width,
                 height: defaults.height,
+                frames: defaults.frames,
                 clips: [],
             };
         }
@@ -1068,6 +1084,7 @@ export class VideoStageEditor {
                     ? (parsed as {
                           width?: unknown;
                           height?: unknown;
+                          frames?: unknown;
                           uploadedAudio?: unknown;
                           clips?: unknown[];
                       })
@@ -1109,12 +1126,14 @@ export class VideoStageEditor {
                     parsedConfig?.height ?? firstClip?.height,
                     defaults.height,
                 ),
+                frames: this.getRegisteredRootFrames() ?? defaults.frames,
                 clips,
             };
         } catch {
             return {
                 width: defaults.width,
                 height: defaults.height,
+                frames: defaults.frames,
                 clips: [],
             };
         }
@@ -1191,6 +1210,7 @@ export class VideoStageEditor {
         const serialized = JSON.stringify({
             width: state.width,
             height: state.height,
+            frames: state.frames,
             clips: this.serializeClipsForStorage(state.clips),
         });
         input.value = serialized;
@@ -1228,6 +1248,12 @@ export class VideoStageEditor {
             triggerChangeFor(heightInput);
             cleared = true;
         }
+        const framesInput = this.getRootFramesParamInput();
+        if (framesInput && framesInput.value !== "0") {
+            framesInput.value = "0";
+            triggerChangeFor(framesInput);
+            cleared = true;
+        }
         return cleared;
     }
 
@@ -1253,19 +1279,8 @@ export class VideoStageEditor {
         return toggler ? toggler.checked : false;
     }
 
-    private hasRootVideoModel(): boolean {
-        const videoModel = VideoStageUtils.getInputElement("input_videomodel");
-        if (videoModel?.value) {
-            return true;
-        }
-        return this.isRootTextToVideoModel();
-    }
-
     private validateClips(clips: Clip[]): string[] {
         const errors: string[] = [];
-        if (!this.hasRootVideoModel()) {
-            errors.push("VideoStages requires a root Video Model.");
-        }
         if (clips.length === 0) {
             errors.push("VideoStages requires at least one clip.");
             return errors;
@@ -1437,6 +1452,7 @@ export class VideoStageEditor {
         const serialized = JSON.stringify({
             width: state.width,
             height: state.height,
+            frames: state.frames,
             clips: this.serializeClipsForStorage(state.clips),
         });
         if (serialized !== input.value) {
@@ -1457,7 +1473,8 @@ export class VideoStageEditor {
             }
             if (
                 target.id !== "input_videoframes" &&
-                target.id !== "input_text2videoframes"
+                target.id !== "input_text2videoframes" &&
+                target.id !== "input_vsframes"
             ) {
                 return;
             }

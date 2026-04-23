@@ -23,7 +23,7 @@ public partial class StageFlowTests
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     [Fact]
-    public void Configured_video_stages_without_root_video_model_is_backend_noop()
+    public void Configured_video_stages_without_native_image_to_video_toggle_run_from_stage_model()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -38,10 +38,10 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNoopSteps());
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
-        Assert.Empty(samplers);
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS"));
-        Assert.Equal(WGNodeData.DT_IMAGE, generator.CurrentMedia.DataType);
+        Assert.Single(samplers);
+        Assert.Single(WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS"));
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.Null(input.Get(T2IParamTypes.VideoModel, null));
     }
 
     [Fact]

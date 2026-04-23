@@ -1,11 +1,55 @@
+using System.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
 internal static class RootVideoStageTakeover
 {
     private const int StashSectionId = VideoStagesExtension.SectionID_VideoStages;
+    private const string SynthesizedRootVideoModelKey = "videostages.synth-root-video-model";
+
+    public static void EnsureRootVideoStageModel(WorkflowGenerator g)
+    {
+        if (g is null || g.UserInput is null)
+        {
+            return;
+        }
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel existingModel) && existingModel is not null)
+        {
+            return;
+        }
+        if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
+            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true)
+        {
+            return;
+        }
+
+        JsonParser.StageSpec firstStage = new JsonParser(g).ParseStages().FirstOrDefault();
+        if (firstStage is null || string.IsNullOrWhiteSpace(firstStage.Model))
+        {
+            return;
+        }
+
+        g.UserInput.Set(T2IParamTypes.VideoModel.Type, firstStage.Model);
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel resolvedModel) && resolvedModel is not null)
+        {
+            g.NodeHelpers[SynthesizedRootVideoModelKey] = "1";
+            return;
+        }
+
+        g.UserInput.Remove(T2IParamTypes.VideoModel);
+        Logs.Warning($"VideoStages: could not resolve root video model '{firstStage.Model}'.");
+    }
+
+    public static void CleanupSynthesizedRootVideoStageModel(WorkflowGenerator g)
+    {
+        if (g?.NodeHelpers?.Remove(SynthesizedRootVideoModelKey) == true)
+        {
+            g.UserInput.Remove(T2IParamTypes.VideoModel);
+        }
+    }
 
     public static bool ShouldTakeOverRootStage(WorkflowGenerator g)
     {

@@ -396,6 +396,32 @@ public class JsonParserClipsTests
     }
 
     [Fact]
+    public void ParseStages_RegisteredRootFrames_OverrideClipDurationFrames()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1280,
+            height: 720,
+            clips: [
+                MakeClip(
+                    "First",
+                    stages: [MakeStage("model-a")],
+                    duration: 4.0,
+                    width: 800,
+                    height: 600)
+            ]));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(VideoStagesExtension.RootFrames, 33);
+        input.Set(T2IParamTypes.VideoFPS, 24);
+        WorkflowGenerator generator = new() { UserInput = input };
+        JsonParser parser = new(generator);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        Assert.Single(stages);
+        Assert.Equal(33, stages[0].ClipFrames);
+    }
+
+    [Fact]
     public void ParseClips_StagesMissingModel_AreSkippedSilently()
     {
         JObject brokenStage = MakeStage("");

@@ -76,6 +76,7 @@ public class JsonParser(WorkflowGenerator g)
     public sealed record VideoStagesSpec(
         int? Width,
         int? Height,
+        int? Frames,
         UploadedAudioSpec UploadedAudio,
         IReadOnlyList<ClipSpec> Clips
     );
@@ -105,8 +106,10 @@ public class JsonParser(WorkflowGenerator g)
         List<ClipSpec> clips = [.. config.Clips];
         int? registeredRootWidth = ResolveRegisteredRootDimension(VideoStagesExtension.RootWidth);
         int? registeredRootHeight = ResolveRegisteredRootDimension(VideoStagesExtension.RootHeight);
+        int? registeredRootFrames = ResolveRegisteredRootFrames();
         int? effectiveRootWidth = registeredRootWidth ?? config.Width;
         int? effectiveRootHeight = registeredRootHeight ?? config.Height;
+        int? effectiveRootFrames = registeredRootFrames ?? config.Frames;
         int fps = ResolveFps();
         List<StageSpec> flattened = [];
         int globalStageIndex = 0;
@@ -117,7 +120,11 @@ public class JsonParser(WorkflowGenerator g)
                 continue;
             }
             int? clipFrames = null;
-            if (clip.DurationSeconds > 0 && fps > 0)
+            if (effectiveRootFrames.HasValue)
+            {
+                clipFrames = effectiveRootFrames;
+            }
+            else if (clip.DurationSeconds > 0 && fps > 0)
             {
                 clipFrames = Math.Max(1, (int)Math.Round(clip.DurationSeconds * fps));
             }
@@ -159,6 +166,13 @@ public class JsonParser(WorkflowGenerator g)
             : null;
     }
 
+    private int? ResolveRegisteredRootFrames()
+    {
+        return g.UserInput.TryGet(VideoStagesExtension.RootFrames, out int value) && value > 0
+            ? value
+            : null;
+    }
+
     /// <summary>
     /// Parses the configured JSON into clip-shaped data. Legacy stage-only
     /// JSON is wrapped in a single default clip so the rest of the pipeline
@@ -166,10 +180,10 @@ public class JsonParser(WorkflowGenerator g)
     /// </summary>
     public VideoStagesSpec ParseConfig()
     {
-        (int? width, int? height, UploadedAudioSpec uploadedAudio, List<JObject> rawEntries) = GetJsonTopLevelConfig();
+        (int? width, int? height, int? frames, UploadedAudioSpec uploadedAudio, List<JObject> rawEntries) = GetJsonTopLevelConfig();
         if (rawEntries.Count == 0)
         {
-            return new VideoStagesSpec(width, height, uploadedAudio, []);
+            return new VideoStagesSpec(width, height, frames, uploadedAudio, []);
         }
 
         bool isClipShaped = rawEntries.Any(IsClipShape);
@@ -183,7 +197,7 @@ public class JsonParser(WorkflowGenerator g)
             {
                 parsed.Add(legacyClip);
             }
-            return new VideoStagesSpec(width, height, uploadedAudio, parsed);
+            return new VideoStagesSpec(width, height, frames, uploadedAudio, parsed);
         }
 
         for (int i = 0; i < rawEntries.Count; i++)
@@ -195,7 +209,7 @@ public class JsonParser(WorkflowGenerator g)
                 parsed.Add(clip);
             }
         }
-        return new VideoStagesSpec(width, height, uploadedAudio, parsed);
+        return new VideoStagesSpec(width, height, frames, uploadedAudio, parsed);
     }
 
     /// <summary>
@@ -478,12 +492,12 @@ public class JsonParser(WorkflowGenerator g)
         return GetEmbeddedUploadSpec(obj, "UploadedAudio");
     }
 
-    private (int? Width, int? Height, UploadedAudioSpec UploadedAudio, List<JObject> Entries) GetJsonTopLevelConfig()
+    private (int? Width, int? Height, int? Frames, UploadedAudioSpec UploadedAudio, List<JObject> Entries) GetJsonTopLevelConfig()
     {
         if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
             || string.IsNullOrWhiteSpace(json))
         {
-            return (null, null, null, []);
+            return (null, null, null, null, []);
         }
 
         try
@@ -491,23 +505,24 @@ public class JsonParser(WorkflowGenerator g)
             JToken token = JToken.Parse(json);
             if (token is JArray array)
             {
-                return (null, null, null, [.. array.OfType<JObject>()]);
+                return (null, null, null, null, [.. array.OfType<JObject>()]);
             }
             if (token is JObject obj)
             {
                 return (
                     GetOptionalNullableInt(obj, "Width"),
                     GetOptionalNullableInt(obj, "Height"),
+                    GetOptionalNullableInt(obj, "Frames"),
                     GetUploadedAudio(obj),
                     GetObjectArray(obj, "Clips")
                 );
             }
-            return (null, null, null, []);
+            return (null, null, null, null, []);
         }
         catch
         {
             Logs.Warning("VideoStages: Ignoring invalid Video Stages JSON.");
-            return (null, null, null, []);
+            return (null, null, null, null, []);
         }
     }
 

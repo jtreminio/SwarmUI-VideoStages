@@ -22,6 +22,7 @@ public class VideoStagesExtension : Extension
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
     public static T2IRegisteredParam<int> RootWidth;
     public static T2IRegisteredParam<int> RootHeight;
+    public static T2IRegisteredParam<int> RootFrames;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
@@ -39,6 +40,7 @@ public class VideoStagesExtension : Extension
         RegisterParameters();
         RegisterComfyNodes();
         RootVideoStageResizer.EnsureRegistered();
+        WorkflowGenerator.AddStep(RootVideoStageTakeover.EnsureRootVideoStageModel, -4.3);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureBase(), -4.2);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureRefiner(), 5.9);
         WorkflowGenerator.AddStep(RootVideoStageTakeover.SuppressCoreRootVideoStage, 10.95);
@@ -116,6 +118,24 @@ public class VideoStagesExtension : Extension
             ViewMax: 4096,
             Step: 32,
             ViewType: ParamViewType.POT_SLIDER,
+            HideFromMetadata: false,
+            DoNotPreview: true,
+            Group: VideoStagesGroup,
+            OrderPriority: OrderPriority,
+            FeatureFlag: "comfyui"
+        ));
+        OrderPriority += 1;
+
+        RootFrames = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Video Stages Frames",
+            Description: "How many frames each VideoStages clip should generate. This lets VideoStages drive image-to-video without enabling SwarmUI's Image To Video group.",
+            Default: "0",
+            Min: 0,
+            Max: 1000,
+            ViewMin: 1,
+            ViewMax: 257,
+            Step: 1,
+            ViewType: ParamViewType.SLIDER,
             HideFromMetadata: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,
