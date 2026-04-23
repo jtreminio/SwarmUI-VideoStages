@@ -150,8 +150,11 @@ public partial class StageFlowTests
 
         WorkflowNode preprocessNode = Assert.Single(
             WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
+        JArray preprocessImageIn = WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image");
+        WorkflowNode preprocessUpstream = WorkflowAssertions.RequireNodeById(workflow, $"{preprocessImageIn[0]}");
+        Assert.Equal("ImageScale", $"{preprocessUpstream.Node["class_type"]}");
         Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
+            WorkflowAssertions.RequireConnectionInput(preprocessUpstream.Node, "image"),
             new JArray("60", 0)));
         WorkflowNode imgToVideoNode = Assert.Single(
             WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace").OrderBy(node => int.Parse(node.Id)));

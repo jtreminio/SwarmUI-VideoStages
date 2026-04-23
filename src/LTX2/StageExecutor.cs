@@ -437,12 +437,74 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             return reusedPath;
         }
 
+        JArray scaledGuidePath = EnsureClipResolutionBeforeLtxvPreprocess(guideImagePath);
+        if (!JToken.DeepEquals(scaledGuidePath, guideImagePath)
+            && TryFindReusablePreprocessOutput(scaledGuidePath, out reusedPath))
+        {
+            return reusedPath;
+        }
+
         string preprocessNode = g.CreateNode(NodeTypes.LTXVPreprocess, new JObject()
         {
-            ["image"] = guideImagePath,
+            ["image"] = scaledGuidePath,
             ["img_compression"] = ImgCompression
         });
         return new JArray(preprocessNode, 0);
+    }
+
+    /// <summary>
+    /// Root video resolution may skip inserting <see cref="NodeTypes.ImageScale"/> on the live
+    /// decode branch (see <see cref="RootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia"/>),
+    /// but LTXVPreprocess still expects clip-sized frames. Match the root clip dimensions here.
+    /// </summary>
+    private JArray EnsureClipResolutionBeforeLtxvPreprocess(JArray guideImagePath)
+    {
+        if (guideImagePath is null || guideImagePath.Count != 2)
+        {
+            return guideImagePath;
+        }
+
+        if (!RootVideoStageResizer.TryGetRootStageResolution(g, out int targetW, out int targetH))
+        {
+            targetW = Math.Max(16, g.UserInput.GetImageWidth());
+            targetH = Math.Max(16, g.UserInput.GetImageHeight());
+        }
+
+        if (TryPathEndsWithClipResolutionImageScale(g.Workflow, guideImagePath, targetW, targetH))
+        {
+            return guideImagePath;
+        }
+
+        string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
+        {
+            ["image"] = guideImagePath,
+            ["width"] = targetW,
+            ["height"] = targetH,
+            ["upscale_method"] = "lanczos",
+            ["crop"] = "center"
+        });
+        return new JArray(scaleNode, 0);
+    }
+
+    private static bool TryPathEndsWithClipResolutionImageScale(
+        JObject workflow,
+        JArray imagePath,
+        int targetW,
+        int targetH)
+    {
+        if (workflow is null
+            || imagePath is not { Count: 2 }
+            || !workflow.TryGetValue($"{imagePath[0]}", out JToken token)
+            || token is not JObject node
+            || $"{node["class_type"]}" != NodeTypes.ImageScale
+            || node["inputs"] is not JObject inputs)
+        {
+            return false;
+        }
+
+        int? width = inputs.Value<int?>("width");
+        int? height = inputs.Value<int?>("height");
+        return width == targetW && height == targetH;
     }
 
     private bool TryFindReusablePreprocessOutput(JArray guideImagePath, out JArray preprocessOutputPath)

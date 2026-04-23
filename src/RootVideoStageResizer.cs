@@ -125,7 +125,7 @@ internal static class RootVideoStageResizer
     /// editor stores Width / Height at the top level; older clip-scoped JSON
     /// is still accepted as a fallback for backward compatibility.
     /// </summary>
-    private static bool TryGetRootStageResolution(WorkflowGenerator g, out int width, out int height)
+    internal static bool TryGetRootStageResolution(WorkflowGenerator g, out int width, out int height)
     {
         width = 0;
         height = 0;

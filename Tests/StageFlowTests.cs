@@ -171,8 +171,16 @@ public partial class StageFlowTests
         }
 
         Assert.False(JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path));
-        WorkflowNode decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{actualGuidePath[0]}");
+        JArray tracePath = actualGuidePath;
+        WorkflowNode decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{tracePath[0]}");
         string decodeType = $"{decodeNode.Node["class_type"]}";
+        if (decodeType == "ImageScale")
+        {
+            tracePath = WorkflowAssertions.RequireConnectionInput(decodeNode.Node, "image");
+            decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{tracePath[0]}");
+            decodeType = $"{decodeNode.Node["class_type"]}";
+        }
+
         Assert.Contains(decodeType, new[] { "VAEDecode", "VAEDecodeTiled" });
 
         JArray latentRef = WorkflowAssertions.RequireConnectionInput(
