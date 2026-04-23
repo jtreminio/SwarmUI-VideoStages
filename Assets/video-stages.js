@@ -173,6 +173,13 @@
 
   // frontend/RenderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  var renderOptionList = (options, selected) => options.map((option) => {
+    const value = escapeAttr(option.value);
+    const label = escapeAttr(option.label);
+    const isSelected = option.value === selected ? " selected" : "";
+    const isDisabled = option.disabled ? " disabled" : "";
+    return `<option value="${value}"${isSelected}${isDisabled}>${label}</option>`;
+  }).join("");
   var clipFieldId = (clipIdx, field) => `vsclip${clipIdx}_${field}`;
   var refFieldId = (clipIdx, refIdx, field) => `vsclip${clipIdx}_ref${refIdx}_${field}`;
   var stageFieldId = (clipIdx, stageIdx, field) => `vsclip${clipIdx}_stage${stageIdx}_${field}`;
@@ -917,9 +924,30 @@
     clamp(value, min, max) {
       return Math.min(Math.max(value, min), max);
     }
+    /**
+     * Stage JSON may use camelCase (editor saves) or PascalCase (C# / metadata).
+     */
+    readRawStageProp(raw, camel, pascal) {
+      if (Object.hasOwn(raw, camel)) {
+        return raw[camel];
+      }
+      if (Object.hasOwn(raw, pascal)) {
+        return raw[pascal];
+      }
+      return void 0;
+    }
+    readRawStageString(raw, camel, pascal) {
+      const v = this.readRawStageProp(raw, camel, pascal);
+      if (v == null) {
+        return void 0;
+      }
+      const s = `${v}`.trim();
+      return s.length > 0 ? s : void 0;
+    }
     normalizeStage(rawStage, previousStage, refCount, stageIndexInClip) {
       const defaults = this.getRootDefaults();
       const fallback = this.buildDefaultStage(previousStage, refCount);
+      const rawRecord = rawStage;
       const firstStageUpscale = stageIndexInClip === 0 ? {
         upscale: defaults.upscale,
         upscaleMethod: defaults.upscaleMethodValues.includes(
@@ -928,13 +956,13 @@
       } : {
         upscale: this.clamp(
           VideoStageUtils.toNumber(
-            `${rawStage.upscale ?? fallback.upscale}`,
+            `${this.readRawStageProp(rawRecord, "upscale", "Upscale") ?? fallback.upscale}`,
             fallback.upscale
           ),
           defaults.upscaleMin,
           defaults.upscaleMax
         ),
-        upscaleMethod: `${rawStage.upscaleMethod ?? fallback.upscaleMethod}` || fallback.upscaleMethod
+        upscaleMethod: `${this.readRawStageString(rawRecord, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
       };
       const stage = {
         expanded: rawStage.expanded === void 0 ? true : !!rawStage.expanded,
@@ -1901,14 +1929,31 @@
         defaults.upscaleStep,
         stageIdx === 0
       );
-      const upscaleMethodField = stageDropdownField(
-        "upscaleMethod",
-        "Upscale Method",
-        defaults.upscaleMethodValues,
-        defaults.upscaleMethodLabels,
-        stage.upscaleMethod,
-        stageIdx === 0 || stage.upscale === 1
-      );
+      const upscaleMethodField = (() => {
+        const selectedMethod = `${stage.upscaleMethod ?? ""}`;
+        let html = injectFieldData(
+          this.buildNativeDropdownStrict(
+            stageFieldId(clipIdx, stageIdx, "upscaleMethod"),
+            "upscaleMethod",
+            "Upscale Method",
+            this.dropdownOptions(
+              defaults.upscaleMethodValues,
+              defaults.upscaleMethodLabels,
+              selectedMethod
+            ),
+            selectedMethod
+          ),
+          {
+            "data-stage-field": "upscaleMethod",
+            "data-stage-idx": String(stageIdx),
+            "data-clip-idx": String(clipIdx)
+          }
+        );
+        if (stageIdx === 0 || stage.upscale === 1) {
+          html = html.replace(/<select /, "<select disabled ");
+        }
+        return html;
+      })();
       const samplerField = stageDropdownField(
         "sampler",
         "Sampler",
@@ -1961,6 +2006,36 @@
      * preserves the selected value even when it is not in the canonical list
      * (e.g. an unknown model name carried over from a reused image).
      */
+    /**
+     * Same layout as {@link buildNativeDropdown} but uses strict option matching.
+     * SwarmUI's `makeDropdownInput` uses `==`, which can mark the wrong option as
+     * selected for some value shapes and makes the browser fall back to the first
+     * option (typically pixel-lanczos) after re-renders.
+     */
+    buildNativeDropdownStrict(id, paramId, label, options, selected) {
+      const escapedLabel = escapeAttr(label);
+      const selectedStr = `${selected ?? ""}`;
+      const optionHtml = renderOptionList(options, selectedStr);
+      const baseHtml = `
+    <div class="auto-input auto-dropdown-box auto-input-flex">
+        <label>
+            <span class="auto-input-name">${escapedLabel}</span>
+        </label>
+        <select class="auto-dropdown" id="${escapeAttr(id)}" data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}" autocomplete="off" onchange="autoSelectWidth(this)">
+${optionHtml}
+        </select>
+    </div>`;
+      return options.reduce((acc, option) => {
+        if (!option.disabled) {
+          return acc;
+        }
+        const optionValue = escapeAttr(option.value);
+        return acc.replace(
+          new RegExp(`(<option [^>]*value="${optionValue}")`),
+          "$1 disabled"
+        );
+      }, baseHtml);
+    }
     buildNativeDropdown(id, paramId, label, options, selected) {
       const values = options.map((option) => option.value);
       const labels = options.map((option) => option.label);
@@ -2269,16 +2344,25 @@
         if (stageIdx < 0 || stageIdx >= clip.stages.length) {
           return;
         }
+        const stage = clip.stages[stageIdx];
+        const stageCard = target.closest("section[data-stage-idx]");
+        const methodSelect = stageCard?.querySelector(
+          '[data-stage-field="upscaleMethod"]'
+        );
+        const preservedUpscaleMethod = stageField === "upscale" ? methodSelect?.value ?? stage.upscaleMethod : null;
         this.applyStageField(
-          clip.stages[stageIdx],
+          stage,
           stageField,
           target
         );
-        if (stageField === "upscale" && stageIdx > 0) {
-          this.syncStageUpscaleMethodDisabled(
-            target,
-            clip.stages[stageIdx].upscale
-          );
+        if (stageField === "upscale") {
+          if (preservedUpscaleMethod != null) {
+            stage.upscaleMethod = preservedUpscaleMethod;
+          }
+          this.syncStageUpscaleMethodDisabled(target, stage.upscale);
+          if (methodSelect && preservedUpscaleMethod != null) {
+            methodSelect.value = preservedUpscaleMethod;
+          }
         }
       } else {
         return;
@@ -2288,7 +2372,7 @@
         this.syncClipAudioUploadFieldVisibility(target, clip.audioSource);
       }
       const isSliderDrag = fromInputEvent && target instanceof HTMLInputElement && target.type === "range";
-      const needsRerender = !isSliderDrag && (clipField === "duration" && !fromInputEvent || stageField === "upscale");
+      const needsRerender = !isSliderDrag && clipField === "duration" && !fromInputEvent;
       if (needsRerender) {
         this.scheduleClipsRefresh();
       }
@@ -2296,6 +2380,10 @@
     syncStageUpscaleMethodDisabled(target, upscale) {
       const stageCard = target.closest("section[data-stage-idx]");
       if (!(stageCard instanceof HTMLElement)) {
+        return;
+      }
+      const stageIdx = parseInt(stageCard.dataset.stageIdx ?? "-1", 10);
+      if (stageIdx === 0) {
         return;
       }
       const upscaleMethod = stageCard.querySelector(

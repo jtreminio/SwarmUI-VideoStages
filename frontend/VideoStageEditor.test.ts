@@ -34,6 +34,7 @@ interface ParsedStage {
     steps?: number;
     cfgScale?: number;
     upscale?: number;
+    upscaleMethod?: string;
     refStrengths?: number[];
     expanded?: boolean;
     skipped?: boolean;
@@ -1313,6 +1314,60 @@ describe("VideoStageEditor", () => {
             s1Range.dispatchEvent(new Event("input", { bubbles: true }));
             expect(parseStored()[0].stages?.[1].upscale).toBe(1.25);
             expect(s1Method?.disabled).toBe(false);
+        });
+
+        it("keeps stage upscale method when upscale slider changes", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const s1Range = document.querySelector(
+                '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
+            ) as HTMLInputElement | null;
+            const s1Method = document.querySelector(
+                '[data-stage-field="upscaleMethod"][data-stage-idx="1"]',
+            ) as HTMLSelectElement | null;
+            if (!s1Range || !s1Method) {
+                throw new Error("Expected stage 1 upscale controls.");
+            }
+
+            s1Range.value = "1.25";
+            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
+            await flushReRender();
+
+            s1Method.value = "pixel-bicubic";
+            s1Method.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
+                "pixel-bicubic",
+            );
+
+            s1Range.value = "1.5";
+            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
+            s1Range.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const stored = parseStored()[0].stages?.[1];
+            expect(stored?.upscale).toBe(1.5);
+            expect(stored?.upscaleMethod).toBe("pixel-bicubic");
+
+            s1Range.value = "1";
+            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
+            s1Range.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            expect(s1Method.disabled).toBe(true);
+            expect(s1Method.value).toBe("pixel-bicubic");
+            expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
+                "pixel-bicubic",
+            );
         });
 
         it("updates stored ref strength when a stage ref slider moves", async () => {

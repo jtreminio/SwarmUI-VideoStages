@@ -4,6 +4,7 @@ import {
     injectFieldData,
     overrideSliderSteps,
     refFieldId,
+    renderOptionList,
     snapDurationToFps,
     stageFieldId,
 } from "./RenderUtils";
@@ -833,6 +834,36 @@ export class VideoStageEditor {
         return Math.min(Math.max(value, min), max);
     }
 
+    /**
+     * Stage JSON may use camelCase (editor saves) or PascalCase (C# / metadata).
+     */
+    private readRawStageProp(
+        raw: Record<string, unknown>,
+        camel: string,
+        pascal: string,
+    ): unknown {
+        if (Object.hasOwn(raw, camel)) {
+            return raw[camel];
+        }
+        if (Object.hasOwn(raw, pascal)) {
+            return raw[pascal];
+        }
+        return undefined;
+    }
+
+    private readRawStageString(
+        raw: Record<string, unknown>,
+        camel: string,
+        pascal: string,
+    ): string | undefined {
+        const v = this.readRawStageProp(raw, camel, pascal);
+        if (v == null) {
+            return undefined;
+        }
+        const s = `${v}`.trim();
+        return s.length > 0 ? s : undefined;
+    }
+
     private normalizeStage(
         rawStage: Partial<Stage> & Record<string, unknown>,
         previousStage: Stage | null,
@@ -841,6 +872,7 @@ export class VideoStageEditor {
     ): Stage {
         const defaults = this.getRootDefaults();
         const fallback = this.buildDefaultStage(previousStage, refCount);
+        const rawRecord = rawStage as Record<string, unknown>;
         const firstStageUpscale =
             stageIndexInClip === 0
                 ? {
@@ -855,14 +887,14 @@ export class VideoStageEditor {
                 : {
                       upscale: this.clamp(
                           VideoStageUtils.toNumber(
-                              `${rawStage.upscale ?? fallback.upscale}`,
+                              `${this.readRawStageProp(rawRecord, "upscale", "Upscale") ?? fallback.upscale}`,
                               fallback.upscale,
                           ),
                           defaults.upscaleMin,
                           defaults.upscaleMax,
                       ),
                       upscaleMethod:
-                          `${rawStage.upscaleMethod ?? fallback.upscaleMethod}` ||
+                          `${this.readRawStageString(rawRecord, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
                           fallback.upscaleMethod,
                   };
         const stage: Stage = {
@@ -2024,14 +2056,31 @@ export class VideoStageEditor {
             defaults.upscaleStep,
             stageIdx === 0,
         );
-        const upscaleMethodField = stageDropdownField(
-            "upscaleMethod",
-            "Upscale Method",
-            defaults.upscaleMethodValues,
-            defaults.upscaleMethodLabels,
-            stage.upscaleMethod,
-            stageIdx === 0 || stage.upscale === 1,
-        );
+        const upscaleMethodField = (() => {
+            const selectedMethod = `${stage.upscaleMethod ?? ""}`;
+            let html = injectFieldData(
+                this.buildNativeDropdownStrict(
+                    stageFieldId(clipIdx, stageIdx, "upscaleMethod"),
+                    "upscaleMethod",
+                    "Upscale Method",
+                    this.dropdownOptions(
+                        defaults.upscaleMethodValues,
+                        defaults.upscaleMethodLabels,
+                        selectedMethod,
+                    ),
+                    selectedMethod,
+                ),
+                {
+                    "data-stage-field": "upscaleMethod",
+                    "data-stage-idx": String(stageIdx),
+                    "data-clip-idx": String(clipIdx),
+                },
+            );
+            if (stageIdx === 0 || stage.upscale === 1) {
+                html = html.replace(/<select /, "<select disabled ");
+            }
+            return html;
+        })();
         const samplerField = stageDropdownField(
             "sampler",
             "Sampler",
@@ -2088,6 +2137,43 @@ export class VideoStageEditor {
      * preserves the selected value even when it is not in the canonical list
      * (e.g. an unknown model name carried over from a reused image).
      */
+    /**
+     * Same layout as {@link buildNativeDropdown} but uses strict option matching.
+     * SwarmUI's `makeDropdownInput` uses `==`, which can mark the wrong option as
+     * selected for some value shapes and makes the browser fall back to the first
+     * option (typically pixel-lanczos) after re-renders.
+     */
+    private buildNativeDropdownStrict(
+        id: string,
+        paramId: string,
+        label: string,
+        options: ImageSourceOption[],
+        selected: string,
+    ): string {
+        const escapedLabel = escapeAttr(label);
+        const selectedStr = `${selected ?? ""}`;
+        const optionHtml = renderOptionList(options, selectedStr);
+        const baseHtml = `
+    <div class="auto-input auto-dropdown-box auto-input-flex">
+        <label>
+            <span class="auto-input-name">${escapedLabel}</span>
+        </label>
+        <select class="auto-dropdown" id="${escapeAttr(id)}" data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}" autocomplete="off" onchange="autoSelectWidth(this)">
+${optionHtml}
+        </select>
+    </div>`;
+        return options.reduce((acc, option) => {
+            if (!option.disabled) {
+                return acc;
+            }
+            const optionValue = escapeAttr(option.value);
+            return acc.replace(
+                new RegExp(`(<option [^>]*value="${optionValue}")`),
+                "$1 disabled",
+            );
+        }, baseHtml);
+    }
+
     private buildNativeDropdown(
         id: string,
         paramId: string,
@@ -2460,16 +2546,28 @@ export class VideoStageEditor {
             if (stageIdx < 0 || stageIdx >= clip.stages.length) {
                 return;
             }
+            const stage = clip.stages[stageIdx];
+            const stageCard = target.closest("section[data-stage-idx]");
+            const methodSelect = stageCard?.querySelector(
+                '[data-stage-field="upscaleMethod"]',
+            ) as HTMLSelectElement | null;
+            const preservedUpscaleMethod =
+                stageField === "upscale"
+                    ? (methodSelect?.value ?? stage.upscaleMethod)
+                    : null;
             this.applyStageField(
-                clip.stages[stageIdx],
+                stage,
                 stageField,
                 target as HTMLInputElement | HTMLSelectElement,
             );
-            if (stageField === "upscale" && stageIdx > 0) {
-                this.syncStageUpscaleMethodDisabled(
-                    target,
-                    clip.stages[stageIdx].upscale,
-                );
+            if (stageField === "upscale") {
+                if (preservedUpscaleMethod != null) {
+                    stage.upscaleMethod = preservedUpscaleMethod;
+                }
+                this.syncStageUpscaleMethodDisabled(target, stage.upscale);
+                if (methodSelect && preservedUpscaleMethod != null) {
+                    methodSelect.value = preservedUpscaleMethod;
+                }
             }
         } else {
             return;
@@ -2484,9 +2582,7 @@ export class VideoStageEditor {
             target instanceof HTMLInputElement &&
             target.type === "range";
         const needsRerender =
-            !isSliderDrag &&
-            ((clipField === "duration" && !fromInputEvent) ||
-                stageField === "upscale");
+            !isSliderDrag && clipField === "duration" && !fromInputEvent;
         if (needsRerender) {
             this.scheduleClipsRefresh();
         }
@@ -2498,6 +2594,10 @@ export class VideoStageEditor {
     ): void {
         const stageCard = target.closest("section[data-stage-idx]");
         if (!(stageCard instanceof HTMLElement)) {
+            return;
+        }
+        const stageIdx = parseInt(stageCard.dataset.stageIdx ?? "-1", 10);
+        if (stageIdx === 0) {
             return;
         }
         const upscaleMethod = stageCard.querySelector(
