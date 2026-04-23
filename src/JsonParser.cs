@@ -34,14 +34,17 @@ public class JsonParser(WorkflowGenerator g)
         string ClipAudioSource = null,
         int? ClipWidth = null,
         int? ClipHeight = null,
-        int? ClipFrames = null
+        int? ClipFrames = null,
+        IReadOnlyList<RefSpec> ClipRefs = null,
+        IReadOnlyList<double> RefStrengths = null
     );
 
     public sealed record RefSpec(
         string Source,
         int Frame,
         bool FromEnd,
-        string UploadFileName
+        string UploadFileName,
+        string Data = null
     );
 
     public sealed record UploadedAudioSpec(
@@ -132,6 +135,7 @@ public class JsonParser(WorkflowGenerator g)
                     ClipWidth = effectiveRootWidth ?? clip.Width,
                     ClipHeight = effectiveRootHeight ?? clip.Height,
                     ClipFrames = clipFrames,
+                    ClipRefs = clip.Refs,
                 });
                 globalStageIndex++;
             }
@@ -285,7 +289,7 @@ public class JsonParser(WorkflowGenerator g)
         List<StageSpec> stages = [];
         for (int i = 0; i < rawStages.Count; i++)
         {
-            if (TryParseStage(rawStages[i], i, defaults, out StageSpec normalized))
+            if (TryParseStage(rawStages[i], i, defaults, clipRefCount: 0, out StageSpec normalized))
             {
                 stages.Add(normalized);
             }
@@ -324,15 +328,6 @@ public class JsonParser(WorkflowGenerator g)
 
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
         List<StageSpec> stages = [];
-        for (int i = 0; i < rawStages.Count; i++)
-        {
-            if (!TryParseStage(rawStages[i], i, defaults, out StageSpec parsed))
-            {
-                continue;
-            }
-            stages.Add(parsed);
-        }
-
         List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
         List<RefSpec> refs = [];
         for (int i = 0; i < rawRefs.Count; i++)
@@ -343,9 +338,14 @@ public class JsonParser(WorkflowGenerator g)
                 refs.Add(parsedRef);
             }
         }
-        if (refs.Count > 0)
+
+        for (int i = 0; i < rawStages.Count; i++)
         {
-            Logs.Warning($"VideoStages: Clip {clipIndex} ({name}) declares {refs.Count} reference image(s); these are recorded in metadata but are not yet wired into ComfyUI keyframe nodes by this extension.");
+            if (!TryParseStage(rawStages[i], i, defaults, refs.Count, out StageSpec parsed))
+            {
+                continue;
+            }
+            stages.Add(parsed);
         }
 
         return new ClipSpec(
@@ -384,11 +384,13 @@ public class JsonParser(WorkflowGenerator g)
             _ = bool.TryParse(rawFromEnd.Trim(), out fromEnd);
         }
         string uploadFileName = GetString(refObj, "UploadFileName");
+        string data = GetString(refObj, "Data");
         return new RefSpec(
             Source: source.Trim(),
             Frame: frame,
             FromEnd: fromEnd,
-            UploadFileName: string.IsNullOrWhiteSpace(uploadFileName) ? null : uploadFileName.Trim()
+            UploadFileName: string.IsNullOrWhiteSpace(uploadFileName) ? null : uploadFileName.Trim(),
+            Data: string.IsNullOrWhiteSpace(data) ? null : data.Trim()
         );
     }
 
@@ -516,7 +518,7 @@ public class JsonParser(WorkflowGenerator g)
         );
     }
 
-    private bool TryParseStage(JObject stage, int index, StageDefaults defaults, out StageSpec parsedStage)
+    private bool TryParseStage(JObject stage, int index, StageDefaults defaults, int clipRefCount, out StageSpec parsedStage)
     {
         parsedStage = null;
         string model = GetOptionalString(stage, "Model", defaultValue: null, index, allowEmpty: false);
@@ -535,6 +537,7 @@ public class JsonParser(WorkflowGenerator g)
         string scheduler = GetOptionalString(stage, "Scheduler", defaults.Scheduler, index, allowEmpty: false);
         string imageReference = NormalizeImageReference(GetString(stage, "ImageReference"), index);
         bool skipped = GetOptionalBool(stage, "Skipped", defaultValue: false);
+        IReadOnlyList<double> refStrengths = ParseStageRefStrengths(stage, index, clipRefCount);
 
         parsedStage = new StageSpec(
             Id: index,
@@ -548,9 +551,65 @@ public class JsonParser(WorkflowGenerator g)
             Sampler: sampler,
             Scheduler: scheduler,
             ImageReference: imageReference,
-            Skipped: skipped
+            Skipped: skipped,
+            ClipRefs: null,
+            RefStrengths: refStrengths
         );
         return true;
+    }
+
+    private static IReadOnlyList<double> ParseStageRefStrengths(JObject stage, int index, int clipRefCount)
+    {
+        if (clipRefCount <= 0)
+        {
+            return [];
+        }
+
+        double defaultStrength = VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+        List<double> strengths = [];
+        foreach (JProperty property in stage.Properties())
+        {
+            if (!string.Equals(property.Name, "refStrengths", StringComparison.OrdinalIgnoreCase)
+                || property.Value is not JArray array)
+            {
+                continue;
+            }
+
+            foreach (JToken entry in array)
+            {
+                if (entry.Type == JTokenType.Float || entry.Type == JTokenType.Integer)
+                {
+                    strengths.Add(ClampRefStrength(entry.Value<double>()));
+                }
+                else if (entry.Type == JTokenType.String
+                    && double.TryParse($"{entry}".Trim(), out double parsed))
+                {
+                    strengths.Add(ClampRefStrength(parsed));
+                }
+            }
+            break;
+        }
+
+        while (strengths.Count < clipRefCount)
+        {
+            strengths.Add(defaultStrength);
+        }
+
+        if (strengths.Count > clipRefCount)
+        {
+            strengths.RemoveRange(clipRefCount, strengths.Count - clipRefCount);
+        }
+
+        return strengths;
+    }
+
+    private static double ClampRefStrength(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+        {
+            return VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+        }
+        return Clamp(value, 0.01, 1.0);
     }
 
     private string NormalizeImageReference(string rawValue, int index)

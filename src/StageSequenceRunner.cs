@@ -32,7 +32,7 @@ public class StageSequenceRunner(
                 int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
                 usedSectionIds.Add(sectionId);
                 PrepareStageOverrides(stage, sectionId);
-                _singleStageRunner.RunStage(stage, sectionId, guideRef);
+                _singleStageRunner.RunStage(stage, sectionId, guideRef, store);
                 CaptureReference(StageRefStore.StageKind.Stage, stage.Id);
 
                 if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false) && stage.Id < stages.Count - 1)

@@ -8,6 +8,9 @@ using VideoStages;
 
 namespace VideoStages.LTX2;
 
+/// <summary>Resolved clip-level reference image for one VideoStages stage.</summary>
+internal sealed record ResolvedClipRef(WGNodeData Image, JsonParser.RefSpec Spec, double Strength);
+
 /// <summary>
 /// Local LTXV2 stage execution for VideoStages. This is intentionally isolated so the
 /// rest of the extension can stay on the native CreateImageToVideo path.
@@ -28,7 +31,8 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         WGNodeData guideMedia,
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
-        PostVideoChain postVideoChain)
+        PostVideoChain postVideoChain,
+        IReadOnlyList<ResolvedClipRef> clipRefs = null)
     {
         postVideoChain?.AttachSourceAudio(sourceMedia);
 
@@ -41,7 +45,15 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             }
 
             PrepareModelAndConditioning(genInfo, sourceMedia);
-            PrepareConditioning(genInfo, stage, sourceMedia, guideMedia, skipGuideReinjection, applySourceVideoLatent, postVideoChain);
+            PrepareConditioning(
+                genInfo,
+                stage,
+                sourceMedia,
+                guideMedia,
+                skipGuideReinjection,
+                applySourceVideoLatent,
+                postVideoChain,
+                clipRefs ?? Array.Empty<ResolvedClipRef>());
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
 
             foreach (Action<WorkflowGenerator.ImageToVideoGenInfo> handler in WorkflowGenerator.AltImageToVideoPostHandlers)
@@ -118,7 +130,8 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         WGNodeData guideMedia,
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
-        PostVideoChain postVideoChain)
+        PostVideoChain postVideoChain,
+        IReadOnlyList<ResolvedClipRef> clipRefs)
     {
         WGNodeData stageLatent = BuildStageLatent(genInfo, stage, sourceMedia, postVideoChain);
         if (stageLatent is null)
@@ -135,6 +148,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         genInfo.DefaultSampler = DefaultVideoSampler;
         genInfo.DefaultScheduler = DefaultVideoScheduler;
         stageLatent = ApplyStageUpscaleIfNeeded(stage, genInfo, stageLatent, sourceMedia);
+        stageLatent = ApplyClipReferenceInplaceMerges(genInfo, stageLatent, clipRefs);
 
         if (skipGuideReinjection)
         {
@@ -164,6 +178,79 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         });
         genInfo.PosCond = [conditioningNode, 0];
         genInfo.NegCond = [conditioningNode, 1];
+
+        ApplyClipReferenceAddGuides(genInfo, clipRefs);
+    }
+
+    private static bool UseLtxvInplaceForRef(JsonParser.RefSpec spec)
+    {
+        return !spec.FromEnd && spec.Frame == 1;
+    }
+
+    private static int ComputeLtxvAddGuideFrameIndex(JsonParser.RefSpec spec)
+    {
+        if (spec.FromEnd)
+        {
+            return -Math.Max(1, spec.Frame);
+        }
+
+        return Math.Max(0, spec.Frame - 1);
+    }
+
+    private WGNodeData ApplyClipReferenceInplaceMerges(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData stageLatent,
+        IReadOnlyList<ResolvedClipRef> clipRefs)
+    {
+        foreach (ResolvedClipRef clipRef in clipRefs)
+        {
+            if (!UseLtxvInplaceForRef(clipRef.Spec))
+            {
+                continue;
+            }
+
+            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path);
+            string imgToVideoNode = g.CreateNode(NodeTypes.LTXVImgToVideoInplace, new JObject()
+            {
+                ["vae"] = genInfo.Vae.Path,
+                ["image"] = preprocessed,
+                ["latent"] = stageLatent.Path,
+                ["strength"] = clipRef.Strength,
+                ["bypass"] = false
+            });
+            stageLatent = stageLatent.WithPath([imgToVideoNode, 0], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
+        }
+
+        return stageLatent;
+    }
+
+    private void ApplyClipReferenceAddGuides(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        IReadOnlyList<ResolvedClipRef> clipRefs)
+    {
+        foreach (ResolvedClipRef clipRef in clipRefs)
+        {
+            if (UseLtxvInplaceForRef(clipRef.Spec))
+            {
+                continue;
+            }
+
+            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path);
+            int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
+            string addGuideNode = g.CreateNode(NodeTypes.LTXVAddGuide, new JObject()
+            {
+                ["positive"] = genInfo.PosCond,
+                ["negative"] = genInfo.NegCond,
+                ["vae"] = genInfo.Vae.Path,
+                ["latent"] = g.CurrentMedia.Path,
+                ["image"] = preprocessed,
+                ["frame_idx"] = frameIdx,
+                ["strength"] = clipRef.Strength
+            });
+            genInfo.PosCond = [addGuideNode, 0];
+            genInfo.NegCond = [addGuideNode, 1];
+            g.CurrentMedia = g.CurrentMedia.WithPath([addGuideNode, 2], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
+        }
     }
 
     private WGNodeData ApplyStageUpscaleIfNeeded(

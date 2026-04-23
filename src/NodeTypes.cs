@@ -22,6 +22,7 @@ internal static class NodeTypes
     public const string LTXVAudioVAEDecode = "LTXVAudioVAEDecode";
     public const string LTXVPreprocess = "LTXVPreprocess";
     public const string LTXVImgToVideoInplace = "LTXVImgToVideoInplace";
+    public const string LTXVAddGuide = "LTXVAddGuide";
     public const string LTXVCropGuides = "LTXVCropGuides";
     public const string LTXVLatentUpsampler = "LTXVLatentUpsampler";
     public const string LTXVConditioning = "LTXVConditioning";

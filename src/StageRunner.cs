@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.LTX2;
@@ -21,7 +24,11 @@ internal class StageRunner(WorkflowGenerator g)
     /// <summary>
     /// Runs one image-to-video stage using the current generator state as input.
     /// </summary>
-    public void RunStage(JsonParser.StageSpec stage, int sectionId, StageRefStore.StageRef guideReference)
+    public void RunStage(
+        JsonParser.StageSpec stage,
+        int sectionId,
+        StageRefStore.StageRef guideReference,
+        StageRefStore refStore)
     {
         if (g.CurrentMedia is null)
         {
@@ -43,11 +50,135 @@ internal class StageRunner(WorkflowGenerator g)
 
         if (useLocalLtxv2Path)
         {
-            _stageExecutor.RunStage(stage, genInfo, sourceMedia, guideMedia, skipGuideReinjection, generationPlan.ApplySourceVideoLatent, postVideoChain);
+            List<ResolvedClipRef> clipRefs = ResolveStageClipRefs(stage, refStore, postVideoChain, sourceMedia);
+            _stageExecutor.RunStage(
+                stage,
+                genInfo,
+                sourceMedia,
+                guideMedia,
+                skipGuideReinjection,
+                generationPlan.ApplySourceVideoLatent,
+                postVideoChain,
+                clipRefs);
             return;
         }
 
         RunNativeStage(generationPlan, sourceMedia, guideMedia, priorOutputPath);
+    }
+
+    private List<ResolvedClipRef> ResolveStageClipRefs(
+        JsonParser.StageSpec stage,
+        StageRefStore refStore,
+        PostVideoChain postVideoChain,
+        WGNodeData sourceMedia)
+    {
+        IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs ?? [];
+        IReadOnlyList<double> strengths = stage.RefStrengths ?? [];
+        List<ResolvedClipRef> resolved = [];
+        for (int i = 0; i < refs.Count; i++)
+        {
+            JsonParser.RefSpec spec = refs[i];
+            double strength = i < strengths.Count
+                ? strengths[i]
+                : VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+            WGNodeData raw = ResolveClipRefSourceMedia(spec, refStore, postVideoChain);
+            if (raw is null)
+            {
+                Logs.Warning($"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; skipping.");
+                continue;
+            }
+
+            WGNodeData prepared = PrepareGuideMedia(raw, sourceMedia, scaleToSourceSize: false);
+            resolved.Add(new ResolvedClipRef(prepared, spec, strength));
+        }
+
+        return resolved;
+    }
+
+    private WGNodeData ResolveClipRefSourceMedia(
+        JsonParser.RefSpec spec,
+        StageRefStore refStore,
+        PostVideoChain postVideoChain)
+    {
+        if (string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
+        {
+            return MaterializeUploadedRefImage(spec);
+        }
+
+        StageRefStore.StageRef stageRef = null;
+        string src = spec.Source?.Trim() ?? "";
+        if (src.Equals("Base", StringComparison.OrdinalIgnoreCase))
+        {
+            stageRef = refStore.Base;
+        }
+        else if (src.Equals("Refiner", StringComparison.OrdinalIgnoreCase))
+        {
+            stageRef = refStore.Refiner;
+        }
+        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(src, out int editStage))
+        {
+            _ = Base2EditPublishedStageRefs.TryGetStageRef(g, editStage, out stageRef);
+        }
+
+        if (stageRef is null)
+        {
+            if (!string.IsNullOrWhiteSpace(src))
+            {
+                Logs.Warning($"VideoStages: Unsupported or unresolved clip reference source '{spec.Source}'.");
+            }
+            return null;
+        }
+
+        return ResolveGuideMedia(stageRef, postVideoChain);
+    }
+
+    private WGNodeData MaterializeUploadedRefImage(JsonParser.RefSpec spec)
+    {
+        string material = spec.Data?.Trim();
+        if (string.IsNullOrWhiteSpace(material))
+        {
+            material = spec.UploadFileName?.Trim();
+        }
+        if (string.IsNullOrWhiteSpace(material))
+        {
+            Logs.Warning("VideoStages: Upload clip reference is missing inline data and a file name.");
+            return null;
+        }
+
+        if (material.StartsWith("inputs/", StringComparison.OrdinalIgnoreCase)
+            || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
+            || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
+        {
+            if (g.UserInput?.SourceSession is null)
+            {
+                Logs.Warning("VideoStages: reference image uses a server-side path but no session is available; cannot load the file.");
+                return null;
+            }
+
+            try
+            {
+                material = T2IParamTypes.FilePathToDataString(
+                    g.UserInput.SourceSession,
+                    material,
+                    "for VideoStages reference image");
+            }
+            catch (SwarmReadableErrorException ex)
+            {
+                Logs.Warning($"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
+                return null;
+            }
+        }
+
+        try
+        {
+            ImageFile img = ImageFile.FromDataString(material);
+            return g.LoadImage(img, "${videostagesrefimage}", false);
+        }
+        catch
+        {
+            Logs.Warning("VideoStages: Ignoring invalid clip reference image payload.");
+            return null;
+        }
     }
 
     private void RunNativeStage(

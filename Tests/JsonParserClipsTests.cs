@@ -497,4 +497,47 @@ public class JsonParserClipsTests
         Assert.Equal("Upload", clip.Refs[0].Source);
         Assert.Equal("ref.png", clip.Refs[0].UploadFileName);
     }
+
+    [Fact]
+    public void ParseStages_FlattenedStagesIncludeClipRefsAndNormalizedRefStrengths()
+    {
+        JObject stage = MakeStage("model-a");
+        stage["refStrengths"] = new JArray(0.55, 0.66);
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                "Clip0",
+                stages: [stage],
+                refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 9)])));
+
+        JsonParser parser = BuildParser(json);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        JsonParser.StageSpec flattened = Assert.Single(stages);
+        Assert.Equal(2, flattened.ClipRefs.Count);
+        Assert.Equal(2, flattened.RefStrengths.Count);
+        Assert.Equal(0.55, flattened.RefStrengths[0]);
+        Assert.Equal(0.66, flattened.RefStrengths[1]);
+    }
+
+    [Fact]
+    public void ParseStages_PadsMissingRefStrengthsToMatchReferenceCount()
+    {
+        JObject stage = MakeStage("model-a");
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                "Clip0",
+                stages: [stage],
+                refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)])));
+
+        JsonParser parser = BuildParser(json);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        JsonParser.StageSpec flattened = Assert.Single(stages);
+        Assert.Equal(2, flattened.RefStrengths.Count);
+        Assert.All(
+            flattened.RefStrengths,
+            strength => Assert.Equal(VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength, strength));
+    }
 }
