@@ -292,6 +292,23 @@
     opacity: 0.7;
 }
 
+/* Stage upscale slider (disabled on first stage, or whenever inputs are disabled) */
+#videostages_stage_editor
+    .vs-card-body
+    .auto-slider-number[data-stage-field="upscale"]:disabled,
+#videostages_stage_editor
+    .vs-card-body
+    .auto-slider-range[data-stage-field="upscale"]:disabled {
+    opacity: 0.45;
+    color: var(--text-soft);
+}
+
+#videostages_stage_editor .vs-card-body .auto-slider-box:has(
+    [data-stage-field="upscale"]:disabled
+) {
+    opacity: 0.7;
+}
+
 /* ------------------------------------------------------------------
  * Small action buttons in headers (collapse / skip / delete)
  * ------------------------------------------------------------------ */

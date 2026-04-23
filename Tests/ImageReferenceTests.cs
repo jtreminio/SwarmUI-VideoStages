@@ -141,6 +141,39 @@ public class ImageReferenceTests
     }
 
     [Fact]
+    public void First_stage_json_upscale_fields_are_normalized_to_defaults_when_non_trivial()
+    {
+        JObject stage = MakeStage("UnitTest_Video.safetensors");
+        stage["Upscale"] = 2.5;
+        stage["UpscaleMethod"] = "model-unit-test-upscaler";
+
+        List<JsonParser.StageSpec> stages = ParseStages(new JArray(stage).ToString());
+
+        Assert.Single(stages);
+        Assert.Equal(1.0, stages[0].Upscale);
+        Assert.Equal("pixel-lanczos", stages[0].UpscaleMethod);
+    }
+
+    [Fact]
+    public void Second_stage_json_preserves_upscale_fields()
+    {
+        JObject first = MakeStage("UnitTest_Video.safetensors");
+        first["Upscale"] = 2.5;
+        first["UpscaleMethod"] = "model-unit-test-upscaler";
+        JObject second = MakeStage("UnitTest_Video.safetensors");
+        second["Upscale"] = 2.0;
+        second["UpscaleMethod"] = "pixel-bicubic";
+
+        List<JsonParser.StageSpec> stages = ParseStages(new JArray(first, second).ToString());
+
+        Assert.Equal(2, stages.Count);
+        Assert.Equal(1.0, stages[0].Upscale);
+        Assert.Equal("pixel-lanczos", stages[0].UpscaleMethod);
+        Assert.Equal(2.0, stages[1].Upscale);
+        Assert.Equal("pixel-bicubic", stages[1].UpscaleMethod);
+    }
+
+    [Fact]
     public void Missing_stage_defaults_do_not_inherit_base_or_refiner_values()
     {
         using SwarmUiTestContext testContext = new();

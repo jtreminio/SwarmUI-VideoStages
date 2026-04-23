@@ -13,7 +13,7 @@ public class VideoStagesExtension : Extension
     public const double DefaultLTXVImgToVideoInplaceStrength = 0.8;
     public const int RootDimensionMin = 256;
     public const int RootDimensionMax = 16384;
-    public const string RootDimensionsDescription = "These are the starting dimensions for each clip. You can upscale later in any stage.";
+    public const string RootDimensionsDescription = "These are the starting dimensions for each clip. The first stage in each clip cannot apply per-stage upscale; use later stages or the main workflow for scaling if needed.";
 
     public const string AudioSourceNative = "Native";
     public const string AudioSourceUpload = "Upload";

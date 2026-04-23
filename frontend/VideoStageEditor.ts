@@ -816,9 +816,34 @@ export class VideoStageEditor {
         rawStage: Partial<Stage> & Record<string, unknown>,
         previousStage: Stage | null,
         refCount: number,
+        stageIndexInClip: number,
     ): Stage {
         const defaults = this.getRootDefaults();
         const fallback = this.buildDefaultStage(previousStage, refCount);
+        const firstStageUpscale =
+            stageIndexInClip === 0
+                ? {
+                      upscale: defaults.upscale,
+                      upscaleMethod: defaults.upscaleMethodValues.includes(
+                          "pixel-lanczos",
+                      )
+                          ? "pixel-lanczos"
+                          : (defaults.upscaleMethodValues[0] ??
+                            "pixel-lanczos"),
+                  }
+                : {
+                      upscale: this.clamp(
+                          VideoStageUtils.toNumber(
+                              `${rawStage.upscale ?? fallback.upscale}`,
+                              fallback.upscale,
+                          ),
+                          defaults.upscaleMin,
+                          defaults.upscaleMax,
+                      ),
+                      upscaleMethod:
+                          `${rawStage.upscaleMethod ?? fallback.upscaleMethod}` ||
+                          fallback.upscaleMethod,
+                  };
         const stage: Stage = {
             expanded:
                 rawStage.expanded === undefined ? true : !!rawStage.expanded,
@@ -835,17 +860,8 @@ export class VideoStageEditor {
                 rawStage.refStrengths,
                 refCount,
             ),
-            upscale: this.clamp(
-                VideoStageUtils.toNumber(
-                    `${rawStage.upscale ?? fallback.upscale}`,
-                    fallback.upscale,
-                ),
-                defaults.upscaleMin,
-                defaults.upscaleMax,
-            ),
-            upscaleMethod:
-                `${rawStage.upscaleMethod ?? fallback.upscaleMethod}` ||
-                fallback.upscaleMethod,
+            upscale: firstStageUpscale.upscale,
+            upscaleMethod: firstStageUpscale.upscaleMethod,
             model: `${rawStage.model ?? fallback.model}` || fallback.model,
             vae: `${rawStage.vae ?? fallback.vae ?? ""}`,
             steps: Math.max(
@@ -880,7 +896,10 @@ export class VideoStageEditor {
             !defaults.upscaleMethodValues.includes(stage.upscaleMethod) &&
             defaults.upscaleMethodValues.length > 0
         ) {
-            stage.upscaleMethod = stage.upscaleMethod || fallback.upscaleMethod;
+            stage.upscaleMethod =
+                stageIndexInClip === 0
+                    ? (defaults.upscaleMethodValues[0] ?? "pixel-lanczos")
+                    : stage.upscaleMethod || fallback.upscaleMethod;
         }
         return stage;
     }
@@ -941,6 +960,7 @@ export class VideoStageEditor {
                         Record<string, unknown>,
                     previousStage,
                     refs.length,
+                    i,
                 ),
             );
         }
@@ -1876,8 +1896,9 @@ export class VideoStageEditor {
             min: number,
             max: number,
             step: number,
-        ): string =>
-            injectFieldData(
+            disabled = false,
+        ): string => {
+            let html = injectFieldData(
                 makeSliderInput(
                     "",
                     stageFieldId(clipIdx, stageIdx, field),
@@ -1900,6 +1921,18 @@ export class VideoStageEditor {
                     "data-clip-idx": String(clipIdx),
                 },
             );
+            if (disabled) {
+                html = html.replace(
+                    /<input class="auto-slider-number nogrow"/g,
+                    '<input class="auto-slider-number nogrow" disabled',
+                );
+                html = html.replace(
+                    /<input class="auto-slider-range nogrow"/g,
+                    '<input class="auto-slider-range nogrow" disabled',
+                );
+            }
+            return html;
+        };
         const stageDropdownField = (
             field: string,
             label: string,
@@ -1966,6 +1999,7 @@ export class VideoStageEditor {
             defaults.upscaleMin,
             defaults.upscaleMax,
             defaults.upscaleStep,
+            stageIdx === 0,
         );
         const upscaleMethodField = stageDropdownField(
             "upscaleMethod",
@@ -1973,7 +2007,7 @@ export class VideoStageEditor {
             defaults.upscaleMethodValues,
             defaults.upscaleMethodLabels,
             stage.upscaleMethod,
-            stage.upscale === 1,
+            stageIdx === 0 || stage.upscale === 1,
         );
         const samplerField = stageDropdownField(
             "sampler",
@@ -2407,7 +2441,7 @@ export class VideoStageEditor {
                 stageField,
                 target as HTMLInputElement | HTMLSelectElement,
             );
-            if (stageField === "upscale") {
+            if (stageField === "upscale" && stageIdx > 0) {
                 this.syncStageUpscaleMethodDisabled(
                     target,
                     clip.stages[stageIdx].upscale,
@@ -2432,6 +2466,23 @@ export class VideoStageEditor {
         if (needsRerender) {
             this.scheduleClipsRefresh();
         }
+    }
+
+    private syncStageUpscaleMethodDisabled(
+        target: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+        upscale: number,
+    ): void {
+        const stageCard = target.closest("section[data-stage-idx]");
+        if (!(stageCard instanceof HTMLElement)) {
+            return;
+        }
+        const upscaleMethod = stageCard.querySelector(
+            '[data-stage-field="upscaleMethod"]',
+        ) as HTMLSelectElement | null;
+        if (!upscaleMethod) {
+            return;
+        }
+        upscaleMethod.disabled = upscale === 1;
     }
 
     private syncRefUploadFieldVisibility(
@@ -2466,23 +2517,6 @@ export class VideoStageEditor {
             this.refUploadCache.delete(this.refUploadKey(clipIdx, refIdx));
             clearMediaFileInput(uploadInput);
         }
-    }
-
-    private syncStageUpscaleMethodDisabled(
-        target: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
-        upscale: number,
-    ): void {
-        const stageCard = target.closest("section[data-stage-idx]");
-        if (!(stageCard instanceof HTMLElement)) {
-            return;
-        }
-        const upscaleMethod = stageCard.querySelector(
-            '[data-stage-field="upscaleMethod"]',
-        ) as HTMLSelectElement | null;
-        if (!upscaleMethod) {
-            return;
-        }
-        upscaleMethod.disabled = upscale === 1;
     }
 
     private applyRefField(

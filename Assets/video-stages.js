@@ -899,9 +899,25 @@
     clamp(value, min, max) {
       return Math.min(Math.max(value, min), max);
     }
-    normalizeStage(rawStage, previousStage, refCount) {
+    normalizeStage(rawStage, previousStage, refCount, stageIndexInClip) {
       const defaults = this.getRootDefaults();
       const fallback = this.buildDefaultStage(previousStage, refCount);
+      const firstStageUpscale = stageIndexInClip === 0 ? {
+        upscale: defaults.upscale,
+        upscaleMethod: defaults.upscaleMethodValues.includes(
+          "pixel-lanczos"
+        ) ? "pixel-lanczos" : defaults.upscaleMethodValues[0] ?? "pixel-lanczos"
+      } : {
+        upscale: this.clamp(
+          VideoStageUtils.toNumber(
+            `${rawStage.upscale ?? fallback.upscale}`,
+            fallback.upscale
+          ),
+          defaults.upscaleMin,
+          defaults.upscaleMax
+        ),
+        upscaleMethod: `${rawStage.upscaleMethod ?? fallback.upscaleMethod}` || fallback.upscaleMethod
+      };
       const stage = {
         expanded: rawStage.expanded === void 0 ? true : !!rawStage.expanded,
         skipped: !!rawStage.skipped,
@@ -917,15 +933,8 @@
           rawStage.refStrengths,
           refCount
         ),
-        upscale: this.clamp(
-          VideoStageUtils.toNumber(
-            `${rawStage.upscale ?? fallback.upscale}`,
-            fallback.upscale
-          ),
-          defaults.upscaleMin,
-          defaults.upscaleMax
-        ),
-        upscaleMethod: `${rawStage.upscaleMethod ?? fallback.upscaleMethod}` || fallback.upscaleMethod,
+        upscale: firstStageUpscale.upscale,
+        upscaleMethod: firstStageUpscale.upscaleMethod,
         model: `${rawStage.model ?? fallback.model}` || fallback.model,
         vae: `${rawStage.vae ?? fallback.vae ?? ""}`,
         steps: Math.max(
@@ -953,7 +962,7 @@
         scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler
       };
       if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
-        stage.upscaleMethod = stage.upscaleMethod || fallback.upscaleMethod;
+        stage.upscaleMethod = stageIndexInClip === 0 ? defaults.upscaleMethodValues[0] ?? "pixel-lanczos" : stage.upscaleMethod || fallback.upscaleMethod;
       }
       return stage;
     }
@@ -1000,7 +1009,8 @@
           this.normalizeStage(
             stagesRaw[i] ?? {},
             previousStage,
-            refs.length
+            refs.length,
+            i
           )
         );
       }
@@ -1775,29 +1785,42 @@
         return `<section class="${cardClasses.join(" ")}" data-stage-idx="${stageIdx}">${head}</section>`;
       }
       const defaults = this.getRootDefaults();
-      const stageSliderField = (field, label, value, min, max, step) => injectFieldData(
-        makeSliderInput(
-          "",
-          stageFieldId(clipIdx, stageIdx, field),
-          field,
-          label,
-          "",
-          String(value),
-          min,
-          max,
-          min,
-          max,
-          step,
-          false,
-          false,
-          false
-        ),
-        {
-          "data-stage-field": field,
-          "data-stage-idx": String(stageIdx),
-          "data-clip-idx": String(clipIdx)
+      const stageSliderField = (field, label, value, min, max, step, disabled = false) => {
+        let html = injectFieldData(
+          makeSliderInput(
+            "",
+            stageFieldId(clipIdx, stageIdx, field),
+            field,
+            label,
+            "",
+            String(value),
+            min,
+            max,
+            min,
+            max,
+            step,
+            false,
+            false,
+            false
+          ),
+          {
+            "data-stage-field": field,
+            "data-stage-idx": String(stageIdx),
+            "data-clip-idx": String(clipIdx)
+          }
+        );
+        if (disabled) {
+          html = html.replace(
+            /<input class="auto-slider-number nogrow"/g,
+            '<input class="auto-slider-number nogrow" disabled'
+          );
+          html = html.replace(
+            /<input class="auto-slider-range nogrow"/g,
+            '<input class="auto-slider-range nogrow" disabled'
+          );
         }
-      );
+        return html;
+      };
       const stageDropdownField = (field, label, values, labels, selected, disabled = false) => {
         let html = injectFieldData(
           this.buildNativeDropdown(
@@ -1855,7 +1878,8 @@
         stage.upscale,
         defaults.upscaleMin,
         defaults.upscaleMax,
-        defaults.upscaleStep
+        defaults.upscaleStep,
+        stageIdx === 0
       );
       const upscaleMethodField = stageDropdownField(
         "upscaleMethod",
@@ -1863,7 +1887,7 @@
         defaults.upscaleMethodValues,
         defaults.upscaleMethodLabels,
         stage.upscaleMethod,
-        stage.upscale === 1
+        stageIdx === 0 || stage.upscale === 1
       );
       const samplerField = stageDropdownField(
         "sampler",
@@ -2229,7 +2253,7 @@
           stageField,
           target
         );
-        if (stageField === "upscale") {
+        if (stageField === "upscale" && stageIdx > 0) {
           this.syncStageUpscaleMethodDisabled(
             target,
             clip.stages[stageIdx].upscale
@@ -2247,6 +2271,19 @@
       if (needsRerender) {
         this.scheduleClipsRefresh();
       }
+    }
+    syncStageUpscaleMethodDisabled(target, upscale) {
+      const stageCard = target.closest("section[data-stage-idx]");
+      if (!(stageCard instanceof HTMLElement)) {
+        return;
+      }
+      const upscaleMethod = stageCard.querySelector(
+        '[data-stage-field="upscaleMethod"]'
+      );
+      if (!upscaleMethod) {
+        return;
+      }
+      upscaleMethod.disabled = upscale === 1;
     }
     syncRefUploadFieldVisibility(target, source) {
       const refCard = target.closest(".vs-ref-card");
@@ -2276,19 +2313,6 @@
         this.refUploadCache.delete(this.refUploadKey(clipIdx, refIdx));
         clearMediaFileInput(uploadInput);
       }
-    }
-    syncStageUpscaleMethodDisabled(target, upscale) {
-      const stageCard = target.closest("section[data-stage-idx]");
-      if (!(stageCard instanceof HTMLElement)) {
-        return;
-      }
-      const upscaleMethod = stageCard.querySelector(
-        '[data-stage-field="upscaleMethod"]'
-      );
-      if (!upscaleMethod) {
-        return;
-      }
-      upscaleMethod.disabled = upscale === 1;
     }
     applyRefField(ref, field, target) {
       if (field === "source") {

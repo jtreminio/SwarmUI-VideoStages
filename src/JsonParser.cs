@@ -530,6 +530,22 @@ public class JsonParser(WorkflowGenerator g)
         double control = GetOptionalDouble(stage, "Control", defaults.Control, index);
         double upscale = GetOptionalDouble(stage, "Upscale", defaults.Upscale, index);
         string upscaleMethod = GetOptionalString(stage, "UpscaleMethod", defaults.UpscaleMethod, index, allowEmpty: false);
+        if (index == 0)
+        {
+            bool hasUpscaleKey = JsonHasOwnProperty(stage, "Upscale");
+            bool hasUpscaleMethodKey = JsonHasOwnProperty(stage, "UpscaleMethod");
+            if (ShouldWarnFirstStageUpscaleIgnored(hasUpscaleKey, hasUpscaleMethodKey, upscale, upscaleMethod))
+            {
+                Logs.Warning(
+                    $"VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', which are ignored for that stage only. Proceeding with upscale {DefaultUpscale} and method '{DefaultUpscaleMethod}' for stage 0.");
+            }
+            upscale = DefaultUpscale;
+            upscaleMethod = DefaultUpscaleMethod;
+        }
+        else
+        {
+            upscale = Math.Max(0.25, upscale);
+        }
         string vae = NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, index, allowEmpty: true));
         int steps = GetOptionalInt(stage, "Steps", defaults.Steps, index);
         double cfgScale = GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index);
@@ -542,7 +558,7 @@ public class JsonParser(WorkflowGenerator g)
         parsedStage = new StageSpec(
             Id: index,
             Control: Clamp(control, 0, 1),
-            Upscale: Math.Max(0.25, upscale),
+            Upscale: upscale,
             UpscaleMethod: upscaleMethod,
             Model: model,
             Vae: vae,
@@ -767,5 +783,42 @@ public class JsonParser(WorkflowGenerator g)
             }
         }
         return null;
+    }
+
+    private static bool JsonHasOwnProperty(JObject obj, string key)
+    {
+        foreach (JProperty property in obj.Properties())
+        {
+            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool ShouldWarnFirstStageUpscaleIgnored(
+        bool hasUpscaleKey,
+        bool hasUpscaleMethodKey,
+        double upscale,
+        string upscaleMethod)
+    {
+        if (!hasUpscaleKey && !hasUpscaleMethodKey)
+        {
+            return false;
+        }
+        if (Math.Abs(upscale - DefaultUpscale) > 1e-9)
+        {
+            return true;
+        }
+        if (hasUpscaleMethodKey
+            && !string.Equals(
+                (upscaleMethod ?? "").Trim(),
+                DefaultUpscaleMethod,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return false;
     }
 }

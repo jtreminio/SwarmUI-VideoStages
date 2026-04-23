@@ -159,7 +159,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Root_stage_resolution_reuses_existing_upscale_before_first_native_video_stage_batch_extract()
+    public void Root_stage_resolution_ignores_stage_upscale_json_before_first_native_video_stage_batch_extract()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -183,19 +183,10 @@ public partial class StageFlowTests
                     WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                     new JArray("12", 0)));
         WorkflowNode imageFromBatch = Assert.Single(WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"));
-        WorkflowNode stageScaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
-            node =>
-                $"{node.Node["inputs"]?["upscale_method"]}" == "bicubic"
-                && !JToken.DeepEquals(
-                    WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                    new JArray("12", 0)));
         Assert.Equal(960, rootScaleNode.Node["inputs"]?.Value<int>("width"));
         Assert.Equal(544, rootScaleNode.Node["inputs"]?.Value<int>("height"));
         Assert.Equal("lanczos", $"{rootScaleNode.Node["inputs"]?["upscale_method"]}");
         Assert.Equal("center", $"{rootScaleNode.Node["inputs"]?["crop"]}");
-        Assert.Equal("bicubic", $"{stageScaleNode.Node["inputs"]?["upscale_method"]}");
-        Assert.Equal("disabled", $"{stageScaleNode.Node["inputs"]?["crop"]}");
         Assert.True(OutputTracesBackToSource(
             workflow,
             WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),

@@ -1178,7 +1178,7 @@ describe("VideoStageEditor", () => {
             ).not.toBeNull();
         });
 
-        it("renders control, steps, cfg scale, and upscale as slider fields", () => {
+        it("renders control, steps, cfg scale, and upscale; disables stage 0 upscale only", async () => {
             const editor = new VideoStageEditor();
             editor.init();
 
@@ -1191,18 +1191,35 @@ describe("VideoStageEditor", () => {
             const cfgScaleSlider = document.querySelector(
                 '[data-stage-field="cfgScale"][type="range"]',
             ) as HTMLInputElement | null;
-            const upscaleSlider = document.querySelector(
-                '[data-stage-field="upscale"][type="range"]',
+            const upscale0 = document.querySelector(
+                '[data-stage-field="upscale"][type="range"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
 
             expect(controlSlider).not.toBeNull();
             expect(stepsSlider).not.toBeNull();
             expect(cfgScaleSlider).not.toBeNull();
-            expect(upscaleSlider).not.toBeNull();
+            expect(upscale0).not.toBeNull();
+            expect(upscale0?.disabled).toBe(true);
             expect(controlSlider?.min).toBe("0.05");
             expect(stepsSlider?.max).toBe("50");
             expect(cfgScaleSlider?.max).toBe("10");
-            expect(upscaleSlider?.max).toBe("4");
+            expect(upscale0?.max).toBe("4");
+            const upscale0n = document.querySelector(
+                '[data-stage-field="upscale"][type="number"][data-stage-idx="0"]',
+            ) as HTMLInputElement | null;
+            expect(upscale0n?.disabled).toBe(true);
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const upscale1 = document.querySelector(
+                '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
+            ) as HTMLInputElement | null;
+            expect(upscale1?.disabled).toBe(false);
         });
 
         it("renders stage headers as Stage n labels with zero-based indexes", async () => {
@@ -1248,32 +1265,47 @@ describe("VideoStageEditor", () => {
             ).toBeNull();
         });
 
-        it("only disables Upscale Method when upscale equals 1", () => {
+        it("disables first-stage upscale controls; stage 1 follows upscale vs method rules", async () => {
             const editor = new VideoStageEditor();
             editor.init();
 
-            const upscaleMethod = document.querySelector(
-                '[data-stage-field="upscaleMethod"]',
+            const s0Method = document.querySelector(
+                '[data-stage-field="upscaleMethod"][data-stage-idx="0"]',
             ) as HTMLSelectElement | null;
-            const upscaleSlider = document.querySelector(
-                '[data-stage-field="upscale"][type="range"]',
+            const s0Range = document.querySelector(
+                '[data-stage-field="upscale"][type="range"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(upscaleMethod).not.toBeNull();
-            expect(upscaleSlider).not.toBeNull();
-            expect(upscaleMethod?.disabled).toBe(true);
-            if (!upscaleMethod || !upscaleSlider) {
-                throw new Error("Expected stage upscale controls to exist.");
-            }
-
-            upscaleSlider.value = "1.25";
-            upscaleSlider.dispatchEvent(new Event("input", { bubbles: true }));
-            expect(parseStored()[0].stages?.[0].upscale).toBe(1.25);
-            expect(upscaleMethod.disabled).toBe(false);
-
-            upscaleSlider.value = "1";
-            upscaleSlider.dispatchEvent(new Event("input", { bubbles: true }));
+            const s0Number = document.querySelector(
+                '[data-stage-field="upscale"][type="number"][data-stage-idx="0"]',
+            ) as HTMLInputElement | null;
+            expect(s0Method?.disabled).toBe(true);
+            expect(s0Range?.disabled).toBe(true);
+            expect(s0Number?.disabled).toBe(true);
             expect(parseStored()[0].stages?.[0].upscale).toBe(1);
-            expect(upscaleMethod.disabled).toBe(true);
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const s1Method = document.querySelector(
+                '[data-stage-field="upscaleMethod"][data-stage-idx="1"]',
+            ) as HTMLSelectElement | null;
+            const s1Range = document.querySelector(
+                '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
+            ) as HTMLInputElement | null;
+            expect(s1Range?.disabled).toBe(false);
+            expect(s1Method?.disabled).toBe(true);
+
+            if (!s1Range) {
+                throw new Error("Expected stage 1 upscale range.");
+            }
+            s1Range.value = "1.25";
+            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
+            expect(parseStored()[0].stages?.[1].upscale).toBe(1.25);
+            expect(s1Method?.disabled).toBe(false);
         });
 
         it("updates stored ref strength when a stage ref slider moves", async () => {
