@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
@@ -20,6 +18,7 @@ public class AudioInjectionTests
     private const string LtxvAudioVaeDecode = "LTXVAudioVAEDecode";
     private const string SwarmSaveAnimationWs = "SwarmSaveAnimationWS";
     private const string SwarmAudioLengthToFrames = "SwarmAudioLengthToFrames";
+    private const string SwarmEnsureAudio = "SwarmEnsureAudio";
     private const string LtxvAudioVaeEncode = "LTXVAudioVAEEncode";
     private const string SetLatentNoiseMask = "SetLatentNoiseMask";
 
@@ -392,12 +391,24 @@ public class AudioInjectionTests
 
         WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, "SwarmLoadAudioB64");
         WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
+        JArray lengthAudioIn = WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio");
+        WorkflowNode lengthEnsure = WorkflowAssertions.RequireNodeById(workflow, $"{lengthAudioIn[0]}");
+        Assert.Equal(SwarmEnsureAudio, $"{lengthEnsure.Node["class_type"]}");
+        JArray ensureAudioIn = WorkflowAssertions.RequireConnectionInput(lengthEnsure.Node, "audio");
+        Assert.Equal(uploadedAudioNode.Id, $"{ensureAudioIn[0]}");
+        Assert.Equal(0, ensureAudioIn[1].Value<int>());
+        Assert.NotEqual(uploadedAudioNode.Id, $"{lengthAudioIn[0]}");
+        Assert.NotEqual("300", $"{lengthAudioIn[0]}");
+
+        WorkflowNode audioEncode = Assert.Single(WorkflowUtils.NodesOfType(workflow, LtxvAudioVaeEncode));
+        WorkflowNode setMask = Assert.Single(WorkflowUtils.NodesOfType(workflow, SetLatentNoiseMask));
         Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio"),
-            new JArray(uploadedAudioNode.Id, 0)));
-        Assert.False(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio"),
-            new JArray("300", 0)));
+            WorkflowAssertions.RequireConnectionInput(setMask.Node, "samples"),
+            new JArray(audioEncode.Id, 0)));
+        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowUtils.FindInputConnections(workflow, new JArray(setMask.Id, 0));
+        Assert.Contains(maskConsumers, connection =>
+            connection.InputName == "audio_latent"
+            && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == LtxvConcatAvLatent);
     }
 
     [Fact]
@@ -467,6 +478,38 @@ public class AudioInjectionTests
 
         IReadOnlyList<WorkflowNode> uploadNodes = WorkflowUtils.NodesOfType(workflow, "SwarmLoadAudioB64");
         Assert.Equal(2, uploadNodes.Count);
+    }
+
+    [Fact]
+    public void Save_audio_stage_uses_clip_uploaded_audio_when_switching_from_native_to_upload_clip()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = MakeMultiClipRootConfig(
+            MakeClipConfig(
+                VideoStagesExtension.AudioSourceNative,
+                MakeStage(models.VideoModel.Name)),
+            MakeClipConfigWithUpload(
+                MakeUploadedAudio(data: "data:audio/wav;base64,QkJC", fileName: "second.wav"),
+                MakeStage(models.VideoModel.Name))
+        ).ToString();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            stagesJson);
+
+        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+
+        WorkflowNode uploadedAudioNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "SwarmLoadAudioB64"));
+        IReadOnlyList<WorkflowInputConnection> uploadConsumers = WorkflowUtils.FindInputConnections(
+            workflow,
+            new JArray(uploadedAudioNode.Id, 0));
+        Assert.Contains(uploadConsumers, connection =>
+            connection.InputName == "audio"
+            && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == SwarmEnsureAudio);
     }
 
     [Fact]

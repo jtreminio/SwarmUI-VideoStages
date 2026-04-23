@@ -15,6 +15,7 @@ namespace VideoStages.LTX2;
 internal sealed class PostVideoChain
 {
     private const string OriginalAudioLatentNodeHelperKey = "videostages.original-audio-latent";
+    private const string UploadedAudioLoadClassType = "SwarmLoadAudioB64";
     private readonly WorkflowGenerator g;
     public readonly WGNodeData CurrentOutputMedia;
     public readonly JArray AvLatentPath;
@@ -191,6 +192,11 @@ internal sealed class PostVideoChain
             return;
         }
 
+        if (IsExplicitUploadAudio(media.AttachedAudio))
+        {
+            return;
+        }
+
         WGNodeData sourceAudio = CreateSourceAudioReference();
         if (sourceAudio is null)
         {
@@ -322,6 +328,22 @@ internal sealed class PostVideoChain
 
     private WGNodeData CreateSourceAudioReference()
     {
+        if (IsExplicitUploadAudio(CurrentOutputMedia?.AttachedAudio))
+        {
+            if (TryGetOriginalAudioLatentPath(out JArray uploadAudioLatentPath)
+                && CurrentOutputMedia.AttachedAudio?.Path is JArray explicitUploadPath
+                && explicitUploadPath.Count == 2
+                && IsAudioLatentDerivedFromUpload(uploadAudioLatentPath, $"{explicitUploadPath[0]}"))
+            {
+                return new WGNodeData(
+                    uploadAudioLatentPath,
+                    g,
+                    WGNodeData.DT_LATENT_AUDIO,
+                    ResolveAudioCompat());
+            }
+            return CloneAudioReference(CurrentOutputMedia.AttachedAudio);
+        }
+
         if (TryGetOriginalAudioLatentPath(out JArray originalAudioLatentPath))
         {
             return new WGNodeData(
@@ -335,17 +357,7 @@ internal sealed class PostVideoChain
             && attachedAudioPath.Count == 2
             && CurrentOutputMedia.AttachedAudio.DataType == WGNodeData.DT_LATENT_AUDIO)
         {
-            return new WGNodeData(
-                new JArray(attachedAudioPath[0], attachedAudioPath[1]),
-                g,
-                CurrentOutputMedia.AttachedAudio.DataType,
-                CurrentOutputMedia.AttachedAudio.Compat)
-            {
-                Width = CurrentOutputMedia.AttachedAudio.Width,
-                Height = CurrentOutputMedia.AttachedAudio.Height,
-                Frames = CurrentOutputMedia.AttachedAudio.Frames,
-                FPS = CurrentOutputMedia.AttachedAudio.FPS
-            };
+            return CloneAudioReference(CurrentOutputMedia.AttachedAudio);
         }
 
         if (AudioLatentPath is null || AudioLatentPath.Count != 2)
@@ -358,6 +370,86 @@ internal sealed class PostVideoChain
             g,
             WGNodeData.DT_LATENT_AUDIO,
             ResolveAudioCompat());
+    }
+
+    private bool IsAudioLatentDerivedFromUpload(JArray audioLatentPath, string uploadNodeId)
+    {
+        if (audioLatentPath is null
+            || audioLatentPath.Count != 2
+            || string.IsNullOrWhiteSpace(uploadNodeId))
+        {
+            return false;
+        }
+
+        Queue<string> pending = new();
+        HashSet<string> visited = [];
+        pending.Enqueue($"{audioLatentPath[0]}");
+        while (pending.Count > 0)
+        {
+            string nodeId = pending.Dequeue();
+            if (!visited.Add(nodeId))
+            {
+                continue;
+            }
+
+            if (string.Equals(nodeId, uploadNodeId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!g.Workflow.TryGetValue(nodeId, out JToken token)
+                || token is not JObject node
+                || node["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+
+            foreach (JProperty input in inputs.Properties())
+            {
+                if (input.Value is not JArray inputPath || inputPath.Count != 2)
+                {
+                    continue;
+                }
+
+                string upstreamId = $"{inputPath[0]}";
+                if (!string.IsNullOrWhiteSpace(upstreamId))
+                {
+                    pending.Enqueue(upstreamId);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private WGNodeData CloneAudioReference(WGNodeData audio)
+    {
+        return new WGNodeData(
+            new JArray(audio.Path[0], audio.Path[1]),
+            g,
+            audio.DataType,
+            audio.Compat)
+        {
+            Width = audio.Width,
+            Height = audio.Height,
+            Frames = audio.Frames,
+            FPS = audio.FPS
+        };
+    }
+
+    private bool IsExplicitUploadAudio(WGNodeData audio)
+    {
+        if (audio?.DataType != WGNodeData.DT_AUDIO
+            || audio.Path is not JArray audioPath
+            || audioPath.Count != 2)
+        {
+            return false;
+        }
+
+        string sourceNodeId = $"{audioPath[0]}";
+        return g.Workflow.TryGetValue(sourceNodeId, out JToken sourceToken)
+            && sourceToken is JObject sourceNode
+            && $"{sourceNode["class_type"]}" == UploadedAudioLoadClassType;
     }
 
     private static void RememberOriginalAudioLatent(WorkflowGenerator generator, JArray audioLatentPath)

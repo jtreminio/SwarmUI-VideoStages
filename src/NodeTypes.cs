@@ -25,6 +25,8 @@ internal static class NodeTypes
     public const string LTXVCropGuides = "LTXVCropGuides";
     public const string LTXVLatentUpsampler = "LTXVLatentUpsampler";
     public const string LTXVConditioning = "LTXVConditioning";
+    public const string SwarmLoadAudioB64 = "SwarmLoadAudioB64";
+    public const string SwarmEnsureAudio = "SwarmEnsureAudio";
     public const string AudioLengthToFrames = "SwarmAudioLengthToFrames";
     public const string SolidMask = "SolidMask";
     public const string SetLatentNoiseMask = "SetLatentNoiseMask";

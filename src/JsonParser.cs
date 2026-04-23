@@ -215,16 +215,42 @@ public class JsonParser(WorkflowGenerator g)
         return perClip ?? ParseUploadedAudio();
     }
 
-    private static AudioFile MaterializeUploadedAudio(UploadedAudioSpec spec)
+    private AudioFile MaterializeUploadedAudio(UploadedAudioSpec spec)
     {
         if (spec is null || string.IsNullOrWhiteSpace(spec.Data))
         {
             return null;
         }
 
+        string trimmed = spec.Data.Trim();
+        string material = trimmed;
+        if (trimmed.StartsWith("inputs/")
+            || trimmed.StartsWith("raw/")
+            || trimmed.StartsWith("Starred/"))
+        {
+            if (g.UserInput?.SourceSession is null)
+            {
+                Logs.Warning("VideoStages: uploaded audio uses a server-side path (inputs/, raw/, or Starred/) but no session is available; cannot load the file.");
+                return null;
+            }
+
+            try
+            {
+                material = T2IParamTypes.FilePathToDataString(
+                    g.UserInput.SourceSession,
+                    trimmed,
+                    "for VideoStages uploaded audio");
+            }
+            catch (SwarmReadableErrorException ex)
+            {
+                Logs.Warning($"VideoStages: Could not resolve uploaded audio path '{trimmed}': {ex.Message}");
+                return null;
+            }
+        }
+
         try
         {
-            AudioFile audio = AudioFile.FromDataString(spec.Data.Trim());
+            AudioFile audio = AudioFile.FromDataString(material);
             audio.SourceFilePath = string.IsNullOrWhiteSpace(spec.FileName)
                 ? null
                 : spec.FileName.Trim();

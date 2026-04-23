@@ -103,7 +103,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         Dictionary<int, AudioStageDetector.Detection> detections = [];
         foreach (JsonParser.ClipSpec clip in clips)
         {
-            if (!string.Equals(clip.AudioSource, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal))
+            if (!string.Equals(clip.AudioSource, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -129,7 +129,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         AudioStageDetector.Detection detectedAudio,
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios)
     {
-        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal))
+        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
         {
             return uploadedAudios.TryGetValue(clipId, out AudioStageDetector.Detection detection) ? detection : null;
         }

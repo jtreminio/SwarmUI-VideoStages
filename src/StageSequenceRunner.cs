@@ -70,7 +70,7 @@ public class StageSequenceRunner(
         {
             return null;
         }
-        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal))
+        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
         {
             if (uploadedAudios is null)
             {

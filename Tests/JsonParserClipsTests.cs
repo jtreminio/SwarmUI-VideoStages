@@ -250,6 +250,31 @@ public class JsonParserClipsTests
     }
 
     [Fact]
+    public void ParseUploadedAudioForClip_InputPath_WithoutSession_ReturnsNull()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                "First Clip",
+                stages: [MakeStage("model-a")],
+                audioSource: VideoStagesExtension.AudioSourceUpload,
+                uploadedAudio: new JObject
+                {
+                    ["Data"] = "inputs/_comfy1/the-harlem-shake_part02.wav",
+                    ["FileName"] = "the-harlem-shake_part02.wav",
+                })));
+        JsonParser parser = BuildParser(json);
+
+        JsonParser.ClipSpec clip = parser.ParseClips().Single();
+
+        Assert.NotNull(clip.UploadedAudio);
+        Assert.Equal("inputs/_comfy1/the-harlem-shake_part02.wav", clip.UploadedAudio.Data);
+
+        AudioFile audio = parser.ParseUploadedAudioForClip(clip);
+
+        Assert.Null(audio);
+    }
+
+    [Fact]
     public void ParseUploadedAudioForClip_FallsBackToRootLevelUpload_WhenClipHasNone()
     {
         string json = JsonConvert.SerializeObject(MakeRootConfig(
