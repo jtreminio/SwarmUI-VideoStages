@@ -63,7 +63,6 @@ public class JsonParserClipsTests
     {
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
         T2IParamInput input = new(null);
-        input.Set(VideoStagesExtension.EnableVideoStages, true);
         input.Set(VideoStagesExtension.VideoStagesJson, json);
         return input;
     }

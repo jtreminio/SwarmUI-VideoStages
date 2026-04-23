@@ -55,7 +55,6 @@ public class AudioInjectionTests
         T2IModel baseModel,
         T2IModel videoModel,
         string stagesJson,
-        bool enableVideoStages = true,
         string audioSource = VideoStagesExtension.AudioSourceNative)
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
@@ -67,7 +66,6 @@ public class AudioInjectionTests
         input.Set(T2IParamTypes.Model, baseModel);
         input.Set(T2IParamTypes.RefinerModel, baseModel);
         input.Set(VideoStagesExtension.AudioSource, audioSource);
-        input.Set(VideoStagesExtension.EnableVideoStages, enableVideoStages);
         input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
         input.Set(T2IParamTypes.VideoModel, videoModel);
         input.Set(T2IParamTypes.VideoFrames, 16);
@@ -271,44 +269,6 @@ public class AudioInjectionTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
-
-        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
-
-        WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio"),
-            new JArray("300", 0)));
-        WorkflowNode emptyVideo = WorkflowAssertions.RequireNodeById(workflow, "108");
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(emptyVideo.Node, "length"),
-            new JArray(lengthToFrames.Id, 1)));
-
-        WorkflowNode setMask = WorkflowAssertions.RequireNodeOfType(workflow, SetLatentNoiseMask);
-        WorkflowNode rootConcat = WorkflowAssertions.RequireNodeById(workflow, "113");
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(rootConcat.Node, "audio_latent"),
-            new JArray(setMask.Id, 0)));
-
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, LtxvEmptyLatentAudio));
-
-        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio"),
-            new JArray("203", 0)));
-
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
-    }
-
-    [Fact]
-    public void Save_audio_stage_injects_audio_into_native_ltx_video_chain_without_enable_flag()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]");
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
@@ -351,7 +311,6 @@ public class AudioInjectionTests
             models.BaseModel,
             models.VideoModel,
             "[]",
-            enableVideoStages: false,
             audioSource: "");
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));

@@ -14,6 +14,8 @@ const flushReRender = async (): Promise<void> => {
     await Promise.resolve();
 };
 
+const OPEN_GROUP_GLYPH = "\u2B9F";
+
 interface ParsedRef {
     source: string;
     frame: number;
@@ -46,12 +48,6 @@ const setupParameterPanel = (): void => {
     const groupContent = document.createElement("div");
     groupContent.id = "input_group_content_videostages";
     document.body.appendChild(groupContent);
-
-    const enableToggle = document.createElement("input");
-    enableToggle.type = "checkbox";
-    enableToggle.id = "input_enableadditionalvideostages";
-    enableToggle.checked = true;
-    document.body.appendChild(enableToggle);
 
     const stagesInput = document.createElement("input");
     stagesInput.type = "text";
@@ -248,6 +244,10 @@ describe("VideoStageEditor", () => {
             const clips = parseStored();
             expect(clips[0].expanded).toBe(true);
             expect(clips[0].skipped).toBe(true);
+            const refreshedSkipBtn = document.querySelector(
+                '[data-clip-action="skip"]',
+            ) as HTMLButtonElement | null;
+            expect(refreshedSkipBtn?.className).toContain("vs-btn-skip-active");
         });
 
         it("toggles skip state for a clip when more than one exists", async () => {
@@ -327,6 +327,199 @@ describe("VideoStageEditor", () => {
             expect(values).toContain("edit0");
             expect(values).toContain("edit1");
         });
+
+        it("renders reference headers as Ref Image n labels", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const refTitle = document.querySelector(
+                ".vs-ref-card .vs-card-title",
+            ) as HTMLElement | null;
+            const refHead = document.querySelector(
+                ".vs-ref-card .vs-card-head",
+            ) as HTMLElement | null;
+            const refCollapseButton = document.querySelector(
+                '[data-ref-action="toggle-collapse"]',
+            ) as HTMLButtonElement | null;
+            expect(refTitle?.textContent?.trim()).toBe("Ref Image 0");
+            expect(refHead?.firstElementChild).toBe(refCollapseButton);
+            expect(refCollapseButton?.textContent?.trim()).toBe(
+                OPEN_GROUP_GLYPH,
+            );
+        });
+
+        it("reveals the upload field when the reference source changes to Upload", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const sourceSelect = document.querySelector(
+                '[data-ref-field="source"]',
+            ) as HTMLSelectElement | null;
+            const uploadField = document.querySelector(
+                ".vs-ref-upload-field",
+            ) as HTMLElement | null;
+            const uploadInput = document.querySelector(
+                '.vs-ref-upload-field .auto-file[data-ref-field="uploadFileName"]',
+            ) as HTMLInputElement | null;
+            expect(sourceSelect).not.toBeNull();
+            expect(uploadField).not.toBeNull();
+            expect(uploadInput).not.toBeNull();
+            expect(uploadField?.style.display).toBe("none");
+            if (!sourceSelect) {
+                throw new Error("Expected ref source select to exist.");
+            }
+
+            sourceSelect.value = "Upload";
+            sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(uploadField?.style.display).toBe("");
+            expect(uploadInput?.type).toBe("file");
+
+            const refreshedUploadField = document.querySelector(
+                ".vs-ref-upload-field",
+            ) as HTMLElement | null;
+            expect(parseStored()[0].refs?.[0].source).toBe("Upload");
+            expect(refreshedUploadField?.style.display).toBe("");
+        });
+
+        it("stores the selected upload image filename for a ref", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const sourceSelect = document.querySelector(
+                '[data-ref-field="source"]',
+            ) as HTMLSelectElement | null;
+            if (!sourceSelect) {
+                throw new Error("Expected ref source select to exist.");
+            }
+            sourceSelect.value = "Upload";
+            sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const uploadInput = document.querySelector(
+                '.vs-ref-upload-field .auto-file[data-ref-field="uploadFileName"]',
+            ) as HTMLInputElement | null;
+            expect(uploadInput).not.toBeNull();
+            if (!uploadInput) {
+                throw new Error("Expected ref upload input to exist.");
+            }
+
+            const file = new File(["image"], "ref.png", { type: "image/png" });
+            Object.defineProperty(uploadInput, "files", {
+                configurable: true,
+                value: [file],
+            });
+            uploadInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].refs?.[0].uploadFileName).toBe("ref.png");
+        });
+
+        it("still reveals Upload when the editor DOM is rebuilt", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const originalEditor = document.getElementById(
+                "videostages_stage_editor",
+            ) as HTMLElement | null;
+            expect(originalEditor).not.toBeNull();
+            if (!originalEditor?.parentElement) {
+                throw new Error("Expected original editor to be mounted.");
+            }
+
+            const rebuiltEditor = originalEditor.cloneNode(true) as HTMLElement;
+            originalEditor.parentElement.replaceChild(
+                rebuiltEditor,
+                originalEditor,
+            );
+
+            const sourceSelect = rebuiltEditor.querySelector(
+                '[data-ref-field="source"]',
+            ) as HTMLSelectElement | null;
+            const uploadField = rebuiltEditor.querySelector(
+                ".vs-ref-upload-field",
+            ) as HTMLElement | null;
+            expect(sourceSelect).not.toBeNull();
+            expect(uploadField?.style.display).toBe("none");
+            if (!sourceSelect) {
+                throw new Error("Expected rebuilt ref source select to exist.");
+            }
+
+            sourceSelect.value = "Upload";
+            sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].refs?.[0].source).toBe("Upload");
+            expect(uploadField?.style.display).toBe("");
+        });
+
+        it("refreshes the reference frame slider max when root frames change", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const frameNumber = document.querySelector(
+                '[data-ref-field="frame"][type="number"]',
+            ) as HTMLInputElement | null;
+            const frameRange = document.querySelector(
+                '[data-ref-field="frame"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(frameNumber?.max).toBe("48");
+            expect(frameRange?.max).toBe("48");
+
+            const rootFramesInput = document.getElementById(
+                "input_videoframes",
+            ) as HTMLInputElement | null;
+            expect(rootFramesInput).not.toBeNull();
+            if (!rootFramesInput) {
+                throw new Error("Expected root video frames input to exist.");
+            }
+
+            rootFramesInput.value = "96";
+            rootFramesInput.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            await flushReRender();
+
+            const refreshedFrameNumber = document.querySelector(
+                '[data-ref-field="frame"][type="number"]',
+            ) as HTMLInputElement | null;
+            const refreshedFrameRange = document.querySelector(
+                '[data-ref-field="frame"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(refreshedFrameNumber?.max).toBe("96");
+            expect(refreshedFrameRange?.max).toBe("96");
+        });
     });
 
     describe("stage actions", () => {
@@ -342,6 +535,104 @@ describe("VideoStageEditor", () => {
 
             const clips = parseStored();
             expect(clips[0].stages).toHaveLength(2);
+        });
+
+        it("renders control, steps, cfg scale, and upscale as slider fields", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const controlSlider = document.querySelector(
+                '[data-stage-field="control"][type="range"]',
+            ) as HTMLInputElement | null;
+            const stepsSlider = document.querySelector(
+                '[data-stage-field="steps"][type="range"]',
+            ) as HTMLInputElement | null;
+            const cfgScaleSlider = document.querySelector(
+                '[data-stage-field="cfgScale"][type="range"]',
+            ) as HTMLInputElement | null;
+            const upscaleSlider = document.querySelector(
+                '[data-stage-field="upscale"][type="range"]',
+            ) as HTMLInputElement | null;
+
+            expect(controlSlider).not.toBeNull();
+            expect(stepsSlider).not.toBeNull();
+            expect(cfgScaleSlider).not.toBeNull();
+            expect(upscaleSlider).not.toBeNull();
+            expect(controlSlider?.min).toBe("0.05");
+            expect(stepsSlider?.max).toBe("50");
+            expect(cfgScaleSlider?.max).toBe("10");
+            expect(upscaleSlider?.max).toBe("4");
+        });
+
+        it("renders stage headers as Stage n labels with zero-based indexes", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const firstHead = document.querySelector(
+                '.vs-card[data-stage-idx="0"] .vs-card-head',
+            ) as HTMLElement | null;
+            const firstCollapseButton = document.querySelector(
+                '[data-stage-action="toggle-collapse"][data-stage-idx="0"]',
+            ) as HTMLButtonElement | null;
+            const firstTitle = document.querySelector(
+                '.vs-card[data-stage-idx="0"] .vs-card-title',
+            ) as HTMLElement | null;
+            expect(firstHead?.firstElementChild).toBe(firstCollapseButton);
+            expect(firstCollapseButton?.textContent?.trim()).toBe(
+                OPEN_GROUP_GLYPH,
+            );
+            expect(firstTitle?.textContent?.trim()).toBe("Stage 0");
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const secondTitle = document.querySelector(
+                '.vs-card[data-stage-idx="1"] .vs-card-title',
+            ) as HTMLElement | null;
+            const secondCollapseButton = document.querySelector(
+                '[data-stage-action="toggle-collapse"][data-stage-idx="1"]',
+            ) as HTMLButtonElement | null;
+            expect(secondTitle?.textContent?.trim()).toBe("Stage 1");
+            expect(secondCollapseButton?.textContent?.trim()).toBe(
+                OPEN_GROUP_GLYPH,
+            );
+            expect(
+                document.querySelector(
+                    '.vs-card[data-stage-idx="0"] .vs-card-summary',
+                ),
+            ).toBeNull();
+        });
+
+        it("only disables Upscale Method when upscale equals 1", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const upscaleMethod = document.querySelector(
+                '[data-stage-field="upscaleMethod"]',
+            ) as HTMLSelectElement | null;
+            const upscaleSlider = document.querySelector(
+                '[data-stage-field="upscale"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(upscaleMethod).not.toBeNull();
+            expect(upscaleSlider).not.toBeNull();
+            expect(upscaleMethod?.disabled).toBe(true);
+            if (!upscaleMethod || !upscaleSlider) {
+                throw new Error("Expected stage upscale controls to exist.");
+            }
+
+            upscaleSlider.value = "1.25";
+            upscaleSlider.dispatchEvent(new Event("input", { bubbles: true }));
+            expect(parseStored()[0].stages?.[0].upscale).toBe(1.25);
+            expect(upscaleMethod.disabled).toBe(false);
+
+            upscaleSlider.value = "1";
+            upscaleSlider.dispatchEvent(new Event("input", { bubbles: true }));
+            expect(parseStored()[0].stages?.[0].upscale).toBe(1);
+            expect(upscaleMethod.disabled).toBe(true);
         });
 
         it("toggles skip state for a stage", async () => {
@@ -363,6 +654,10 @@ describe("VideoStageEditor", () => {
 
             const clips = parseStored();
             expect(clips[0].stages?.[0].skipped).toBe(true);
+            const refreshedSkipBtn = document.querySelector(
+                '[data-stage-action="skip"]',
+            ) as HTMLButtonElement | null;
+            expect(refreshedSkipBtn?.className).toContain("vs-btn-skip-active");
         });
 
         it("removes a stage when more than one exists", async () => {

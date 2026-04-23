@@ -91,16 +91,11 @@ export class VideoStages {
                 return null;
             }
 
-            const enabled =
-                metadata.enableadditionalvideostages ??
-                metadata.enablevideostages;
-            if (`${enabled}` === "true") {
-                return true;
-            }
-
-            // The hidden `videostages` JSON is always seeded locally, so it is not
-            // trustworthy evidence that the reused image truly opted into VideoStages.
-            return false;
+            return (
+                metadata.videostages !== undefined ||
+                metadata.vsaudiosource !== undefined ||
+                metadata.vsaudioupload !== undefined
+            );
         } catch (error) {
             console.log(
                 "VideoStages: failed to inspect reused image metadata",

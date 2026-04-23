@@ -98,12 +98,6 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         return GetRootVideoModel() is not null;
     }
 
-    private bool HasNativeRootVideoModel()
-    {
-        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel)
-            && imageToVideoModel is not null;
-    }
-
     private T2IModel GetRootVideoModel()
     {
         if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
@@ -120,37 +114,14 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         return null;
     }
 
-    private bool IsVideoStagesEnabledForVideo()
-    {
-        if (!g.UserInput.Get(VideoStagesExtension.EnableVideoStages, false))
-        {
-            return false;
-        }
-
-        return HasRootVideoModel();
-    }
-
     private bool ShouldCaptureRootReferences()
     {
-        return HasConfiguredStages() || NeedsRootGuideReferenceCapture();
-    }
-
-    private bool NeedsRootGuideReferenceCapture()
-    {
-        if (!HasNativeRootVideoModel()
-            || !g.UserInput.TryGet(VideoStagesExtension.RootGuideImageReference, out string guideReference))
-        {
-            return false;
-        }
-
-        string compact = ImageReferenceSyntax.Compact(guideReference);
-        return string.Equals(compact, "Base", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(compact, "Refiner", StringComparison.OrdinalIgnoreCase);
+        return HasConfiguredStages();
     }
 
     private bool HasConfiguredStages()
     {
-        if (!IsVideoStagesEnabledForVideo())
+        if (!HasRootVideoModel())
         {
             return false;
         }
@@ -164,7 +135,12 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             return false;
         }
 
-        return json.Trim() != "[]";
+        if (json.Trim() == "[]")
+        {
+            return false;
+        }
+
+        return new JsonParser(g).ParseStages().Count > 0;
     }
 
     private void EnsureFinalStageOutputSaved()

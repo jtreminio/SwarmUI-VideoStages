@@ -61,6 +61,17 @@ declare function makeDropdownInput(
     alt_names?: string[] | null,
     reparse_alt_names?: boolean,
 ): string;
+declare function makeImageInput(
+    featureid: string,
+    id: string,
+    paramid: string,
+    name: string,
+    description: string,
+    toggles?: boolean,
+    popover_button?: boolean,
+    can_upload?: boolean,
+    show_input_browser_button?: boolean,
+): string;
 declare function makeTextInput(
     featureid: string,
     id: string,
@@ -88,6 +99,15 @@ declare function makeCheckboxInput(
 declare function autoNumberWidth(elem: HTMLElement): void;
 declare function autoSelectWidth(elem: HTMLElement): void;
 declare function enableSlidersIn(elem: HTMLElement): void;
+declare function clearMediaFileInput(elem: HTMLInputElement): void;
+declare function setMediaFileDirect(
+    elem: HTMLInputElement,
+    src: string,
+    type: string,
+    name: string,
+    longName?: string | null,
+    callback?: (() => void) | null,
+): void;
 declare let copy_current_image_params: (() => void) & {
     __videoStagesWrapped?: boolean;
 };

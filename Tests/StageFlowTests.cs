@@ -51,7 +51,7 @@ public partial class StageFlowTests
             ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
         };
 
-    private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, bool enableVideoStages = true, string prompt = "unit test prompt")
+    private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, string prompt = "unit test prompt")
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
@@ -61,7 +61,6 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, baseModel);
         input.Set(T2IParamTypes.RefinerModel, baseModel);
-        input.Set(VideoStagesExtension.EnableVideoStages, enableVideoStages);
         input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
         return input;
     }
@@ -70,10 +69,9 @@ public partial class StageFlowTests
         T2IModel baseModel,
         T2IModel videoModel,
         string stagesJson,
-        bool enableVideoStages = true,
         string prompt = "unit test prompt")
     {
-        T2IParamInput input = BuildInput(baseModel, stagesJson, enableVideoStages: enableVideoStages, prompt: prompt);
+        T2IParamInput input = BuildInput(baseModel, stagesJson, prompt: prompt);
         input.Set(T2IParamTypes.VideoModel, videoModel);
         input.Set(T2IParamTypes.VideoFrames, 16);
         input.Set(T2IParamTypes.VideoFPS, 24);
@@ -88,7 +86,6 @@ public partial class StageFlowTests
     private static T2IParamInput BuildTextToVideoInput(
         T2IModel videoModel,
         string stagesJson,
-        bool enableVideoStages = true,
         string prompt = "unit test prompt")
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
@@ -98,7 +95,6 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.Width, 512);
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, videoModel);
-        input.Set(VideoStagesExtension.EnableVideoStages, enableVideoStages);
         input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
         input.Set(T2IParamTypes.Text2VideoFrames, 25);
         if (Program.T2IModelSets.TryGetValue("Clip", out T2IModelHandler clipHandler)
@@ -380,11 +376,6 @@ public partial class StageFlowTests
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowSteps() =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(int editStageIndex) =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRefinerImageStep(), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 10.9), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>

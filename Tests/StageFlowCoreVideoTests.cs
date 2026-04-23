@@ -23,7 +23,7 @@ public partial class StageFlowTests
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     [Fact]
-    public void Enabled_video_stages_without_root_video_model_is_backend_noop()
+    public void Configured_video_stages_without_root_video_model_is_backend_noop()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -34,7 +34,7 @@ public partial class StageFlowTests
             MakeStage(models.VideoModel.Name, "Generated")
         ).ToString();
 
-        T2IParamInput input = BuildInput(models.BaseModel, stagesJson, enableVideoStages: true);
+        T2IParamInput input = BuildInput(models.BaseModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNoopSteps());
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
@@ -207,82 +207,6 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Root_stage_resolution_still_applies_to_native_video_when_additional_stages_are_disabled()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        // Clip-shaped JSON still drives root resize even when the runner is disabled.
-        string stagesJson = new JArray(
-            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
-        ).ToString();
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, enableVideoStages: false);
-        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-
-        IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
-        WorkflowNode scaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray("12", 0)));
-        WorkflowNode imageFromBatch = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray(scaleNode.Id, 0)));
-
-        Assert.Single(samplers);
-        Assert.Equal(768, scaleNode.Node["inputs"]?.Value<int>("width"));
-        Assert.Equal(448, scaleNode.Node["inputs"]?.Value<int>("height"));
-        Assert.Equal("lanczos", $"{scaleNode.Node["inputs"]?["upscale_method"]}");
-        Assert.Equal("center", $"{scaleNode.Node["inputs"]?["crop"]}");
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
-            new JArray(scaleNode.Id, 0)));
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-    }
-
-    [Fact]
-    public void Root_stage_resolution_updates_native_ltxv2_audio_noise_mask_dimensions_when_additional_stages_are_disabled()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        string stagesJson = new JArray(
-            MakeClip(width: 384, height: 640, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
-        ).ToString();
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, enableVideoStages: false);
-        input.Set(T2IParamTypes.Width, 768);
-        input.Set(T2IParamTypes.Height, 1280);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowStepsWithRawAudio());
-
-        WorkflowNode setMaskNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "SetLatentNoiseMask"),
-            node => WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 0)).Any(connection =>
-                connection.InputName == "audio_latent"
-                && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == "LTXVConcatAVLatent"));
-        WorkflowNode concatNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "audio_latent"),
-                new JArray(setMaskNode.Id, 0)));
-        WorkflowNode solidMaskNode = WorkflowAssertions.RequireNodeById(
-            workflow,
-            $"{WorkflowAssertions.RequireConnectionInput(setMaskNode.Node, "mask")[0]}");
-
-        Assert.Equal("SolidMask", $"{solidMaskNode.Node["class_type"]}");
-        Assert.Equal(384, solidMaskNode.Node["inputs"]?.Value<int>("width"));
-        Assert.Equal(640, solidMaskNode.Node["inputs"]?.Value<int>("height"));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(concatNode.Node, "audio_latent"),
-            new JArray(setMaskNode.Id, 0)));
-    }
-
-    [Fact]
     public void Root_stage_resolution_updates_native_wan22_latent_dimensions()
     {
         using SwarmUiTestContext _ = new();
@@ -319,7 +243,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Root_guide_image_reference_edit_stage_retargets_root_scale_input_and_preserves_root_resolution()
+    public void Clip_shaped_json_without_stages_does_not_run_additional_stages()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -327,112 +251,10 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
-            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+            MakeClip(width: 768, height: 448)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootGuideImageReference, "edit0");
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
-
-        WorkflowNode scaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray("60", 0)));
-        WorkflowNode imageFromBatch = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray(scaleNode.Id, 0)));
-        Assert.Equal(768, scaleNode.Node["inputs"]?.Value<int>("width"));
-        Assert.Equal(448, scaleNode.Node["inputs"]?.Value<int>("height"));
-        Assert.Equal("lanczos", $"{scaleNode.Node["inputs"]?["upscale_method"]}");
-        Assert.Equal("center", $"{scaleNode.Node["inputs"]?["crop"]}");
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
-            new JArray(scaleNode.Id, 0)));
-    }
-
-    [Fact]
-    public void Root_guide_image_reference_default_keeps_current_root_source()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
-        ).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootGuideImageReference, "Default");
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(0));
-
-        Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray("12", 0)));
-        Assert.DoesNotContain(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray("60", 0)));
-    }
-
-    [Fact]
-    public void Root_guide_image_reference_base_still_applies_when_additional_stages_are_disabled()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]", enableVideoStages: false);
-        input.Set(VideoStagesExtension.RootGuideImageReference, "Base");
-        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-
-        IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
-        StageRefStore store = new(generator);
-        WorkflowNode scaleNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "ImageScale"));
-        WorkflowNode imageFromBatch = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray(scaleNode.Id, 0)));
-
-        Assert.Single(samplers);
-        Assert.NotNull(store.Base);
-        Assert.False(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(scaleNode.Node, "image"),
-            new JArray("12", 0)));
-        AssertGuideReferenceResolvesToPreprocessInput(
-            workflow,
-            WorkflowAssertions.RequireConnectionInput(scaleNode.Node, "image"),
-            store.Base);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
-            new JArray(scaleNode.Id, 0)));
-    }
-
-    [Fact]
-    public void Disabled_video_stages_ignores_configured_additional_stages()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
-        ).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, enableVideoStages: false);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
