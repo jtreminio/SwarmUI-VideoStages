@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
@@ -29,6 +30,8 @@ public class JsonParser(WorkflowGenerator g)
         string Scheduler,
         string ImageReference,
         bool Skipped = false,
+        int ClipId = 0,
+        string ClipAudioSource = null,
         int? ClipWidth = null,
         int? ClipHeight = null,
         int? ClipFrames = null
@@ -41,15 +44,37 @@ public class JsonParser(WorkflowGenerator g)
         string UploadFileName
     );
 
+    public sealed record UploadedAudioSpec(
+        string Data,
+        string FileName
+    );
+
     public sealed record ClipSpec(
         int Id,
         string Name,
         bool Skipped,
         double DurationSeconds,
+        string AudioSource,
         int? Width,
         int? Height,
+        UploadedAudioSpec UploadedAudio,
         IReadOnlyList<RefSpec> Refs,
         IReadOnlyList<StageSpec> Stages
+    );
+
+    /// <summary>
+    /// Top-level spec for a parsed VideoStages JSON payload.
+    /// <para>
+    /// <see cref="UploadedAudio"/> is the legacy root-level shared upload that
+    /// older saved JSON used before per-clip uploads existed; it is kept as a
+    /// fallback for any clip that requests Upload but has no per-clip payload.
+    /// </para>
+    /// </summary>
+    public sealed record VideoStagesSpec(
+        int? Width,
+        int? Height,
+        UploadedAudioSpec UploadedAudio,
+        IReadOnlyList<ClipSpec> Clips
     );
 
     private sealed record StageDefaults(
@@ -67,13 +92,18 @@ public class JsonParser(WorkflowGenerator g)
     /// Parses the configured JSON. If the JSON is in clip-shape (each entry
     /// has a "Stages" array), returns a flattened list of every clip's stages
     /// in render order; legacy stage-shape JSON is treated as a single clip's
-    /// stages. Each stage carries its parent clip's optional width/height/frames
-    /// so the runner can apply per-clip overrides. Use <see cref="ParseClips"/>
-    /// for clip-aware behavior.
+    /// stages. Each stage carries its parent clip's optional audio source,
+    /// width/height/frames so the runner can apply per-clip overrides. Use
+    /// <see cref="ParseClips"/> for clip-aware behavior.
     /// </summary>
     public List<StageSpec> ParseStages()
     {
-        List<ClipSpec> clips = ParseClips();
+        VideoStagesSpec config = ParseConfig();
+        List<ClipSpec> clips = [.. config.Clips];
+        int? registeredRootWidth = ResolveRegisteredRootDimension(VideoStagesExtension.RootWidth);
+        int? registeredRootHeight = ResolveRegisteredRootDimension(VideoStagesExtension.RootHeight);
+        int? effectiveRootWidth = registeredRootWidth ?? config.Width;
+        int? effectiveRootHeight = registeredRootHeight ?? config.Height;
         int fps = ResolveFps();
         List<StageSpec> flattened = [];
         int globalStageIndex = 0;
@@ -97,8 +127,10 @@ public class JsonParser(WorkflowGenerator g)
                 flattened.Add(stage with
                 {
                     Id = globalStageIndex,
-                    ClipWidth = clip.Width,
-                    ClipHeight = clip.Height,
+                    ClipId = clip.Id,
+                    ClipAudioSource = clip.AudioSource,
+                    ClipWidth = effectiveRootWidth ?? clip.Width,
+                    ClipHeight = effectiveRootHeight ?? clip.Height,
                     ClipFrames = clipFrames,
                 });
                 globalStageIndex++;
@@ -116,17 +148,24 @@ public class JsonParser(WorkflowGenerator g)
         return 24;
     }
 
+    private int? ResolveRegisteredRootDimension(T2IRegisteredParam<int> param)
+    {
+        return g.UserInput.TryGet(param, out int value) && value >= VideoStagesExtension.RootDimensionMin
+            ? value
+            : null;
+    }
+
     /// <summary>
     /// Parses the configured JSON into clip-shaped data. Legacy stage-only
     /// JSON is wrapped in a single default clip so the rest of the pipeline
     /// can always reason in terms of clips.
     /// </summary>
-    public List<ClipSpec> ParseClips()
+    public VideoStagesSpec ParseConfig()
     {
-        List<JObject> rawEntries = GetJsonTopLevelArray();
+        (int? width, int? height, UploadedAudioSpec uploadedAudio, List<JObject> rawEntries) = GetJsonTopLevelConfig();
         if (rawEntries.Count == 0)
         {
-            return [];
+            return new VideoStagesSpec(width, height, uploadedAudio, []);
         }
 
         bool isClipShaped = rawEntries.Any(IsClipShape);
@@ -140,7 +179,7 @@ public class JsonParser(WorkflowGenerator g)
             {
                 parsed.Add(legacyClip);
             }
-            return parsed;
+            return new VideoStagesSpec(width, height, uploadedAudio, parsed);
         }
 
         for (int i = 0; i < rawEntries.Count; i++)
@@ -152,7 +191,55 @@ public class JsonParser(WorkflowGenerator g)
                 parsed.Add(clip);
             }
         }
-        return parsed;
+        return new VideoStagesSpec(width, height, uploadedAudio, parsed);
+    }
+
+    /// <summary>
+    /// Returns the legacy root-level shared uploaded audio, or null. Modern
+    /// payloads place the upload inside the clip itself (see
+    /// <see cref="ParseUploadedAudioForClip"/>); this is kept as a fallback so
+    /// older saved metadata still loads correctly.
+    /// </summary>
+    public AudioFile ParseUploadedAudio()
+    {
+        return MaterializeUploadedAudio(ParseConfig().UploadedAudio);
+    }
+
+    /// <summary>
+    /// Returns the uploaded audio attached to a specific clip, falling back to
+    /// the legacy root-level upload when the clip itself does not carry one.
+    /// </summary>
+    public AudioFile ParseUploadedAudioForClip(ClipSpec clip)
+    {
+        AudioFile perClip = MaterializeUploadedAudio(clip?.UploadedAudio);
+        return perClip ?? ParseUploadedAudio();
+    }
+
+    private static AudioFile MaterializeUploadedAudio(UploadedAudioSpec spec)
+    {
+        if (spec is null || string.IsNullOrWhiteSpace(spec.Data))
+        {
+            return null;
+        }
+
+        try
+        {
+            AudioFile audio = AudioFile.FromDataString(spec.Data.Trim());
+            audio.SourceFilePath = string.IsNullOrWhiteSpace(spec.FileName)
+                ? null
+                : spec.FileName.Trim();
+            return audio;
+        }
+        catch
+        {
+            Logs.Warning("VideoStages: Ignoring invalid uploaded audio embedded in Video Stages JSON.");
+            return null;
+        }
+    }
+
+    public List<ClipSpec> ParseClips()
+    {
+        return [.. ParseConfig().Clips];
     }
 
     private static bool IsClipShape(JObject entry)
@@ -182,8 +269,10 @@ public class JsonParser(WorkflowGenerator g)
             Name: "Clip 0",
             Skipped: false,
             DurationSeconds: 0,
+            AudioSource: VideoStagesExtension.AudioSourceNative,
             Width: null,
             Height: null,
+            UploadedAudio: null,
             Refs: [],
             Stages: stages
         );
@@ -194,8 +283,18 @@ public class JsonParser(WorkflowGenerator g)
         bool skipped = GetOptionalBool(clipObj, "Skipped", defaultValue: false);
         string name = GetOptionalString(clipObj, "Name", defaultValue: $"Clip {clipIndex}", clipIndex, allowEmpty: true);
         double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, clipIndex);
+        string audioSource = GetString(clipObj, "AudioSource");
+        if (string.IsNullOrWhiteSpace(audioSource))
+        {
+            audioSource = VideoStagesExtension.AudioSourceNative;
+        }
+        else
+        {
+            audioSource = audioSource.Trim();
+        }
         int? width = GetOptionalNullableInt(clipObj, "Width");
         int? height = GetOptionalNullableInt(clipObj, "Height");
+        UploadedAudioSpec uploadedAudio = GetUploadedAudio(clipObj);
 
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
         List<StageSpec> stages = [];
@@ -228,8 +327,10 @@ public class JsonParser(WorkflowGenerator g)
             Name: string.IsNullOrWhiteSpace(name) ? $"Clip {clipIndex}" : name,
             Skipped: skipped,
             DurationSeconds: Math.Max(0, duration),
+            AudioSource: audioSource,
             Width: width,
             Height: height,
+            UploadedAudio: uploadedAudio,
             Refs: refs,
             Stages: stages
         );
@@ -297,27 +398,68 @@ public class JsonParser(WorkflowGenerator g)
         return [];
     }
 
-    private List<JObject> GetJsonTopLevelArray()
+    private static JObject GetObject(JObject obj, string key)
+    {
+        foreach (JProperty property in obj.Properties())
+        {
+            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase) && property.Value is JObject nested)
+            {
+                return nested;
+            }
+        }
+        return null;
+    }
+
+    private static UploadedAudioSpec GetUploadedAudio(JObject obj)
+    {
+        JObject uploadedAudio = GetObject(obj, "UploadedAudio");
+        if (uploadedAudio is null)
+        {
+            return null;
+        }
+
+        string data = GetString(uploadedAudio, "Data");
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            return null;
+        }
+
+        return new UploadedAudioSpec(
+            Data: data.Trim(),
+            FileName: GetString(uploadedAudio, "FileName")?.Trim()
+        );
+    }
+
+    private (int? Width, int? Height, UploadedAudioSpec UploadedAudio, List<JObject> Entries) GetJsonTopLevelConfig()
     {
         if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
             || string.IsNullOrWhiteSpace(json))
         {
-            return [];
+            return (null, null, null, []);
         }
 
         try
         {
             JToken token = JToken.Parse(json);
-            if (token is not JArray array)
+            if (token is JArray array)
             {
-                return [];
+                return (null, null, null, [.. array.OfType<JObject>()]);
             }
-            return [.. array.OfType<JObject>()];
+            if (token is JObject obj)
+            {
+                return (
+                    GetOptionalNullableInt(obj, "Width"),
+                    GetOptionalNullableInt(obj, "Height"),
+                    GetUploadedAudio(obj),
+                    GetObjectArray(obj, "Clips")
+                );
+            }
+            return (null, null, null, []);
         }
         catch
         {
             Logs.Warning("VideoStages: Ignoring invalid Video Stages JSON.");
-            return [];
+            return (null, null, null, []);
         }
     }
 

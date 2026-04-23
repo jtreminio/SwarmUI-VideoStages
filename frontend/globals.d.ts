@@ -48,6 +48,13 @@ declare function makeSliderInput(
     toggles?: boolean,
     popover_button?: boolean,
 ): string;
+declare function makeGenericPopover(
+    id: string,
+    name: string,
+    type: string,
+    description: string,
+    example: string,
+): string;
 declare function makeDropdownInput(
     featureid: string,
     id: string,
@@ -62,6 +69,17 @@ declare function makeDropdownInput(
     reparse_alt_names?: boolean,
 ): string;
 declare function makeImageInput(
+    featureid: string,
+    id: string,
+    paramid: string,
+    name: string,
+    description: string,
+    toggles?: boolean,
+    popover_button?: boolean,
+    can_upload?: boolean,
+    show_input_browser_button?: boolean,
+): string;
+declare function makeAudioInput(
     featureid: string,
     id: string,
     paramid: string,

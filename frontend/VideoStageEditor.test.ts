@@ -38,12 +38,23 @@ interface ParsedStage {
 interface ParsedClip {
     name?: string;
     duration?: number;
+    audioSource?: string;
+    uploadedAudio?: {
+        data?: string;
+        fileName?: string | null;
+    } | null;
     width?: number;
     height?: number;
     expanded?: boolean;
     skipped?: boolean;
     refs?: ParsedRef[];
     stages?: ParsedStage[];
+}
+
+interface ParsedConfig {
+    width?: number;
+    height?: number;
+    clips: ParsedClip[];
 }
 
 const setupParameterPanel = (): void => {
@@ -55,6 +66,18 @@ const setupParameterPanel = (): void => {
     stagesInput.type = "text";
     stagesInput.id = "input_videostages";
     document.body.appendChild(stagesInput);
+
+    const vsWidthInput = document.createElement("input");
+    vsWidthInput.type = "number";
+    vsWidthInput.id = "input_vswidth";
+    vsWidthInput.value = "0";
+    document.body.appendChild(vsWidthInput);
+
+    const vsHeightInput = document.createElement("input");
+    vsHeightInput.type = "number";
+    vsHeightInput.id = "input_vsheight";
+    vsHeightInput.value = "0";
+    document.body.appendChild(vsHeightInput);
 
     const groupToggle = document.createElement("input");
     groupToggle.type = "checkbox";
@@ -128,8 +151,21 @@ const setupParameterPanel = (): void => {
 const getStagesInput = (): HTMLInputElement =>
     document.getElementById("input_videostages") as HTMLInputElement;
 
-const parseStored = (): ParsedClip[] =>
-    JSON.parse(getStagesInput().value || "[]") as ParsedClip[];
+const parseStoredConfig = (): ParsedConfig => {
+    const parsed = JSON.parse(getStagesInput().value || "[]") as
+        | ParsedClip[]
+        | ParsedConfig;
+    if (Array.isArray(parsed)) {
+        return { clips: parsed };
+    }
+    return {
+        width: parsed.width,
+        height: parsed.height,
+        clips: Array.isArray(parsed.clips) ? parsed.clips : [],
+    };
+};
+
+const parseStored = (): ParsedClip[] => parseStoredConfig().clips;
 
 describe("VideoStageEditor", () => {
     beforeEach(() => {
@@ -154,7 +190,7 @@ describe("VideoStageEditor", () => {
             expect(clips[0].name).toBe("Clip 0");
         });
 
-        it("seeds default clip dimensions from SwarmUI core width and height fields", () => {
+        it("seeds root dimensions from SwarmUI core width and height fields", () => {
             const coreWidthInput = document.createElement("input");
             coreWidthInput.type = "number";
             coreWidthInput.id = "input_width";
@@ -170,9 +206,40 @@ describe("VideoStageEditor", () => {
             const editor = new VideoStageEditor();
             editor.init();
 
-            const clips = parseStored();
-            expect(clips[0].width).toBe(1344);
-            expect(clips[0].height).toBe(832);
+            const config = parseStoredConfig();
+            expect(config.width).toBe(1344);
+            expect(config.height).toBe(832);
+        });
+
+        it("prefers registered VideoStages root params over core width and height defaults", () => {
+            const registeredWidthInput = document.getElementById(
+                "input_vswidth",
+            ) as HTMLInputElement;
+            registeredWidthInput.value = "1536";
+
+            const registeredHeightInput = document.getElementById(
+                "input_vsheight",
+            ) as HTMLInputElement;
+            registeredHeightInput.value = "864";
+
+            const coreWidthInput = document.createElement("input");
+            coreWidthInput.type = "number";
+            coreWidthInput.id = "input_width";
+            coreWidthInput.value = "1344";
+            document.body.appendChild(coreWidthInput);
+
+            const coreHeightInput = document.createElement("input");
+            coreHeightInput.type = "number";
+            coreHeightInput.id = "input_height";
+            coreHeightInput.value = "832";
+            document.body.appendChild(coreHeightInput);
+
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const config = parseStoredConfig();
+            expect(config.width).toBe(1536);
+            expect(config.height).toBe(864);
         });
 
         it("seeds the first stage with the frontend default values", () => {
@@ -202,26 +269,102 @@ describe("VideoStageEditor", () => {
             ).not.toBeNull();
         });
 
-        it("preserves existing JSON state", () => {
-            getStagesInput().value = JSON.stringify([
-                {
-                    name: "First",
-                    duration: 4,
-                    width: 800,
-                    height: 600,
-                    refs: [{ source: "Refiner", frame: 5, fromEnd: true }],
-                    stages: [
-                        { model: "ltx-2.3-22b-dev", steps: 8, cfgScale: 1 },
-                    ],
-                },
-            ]);
+        it("does not render its own root width/height fields (uses registered SwarmUI sliders)", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const widthNumber = document.querySelector(
+                '[data-root-field="width"]',
+            );
+            const heightNumber = document.querySelector(
+                '[data-root-field="height"]',
+            );
+            expect(widthNumber).toBeNull();
+            expect(heightNumber).toBeNull();
+        });
+
+        it("seeds registered RootWidth/RootHeight sliders from core dimensions when at sentinel", () => {
+            const coreWidthInput = document.createElement("input");
+            coreWidthInput.type = "number";
+            coreWidthInput.id = "input_width";
+            coreWidthInput.value = "1280";
+            document.body.appendChild(coreWidthInput);
+
+            const coreHeightInput = document.createElement("input");
+            coreHeightInput.type = "number";
+            coreHeightInput.id = "input_height";
+            coreHeightInput.value = "720";
+            document.body.appendChild(coreHeightInput);
 
             const editor = new VideoStageEditor();
             editor.init();
 
+            const registeredWidth = document.getElementById(
+                "input_vswidth",
+            ) as HTMLInputElement;
+            const registeredHeight = document.getElementById(
+                "input_vsheight",
+            ) as HTMLInputElement;
+            expect(registeredWidth.value).toBe("1280");
+            expect(registeredHeight.value).toBe("720");
+        });
+
+        it("does not overwrite registered RootWidth/RootHeight when the user has set them", () => {
+            const registeredWidth = document.getElementById(
+                "input_vswidth",
+            ) as HTMLInputElement;
+            registeredWidth.value = "1024";
+            const registeredHeight = document.getElementById(
+                "input_vsheight",
+            ) as HTMLInputElement;
+            registeredHeight.value = "768";
+
+            const coreWidthInput = document.createElement("input");
+            coreWidthInput.type = "number";
+            coreWidthInput.id = "input_width";
+            coreWidthInput.value = "1280";
+            document.body.appendChild(coreWidthInput);
+
+            const coreHeightInput = document.createElement("input");
+            coreHeightInput.type = "number";
+            coreHeightInput.id = "input_height";
+            coreHeightInput.value = "720";
+            document.body.appendChild(coreHeightInput);
+
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            expect(registeredWidth.value).toBe("1024");
+            expect(registeredHeight.value).toBe("768");
+        });
+
+        it("preserves existing JSON state", () => {
+            getStagesInput().value = JSON.stringify({
+                width: 800,
+                height: 600,
+                clips: [
+                    {
+                        name: "First",
+                        duration: 4,
+                        audioSource: "Upload",
+                        refs: [{ source: "Refiner", frame: 5, fromEnd: true }],
+                        stages: [
+                            { model: "ltx-2.3-22b-dev", steps: 8, cfgScale: 1 },
+                        ],
+                    },
+                ],
+            });
+
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const config = parseStoredConfig();
             const clips = parseStored();
+            expect(config.width).toBe(800);
+            expect(config.height).toBe(600);
             expect(clips).toHaveLength(1);
             expect(clips[0].name).toBe("First");
+            expect(clips[0].audioSource).toBe("Upload");
             expect(clips[0].refs?.[0].source).toBe("Refiner");
             expect(clips[0].refs?.[0].fromEnd).toBe(true);
             expect(clips[0].stages?.[0].steps).toBe(8);
@@ -323,6 +466,286 @@ describe("VideoStageEditor", () => {
             expect(clips[0].duration).toBe(6);
         });
 
+        it("reflects registered RootWidth/RootHeight slider changes in saved JSON", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const registeredWidth = document.getElementById(
+                "input_vswidth",
+            ) as HTMLInputElement;
+            const registeredHeight = document.getElementById(
+                "input_vsheight",
+            ) as HTMLInputElement;
+
+            registeredWidth.value = "1536";
+            registeredHeight.value = "864";
+
+            const fpsInput = document.getElementById(
+                "input_videofps",
+            ) as HTMLInputElement;
+            fpsInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement;
+            durationSlider.value = "5";
+            durationSlider.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+
+            const config = parseStoredConfig();
+            expect(config.width).toBe(1536);
+            expect(config.height).toBe(864);
+        });
+
+        it("stores clip audio source at the clip level", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"]',
+            ) as HTMLSelectElement | null;
+            expect(audioSource).not.toBeNull();
+            if (!audioSource) {
+                throw new Error("Expected clip audio source select to exist.");
+            }
+
+            audioSource.value = "Upload";
+            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].audioSource).toBe("Upload");
+        });
+
+        it("renders a hidden per-clip audio upload field directly below the audio source dropdown", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const uploadField = document.querySelector(
+                ".vs-clip-audio-upload-field",
+            ) as HTMLElement | null;
+            const uploadInput = document.querySelector(
+                '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+
+            expect(audioSource).not.toBeNull();
+            expect(uploadField).not.toBeNull();
+            expect(uploadInput).not.toBeNull();
+            expect(uploadField?.style.display).toBe("none");
+
+            // The upload field must be the very next sibling (below) the
+            // audio-source row inside the clip body.
+            const audioSourceRow = audioSource?.closest(".auto-input");
+            expect(audioSourceRow?.nextElementSibling).toBe(uploadField);
+        });
+
+        it("reveals the per-clip audio upload field when audioSource changes to Upload", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const uploadField = document.querySelector(
+                ".vs-clip-audio-upload-field",
+            ) as HTMLElement | null;
+            if (!audioSource || !uploadField) {
+                throw new Error("Expected per-clip audio controls to exist.");
+            }
+            expect(uploadField.style.display).toBe("none");
+
+            audioSource.value = "Upload";
+            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(uploadField.style.display).toBe("");
+        });
+
+        it("still reveals clip audio Upload when the editor DOM is rebuilt", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const originalEditor = document.getElementById(
+                "videostages_stage_editor",
+            ) as HTMLElement | null;
+            expect(originalEditor).not.toBeNull();
+            if (!originalEditor?.parentElement) {
+                throw new Error("Expected original editor to be mounted.");
+            }
+
+            const rebuiltEditor = originalEditor.cloneNode(true) as HTMLElement;
+            originalEditor.parentElement.replaceChild(
+                rebuiltEditor,
+                originalEditor,
+            );
+
+            const audioSource = rebuiltEditor.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const uploadField = rebuiltEditor.querySelector(
+                ".vs-clip-audio-upload-field",
+            ) as HTMLElement | null;
+            const uploadInput = rebuiltEditor.querySelector(
+                '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            expect(audioSource).not.toBeNull();
+            expect(uploadField).not.toBeNull();
+            expect(uploadInput?.type).toBe("file");
+            expect(uploadField?.style.display).toBe("none");
+            if (!audioSource) {
+                throw new Error("Expected rebuilt clip audio source to exist.");
+            }
+
+            audioSource.value = "Upload";
+            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].audioSource).toBe("Upload");
+            expect(uploadField?.style.display).toBe("");
+        });
+
+        it("stores uploaded audio payload on the clip", () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            if (!audioSource) {
+                throw new Error("Expected clip audio source select to exist.");
+            }
+            audioSource.value = "Upload";
+            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const uploadInput = document.querySelector(
+                '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            if (!uploadInput) {
+                throw new Error("Expected per-clip upload input to exist.");
+            }
+
+            // SwarmUI's inline `onchange="load_media_file(...)"` runs before our
+            // delegated handler and would clear dataset.filedata when no real
+            // File object exists; nulling onchange lets the test stub the
+            // loaded audio payload synchronously.
+            uploadInput.onchange = null;
+            uploadInput.dataset.filedata = "data:audio/wav;base64,QUJD";
+            uploadInput.dataset.filename = "clip.wav";
+            uploadInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const clips = parseStored();
+            expect(clips[0].uploadedAudio?.data).toBe(
+                "data:audio/wav;base64,QUJD",
+            );
+            expect(clips[0].uploadedAudio?.fileName).toBe("clip.wav");
+
+            // The legacy root-level uploadedAudio should not be present.
+            const rawConfig = JSON.parse(getStagesInput().value) as Record<
+                string,
+                unknown
+            >;
+            expect(rawConfig.uploadedAudio).toBeUndefined();
+        });
+
+        it("keeps per-clip uploads independent across multiple Upload clips", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-clip"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const audioSources = document.querySelectorAll(
+                '[data-clip-field="audioSource"]',
+            ) as NodeListOf<HTMLSelectElement>;
+            expect(audioSources).toHaveLength(2);
+            for (const select of audioSources) {
+                select.value = "Upload";
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+
+            const uploadInputs = document.querySelectorAll(
+                '.auto-file[data-clip-field="uploadedAudio"]',
+            ) as NodeListOf<HTMLInputElement>;
+            expect(uploadInputs).toHaveLength(2);
+
+            uploadInputs[0].onchange = null;
+            uploadInputs[0].dataset.filedata = "data:audio/wav;base64,FIRST";
+            uploadInputs[0].dataset.filename = "first.wav";
+            uploadInputs[0].dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+
+            uploadInputs[1].onchange = null;
+            uploadInputs[1].dataset.filedata = "data:audio/wav;base64,SECOND";
+            uploadInputs[1].dataset.filename = "second.wav";
+            uploadInputs[1].dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+
+            const clips = parseStored();
+            expect(clips[0].uploadedAudio?.data).toBe(
+                "data:audio/wav;base64,FIRST",
+            );
+            expect(clips[0].uploadedAudio?.fileName).toBe("first.wav");
+            expect(clips[1].uploadedAudio?.data).toBe(
+                "data:audio/wav;base64,SECOND",
+            );
+            expect(clips[1].uploadedAudio?.fileName).toBe("second.wav");
+        });
+
+        it("migrates a legacy root-level uploadedAudio into Upload-mode clips on load", () => {
+            getStagesInput().value = JSON.stringify({
+                width: 1024,
+                height: 768,
+                uploadedAudio: {
+                    data: "data:audio/wav;base64,LEGACY",
+                    fileName: "legacy.wav",
+                },
+                clips: [
+                    {
+                        name: "First",
+                        duration: 4,
+                        audioSource: "Upload",
+                        refs: [],
+                        stages: [
+                            { model: "ltx-2.3-22b-dev", steps: 8, cfgScale: 1 },
+                        ],
+                    },
+                    {
+                        name: "Second",
+                        duration: 4,
+                        audioSource: "Native",
+                        refs: [],
+                        stages: [
+                            { model: "ltx-2.3-22b-dev", steps: 8, cfgScale: 1 },
+                        ],
+                    },
+                ],
+            });
+
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const clips = parseStored();
+            expect(clips[0].uploadedAudio?.data).toBe(
+                "data:audio/wav;base64,LEGACY",
+            );
+            expect(clips[0].uploadedAudio?.fileName).toBe("legacy.wav");
+            // Native clips should never inherit a legacy root upload.
+            expect(clips[1].uploadedAudio).toBeFalsy();
+
+            // The migration should drop the legacy root field on the next save.
+            const rawConfig = JSON.parse(getStagesInput().value) as Record<
+                string,
+                unknown
+            >;
+            expect(rawConfig.uploadedAudio).toBeUndefined();
+        });
+
         it("does not rerender the duration number input while typing", async () => {
             const editor = new VideoStageEditor();
             editor.init();
@@ -373,31 +796,6 @@ describe("VideoStageEditor", () => {
 
             expect(durationNumber?.step).toBe("any");
             expect(durationSlider?.step).toBe("0.5");
-        });
-
-        it("uses SwarmUI-style pot slider jumps for clip width and height", () => {
-            const editor = new VideoStageEditor();
-            editor.init();
-
-            const widthNumber = document.querySelector(
-                '[data-clip-field="width"][type="number"]',
-            ) as HTMLInputElement | null;
-            const widthSlider = document.querySelector(
-                '[data-clip-field="width"][type="range"]',
-            ) as HTMLInputElement | null;
-            const heightNumber = document.querySelector(
-                '[data-clip-field="height"][type="number"]',
-            ) as HTMLInputElement | null;
-            const heightSlider = document.querySelector(
-                '[data-clip-field="height"][type="range"]',
-            ) as HTMLInputElement | null;
-
-            expect(widthNumber?.step).toBe("32");
-            expect(widthSlider?.step).toBe("1");
-            expect(widthSlider?.dataset.ispot).toBe("true");
-            expect(heightNumber?.step).toBe("32");
-            expect(heightSlider?.step).toBe("1");
-            expect(heightSlider?.dataset.ispot).toBe("true");
         });
     });
 

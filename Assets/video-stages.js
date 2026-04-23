@@ -27,111 +27,90 @@
   };
 
   // frontend/AudioSourceController.ts
+  var AUDIO_SOURCE_NATIVE = "Native";
+  var AUDIO_SOURCE_UPLOAD = "Upload";
+  var AUDIO_SOURCE_SWARM = "Swarm Audio";
+  var TEXT2AUDIO_TOGGLE_ID = "input_group_content_texttoaudio_toggle";
+  var ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
+  var SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
+  var getSourceSelects = () => Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
+    (elem) => elem instanceof HTMLSelectElement
+  );
+  var isSourceSelect = (target) => target instanceof HTMLSelectElement && target.matches('[data-clip-field="audioSource"]');
+  var isTextToAudioEnabled = () => {
+    const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
+    return !!toggle?.checked;
+  };
+  var getAceStepFunRefs = () => {
+    const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
+    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+      return [];
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const refs = [];
+    for (const raw of snapshot.refs) {
+      const ref = `${raw || ""}`.trim();
+      if (!ref || seen.has(ref)) {
+        continue;
+      }
+      seen.add(ref);
+      refs.push(ref);
+    }
+    return refs;
+  };
+  var buildAudioSourceOptions = () => {
+    const options = [
+      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    if (isTextToAudioEnabled()) {
+      options.push({
+        value: AUDIO_SOURCE_SWARM,
+        label: AUDIO_SOURCE_SWARM
+      });
+    }
+    for (const ref of getAceStepFunRefs()) {
+      options.push({ value: ref, label: ref });
+    }
+    return options;
+  };
+  var resolveAudioSourceValue = (currentValue, options) => {
+    const desired = `${currentValue || ""}`;
+    if (options.some((option) => option.value === desired)) {
+      return desired;
+    }
+    return AUDIO_SOURCE_NATIVE;
+  };
   var AudioSourceController = () => {
-    const NATIVE_VALUE = "Native";
-    const UPLOAD_VALUE = "Upload";
-    const SWARM_VALUE = "Swarm Audio";
-    const SOURCE_INPUT_ID = "input_vsaudiosource";
-    const UPLOAD_INPUT_ID = "input_vsaudioupload";
-    const TEXT2AUDIO_TOGGLE_ID = "input_group_content_texttoaudio_toggle";
-    const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
-    const getSourceSelect = () => VideoStageUtils.getSelectElement(SOURCE_INPUT_ID);
-    const getUploadContainer = () => {
-      const fileInput = VideoStageUtils.getInputElement(UPLOAD_INPUT_ID);
-      if (!fileInput) {
-        return null;
+    const refreshOptions = () => {
+      const selects = getSourceSelects();
+      if (selects.length === 0) {
+        return;
       }
-      return findParentOfClass(fileInput, "auto-input");
-    };
-    const isTextToAudioEnabled = () => {
-      const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
-      return !!toggle?.checked;
-    };
-    const getAceStepFunRefs = () => {
-      const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
-      if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
-        return [];
-      }
-      const seen = /* @__PURE__ */ new Set();
-      const refs = [];
-      for (const raw of snapshot.refs) {
-        const ref = `${raw || ""}`.trim();
-        if (!ref || seen.has(ref)) {
+      const options = buildAudioSourceOptions();
+      for (const select of selects) {
+        const desired = resolveAudioSourceValue(select.value, options);
+        const newValuesJson = JSON.stringify(options.map((o) => o.value));
+        const currentValuesJson = JSON.stringify(
+          Array.from(select.options).map((o) => o.value)
+        );
+        if (newValuesJson === currentValuesJson && select.value === desired) {
           continue;
         }
-        seen.add(ref);
-        refs.push(ref);
-      }
-      return refs;
-    };
-    const buildOptions = () => {
-      const options = [
-        { value: NATIVE_VALUE, label: NATIVE_VALUE },
-        { value: UPLOAD_VALUE, label: UPLOAD_VALUE }
-      ];
-      if (isTextToAudioEnabled()) {
-        options.push({ value: SWARM_VALUE, label: SWARM_VALUE });
-      }
-      for (const ref of getAceStepFunRefs()) {
-        options.push({ value: ref, label: ref });
-      }
-      return options;
-    };
-    const resolveSelectedValue = (currentValue, options) => {
-      const desired = `${currentValue || ""}`;
-      if (options.some((o) => o.value === desired)) {
-        return desired;
-      }
-      return NATIVE_VALUE;
-    };
-    const applyUploadVisibility = () => {
-      const container = getUploadContainer();
-      if (!container) {
-        return;
-      }
-      const select = getSourceSelect();
-      const showUpload = !!select && `${select.value || ""}` === UPLOAD_VALUE;
-      if (showUpload) {
-        container.style.display = "";
-        delete container.dataset.visible_controlled;
-        return;
-      }
-      container.style.display = "none";
-      container.dataset.visible_controlled = "true";
-    };
-    const refreshOptions = () => {
-      const select = getSourceSelect();
-      if (!select) {
-        return;
-      }
-      const options = buildOptions();
-      const desired = resolveSelectedValue(select.value, options);
-      const newValuesJson = JSON.stringify(options.map((o) => o.value));
-      const currentValuesJson = JSON.stringify(
-        Array.from(select.options).map((o) => o.value)
-      );
-      if (newValuesJson === currentValuesJson && select.value === desired) {
-        return;
-      }
-      select.innerHTML = "";
-      for (const option of options) {
-        const elem = document.createElement("option");
-        elem.value = option.value;
-        elem.text = option.label;
-        elem.selected = option.value === desired;
-        select.appendChild(elem);
-      }
-      select.value = desired;
-      triggerChangeFor(select);
-      applyUploadVisibility();
-    };
-    const onDocumentChange = (event) => {
-      if (event.target?.id === SOURCE_INPUT_ID) {
-        applyUploadVisibility();
+        select.innerHTML = "";
+        for (const option of options) {
+          const elem = document.createElement("option");
+          elem.value = option.value;
+          elem.text = option.label;
+          elem.selected = option.value === desired;
+          select.appendChild(elem);
+        }
+        select.value = desired;
+        triggerChangeFor(select);
       }
     };
     const onDocumentDropdownInteraction = (event) => {
-      if (event.target?.id === SOURCE_INPUT_ID) {
+      if (isSourceSelect(event.target)) {
         refreshOptions();
       }
     };
@@ -148,7 +127,6 @@
       try {
         bindText2AudioToggle();
         refreshOptions();
-        applyUploadVisibility();
       } catch (error) {
         console.log(
           "AudioSourceController: param build sync failed",
@@ -163,19 +141,16 @@
       }
       setTimeout(scheduleInitialSync, 200);
     };
-    document.addEventListener("change", onDocumentChange, true);
     document.addEventListener("mousedown", onDocumentDropdownInteraction);
     document.addEventListener("focusin", onDocumentDropdownInteraction);
     document.addEventListener(ACESTEPFUN_EVENT, refreshOptions);
     scheduleInitialSync();
     return {
-      buildOptions,
-      resolveSelectedValue,
-      applyUploadVisibility,
+      buildOptions: buildAudioSourceOptions,
+      resolveSelectedValue: resolveAudioSourceValue,
       refreshOptions,
       runOnEachBuild,
       dispose: () => {
-        document.removeEventListener("change", onDocumentChange, true);
         document.removeEventListener(
           "mousedown",
           onDocumentDropdownInteraction
@@ -342,10 +317,10 @@
   var CLIP_DURATION_MAX = 9999;
   var CLIP_DURATION_SLIDER_MAX = 60;
   var CLIP_DURATION_SLIDER_STEP = 0.5;
-  var CLIP_DIMENSION_MIN = 256;
-  var CLIP_DIMENSION_MAX = 16384;
-  var CLIP_DIMENSION_SLIDER_MAX = 4096;
-  var CLIP_DIMENSION_STEP = 32;
+  var ROOT_DIMENSION_MIN = 256;
+  var CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
+  var CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
+  var CLIP_AUDIO_UPLOAD_DESCRIPTION = "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
   var STAGE_REF_STRENGTH_MIN = 0.1;
   var STAGE_REF_STRENGTH_MAX = 1;
   var STAGE_REF_STRENGTH_STEP = 0.1;
@@ -398,12 +373,34 @@
       this.createEditor();
       this.startClipsInputSync();
       this.ensureClipsSeeded();
+      this.persistLegacyRootUploadMigration();
       this.wrapGenerateWithValidation();
       this.renderClips();
       this.installSourceDropdownObserver();
       this.installBase2EditStageChangeListener();
       this.installRootFramesChangeListener();
       this.installRefSourceFallbackListener();
+    }
+    /**
+     * If the persisted JSON still carries a legacy root-level `uploadedAudio`
+     * field, persist the migrated state once on load so subsequent reads see
+     * the per-clip layout and the obsolete root field is dropped.
+     */
+    persistLegacyRootUploadMigration() {
+      const input = this.getClipsInput();
+      if (!input?.value) {
+        return;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(input.value);
+      } catch {
+        return;
+      }
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object" || !("uploadedAudio" in parsed)) {
+        return;
+      }
+      this.saveState(this.getState());
     }
     resetForInactiveReuse() {
       this.suppressInactiveReseed = true;
@@ -449,6 +446,78 @@
     }
     getClipsInput() {
       return VideoStageUtils.getInputElement("input_videostages");
+    }
+    getRootDimensionParamInput(field) {
+      return VideoStageUtils.getInputElement(
+        field === "width" ? "input_vswidth" : "input_vsheight"
+      );
+    }
+    getCoreDimensionInput(field) {
+      const primaryId = field === "width" ? "input_width" : "input_height";
+      const fallbackId = field === "width" ? "input_aspectratiowidth" : "input_aspectratioheight";
+      return VideoStageUtils.getInputElement(primaryId) ?? VideoStageUtils.getInputElement(fallbackId);
+    }
+    getRegisteredRootDimension(field) {
+      const input = this.getRootDimensionParamInput(field);
+      if (!input) {
+        return null;
+      }
+      const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+      return value >= ROOT_DIMENSION_MIN ? value : null;
+    }
+    getCoreDimension(field) {
+      const input = this.getCoreDimensionInput(field);
+      if (!input) {
+        return null;
+      }
+      const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+      return value >= ROOT_DIMENSION_MIN ? value : null;
+    }
+    /**
+     * Seeds the registered RootWidth/RootHeight sliders with the user's
+     * currently-selected core Width/Height while our slider is still at the
+     * sentinel default (anything below {@link ROOT_DIMENSION_MIN}). Once the
+     * user moves our slider to a real value the sentinel guard prevents any
+     * further automatic overrides, so manual changes stick.
+     */
+    seedRegisteredDimensionsFromCore() {
+      for (const field of ["width", "height"]) {
+        const ourInput = this.getRootDimensionParamInput(field);
+        if (!ourInput) {
+          continue;
+        }
+        const ourValue = Math.round(
+          VideoStageUtils.toNumber(ourInput.value, 0)
+        );
+        if (ourValue >= ROOT_DIMENSION_MIN) {
+          continue;
+        }
+        const coreValue = this.getCoreDimension(field);
+        if (coreValue === null) {
+          continue;
+        }
+        ourInput.value = `${coreValue}`;
+        triggerChangeFor(ourInput);
+      }
+    }
+    getEffectiveRootDimension(field, persistedValue, fallback) {
+      return this.getRegisteredRootDimension(field) ?? this.getCoreDimension(field) ?? this.normalizeRootDimension(persistedValue, fallback);
+    }
+    normalizeUploadedAudio(value) {
+      if (!value || typeof value !== "object") {
+        return null;
+      }
+      const raw = value;
+      const data = `${raw.data ?? ""}`.trim();
+      if (!data) {
+        return null;
+      }
+      return {
+        data,
+        fileName: this.normalizeUploadFileName(
+          raw.fileName == null ? null : `${raw.fileName}`
+        )
+      };
     }
     getGroupToggle() {
       return VideoStageUtils.getInputElement(
@@ -590,13 +659,17 @@
         schedulerLabels: scheduler.labels,
         upscaleMethodValues: upscaleMethodValues.length > 0 ? upscaleMethodValues : fallbackUpscaleMethods,
         upscaleMethodLabels: upscaleMethodLabels.length > 0 ? upscaleMethodLabels : fallbackUpscaleMethods,
-        width: Math.max(
-          CLIP_DIMENSION_MIN,
-          Math.round(VideoStageUtils.toNumber(widthInput?.value, 1024))
+        width: this.getRegisteredRootDimension("width") ?? Math.max(
+          ROOT_DIMENSION_MIN,
+          Math.round(
+            VideoStageUtils.toNumber(widthInput?.value, 1024)
+          )
         ),
-        height: Math.max(
-          CLIP_DIMENSION_MIN,
-          Math.round(VideoStageUtils.toNumber(heightInput?.value, 1024))
+        height: this.getRegisteredRootDimension("height") ?? Math.max(
+          ROOT_DIMENSION_MIN,
+          Math.round(
+            VideoStageUtils.toNumber(heightInput?.value, 1024)
+          )
         ),
         fps,
         frames,
@@ -699,11 +772,19 @@
           ),
           defaults.fps
         ),
-        width: defaults.width,
-        height: defaults.height,
+        audioSource: AUDIO_SOURCE_NATIVE,
+        uploadedAudio: null,
         refs: [],
         stages: [this.buildDefaultStage(null, 0)]
       };
+    }
+    normalizeRootDimension(value, fallback) {
+      return Math.max(
+        ROOT_DIMENSION_MIN,
+        Math.round(
+          VideoStageUtils.toNumber(`${value ?? fallback}`, fallback)
+        )
+      );
     }
     refUploadKey(clipIdx, refIdx) {
       return `${clipIdx}:${refIdx}`;
@@ -902,6 +983,7 @@
     }
     normalizeClip(rawClip, index) {
       const defaults = this.getRootDefaults();
+      const audioSourceOptions = buildAudioSourceOptions();
       const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
       const refFrameMax = this.getReferenceFrameMax();
       const refs = refsRaw.map(
@@ -938,36 +1020,30 @@
           Math.max(CLIP_DURATION_MIN, rawDuration),
           fps
         ),
-        width: Math.max(
-          CLIP_DIMENSION_MIN,
-          Math.round(
-            VideoStageUtils.toNumber(
-              `${rawClip.width}`,
-              defaults.width
-            )
-          )
+        audioSource: resolveAudioSourceValue(
+          `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
+          audioSourceOptions
         ),
-        height: Math.max(
-          CLIP_DIMENSION_MIN,
-          Math.round(
-            VideoStageUtils.toNumber(
-              `${rawClip.height}`,
-              defaults.height
-            )
-          )
-        ),
+        uploadedAudio: this.normalizeUploadedAudio(rawClip.uploadedAudio),
         refs,
         stages
       };
     }
-    getClips() {
+    getState() {
+      const defaults = this.getRootDefaults();
       const input = this.getClipsInput();
       if (!input?.value) {
-        return [];
+        return {
+          width: defaults.width,
+          height: defaults.height,
+          clips: []
+        };
       }
       try {
         const parsed = JSON.parse(input.value);
-        const clipsRaw = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.clips) ? parsed.clips : [];
+        const parsedConfig = parsed && !Array.isArray(parsed) && typeof parsed === "object" ? parsed : null;
+        const clipsRaw = Array.isArray(parsed) ? parsed : Array.isArray(parsedConfig?.clips) ? parsedConfig.clips : [];
+        const firstClip = clipsRaw.length > 0 && clipsRaw[0] && typeof clipsRaw[0] === "object" ? clipsRaw[0] : null;
         const clips = [];
         for (let i = 0; i < clipsRaw.length; i++) {
           clips.push(
@@ -977,9 +1053,53 @@
             )
           );
         }
-        return clips;
+        this.migrateLegacyRootUploadedAudio(
+          clips,
+          this.normalizeUploadedAudio(parsedConfig?.uploadedAudio)
+        );
+        return {
+          width: this.getEffectiveRootDimension(
+            "width",
+            parsedConfig?.width ?? firstClip?.width,
+            defaults.width
+          ),
+          height: this.getEffectiveRootDimension(
+            "height",
+            parsedConfig?.height ?? firstClip?.height,
+            defaults.height
+          ),
+          clips
+        };
       } catch {
-        return [];
+        return {
+          width: defaults.width,
+          height: defaults.height,
+          clips: []
+        };
+      }
+    }
+    /**
+     * Older saved JSON stored a single shared upload at the top level of the
+     * config. New saves persist the upload directly inside each Upload-mode
+     * clip, so on load we migrate any legacy root-level upload into every
+     * Upload-mode clip that does not already carry its own audio. The next
+     * save then drops the obsolete root-level field.
+     */
+    migrateLegacyRootUploadedAudio(clips, legacyRootUpload) {
+      if (!legacyRootUpload) {
+        return;
+      }
+      for (const clip of clips) {
+        if (clip.uploadedAudio) {
+          continue;
+        }
+        if (`${clip.audioSource || ""}` !== AUDIO_SOURCE_UPLOAD) {
+          continue;
+        }
+        clip.uploadedAudio = {
+          data: legacyRootUpload.data,
+          fileName: legacyRootUpload.fileName
+        };
       }
     }
     serializeClipsForStorage(clips) {
@@ -988,8 +1108,8 @@
         expanded: clip.expanded,
         skipped: clip.skipped,
         duration: clip.duration,
-        width: clip.width,
-        height: clip.height,
+        audioSource: clip.audioSource,
+        uploadedAudio: clip.uploadedAudio,
         refs: clip.refs.map((ref) => ({
           expanded: ref.expanded,
           source: ref.source,
@@ -1013,38 +1133,64 @@
         }))
       }));
     }
-    saveClips(clips) {
+    saveState(state) {
       const input = this.getClipsInput();
       if (!input) {
         return;
       }
       this.suppressInactiveReseed = false;
-      const serialized = JSON.stringify(this.serializeClipsForStorage(clips));
+      const serialized = JSON.stringify({
+        width: state.width,
+        height: state.height,
+        clips: this.serializeClipsForStorage(state.clips)
+      });
       input.value = serialized;
       this.lastKnownClipsJson = serialized;
       triggerChangeFor(input);
     }
+    getClips() {
+      return this.getState().clips;
+    }
+    saveClips(clips) {
+      const state = this.getState();
+      state.clips = clips;
+      this.saveState(state);
+    }
     clearClipsForInactiveReuse() {
       const input = this.getClipsInput();
-      if (!input || input.value === "") {
-        return false;
+      let cleared = false;
+      if (input && input.value !== "") {
+        input.value = "";
+        this.lastKnownClipsJson = "";
+        cleared = true;
       }
-      input.value = "";
-      this.lastKnownClipsJson = "";
-      return true;
+      const widthInput = this.getRootDimensionParamInput("width");
+      if (widthInput && widthInput.value !== "0") {
+        widthInput.value = "0";
+        triggerChangeFor(widthInput);
+        cleared = true;
+      }
+      const heightInput = this.getRootDimensionParamInput("height");
+      if (heightInput && heightInput.value !== "0") {
+        heightInput.value = "0";
+        triggerChangeFor(heightInput);
+        cleared = true;
+      }
+      return cleared;
     }
     shouldKeepClipsBlankWhileDisabled() {
       return this.suppressInactiveReseed && !this.isVideoStagesEnabled();
     }
     ensureClipsSeeded() {
-      const clips = this.getClips();
-      if (clips.length > 0) {
+      const state = this.getState();
+      if (state.clips.length > 0) {
         return;
       }
       if (this.shouldKeepClipsBlankWhileDisabled()) {
         return;
       }
-      this.saveClips([this.buildDefaultClip(0)]);
+      state.clips = [this.buildDefaultClip(0)];
+      this.saveState(state);
     }
     isVideoStagesEnabled() {
       const toggler = this.getGroupToggle();
@@ -1200,10 +1346,14 @@
       if (!input) {
         return;
       }
-      const clips = this.getClips();
-      const serialized = JSON.stringify(this.serializeClipsForStorage(clips));
+      const state = this.getState();
+      const serialized = JSON.stringify({
+        width: state.width,
+        height: state.height,
+        clips: this.serializeClipsForStorage(state.clips)
+      });
       if (serialized !== input.value) {
-        this.saveClips(clips);
+        this.saveState(state);
       }
       this.scheduleClipsRefresh();
     }
@@ -1235,7 +1385,9 @@
           if (!(target instanceof HTMLSelectElement)) {
             return;
           }
-          if (target.dataset.refField !== "source") {
+          const isRefSourceChange = target.dataset.refField === "source";
+          const isClipAudioSourceChange = target.dataset.clipField === "audioSource";
+          if (!isRefSourceChange && !isClipAudioSourceChange) {
             return;
           }
           const liveEditor = document.getElementById(
@@ -1292,11 +1444,14 @@
       if (!this.editor) {
         return [];
       }
-      let clips = this.getClips();
+      this.seedRegisteredDimensionsFromCore();
+      const state = this.getState();
+      let clips = state.clips;
       if (clips.length === 0) {
         if (!this.shouldKeepClipsBlankWhileDisabled()) {
-          clips = [this.buildDefaultClip(0)];
-          this.saveClips(clips);
+          state.clips = [this.buildDefaultClip(0)];
+          clips = state.clips;
+          this.saveState(state);
         }
       }
       const focusSnapshot = this.captureFocus();
@@ -1326,6 +1481,7 @@
       this.editor.appendChild(addClipButton);
       this.attachEventListeners();
       enableSlidersIn(this.editor);
+      this.restoreClipAudioUploadPreviews(clips);
       this.restoreRefUploadPreviews();
       this.restoreFocus(focusSnapshot);
       return this.validateClips(clips);
@@ -1370,49 +1526,34 @@
         ),
         { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) }
       );
-      const widthField = injectFieldData(
-        makeSliderInput(
-          "",
-          clipFieldId(clipIdx, "width"),
-          "width",
-          "Width",
-          "",
-          String(clip.width),
-          CLIP_DIMENSION_MIN,
-          CLIP_DIMENSION_MAX,
-          CLIP_DIMENSION_MIN,
-          CLIP_DIMENSION_SLIDER_MAX,
-          CLIP_DIMENSION_STEP,
-          true,
-          false,
-          false
-        ),
-        { "data-clip-field": "width", "data-clip-idx": String(clipIdx) }
+      const audioSourceOptions = buildAudioSourceOptions();
+      const audioSource = resolveAudioSourceValue(
+        clip.audioSource,
+        audioSourceOptions
       );
-      const heightField = injectFieldData(
-        makeSliderInput(
-          "",
-          clipFieldId(clipIdx, "height"),
-          "height",
-          "Height",
-          "",
-          String(clip.height),
-          CLIP_DIMENSION_MIN,
-          CLIP_DIMENSION_MAX,
-          CLIP_DIMENSION_MIN,
-          CLIP_DIMENSION_SLIDER_MAX,
-          CLIP_DIMENSION_STEP,
-          true,
-          false,
-          false
+      const audioSourceField = injectFieldData(
+        this.buildNativeDropdown(
+          clipFieldId(clipIdx, "audioSource"),
+          "audioSource",
+          "Audio Source",
+          audioSourceOptions,
+          audioSource
         ),
-        { "data-clip-field": "height", "data-clip-idx": String(clipIdx) }
+        {
+          "data-clip-field": "audioSource",
+          "data-clip-idx": String(clipIdx)
+        }
+      );
+      const audioUploadField = this.renderClipAudioUploadField(
+        clip,
+        clipIdx,
+        audioSource
       );
       const body = `
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${lengthField}
-                ${widthField}
-                ${heightField}
+                ${audioSourceField}
+                ${audioUploadField}
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
@@ -1438,6 +1579,71 @@
         /<div class="([^"]*)"([^>]*)>/,
         (_match, classes, attrs) => `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`
       );
+    }
+    renderClipAudioUploadField(clip, clipIdx, audioSource) {
+      const id = clipFieldId(clipIdx, CLIP_AUDIO_UPLOAD_FIELD);
+      return this.decorateAutoInputWrapper(
+        injectFieldData(
+          makeAudioInput(
+            "",
+            id,
+            CLIP_AUDIO_UPLOAD_FIELD,
+            CLIP_AUDIO_UPLOAD_LABEL,
+            CLIP_AUDIO_UPLOAD_DESCRIPTION,
+            false,
+            true,
+            true,
+            true
+          ),
+          {
+            "data-clip-field": CLIP_AUDIO_UPLOAD_FIELD,
+            "data-clip-idx": String(clipIdx),
+            "data-has-uploaded-audio": clip.uploadedAudio?.data ? "true" : "false"
+          }
+        ),
+        "vs-clip-audio-upload-field",
+        audioSource !== AUDIO_SOURCE_UPLOAD
+      );
+    }
+    restoreClipAudioUploadPreviews(clips) {
+      if (!this.editor) {
+        return;
+      }
+      for (let clipIdx = 0; clipIdx < clips.length; clipIdx++) {
+        const upload = clips[clipIdx].uploadedAudio;
+        if (!upload?.data) {
+          continue;
+        }
+        const input = this.editor.querySelector(
+          `.auto-file[data-clip-field="${CLIP_AUDIO_UPLOAD_FIELD}"][data-clip-idx="${clipIdx}"]`
+        );
+        if (!input) {
+          continue;
+        }
+        if (input.dataset.filedata === upload.data && this.normalizeUploadFileName(input.dataset.filename) === upload.fileName) {
+          continue;
+        }
+        setMediaFileDirect(
+          input,
+          upload.data,
+          "audio",
+          upload.fileName ?? CLIP_AUDIO_UPLOAD_LABEL,
+          upload.fileName ?? void 0
+        );
+      }
+    }
+    syncClipAudioUploadFieldVisibility(target, source) {
+      const clipCard = target.closest(".vs-clip-card");
+      if (!(clipCard instanceof HTMLElement)) {
+        return;
+      }
+      const uploadField = clipCard.querySelector(
+        ".vs-clip-audio-upload-field"
+      );
+      if (!uploadField) {
+        return;
+      }
+      uploadField.style.display = source === AUDIO_SOURCE_UPLOAD ? "" : "none";
     }
     renderRefRow(ref, clipIdx, refIdx) {
       const collapseTitle = ref.expanded ? "Collapse" : "Expand";
@@ -1768,6 +1974,13 @@
           this.handleRefUploadRemove(refUploadRemoveButton);
           return;
         }
+        const clipUploadRemoveButton = target?.closest(
+          ".vs-clip-audio-upload-field .auto-input-remove-button"
+        );
+        if (clipUploadRemoveButton) {
+          this.handleClipAudioUploadRemove(clipUploadRemoveButton);
+          return;
+        }
         const actionElem = target?.closest(
           "[data-clip-action], [data-stage-action], [data-ref-action]"
         );
@@ -1939,35 +2152,63 @@
       this.refUploadCache.delete(this.refUploadKey(clipIdx, refIdx));
       this.saveClips(clips);
     }
+    handleClipAudioUploadRemove(elem) {
+      const uploadField = elem.closest(".vs-clip-audio-upload-field");
+      if (!(uploadField instanceof HTMLElement)) {
+        return;
+      }
+      const fileInput = uploadField.querySelector(
+        `.auto-file[data-clip-field="${CLIP_AUDIO_UPLOAD_FIELD}"]`
+      );
+      if (!fileInput) {
+        return;
+      }
+      const clipIdx = parseInt(fileInput.dataset.clipIdx ?? "-1", 10);
+      const clips = this.getClips();
+      if (clipIdx < 0 || clipIdx >= clips.length) {
+        return;
+      }
+      clips[clipIdx].uploadedAudio = null;
+      this.saveClips(clips);
+    }
     handleFieldChange(elem, fromInputEvent = false) {
       if (!elem || !this.editor?.contains(elem)) {
         return;
       }
       const target = elem;
-      const clips = this.getClips();
+      const state = this.getState();
+      const clips = state.clips;
+      const defaults = this.getRootDefaults();
+      const clipField = target.dataset.clipField;
+      const stageField = target.dataset.stageField;
+      const refField = target.dataset.refField;
       const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
       if (clipIdx < 0 || clipIdx >= clips.length) {
         return;
       }
       const clip = clips[clipIdx];
-      const defaults = this.getRootDefaults();
-      const clipField = target.dataset.clipField;
-      const stageField = target.dataset.stageField;
-      const refField = target.dataset.refField;
       if (clipField === "duration") {
         const value = parseFloat(target.value);
         if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
           clip.duration = snapDurationToFps(value, defaults.fps);
         }
-      } else if (clipField === "width") {
-        const value = parseFloat(target.value);
-        if (Number.isFinite(value) && value >= CLIP_DIMENSION_MIN) {
-          clip.width = Math.max(CLIP_DIMENSION_MIN, Math.round(value));
+      } else if (clipField === "audioSource") {
+        clip.audioSource = target.value || AUDIO_SOURCE_NATIVE;
+      } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
+        if (!(target instanceof HTMLInputElement) || target.type !== "file") {
+          return;
         }
-      } else if (clipField === "height") {
-        const value = parseFloat(target.value);
-        if (Number.isFinite(value) && value >= CLIP_DIMENSION_MIN) {
-          clip.height = Math.max(CLIP_DIMENSION_MIN, Math.round(value));
+        if (target.dataset.filedata) {
+          clip.uploadedAudio = {
+            data: target.dataset.filedata,
+            fileName: this.normalizeUploadFileName(
+              target.dataset.filename ?? target.files?.[0]?.name ?? null
+            )
+          };
+        } else if (target.files && target.files.length > 0) {
+          return;
+        } else {
+          clip.uploadedAudio = null;
         }
       } else if (refField) {
         const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
@@ -1997,7 +2238,10 @@
       } else {
         return;
       }
-      this.saveClips(clips);
+      this.saveState(state);
+      if (clipField === "audioSource") {
+        this.syncClipAudioUploadFieldVisibility(target, clip.audioSource);
+      }
       const isSliderDrag = fromInputEvent && target instanceof HTMLInputElement && target.type === "range";
       const needsRerender = !isSliderDrag && (clipField === "duration" && !fromInputEvent || stageField === "upscale");
       if (needsRerender) {

@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { AudioSourceController } from "./AudioSourceController";
-import {
-    mountCheckbox,
-    mountSelect,
-    mountUploadRow,
-} from "./__test_helpers__/dom";
+import { mountCheckbox, mountSelect } from "./__test_helpers__/dom";
 import {
     stubAceStepFunRegistry,
     stubAceStepFunRegistryThrowing,
@@ -12,8 +8,7 @@ import {
 
 type Controller = ReturnType<typeof AudioSourceController>;
 
-const SOURCE_ID = "input_vsaudiosource";
-const UPLOAD_ID = "input_vsaudioupload";
+const SOURCE_ID = "vsclip0_audioSource";
 const T2A_ID = "input_group_content_texttoaudio_toggle";
 const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
 
@@ -22,22 +17,17 @@ interface DomFixtureOptions {
     initialOptions?: string[];
     t2aChecked?: boolean;
     omitSource?: boolean;
-    omitUpload?: boolean;
     omitToggle?: boolean;
 }
 
 interface DomFixture {
     select: HTMLSelectElement | null;
-    wrapper: HTMLElement | null;
-    fileInput: HTMLInputElement | null;
     toggle: HTMLInputElement | null;
 }
 
 const setupDom = (options: DomFixtureOptions = {}): DomFixture => {
     const fixture: DomFixture = {
         select: null,
-        wrapper: null,
-        fileInput: null,
         toggle: null,
     };
 
@@ -46,12 +36,10 @@ const setupDom = (options: DomFixtureOptions = {}): DomFixture => {
             value: options.initialValue,
             options: options.initialOptions ?? ["Native", "Upload"],
         });
-    }
-
-    if (!options.omitUpload) {
-        const row = mountUploadRow(UPLOAD_ID);
-        fixture.wrapper = row.wrapper;
-        fixture.fileInput = row.fileInput;
+        if (fixture.select) {
+            fixture.select.dataset.clipField = "audioSource";
+            fixture.select.dataset.clipIdx = "0";
+        }
     }
 
     if (!options.omitToggle) {
@@ -191,40 +179,6 @@ describe("AudioSourceController", () => {
         });
     });
 
-    describe("applyUploadVisibility", () => {
-        it("hides the upload row when the source is not Upload", () => {
-            const { wrapper } = setupDom({ initialValue: "Native" });
-            controller = AudioSourceController();
-
-            controller.applyUploadVisibility();
-
-            expect(wrapper?.style.display).toBe("none");
-            expect(wrapper?.dataset.visible_controlled).toBe("true");
-        });
-
-        it("reveals the upload row and clears the controlled flag for Upload", () => {
-            const { select, wrapper } = setupDom({ initialValue: "Native" });
-            controller = AudioSourceController();
-            controller.applyUploadVisibility();
-
-            if (!select || !wrapper) {
-                throw new Error("fixture missing");
-            }
-            select.value = "Upload";
-            controller.applyUploadVisibility();
-
-            expect(wrapper.style.display).toBe("");
-            expect(wrapper.dataset.visible_controlled).toBeUndefined();
-        });
-
-        it("is a no-op when the upload container is missing", () => {
-            setupDom({ omitUpload: true });
-            controller = AudioSourceController();
-
-            expect(() => controller?.applyUploadVisibility()).not.toThrow();
-        });
-    });
-
     describe("refreshOptions", () => {
         it("rebuilds <option> elements and selects the resolved value", () => {
             const { select } = setupDom({
@@ -237,6 +191,22 @@ describe("AudioSourceController", () => {
 
             const values = Array.from(select?.options ?? []).map(
                 (o) => o.value,
+            );
+            expect(values).toEqual(["Native", "Upload"]);
+            expect(select?.value).toBe("Upload");
+        });
+
+        it("refreshes clip-level audio source dropdowns", () => {
+            const { select } = setupDom({
+                initialValue: "Upload",
+                initialOptions: ["Native", "Upload", "stale-extra"],
+            });
+            controller = AudioSourceController();
+
+            controller.refreshOptions();
+
+            const values = Array.from(select?.options ?? []).map(
+                (option) => option.value,
             );
             expect(values).toEqual(["Native", "Upload"]);
             expect(select?.value).toBe("Upload");
@@ -307,38 +277,6 @@ describe("AudioSourceController", () => {
             expect(values).toContain("new-track");
         });
 
-        it("re-applies upload visibility when the source select fires a change event", () => {
-            const { select, wrapper } = setupDom({ initialValue: "Native" });
-            controller = AudioSourceController();
-            controller.applyUploadVisibility();
-            if (!select || !wrapper) {
-                throw new Error("fixture missing");
-            }
-            expect(wrapper.style.display).toBe("none");
-
-            select.value = "Upload";
-            select.dispatchEvent(new Event("change", { bubbles: true }));
-
-            expect(wrapper.style.display).toBe("");
-        });
-
-        it("ignores change events from unrelated elements", () => {
-            const { wrapper } = setupDom({ initialValue: "Native" });
-            controller = AudioSourceController();
-            controller.applyUploadVisibility();
-            if (!wrapper) {
-                throw new Error("fixture missing");
-            }
-            const originalDisplay = wrapper.style.display;
-
-            const unrelated = document.createElement("input");
-            unrelated.id = "some-other-input";
-            document.body.appendChild(unrelated);
-            unrelated.dispatchEvent(new Event("change", { bubbles: true }));
-
-            expect(wrapper.style.display).toBe(originalDisplay);
-        });
-
         it("refreshes options when the source select receives a focusin", () => {
             const { select } = setupDom({
                 initialValue: "Upload",
@@ -373,20 +311,19 @@ describe("AudioSourceController", () => {
             expect(values).toContain("Swarm Audio");
         });
 
-        it("stops responding to events after dispose", () => {
-            const { select, wrapper } = setupDom({ initialValue: "Native" });
+        it("stops responding to acestepfun events after dispose", () => {
+            const { select } = setupDom();
             controller = AudioSourceController();
-            controller.applyUploadVisibility();
-            if (!select || !wrapper) {
-                throw new Error("fixture missing");
-            }
+            const originalCount = select?.options.length ?? 0;
             controller.dispose();
             controller = null;
 
-            select.value = "Upload";
-            select.dispatchEvent(new Event("change", { bubbles: true }));
+            stubAceStepFunRegistry(["new-track"]);
+            document.dispatchEvent(new Event(ACESTEPFUN_EVENT));
 
-            expect(wrapper.style.display).toBe("none");
+            // Without an active listener, the dropdown should not have been
+            // re-populated to include the new ref.
+            expect(select?.options.length).toBe(originalCount);
         });
     });
 
@@ -433,7 +370,6 @@ describe("AudioSourceController", () => {
         it("is resilient when the DOM is empty", () => {
             setupDom({
                 omitSource: true,
-                omitUpload: true,
                 omitToggle: true,
             });
             controller = AudioSourceController();

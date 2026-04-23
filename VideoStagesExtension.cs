@@ -3,7 +3,6 @@ using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Media;
 
 namespace VideoStages;
 
@@ -11,14 +10,17 @@ public class VideoStagesExtension : Extension
 {
     public const int SectionID_VideoStages = 48823;
     public const double DefaultLTXVImgToVideoInplaceStrength = 0.8;
+    public const int RootDimensionMin = 256;
+    public const int RootDimensionMax = 16384;
+    public const string RootDimensionsDescription = "These are the starting dimensions for each clip. You can upscale later in any stage.";
 
     public const string AudioSourceNative = "Native";
     public const string AudioSourceUpload = "Upload";
     public const string AudioSourceSwarm = "Swarm Audio";
 
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
-    public static T2IRegisteredParam<string> AudioSource;
-    public static T2IRegisteredParam<AudioFile> AudioUpload;
+    public static T2IRegisteredParam<int> RootWidth;
+    public static T2IRegisteredParam<int> RootHeight;
     public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
 
@@ -69,29 +71,42 @@ public class VideoStagesExtension : Extension
 
         double OrderPriority = 0;
 
-        AudioSource = T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "VS Audio Source",
-            Description: "Where the audio for your video should come from.\n"
-                + $"'{AudioSourceNative}': auto-detect any audio nodes already present in the workflow (default).\n"
-                + $"'{AudioSourceUpload}': use the audio file you upload below.\n"
-                + $"'{AudioSourceSwarm}': use the Text-To-Audio output (only when Text To Audio is enabled).\n"
-                + "Tracks published by extensions (eg AceStepFun) are also added dynamically when available.",
-            Default: AudioSourceNative,
-            GetValues: (_) => [AudioSourceNative, AudioSourceUpload],
+        // Min: 0 lets us use 0 as a sentinel for "no custom value yet" so the
+        // frontend can mirror the user's currently-selected core Width/Height
+        // into our slider on each panel build until the user moves it.
+        RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Video Stages Width",
+            Description: RootDimensionsDescription,
+            Default: "0",
+            Min: 0,
+            Max: RootDimensionMax,
+            ViewMin: RootDimensionMin,
+            ViewMax: 4096,
+            Step: 32,
+            ViewType: ParamViewType.POT_SLIDER,
+            HideFromMetadata: false,
+            DoNotPreview: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
             FeatureFlag: "comfyui"
         ));
         OrderPriority += 1;
 
-        AudioUpload = T2IParamTypes.Register<AudioFile>(new T2IParamType(
-            Name: "VS Audio Upload",
-            Description: $"Audio file to connect to the generated video. Only used when VS Audio Source is set to '{AudioSourceUpload}'.",
-            Default: null,
+        RootHeight = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Video Stages Height",
+            Description: RootDimensionsDescription,
+            Default: "0",
+            Min: 0,
+            Max: RootDimensionMax,
+            ViewMin: RootDimensionMin,
+            ViewMax: 4096,
+            Step: 32,
+            ViewType: ParamViewType.POT_SLIDER,
+            HideFromMetadata: false,
+            DoNotPreview: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui",
-            DoNotPreview: true
+            FeatureFlag: "comfyui"
         ));
         OrderPriority += 1;
 

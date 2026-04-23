@@ -51,6 +51,14 @@ public partial class StageFlowTests
             ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
         };
 
+    private static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
+        new()
+        {
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Clips"] = new JArray(clips.Cast<JToken>().ToArray())
+        };
+
     private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, string prompt = "unit test prompt")
     {
         _ = WorkflowTestHarness.VideoStagesSteps();

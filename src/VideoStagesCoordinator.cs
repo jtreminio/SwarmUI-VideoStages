@@ -39,36 +39,48 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             return;
         }
 
-        TryInjectDetectedAudio();
-
-        List<JsonParser.StageSpec> stages = HasConfiguredStages()
-            ? new JsonParser(g).ParseStages()
-            : [];
+        JsonParser parser = new(g);
+        List<JsonParser.ClipSpec> clips = parser.ParseClips();
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
         if (stages.Count == 0)
         {
+            TryInjectConfiguredAudio(parser, clips);
             return;
         }
 
-        new StageSequenceRunner(g, new StageRefStore(g), stages).Run();
+        AudioStageDetector.Detection detectedAudio = (!g.IsLTXV2() || g.CurrentAudioVae is null)
+            ? null
+            : new AudioStageDetector(g).Detect();
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
+        AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, uploadedAudios);
+        if (firstClipAudio is not null)
+        {
+            _ = new AudioInjector(g).TryInject(firstClipAudio);
+        }
+
+        new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, uploadedAudios).Run();
         EnsureFinalStageOutputSaved();
     }
 
-    private void TryInjectDetectedAudio()
+    private void TryInjectConfiguredAudio(JsonParser parser, List<JsonParser.ClipSpec> clips)
     {
         if (!g.IsLTXV2() || g.CurrentAudioVae is null)
         {
             return;
         }
 
-        string source = $"{g.UserInput.Get(VideoStagesExtension.AudioSource, VideoStagesExtension.AudioSourceNative)}".Trim();
-        if (string.IsNullOrEmpty(source))
+        AudioStageDetector.Detection detectedAudio = new AudioStageDetector(g).Detect();
+        if (clips.Count == 0)
         {
+            if (detectedAudio is not null)
+            {
+                _ = new AudioInjector(g).TryInject(detectedAudio);
+            }
             return;
         }
 
-        AudioStageDetector.Detection detection = string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal)
-            ? BuildUploadDetection()
-            : new AudioStageDetector(g).Detect();
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
+        AudioStageDetector.Detection detection = ResolveClipAudioSource(clips[0].Id, clips[0].AudioSource, detectedAudio, uploadedAudios);
         if (detection is null)
         {
             return;
@@ -77,20 +89,51 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         _ = new AudioInjector(g).TryInject(detection);
     }
 
-    private AudioStageDetector.Detection BuildUploadDetection()
+    /// <summary>
+    /// Creates a separate <see cref="AudioStageDetector.Detection"/> per
+    /// upload-mode clip so each clip can carry its own uploaded audio file.
+    /// Returns an empty dictionary when no clip uses Upload (avoids creating
+    /// orphan SwarmLoadAudioB64 nodes for clips that pull from the native
+    /// workflow audio instead).
+    /// </summary>
+    private IReadOnlyDictionary<int, AudioStageDetector.Detection> BuildPerClipUploadDetections(
+        JsonParser parser,
+        IReadOnlyList<JsonParser.ClipSpec> clips)
     {
-        if (!g.UserInput.TryGet(VideoStagesExtension.AudioUpload, out AudioFile uploaded) || uploaded is null)
+        Dictionary<int, AudioStageDetector.Detection> detections = [];
+        foreach (JsonParser.ClipSpec clip in clips)
         {
-            return null;
+            if (!string.Equals(clip.AudioSource, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            AudioFile uploaded = parser.ParseUploadedAudioForClip(clip);
+            if (uploaded is null)
+            {
+                continue;
+            }
+            string loadNodeId = g.CreateAudioLoadNode(uploaded, "${vsaudioupload}");
+            WGNodeData audio = new(
+                new JArray(loadNodeId, 0),
+                g,
+                WGNodeData.DT_AUDIO,
+                g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
+            detections[clip.Id] = new AudioStageDetector.Detection(audio, loadNodeId, "SwarmLoadAudioB64", loadNodeId, int.MaxValue);
         }
+        return detections;
+    }
 
-        string loadNodeId = g.CreateAudioLoadNode(uploaded, "${vsaudioupload}");
-        WGNodeData audio = new(
-            new JArray(loadNodeId, 0),
-            g,
-            WGNodeData.DT_AUDIO,
-            g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
-        return new AudioStageDetector.Detection(audio, loadNodeId, "SwarmLoadAudioB64", loadNodeId, int.MaxValue);
+    private static AudioStageDetector.Detection ResolveClipAudioSource(
+        int clipId,
+        string source,
+        AudioStageDetector.Detection detectedAudio,
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios)
+    {
+        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal))
+        {
+            return uploadedAudios.TryGetValue(clipId, out AudioStageDetector.Detection detection) ? detection : null;
+        }
+        return detectedAudio;
     }
 
     private bool HasRootVideoModel()

@@ -17,18 +17,27 @@ import {
     type RefImage,
     type RootDefaults,
     type Stage,
+    type UploadedAudio,
+    type VideoStagesConfig,
 } from "./Types";
 import { VideoStageUtils } from "./Utils";
+import {
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+    buildAudioSourceOptions,
+    resolveAudioSourceValue,
+} from "./AudioSourceController";
 
 const REF_FRAME_MIN = 1;
 const CLIP_DURATION_MIN = 1;
 const CLIP_DURATION_MAX = 9999;
 const CLIP_DURATION_SLIDER_MAX = 60;
 const CLIP_DURATION_SLIDER_STEP = 0.5;
-const CLIP_DIMENSION_MIN = 256;
-const CLIP_DIMENSION_MAX = 16384;
-const CLIP_DIMENSION_SLIDER_MAX = 4096;
-const CLIP_DIMENSION_STEP = 32;
+const ROOT_DIMENSION_MIN = 256;
+const CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
+const CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
+const CLIP_AUDIO_UPLOAD_DESCRIPTION =
+    "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
 const STAGE_REF_STRENGTH_MIN = 0.1;
 const STAGE_REF_STRENGTH_MAX = 1;
 const STAGE_REF_STRENGTH_STEP = 0.1;
@@ -93,12 +102,40 @@ export class VideoStageEditor {
         this.createEditor();
         this.startClipsInputSync();
         this.ensureClipsSeeded();
+        this.persistLegacyRootUploadMigration();
         this.wrapGenerateWithValidation();
         this.renderClips();
         this.installSourceDropdownObserver();
         this.installBase2EditStageChangeListener();
         this.installRootFramesChangeListener();
         this.installRefSourceFallbackListener();
+    }
+
+    /**
+     * If the persisted JSON still carries a legacy root-level `uploadedAudio`
+     * field, persist the migrated state once on load so subsequent reads see
+     * the per-clip layout and the obsolete root field is dropped.
+     */
+    private persistLegacyRootUploadMigration(): void {
+        const input = this.getClipsInput();
+        if (!input?.value) {
+            return;
+        }
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(input.value);
+        } catch {
+            return;
+        }
+        if (
+            !parsed ||
+            Array.isArray(parsed) ||
+            typeof parsed !== "object" ||
+            !("uploadedAudio" in (parsed as Record<string, unknown>))
+        ) {
+            return;
+        }
+        this.saveState(this.getState());
     }
 
     public resetForInactiveReuse(): void {
@@ -158,6 +195,105 @@ export class VideoStageEditor {
 
     private getClipsInput(): HTMLInputElement | null {
         return VideoStageUtils.getInputElement("input_videostages");
+    }
+
+    private getRootDimensionParamInput(
+        field: "width" | "height",
+    ): HTMLInputElement | null {
+        return VideoStageUtils.getInputElement(
+            field === "width" ? "input_vswidth" : "input_vsheight",
+        );
+    }
+
+    private getCoreDimensionInput(
+        field: "width" | "height",
+    ): HTMLInputElement | null {
+        const primaryId = field === "width" ? "input_width" : "input_height";
+        const fallbackId =
+            field === "width"
+                ? "input_aspectratiowidth"
+                : "input_aspectratioheight";
+        return (
+            VideoStageUtils.getInputElement(primaryId) ??
+            VideoStageUtils.getInputElement(fallbackId)
+        );
+    }
+
+    private getRegisteredRootDimension(
+        field: "width" | "height",
+    ): number | null {
+        const input = this.getRootDimensionParamInput(field);
+        if (!input) {
+            return null;
+        }
+        const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+        return value >= ROOT_DIMENSION_MIN ? value : null;
+    }
+
+    private getCoreDimension(field: "width" | "height"): number | null {
+        const input = this.getCoreDimensionInput(field);
+        if (!input) {
+            return null;
+        }
+        const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+        return value >= ROOT_DIMENSION_MIN ? value : null;
+    }
+
+    /**
+     * Seeds the registered RootWidth/RootHeight sliders with the user's
+     * currently-selected core Width/Height while our slider is still at the
+     * sentinel default (anything below {@link ROOT_DIMENSION_MIN}). Once the
+     * user moves our slider to a real value the sentinel guard prevents any
+     * further automatic overrides, so manual changes stick.
+     */
+    private seedRegisteredDimensionsFromCore(): void {
+        for (const field of ["width", "height"] as const) {
+            const ourInput = this.getRootDimensionParamInput(field);
+            if (!ourInput) {
+                continue;
+            }
+            const ourValue = Math.round(
+                VideoStageUtils.toNumber(ourInput.value, 0),
+            );
+            if (ourValue >= ROOT_DIMENSION_MIN) {
+                continue;
+            }
+            const coreValue = this.getCoreDimension(field);
+            if (coreValue === null) {
+                continue;
+            }
+            ourInput.value = `${coreValue}`;
+            triggerChangeFor(ourInput);
+        }
+    }
+
+    private getEffectiveRootDimension(
+        field: "width" | "height",
+        persistedValue: unknown,
+        fallback: number,
+    ): number {
+        return (
+            this.getRegisteredRootDimension(field) ??
+            this.getCoreDimension(field) ??
+            this.normalizeRootDimension(persistedValue, fallback)
+        );
+    }
+
+    private normalizeUploadedAudio(value: unknown): UploadedAudio | null {
+        if (!value || typeof value !== "object") {
+            return null;
+        }
+        const raw = value as { data?: unknown; fileName?: unknown };
+        const data = `${raw.data ?? ""}`.trim();
+        if (!data) {
+            return null;
+        }
+        return {
+            data,
+            fileName: this.normalizeUploadFileName(
+                raw.fileName == null ? null : `${raw.fileName}`,
+            ),
+        };
     }
 
     private getGroupToggle(): HTMLInputElement | null {
@@ -375,14 +511,22 @@ export class VideoStageEditor {
                 upscaleMethodLabels.length > 0
                     ? upscaleMethodLabels
                     : fallbackUpscaleMethods,
-            width: Math.max(
-                CLIP_DIMENSION_MIN,
-                Math.round(VideoStageUtils.toNumber(widthInput?.value, 1024)),
-            ),
-            height: Math.max(
-                CLIP_DIMENSION_MIN,
-                Math.round(VideoStageUtils.toNumber(heightInput?.value, 1024)),
-            ),
+            width:
+                this.getRegisteredRootDimension("width") ??
+                Math.max(
+                    ROOT_DIMENSION_MIN,
+                    Math.round(
+                        VideoStageUtils.toNumber(widthInput?.value, 1024),
+                    ),
+                ),
+            height:
+                this.getRegisteredRootDimension("height") ??
+                Math.max(
+                    ROOT_DIMENSION_MIN,
+                    Math.round(
+                        VideoStageUtils.toNumber(heightInput?.value, 1024),
+                    ),
+                ),
             fps,
             frames,
             control: 1,
@@ -512,11 +656,20 @@ export class VideoStageEditor {
                 ),
                 defaults.fps,
             ),
-            width: defaults.width,
-            height: defaults.height,
+            audioSource: AUDIO_SOURCE_NATIVE,
+            uploadedAudio: null,
             refs: [],
             stages: [this.buildDefaultStage(null, 0)],
         };
+    }
+
+    private normalizeRootDimension(value: unknown, fallback: number): number {
+        return Math.max(
+            ROOT_DIMENSION_MIN,
+            Math.round(
+                VideoStageUtils.toNumber(`${value ?? fallback}`, fallback),
+            ),
+        );
     }
 
     private refUploadKey(clipIdx: number, refIdx: number): string {
@@ -768,6 +921,7 @@ export class VideoStageEditor {
         index: number,
     ): Clip {
         const defaults = this.getRootDefaults();
+        const audioSourceOptions = buildAudioSourceOptions();
         const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
         const refFrameMax = this.getReferenceFrameMax();
         const refs = refsRaw.map((rawRef) =>
@@ -812,42 +966,49 @@ export class VideoStageEditor {
                 Math.max(CLIP_DURATION_MIN, rawDuration),
                 fps,
             ),
-            width: Math.max(
-                CLIP_DIMENSION_MIN,
-                Math.round(
-                    VideoStageUtils.toNumber(
-                        `${rawClip.width}`,
-                        defaults.width,
-                    ),
-                ),
+            audioSource: resolveAudioSourceValue(
+                `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
+                audioSourceOptions,
             ),
-            height: Math.max(
-                CLIP_DIMENSION_MIN,
-                Math.round(
-                    VideoStageUtils.toNumber(
-                        `${rawClip.height}`,
-                        defaults.height,
-                    ),
-                ),
-            ),
+            uploadedAudio: this.normalizeUploadedAudio(rawClip.uploadedAudio),
             refs,
             stages,
         };
     }
 
-    private getClips(): Clip[] {
+    private getState(): VideoStagesConfig {
+        const defaults = this.getRootDefaults();
         const input = this.getClipsInput();
         if (!input?.value) {
-            return [];
+            return {
+                width: defaults.width,
+                height: defaults.height,
+                clips: [],
+            };
         }
 
         try {
             const parsed = JSON.parse(input.value);
+            const parsedConfig =
+                parsed && !Array.isArray(parsed) && typeof parsed === "object"
+                    ? (parsed as {
+                          width?: unknown;
+                          height?: unknown;
+                          uploadedAudio?: unknown;
+                          clips?: unknown[];
+                      })
+                    : null;
             const clipsRaw = Array.isArray(parsed)
                 ? parsed
-                : Array.isArray((parsed as { clips?: unknown[] })?.clips)
-                  ? (parsed as { clips: unknown[] }).clips
+                : Array.isArray(parsedConfig?.clips)
+                  ? parsedConfig.clips
                   : [];
+            const firstClip =
+                clipsRaw.length > 0 &&
+                clipsRaw[0] &&
+                typeof clipsRaw[0] === "object"
+                    ? (clipsRaw[0] as { width?: unknown; height?: unknown })
+                    : null;
 
             const clips: Clip[] = [];
             for (let i = 0; i < clipsRaw.length; i++) {
@@ -859,9 +1020,57 @@ export class VideoStageEditor {
                     ),
                 );
             }
-            return clips;
+            this.migrateLegacyRootUploadedAudio(
+                clips,
+                this.normalizeUploadedAudio(parsedConfig?.uploadedAudio),
+            );
+            return {
+                width: this.getEffectiveRootDimension(
+                    "width",
+                    parsedConfig?.width ?? firstClip?.width,
+                    defaults.width,
+                ),
+                height: this.getEffectiveRootDimension(
+                    "height",
+                    parsedConfig?.height ?? firstClip?.height,
+                    defaults.height,
+                ),
+                clips,
+            };
         } catch {
-            return [];
+            return {
+                width: defaults.width,
+                height: defaults.height,
+                clips: [],
+            };
+        }
+    }
+
+    /**
+     * Older saved JSON stored a single shared upload at the top level of the
+     * config. New saves persist the upload directly inside each Upload-mode
+     * clip, so on load we migrate any legacy root-level upload into every
+     * Upload-mode clip that does not already carry its own audio. The next
+     * save then drops the obsolete root-level field.
+     */
+    private migrateLegacyRootUploadedAudio(
+        clips: Clip[],
+        legacyRootUpload: UploadedAudio | null,
+    ): void {
+        if (!legacyRootUpload) {
+            return;
+        }
+        for (const clip of clips) {
+            if (clip.uploadedAudio) {
+                continue;
+            }
+            if (`${clip.audioSource || ""}` !== AUDIO_SOURCE_UPLOAD) {
+                continue;
+            }
+            clip.uploadedAudio = {
+                data: legacyRootUpload.data,
+                fileName: legacyRootUpload.fileName,
+            };
         }
     }
 
@@ -871,8 +1080,8 @@ export class VideoStageEditor {
             expanded: clip.expanded,
             skipped: clip.skipped,
             duration: clip.duration,
-            width: clip.width,
-            height: clip.height,
+            audioSource: clip.audioSource,
+            uploadedAudio: clip.uploadedAudio,
             refs: clip.refs.map((ref) => ({
                 expanded: ref.expanded,
                 source: ref.source,
@@ -897,28 +1106,54 @@ export class VideoStageEditor {
         }));
     }
 
-    private saveClips(clips: Clip[]): void {
+    private saveState(state: VideoStagesConfig): void {
         const input = this.getClipsInput();
         if (!input) {
             return;
         }
 
         this.suppressInactiveReseed = false;
-        const serialized = JSON.stringify(this.serializeClipsForStorage(clips));
+        const serialized = JSON.stringify({
+            width: state.width,
+            height: state.height,
+            clips: this.serializeClipsForStorage(state.clips),
+        });
         input.value = serialized;
         this.lastKnownClipsJson = serialized;
         triggerChangeFor(input);
     }
 
+    private getClips(): Clip[] {
+        return this.getState().clips;
+    }
+
+    private saveClips(clips: Clip[]): void {
+        const state = this.getState();
+        state.clips = clips;
+        this.saveState(state);
+    }
+
     private clearClipsForInactiveReuse(): boolean {
         const input = this.getClipsInput();
-        if (!input || input.value === "") {
-            return false;
+        let cleared = false;
+        if (input && input.value !== "") {
+            input.value = "";
+            this.lastKnownClipsJson = "";
+            cleared = true;
         }
-
-        input.value = "";
-        this.lastKnownClipsJson = "";
-        return true;
+        const widthInput = this.getRootDimensionParamInput("width");
+        if (widthInput && widthInput.value !== "0") {
+            widthInput.value = "0";
+            triggerChangeFor(widthInput);
+            cleared = true;
+        }
+        const heightInput = this.getRootDimensionParamInput("height");
+        if (heightInput && heightInput.value !== "0") {
+            heightInput.value = "0";
+            triggerChangeFor(heightInput);
+            cleared = true;
+        }
+        return cleared;
     }
 
     private shouldKeepClipsBlankWhileDisabled(): boolean {
@@ -926,15 +1161,16 @@ export class VideoStageEditor {
     }
 
     private ensureClipsSeeded(): void {
-        const clips = this.getClips();
-        if (clips.length > 0) {
+        const state = this.getState();
+        if (state.clips.length > 0) {
             return;
         }
         if (this.shouldKeepClipsBlankWhileDisabled()) {
             return;
         }
 
-        this.saveClips([this.buildDefaultClip(0)]);
+        state.clips = [this.buildDefaultClip(0)];
+        this.saveState(state);
     }
 
     private isVideoStagesEnabled(): boolean {
@@ -1122,10 +1358,14 @@ export class VideoStageEditor {
             return;
         }
 
-        const clips = this.getClips();
-        const serialized = JSON.stringify(this.serializeClipsForStorage(clips));
+        const state = this.getState();
+        const serialized = JSON.stringify({
+            width: state.width,
+            height: state.height,
+            clips: this.serializeClipsForStorage(state.clips),
+        });
         if (serialized !== input.value) {
-            this.saveClips(clips);
+            this.saveState(state);
         }
         this.scheduleClipsRefresh();
     }
@@ -1166,7 +1406,10 @@ export class VideoStageEditor {
                 if (!(target instanceof HTMLSelectElement)) {
                     return;
                 }
-                if (target.dataset.refField !== "source") {
+                const isRefSourceChange = target.dataset.refField === "source";
+                const isClipAudioSourceChange =
+                    target.dataset.clipField === "audioSource";
+                if (!isRefSourceChange && !isClipAudioSourceChange) {
                     return;
                 }
                 const liveEditor = document.getElementById(
@@ -1181,8 +1424,8 @@ export class VideoStageEditor {
 
                 // SwarmUI can rebuild the parameter panel after our init hook,
                 // leaving the old editor element (and its delegated listeners)
-                // detached. Mirror the ref-source change here so Upload still
-                // reveals the native file picker on the live DOM.
+                // detached. Mirror source-select changes here so Upload still
+                // reveals its native file picker on the live DOM.
                 this.createEditor();
                 this.handleFieldChange(target);
             },
@@ -1234,11 +1477,15 @@ export class VideoStageEditor {
             return [];
         }
 
-        let clips = this.getClips();
+        this.seedRegisteredDimensionsFromCore();
+
+        const state = this.getState();
+        let clips = state.clips;
         if (clips.length === 0) {
             if (!this.shouldKeepClipsBlankWhileDisabled()) {
-                clips = [this.buildDefaultClip(0)];
-                this.saveClips(clips);
+                state.clips = [this.buildDefaultClip(0)];
+                clips = state.clips;
+                this.saveState(state);
             }
         }
 
@@ -1273,6 +1520,7 @@ export class VideoStageEditor {
 
         this.attachEventListeners();
         enableSlidersIn(this.editor);
+        this.restoreClipAudioUploadPreviews(clips);
         this.restoreRefUploadPreviews();
         this.restoreFocus(focusSnapshot);
 
@@ -1327,50 +1575,35 @@ export class VideoStageEditor {
             ),
             { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) },
         );
-        const widthField = injectFieldData(
-            makeSliderInput(
-                "",
-                clipFieldId(clipIdx, "width"),
-                "width",
-                "Width",
-                "",
-                String(clip.width),
-                CLIP_DIMENSION_MIN,
-                CLIP_DIMENSION_MAX,
-                CLIP_DIMENSION_MIN,
-                CLIP_DIMENSION_SLIDER_MAX,
-                CLIP_DIMENSION_STEP,
-                true,
-                false,
-                false,
-            ),
-            { "data-clip-field": "width", "data-clip-idx": String(clipIdx) },
+        const audioSourceOptions = buildAudioSourceOptions();
+        const audioSource = resolveAudioSourceValue(
+            clip.audioSource,
+            audioSourceOptions,
         );
-        const heightField = injectFieldData(
-            makeSliderInput(
-                "",
-                clipFieldId(clipIdx, "height"),
-                "height",
-                "Height",
-                "",
-                String(clip.height),
-                CLIP_DIMENSION_MIN,
-                CLIP_DIMENSION_MAX,
-                CLIP_DIMENSION_MIN,
-                CLIP_DIMENSION_SLIDER_MAX,
-                CLIP_DIMENSION_STEP,
-                true,
-                false,
-                false,
+        const audioSourceField = injectFieldData(
+            this.buildNativeDropdown(
+                clipFieldId(clipIdx, "audioSource"),
+                "audioSource",
+                "Audio Source",
+                audioSourceOptions,
+                audioSource,
             ),
-            { "data-clip-field": "height", "data-clip-idx": String(clipIdx) },
+            {
+                "data-clip-field": "audioSource",
+                "data-clip-idx": String(clipIdx),
+            },
+        );
+        const audioUploadField = this.renderClipAudioUploadField(
+            clip,
+            clipIdx,
+            audioSource,
         );
 
         const body = `
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${lengthField}
-                ${widthField}
-                ${heightField}
+                ${audioSourceField}
+                ${audioUploadField}
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
@@ -1403,6 +1636,88 @@ export class VideoStageEditor {
             (_match, classes, attrs) =>
                 `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`,
         );
+    }
+
+    private renderClipAudioUploadField(
+        clip: Clip,
+        clipIdx: number,
+        audioSource: string,
+    ): string {
+        const id = clipFieldId(clipIdx, CLIP_AUDIO_UPLOAD_FIELD);
+        return this.decorateAutoInputWrapper(
+            injectFieldData(
+                makeAudioInput(
+                    "",
+                    id,
+                    CLIP_AUDIO_UPLOAD_FIELD,
+                    CLIP_AUDIO_UPLOAD_LABEL,
+                    CLIP_AUDIO_UPLOAD_DESCRIPTION,
+                    false,
+                    true,
+                    true,
+                    true,
+                ),
+                {
+                    "data-clip-field": CLIP_AUDIO_UPLOAD_FIELD,
+                    "data-clip-idx": String(clipIdx),
+                    "data-has-uploaded-audio": clip.uploadedAudio?.data
+                        ? "true"
+                        : "false",
+                },
+            ),
+            "vs-clip-audio-upload-field",
+            audioSource !== AUDIO_SOURCE_UPLOAD,
+        );
+    }
+
+    private restoreClipAudioUploadPreviews(clips: Clip[]): void {
+        if (!this.editor) {
+            return;
+        }
+        for (let clipIdx = 0; clipIdx < clips.length; clipIdx++) {
+            const upload = clips[clipIdx].uploadedAudio;
+            if (!upload?.data) {
+                continue;
+            }
+            const input = this.editor.querySelector(
+                `.auto-file[data-clip-field="${CLIP_AUDIO_UPLOAD_FIELD}"][data-clip-idx="${clipIdx}"]`,
+            ) as HTMLInputElement | null;
+            if (!input) {
+                continue;
+            }
+            if (
+                input.dataset.filedata === upload.data &&
+                this.normalizeUploadFileName(input.dataset.filename) ===
+                    upload.fileName
+            ) {
+                continue;
+            }
+            setMediaFileDirect(
+                input,
+                upload.data,
+                "audio",
+                upload.fileName ?? CLIP_AUDIO_UPLOAD_LABEL,
+                upload.fileName ?? undefined,
+            );
+        }
+    }
+
+    private syncClipAudioUploadFieldVisibility(
+        target: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+        source: string,
+    ): void {
+        const clipCard = target.closest(".vs-clip-card");
+        if (!(clipCard instanceof HTMLElement)) {
+            return;
+        }
+        const uploadField = clipCard.querySelector(
+            ".vs-clip-audio-upload-field",
+        ) as HTMLElement | null;
+        if (!uploadField) {
+            return;
+        }
+        uploadField.style.display =
+            source === AUDIO_SOURCE_UPLOAD ? "" : "none";
     }
 
     private renderRefRow(
@@ -1793,6 +2108,13 @@ export class VideoStageEditor {
                 this.handleRefUploadRemove(refUploadRemoveButton);
                 return;
             }
+            const clipUploadRemoveButton = target?.closest(
+                ".vs-clip-audio-upload-field .auto-input-remove-button",
+            ) as HTMLElement | null;
+            if (clipUploadRemoveButton) {
+                this.handleClipAudioUploadRemove(clipUploadRemoveButton);
+                return;
+            }
             const actionElem = target?.closest(
                 "[data-clip-action], [data-stage-action], [data-ref-action]",
             ) as HTMLElement | null;
@@ -1992,6 +2314,27 @@ export class VideoStageEditor {
         this.saveClips(clips);
     }
 
+    private handleClipAudioUploadRemove(elem: HTMLElement): void {
+        const uploadField = elem.closest(".vs-clip-audio-upload-field");
+        if (!(uploadField instanceof HTMLElement)) {
+            return;
+        }
+        const fileInput = uploadField.querySelector(
+            `.auto-file[data-clip-field="${CLIP_AUDIO_UPLOAD_FIELD}"]`,
+        ) as HTMLInputElement | null;
+        if (!fileInput) {
+            return;
+        }
+        const clipIdx = parseInt(fileInput.dataset.clipIdx ?? "-1", 10);
+        const clips = this.getClips();
+        if (clipIdx < 0 || clipIdx >= clips.length) {
+            return;
+        }
+
+        clips[clipIdx].uploadedAudio = null;
+        this.saveClips(clips);
+    }
+
     private handleFieldChange(
         elem: HTMLElement | null,
         fromInputEvent = false,
@@ -2003,32 +2346,47 @@ export class VideoStageEditor {
             | HTMLInputElement
             | HTMLSelectElement
             | HTMLTextAreaElement;
-        const clips = this.getClips();
-        const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
-        if (clipIdx < 0 || clipIdx >= clips.length) {
-            return;
-        }
-        const clip = clips[clipIdx];
+        const state = this.getState();
+        const clips = state.clips;
         const defaults = this.getRootDefaults();
 
         const clipField = target.dataset.clipField;
         const stageField = target.dataset.stageField;
         const refField = target.dataset.refField;
 
+        const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
+        if (clipIdx < 0 || clipIdx >= clips.length) {
+            return;
+        }
+        const clip = clips[clipIdx];
+
         if (clipField === "duration") {
             const value = parseFloat(target.value);
             if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
                 clip.duration = snapDurationToFps(value, defaults.fps);
             }
-        } else if (clipField === "width") {
-            const value = parseFloat(target.value);
-            if (Number.isFinite(value) && value >= CLIP_DIMENSION_MIN) {
-                clip.width = Math.max(CLIP_DIMENSION_MIN, Math.round(value));
+        } else if (clipField === "audioSource") {
+            clip.audioSource = target.value || AUDIO_SOURCE_NATIVE;
+        } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
+            if (
+                !(target instanceof HTMLInputElement) ||
+                target.type !== "file"
+            ) {
+                return;
             }
-        } else if (clipField === "height") {
-            const value = parseFloat(target.value);
-            if (Number.isFinite(value) && value >= CLIP_DIMENSION_MIN) {
-                clip.height = Math.max(CLIP_DIMENSION_MIN, Math.round(value));
+            if (target.dataset.filedata) {
+                clip.uploadedAudio = {
+                    data: target.dataset.filedata,
+                    fileName: this.normalizeUploadFileName(
+                        target.dataset.filename ??
+                            target.files?.[0]?.name ??
+                            null,
+                    ),
+                };
+            } else if (target.files && target.files.length > 0) {
+                return;
+            } else {
+                clip.uploadedAudio = null;
             }
         } else if (refField) {
             const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
@@ -2059,7 +2417,10 @@ export class VideoStageEditor {
             return;
         }
 
-        this.saveClips(clips);
+        this.saveState(state);
+        if (clipField === "audioSource") {
+            this.syncClipAudioUploadFieldVisibility(target, clip.audioSource);
+        }
         const isSliderDrag =
             fromInputEvent &&
             target instanceof HTMLInputElement &&

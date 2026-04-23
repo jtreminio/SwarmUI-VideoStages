@@ -6,11 +6,17 @@ using VideoStages.LTX2;
 
 namespace VideoStages;
 
-public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IReadOnlyList<JsonParser.StageSpec> stages)
+public class StageSequenceRunner(
+    WorkflowGenerator g,
+    StageRefStore store,
+    IReadOnlyList<JsonParser.StageSpec> stages,
+    AudioStageDetector.Detection detectedAudio = null,
+    IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null)
 {
     private const int IntermediateStageSaveId = 52100;
 
     private readonly StageRunner _singleStageRunner = new(g);
+    private int? _preparedClipId = null;
 
     public void Run()
     {
@@ -20,6 +26,7 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
             CaptureReference(StageRefStore.StageKind.Generated);
             foreach (JsonParser.StageSpec stage in stages)
             {
+                PrepareClipAudio(stage);
                 StageRefStore.StageRef guideRef = ResolveGuideReference(stage);
 
                 int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
@@ -41,6 +48,37 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
                 g.UserInput.SectionParamOverrides.Remove(sectionId);
             }
         }
+    }
+
+    private void PrepareClipAudio(JsonParser.StageSpec stage)
+    {
+        if (_preparedClipId == stage.ClipId || g.CurrentMedia is null)
+        {
+            return;
+        }
+
+        _preparedClipId = stage.ClipId;
+        WGNodeData currentMedia = g.CurrentMedia.Duplicate();
+        currentMedia.AttachedAudio = ResolveClipAudio(stage)?.Audio;
+        g.CurrentMedia = currentMedia;
+    }
+
+    private AudioStageDetector.Detection ResolveClipAudio(JsonParser.StageSpec stage)
+    {
+        string source = $"{stage.ClipAudioSource ?? VideoStagesExtension.AudioSourceNative}".Trim();
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return null;
+        }
+        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.Ordinal))
+        {
+            if (uploadedAudios is null)
+            {
+                return null;
+            }
+            return uploadedAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection detection) ? detection : null;
+        }
+        return detectedAudio;
     }
 
     private void CaptureReference(StageRefStore.StageKind kind, int? index = null)

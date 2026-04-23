@@ -111,10 +111,9 @@ internal static class RootVideoStageResizer
     }
 
     /// <summary>
-    /// Returns the resolution to use for the root video stage. With the
-    /// per-clip data model, the first non-skipped clip drives the root
-    /// stage's pre-frame-extract scale; if it doesn't carry both Width
-    /// and Height (e.g. legacy stage-only JSON), the resizer is skipped.
+    /// Returns the resolution to use for the root video stage. The current
+    /// editor stores Width / Height at the top level; older clip-scoped JSON
+    /// is still accepted as a fallback for backward compatibility.
     /// </summary>
     private static bool TryGetRootStageResolution(WorkflowGenerator g, out int width, out int height)
     {
@@ -125,8 +124,20 @@ internal static class RootVideoStageResizer
             return false;
         }
 
+        if (TryGetRegisteredRootStageResolution(g, out width, out height))
+        {
+            return true;
+        }
+
         JsonParser parser = new(g);
-        foreach (JsonParser.ClipSpec clip in parser.ParseClips())
+        JsonParser.VideoStagesSpec config = parser.ParseConfig();
+        if (config.Width.HasValue && config.Height.HasValue && config.Width.Value > 0 && config.Height.Value > 0)
+        {
+            width = config.Width.Value;
+            height = config.Height.Value;
+            return true;
+        }
+        foreach (JsonParser.ClipSpec clip in config.Clips)
         {
             if (clip.Skipped)
             {
@@ -141,6 +152,16 @@ internal static class RootVideoStageResizer
             return false;
         }
         return false;
+    }
+
+    private static bool TryGetRegisteredRootStageResolution(WorkflowGenerator g, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        return g.UserInput.TryGet(VideoStagesExtension.RootWidth, out width)
+            && g.UserInput.TryGet(VideoStagesExtension.RootHeight, out height)
+            && width >= VideoStagesExtension.RootDimensionMin
+            && height >= VideoStagesExtension.RootDimensionMin;
     }
 
     internal static bool TryGetConfiguredRootStageResolution(WorkflowGenerator g, out int width, out int height)
@@ -188,7 +209,7 @@ internal static class RootVideoStageResizer
 
     private static void UpdateAllAudioMaskDimensions(WorkflowGenerator g, int width, int height)
     {
-        foreach (var setMaskNode in WorkflowUtils.NodesOfType(g.Workflow, NodeTypes.SetLatentNoiseMask))
+        foreach (WorkflowNode setMaskNode in WorkflowUtils.NodesOfType(g.Workflow, NodeTypes.SetLatentNoiseMask))
         {
             if (!IsAudioNoiseMaskNode(g, setMaskNode.Node)
                 || !TryGetSolidMaskInputsForSetMaskNode(g, setMaskNode.Node, out JObject solidMaskInputs))

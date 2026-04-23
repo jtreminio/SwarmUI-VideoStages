@@ -31,6 +31,17 @@ export interface RootDefaults {
     cfgScaleStep: number;
 }
 
+export interface VideoStagesConfig {
+    width: number;
+    height: number;
+    clips: Clip[];
+}
+
+export interface UploadedAudio {
+    data: string;
+    fileName: string | null;
+}
+
 export interface Stage {
     expanded: boolean;
     skipped: boolean;
@@ -59,8 +70,8 @@ export interface Clip {
     expanded: boolean;
     skipped: boolean;
     duration: number;
-    width: number;
-    height: number;
+    audioSource: string;
+    uploadedAudio: UploadedAudio | null;
     refs: RefImage[];
     stages: Stage[];
 }

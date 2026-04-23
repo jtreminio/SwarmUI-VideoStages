@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using Xunit;
 
@@ -44,18 +45,56 @@ public class JsonParserClipsTests
         IEnumerable<JObject> refs = null,
         bool skipped = false,
         double duration = 3.0,
+        string audioSource = VideoStagesExtension.AudioSourceNative,
         int width = 1024,
-        int height = 768)
+        int height = 768,
+        JObject uploadedAudio = null)
     {
-        return new JObject
+        JObject clip = new()
         {
             ["Name"] = name,
             ["Skipped"] = skipped,
             ["Duration"] = duration,
+            ["AudioSource"] = audioSource,
             ["Width"] = width,
             ["Height"] = height,
             ["Refs"] = new JArray(refs ?? []),
             ["Stages"] = new JArray(stages),
+        };
+        if (uploadedAudio is not null)
+        {
+            clip["UploadedAudio"] = uploadedAudio;
+        }
+        return clip;
+    }
+
+    private static JObject MakeRootConfig(
+        int width,
+        int height,
+        IEnumerable<JObject> clips,
+        JObject uploadedAudio = null)
+    {
+        JObject config = new()
+        {
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Clips"] = new JArray(clips),
+        };
+        if (uploadedAudio is not null)
+        {
+            config["UploadedAudio"] = uploadedAudio;
+        }
+        return config;
+    }
+
+    private static JObject MakeUploadedAudio(
+        string data = "data:audio/wav;base64,QUJD",
+        string fileName = "clip.wav")
+    {
+        return new JObject
+        {
+            ["Data"] = data,
+            ["FileName"] = fileName,
         };
     }
 
@@ -134,6 +173,106 @@ public class JsonParserClipsTests
     }
 
     [Fact]
+    public void ParseConfig_RootShape_PopulatesRootDimensionsAndClipAudioSource()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1344,
+            height: 832,
+            clips: [
+                MakeClip(
+                    "First Clip",
+                    stages: [MakeStage("model-a")],
+                    audioSource: VideoStagesExtension.AudioSourceUpload)
+            ]));
+        JsonParser parser = BuildParser(json);
+
+        JsonParser.VideoStagesSpec config = parser.ParseConfig();
+
+        Assert.Equal(1344, config.Width);
+        Assert.Equal(832, config.Height);
+        Assert.Single(config.Clips);
+        Assert.Equal(VideoStagesExtension.AudioSourceUpload, config.Clips[0].AudioSource);
+    }
+
+    [Fact]
+    public void ParseUploadedAudio_RootShape_ReturnsEmbeddedAudioFile()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1344,
+            height: 832,
+            clips: [
+                MakeClip(
+                    "First Clip",
+                    stages: [MakeStage("model-a")],
+                    audioSource: VideoStagesExtension.AudioSourceUpload)
+            ],
+            uploadedAudio: MakeUploadedAudio()));
+        JsonParser parser = BuildParser(json);
+
+        AudioFile uploadedAudio = parser.ParseUploadedAudio();
+
+        Assert.NotNull(uploadedAudio);
+        Assert.Equal("clip.wav", uploadedAudio.SourceFilePath);
+        Assert.Equal("wav", uploadedAudio.Type.Extension);
+    }
+
+    [Fact]
+    public void ParseClips_PerClipUploadedAudio_IsParsed()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                "First Clip",
+                stages: [MakeStage("model-a")],
+                audioSource: VideoStagesExtension.AudioSourceUpload,
+                uploadedAudio: MakeUploadedAudio(fileName: "first.wav")),
+            MakeClip(
+                "Second Clip",
+                stages: [MakeStage("model-b")],
+                audioSource: VideoStagesExtension.AudioSourceUpload,
+                uploadedAudio: MakeUploadedAudio(fileName: "second.wav"))
+        ));
+        JsonParser parser = BuildParser(json);
+
+        List<JsonParser.ClipSpec> clips = parser.ParseClips();
+
+        Assert.Equal(2, clips.Count);
+        Assert.NotNull(clips[0].UploadedAudio);
+        Assert.Equal("first.wav", clips[0].UploadedAudio.FileName);
+        Assert.NotNull(clips[1].UploadedAudio);
+        Assert.Equal("second.wav", clips[1].UploadedAudio.FileName);
+
+        AudioFile firstAudio = parser.ParseUploadedAudioForClip(clips[0]);
+        AudioFile secondAudio = parser.ParseUploadedAudioForClip(clips[1]);
+        Assert.NotNull(firstAudio);
+        Assert.Equal("first.wav", firstAudio.SourceFilePath);
+        Assert.NotNull(secondAudio);
+        Assert.Equal("second.wav", secondAudio.SourceFilePath);
+    }
+
+    [Fact]
+    public void ParseUploadedAudioForClip_FallsBackToRootLevelUpload_WhenClipHasNone()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1024,
+            height: 768,
+            clips: [
+                MakeClip(
+                    "First Clip",
+                    stages: [MakeStage("model-a")],
+                    audioSource: VideoStagesExtension.AudioSourceUpload)
+            ],
+            uploadedAudio: MakeUploadedAudio(fileName: "legacy.wav")));
+        JsonParser parser = BuildParser(json);
+
+        JsonParser.ClipSpec clip = parser.ParseClips().Single();
+        Assert.Null(clip.UploadedAudio);
+
+        AudioFile audio = parser.ParseUploadedAudioForClip(clip);
+        Assert.NotNull(audio);
+        Assert.Equal("legacy.wav", audio.SourceFilePath);
+    }
+
+    [Fact]
     public void ParseStages_Flattens_ClipShape_AcrossClips_AssigningSequentialIds()
     {
         string json = JsonConvert.SerializeObject(new JArray(
@@ -171,6 +310,64 @@ public class JsonParserClipsTests
         Assert.Equal(2, stages.Count);
         Assert.Equal("model-a", stages[0].Model);
         Assert.Equal("model-c", stages[1].Model);
+    }
+
+    [Fact]
+    public void ParseStages_RootShape_UsesRootDimensionsAcrossClips()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1280,
+            height: 720,
+            clips: [
+                MakeClip(
+                    "First",
+                    stages: [MakeStage("model-a")],
+                    duration: 4.0,
+                    width: 800,
+                    height: 600)
+            ]));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(T2IParamTypes.VideoFPS, 24);
+        WorkflowGenerator generator = new() { UserInput = input };
+        JsonParser parser = new(generator);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        Assert.Single(stages);
+        Assert.Equal(0, stages[0].ClipId);
+        Assert.Equal(VideoStagesExtension.AudioSourceNative, stages[0].ClipAudioSource);
+        Assert.Equal(1280, stages[0].ClipWidth);
+        Assert.Equal(720, stages[0].ClipHeight);
+        Assert.Equal(96, stages[0].ClipFrames);
+    }
+
+    [Fact]
+    public void ParseStages_RegisteredRootParams_OverrideJsonRootDimensions()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1280,
+            height: 720,
+            clips: [
+                MakeClip(
+                    "First",
+                    stages: [MakeStage("model-a")],
+                    duration: 4.0,
+                    width: 800,
+                    height: 600)
+            ]));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(VideoStagesExtension.RootWidth, 1536);
+        input.Set(VideoStagesExtension.RootHeight, 864);
+        input.Set(T2IParamTypes.VideoFPS, 24);
+        WorkflowGenerator generator = new() { UserInput = input };
+        JsonParser parser = new(generator);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        Assert.Single(stages);
+        Assert.Equal(1536, stages[0].ClipWidth);
+        Assert.Equal(864, stages[0].ClipHeight);
+        Assert.Equal(96, stages[0].ClipFrames);
     }
 
     [Fact]
