@@ -29,6 +29,7 @@ interface ParsedStage {
     steps?: number;
     cfgScale?: number;
     upscale?: number;
+    refStrengths?: number[];
     expanded?: boolean;
     skipped?: boolean;
 }
@@ -347,6 +348,35 @@ describe("VideoStageEditor", () => {
             expect(clips[0].refs?.[0].source).toBe("Base");
         });
 
+        it("adds a default ref strength slider for each stage when a ref is added", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const clips = parseStored();
+            expect(clips[0].refs).toHaveLength(1);
+            expect(clips[0].stages?.[0].refStrengths).toEqual([0.8]);
+            expect(clips[0].stages?.[1].refStrengths).toEqual([0.8]);
+            expect(
+                document.querySelectorAll(
+                    '[data-stage-field="refStrength_0"][type="range"]',
+                ),
+            ).toHaveLength(2);
+        });
+
         it("includes Base2Edit refs in the source dropdown when registered", async () => {
             stubBase2EditStageRegistry(["edit0", "edit1"]);
             const editor = new VideoStageEditor();
@@ -517,6 +547,54 @@ describe("VideoStageEditor", () => {
             expect(uploadField?.style.display).toBe("");
         });
 
+        it("removes the matching ref strength from each stage when a ref is deleted", async () => {
+            getStagesInput().value = JSON.stringify([
+                {
+                    name: "First",
+                    duration: 4,
+                    width: 800,
+                    height: 600,
+                    refs: [
+                        { source: "Base", frame: 1 },
+                        { source: "Refiner", frame: 5 },
+                    ],
+                    stages: [
+                        {
+                            model: "ltx-2.3-22b-dev",
+                            steps: 8,
+                            cfgScale: 1,
+                            refStrengths: [0.3, 0.7],
+                        },
+                        {
+                            model: "ltx-2.3-22b-dev",
+                            steps: 12,
+                            cfgScale: 1,
+                            refStrengths: [0.4, 0.9],
+                        },
+                    ],
+                },
+            ]);
+
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            const deleteBtn = document.querySelector(
+                '[data-ref-action="delete"][data-ref-idx="0"]',
+            ) as HTMLButtonElement | null;
+            expect(deleteBtn).not.toBeNull();
+            deleteBtn?.click();
+            await flushReRender();
+
+            const clips = parseStored();
+            expect(clips[0].refs).toHaveLength(1);
+            expect(clips[0].refs?.[0].source).toBe("Refiner");
+            expect(clips[0].stages?.[0].refStrengths).toEqual([0.7]);
+            expect(clips[0].stages?.[1].refStrengths).toEqual([0.9]);
+            expect(
+                document.querySelector('[data-stage-field="refStrength_1"]'),
+            ).toBeNull();
+        });
+
         it("refreshes the reference frame slider max when root frames change", async () => {
             const editor = new VideoStageEditor();
             editor.init();
@@ -575,6 +653,43 @@ describe("VideoStageEditor", () => {
 
             const clips = parseStored();
             expect(clips[0].stages).toHaveLength(2);
+        });
+
+        it("initializes new stages with default ref strengths for existing refs", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const clips = parseStored();
+            expect(clips[0].stages?.[1].refStrengths).toEqual([0.8, 0.8]);
+            expect(
+                document.querySelector(
+                    '[data-stage-field="refStrength_0"][data-stage-idx="1"]',
+                ),
+            ).not.toBeNull();
+            expect(
+                document.querySelector(
+                    '[data-stage-field="refStrength_1"][data-stage-idx="1"]',
+                ),
+            ).not.toBeNull();
         });
 
         it("renders control, steps, cfg scale, and upscale as slider fields", () => {
@@ -673,6 +788,33 @@ describe("VideoStageEditor", () => {
             upscaleSlider.dispatchEvent(new Event("input", { bubbles: true }));
             expect(parseStored()[0].stages?.[0].upscale).toBe(1);
             expect(upscaleMethod.disabled).toBe(true);
+        });
+
+        it("updates stored ref strength when a stage ref slider moves", async () => {
+            const editor = new VideoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const refStrengthSlider = document.querySelector(
+                '[data-stage-field="refStrength_0"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(refStrengthSlider).not.toBeNull();
+            if (!refStrengthSlider) {
+                throw new Error("Expected stage ref strength slider to exist.");
+            }
+
+            refStrengthSlider.value = "0.5";
+            refStrengthSlider.dispatchEvent(
+                new Event("input", { bubbles: true }),
+            );
+
+            expect(parseStored()[0].stages?.[0].refStrengths).toEqual([0.5]);
         });
 
         it("toggles skip state for a stage", async () => {

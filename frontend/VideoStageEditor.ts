@@ -29,6 +29,28 @@ const CLIP_DIMENSION_MIN = 256;
 const CLIP_DIMENSION_MAX = 16384;
 const CLIP_DIMENSION_SLIDER_MAX = 4096;
 const CLIP_DIMENSION_STEP = 32;
+const STAGE_REF_STRENGTH_MIN = 0.1;
+const STAGE_REF_STRENGTH_MAX = 1;
+const STAGE_REF_STRENGTH_STEP = 0.1;
+const STAGE_REF_STRENGTH_DEFAULT = 0.8;
+const STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
+
+const stageRefStrengthField = (refIdx: number): string =>
+    `${STAGE_REF_STRENGTH_FIELD_PREFIX}${refIdx}`;
+
+const parseStageRefStrengthIndex = (field: string): number | null => {
+    if (!field.startsWith(STAGE_REF_STRENGTH_FIELD_PREFIX)) {
+        return null;
+    }
+    const refIdx = parseInt(
+        field.slice(STAGE_REF_STRENGTH_FIELD_PREFIX.length),
+        10,
+    );
+    if (!Number.isInteger(refIdx) || refIdx < 0) {
+        return null;
+    }
+    return refIdx;
+};
 
 interface CachedRefUpload {
     src: string;
@@ -400,12 +422,51 @@ export class VideoStageEditor {
         };
     }
 
-    private buildDefaultStage(previousStage: Stage | null): Stage {
+    private normalizeStageRefStrengthValue(value: unknown): number {
+        return (
+            Math.round(
+                this.clamp(
+                    VideoStageUtils.toNumber(
+                        `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
+                        STAGE_REF_STRENGTH_DEFAULT,
+                    ),
+                    STAGE_REF_STRENGTH_MIN,
+                    STAGE_REF_STRENGTH_MAX,
+                ) * 10,
+            ) / 10
+        );
+    }
+
+    private buildDefaultStageRefStrengths(refCount: number): number[] {
+        const strengths: number[] = [];
+        for (let i = 0; i < refCount; i++) {
+            strengths.push(STAGE_REF_STRENGTH_DEFAULT);
+        }
+        return strengths;
+    }
+
+    private normalizeStageRefStrengths(
+        rawStrengths: unknown,
+        refCount: number,
+    ): number[] {
+        const strengths: number[] = [];
+        const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+        for (let i = 0; i < refCount; i++) {
+            strengths.push(this.normalizeStageRefStrengthValue(rawValues[i]));
+        }
+        return strengths;
+    }
+
+    private buildDefaultStage(
+        previousStage: Stage | null,
+        refCount: number,
+    ): Stage {
         const defaults = this.getRootDefaults();
         return {
             expanded: true,
             skipped: false,
             control: previousStage ? previousStage.control : defaults.control,
+            refStrengths: this.buildDefaultStageRefStrengths(refCount),
             upscale: previousStage ? previousStage.upscale : defaults.upscale,
             upscaleMethod: previousStage
                 ? previousStage.upscaleMethod
@@ -457,7 +518,7 @@ export class VideoStageEditor {
             width: defaults.width,
             height: defaults.height,
             refs: [],
-            stages: [this.buildDefaultStage(null)],
+            stages: [this.buildDefaultStage(null, 0)],
         };
     }
 
@@ -604,9 +665,10 @@ export class VideoStageEditor {
     private normalizeStage(
         rawStage: Partial<Stage> & Record<string, unknown>,
         previousStage: Stage | null,
+        refCount: number,
     ): Stage {
         const defaults = this.getRootDefaults();
-        const fallback = this.buildDefaultStage(previousStage);
+        const fallback = this.buildDefaultStage(previousStage, refCount);
         const stage: Stage = {
             expanded:
                 rawStage.expanded === undefined ? true : !!rawStage.expanded,
@@ -618,6 +680,10 @@ export class VideoStageEditor {
                 ),
                 defaults.controlMin,
                 defaults.controlMax,
+            ),
+            refStrengths: this.normalizeStageRefStrengths(
+                rawStage.refStrengths,
+                refCount,
             ),
             upscale: this.clamp(
                 VideoStageUtils.toNumber(
@@ -705,6 +771,15 @@ export class VideoStageEditor {
         index: number,
     ): Clip {
         const defaults = this.getRootDefaults();
+        const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
+        const refFrameMax = this.getReferenceFrameMax();
+        const refs = refsRaw.map((rawRef) =>
+            this.normalizeRef(
+                (rawRef ?? {}) as Partial<RefImage> & Record<string, unknown>,
+                refFrameMax,
+            ),
+        );
+
         const stages: Stage[] = [];
         const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
         for (let i = 0; i < stagesRaw.length; i++) {
@@ -714,21 +789,13 @@ export class VideoStageEditor {
                     (stagesRaw[i] ?? {}) as Partial<Stage> &
                         Record<string, unknown>,
                     previousStage,
+                    refs.length,
                 ),
             );
         }
         if (stages.length === 0) {
-            stages.push(this.buildDefaultStage(null));
+            stages.push(this.buildDefaultStage(null, refs.length));
         }
-
-        const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
-        const refFrameMax = this.getReferenceFrameMax();
-        const refs = refsRaw.map((rawRef) =>
-            this.normalizeRef(
-                (rawRef ?? {}) as Partial<RefImage> & Record<string, unknown>,
-                refFrameMax,
-            ),
-        );
 
         const fps = Math.max(1, defaults.fps);
         const rawDuration = VideoStageUtils.toNumber(
@@ -820,6 +887,7 @@ export class VideoStageEditor {
                 expanded: stage.expanded,
                 skipped: stage.skipped,
                 control: stage.control,
+                refStrengths: stage.refStrengths,
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
                 model: stage.model,
@@ -1616,6 +1684,18 @@ export class VideoStageEditor {
             defaults.vaeLabels,
             stage.vae,
         );
+        const refStrengthFields = clip.refs
+            .map((_ref, refIdx) =>
+                stageSliderField(
+                    stageRefStrengthField(refIdx),
+                    `Reference Image ${refIdx} Strength`,
+                    stage.refStrengths[refIdx] ?? STAGE_REF_STRENGTH_DEFAULT,
+                    STAGE_REF_STRENGTH_MIN,
+                    STAGE_REF_STRENGTH_MAX,
+                    STAGE_REF_STRENGTH_STEP,
+                ),
+            )
+            .join("");
 
         return `<section class="${cardClasses.join(" ")}" data-stage-idx="${stageIdx}">
             ${head}
@@ -1629,6 +1709,7 @@ export class VideoStageEditor {
                 ${samplerField}
                 ${schedulerField}
                 ${vaeField}
+                ${refStrengthFields}
             </div>
         </section>`;
     }
@@ -1823,13 +1904,18 @@ export class VideoStageEditor {
                 clip.stages.length > 0
                     ? clip.stages[clip.stages.length - 1]
                     : null;
-            clip.stages.push(this.buildDefaultStage(previousStage));
+            clip.stages.push(
+                this.buildDefaultStage(previousStage, clip.refs.length),
+            );
             this.saveClips(clips);
             this.scheduleClipsRefresh();
             return;
         }
         if (clipAction === "add-ref") {
             clip.refs.push(this.buildDefaultRef());
+            for (const stage of clip.stages) {
+                stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+            }
             this.refUploadCache.delete(
                 this.refUploadKey(clipIdx, clip.refs.length - 1),
             );
@@ -1847,6 +1933,11 @@ export class VideoStageEditor {
             const ref = clip.refs[refIdx];
             if (refAction === "delete") {
                 clip.refs.splice(refIdx, 1);
+                for (const stage of clip.stages) {
+                    if (refIdx < stage.refStrengths.length) {
+                        stage.refStrengths.splice(refIdx, 1);
+                    }
+                }
                 this.reindexRefUploadCacheAfterRefDelete(clipIdx, refIdx);
             } else if (refAction === "toggle-collapse") {
                 ref.expanded = !ref.expanded;
@@ -2081,7 +2172,14 @@ export class VideoStageEditor {
         field: string,
         target: HTMLInputElement | HTMLSelectElement,
     ): void {
-        if (field === "model") {
+        const refStrengthIdx = parseStageRefStrengthIndex(field);
+        if (refStrengthIdx != null) {
+            const value = parseFloat(target.value);
+            if (Number.isFinite(value)) {
+                stage.refStrengths[refStrengthIdx] =
+                    this.normalizeStageRefStrengthValue(value);
+            }
+        } else if (field === "model") {
             stage.model = target.value;
         } else if (field === "vae") {
             stage.vae = target.value;

@@ -48,6 +48,10 @@
     min-width: 0;
     flex: 1 1 100%;
     max-width: 100%;
+    transition:
+        border-color 0.15s,
+        background 0.15s,
+        box-shadow 0.15s;
 }
 
 #videostages_stage_editor .vs-clip-card.input-group.input-group-open {
@@ -155,6 +159,10 @@
     border-radius: 6px;
     padding: 6px 8px;
     min-width: 0;
+    transition:
+        border-color 0.15s,
+        background 0.15s,
+        box-shadow 0.15s;
 }
 
 #videostages_stage_editor .vs-card.input-group {
@@ -217,6 +225,10 @@
 
 #videostages_stage_editor .vs-card-body {
     margin-top: 8px;
+    transition:
+        border-color 0.15s,
+        background 0.15s,
+        box-shadow 0.15s;
 }
 
 #videostages_stage_editor .vs-card-body.input-group-content {
@@ -232,8 +244,52 @@
 
 #videostages_stage_editor .vs-clip-card-body.input-group-content > .auto-input,
 #videostages_stage_editor .vs-card-body.input-group-content > .auto-input {
+    flex: 1 1 17rem;
+    width: min(100%, 50rem);
+    min-width: min(17rem, 100%);
     max-width: 100%;
     overflow: visible;
+}
+
+#videostages_stage_editor .vs-clip-card-body.input-group-content > .input-group,
+#videostages_stage_editor .vs-card-body.input-group-content > .input-group {
+    min-width: min(70%, 100%);
+    max-width: 100%;
+}
+
+#videostages_stage_editor .vs-clip-card-body label,
+#videostages_stage_editor .vs-card-body label {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+}
+
+#videostages_stage_editor .vs-clip-card-body .auto-input-name,
+#videostages_stage_editor .vs-card-body .auto-input-name {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+#videostages_stage_editor .vs-clip-card-body .auto-dropdown,
+#videostages_stage_editor .vs-card-body .auto-dropdown,
+#videostages_stage_editor .vs-clip-card-body .auto-slider-range-wrapper,
+#videostages_stage_editor .vs-card-body .auto-slider-range-wrapper {
+    width: 100% !important;
+    min-width: 0;
+    max-width: 100%;
+}
+
+#videostages_stage_editor .vs-card-body .auto-dropdown:disabled {
+    opacity: 0.45;
+    color: var(--text-soft);
+}
+
+#videostages_stage_editor .vs-card-body .auto-dropdown-box:has(
+    .auto-dropdown:disabled
+) {
+    opacity: 0.7;
 }
 
 /* ------------------------------------------------------------------
@@ -250,6 +306,40 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    cursor: pointer;
+}
+
+#videostages_stage_editor [data-clip-action="delete"],
+#videostages_stage_editor [data-ref-action="delete"],
+#videostages_stage_editor [data-stage-action="delete"] {
+    cursor: pointer !important;
+}
+
+#videostages_stage_editor [data-clip-action="delete"]:hover,
+#videostages_stage_editor [data-ref-action="delete"]:hover,
+#videostages_stage_editor [data-stage-action="delete"]:hover {
+    background-color: var(--danger-button-background);
+    color: var(--danger-button-foreground);
+    border-color: var(--danger-button-border);
+}
+
+#videostages_stage_editor [data-clip-action="delete"]:disabled,
+#videostages_stage_editor [data-ref-action="delete"]:disabled,
+#videostages_stage_editor [data-stage-action="delete"]:disabled {
+    cursor: pointer !important;
+}
+
+#videostages_stage_editor .vs-clip-card:has([data-clip-action="delete"]:hover) {
+    border-color: color-mix(in srgb, var(--red) 50%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 40%, transparent);
+}
+
+#videostages_stage_editor .vs-ref-card:has([data-ref-action="delete"]:hover),
+#videostages_stage_editor .vs-card[data-stage-idx]:has(
+    [data-stage-action="delete"]:hover
+) {
+    border-color: color-mix(in srgb, var(--red) 50%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 40%, transparent);
 }
 #videostages_stage_editor .vs-btn-collapse {
     font-size: 11px;

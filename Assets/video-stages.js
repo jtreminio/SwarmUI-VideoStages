@@ -346,6 +346,25 @@
   var CLIP_DIMENSION_MAX = 16384;
   var CLIP_DIMENSION_SLIDER_MAX = 4096;
   var CLIP_DIMENSION_STEP = 32;
+  var STAGE_REF_STRENGTH_MIN = 0.1;
+  var STAGE_REF_STRENGTH_MAX = 1;
+  var STAGE_REF_STRENGTH_STEP = 0.1;
+  var STAGE_REF_STRENGTH_DEFAULT = 0.8;
+  var STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
+  var stageRefStrengthField = (refIdx) => `${STAGE_REF_STRENGTH_FIELD_PREFIX}${refIdx}`;
+  var parseStageRefStrengthIndex = (field) => {
+    if (!field.startsWith(STAGE_REF_STRENGTH_FIELD_PREFIX)) {
+      return null;
+    }
+    const refIdx = parseInt(
+      field.slice(STAGE_REF_STRENGTH_FIELD_PREFIX.length),
+      10
+    );
+    if (!Number.isInteger(refIdx) || refIdx < 0) {
+      return null;
+    }
+    return refIdx;
+  };
   var VideoStageEditor = class {
     editor = null;
     inactiveReuseGuard;
@@ -617,12 +636,40 @@
         cfgScaleStep: VideoStageUtils.toNumber(cfgScale?.step, 0.5)
       };
     }
-    buildDefaultStage(previousStage) {
+    normalizeStageRefStrengthValue(value) {
+      return Math.round(
+        this.clamp(
+          VideoStageUtils.toNumber(
+            `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
+            STAGE_REF_STRENGTH_DEFAULT
+          ),
+          STAGE_REF_STRENGTH_MIN,
+          STAGE_REF_STRENGTH_MAX
+        ) * 10
+      ) / 10;
+    }
+    buildDefaultStageRefStrengths(refCount) {
+      const strengths = [];
+      for (let i = 0; i < refCount; i++) {
+        strengths.push(STAGE_REF_STRENGTH_DEFAULT);
+      }
+      return strengths;
+    }
+    normalizeStageRefStrengths(rawStrengths, refCount) {
+      const strengths = [];
+      const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+      for (let i = 0; i < refCount; i++) {
+        strengths.push(this.normalizeStageRefStrengthValue(rawValues[i]));
+      }
+      return strengths;
+    }
+    buildDefaultStage(previousStage, refCount) {
       const defaults = this.getRootDefaults();
       return {
         expanded: true,
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
+        refStrengths: this.buildDefaultStageRefStrengths(refCount),
         upscale: previousStage ? previousStage.upscale : defaults.upscale,
         upscaleMethod: previousStage ? previousStage.upscaleMethod : defaults.upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : defaults.upscaleMethodValues[0] ?? "pixel-lanczos",
         model: previousStage ? previousStage.model : this.getDefaultStageModel(defaults.modelValues),
@@ -658,7 +705,7 @@
         width: defaults.width,
         height: defaults.height,
         refs: [],
-        stages: [this.buildDefaultStage(null)]
+        stages: [this.buildDefaultStage(null, 0)]
       };
     }
     refUploadKey(clipIdx, refIdx) {
@@ -774,9 +821,9 @@
     clamp(value, min, max) {
       return Math.min(Math.max(value, min), max);
     }
-    normalizeStage(rawStage, previousStage) {
+    normalizeStage(rawStage, previousStage, refCount) {
       const defaults = this.getRootDefaults();
-      const fallback = this.buildDefaultStage(previousStage);
+      const fallback = this.buildDefaultStage(previousStage, refCount);
       const stage = {
         expanded: rawStage.expanded === void 0 ? true : !!rawStage.expanded,
         skipped: !!rawStage.skipped,
@@ -787,6 +834,10 @@
           ),
           defaults.controlMin,
           defaults.controlMax
+        ),
+        refStrengths: this.normalizeStageRefStrengths(
+          rawStage.refStrengths,
+          refCount
         ),
         upscale: this.clamp(
           VideoStageUtils.toNumber(
@@ -854,20 +905,6 @@
     }
     normalizeClip(rawClip, index) {
       const defaults = this.getRootDefaults();
-      const stages = [];
-      const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-      for (let i = 0; i < stagesRaw.length; i++) {
-        const previousStage = i > 0 ? stages[i - 1] : null;
-        stages.push(
-          this.normalizeStage(
-            stagesRaw[i] ?? {},
-            previousStage
-          )
-        );
-      }
-      if (stages.length === 0) {
-        stages.push(this.buildDefaultStage(null));
-      }
       const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
       const refFrameMax = this.getReferenceFrameMax();
       const refs = refsRaw.map(
@@ -876,6 +913,21 @@
           refFrameMax
         )
       );
+      const stages = [];
+      const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+      for (let i = 0; i < stagesRaw.length; i++) {
+        const previousStage = i > 0 ? stages[i - 1] : null;
+        stages.push(
+          this.normalizeStage(
+            stagesRaw[i] ?? {},
+            previousStage,
+            refs.length
+          )
+        );
+      }
+      if (stages.length === 0) {
+        stages.push(this.buildDefaultStage(null, refs.length));
+      }
       const fps = Math.max(1, defaults.fps);
       const rawDuration = VideoStageUtils.toNumber(
         `${rawClip.duration}`,
@@ -952,6 +1004,7 @@
           expanded: stage.expanded,
           skipped: stage.skipped,
           control: stage.control,
+          refStrengths: stage.refStrengths,
           upscale: stage.upscale,
           upscaleMethod: stage.upscaleMethod,
           model: stage.model,
@@ -1630,6 +1683,16 @@
         defaults.vaeLabels,
         stage.vae
       );
+      const refStrengthFields = clip.refs.map(
+        (_ref, refIdx) => stageSliderField(
+          stageRefStrengthField(refIdx),
+          `Reference Image ${refIdx} Strength`,
+          stage.refStrengths[refIdx] ?? STAGE_REF_STRENGTH_DEFAULT,
+          STAGE_REF_STRENGTH_MIN,
+          STAGE_REF_STRENGTH_MAX,
+          STAGE_REF_STRENGTH_STEP
+        )
+      ).join("");
       return `<section class="${cardClasses.join(" ")}" data-stage-idx="${stageIdx}">
             ${head}
             <div class="vs-card-body input-group-content">
@@ -1642,6 +1705,7 @@
                 ${samplerField}
                 ${schedulerField}
                 ${vaeField}
+                ${refStrengthFields}
             </div>
         </section>`;
     }
@@ -1792,13 +1856,18 @@
       }
       if (clipAction === "add-stage") {
         const previousStage = clip.stages.length > 0 ? clip.stages[clip.stages.length - 1] : null;
-        clip.stages.push(this.buildDefaultStage(previousStage));
+        clip.stages.push(
+          this.buildDefaultStage(previousStage, clip.refs.length)
+        );
         this.saveClips(clips);
         this.scheduleClipsRefresh();
         return;
       }
       if (clipAction === "add-ref") {
         clip.refs.push(this.buildDefaultRef());
+        for (const stage of clip.stages) {
+          stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+        }
         this.refUploadCache.delete(
           this.refUploadKey(clipIdx, clip.refs.length - 1)
         );
@@ -1815,6 +1884,11 @@
         const ref = clip.refs[refIdx];
         if (refAction === "delete") {
           clip.refs.splice(refIdx, 1);
+          for (const stage of clip.stages) {
+            if (refIdx < stage.refStrengths.length) {
+              stage.refStrengths.splice(refIdx, 1);
+            }
+          }
           this.reindexRefUploadCacheAfterRefDelete(clipIdx, refIdx);
         } else if (refAction === "toggle-collapse") {
           ref.expanded = !ref.expanded;
@@ -2011,7 +2085,13 @@
       }
     }
     applyStageField(stage, field, target) {
-      if (field === "model") {
+      const refStrengthIdx = parseStageRefStrengthIndex(field);
+      if (refStrengthIdx != null) {
+        const value = parseFloat(target.value);
+        if (Number.isFinite(value)) {
+          stage.refStrengths[refStrengthIdx] = this.normalizeStageRefStrengthValue(value);
+        }
+      } else if (field === "model") {
         stage.model = target.value;
       } else if (field === "vae") {
         stage.vae = target.value;

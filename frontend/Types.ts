@@ -35,6 +35,7 @@ export interface Stage {
     expanded: boolean;
     skipped: boolean;
     control: number;
+    refStrengths: number[];
     upscale: number;
     upscaleMethod: string;
     model: string;
