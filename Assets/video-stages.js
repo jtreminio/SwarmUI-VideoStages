@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // frontend/Utils.ts
+  // frontend/UtilsTemp.ts
   var getElementByType = (id, ctor) => {
     const element = document.getElementById(id);
     return element instanceof ctor ? element : null;
@@ -117,10 +117,7 @@
         bindText2AudioToggle();
         refreshOptions();
       } catch (error) {
-        console.warn(
-          "audioSource: param build sync failed",
-          error
-        );
+        console.warn("audioSource: param build sync failed", error);
       }
     };
     const scheduleInitialSync = () => {
@@ -220,7 +217,7 @@
   };
   var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
-  // frontend/RenderUtils.ts
+  // frontend/RenderUtilsTemp.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   var renderOptionList = (options, selected) => options.map((option) => {
     const value = escapeAttr(option.value);
@@ -271,7 +268,7 @@
     return Math.max(0.1, Math.floor(aligned * 10) / 10);
   };
 
-  // frontend/Types.ts
+  // frontend/TypesTemp.ts
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
@@ -2350,7 +2347,7 @@ ${optionHtml}
     return `<div class="${groupClasses.join(" ")}" id="auto-group-vsclip${clipIdx}" data-clip-idx="${clipIdx}">${head}${body}</div>`;
   };
 
-  // frontend/VideoStageEditor.ts
+  // frontend/VideoStageEditorTemp.ts
   var VideoStageEditor = () => {
     let editor = null;
     let clipsRefreshTimer = null;

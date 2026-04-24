@@ -24,7 +24,7 @@ import { createRefUploadCache } from "./refUploadCache";
 import { renderClipCard } from "./renderHtml";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { seedRegisteredDimensionsFromCore } from "./swarmInputs";
-import type { Clip, VideoStagesConfig } from "./Types";
+import type { Clip, VideoStagesConfig } from "./TypesTemp";
 import { validateClips } from "./validation";
 
 export type VideoStageEditor = {

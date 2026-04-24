@@ -14,7 +14,7 @@ import {
     STAGE_REF_STRENGTH_MAX,
     STAGE_REF_STRENGTH_MIN,
 } from "./constants";
-import { framesForClip, snapDurationToFps } from "./RenderUtils";
+import { framesForClip, snapDurationToFps } from "./RenderUtilsTemp";
 import {
     type Clip,
     REF_SOURCE_BASE,
@@ -22,8 +22,8 @@ import {
     type RootDefaults,
     type Stage,
     type UploadedAudio,
-} from "./Types";
-import { VideoStageUtils } from "./Utils";
+} from "./TypesTemp";
+import { VideoStageUtils } from "./UtilsTemp";
 
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],

@@ -3,7 +3,7 @@ import {
     ROOT_DIMENSION_MIN,
     ROOT_FPS_MIN,
 } from "./constants";
-import { VideoStageUtils } from "./Utils";
+import { VideoStageUtils } from "./UtilsTemp";
 
 export const getClipsInput = (): HTMLInputElement | null =>
     VideoStageUtils.getInputElement("input_videostages");

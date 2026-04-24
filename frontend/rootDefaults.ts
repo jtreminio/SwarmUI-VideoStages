@@ -6,8 +6,8 @@ import {
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
-import type { RootDefaults } from "./Types";
-import { VideoStageUtils } from "./Utils";
+import type { RootDefaults } from "./TypesTemp";
+import { VideoStageUtils } from "./UtilsTemp";
 
 export const getDefaultStageModel = (modelValues: string[]): string => {
     if (isRootTextToVideoModel()) {

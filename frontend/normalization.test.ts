@@ -7,7 +7,7 @@ import {
     readRawStageProp,
     readRawStageString,
 } from "./normalization";
-import { REF_SOURCE_BASE, type RootDefaults } from "./Types";
+import { REF_SOURCE_BASE, type RootDefaults } from "./TypesTemp";
 
 const stubDefaults = (): RootDefaults => ({
     modelValues: ["ltx"],

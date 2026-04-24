@@ -13,7 +13,7 @@
  *                              timers across tests.
  *   - window.acestepfunTrackRegistry / window.base2editStageRegistry
  *                              Cross-extension snapshot bridges read by
- *                              audioSource and VideoStageEditor.
+ *                              audioSource and VideoStageEditorTemp.
  *   - document.body            Tests build their own DOM fixtures; we wipe
  *                              them between tests so nothing bleeds over.
  *

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { serializeClipsForStorage } from "./persistence";
-import type { Clip } from "./Types";
+import type { Clip } from "./TypesTemp";
 
 describe("persistence", () => {
     describe("serializeClipsForStorage", () => {

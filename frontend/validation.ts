@@ -5,7 +5,7 @@ import {
     REF_SOURCE_BASE,
     REF_SOURCE_REFINER,
     REF_SOURCE_UPLOAD,
-} from "./Types";
+} from "./TypesTemp";
 
 export const getRefSourceError = (source: string): string | null => {
     const compact = `${source || ""}`.trim().replace(/\s+/g, "");

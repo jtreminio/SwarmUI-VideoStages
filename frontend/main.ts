@@ -1,5 +1,5 @@
 import { audioSource } from "./audioSource";
-import { VideoStageEditor } from "./VideoStageEditor";
+import { VideoStageEditor } from "./VideoStageEditorTemp";
 
 const stageEditor = VideoStageEditor();
 

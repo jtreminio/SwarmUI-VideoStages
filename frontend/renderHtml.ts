@@ -28,7 +28,7 @@ import {
     refFieldId,
     renderOptionList,
     stageFieldId,
-} from "./RenderUtils";
+} from "./RenderUtilsTemp";
 import { getBase2EditStageRefs } from "./swarmInputs";
 import {
     type Clip,
@@ -39,7 +39,7 @@ import {
     type RefImage,
     type RootDefaults,
     type Stage,
-} from "./Types";
+} from "./TypesTemp";
 import { getRefSourceError } from "./validation";
 
 export const decorateAutoInputWrapper = (

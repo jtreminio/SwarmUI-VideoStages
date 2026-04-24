@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { VideoStageUtils } from "./Utils";
+import { VideoStageUtils } from "./UtilsTemp";
 
 describe("VideoStageUtils", () => {
     describe("getInputElement", () => {
