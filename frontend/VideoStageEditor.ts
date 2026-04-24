@@ -15,7 +15,6 @@ import {
     snapDurationToFps,
     stageFieldId,
 } from "./RenderUtils";
-import { ToggleableGroupReuseGuard } from "./ToggleableGroupReuseGuard";
 import {
     type Clip,
     type ImageSourceOption,
@@ -71,35 +70,18 @@ interface CachedRefUpload {
 
 export class VideoStageEditor {
     private editor: HTMLElement | null = null;
-    private inactiveReuseGuard: ToggleableGroupReuseGuard;
     private genButtonWrapped = false;
     private genWrapInterval: ReturnType<typeof setInterval> | null = null;
     private clipsInputSyncInterval: ReturnType<typeof setInterval> | null =
         null;
     private clipsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     private lastKnownClipsJson = "";
-    private suppressInactiveReseed = false;
     private observedDropdownIds = new Set<string>();
     private sourceDropdownObserver: MutationObserver | null = null;
     private base2EditListenerInstalled = false;
     private rootVideoTimingChangeListenerInstalled = false;
     private refSourceFallbackListenerInstalled = false;
     private refUploadCache = new Map<string, CachedRefUpload>();
-
-    public constructor() {
-        this.inactiveReuseGuard = new ToggleableGroupReuseGuard({
-            groupContentId: "input_group_content_videostages",
-            getEnableToggle: () => this.getGroupToggle(),
-            getGroupToggle: () => this.getGroupToggle(),
-            clearInactiveState: () => this.clearClipsForInactiveReuse(),
-            afterStateChange: () => {
-                if (!this.editor) {
-                    return;
-                }
-                this.scheduleClipsRefresh();
-            },
-        });
-    }
 
     public init(): void {
         this.createEditor();
@@ -139,16 +121,6 @@ export class VideoStageEditor {
             return;
         }
         this.saveState(this.getState());
-    }
-
-    public resetForInactiveReuse(): void {
-        this.suppressInactiveReseed = true;
-        this.inactiveReuseGuard.enforceInactiveState();
-        this.inactiveReuseGuard.start();
-    }
-
-    public tryInstallInactiveReuseGuard(): boolean {
-        return this.inactiveReuseGuard.tryInstallGroupToggleWrapper();
     }
 
     public startGenerateWrapRetry(intervalMs = 250): void {
@@ -1225,7 +1197,6 @@ export class VideoStageEditor {
             return;
         }
 
-        this.suppressInactiveReseed = false;
         const serialized = JSON.stringify({
             width: state.width,
             height: state.height,
@@ -1247,45 +1218,9 @@ export class VideoStageEditor {
         this.saveState(state);
     }
 
-    private clearClipsForInactiveReuse(): boolean {
-        const input = this.getClipsInput();
-        let cleared = false;
-        if (input && input.value !== "") {
-            input.value = "";
-            this.lastKnownClipsJson = "";
-            cleared = true;
-        }
-        const widthInput = this.getRootDimensionParamInput("width");
-        if (widthInput && widthInput.value !== "0") {
-            widthInput.value = "0";
-            triggerChangeFor(widthInput);
-            cleared = true;
-        }
-        const heightInput = this.getRootDimensionParamInput("height");
-        if (heightInput && heightInput.value !== "0") {
-            heightInput.value = "0";
-            triggerChangeFor(heightInput);
-            cleared = true;
-        }
-        const fpsInput = this.getRootFpsParamInput();
-        if (fpsInput && fpsInput.value !== "24") {
-            fpsInput.value = "24";
-            triggerChangeFor(fpsInput);
-            cleared = true;
-        }
-        return cleared;
-    }
-
-    private shouldKeepClipsBlankWhileDisabled(): boolean {
-        return this.suppressInactiveReseed && !this.isVideoStagesEnabled();
-    }
-
     private ensureClipsSeeded(): void {
         const state = this.getState();
         if (state.clips.length > 0) {
-            return;
-        }
-        if (this.shouldKeepClipsBlankWhileDisabled()) {
             return;
         }
 
@@ -1595,11 +1530,9 @@ export class VideoStageEditor {
         const state = this.getState();
         let clips = state.clips;
         if (clips.length === 0) {
-            if (!this.shouldKeepClipsBlankWhileDisabled()) {
-                state.clips = [this.buildDefaultClip(0)];
-                clips = state.clips;
-                this.saveState(state);
-            }
+            state.clips = [this.buildDefaultClip(0)];
+            clips = state.clips;
+            this.saveState(state);
         }
 
         const focusSnapshot = this.captureFocus();

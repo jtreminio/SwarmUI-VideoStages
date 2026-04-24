@@ -37,14 +37,6 @@ export const framesForClip = (durationSeconds: number, fps: number): number =>
             1,
     );
 
-/**
- * Builds a unique field id for a clip-level field.
- *
- * The id is required by SwarmUI's `make*Input` helpers (they wire labels and
- * popovers to it). We never read this id back from our own code -- our
- * delegated event handler keys off the `data-clip-field`/`data-clip-idx`
- * attributes that {@link injectFieldData} stamps on the inner control.
- */
 export const clipFieldId = (clipIdx: number, field: string): string =>
     `vsclip${clipIdx}_${field}`;
 
@@ -60,18 +52,7 @@ export const stageFieldId = (
     field: string,
 ): string => `vsclip${clipIdx}_stage${stageIdx}_${field}`;
 
-/**
- * Splices our editor-routing data attributes onto the inner control(s)
- * (`<input>`, `<select>`, or `<textarea>`) emitted by SwarmUI's `make*Input`
- * helpers so the existing delegated change handler can route by clip / ref /
- * stage index without us forking the helper output. Slider helpers emit both
- * a number input and a range input, and both need the same routing data.
- *
- * `nogrow` is added because SwarmUI's `autoNumberWidth` / `autoSelectWidth`
- * runnables stamp inline `style.width` from option/value text width. In our
- * grid layout we want the controls to fill their cell instead, and the
- * helpers explicitly bail when they see this class.
- */
+// Route changes via data-* on controls from make*Input; nogrow skips SwarmUI auto-width.
 export const injectFieldData = (
     html: string,
     dataAttrs: Record<string, string>,
@@ -111,10 +92,7 @@ export const overrideSliderSteps = (
     return updated;
 };
 
-/**
- * Round up to a whole frame at the given fps, then truncate to 1 decimal.
- * Mirrors the working.html behavior for stable display values.
- */
+// Round up to a frame at fps, then one decimal place (matches working.html).
 export const snapDurationToFps = (seconds: number, fps: number): number => {
     if (
         !Number.isFinite(seconds) ||

@@ -221,104 +221,6 @@
     return Math.max(0.1, Math.floor(aligned * 10) / 10);
   };
 
-  // frontend/ToggleableGroupReuseGuard.ts
-  var ToggleableGroupReuseGuard = class _ToggleableGroupReuseGuard {
-    constructor(options) {
-      this.options = options;
-      if (!_ToggleableGroupReuseGuard.guards.includes(this)) {
-        _ToggleableGroupReuseGuard.guards.push(this);
-      }
-    }
-    options;
-    static guards = [];
-    guardUntil = 0;
-    guardTimer = null;
-    tryInstallGroupToggleWrapper() {
-      if (typeof doToggleGroup !== "function") {
-        return false;
-      }
-      const wrappedExisting = doToggleGroup;
-      if (wrappedExisting.__toggleableGroupReuseGuardWrapped) {
-        return true;
-      }
-      const prior = doToggleGroup;
-      const wrapped = ((id) => {
-        const toggle = document.getElementById(
-          `${id}_toggle`
-        );
-        const matchingGuards = _ToggleableGroupReuseGuard.guards.filter(
-          (guard) => guard.matchesGroup(id)
-        );
-        const shouldSuppress = !!toggle?.checked && matchingGuards.some(
-          (guard) => guard.shouldSuppressGroupActivation(id)
-        );
-        if (shouldSuppress && toggle) {
-          toggle.checked = false;
-        }
-        return prior(id);
-      });
-      wrapped.__toggleableGroupReuseGuardWrapped = true;
-      doToggleGroup = wrapped;
-      return true;
-    }
-    enforceInactiveState() {
-      let changed = false;
-      const groupToggle = this.getGroupToggle();
-      if (groupToggle?.checked) {
-        groupToggle.checked = false;
-        if (typeof doToggleGroup === "function") {
-          doToggleGroup(this.options.groupContentId);
-        }
-        changed = true;
-      }
-      const enableToggle = this.options.getEnableToggle();
-      if (enableToggle?.checked) {
-        enableToggle.checked = false;
-        changed = true;
-      }
-      if (this.options.clearInactiveState?.()) {
-        changed = true;
-      }
-      if (changed) {
-        this.options.afterStateChange?.();
-      }
-    }
-    start(durationMs = 1500) {
-      this.stop();
-      this.guardUntil = Date.now() + durationMs;
-      const tick = () => {
-        if (Date.now() >= this.guardUntil) {
-          this.stop();
-          return;
-        }
-        this.enforceInactiveState();
-        this.guardTimer = setTimeout(tick, 25);
-      };
-      this.guardTimer = setTimeout(tick, 25);
-    }
-    stop() {
-      if (this.guardTimer) {
-        clearTimeout(this.guardTimer);
-        this.guardTimer = null;
-      }
-      this.guardUntil = 0;
-    }
-    shouldSuppressGroupActivation(groupId) {
-      if (groupId !== this.options.groupContentId || Date.now() >= this.guardUntil) {
-        return false;
-      }
-      return !this.options.getEnableToggle()?.checked;
-    }
-    matchesGroup(groupId) {
-      return groupId === this.options.groupContentId;
-    }
-    getGroupToggle() {
-      return this.options.getGroupToggle?.() ?? document.getElementById(
-        `${this.options.groupContentId}_toggle`
-      );
-    }
-  };
-
   // frontend/Types.ts
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
@@ -356,33 +258,17 @@
   };
   var VideoStageEditor = class {
     editor = null;
-    inactiveReuseGuard;
     genButtonWrapped = false;
     genWrapInterval = null;
     clipsInputSyncInterval = null;
     clipsRefreshTimer = null;
     lastKnownClipsJson = "";
-    suppressInactiveReseed = false;
     observedDropdownIds = /* @__PURE__ */ new Set();
     sourceDropdownObserver = null;
     base2EditListenerInstalled = false;
     rootVideoTimingChangeListenerInstalled = false;
     refSourceFallbackListenerInstalled = false;
     refUploadCache = /* @__PURE__ */ new Map();
-    constructor() {
-      this.inactiveReuseGuard = new ToggleableGroupReuseGuard({
-        groupContentId: "input_group_content_videostages",
-        getEnableToggle: () => this.getGroupToggle(),
-        getGroupToggle: () => this.getGroupToggle(),
-        clearInactiveState: () => this.clearClipsForInactiveReuse(),
-        afterStateChange: () => {
-          if (!this.editor) {
-            return;
-          }
-          this.scheduleClipsRefresh();
-        }
-      });
-    }
     init() {
       this.createEditor();
       this.startClipsInputSync();
@@ -415,14 +301,6 @@
         return;
       }
       this.saveState(this.getState());
-    }
-    resetForInactiveReuse() {
-      this.suppressInactiveReseed = true;
-      this.inactiveReuseGuard.enforceInactiveState();
-      this.inactiveReuseGuard.start();
-    }
-    tryInstallInactiveReuseGuard() {
-      return this.inactiveReuseGuard.tryInstallGroupToggleWrapper();
     }
     startGenerateWrapRetry(intervalMs = 250) {
       if (this.genWrapInterval) {
@@ -1233,7 +1111,6 @@
       if (!input) {
         return;
       }
-      this.suppressInactiveReseed = false;
       const serialized = JSON.stringify({
         width: state.width,
         height: state.height,
@@ -1252,43 +1129,9 @@
       state.clips = clips;
       this.saveState(state);
     }
-    clearClipsForInactiveReuse() {
-      const input = this.getClipsInput();
-      let cleared = false;
-      if (input && input.value !== "") {
-        input.value = "";
-        this.lastKnownClipsJson = "";
-        cleared = true;
-      }
-      const widthInput = this.getRootDimensionParamInput("width");
-      if (widthInput && widthInput.value !== "0") {
-        widthInput.value = "0";
-        triggerChangeFor(widthInput);
-        cleared = true;
-      }
-      const heightInput = this.getRootDimensionParamInput("height");
-      if (heightInput && heightInput.value !== "0") {
-        heightInput.value = "0";
-        triggerChangeFor(heightInput);
-        cleared = true;
-      }
-      const fpsInput = this.getRootFpsParamInput();
-      if (fpsInput && fpsInput.value !== "24") {
-        fpsInput.value = "24";
-        triggerChangeFor(fpsInput);
-        cleared = true;
-      }
-      return cleared;
-    }
-    shouldKeepClipsBlankWhileDisabled() {
-      return this.suppressInactiveReseed && !this.isVideoStagesEnabled();
-    }
     ensureClipsSeeded() {
       const state = this.getState();
       if (state.clips.length > 0) {
-        return;
-      }
-      if (this.shouldKeepClipsBlankWhileDisabled()) {
         return;
       }
       state.clips = [this.buildDefaultClip(0)];
@@ -1541,11 +1384,9 @@
       const state = this.getState();
       let clips = state.clips;
       if (clips.length === 0) {
-        if (!this.shouldKeepClipsBlankWhileDisabled()) {
-          state.clips = [this.buildDefaultClip(0)];
-          clips = state.clips;
-          this.saveState(state);
-        }
+        state.clips = [this.buildDefaultClip(0)];
+        clips = state.clips;
+        this.saveState(state);
       }
       const focusSnapshot = this.captureFocus();
       this.editor.innerHTML = "";
@@ -2626,23 +2467,9 @@ ${optionHtml}
     stageEditor;
     constructor(stageEditor) {
       this.stageEditor = stageEditor;
-      if (!this.stageEditor.tryInstallInactiveReuseGuard()) {
-        const interval = setInterval(() => {
-          if (this.stageEditor.tryInstallInactiveReuseGuard()) {
-            clearInterval(interval);
-          }
-        }, 200);
-      }
       if (!this.tryRegisterStageEditor()) {
         const interval = setInterval(() => {
           if (this.tryRegisterStageEditor()) {
-            clearInterval(interval);
-          }
-        }, 200);
-      }
-      if (!this.tryWrapReuseParameters()) {
-        const interval = setInterval(() => {
-          if (this.tryWrapReuseParameters()) {
             clearInterval(interval);
           }
         }, 200);
@@ -2661,47 +2488,6 @@ ${optionHtml}
         }
       });
       return true;
-    }
-    tryWrapReuseParameters() {
-      if (typeof copy_current_image_params !== "function") {
-        return false;
-      }
-      const wrappedExisting = copy_current_image_params;
-      if (wrappedExisting.__videoStagesWrapped) {
-        return true;
-      }
-      const prior = copy_current_image_params;
-      const wrapped = (() => {
-        const metadataUsesVideoStages = this.currentImageUsesVideoStages();
-        prior();
-        if (metadataUsesVideoStages === false) {
-          this.stageEditor.resetForInactiveReuse();
-        }
-      });
-      wrapped.__videoStagesWrapped = true;
-      copy_current_image_params = wrapped;
-      return true;
-    }
-    currentImageUsesVideoStages() {
-      if (!currentMetadataVal) {
-        return null;
-      }
-      try {
-        const metadataFull = JSON.parse(
-          interpretMetadata(currentMetadataVal)
-        );
-        const metadata = metadataFull?.sui_image_params;
-        if (!metadata || typeof metadata !== "object") {
-          return null;
-        }
-        return metadata.videostages !== void 0 || metadata.vsaudiosource !== void 0 || metadata.vsaudioupload !== void 0;
-      } catch (error) {
-        console.log(
-          "VideoStages: failed to inspect reused image metadata",
-          error
-        );
-        return null;
-      }
     }
   };
 
