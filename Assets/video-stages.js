@@ -259,29 +259,12 @@
       createEditor();
       startClipsInputSync();
       ensureClipsSeeded();
-      persistLegacyRootUploadMigration();
       wrapGenerateWithValidation();
       renderClips();
       installSourceDropdownObserver();
       installBase2EditStageChangeListener();
       installRootVideoTimingChangeListener();
       installRefSourceFallbackListener();
-    };
-    const persistLegacyRootUploadMigration = () => {
-      const input = getClipsInput();
-      if (!input?.value) {
-        return;
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(input.value);
-      } catch {
-        return;
-      }
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object" || !("uploadedAudio" in parsed)) {
-        return;
-      }
-      saveState(getState());
     };
     const startGenerateWrapRetry = (intervalMs = 250) => {
       if (genWrapInterval) {
@@ -989,10 +972,6 @@
             )
           );
         }
-        migrateLegacyRootUploadedAudio(
-          clips,
-          normalizeUploadedAudio(parsedConfig?.uploadedAudio)
-        );
         return {
           width: getEffectiveRootDimension(
             "width",
@@ -1013,23 +992,6 @@
           height: defaults.height,
           fps: defaults.fps,
           clips: []
-        };
-      }
-    };
-    const migrateLegacyRootUploadedAudio = (clips, legacyRootUpload) => {
-      if (!legacyRootUpload) {
-        return;
-      }
-      for (const clip of clips) {
-        if (clip.uploadedAudio) {
-          continue;
-        }
-        if (`${clip.audioSource || ""}` !== AUDIO_SOURCE_UPLOAD) {
-          continue;
-        }
-        clip.uploadedAudio = {
-          data: legacyRootUpload.data,
-          fileName: legacyRootUpload.fileName
         };
       }
     };

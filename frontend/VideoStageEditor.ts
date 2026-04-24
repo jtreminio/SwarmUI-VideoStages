@@ -91,40 +91,12 @@ export const VideoStageEditor = (): VideoStageEditor => {
         createEditor();
         startClipsInputSync();
         ensureClipsSeeded();
-        persistLegacyRootUploadMigration();
         wrapGenerateWithValidation();
         renderClips();
         installSourceDropdownObserver();
         installBase2EditStageChangeListener();
         installRootVideoTimingChangeListener();
         installRefSourceFallbackListener();
-    };
-
-    /**
-     * If the persisted JSON still carries a legacy root-level `uploadedAudio`
-     * field, persist the migrated state once on load so subsequent reads see
-     * the per-clip layout and the obsolete root field is dropped.
-     */
-    const persistLegacyRootUploadMigration = (): void => {
-        const input = getClipsInput();
-        if (!input?.value) {
-            return;
-        }
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(input.value);
-        } catch {
-            return;
-        }
-        if (
-            !parsed ||
-            Array.isArray(parsed) ||
-            typeof parsed !== "object" ||
-            !("uploadedAudio" in (parsed as Record<string, unknown>))
-        ) {
-            return;
-        }
-        saveState(getState());
     };
 
     const startGenerateWrapRetry = (intervalMs = 250): void => {
@@ -1078,7 +1050,6 @@ export const VideoStageEditor = (): VideoStageEditor => {
                           width?: unknown;
                           height?: unknown;
                           fps?: unknown;
-                          uploadedAudio?: unknown;
                           clips?: unknown[];
                       })
                     : null;
@@ -1104,10 +1075,6 @@ export const VideoStageEditor = (): VideoStageEditor => {
                     ),
                 );
             }
-            migrateLegacyRootUploadedAudio(
-                clips,
-                normalizeUploadedAudio(parsedConfig?.uploadedAudio),
-            );
             return {
                 width: getEffectiveRootDimension(
                     "width",
@@ -1130,34 +1097,6 @@ export const VideoStageEditor = (): VideoStageEditor => {
                 height: defaults.height,
                 fps: defaults.fps,
                 clips: [],
-            };
-        }
-    };
-
-    /**
-     * Older saved JSON stored a single shared upload at the top level of the
-     * config. New saves persist the upload directly inside each Upload-mode
-     * clip, so on load we migrate any legacy root-level upload into every
-     * Upload-mode clip that does not already carry its own audio. The next
-     * save then drops the obsolete root-level field.
-     */
-    const migrateLegacyRootUploadedAudio = (
-        clips: Clip[],
-        legacyRootUpload: UploadedAudio | null,
-    ): void => {
-        if (!legacyRootUpload) {
-            return;
-        }
-        for (const clip of clips) {
-            if (clip.uploadedAudio) {
-                continue;
-            }
-            if (`${clip.audioSource || ""}` !== AUDIO_SOURCE_UPLOAD) {
-                continue;
-            }
-            clip.uploadedAudio = {
-                data: legacyRootUpload.data,
-                fileName: legacyRootUpload.fileName,
             };
         }
     };

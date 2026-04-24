@@ -714,53 +714,6 @@ describe("VideoStageEditor", () => {
             expect(clips[1].uploadedAudio?.fileName).toBe("second.wav");
         });
 
-        it("migrates a legacy root-level uploadedAudio into Upload-mode clips on load", () => {
-            getStagesInput().value = JSON.stringify({
-                width: 1024,
-                height: 768,
-                uploadedAudio: {
-                    data: "data:audio/wav;base64,LEGACY",
-                    fileName: "legacy.wav",
-                },
-                clips: [
-                    {
-                        name: "First",
-                        duration: 4,
-                        audioSource: "Upload",
-                        refs: [],
-                        stages: [
-                            { model: "ltx-2.3-22b-dev", steps: 8, cfgScale: 1 },
-                        ],
-                    },
-                    {
-                        name: "Second",
-                        duration: 4,
-                        audioSource: "Native",
-                        refs: [],
-                        stages: [
-                            { model: "ltx-2.3-22b-dev", steps: 8, cfgScale: 1 },
-                        ],
-                    },
-                ],
-            });
-
-            const editor = VideoStageEditor();
-            editor.init();
-
-            const clips = parseStored();
-            expect(clips[0].uploadedAudio?.data).toBe(
-                "data:audio/wav;base64,LEGACY",
-            );
-            expect(clips[0].uploadedAudio?.fileName).toBe("legacy.wav");
-            expect(clips[1].uploadedAudio).toBeFalsy();
-
-            const rawConfig = JSON.parse(getStagesInput().value) as Record<
-                string,
-                unknown
-            >;
-            expect(rawConfig.uploadedAudio).toBeUndefined();
-        });
-
         it("does not rerender the duration number input while typing", async () => {
             const editor = VideoStageEditor();
             editor.init();
