@@ -62,14 +62,12 @@ export const getCoreDimension = (field: "width" | "height"): number | null => {
 };
 
 /**
- * Seeds the registered RootWidth/RootHeight sliders with the user's
- * currently-selected core Width/Height while our slider is still at the
- * sentinel default (anything below {@link ROOT_DIMENSION_MIN}). Once the
- * user moves our slider to a real value the sentinel guard prevents any
- * further automatic overrides, so manual changes stick.
+ * Seeds registered Root width/height from core inputs while this slider is
+ * still below {@link ROOT_DIMENSION_MIN}; above that, manual values stick.
  */
 export const seedRegisteredDimensionsFromCore = (): void => {
-    for (const field of ["width", "height"] as const) {
+    const fields: Array<"width" | "height"> = ["width", "height"];
+    for (const field of fields) {
         const ourInput = getRootDimensionParamInput(field);
         if (!ourInput) {
             continue;

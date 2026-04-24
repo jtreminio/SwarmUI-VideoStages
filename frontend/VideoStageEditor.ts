@@ -15,11 +15,11 @@ import { buildDefaultClip } from "./video-stage-editor/normalization";
 import { createObservers } from "./video-stage-editor/observers";
 import {
     ensureClipsSeeded,
+    getClips,
+    getState,
     type PersistenceCallbacks,
-    getClips as persistenceGetClips,
-    getState as persistenceGetState,
-    saveClips as persistenceSaveClips,
-    saveState as persistenceSaveState,
+    saveClips,
+    saveState,
 } from "./video-stage-editor/persistence";
 import { createRefUploadCache } from "./video-stage-editor/refUploadCache";
 import { renderClipCard } from "./video-stage-editor/renderHtml";
@@ -42,12 +42,12 @@ export const VideoStageEditor = (): VideoStageEditor => {
     const refUploadCache = createRefUploadCache();
     const persistenceCallbacks: PersistenceCallbacks = {};
 
-    const getState = (): VideoStagesConfig => persistenceGetState();
-    const saveState = (state: VideoStagesConfig): void =>
-        persistenceSaveState(state, persistenceCallbacks);
-    const getClips = (): Clip[] => persistenceGetClips();
-    const saveClips = (clips: Clip[]): void =>
-        persistenceSaveClips(clips, persistenceCallbacks);
+    const getEditorState = (): VideoStagesConfig => getState();
+    const saveEditorState = (state: VideoStagesConfig): void =>
+        saveState(state, persistenceCallbacks);
+    const getEditorClips = (): Clip[] => getClips();
+    const saveEditorClips = (clips: Clip[]): void =>
+        saveClips(clips, persistenceCallbacks);
 
     const scheduleClipsRefresh = (): void => {
         if (clipsRefreshTimer) {
@@ -63,22 +63,22 @@ export const VideoStageEditor = (): VideoStageEditor => {
 
     const observers = createObservers({
         scheduleRefresh: scheduleClipsRefresh,
-        getState,
-        saveState,
+        getState: getEditorState,
+        saveState: saveEditorState,
     });
 
     persistenceCallbacks.onAfterSerialize = (serialized: string): void => {
         observers.markPersisted(serialized);
     };
 
-    const generateWrap = createGenerateWrap({ getClips });
+    const generateWrap = createGenerateWrap({ getClips: getEditorClips });
 
     const getDomDeps = (): DomEventsDeps => ({
         getEditor: () => editor,
-        getClips,
-        saveClips,
-        getState,
-        saveState,
+        getClips: getEditorClips,
+        saveClips: saveEditorClips,
+        getState: getEditorState,
+        saveState: saveEditorState,
         persistenceCallbacks,
         scheduleClipsRefresh,
         refUploadCache,
@@ -112,9 +112,9 @@ export const VideoStageEditor = (): VideoStageEditor => {
             if (!upload?.data) {
                 continue;
             }
-            const input = editor.querySelector(
+            const input = editor.querySelector<HTMLInputElement>(
                 `.auto-file[data-clip-field="${CLIP_AUDIO_UPLOAD_FIELD}"][data-clip-idx="${clipIdx}"]`,
-            ) as HTMLInputElement | null;
+            );
             if (!input) {
                 continue;
             }
@@ -142,14 +142,14 @@ export const VideoStageEditor = (): VideoStageEditor => {
 
         seedRegisteredDimensionsFromCore();
 
-        const state = getState();
+        const state = getEditorState();
         let clips = state.clips;
         if (clips.length === 0) {
             state.clips = [
                 buildDefaultClip(0, getRootDefaults, getDefaultStageModel),
             ];
             clips = state.clips;
-            saveState(state);
+            saveEditorState(state);
         }
 
         const focusSnapshot = captureFocus();

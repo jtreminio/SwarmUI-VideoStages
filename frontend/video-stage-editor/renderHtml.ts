@@ -70,10 +70,6 @@ export const dropdownOptions = (
     }));
 };
 
-/**
- * Native select like {@link buildNativeDropdown}, but with strict option matching.
- * `makeDropdownInput` uses loose equality and can select the wrong option after re-render.
- */
 export const buildNativeDropdownStrict = (
     id: string,
     paramId: string,
@@ -82,8 +78,7 @@ export const buildNativeDropdownStrict = (
     selected: string,
 ): string => {
     const escapedLabel = escapeAttr(label);
-    const selectedStr = `${selected ?? ""}`;
-    const optionHtml = renderOptionList(options, selectedStr);
+    const optionHtml = renderOptionList(options, selected);
     const baseHtml = `
     <div class="auto-input auto-dropdown-box auto-input-flex">
         <label>
@@ -93,16 +88,15 @@ export const buildNativeDropdownStrict = (
 ${optionHtml}
         </select>
     </div>`;
-    return options.reduce((acc, option) => {
-        if (!option.disabled) {
-            return acc;
-        }
-        const optionValue = escapeAttr(option.value);
-        return acc.replace(
-            new RegExp(`(<option [^>]*value="${optionValue}")`),
-            "$1 disabled",
-        );
-    }, baseHtml);
+    return options
+        .filter((o) => o.disabled)
+        .reduce((acc, option) => {
+            const optionValue = escapeAttr(option.value);
+            return acc.replace(
+                new RegExp(`(<option [^>]*value="${optionValue}")`),
+                "$1 disabled",
+            );
+        }, baseHtml);
 };
 
 export const buildNativeDropdown = (
@@ -127,16 +121,15 @@ export const buildNativeDropdown = (
         labels,
         false,
     );
-    return options.reduce((acc, option) => {
-        if (!option.disabled) {
-            return acc;
-        }
-        const optionValue = escapeAttr(option.value);
-        return acc.replace(
-            new RegExp(`(<option [^>]*value="${optionValue}")`),
-            "$1 disabled",
-        );
-    }, html);
+    return options
+        .filter((o) => o.disabled)
+        .reduce((acc, option) => {
+            const optionValue = escapeAttr(option.value);
+            return acc.replace(
+                new RegExp(`(<option [^>]*value="${optionValue}")`),
+                "$1 disabled",
+            );
+        }, html);
 };
 
 export const buildRefSourceOptions = (
@@ -360,7 +353,7 @@ export const renderStageRow = (
         step: number,
         disabled = false,
     ): string => {
-        let html = injectFieldData(
+        const html = injectFieldData(
             makeSliderInput(
                 "",
                 stageFieldId(clipIdx, stageIdx, field),
@@ -383,17 +376,18 @@ export const renderStageRow = (
                 "data-clip-idx": String(clipIdx),
             },
         );
-        if (disabled) {
-            html = html.replace(
+        if (!disabled) {
+            return html;
+        }
+        return html
+            .replace(
                 /<input class="auto-slider-number nogrow"/g,
                 '<input class="auto-slider-number nogrow" disabled',
-            );
-            html = html.replace(
+            )
+            .replace(
                 /<input class="auto-slider-range nogrow"/g,
                 '<input class="auto-slider-range nogrow" disabled',
             );
-        }
-        return html;
     };
     const stageDropdownField = (
         field: string,
@@ -403,7 +397,7 @@ export const renderStageRow = (
         selected: string,
         disabled = false,
     ): string => {
-        let html = injectFieldData(
+        const html = injectFieldData(
             buildNativeDropdown(
                 stageFieldId(clipIdx, stageIdx, field),
                 field,
@@ -417,10 +411,10 @@ export const renderStageRow = (
                 "data-clip-idx": String(clipIdx),
             },
         );
-        if (disabled) {
-            html = html.replace(/<select /, "<select disabled ");
+        if (!disabled) {
+            return html;
         }
-        return html;
+        return html.replace(/<select /, "<select disabled ");
     };
 
     const modelField = stageDropdownField(
@@ -463,31 +457,29 @@ export const renderStageRow = (
         defaults.upscaleStep,
         stageIdx === 0,
     );
-    const upscaleMethodField = (() => {
-        const selectedMethod = `${stage.upscaleMethod ?? ""}`;
-        let html = injectFieldData(
-            buildNativeDropdownStrict(
-                stageFieldId(clipIdx, stageIdx, "upscaleMethod"),
-                "upscaleMethod",
-                "Upscale Method",
-                dropdownOptions(
-                    defaults.upscaleMethodValues,
-                    defaults.upscaleMethodLabels,
-                    selectedMethod,
-                ),
-                selectedMethod,
+    const selectedUpscaleMethod = `${stage.upscaleMethod ?? ""}`;
+    const upscaleMethodFieldBase = injectFieldData(
+        buildNativeDropdownStrict(
+            stageFieldId(clipIdx, stageIdx, "upscaleMethod"),
+            "upscaleMethod",
+            "Upscale Method",
+            dropdownOptions(
+                defaults.upscaleMethodValues,
+                defaults.upscaleMethodLabels,
+                selectedUpscaleMethod,
             ),
-            {
-                "data-stage-field": "upscaleMethod",
-                "data-stage-idx": String(stageIdx),
-                "data-clip-idx": String(clipIdx),
-            },
-        );
-        if (stageIdx === 0 || stage.upscale === 1) {
-            html = html.replace(/<select /, "<select disabled ");
-        }
-        return html;
-    })();
+            selectedUpscaleMethod,
+        ),
+        {
+            "data-stage-field": "upscaleMethod",
+            "data-stage-idx": String(stageIdx),
+            "data-clip-idx": String(clipIdx),
+        },
+    );
+    const upscaleMethodField =
+        stageIdx === 0 || stage.upscale === 1
+            ? upscaleMethodFieldBase.replace(/<select /, "<select disabled ")
+            : upscaleMethodFieldBase;
     const samplerField = stageDropdownField(
         "sampler",
         "Sampler",
@@ -510,7 +502,7 @@ export const renderStageRow = (
         stage.vae,
     );
     const refStrengthFields = clip.refs
-        .map((_ref, refIdx) =>
+        .map((_, refIdx) =>
             stageSliderField(
                 stageRefStrengthField(refIdx),
                 `Reference Image ${refIdx} Strength`,
@@ -621,7 +613,7 @@ export const renderClipCard = (
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Reference Images &middot; ${refsCount}</div>
                     </div>
-                <div class="vs-card-list">${clip.refs.map((ref, refIdx) => renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults)).join("")}</div>
+                    <div class="vs-card-list">${clip.refs.map((ref, refIdx) => renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults)).join("")}</div>
                     <button type="button" class="vs-add-btn" data-clip-action="add-ref" data-clip-idx="${clipIdx}">+ Add Reference Image</button>
                 </div>
 

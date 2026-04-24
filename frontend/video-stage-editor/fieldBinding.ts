@@ -20,6 +20,65 @@ import {
 } from "./normalization";
 import type { RefUploadCacheApi } from "./refUploadCache";
 
+type ApplyRefFieldDeps = {
+    getRootDefaults: () => RootDefaults;
+    refUploadCache: RefUploadCacheApi;
+    getClips: () => Clip[];
+    saveClips: (clips: Clip[]) => void;
+};
+
+const handleUploadFileName = (
+    ref: RefImage,
+    target: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+    deps: Pick<ApplyRefFieldDeps, "refUploadCache" | "getClips" | "saveClips">,
+): void => {
+    const { refUploadCache, getClips, saveClips } = deps;
+    const clearUpload = (clipIdx: number, refIdx: number): void => {
+        ref.uploadFileName = null;
+        ref.uploadedImage = null;
+        refUploadCache.delete(refUploadKey(clipIdx, refIdx));
+    };
+
+    if (!(target instanceof HTMLInputElement) || target.type !== "file") {
+        ref.uploadFileName = normalizeUploadFileName(target.value);
+        if (!ref.uploadFileName) {
+            ref.uploadedImage = null;
+        }
+        return;
+    }
+
+    const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
+    const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
+
+    if (target.dataset.filedata) {
+        const fileName = normalizeUploadFileName(
+            target.dataset.filename ?? target.files?.[0]?.name ?? null,
+        );
+        ref.uploadedImage = {
+            data: target.dataset.filedata,
+            fileName,
+        };
+        ref.uploadFileName = fileName;
+        return;
+    }
+
+    const fileName = normalizeUploadFileName(target.files?.[0]?.name ?? null);
+    if (!fileName) {
+        clearUpload(clipIdx, refIdx);
+        return;
+    }
+
+    ref.uploadFileName = fileName;
+    ref.uploadedImage = null;
+    refUploadCache.cacheSelection({
+        clipIdx,
+        refIdx,
+        fileInput: target,
+        getClips,
+        saveClips,
+    });
+};
+
 export const syncStageUpscaleMethodDisabled = (
     target: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
     upscale: number,
@@ -32,9 +91,9 @@ export const syncStageUpscaleMethodDisabled = (
     if (stageIdx === 0) {
         return;
     }
-    const upscaleMethod = stageCard.querySelector(
+    const upscaleMethod = stageCard.querySelector<HTMLSelectElement>(
         '[data-stage-field="upscaleMethod"]',
-    ) as HTMLSelectElement | null;
+    );
     if (!upscaleMethod) {
         return;
     }
@@ -50,9 +109,9 @@ export const syncRefUploadFieldVisibility = (
     if (!(refCard instanceof HTMLElement)) {
         return;
     }
-    const uploadField = refCard.querySelector(
+    const uploadField = refCard.querySelector<HTMLElement>(
         ".vs-ref-upload-field",
-    ) as HTMLElement | null;
+    );
     if (!uploadField) {
         return;
     }
@@ -65,9 +124,9 @@ export const syncRefUploadFieldVisibility = (
         return;
     }
 
-    const uploadInput = uploadField.querySelector(
+    const uploadInput = uploadField.querySelector<HTMLInputElement>(
         '.auto-file[data-ref-field="uploadFileName"]',
-    ) as HTMLInputElement | null;
+    );
     if (uploadInput) {
         const clipIdx = parseInt(uploadInput.dataset.clipIdx ?? "-1", 10);
         const refIdx = parseInt(uploadInput.dataset.refIdx ?? "-1", 10);
@@ -84,9 +143,9 @@ export const syncClipAudioUploadFieldVisibility = (
     if (!(clipCard instanceof HTMLElement)) {
         return;
     }
-    const uploadField = clipCard.querySelector(
+    const uploadField = clipCard.querySelector<HTMLElement>(
         ".vs-clip-audio-upload-field",
-    ) as HTMLElement | null;
+    );
     if (!uploadField) {
         return;
     }
@@ -98,12 +157,7 @@ export const applyRefField = (
     ref: RefImage,
     field: string,
     target: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
-    deps: {
-        getRootDefaults: () => RootDefaults;
-        refUploadCache: RefUploadCacheApi;
-        getClips: () => Clip[];
-        saveClips: (clips: Clip[]) => void;
-    },
+    deps: ApplyRefFieldDeps,
 ): void => {
     const { getRootDefaults, refUploadCache, getClips, saveClips } = deps;
     const frameMax = (): number => getReferenceFrameMax(getRootDefaults, clip);
@@ -114,55 +168,32 @@ export const applyRefField = (
             ref.uploadFileName = null;
             ref.uploadedImage = null;
         }
-    } else if (field === "frame") {
+
+        return;
+    }
+
+    if (field === "frame") {
         const value = parseInt(target.value, 10);
         if (Number.isFinite(value)) {
             ref.frame = clamp(value, REF_FRAME_MIN, frameMax());
         }
-    } else if (field === "fromEnd") {
+
+        return;
+    }
+
+    if (field === "fromEnd") {
         ref.fromEnd =
             target instanceof HTMLInputElement ? !!target.checked : false;
-    } else if (field === "uploadFileName") {
-        if (target instanceof HTMLInputElement && target.type === "file") {
-            const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
-            const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
-            if (target.dataset.filedata) {
-                ref.uploadedImage = {
-                    data: target.dataset.filedata,
-                    fileName: normalizeUploadFileName(
-                        target.dataset.filename ??
-                            target.files?.[0]?.name ??
-                            null,
-                    ),
-                };
-                ref.uploadFileName = ref.uploadedImage.fileName;
-            } else if (target.files && target.files.length > 0) {
-                const fileName = target.files[0]?.name ?? null;
-                ref.uploadFileName = normalizeUploadFileName(fileName);
-                if (ref.uploadFileName) {
-                    refUploadCache.cacheSelection({
-                        clipIdx,
-                        refIdx,
-                        fileInput: target,
-                        getClips,
-                        saveClips,
-                    });
-                } else {
-                    ref.uploadedImage = null;
-                    refUploadCache.delete(refUploadKey(clipIdx, refIdx));
-                }
-                return;
-            } else {
-                ref.uploadFileName = null;
-                ref.uploadedImage = null;
-                refUploadCache.delete(refUploadKey(clipIdx, refIdx));
-            }
-            return;
-        }
-        ref.uploadFileName = normalizeUploadFileName(target.value);
-        if (!ref.uploadFileName) {
-            ref.uploadedImage = null;
-        }
+
+        return;
+    }
+    if (field === "uploadFileName") {
+        handleUploadFileName(ref, target, {
+            refUploadCache,
+            getClips,
+            saveClips,
+        });
+        return;
     }
 };
 
@@ -179,17 +210,35 @@ export const applyStageField = (
             stage.refStrengths[refStrengthIdx] =
                 normalizeStageRefStrengthValue(value);
         }
-    } else if (field === "model") {
+        return;
+    }
+
+    if (field === "model") {
         stage.model = target.value;
-    } else if (field === "vae") {
+        return;
+    }
+
+    if (field === "vae") {
         stage.vae = target.value;
-    } else if (field === "sampler") {
+        return;
+    }
+
+    if (field === "sampler") {
         stage.sampler = target.value;
-    } else if (field === "scheduler") {
+        return;
+    }
+
+    if (field === "scheduler") {
         stage.scheduler = target.value;
-    } else if (field === "upscaleMethod") {
+        return;
+    }
+
+    if (field === "upscaleMethod") {
         stage.upscaleMethod = target.value;
-    } else if (field === "control") {
+        return;
+    }
+
+    if (field === "control") {
         const value = parseFloat(target.value);
         if (Number.isFinite(value)) {
             const defaults = getRootDefaults();
@@ -199,7 +248,10 @@ export const applyStageField = (
                 defaults.controlMax,
             );
         }
-    } else if (field === "upscale") {
+        return;
+    }
+
+    if (field === "upscale") {
         const value = parseFloat(target.value);
         if (Number.isFinite(value)) {
             const defaults = getRootDefaults();
@@ -209,7 +261,10 @@ export const applyStageField = (
                 defaults.upscaleMax,
             );
         }
-    } else if (field === "steps") {
+        return;
+    }
+
+    if (field === "steps") {
         const value = parseInt(target.value, 10);
         if (Number.isFinite(value)) {
             const defaults = getRootDefaults();
@@ -217,7 +272,10 @@ export const applyStageField = (
                 clamp(value, defaults.stepsMin, defaults.stepsMax),
             );
         }
-    } else if (field === "cfgScale") {
+        return;
+    }
+
+    if (field === "cfgScale") {
         const value = parseFloat(target.value);
         if (Number.isFinite(value)) {
             const defaults = getRootDefaults();
@@ -227,5 +285,6 @@ export const applyStageField = (
                 defaults.cfgScaleMax,
             );
         }
+        return;
     }
 };

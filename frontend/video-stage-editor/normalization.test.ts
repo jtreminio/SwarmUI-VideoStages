@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import type { Clip, RootDefaults } from "../Types";
-import { REF_SOURCE_BASE } from "../Types";
+import { REF_SOURCE_BASE, type RootDefaults } from "../Types";
 import {
     buildDefaultRef,
     normalizeClip,
@@ -77,17 +76,18 @@ describe("normalization", () => {
     });
 
     it("normalizeClip pads refStrengths for each stage from raw", () => {
+        const rawClip: Record<string, unknown> = {
+            duration: 2,
+            refs: [{ source: REF_SOURCE_BASE, frame: 1 }],
+            stages: [
+                {
+                    model: "ltx",
+                    refStrengths: [0.3],
+                },
+            ],
+        };
         const clip = normalizeClip(
-            {
-                duration: 2,
-                refs: [{ source: REF_SOURCE_BASE, frame: 1 }],
-                stages: [
-                    {
-                        model: "ltx",
-                        refStrengths: [0.3],
-                    },
-                ],
-            } as Partial<Clip> & Record<string, unknown>,
+            rawClip,
             0,
             getRootDefaults,
             getDefaultStageModel,

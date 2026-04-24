@@ -25,21 +25,30 @@ import {
     STAGE_REF_STRENGTH_MIN,
 } from "./constants";
 
+const resolveRootPreferredUpscaleMethod = (
+    upscaleMethodValues: string[],
+): string =>
+    upscaleMethodValues.includes("pixel-lanczos")
+        ? "pixel-lanczos"
+        : (upscaleMethodValues[0] ?? "pixel-lanczos");
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
 export const normalizeUploadedAudio = (
     value: unknown,
 ): UploadedAudio | null => {
-    if (!value || typeof value !== "object") {
+    if (!isRecord(value)) {
         return null;
     }
-    const raw = value as { data?: unknown; fileName?: unknown };
-    const data = `${raw.data ?? ""}`.trim();
+    const data = `${value.data ?? ""}`.trim();
     if (!data) {
         return null;
     }
     return {
         data,
         fileName: normalizeUploadFileName(
-            raw.fileName == null ? null : `${raw.fileName}`,
+            value.fileName == null ? null : `${value.fileName}`,
         ),
     };
 };
@@ -133,9 +142,7 @@ export const buildDefaultStage = (
         upscale: previousStage ? previousStage.upscale : defaults.upscale,
         upscaleMethod: previousStage
             ? previousStage.upscaleMethod
-            : defaults.upscaleMethodValues.includes("pixel-lanczos")
-              ? "pixel-lanczos"
-              : (defaults.upscaleMethodValues[0] ?? "pixel-lanczos"),
+            : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
         model: previousStage
             ? previousStage.model
             : getDefaultStageModel(defaults.modelValues),
@@ -203,7 +210,7 @@ export const getReferenceFrameMax = (
 export const normalizeStage = (
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
-    rawStage: Partial<Stage> & Record<string, unknown>,
+    rawStage: Record<string, unknown>,
     previousStage: Stage | null,
     refCount: number,
     stageIndexInClip: number,
@@ -215,28 +222,25 @@ export const normalizeStage = (
         previousStage,
         refCount,
     );
-    const rawRecord = rawStage as Record<string, unknown>;
     const firstStageUpscale =
         stageIndexInClip === 0
             ? {
                   upscale: defaults.upscale,
-                  upscaleMethod: defaults.upscaleMethodValues.includes(
-                      "pixel-lanczos",
-                  )
-                      ? "pixel-lanczos"
-                      : (defaults.upscaleMethodValues[0] ?? "pixel-lanczos"),
+                  upscaleMethod: resolveRootPreferredUpscaleMethod(
+                      defaults.upscaleMethodValues,
+                  ),
               }
             : {
                   upscale: clamp(
                       VideoStageUtils.toNumber(
-                          `${readRawStageProp(rawRecord, "upscale", "Upscale") ?? fallback.upscale}`,
+                          `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
                           fallback.upscale,
                       ),
                       defaults.upscaleMin,
                       defaults.upscaleMax,
                   ),
                   upscaleMethod:
-                      `${readRawStageString(rawRecord, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
+                      `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
                       fallback.upscaleMethod,
               };
     const stage: Stage = {
@@ -297,7 +301,7 @@ export const normalizeStage = (
 };
 
 export const normalizeRef = (
-    rawRef: Partial<RefImage> & Record<string, unknown>,
+    rawRef: Record<string, unknown>,
     frameMax: number,
 ): RefImage => {
     const fallback = buildDefaultRef();
@@ -329,7 +333,7 @@ export const normalizeRef = (
 };
 
 export const normalizeClip = (
-    rawClip: Partial<Clip> & Record<string, unknown>,
+    rawClip: Record<string, unknown>,
     index: number,
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
@@ -348,10 +352,7 @@ export const normalizeClip = (
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
     const refFrameMax = getReferenceFrameMax(getRootDefaults, { duration });
     const refs = refsRaw.map((rawRef) =>
-        normalizeRef(
-            (rawRef ?? {}) as Partial<RefImage> & Record<string, unknown>,
-            refFrameMax,
-        ),
+        normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
     );
 
     const stages: Stage[] = [];
@@ -363,8 +364,7 @@ export const normalizeClip = (
             normalizeStage(
                 getRootDefaults,
                 getDefaultStageModel,
-                (stagesRaw[i] ?? {}) as Partial<Stage> &
-                    Record<string, unknown>,
+                isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
                 previousStage,
                 refs.length,
                 i,

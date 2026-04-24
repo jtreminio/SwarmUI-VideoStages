@@ -41,17 +41,15 @@ describe("persistence", () => {
                     ],
                 },
             ];
-            const raw = serializeClipsForStorage(clips);
-            expect(raw).toHaveLength(1);
-            const row = raw[0] as Record<string, unknown>;
-            expect(row.name).toBe("A");
-            expect(Array.isArray(row.refs)).toBe(true);
-            expect(Array.isArray(row.stages)).toBe(true);
-            const stage = (row.stages as unknown[])[0] as Record<
-                string,
-                unknown
-            >;
-            expect(stage.refStrengths).toEqual([0.8]);
+            expect(serializeClipsForStorage(clips)).toEqual([
+                expect.objectContaining({
+                    name: "A",
+                    refs: expect.any(Array),
+                    stages: expect.arrayContaining([
+                        expect.objectContaining({ refStrengths: [0.8] }),
+                    ]),
+                }),
+            ]);
         });
     });
 });

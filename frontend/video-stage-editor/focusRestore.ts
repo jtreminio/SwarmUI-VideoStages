@@ -7,13 +7,12 @@ export type FocusSnapshot = {
 export const captureFocus = (): FocusSnapshot => {
     const el = document.activeElement;
     if (
-        !el ||
-        el === document.body ||
-        (el.tagName !== "INPUT" && el.tagName !== "SELECT")
+        !(el instanceof HTMLInputElement) &&
+        !(el instanceof HTMLSelectElement)
     ) {
         return null;
     }
-    const dataset = (el as HTMLElement).dataset;
+    const dataset = el.dataset;
     let selector: string | null = null;
     if (dataset.clipField && dataset.clipIdx) {
         selector = `[data-clip-field="${dataset.clipField}"][data-clip-idx="${dataset.clipIdx}"]`;
@@ -27,11 +26,10 @@ export const captureFocus = (): FocusSnapshot => {
     }
     let start: number | null = null;
     let end: number | null = null;
-    try {
-        const inputEl = el as HTMLInputElement;
-        start = inputEl.selectionStart;
-        end = inputEl.selectionEnd;
-    } catch {}
+    if (el instanceof HTMLInputElement) {
+        start = el.selectionStart;
+        end = el.selectionEnd;
+    }
     return { selector, start, end };
 };
 
@@ -39,11 +37,11 @@ export const restoreFocus = (snapshot: FocusSnapshot): void => {
     if (!snapshot) {
         return;
     }
-    const el = document.querySelector(snapshot.selector) as
-        | HTMLInputElement
-        | HTMLSelectElement
-        | null;
-    if (!el) {
+    const el = document.querySelector<HTMLElement>(snapshot.selector);
+    if (
+        !(el instanceof HTMLInputElement) &&
+        !(el instanceof HTMLSelectElement)
+    ) {
         return;
     }
     el.focus();

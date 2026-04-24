@@ -1,6 +1,6 @@
 import { AUDIO_SOURCE_NATIVE } from "../AudioSourceController";
 import { snapDurationToFps } from "../RenderUtils";
-import type { Clip } from "../Types";
+import type { Clip, VideoStagesConfig } from "../Types";
 import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_DURATION_MIN,
@@ -31,15 +31,26 @@ export type DomEventsDeps = {
     getEditor: () => HTMLElement | null;
     getClips: () => Clip[];
     saveClips: (clips: Clip[]) => void;
-    getState: () => import("../Types").VideoStagesConfig;
+    getState: () => VideoStagesConfig;
     saveState: (
-        state: import("../Types").VideoStagesConfig,
+        state: VideoStagesConfig,
         callbacks?: PersistenceCallbacks,
     ) => void;
     persistenceCallbacks?: PersistenceCallbacks;
     scheduleClipsRefresh: () => void;
     refUploadCache: RefUploadCacheApi;
 };
+
+type FieldTarget = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+type StageFieldTarget = HTMLInputElement | HTMLSelectElement;
+
+const isFieldTarget = (value: EventTarget | null): value is FieldTarget =>
+    value instanceof HTMLInputElement ||
+    value instanceof HTMLSelectElement ||
+    value instanceof HTMLTextAreaElement;
+
+const isStageFieldTarget = (value: FieldTarget): value is StageFieldTarget =>
+    value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
 
 export const getEditorActionTarget = (
     getEditor: () => HTMLElement | null,
@@ -73,9 +84,9 @@ export const handleRefUploadRemove = (
     if (!(uploadField instanceof HTMLElement)) {
         return;
     }
-    const fileInput = uploadField.querySelector(
+    const fileInput = uploadField.querySelector<HTMLInputElement>(
         '.auto-file[data-ref-field="uploadFileName"]',
-    ) as HTMLInputElement | null;
+    );
     if (!fileInput) {
         return;
     }
@@ -103,9 +114,9 @@ export const handleClipAudioUploadRemove = (
     if (!(uploadField instanceof HTMLElement)) {
         return;
     }
-    const fileInput = uploadField.querySelector(
+    const fileInput = uploadField.querySelector<HTMLInputElement>(
         `.auto-file[data-clip-field="${CLIP_AUDIO_UPLOAD_FIELD}"]`,
-    ) as HTMLInputElement | null;
+    );
     if (!fileInput) {
         return;
     }
@@ -238,26 +249,22 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
 };
 
 export const handleFieldChange = (
-    elem: HTMLElement | null,
+    elem: EventTarget | null,
     deps: DomEventsDeps,
     fromInputEvent = false,
 ): void => {
-    if (!elem || !deps.getEditor()?.contains(elem)) {
+    if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
         return;
     }
-    const target = elem as
-        | HTMLInputElement
-        | HTMLSelectElement
-        | HTMLTextAreaElement;
     const state = deps.getState();
     const clips = state.clips;
     const defaults = getRootDefaults();
 
-    const clipField = target.dataset.clipField;
-    const stageField = target.dataset.stageField;
-    const refField = target.dataset.refField;
+    const clipField = elem.dataset.clipField;
+    const stageField = elem.dataset.stageField;
+    const refField = elem.dataset.refField;
 
-    const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
+    const clipIdx = parseInt(elem.dataset.clipIdx ?? "-1", 10);
     if (clipIdx < 0 || clipIdx >= clips.length) {
         return;
     }
@@ -271,7 +278,7 @@ export const handleFieldChange = (
     };
 
     if (clipField === "duration") {
-        const value = parseFloat(target.value);
+        const value = parseFloat(elem.value);
         if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
             clip.duration = snapDurationToFps(value, defaults.fps);
             const frameMax = getReferenceFrameMax(getRootDefaults, clip);
@@ -280,25 +287,25 @@ export const handleFieldChange = (
             }
         }
     } else if (clipField === "audioSource") {
-        clip.audioSource = target.value || AUDIO_SOURCE_NATIVE;
+        clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
-        if (!(target instanceof HTMLInputElement) || target.type !== "file") {
+        if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
             return;
         }
-        if (target.dataset.filedata) {
+        if (elem.dataset.filedata) {
             clip.uploadedAudio = {
-                data: target.dataset.filedata,
+                data: elem.dataset.filedata,
                 fileName: normalizeUploadFileName(
-                    target.dataset.filename ?? target.files?.[0]?.name ?? null,
+                    elem.dataset.filename ?? elem.files?.[0]?.name ?? null,
                 ),
             };
-        } else if (target.files && target.files.length > 0) {
+        } else if (elem.files?.length) {
             return;
         } else {
             clip.uploadedAudio = null;
         }
     } else if (refField) {
-        const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
+        const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
         if (refIdx < 0 || refIdx >= clip.refs.length) {
             return;
         }
@@ -306,41 +313,35 @@ export const handleFieldChange = (
             clip,
             clip.refs[refIdx],
             refField,
-            target,
+            elem,
             fieldBindingDeps,
         );
         if (refField === "source") {
-            syncRefUploadFieldVisibility(
-                target,
-                target.value,
-                deps.refUploadCache,
-            );
+            syncRefUploadFieldVisibility(elem, elem.value, deps.refUploadCache);
         }
     } else if (stageField) {
-        const stageIdx = parseInt(target.dataset.stageIdx ?? "-1", 10);
+        const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
         if (stageIdx < 0 || stageIdx >= clip.stages.length) {
             return;
         }
+        if (!isStageFieldTarget(elem)) {
+            return;
+        }
         const stage = clip.stages[stageIdx];
-        const stageCard = target.closest("section[data-stage-idx]");
-        const methodSelect = stageCard?.querySelector(
+        const stageCard = elem.closest("section[data-stage-idx]");
+        const methodSelect = stageCard?.querySelector<HTMLSelectElement>(
             '[data-stage-field="upscaleMethod"]',
-        ) as HTMLSelectElement | null;
+        );
         const preservedUpscaleMethod =
             stageField === "upscale"
                 ? (methodSelect?.value ?? stage.upscaleMethod)
                 : null;
-        applyStageField(
-            stage,
-            stageField,
-            target as HTMLInputElement | HTMLSelectElement,
-            getRootDefaults,
-        );
+        applyStageField(stage, stageField, elem, getRootDefaults);
         if (stageField === "upscale") {
             if (preservedUpscaleMethod != null) {
                 stage.upscaleMethod = preservedUpscaleMethod;
             }
-            syncStageUpscaleMethodDisabled(target, stage.upscale);
+            syncStageUpscaleMethodDisabled(elem, stage.upscale);
             if (methodSelect && preservedUpscaleMethod != null) {
                 methodSelect.value = preservedUpscaleMethod;
             }
@@ -351,12 +352,12 @@ export const handleFieldChange = (
 
     deps.saveState(state, deps.persistenceCallbacks);
     if (clipField === "audioSource") {
-        syncClipAudioUploadFieldVisibility(target, clip.audioSource);
+        syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
     }
     const isSliderDrag =
         fromInputEvent &&
-        target instanceof HTMLInputElement &&
-        target.type === "range";
+        elem instanceof HTMLInputElement &&
+        elem.type === "range";
     const needsRerender =
         !isSliderDrag && clipField === "duration" && !fromInputEvent;
     if (needsRerender) {
@@ -375,24 +376,27 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
     editor.dataset.vsListenersAttached = "1";
 
     editor.addEventListener("click", (event: MouseEvent) => {
-        const target = event.target as Element | null;
-        const refUploadRemoveButton = target?.closest(
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        const refUploadRemoveButton = target.closest<HTMLElement>(
             ".vs-ref-upload-field .auto-input-remove-button",
-        ) as HTMLElement | null;
+        );
         if (refUploadRemoveButton) {
             handleRefUploadRemove(refUploadRemoveButton, deps);
             return;
         }
-        const clipUploadRemoveButton = target?.closest(
+        const clipUploadRemoveButton = target.closest<HTMLElement>(
             ".vs-clip-audio-upload-field .auto-input-remove-button",
-        ) as HTMLElement | null;
+        );
         if (clipUploadRemoveButton) {
             handleClipAudioUploadRemove(clipUploadRemoveButton, deps);
             return;
         }
-        const actionElem = target?.closest(
+        const actionElem = target.closest<HTMLElement>(
             "[data-clip-action], [data-stage-action], [data-ref-action]",
-        ) as HTMLElement | null;
+        );
         if (actionElem) {
             event.preventDefault();
             event.stopPropagation();
@@ -400,24 +404,25 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
             return;
         }
 
-        const clipHeader = target?.closest(
+        const clipHeader = target.closest<HTMLElement>(
             ".vs-clip-card > .input-group-shrinkable",
-        ) as HTMLElement | null;
+        );
         if (clipHeader) {
             event.stopPropagation();
-            const group = clipHeader.closest(
-                ".vs-clip-card",
-            ) as HTMLElement | null;
+            const group = clipHeader.closest<HTMLElement>(".vs-clip-card");
             const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
             toggleClipExpanded(clipIdx, deps);
         }
     });
 
-    editor.addEventListener("change", (event) => {
-        handleFieldChange(event.target as HTMLElement | null, deps);
+    editor.addEventListener("change", (event: Event) => {
+        handleFieldChange(event.target, deps);
     });
-    editor.addEventListener("input", (event) => {
-        const target = event.target as HTMLElement | null;
+    editor.addEventListener("input", (event: Event) => {
+        const target = event.target;
+        if (!isFieldTarget(target)) {
+            return;
+        }
         if (
             target instanceof HTMLInputElement &&
             (target.type === "number" || target.type === "range")

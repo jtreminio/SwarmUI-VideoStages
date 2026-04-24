@@ -78,6 +78,48 @@ export interface Clip {
     stages: Stage[];
 }
 
+/** Ref fields persisted by `serializeClipsForStorage`. */
+export type StoredRefImage = Pick<
+    RefImage,
+    | "expanded"
+    | "source"
+    | "uploadFileName"
+    | "uploadedImage"
+    | "frame"
+    | "fromEnd"
+>;
+
+/** Stage fields persisted by `serializeClipsForStorage`. */
+export type StoredStage = Pick<
+    Stage,
+    | "expanded"
+    | "skipped"
+    | "control"
+    | "refStrengths"
+    | "upscale"
+    | "upscaleMethod"
+    | "model"
+    | "vae"
+    | "steps"
+    | "cfgScale"
+    | "sampler"
+    | "scheduler"
+>;
+
+/** Clip tree shape written to JSON by `serializeClipsForStorage`. */
+export type StoredClip = Pick<
+    Clip,
+    | "name"
+    | "expanded"
+    | "skipped"
+    | "duration"
+    | "audioSource"
+    | "uploadedAudio"
+> & {
+    refs: StoredRefImage[];
+    stages: StoredStage[];
+};
+
 export const REF_SOURCE_BASE = "Base";
 export const REF_SOURCE_REFINER = "Refiner";
 export const REF_SOURCE_UPLOAD = "Upload";

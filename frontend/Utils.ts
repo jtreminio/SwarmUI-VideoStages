@@ -1,9 +1,17 @@
+const getElementByType = <T extends Element>(
+    id: string,
+    ctor: { new (): T },
+): T | null => {
+    const element = document.getElementById(id);
+    return element instanceof ctor ? element : null;
+};
+
 export const VideoStageUtils = {
     getInputElement: (id: string): HTMLInputElement | null =>
-        document.getElementById(id) as HTMLInputElement | null,
+        getElementByType(id, HTMLInputElement),
 
     getSelectElement: (id: string): HTMLSelectElement | null =>
-        document.getElementById(id) as HTMLSelectElement | null,
+        getElementByType(id, HTMLSelectElement),
 
     getSelectValues: (select: HTMLSelectElement | null): string[] =>
         select ? Array.from(select.options, (option) => option.value) : [],

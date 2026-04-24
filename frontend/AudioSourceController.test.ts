@@ -272,7 +272,10 @@ describe("AudioSourceController", () => {
             controller.runOnEachBuild();
 
             expect(toggle).not.toBeNull();
-            const text2Audio = toggle as HTMLInputElement;
+            if (!(toggle instanceof HTMLInputElement)) {
+                throw new Error("Expected text-to-audio toggle input");
+            }
+            const text2Audio = toggle;
             text2Audio.checked = true;
             text2Audio.dispatchEvent(new Event("change"));
 
@@ -303,7 +306,7 @@ describe("AudioSourceController", () => {
 
             controller = AudioSourceController();
 
-            const steps = postParamBuildSteps as (() => void)[];
+            const steps = postParamBuildSteps;
             expect(steps).toHaveLength(1);
             expect(typeof steps[0]).toBe("function");
         });
@@ -314,7 +317,7 @@ describe("AudioSourceController", () => {
                 initialOptions: ["Native", "Upload", "stale"],
             });
             controller = AudioSourceController();
-            for (const step of postParamBuildSteps as (() => void)[]) {
+            for (const step of postParamBuildSteps) {
                 step();
             }
 

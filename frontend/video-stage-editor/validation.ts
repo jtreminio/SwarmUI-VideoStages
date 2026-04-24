@@ -16,13 +16,13 @@ export const getRefSourceError = (source: string): string | null => {
     ) {
         return null;
     }
-    if (parseBase2EditStageIndex(compact) != null) {
-        if (!isAvailableBase2EditReference(compact)) {
-            return `references missing Base2Edit stage "${source}".`;
-        }
-        return null;
+    if (parseBase2EditStageIndex(compact) == null) {
+        return `has unknown source "${source}".`;
     }
-    return `has unknown source "${source}".`;
+    if (!isAvailableBase2EditReference(compact)) {
+        return `references missing Base2Edit stage "${source}".`;
+    }
+    return null;
 };
 
 export const validateClips = (clips: Clip[]): string[] => {

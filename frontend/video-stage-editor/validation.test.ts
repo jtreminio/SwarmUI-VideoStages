@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
 import { stubBase2EditStageRegistry } from "../__test_helpers__/registries";
-import type { Clip } from "../Types";
-import { REF_SOURCE_BASE, REF_SOURCE_UPLOAD } from "../Types";
+import { type Clip, REF_SOURCE_BASE, REF_SOURCE_UPLOAD } from "../Types";
 import { getRefSourceError, validateClips } from "./validation";
 
 const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({

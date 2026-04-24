@@ -3,6 +3,14 @@ import { VideoStageUtils } from "../Utils";
 import { serializeClipsForStorage } from "./persistence";
 import { getClipsInput } from "./swarmInputs";
 
+const ROOT_VIDEO_TIMING_INPUT_IDS = new Set<string>([
+    "input_videoframes",
+    "input_text2videoframes",
+    "input_videofps",
+    "input_videoframespersecond",
+    "input_vsfps",
+]);
+
 export type ObserversApi = {
     markPersisted: (serialized: string) => void;
     startClipsInputSync: () => void;
@@ -11,7 +19,7 @@ export type ObserversApi = {
     installRootVideoTimingChangeListener: () => void;
     installRefSourceFallbackListener: (
         createEditor: () => void,
-        handleFieldChange: (target: HTMLElement) => void,
+        handleFieldChange: (target: EventTarget | null) => void,
     ) => void;
 };
 
@@ -114,17 +122,11 @@ export const createObservers = (deps: {
         }
         rootVideoTimingChangeListenerInstalled = true;
         document.addEventListener("change", (event) => {
-            const target = event.target as HTMLElement | null;
-            if (!(target instanceof HTMLInputElement)) {
+            if (!(event.target instanceof HTMLInputElement)) {
                 return;
             }
-            if (
-                target.id !== "input_videoframes" &&
-                target.id !== "input_text2videoframes" &&
-                target.id !== "input_videofps" &&
-                target.id !== "input_videoframespersecond" &&
-                target.id !== "input_vsfps"
-            ) {
+            const target = event.target;
+            if (!ROOT_VIDEO_TIMING_INPUT_IDS.has(target.id)) {
                 return;
             }
 
@@ -144,7 +146,7 @@ export const createObservers = (deps: {
 
     const installRefSourceFallbackListener = (
         createEditor: () => void,
-        handleFieldChange: (target: HTMLElement) => void,
+        handleFieldChange: (target: EventTarget | null) => void,
     ): void => {
         if (refSourceFallbackListenerInstalled) {
             return;
@@ -153,10 +155,10 @@ export const createObservers = (deps: {
         document.addEventListener(
             "change",
             (event) => {
-                const target = event.target as Element | null;
-                if (!(target instanceof HTMLSelectElement)) {
+                if (!(event.target instanceof HTMLSelectElement)) {
                     return;
                 }
+                const target = event.target;
                 const isRefSourceChange = target.dataset.refField === "source";
                 const isClipAudioSourceChange =
                     target.dataset.clipField === "audioSource";

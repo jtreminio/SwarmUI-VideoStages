@@ -1,4 +1,4 @@
-import type { Clip, VideoStagesConfig } from "../Types";
+import type { Clip, StoredClip, VideoStagesConfig } from "../Types";
 import {
     buildDefaultClip,
     normalizeClip,
@@ -13,37 +13,61 @@ import {
     getRegisteredRootFps,
 } from "./swarmInputs";
 
-export const serializeClipsForStorage = (clips: Clip[]): unknown[] =>
-    clips.map((clip) => ({
-        name: clip.name,
-        expanded: clip.expanded,
-        skipped: clip.skipped,
-        duration: clip.duration,
-        audioSource: clip.audioSource,
-        uploadedAudio: clip.uploadedAudio,
-        refs: clip.refs.map((ref) => ({
-            expanded: ref.expanded,
-            source: ref.source,
-            uploadFileName: ref.uploadFileName,
-            uploadedImage: ref.uploadedImage,
-            frame: ref.frame,
-            fromEnd: ref.fromEnd,
-        })),
-        stages: clip.stages.map((stage) => ({
-            expanded: stage.expanded,
-            skipped: stage.skipped,
-            control: stage.control,
-            refStrengths: stage.refStrengths,
-            upscale: stage.upscale,
-            upscaleMethod: stage.upscaleMethod,
-            model: stage.model,
-            vae: stage.vae,
-            steps: stage.steps,
-            cfgScale: stage.cfgScale,
-            sampler: stage.sampler,
-            scheduler: stage.scheduler,
-        })),
-    }));
+type ParsedConfig = {
+    width?: unknown;
+    height?: unknown;
+    fps?: unknown;
+    clips?: unknown[];
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+const toParsedConfig = (value: unknown): ParsedConfig | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+    return {
+        width: value.width,
+        height: value.height,
+        fps: value.fps,
+        clips: Array.isArray(value.clips) ? value.clips : undefined,
+    };
+};
+
+export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
+    clips.map(
+        (clip): StoredClip => ({
+            name: clip.name,
+            expanded: clip.expanded,
+            skipped: clip.skipped,
+            duration: clip.duration,
+            audioSource: clip.audioSource,
+            uploadedAudio: clip.uploadedAudio,
+            refs: clip.refs.map((ref) => ({
+                expanded: ref.expanded,
+                source: ref.source,
+                uploadFileName: ref.uploadFileName,
+                uploadedImage: ref.uploadedImage,
+                frame: ref.frame,
+                fromEnd: ref.fromEnd,
+            })),
+            stages: clip.stages.map((stage) => ({
+                expanded: stage.expanded,
+                skipped: stage.skipped,
+                control: stage.control,
+                refStrengths: stage.refStrengths,
+                upscale: stage.upscale,
+                upscaleMethod: stage.upscaleMethod,
+                model: stage.model,
+                vae: stage.vae,
+                steps: stage.steps,
+                cfgScale: stage.cfgScale,
+                sampler: stage.sampler,
+                scheduler: stage.scheduler,
+            })),
+        }),
+    );
 
 const getEffectiveRootDimension = (
     field: "width" | "height",
@@ -72,37 +96,22 @@ export const getState = (): VideoStagesConfig => {
 
     try {
         const parsed = JSON.parse(input.value);
-        const parsedConfig =
-            parsed && !Array.isArray(parsed) && typeof parsed === "object"
-                ? (parsed as {
-                      width?: unknown;
-                      height?: unknown;
-                      fps?: unknown;
-                      clips?: unknown[];
-                  })
-                : null;
-        const clipsRaw = Array.isArray(parsed)
-            ? parsed
-            : Array.isArray(parsedConfig?.clips)
-              ? parsedConfig.clips
-              : [];
+        const parsedConfig = toParsedConfig(parsed);
+        let clipsRaw: unknown[] = [];
+        if (Array.isArray(parsed)) {
+            clipsRaw = parsed;
+        } else if (Array.isArray(parsedConfig?.clips)) {
+            clipsRaw = parsedConfig.clips;
+        }
         const firstClip =
-            clipsRaw.length > 0 &&
-            clipsRaw[0] &&
-            typeof clipsRaw[0] === "object"
-                ? (clipsRaw[0] as { width?: unknown; height?: unknown })
-                : null;
+            clipsRaw.length > 0 && isRecord(clipsRaw[0]) ? clipsRaw[0] : null;
 
         const clips: Clip[] = [];
         for (let i = 0; i < clipsRaw.length; i++) {
+            const el = clipsRaw[i];
+            const record: Record<string, unknown> = isRecord(el) ? el : {};
             clips.push(
-                normalizeClip(
-                    (clipsRaw[i] ?? {}) as Partial<Clip> &
-                        Record<string, unknown>,
-                    i,
-                    getRootDefaults,
-                    getDefaultStageModel,
-                ),
+                normalizeClip(record, i, getRootDefaults, getDefaultStageModel),
             );
         }
         return {
