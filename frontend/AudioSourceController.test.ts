@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
-import { AudioSourceController } from "./AudioSourceController";
 import { mountCheckbox, mountSelect } from "./__test_helpers__/dom";
 import {
     stubAceStepFunRegistry,
     stubAceStepFunRegistryThrowing,
 } from "./__test_helpers__/registries";
+import { AudioSourceController } from "./AudioSourceController";
 
 type Controller = ReturnType<typeof AudioSourceController>;
 
@@ -120,16 +120,12 @@ describe("AudioSourceController", () => {
         it("survives a registry that returns a non-array refs payload", () => {
             setupDom();
             window.acestepfunTrackRegistry = {
-                getSnapshot: () =>
-                    ({
-                        enabled: true,
-                        trackCount: 0,
-                        refs: "not an array",
-                    }) as unknown as ReturnType<
-                        NonNullable<
-                            Window["acestepfunTrackRegistry"]
-                        >["getSnapshot"]
-                    >,
+                getSnapshot: () => ({
+                    enabled: true,
+                    trackCount: 0,
+                    // @ts-expect-error intentional malformed snapshot
+                    refs: "not an array",
+                }),
             };
             controller = AudioSourceController();
 
@@ -164,18 +160,12 @@ describe("AudioSourceController", () => {
             controller = AudioSourceController();
             const options = controller.buildOptions();
 
-            expect(
-                controller.resolveSelectedValue(
-                    null as unknown as string,
-                    options,
-                ),
-            ).toBe("Native");
-            expect(
-                controller.resolveSelectedValue(
-                    undefined as unknown as string,
-                    options,
-                ),
-            ).toBe("Native");
+            expect(controller.resolveSelectedValue(null, options)).toBe(
+                "Native",
+            );
+            expect(controller.resolveSelectedValue(undefined, options)).toBe(
+                "Native",
+            );
         });
     });
 
@@ -191,22 +181,6 @@ describe("AudioSourceController", () => {
 
             const values = Array.from(select?.options ?? []).map(
                 (o) => o.value,
-            );
-            expect(values).toEqual(["Native", "Upload"]);
-            expect(select?.value).toBe("Upload");
-        });
-
-        it("refreshes clip-level audio source dropdowns", () => {
-            const { select } = setupDom({
-                initialValue: "Upload",
-                initialOptions: ["Native", "Upload", "stale-extra"],
-            });
-            controller = AudioSourceController();
-
-            controller.refreshOptions();
-
-            const values = Array.from(select?.options ?? []).map(
-                (option) => option.value,
             );
             expect(values).toEqual(["Native", "Upload"]);
             expect(select?.value).toBe("Upload");
@@ -257,9 +231,9 @@ describe("AudioSourceController", () => {
 
         it("is a no-op when the source <select> is missing", () => {
             setupDom({ omitSource: true });
-            controller = AudioSourceController();
-
-            expect(() => controller?.refreshOptions()).not.toThrow();
+            const c = AudioSourceController();
+            controller = c;
+            expect(() => c.refreshOptions()).not.toThrow();
         });
     });
 
@@ -295,15 +269,12 @@ describe("AudioSourceController", () => {
         it("refreshes options when the text-to-audio toggle changes", () => {
             const { select, toggle } = setupDom();
             controller = AudioSourceController();
-            // The toggle listener is wired by bindText2AudioToggle, which only
-            // runs as part of runOnEachBuild (the postParamBuildSteps hook).
             controller.runOnEachBuild();
-            if (!toggle) {
-                throw new Error("fixture missing");
-            }
 
-            toggle.checked = true;
-            toggle.dispatchEvent(new Event("change"));
+            expect(toggle).not.toBeNull();
+            const text2Audio = toggle as HTMLInputElement;
+            text2Audio.checked = true;
+            text2Audio.dispatchEvent(new Event("change"));
 
             const values = Array.from(select?.options ?? []).map(
                 (o) => o.value,
@@ -321,8 +292,6 @@ describe("AudioSourceController", () => {
             stubAceStepFunRegistry(["new-track"]);
             document.dispatchEvent(new Event(ACESTEPFUN_EVENT));
 
-            // Without an active listener, the dropdown should not have been
-            // re-populated to include the new ref.
             expect(select?.options.length).toBe(originalCount);
         });
     });
@@ -330,18 +299,13 @@ describe("AudioSourceController", () => {
     describe("postParamBuildSteps integration", () => {
         it("registers runOnEachBuild on construction", () => {
             setupDom();
-            const before = (
-                globalThis as { postParamBuildSteps?: Array<unknown> }
-            ).postParamBuildSteps;
-            expect(before).toEqual([]);
+            expect(postParamBuildSteps).toEqual([]);
 
             controller = AudioSourceController();
 
-            const after = (
-                globalThis as { postParamBuildSteps?: Array<() => void> }
-            ).postParamBuildSteps;
-            expect(after).toHaveLength(1);
-            expect(typeof after?.[0]).toBe("function");
+            const steps = postParamBuildSteps as (() => void)[];
+            expect(steps).toHaveLength(1);
+            expect(typeof steps[0]).toBe("function");
         });
 
         it("runs the registered build step without throwing and refreshes the DOM", () => {
@@ -350,14 +314,7 @@ describe("AudioSourceController", () => {
                 initialOptions: ["Native", "Upload", "stale"],
             });
             controller = AudioSourceController();
-            const steps = (
-                globalThis as { postParamBuildSteps?: Array<() => void> }
-            ).postParamBuildSteps;
-            if (!steps) {
-                throw new Error("postParamBuildSteps was not seeded");
-            }
-
-            for (const step of steps) {
+            for (const step of postParamBuildSteps as (() => void)[]) {
                 step();
             }
 
@@ -372,20 +329,21 @@ describe("AudioSourceController", () => {
                 omitSource: true,
                 omitToggle: true,
             });
-            controller = AudioSourceController();
-
-            expect(() => controller?.runOnEachBuild()).not.toThrow();
+            const c = AudioSourceController();
+            controller = c;
+            expect(() => c.runOnEachBuild()).not.toThrow();
         });
 
         it("swallows errors thrown during a refresh and logs them", () => {
             setupDom();
             stubAceStepFunRegistryThrowing(new Error("boom"));
             const consoleSpy = jest
-                .spyOn(console, "log")
+                .spyOn(console, "warn")
                 .mockImplementation(() => {});
-            controller = AudioSourceController();
+            const c = AudioSourceController();
+            controller = c;
 
-            expect(() => controller?.runOnEachBuild()).not.toThrow();
+            expect(() => c.runOnEachBuild()).not.toThrow();
             expect(consoleSpy).toHaveBeenCalledWith(
                 "AudioSourceController: param build sync failed",
                 expect.any(Error),

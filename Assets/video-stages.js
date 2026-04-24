@@ -36,7 +36,7 @@
   var getSourceSelects = () => Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
     (elem) => elem instanceof HTMLSelectElement
   );
-  var isSourceSelect = (target) => target instanceof HTMLSelectElement && target.matches('[data-clip-field="audioSource"]');
+  var isSourceSelect = (target) => target instanceof HTMLSelectElement && target.matches(SOURCE_SELECT_SELECTOR);
   var isTextToAudioEnabled = () => {
     const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
     return !!toggle?.checked;
@@ -101,11 +101,10 @@
         for (const option of options) {
           const elem = document.createElement("option");
           elem.value = option.value;
-          elem.text = option.label;
+          elem.textContent = option.label;
           elem.selected = option.value === desired;
           select.appendChild(elem);
         }
-        select.value = desired;
         triggerChangeFor(select);
       }
     };
@@ -128,7 +127,7 @@
         bindText2AudioToggle();
         refreshOptions();
       } catch (error) {
-        console.log(
+        console.warn(
           "AudioSourceController: param build sync failed",
           error
         );

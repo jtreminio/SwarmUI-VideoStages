@@ -59,6 +59,61 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Chained_native_ltx_pixel_upscale_after_latent_upscale_chains_additively_through_decoded_video()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 2.0,
+                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+                steps: 8),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 2.0,
+                upscaleMethod: "pixel-lanczos",
+                steps: 8)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        List<WorkflowNode> samplerNodes = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(3, samplerNodes.Count);
+
+        Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
+
+        // Upscaling chains additively from the prior stage's dimensions:
+        //   512x512 base -> latentmodel x2 -> 1024x1024 -> pixel-lanczos x2 -> 2048x2048
+        // The third stage's pixel-lanczos must therefore add an ImageScale at 2048x2048.
+        // Without that node the third sampler reuses the prior dimensions and the chain
+        // is not additive.
+        WorkflowNode pixelUpscaleScaleNode = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => node.Node["inputs"]?.Value<int>("width") == 2048
+                && node.Node["inputs"]?.Value<int>("height") == 2048
+                && $"{node.Node["inputs"]?["crop"]}" == "disabled"
+                && $"{node.Node["inputs"]?["upscale_method"]}" == "lanczos");
+
+        WorkflowNode finalSampler = samplerNodes[2];
+        Assert.True(OutputTracesBackToSource(
+            workflow,
+            WorkflowAssertions.RequireConnectionInput(finalSampler.Node, "latent_image"),
+            new JArray(pixelUpscaleScaleNode.Id, 0)));
+    }
+
+    [Fact]
     public void Chained_native_ltx_generated_reference_tracks_previous_stage_output_and_skips_redundant_guide_reinjection()
     {
         using SwarmUiTestContext _ = new();

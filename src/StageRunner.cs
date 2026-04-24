@@ -555,7 +555,6 @@ internal class StageRunner(WorkflowGenerator g)
 
         T2IModel stageVideoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId);
         bool isLtxv2Stage = stageVideoModel?.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID;
-        bool isLtxv2VideoStage = isLtxv2Stage && source.DataType == WGNodeData.DT_VIDEO;
         if (isLtxv2Stage)
         {
             bool supportedLtxUpscale = stage.UpscaleMethod.StartsWith("latent-", StringComparison.OrdinalIgnoreCase)
@@ -566,12 +565,10 @@ internal class StageRunner(WorkflowGenerator g)
                 g.CurrentMedia = source;
                 return source;
             }
-            if (isLtxv2VideoStage)
-            {
-                Logs.Warning($"VideoStages: Stage {stage.Id} uses pixel/model upscale method '{stage.UpscaleMethod}' on an LTX-V2 video stage, which is unsupported. Skipping upscale.");
-                g.CurrentMedia = source;
-                return source;
-            }
+            // Pixel/model upscales fall through to the standard ImageScale path below.
+            // ImageScale operates on each frame in a video tensor batch, so the next
+            // stage's BuildStageLatent re-encodes the upscaled frames into a fresh latent
+            // at the new dimensions, keeping the chain additive across stages.
         }
 
         if (stage.UpscaleMethod.StartsWith("pixel-", StringComparison.OrdinalIgnoreCase))

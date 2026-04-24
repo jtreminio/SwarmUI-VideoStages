@@ -6,8 +6,8 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import { VideoStageEditor } from "./VideoStageEditor";
 import { stubBase2EditStageRegistry } from "./__test_helpers__/registries";
+import { VideoStageEditor } from "./VideoStageEditor";
 
 const flushReRender = async (): Promise<void> => {
     jest.runOnlyPendingTimers();

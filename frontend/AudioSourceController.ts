@@ -22,7 +22,7 @@ const isSourceSelect = (
     target: EventTarget | null,
 ): target is HTMLSelectElement =>
     target instanceof HTMLSelectElement &&
-    target.matches('[data-clip-field="audioSource"]');
+    target.matches(SOURCE_SELECT_SELECTOR);
 
 const isTextToAudioEnabled = (): boolean => {
     const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
@@ -100,11 +100,10 @@ export const AudioSourceController = () => {
             for (const option of options) {
                 const elem = document.createElement("option");
                 elem.value = option.value;
-                elem.text = option.label;
+                elem.textContent = option.label;
                 elem.selected = option.value === desired;
                 select.appendChild(elem);
             }
-            select.value = desired;
             triggerChangeFor(select);
         }
     };
@@ -130,7 +129,7 @@ export const AudioSourceController = () => {
             bindText2AudioToggle();
             refreshOptions();
         } catch (error) {
-            console.log(
+            console.warn(
                 "AudioSourceController: param build sync failed",
                 error,
             );

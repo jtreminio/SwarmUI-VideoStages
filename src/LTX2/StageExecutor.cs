@@ -286,14 +286,12 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             string latentMethod = stage.UpscaleMethod["latent-".Length..];
             return ApplyLatentUpscale(stageLatent, latentMethod, stage.Upscale, width, height);
         }
-        if (sourceMedia?.DataType == WGNodeData.DT_IMAGE)
-        {
-            // Pixel/model upscales for image-sourced root stages are applied before
-            // we enter the local LTX-V2 latent path.
-            return stageLatent;
-        }
 
-        Logs.Warning($"VideoStages: Stage {stage.Id} uses unsupported LTX-V2 video upscale method '{stage.UpscaleMethod}'. Skipping upscale.");
+        // Pixel/model upscales (pixel-* / model-*) are applied at the image level by
+        // StageRunner.ApplyStageUpscaleIfNeeded before BuildStageLatent re-encodes the
+        // upscaled frames. By the time we reach this point on the LTX-V2 latent path the
+        // dimension bump is already baked into stageLatent, so there is nothing further to
+        // do here. Unrecognized methods (no known prefix) silently fall through too.
         return stageLatent;
     }
 

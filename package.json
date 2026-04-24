@@ -12,7 +12,7 @@
         "format": "biome format --write .",
         "format:check": "biome format .",
         "lint": "biome lint .",
-        "lint:fix": "biome lint --write .",
+        "lint:fix": "biome check --write .",
         "test": "jest --config ./jest.config.cjs --passWithNoTests",
         "test:coverage": "jest --config ./jest.config.cjs --coverage --passWithNoTests",
         "typecheck": "tsc --noEmit"

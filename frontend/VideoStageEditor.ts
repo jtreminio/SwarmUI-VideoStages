@@ -1,4 +1,10 @@
 import {
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+    buildAudioSourceOptions,
+    resolveAudioSourceValue,
+} from "./AudioSourceController";
+import {
     clipFieldId,
     escapeAttr,
     framesForClip,
@@ -23,12 +29,6 @@ import {
     type VideoStagesConfig,
 } from "./Types";
 import { VideoStageUtils } from "./Utils";
-import {
-    AUDIO_SOURCE_NATIVE,
-    AUDIO_SOURCE_UPLOAD,
-    buildAudioSourceOptions,
-    resolveAudioSourceValue,
-} from "./AudioSourceController";
 
 const REF_FRAME_MIN = 1;
 const CLIP_DURATION_MIN = 1;
