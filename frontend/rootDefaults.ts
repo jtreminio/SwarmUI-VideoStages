@@ -1,5 +1,5 @@
-import type { RootDefaults } from "../Types";
-import { VideoStageUtils } from "../Utils";
+import type { RootDefaults } from "./Types";
+import { VideoStageUtils } from "./Utils";
 import { ROOT_DIMENSION_MIN } from "./constants";
 import {
     getDropdownOptions,

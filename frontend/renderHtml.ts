@@ -2,7 +2,7 @@ import {
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
     resolveAudioSourceValue,
-} from "../AudioSourceController";
+} from "./AudioSourceController";
 import {
     clipFieldId,
     escapeAttr,
@@ -11,7 +11,7 @@ import {
     refFieldId,
     renderOptionList,
     stageFieldId,
-} from "../RenderUtils";
+} from "./RenderUtils";
 import {
     type Clip,
     type ImageSourceOption,
@@ -21,7 +21,7 @@ import {
     type RefImage,
     type RootDefaults,
     type Stage,
-} from "../Types";
+} from "./Types";
 import {
     CLIP_AUDIO_UPLOAD_DESCRIPTION,
     CLIP_AUDIO_UPLOAD_FIELD,

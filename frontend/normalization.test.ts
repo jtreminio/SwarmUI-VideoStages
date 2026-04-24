@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { REF_SOURCE_BASE, type RootDefaults } from "../Types";
+import { REF_SOURCE_BASE, type RootDefaults } from "./Types";
 import {
     buildDefaultRef,
     normalizeClip,

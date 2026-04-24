@@ -1,4 +1,4 @@
-import { AUDIO_SOURCE_UPLOAD } from "../AudioSourceController";
+import { AUDIO_SOURCE_UPLOAD } from "./AudioSourceController";
 import {
     type Clip,
     REF_SOURCE_BASE,
@@ -6,7 +6,7 @@ import {
     type RefImage,
     type RootDefaults,
     type Stage,
-} from "../Types";
+} from "./Types";
 import {
     clamp,
     normalizeUploadFileName,

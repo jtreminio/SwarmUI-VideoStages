@@ -1,6 +1,6 @@
-import { AUDIO_SOURCE_NATIVE } from "../AudioSourceController";
-import { snapDurationToFps } from "../RenderUtils";
-import type { Clip, VideoStagesConfig } from "../Types";
+import { AUDIO_SOURCE_NATIVE } from "./AudioSourceController";
+import { snapDurationToFps } from "./RenderUtils";
+import type { Clip, VideoStagesConfig } from "./Types";
 import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_DURATION_MIN,

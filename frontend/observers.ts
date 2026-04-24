@@ -1,5 +1,5 @@
-import type { VideoStagesConfig } from "../Types";
-import { VideoStageUtils } from "../Utils";
+import type { VideoStagesConfig } from "./Types";
+import { VideoStageUtils } from "./Utils";
 import { serializeClipsForStorage } from "./persistence";
 import { getClipsInput } from "./swarmInputs";
 

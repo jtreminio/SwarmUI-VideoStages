@@ -1,4 +1,4 @@
-import type { Clip, StoredClip, VideoStagesConfig } from "../Types";
+import type { Clip, StoredClip, VideoStagesConfig } from "./Types";
 import {
     buildDefaultClip,
     normalizeClip,

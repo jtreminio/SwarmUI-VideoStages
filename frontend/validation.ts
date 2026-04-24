@@ -3,7 +3,7 @@ import {
     REF_SOURCE_BASE,
     REF_SOURCE_REFINER,
     REF_SOURCE_UPLOAD,
-} from "../Types";
+} from "./Types";
 import { parseBase2EditStageIndex } from "./constants";
 import { isAvailableBase2EditReference } from "./swarmInputs";
 

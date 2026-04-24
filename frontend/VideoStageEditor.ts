@@ -3,16 +3,16 @@ import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_AUDIO_UPLOAD_LABEL,
     normalizeUploadFileName,
-} from "./video-stage-editor/constants";
+} from "./constants";
 import {
     attachEventListeners,
     type DomEventsDeps,
     handleFieldChange,
-} from "./video-stage-editor/domEvents";
-import { captureFocus, restoreFocus } from "./video-stage-editor/focusRestore";
-import { createGenerateWrap } from "./video-stage-editor/generateWrap";
-import { buildDefaultClip } from "./video-stage-editor/normalization";
-import { createObservers } from "./video-stage-editor/observers";
+} from "./domEvents";
+import { captureFocus, restoreFocus } from "./focusRestore";
+import { createGenerateWrap } from "./generateWrap";
+import { buildDefaultClip } from "./normalization";
+import { createObservers } from "./observers";
 import {
     ensureClipsSeeded,
     getClips,
@@ -20,15 +20,12 @@ import {
     type PersistenceCallbacks,
     saveClips,
     saveState,
-} from "./video-stage-editor/persistence";
-import { createRefUploadCache } from "./video-stage-editor/refUploadCache";
-import { renderClipCard } from "./video-stage-editor/renderHtml";
-import {
-    getDefaultStageModel,
-    getRootDefaults,
-} from "./video-stage-editor/rootDefaults";
-import { seedRegisteredDimensionsFromCore } from "./video-stage-editor/swarmInputs";
-import { validateClips } from "./video-stage-editor/validation";
+} from "./persistence";
+import { createRefUploadCache } from "./refUploadCache";
+import { renderClipCard } from "./renderHtml";
+import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import { seedRegisteredDimensionsFromCore } from "./swarmInputs";
+import { validateClips } from "./validation";
 
 export type VideoStageEditor = {
     init(): void;

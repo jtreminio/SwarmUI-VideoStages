@@ -1,4 +1,4 @@
-import { VideoStageUtils } from "../Utils";
+import { VideoStageUtils } from "./Utils";
 import {
     parseBase2EditStageIndex,
     ROOT_DIMENSION_MIN,

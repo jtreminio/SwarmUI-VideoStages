@@ -160,7 +160,7 @@
     };
   };
 
-  // frontend/video-stage-editor/constants.ts
+  // frontend/constants.ts
   var REF_FRAME_MIN = 1;
   var CLIP_DURATION_MIN = 1;
   var CLIP_DURATION_MAX = 9999;
@@ -276,7 +276,7 @@
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
 
-  // frontend/video-stage-editor/normalization.ts
+  // frontend/normalization.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : upscaleMethodValues[0] ?? "pixel-lanczos";
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var normalizeUploadedAudio = (value) => {
@@ -554,7 +554,7 @@
     };
   };
 
-  // frontend/video-stage-editor/fieldBinding.ts
+  // frontend/fieldBinding.ts
   var handleUploadFileName = (ref, target, deps) => {
     const { refUploadCache, getClips: getClips2, saveClips: saveClips2 } = deps;
     const clearUpload = (clipIdx2, refIdx2) => {
@@ -764,7 +764,7 @@
     }
   };
 
-  // frontend/video-stage-editor/swarmInputs.ts
+  // frontend/swarmInputs.ts
   var getClipsInput = () => VideoStageUtils.getInputElement("input_videostages");
   var getRootDimensionParamInput = (field) => VideoStageUtils.getInputElement(
     field === "width" ? "input_vswidth" : "input_vsheight"
@@ -881,7 +881,7 @@
     return toggler ? toggler.checked : false;
   };
 
-  // frontend/video-stage-editor/rootDefaults.ts
+  // frontend/rootDefaults.ts
   var getDefaultStageModel = (modelValues) => {
     if (isRootTextToVideoModel()) {
       const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
@@ -979,7 +979,7 @@
     };
   };
 
-  // frontend/video-stage-editor/domEvents.ts
+  // frontend/domEvents.ts
   var isFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement || value instanceof HTMLTextAreaElement;
   var isStageFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
   var getEditorActionTarget = (getEditor, elem) => {
@@ -1313,7 +1313,7 @@
     });
   };
 
-  // frontend/video-stage-editor/focusRestore.ts
+  // frontend/focusRestore.ts
   var captureFocus = () => {
     const el = document.activeElement;
     if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLSelectElement)) {
@@ -1356,7 +1356,7 @@
     }
   };
 
-  // frontend/video-stage-editor/validation.ts
+  // frontend/validation.ts
   var getRefSourceError = (source) => {
     const compact = `${source || ""}`.trim().replace(/\s+/g, "");
     if (compact === REF_SOURCE_BASE || compact === REF_SOURCE_REFINER || compact === REF_SOURCE_UPLOAD) {
@@ -1414,7 +1414,7 @@
     return errors;
   };
 
-  // frontend/video-stage-editor/generateWrap.ts
+  // frontend/generateWrap.ts
   var createGenerateWrap = (deps) => {
     let genButtonWrapped = false;
     let genWrapInterval = null;
@@ -1467,7 +1467,7 @@
     return { tryWrap, startRetry };
   };
 
-  // frontend/video-stage-editor/persistence.ts
+  // frontend/persistence.ts
   var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var toParsedConfig = (value) => {
     if (!isRecord2(value)) {
@@ -1595,7 +1595,7 @@
     saveState(state, callbacks);
   };
 
-  // frontend/video-stage-editor/observers.ts
+  // frontend/observers.ts
   var ROOT_VIDEO_TIMING_INPUT_IDS = /* @__PURE__ */ new Set([
     "input_videoframes",
     "input_text2videoframes",
@@ -1747,7 +1747,7 @@
     };
   };
 
-  // frontend/video-stage-editor/refUploadCache.ts
+  // frontend/refUploadCache.ts
   var createRefUploadCache = () => {
     let cache = /* @__PURE__ */ new Map();
     const reindexAfterClipDelete = (deletedClipIdx) => {
@@ -1860,7 +1860,7 @@
     };
   };
 
-  // frontend/video-stage-editor/renderHtml.ts
+  // frontend/renderHtml.ts
   var decorateAutoInputWrapper = (html, className, hidden = false) => html.replace(
     /<div class="([^"]*)"([^>]*)>/,
     (_match, classes, attrs) => `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`

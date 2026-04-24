@@ -1,4 +1,4 @@
-import type { Clip } from "../Types";
+import type { Clip } from "./Types";
 import {
     type CachedRefUpload,
     normalizeUploadFileName,

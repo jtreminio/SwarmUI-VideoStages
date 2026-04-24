@@ -2,8 +2,8 @@ import {
     AUDIO_SOURCE_NATIVE,
     buildAudioSourceOptions,
     resolveAudioSourceValue,
-} from "../AudioSourceController";
-import { framesForClip, snapDurationToFps } from "../RenderUtils";
+} from "./AudioSourceController";
+import { framesForClip, snapDurationToFps } from "./RenderUtils";
 import {
     type Clip,
     REF_SOURCE_BASE,
@@ -11,8 +11,8 @@ import {
     type RootDefaults,
     type Stage,
     type UploadedAudio,
-} from "../Types";
-import { VideoStageUtils } from "../Utils";
+} from "./Types";
+import { VideoStageUtils } from "./Utils";
 import {
     CLIP_DURATION_MIN,
     clamp,
