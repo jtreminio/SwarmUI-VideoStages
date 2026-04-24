@@ -81,7 +81,6 @@ export const AudioSourceController = () => {
         if (selects.length === 0) {
             return;
         }
-
         const options = buildAudioSourceOptions();
         for (const select of selects) {
             const desired = resolveAudioSourceValue(select.value, options);
@@ -95,7 +94,6 @@ export const AudioSourceController = () => {
             ) {
                 continue;
             }
-
             select.innerHTML = "";
             for (const option of options) {
                 const elem = document.createElement("option");
@@ -137,14 +135,11 @@ export const AudioSourceController = () => {
     };
 
     const scheduleInitialSync = (): void => {
-        if (
-            typeof postParamBuildSteps !== "undefined" &&
-            Array.isArray(postParamBuildSteps)
-        ) {
-            postParamBuildSteps.push(runOnEachBuild);
+        if (!Array.isArray(postParamBuildSteps)) {
+            setTimeout(scheduleInitialSync, 200);
             return;
         }
-        setTimeout(scheduleInitialSync, 200);
+        postParamBuildSteps.push(runOnEachBuild);
     };
 
     document.addEventListener("mousedown", onDocumentDropdownInteraction);

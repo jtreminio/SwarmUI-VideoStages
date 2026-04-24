@@ -129,7 +129,7 @@ declare function setMediaFileDirect(
 declare let copy_current_image_params: (() => void) & {
     __videoStagesWrapped?: boolean;
 };
-declare let currentMetadataVal: string | null | undefined;
+declare let currentMetadataVal: string | null;
 declare function interpretMetadata(metadata: string): string;
 
 declare let postParamBuildSteps: (() => void)[] | undefined;

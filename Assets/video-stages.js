@@ -134,11 +134,11 @@
       }
     };
     const scheduleInitialSync = () => {
-      if (typeof postParamBuildSteps !== "undefined" && Array.isArray(postParamBuildSteps)) {
-        postParamBuildSteps.push(runOnEachBuild);
+      if (!Array.isArray(postParamBuildSteps)) {
+        setTimeout(scheduleInitialSync, 200);
         return;
       }
-      setTimeout(scheduleInitialSync, 200);
+      postParamBuildSteps.push(runOnEachBuild);
     };
     document.addEventListener("mousedown", onDocumentDropdownInteraction);
     document.addEventListener("focusin", onDocumentDropdownInteraction);
