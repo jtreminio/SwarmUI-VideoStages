@@ -377,6 +377,7 @@
       audioSource: AUDIO_SOURCE_NATIVE,
       saveAudioTrack: false,
       clipLengthFromAudio: false,
+      reuseAudio: false,
       uploadedAudio: null,
       refs: [],
       stages: [
@@ -536,6 +537,7 @@
       audioSource: audioSource2,
       saveAudioTrack: !!rawClip.saveAudioTrack,
       clipLengthFromAudio: canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio,
+      reuseAudio: !!rawClip.reuseAudio,
       uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
       refs,
       stages
@@ -1241,6 +1243,8 @@
       if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
         elem.checked = false;
       }
+    } else if (clipField === "reuseAudio") {
+      clip.reuseAudio = elem instanceof HTMLInputElement && !!elem.checked;
     } else if (clipField === "clipLengthFromAudio") {
       clip.clipLengthFromAudio = elem instanceof HTMLInputElement && canUseClipLengthFromAudio(clip.audioSource) ? !!elem.checked : false;
       if (elem instanceof HTMLInputElement && !clip.clipLengthFromAudio) {
@@ -1649,6 +1653,7 @@
       audioSource: clip.audioSource,
       saveAudioTrack: clip.saveAudioTrack,
       clipLengthFromAudio: clip.clipLengthFromAudio,
+      reuseAudio: clip.reuseAudio,
       uploadedAudio: clip.uploadedAudio,
       refs: clip.refs.map((ref) => ({
         expanded: ref.expanded,
@@ -2533,6 +2538,27 @@ ${optionHtml}
         "data-clip-idx": String(clipIdx)
       }
     );
+    const reuseAudioField = renderLeftTooltipCheckboxField(
+      injectFieldData(
+        makeCheckboxInput(
+          "",
+          clipFieldId(clipIdx, "reuseAudio"),
+          "reuseAudio",
+          "Reuse Audio",
+          "Use the first stage's produced audio latent for later stages in this clip.",
+          clip.reuseAudio,
+          false,
+          true,
+          true
+        ),
+        {
+          "data-clip-field": "reuseAudio",
+          "data-clip-idx": String(clipIdx)
+        }
+      ),
+      "vs-clip-reuse-audio-field",
+      false
+    );
     const clipLengthFromAudioField = renderLeftTooltipCheckboxField(
       injectFieldData(
         makeCheckboxInput(
@@ -2589,6 +2615,7 @@ ${optionHtml}
                         <div class="vs-section-block-title">AUDIO</div>
                     </div>
                     ${audioSourceField}
+                    ${reuseAudioField}
                     ${clipLengthFromAudioField}
                     ${saveAudioTrackField}
                     ${audioUploadField}

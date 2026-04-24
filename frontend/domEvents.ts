@@ -341,6 +341,8 @@ export const handleFieldChange = (
         if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
             elem.checked = false;
         }
+    } else if (clipField === "reuseAudio") {
+        clip.reuseAudio = elem instanceof HTMLInputElement && !!elem.checked;
     } else if (clipField === "clipLengthFromAudio") {
         clip.clipLengthFromAudio =
             elem instanceof HTMLInputElement &&

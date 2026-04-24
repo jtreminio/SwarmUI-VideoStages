@@ -203,7 +203,7 @@ public partial class StageFlowTests
         IReadOnlyList<WorkflowNode> separateNodes = WorkflowUtils.NodesOfType(workflow, "LTXVSeparateAVLatent");
         Assert.True(separateNodes.Count >= 3);
         WorkflowNode originalSeparate = RequireOriginalNativeLtxSeparate(workflow);
-        AssertStageLtxConcatsReuseOriginalAudio(workflow, originalSeparate);
+        AssertStageLtxConcatsUseProgressiveAudio(workflow, originalSeparate);
 
         WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
         AssertLtxFinalDecodeUsesPlainVaeDecode(finalVideoDecode);
@@ -218,5 +218,30 @@ public partial class StageFlowTests
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
+    }
+
+    [Fact]
+    public void Chained_native_ltx_reuse_audio_uses_first_stage_audio_for_later_stages()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClip(
+            width: 512,
+            height: 512,
+            MakeStage(models.VideoModel.Name, "Base", steps: 10),
+            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 12),
+            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 14));
+        clip["reuseAudio"] = true;
+        string stagesJson = new JArray(clip).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        WorkflowNode originalSeparate = RequireOriginalNativeLtxSeparate(workflow);
+        AssertStageLtxConcatsReuseFirstStageAudio(workflow, originalSeparate);
+        AssertWorkflowHasNoCycles(workflow);
     }
 }

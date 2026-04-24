@@ -35,6 +35,9 @@ public class JsonParser(WorkflowGenerator g)
         int? ClipHeight = null,
         int? ClipFrames = null,
         int? ClipFPS = null,
+        bool ClipReuseAudio = false,
+        int ClipStageIndex = 0,
+        int ClipStageCount = 0,
         IReadOnlyList<RefSpec> ClipRefs = null,
         IReadOnlyList<double> RefStrengths = null
     );
@@ -59,6 +62,7 @@ public class JsonParser(WorkflowGenerator g)
         string AudioSource,
         bool SaveAudioTrack,
         bool ClipLengthFromAudio,
+        bool ReuseAudio,
         int? Width,
         int? Height,
         UploadedAudioSpec UploadedAudio,
@@ -107,18 +111,19 @@ public class JsonParser(WorkflowGenerator g)
             {
                 clipFrames = CalculateAlignedFrameCount(clip.DurationSeconds, fps);
             }
-            foreach (StageSpec stage in clip.Stages)
+            List<StageSpec> activeStages = [.. clip.Stages.Where(stage => !stage.Skipped)];
+            for (int clipStageIndex = 0; clipStageIndex < activeStages.Count; clipStageIndex++)
             {
-                if (stage.Skipped)
-                {
-                    continue;
-                }
+                StageSpec stage = activeStages[clipStageIndex];
                 flattened.Add(stage with
                 {
                     Id = globalStageIndex,
                     ClipId = clip.Id,
                     ClipAudioSource = clip.AudioSource,
                     ClipLengthFromAudio = clip.ClipLengthFromAudio,
+                    ClipReuseAudio = clip.ReuseAudio,
+                    ClipStageIndex = clipStageIndex,
+                    ClipStageCount = activeStages.Count,
                     ClipWidth = effectiveRootWidth ?? clip.Width,
                     ClipHeight = effectiveRootHeight ?? clip.Height,
                     ClipFrames = clipFrames,
@@ -268,6 +273,7 @@ public class JsonParser(WorkflowGenerator g)
         }
         bool saveAudioTrack = GetOptionalBool(clipObj, "SaveAudioTrack", defaultValue: false);
         bool clipLengthFromAudio = GetOptionalBool(clipObj, "ClipLengthFromAudio", defaultValue: false);
+        bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
         int? width = GetOptionalNullableInt(clipObj, "Width");
         int? height = GetOptionalNullableInt(clipObj, "Height");
         UploadedAudioSpec uploadedAudio = GetUploadedAudio(clipObj);
@@ -301,6 +307,7 @@ public class JsonParser(WorkflowGenerator g)
             AudioSource: audioSource,
             SaveAudioTrack: saveAudioTrack,
             ClipLengthFromAudio: clipLengthFromAudio,
+            ReuseAudio: reuseAudio,
             Width: width,
             Height: height,
             UploadedAudio: uploadedAudio,

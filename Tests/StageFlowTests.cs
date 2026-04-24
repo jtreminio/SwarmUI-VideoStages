@@ -230,7 +230,52 @@ public partial class StageFlowTests
     {
         JArray originalAudioLatent = new(originalSeparate.Id, 1);
 
-        List<WorkflowNode> concatNodes = WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent")
+        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        Assert.NotEmpty(concatNodes);
+
+        foreach (WorkflowNode concatNode in concatNodes)
+        {
+            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNode.Node, "audio_latent");
+            Assert.True(
+                JToken.DeepEquals(audioLatent, originalAudioLatent),
+                $"Expected concat {concatNode.Id} audio_latent to be [{originalSeparate.Id}, 1] but found [{audioLatent[0]}, {audioLatent[1]}].");
+        }
+    }
+
+    private static void AssertStageLtxConcatsUseProgressiveAudio(JObject workflow, WorkflowNode originalSeparate)
+    {
+        JArray originalAudioLatent = new(originalSeparate.Id, 1);
+        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        Assert.True(concatNodes.Count >= 2);
+
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(concatNodes[0].Node, "audio_latent"),
+            originalAudioLatent));
+        Assert.False(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(concatNodes[1].Node, "audio_latent"),
+            originalAudioLatent));
+    }
+
+    private static void AssertStageLtxConcatsReuseFirstStageAudio(JObject workflow, WorkflowNode originalSeparate)
+    {
+        JArray originalAudioLatent = new(originalSeparate.Id, 1);
+        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        Assert.True(concatNodes.Count >= 3);
+
+        JArray firstStageAudioLatent = WorkflowAssertions.RequireConnectionInput(concatNodes[1].Node, "audio_latent");
+        Assert.False(JToken.DeepEquals(firstStageAudioLatent, originalAudioLatent));
+        for (int i = 2; i < concatNodes.Count; i++)
+        {
+            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNodes[i].Node, "audio_latent");
+            Assert.True(
+                JToken.DeepEquals(audioLatent, firstStageAudioLatent),
+                $"Expected concat {concatNodes[i].Id} audio_latent to reuse [{firstStageAudioLatent[0]}, {firstStageAudioLatent[1]}] but found [{audioLatent[0]}, {audioLatent[1]}].");
+        }
+    }
+
+    private static List<WorkflowNode> GetSamplerConcatNodes(JObject workflow)
+    {
+        return WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent")
             .Where(node => WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 0))
                 .Any(connection =>
                 {
@@ -247,15 +292,6 @@ public partial class StageFlowTests
                 }))
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
-        Assert.NotEmpty(concatNodes);
-
-        foreach (WorkflowNode concatNode in concatNodes)
-        {
-            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNode.Node, "audio_latent");
-            Assert.True(
-                JToken.DeepEquals(audioLatent, originalAudioLatent),
-                $"Expected concat {concatNode.Id} audio_latent to be [{originalSeparate.Id}, 1] but found [{audioLatent[0]}, {audioLatent[1]}].");
-        }
     }
 
     private static WorkflowNode RequireOriginalNativeLtxSeparate(JObject workflow)

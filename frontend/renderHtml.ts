@@ -644,6 +644,27 @@ export const renderClipCard = (
             "data-clip-idx": String(clipIdx),
         },
     );
+    const reuseAudioField = renderLeftTooltipCheckboxField(
+        injectFieldData(
+            makeCheckboxInput(
+                "",
+                clipFieldId(clipIdx, "reuseAudio"),
+                "reuseAudio",
+                "Reuse Audio",
+                "Use the first stage's produced audio latent for later stages in this clip.",
+                clip.reuseAudio,
+                false,
+                true,
+                true,
+            ),
+            {
+                "data-clip-field": "reuseAudio",
+                "data-clip-idx": String(clipIdx),
+            },
+        ),
+        "vs-clip-reuse-audio-field",
+        false,
+    );
     const clipLengthFromAudioField = renderLeftTooltipCheckboxField(
         injectFieldData(
             makeCheckboxInput(
@@ -701,6 +722,7 @@ export const renderClipCard = (
                         <div class="vs-section-block-title">AUDIO</div>
                     </div>
                     ${audioSourceField}
+                    ${reuseAudioField}
                     ${clipLengthFromAudioField}
                     ${saveAudioTrackField}
                     ${audioUploadField}

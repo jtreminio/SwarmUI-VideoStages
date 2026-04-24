@@ -57,6 +57,7 @@ interface ParsedClip {
     audioSource?: string;
     saveAudioTrack?: boolean;
     clipLengthFromAudio?: boolean;
+    reuseAudio?: boolean;
     uploadedAudio?: {
         data?: string;
         fileName?: string | null;
@@ -841,6 +842,24 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].saveAudioTrack).toBe(true);
         });
 
+        it("stores the Reuse Audio checkbox at the clip level", () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const reuseAudio = document.querySelector(
+                '[data-clip-field="reuseAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            expect(reuseAudio).not.toBeNull();
+            const checkbox = must(reuseAudio);
+            expect(checkbox.checked).toBe(false);
+            expect(parseStored()[0].reuseAudio).toBe(false);
+
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].reuseAudio).toBe(true);
+        });
+
         it("renders clip audio controls inside an AUDIO section", () => {
             const editor = videoStageEditor();
             editor.init();
@@ -864,8 +883,14 @@ describe("videoStageEditor", () => {
             const clipLengthFromAudioField = audioSection?.querySelector(
                 ".vs-clip-length-from-audio-field",
             ) as HTMLElement | null;
+            const reuseAudioField = audioSection?.querySelector(
+                ".vs-clip-reuse-audio-field",
+            ) as HTMLElement | null;
             const uploadInput = audioSection?.querySelector(
                 '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            const reuseAudio = audioSection?.querySelector(
+                '[data-clip-field="reuseAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
             const clipLengthFromAudio = audioSection?.querySelector(
                 '[data-clip-field="clipLengthFromAudio"][data-clip-idx="0"]',
@@ -879,7 +904,9 @@ describe("videoStageEditor", () => {
             expect(uploadField).not.toBeNull();
             expect(saveAudioTrackField).not.toBeNull();
             expect(clipLengthFromAudioField).not.toBeNull();
+            expect(reuseAudioField).not.toBeNull();
             expect(uploadInput).not.toBeNull();
+            expect(reuseAudio).not.toBeNull();
             expect(clipLengthFromAudio).not.toBeNull();
             expect(saveAudioTrack).not.toBeNull();
             expect(uploadField?.style.display).toBe("none");
@@ -945,11 +972,15 @@ describe("videoStageEditor", () => {
             const clipLengthFromAudioField = document.querySelector(
                 ".vs-clip-length-from-audio-field .auto-input-name",
             );
+            const reuseAudioField = document.querySelector(
+                ".vs-clip-reuse-audio-field .auto-input-name",
+            );
             const audioUploadField = document.querySelector(
                 ".vs-clip-audio-upload-field .auto-input-name",
             );
             expect(saveAudioTrackField).not.toBeNull();
             expect(clipLengthFromAudioField).not.toBeNull();
+            expect(reuseAudioField).not.toBeNull();
             expect(audioUploadField).not.toBeNull();
 
             expect(
@@ -963,6 +994,11 @@ describe("videoStageEditor", () => {
                 ),
             ).toBe(true);
             expect(
+                reuseAudioField?.firstElementChild?.classList.contains(
+                    "auto-input-qbutton",
+                ),
+            ).toBe(true);
+            expect(
                 audioUploadField?.lastElementChild?.classList.contains(
                     "auto-input-qbutton",
                 ),
@@ -971,6 +1007,7 @@ describe("videoStageEditor", () => {
             expect(clipLengthFromAudioField?.textContent).toBe(
                 "?Clip Length from Audio",
             );
+            expect(reuseAudioField?.textContent).toBe("?Reuse Audio");
             expect(audioUploadField?.textContent).toBe("Audio Upload?");
 
             const audioUploadPopover = document.getElementById(

@@ -39,6 +39,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
             audioSource: clip.audioSource,
             saveAudioTrack: clip.saveAudioTrack,
             clipLengthFromAudio: clip.clipLengthFromAudio,
+            reuseAudio: clip.reuseAudio,
             uploadedAudio: clip.uploadedAudio,
             refs: clip.refs.map((ref) => ({
                 expanded: ref.expanded,

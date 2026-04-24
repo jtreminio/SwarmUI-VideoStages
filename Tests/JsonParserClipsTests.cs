@@ -44,6 +44,7 @@ public class JsonParserClipsTests
         string audioSource = VideoStagesExtension.AudioSourceNative,
         bool saveAudioTrack = false,
         bool clipLengthFromAudio = false,
+        bool reuseAudio = false,
         int width = 1024,
         int height = 768,
         JObject uploadedAudio = null)
@@ -55,6 +56,7 @@ public class JsonParserClipsTests
             ["AudioSource"] = audioSource,
             ["SaveAudioTrack"] = saveAudioTrack,
             ["ClipLengthFromAudio"] = clipLengthFromAudio,
+            ["ReuseAudio"] = reuseAudio,
             ["Width"] = width,
             ["Height"] = height,
             ["Refs"] = new JArray(refs ?? []),
@@ -117,6 +119,7 @@ public class JsonParserClipsTests
                 duration: 4.0,
                 saveAudioTrack: true,
                 clipLengthFromAudio: true,
+                reuseAudio: true,
                 width: 800,
                 height: 600),
             MakeClip(
@@ -132,6 +135,7 @@ public class JsonParserClipsTests
         Assert.Equal(4.0, clips[0].DurationSeconds);
         Assert.True(clips[0].SaveAudioTrack);
         Assert.True(clips[0].ClipLengthFromAudio);
+        Assert.True(clips[0].ReuseAudio);
         Assert.Equal(800, clips[0].Width);
         Assert.Equal(600, clips[0].Height);
         Assert.Equal(2, clips[0].Refs.Count);
@@ -290,6 +294,9 @@ public class JsonParserClipsTests
         Assert.Equal(0, stages[0].ClipId);
         Assert.Equal(VideoStagesExtension.AudioSourceNative, stages[0].ClipAudioSource);
         Assert.False(stages[0].ClipLengthFromAudio);
+        Assert.False(stages[0].ClipReuseAudio);
+        Assert.Equal(0, stages[0].ClipStageIndex);
+        Assert.Equal(1, stages[0].ClipStageCount);
         Assert.Equal(1280, stages[0].ClipWidth);
         Assert.Equal(720, stages[0].ClipHeight);
         Assert.Equal(97, stages[0].ClipFrames);

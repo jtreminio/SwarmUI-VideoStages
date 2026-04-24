@@ -187,6 +187,7 @@ export const buildDefaultClip = (
         audioSource: AUDIO_SOURCE_NATIVE,
         saveAudioTrack: false,
         clipLengthFromAudio: false,
+        reuseAudio: false,
         uploadedAudio: null,
         refs: [],
         stages: [
@@ -390,6 +391,7 @@ export const normalizeClip = (
         clipLengthFromAudio:
             canUseClipLengthFromAudio(audioSource) &&
             !!rawClip.clipLengthFromAudio,
+        reuseAudio: !!rawClip.reuseAudio,
         uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
         refs,
         stages,

@@ -6,9 +6,9 @@ namespace VideoStages.LTX2;
 
 internal sealed class LtxPostVideoChain
 {
-    private const string OriginalAudioLatentNodeHelperKey = "videostages.original-audio-latent";
     private const string UploadedAudioLoadClassType = "SwarmLoadAudioB64";
     private readonly WorkflowGenerator g;
+    private readonly bool useReusedAudioLatent;
     public readonly WGNodeData CurrentOutputMedia;
     public readonly JArray AvLatentPath;
     public readonly JArray AudioLatentPath;
@@ -29,9 +29,11 @@ internal sealed class LtxPostVideoChain
         string videoDecodeNodeId,
         string audioDecodeNodeId,
         JArray decodeOutputPath,
-        bool hasPostDecodeWrappers)
+        bool hasPostDecodeWrappers,
+        bool useReusedAudio)
     {
         g = generator;
+        useReusedAudioLatent = useReusedAudio;
         CurrentOutputMedia = currentOutputMedia;
         AvLatentPath = avLatentPath;
         AudioLatentPath = audioLatentPath;
@@ -43,8 +45,25 @@ internal sealed class LtxPostVideoChain
         HasPostDecodeWrappers = hasPostDecodeWrappers;
     }
 
-    public static LtxPostVideoChain TryCapture(WorkflowGenerator generator)
+    public static LtxPostVideoChain TryCapture(WorkflowGenerator generator) =>
+        TryCapture(generator, null, mutateReuseAudioState: false);
+
+    public static LtxPostVideoChain TryCapture(WorkflowGenerator generator, JsonParser.StageSpec stage) =>
+        TryCapture(generator, stage, mutateReuseAudioState: true);
+
+    private static LtxPostVideoChain TryCapture(
+        WorkflowGenerator generator,
+        JsonParser.StageSpec stage,
+        bool mutateReuseAudioState)
     {
+        bool clipCanReuseAudio = stage?.ClipReuseAudio == true && stage.ClipStageCount >= 3;
+        bool useReusedAudio = clipCanReuseAudio && stage.ClipStageIndex > 0;
+        bool captureReusableAudio = clipCanReuseAudio && stage.ClipStageIndex == 1;
+        if (mutateReuseAudioState && !useReusedAudio && !captureReusableAudio)
+        {
+            LtxAudioReuseState.Clear(generator);
+        }
+
         if (generator.CurrentMedia?.IsRawMedia != true
             || generator.CurrentMedia.Path is not JArray mediaPath
             || mediaPath.Count != 2)
@@ -96,7 +115,10 @@ internal sealed class LtxPostVideoChain
             return null;
         }
 
-        RememberOriginalAudioLatent(generator, new JArray(separateId, 1));
+        if (mutateReuseAudioState && captureReusableAudio)
+        {
+            LtxAudioReuseState.Remember(generator, new JArray(separateId, 1));
+        }
 
         return new LtxPostVideoChain(
             generator,
@@ -108,7 +130,8 @@ internal sealed class LtxPostVideoChain
             decode.Id,
             audioDecodeId,
             new JArray(decode.Id, 0),
-            !JToken.DeepEquals(mediaPath, new JArray(decode.Id, 0)));
+            !JToken.DeepEquals(mediaPath, new JArray(decode.Id, 0)),
+            useReusedAudio);
     }
 
     public WGNodeData CreateStageInput()
@@ -353,35 +376,28 @@ internal sealed class LtxPostVideoChain
 
     private WGNodeData CreateSourceAudioReference()
     {
-        if (IsExplicitUploadAudio(CurrentOutputMedia?.AttachedAudio))
-        {
-            if (TryGetOriginalAudioLatentPath(out JArray uploadAudioLatentPath)
-                && CurrentOutputMedia.AttachedAudio?.Path is JArray explicitUploadPath
-                && explicitUploadPath.Count == 2
-                && IsAudioLatentDerivedFromUpload(uploadAudioLatentPath, $"{explicitUploadPath[0]}"))
-            {
-                return new WGNodeData(
-                    uploadAudioLatentPath,
-                    g,
-                    WGNodeData.DT_LATENT_AUDIO,
-                    ResolveAudioCompat());
-            }
-            return CloneAudioReference(CurrentOutputMedia.AttachedAudio);
-        }
-
-        if (TryGetOriginalAudioLatentPath(out JArray originalAudioLatentPath))
+        if (useReusedAudioLatent && LtxAudioReuseState.TryGetPath(g, out JArray reusedAudioLatentPath))
         {
             return new WGNodeData(
-                originalAudioLatentPath,
+                reusedAudioLatentPath,
                 g,
                 WGNodeData.DT_LATENT_AUDIO,
                 ResolveAudioCompat());
         }
 
-        if (CurrentOutputMedia?.AttachedAudio?.Path is JArray attachedAudioPath
-            && attachedAudioPath.Count == 2
-            && CurrentOutputMedia.AttachedAudio.DataType == WGNodeData.DT_LATENT_AUDIO)
+        if (IsExplicitUploadAudio(CurrentOutputMedia?.AttachedAudio))
         {
+            JArray currentAudioLatentPath = new(AudioLatentPath[0], AudioLatentPath[1]);
+            if (CurrentOutputMedia.AttachedAudio?.Path is JArray explicitUploadPath
+                && explicitUploadPath.Count == 2
+                && IsAudioLatentDerivedFromUpload(currentAudioLatentPath, $"{explicitUploadPath[0]}"))
+            {
+                return new WGNodeData(
+                    currentAudioLatentPath,
+                    g,
+                    WGNodeData.DT_LATENT_AUDIO,
+                    ResolveAudioCompat());
+            }
             return CloneAudioReference(CurrentOutputMedia.AttachedAudio);
         }
 
@@ -521,43 +537,6 @@ internal sealed class LtxPostVideoChain
         }
 
         return false;
-    }
-
-    private static void RememberOriginalAudioLatent(WorkflowGenerator generator, JArray audioLatentPath)
-    {
-        if (audioLatentPath is null
-            || audioLatentPath.Count != 2
-            || generator.NodeHelpers.ContainsKey(OriginalAudioLatentNodeHelperKey))
-        {
-            return;
-        }
-
-        generator.NodeHelpers[OriginalAudioLatentNodeHelperKey] = audioLatentPath.ToString(Newtonsoft.Json.Formatting.None);
-    }
-
-    private bool TryGetOriginalAudioLatentPath(out JArray originalAudioLatentPath)
-    {
-        originalAudioLatentPath = null;
-        if (!g.NodeHelpers.TryGetValue(OriginalAudioLatentNodeHelperKey, out string encodedPath)
-            || string.IsNullOrWhiteSpace(encodedPath))
-        {
-            return false;
-        }
-
-        try
-        {
-            if (JToken.Parse(encodedPath) is not JArray parsedPath || parsedPath.Count != 2)
-            {
-                return false;
-            }
-
-            originalAudioLatentPath = new JArray(parsedPath[0], parsedPath[1]);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private void RetargetVideoDecode(string videoDecodeNodeId, JArray vaeRef, JArray latentRef)
