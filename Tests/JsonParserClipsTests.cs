@@ -644,6 +644,6 @@ public class JsonParserClipsTests
         Assert.Equal(2, flattened.RefStrengths.Count);
         Assert.All(
             flattened.RefStrengths,
-            strength => Assert.Equal(VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength, strength));
+            strength => Assert.Equal(VideoStagesExtension.DefaultStageRefStrength, strength));
     }
 }

@@ -97,7 +97,7 @@ internal class StageRunner(WorkflowGenerator g)
             JsonParser.RefSpec spec = refs[i];
             double strength = i < strengths.Count
                 ? strengths[i]
-                : VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+                : VideoStagesExtension.DefaultStageRefStrength;
             WGNodeData raw = ResolveClipRefSourceMedia(spec, refStore, postVideoChain);
             if (raw is null)
             {

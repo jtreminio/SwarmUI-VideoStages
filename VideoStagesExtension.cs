@@ -10,7 +10,7 @@ namespace VideoStages;
 public class VideoStagesExtension : Extension
 {
     public const int SectionID_VideoStages = 48823;
-    public const double DefaultLTXVImgToVideoInplaceStrength = 0.8;
+    public const double DefaultStageRefStrength = 0.8;
     public const int RootDimensionMin = 256;
     public const int RootDimensionMax = 16384;
     public const string RootDimensionsDescription = "These are the starting dimensions for each clip. The first stage in each clip cannot apply per-stage upscale; use later stages or the main workflow for scaling if needed.";
@@ -24,7 +24,6 @@ public class VideoStagesExtension : Extension
     public static T2IRegisteredParam<int> RootHeight;
     public static T2IRegisteredParam<int> RootFPS;
     public static T2IRegisteredParam<string> VideoStagesJson;
-    public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
 
     public override void OnPreInit()
@@ -85,7 +84,7 @@ public class VideoStagesExtension : Extension
             OrderPriority: -2.9
         );
 
-        double OrderPriority = 0;
+        int OrderPriority = 0;
 
         // Min: 0 lets us use 0 as a sentinel for "no custom value yet" so the
         // frontend can mirror the user's currently-selected core Width/Height
@@ -150,20 +149,6 @@ public class VideoStagesExtension : Extension
             Default: "",
             VisibleNormally: false,
             IsAdvanced: false,
-            HideFromMetadata: false,
-            DoNotPreview: true,
-            Group: VideoStagesGroup,
-            FeatureFlag: "comfyui"
-        ));
-
-        LTXVImgToVideoInplaceStrength = T2IParamTypes.Register<double>(new T2IParamType(
-            Name: "Video Stages LTXVImgToVideoInplaceStrength",
-            Description: ".",
-            Default: $"{DefaultLTXVImgToVideoInplaceStrength}",
-            Min: 0.1,
-            Max: 1,
-            VisibleNormally: false,
-            IsAdvanced: true,
             HideFromMetadata: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,

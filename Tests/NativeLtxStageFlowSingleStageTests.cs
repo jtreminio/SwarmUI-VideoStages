@@ -269,7 +269,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Native_ltx_stage_uses_core_default_strength_for_img_to_video_inplace()
+    public void Native_ltx_stage_uses_core_default_strength_without_stage_ref_override()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -281,12 +281,6 @@ public partial class StageFlowTests
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        System.Reflection.FieldInfo strengthField = typeof(VideoStagesExtension).GetField(nameof(VideoStagesExtension.LTXVImgToVideoInplaceStrength));
-        Assert.NotNull(strengthField);
-        T2IRegisteredParam<double> strengthParam = Assert.IsType<T2IRegisteredParam<double>>(strengthField.GetValue(null));
-        Assert.False(strengthParam.Type.VisibleNormally);
-        Assert.True(strengthParam.Type.DoNotPreview);
-        input.Set(strengthParam, 0.35);
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
 

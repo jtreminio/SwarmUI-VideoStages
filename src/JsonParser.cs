@@ -622,7 +622,7 @@ public class JsonParser(WorkflowGenerator g)
             return [];
         }
 
-        double defaultStrength = VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+        double defaultStrength = VideoStagesExtension.DefaultStageRefStrength;
         List<double> strengths = [];
         foreach (JProperty property in stage.Properties())
         {
@@ -664,7 +664,7 @@ public class JsonParser(WorkflowGenerator g)
     {
         if (double.IsNaN(value) || double.IsInfinity(value))
         {
-            return VideoStagesExtension.DefaultLTXVImgToVideoInplaceStrength;
+            return VideoStagesExtension.DefaultStageRefStrength;
         }
         return Clamp(value, 0.01, 1.0);
     }
