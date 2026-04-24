@@ -8,7 +8,7 @@ namespace VideoStages;
 
 public class JsonParser(WorkflowGenerator g)
 {
-    private const double DefaultControl = 1.0;
+    private const double DefaultControl = 0.5;
     private const double DefaultUpscale = 1.0;
     private const string DefaultUpscaleMethod = "pixel-lanczos";
     private const string DefaultGeneratedReference = "Generated";
@@ -451,10 +451,10 @@ public class JsonParser(WorkflowGenerator g)
     {
         int steps = g.UserInput.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
             ? explicitVideoSteps
-            : g.UserInput.Get(T2IParamTypes.Steps, 20, autoFixDefault: true);
+            : g.UserInput.Get(T2IParamTypes.Steps, 8, autoFixDefault: true);
         double cfgScale = g.UserInput.TryGet(T2IParamTypes.VideoCFG, out double explicitVideoCfg)
             ? explicitVideoCfg
-            : g.UserInput.Get(T2IParamTypes.CFGScale, 7, autoFixDefault: true);
+            : g.UserInput.Get(T2IParamTypes.CFGScale, 1, autoFixDefault: true);
         string sampler = ComfyUIBackendExtension.SamplerParam is null
             ? "euler"
             : g.UserInput.Get(ComfyUIBackendExtension.SamplerParam, "euler", autoFixDefault: true);

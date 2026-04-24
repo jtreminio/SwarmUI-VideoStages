@@ -158,7 +158,7 @@ public class ImageReferenceTests
         List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(stage));
 
         Assert.Single(stages);
-        Assert.Equal(1.0, stages[0].Control);
+        Assert.Equal(0.5, stages[0].Control);
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class ImageReferenceTests
         List<JsonParser.StageSpec> stages = ParseStages(input);
 
         Assert.Single(stages);
-        Assert.Equal(1.0, stages[0].Control);
+        Assert.Equal(0.5, stages[0].Control);
         Assert.Equal(1.0, stages[0].Upscale);
         Assert.Equal("pixel-lanczos", stages[0].UpscaleMethod);
         Assert.Equal("", stages[0].Vae);

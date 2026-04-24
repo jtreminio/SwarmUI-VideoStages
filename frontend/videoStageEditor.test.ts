@@ -208,6 +208,7 @@ describe("videoStageEditor", () => {
             const clips = parseStored();
             expect(clips).toHaveLength(1);
             expect(clips[0].stages).toHaveLength(1);
+            expect(clips[0].duration).toBe(5);
             expect(clips[0].refs).toEqual([]);
             expect(
                 document.querySelector(".vs-clip-card .header-label")
@@ -285,7 +286,7 @@ describe("videoStageEditor", () => {
             editor.init();
 
             const defaultStage = parseStored()[0].stages?.[0];
-            expect(defaultStage?.control).toBe(1);
+            expect(defaultStage?.control).toBe(0.5);
             expect(defaultStage?.steps).toBe(8);
             expect(defaultStage?.cfgScale).toBe(1);
             expect(defaultStage?.upscale).toBe(1);
@@ -1204,8 +1205,8 @@ describe("videoStageEditor", () => {
             const frameRange = document.querySelector(
                 '[data-ref-field="frame"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(frameNumber?.max).toBe("49");
-            expect(frameRange?.max).toBe("49");
+            expect(frameNumber?.max).toBe("121");
+            expect(frameRange?.max).toBe("121");
 
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"][type="number"]',
@@ -1279,7 +1280,7 @@ describe("videoStageEditor", () => {
             ).not.toBeNull();
         });
 
-        it("renders control, steps, cfg scale, and upscale; disables stage 0 control and upscale only", async () => {
+        it("renders steps and cfg scale; hides stage 0 control and upscale fields from layout", async () => {
             const editor = videoStageEditor();
             editor.init();
 
@@ -1303,11 +1304,21 @@ describe("videoStageEditor", () => {
             expect(stepsSlider).not.toBeNull();
             expect(cfgScaleSlider).not.toBeNull();
             expect(upscale0).not.toBeNull();
-            expect(controlSlider?.disabled).toBe(true);
-            expect(controlNumber?.disabled).toBe(true);
-            expect(controlSlider?.value).toBe("1");
-            expect(controlNumber?.value).toBe("1");
-            expect(upscale0?.disabled).toBe(true);
+            expect(controlSlider?.disabled).toBe(false);
+            expect(controlNumber?.disabled).toBe(false);
+            expect(controlSlider?.value).toBe("0.5");
+            expect(controlNumber?.value).toBe("0.5");
+            expect(upscale0?.disabled).toBe(false);
+            expect(
+                controlSlider
+                    ?.closest(".vs-first-stage-field-hidden")
+                    ?.getAttribute("style"),
+            ).toBe("display: none;");
+            expect(
+                upscale0
+                    ?.closest(".vs-first-stage-field-hidden")
+                    ?.getAttribute("style"),
+            ).toBe("display: none;");
             expect(controlSlider?.min).toBe("0.05");
             expect(stepsSlider?.max).toBe("50");
             expect(cfgScaleSlider?.max).toBe("10");
@@ -1315,7 +1326,7 @@ describe("videoStageEditor", () => {
             const upscale0n = document.querySelector(
                 '[data-stage-field="upscale"][type="number"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(upscale0n?.disabled).toBe(true);
+            expect(upscale0n?.disabled).toBe(false);
 
             (
                 document.querySelector(
@@ -1373,7 +1384,7 @@ describe("videoStageEditor", () => {
             ).toBeNull();
         });
 
-        it("disables first-stage upscale controls; stage 1 follows upscale vs method rules", async () => {
+        it("hides first-stage control, upscale, and upscale method; stage 1 follows upscale vs method rules", async () => {
             const editor = videoStageEditor();
             editor.init();
 
@@ -1392,12 +1403,27 @@ describe("videoStageEditor", () => {
             const s0Number = document.querySelector(
                 '[data-stage-field="upscale"][type="number"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(s0Method?.disabled).toBe(true);
-            expect(s0ControlRange?.disabled).toBe(true);
-            expect(s0ControlNumber?.disabled).toBe(true);
-            expect(s0Range?.disabled).toBe(true);
-            expect(s0Number?.disabled).toBe(true);
-            expect(parseStored()[0].stages?.[0].control).toBe(1);
+            expect(s0Method?.disabled).toBe(false);
+            expect(s0ControlRange?.disabled).toBe(false);
+            expect(s0ControlNumber?.disabled).toBe(false);
+            expect(s0Range?.disabled).toBe(false);
+            expect(s0Number?.disabled).toBe(false);
+            expect(
+                s0Method
+                    ?.closest(".vs-first-stage-field-hidden")
+                    ?.getAttribute("style"),
+            ).toBe("display: none;");
+            expect(
+                s0ControlRange
+                    ?.closest(".vs-first-stage-field-hidden")
+                    ?.getAttribute("style"),
+            ).toBe("display: none;");
+            expect(
+                s0Range
+                    ?.closest(".vs-first-stage-field-hidden")
+                    ?.getAttribute("style"),
+            ).toBe("display: none;");
+            expect(parseStored()[0].stages?.[0].control).toBe(0.5);
             expect(parseStored()[0].stages?.[0].upscale).toBe(1);
 
             (

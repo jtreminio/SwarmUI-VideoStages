@@ -262,6 +262,10 @@ export const applyStageField = (
     }
 
     if (field === "upscale") {
+        if (stageIdx === 0) {
+            stage.upscale = getRootDefaults().upscale;
+            return;
+        }
         const value = parseFloat(target.value);
         if (Number.isFinite(value)) {
             const defaults = getRootDefaults();

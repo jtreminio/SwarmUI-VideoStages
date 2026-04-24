@@ -53,6 +53,11 @@ export const decorateAutoInputWrapper = (
             `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`,
     );
 
+const hideFirstStageField = (html: string, stageIdx: number): string =>
+    stageIdx === 0
+        ? decorateAutoInputWrapper(html, "vs-first-stage-field-hidden", true)
+        : html;
+
 export const dropdownOptions = (
     values: string[],
     labels: string[],
@@ -424,14 +429,17 @@ export const renderStageRow = (
         defaults.modelLabels,
         stage.model,
     );
-    const controlField = stageSliderField(
-        "control",
-        "Control",
-        stage.control,
-        defaults.controlMin,
-        defaults.controlMax,
-        defaults.controlStep,
-        stageIdx === 0,
+    const controlField = hideFirstStageField(
+        stageSliderField(
+            "control",
+            "Control",
+            stage.control,
+            defaults.controlMin,
+            defaults.controlMax,
+            defaults.controlStep,
+            false,
+        ),
+        stageIdx,
     );
     const stepsField = stageSliderField(
         "steps",
@@ -449,14 +457,17 @@ export const renderStageRow = (
         defaults.cfgScaleMax,
         defaults.cfgScaleStep,
     );
-    const upscaleField = stageSliderField(
-        "upscale",
-        "Upscale",
-        stage.upscale,
-        defaults.upscaleMin,
-        defaults.upscaleMax,
-        defaults.upscaleStep,
-        stageIdx === 0,
+    const upscaleField = hideFirstStageField(
+        stageSliderField(
+            "upscale",
+            "Upscale",
+            stage.upscale,
+            defaults.upscaleMin,
+            defaults.upscaleMax,
+            defaults.upscaleStep,
+            false,
+        ),
+        stageIdx,
     );
     const selectedUpscaleMethod = `${stage.upscaleMethod ?? ""}`;
     const upscaleMethodFieldBase = injectFieldData(
@@ -477,10 +488,14 @@ export const renderStageRow = (
             "data-clip-idx": String(clipIdx),
         },
     );
-    const upscaleMethodField =
-        stageIdx === 0 || stage.upscale === 1
-            ? upscaleMethodFieldBase.replace(/<select /, "<select disabled ")
-            : upscaleMethodFieldBase;
+    const upscaleMethodField = hideFirstStageField(
+        stageIdx === 0
+            ? upscaleMethodFieldBase
+            : stage.upscale === 1
+              ? upscaleMethodFieldBase.replace(/<select /, "<select disabled ")
+              : upscaleMethodFieldBase,
+        stageIdx,
+    );
     const samplerField = stageDropdownField(
         "sampler",
         "Sampler",

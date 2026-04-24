@@ -108,7 +108,7 @@ export const getRootDefaults = (): RootDefaults => {
             ),
         fps,
         frames,
-        control: 1,
+        control: 0.5,
         controlMin: 0.05,
         controlMax: 1,
         controlStep: 0.05,

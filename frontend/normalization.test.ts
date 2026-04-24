@@ -21,10 +21,10 @@ const stubDefaults = (): RootDefaults => ({
     upscaleMethodValues: ["pixel-lanczos", "pixel-bicubic"],
     upscaleMethodLabels: ["Lanczos", "Bicubic"],
     width: 1024,
-    height: 768,
+    height: 1024,
     fps: 24,
     frames: 48,
-    control: 1,
+    control: 0.5,
     controlMin: 0.05,
     controlMax: 1,
     controlStep: 0.05,
@@ -141,7 +141,7 @@ describe("normalization", () => {
             0,
         );
 
-        expect(stage0.control).toBe(1);
+        expect(stage0.control).toBe(0.5);
     });
 
     it("normalizeStage reads PascalCase control for non-first stage", () => {
@@ -177,6 +177,7 @@ describe("normalization", () => {
     it("buildDefaultRef matches editor defaults", () => {
         const ref = buildDefaultRef();
         expect(ref.source).toBe(REF_SOURCE_BASE);
+        expect(ref.frame).toBe(1);
         expect(ref.uploadedImage).toBeNull();
     });
 });

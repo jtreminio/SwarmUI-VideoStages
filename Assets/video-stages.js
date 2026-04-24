@@ -159,6 +159,7 @@
 
   // frontend/constants.ts
   var REF_FRAME_MIN = 1;
+  var DEFAULT_CLIP_DURATION_SECONDS = 5;
   var CLIP_DURATION_MIN = 1;
   var CLIP_DURATION_MAX = 9999;
   var CLIP_DURATION_SLIDER_MAX = 60;
@@ -373,10 +374,7 @@
       expanded: true,
       skipped: false,
       duration: snapDurationToFps(
-        Math.max(
-          CLIP_DURATION_MIN,
-          defaults.frames / Math.max(1, defaults.fps)
-        ),
+        Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
       ),
       audioSource: AUDIO_SOURCE_NATIVE,
@@ -736,6 +734,10 @@
       return;
     }
     if (field === "upscale") {
+      if (stageIdx === 0) {
+        stage.upscale = getRootDefaults2().upscale;
+        return;
+      }
       const value = parseFloat(target.value);
       if (Number.isFinite(value)) {
         const defaults = getRootDefaults2();
@@ -960,7 +962,7 @@
       ),
       fps,
       frames,
-      control: 1,
+      control: 0.5,
       controlMin: 0.05,
       controlMax: 1,
       controlStep: 0.05,
@@ -1931,6 +1933,7 @@
     /<div class="([^"]*)"([^>]*)>/,
     (_match, classes, attrs) => `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`
   );
+  var hideFirstStageField = (html, stageIdx) => stageIdx === 0 ? decorateAutoInputWrapper(html, "vs-first-stage-field-hidden", true) : html;
   var dropdownOptions = (values, labels, selected) => {
     const finalValues = [...values];
     const finalLabels = [...labels];
@@ -2227,14 +2230,17 @@ ${optionHtml}
       defaults.modelLabels,
       stage.model
     );
-    const controlField = stageSliderField(
-      "control",
-      "Control",
-      stage.control,
-      defaults.controlMin,
-      defaults.controlMax,
-      defaults.controlStep,
-      stageIdx === 0
+    const controlField = hideFirstStageField(
+      stageSliderField(
+        "control",
+        "Control",
+        stage.control,
+        defaults.controlMin,
+        defaults.controlMax,
+        defaults.controlStep,
+        false
+      ),
+      stageIdx
     );
     const stepsField = stageSliderField(
       "steps",
@@ -2252,14 +2258,17 @@ ${optionHtml}
       defaults.cfgScaleMax,
       defaults.cfgScaleStep
     );
-    const upscaleField = stageSliderField(
-      "upscale",
-      "Upscale",
-      stage.upscale,
-      defaults.upscaleMin,
-      defaults.upscaleMax,
-      defaults.upscaleStep,
-      stageIdx === 0
+    const upscaleField = hideFirstStageField(
+      stageSliderField(
+        "upscale",
+        "Upscale",
+        stage.upscale,
+        defaults.upscaleMin,
+        defaults.upscaleMax,
+        defaults.upscaleStep,
+        false
+      ),
+      stageIdx
     );
     const selectedUpscaleMethod = `${stage.upscaleMethod ?? ""}`;
     const upscaleMethodFieldBase = injectFieldData(
@@ -2280,7 +2289,10 @@ ${optionHtml}
         "data-clip-idx": String(clipIdx)
       }
     );
-    const upscaleMethodField = stageIdx === 0 || stage.upscale === 1 ? upscaleMethodFieldBase.replace(/<select /, "<select disabled ") : upscaleMethodFieldBase;
+    const upscaleMethodField = hideFirstStageField(
+      stageIdx === 0 ? upscaleMethodFieldBase : stage.upscale === 1 ? upscaleMethodFieldBase.replace(/<select /, "<select disabled ") : upscaleMethodFieldBase,
+      stageIdx
+    );
     const samplerField = stageDropdownField(
       "sampler",
       "Sampler",

@@ -6,6 +6,7 @@ import {
 import {
     CLIP_DURATION_MIN,
     clamp,
+    DEFAULT_CLIP_DURATION_SECONDS,
     normalizeUploadFileName,
     REF_FRAME_MIN,
     ROOT_DIMENSION_MIN,
@@ -179,10 +180,7 @@ export const buildDefaultClip = (
         expanded: true,
         skipped: false,
         duration: snapDurationToFps(
-            Math.max(
-                CLIP_DURATION_MIN,
-                defaults.frames / Math.max(1, defaults.fps),
-            ),
+            Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
             defaults.fps,
         ),
         audioSource: AUDIO_SOURCE_NATIVE,

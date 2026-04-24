@@ -1,4 +1,5 @@
 export const REF_FRAME_MIN = 1;
+export const DEFAULT_CLIP_DURATION_SECONDS = 5;
 export const CLIP_DURATION_MIN = 1;
 export const CLIP_DURATION_MAX = 9999;
 export const CLIP_DURATION_SLIDER_MAX = 60;
