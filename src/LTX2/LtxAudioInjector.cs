@@ -4,7 +4,7 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.LTX2;
 
-public sealed class AudioInjector(WorkflowGenerator g)
+public sealed class LtxAudioInjector(WorkflowGenerator g)
 {
     private const int AudioInjectionIdBase = 52300;
     private const int AudioInjectionEnsureFallbackSlot = 50;

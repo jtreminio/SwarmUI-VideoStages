@@ -2,7 +2,6 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
 
 namespace VideoStages;
 
@@ -55,7 +54,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             if (!rootStageTakeover)
             {
                 AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, uploadedAudios);
-                LtxAudioCoordinator.TryInject(g, firstClipAudio);
+                _ = new LTX2.LtxAudioInjector(g).TryInject(firstClipAudio);
             }
 
             new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, uploadedAudios, rootStageTakeover).Run();
@@ -70,15 +69,16 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
     private void TryInjectConfiguredAudio(JsonParser parser, List<JsonParser.ClipSpec> clips)
     {
         AudioStageDetector.Detection detectedAudio = new AudioStageDetector(g).Detect();
+        LTX2.LtxAudioInjector ltxAudioInjector = new(g);
         if (clips.Count == 0)
         {
-            LtxAudioCoordinator.TryInject(g, detectedAudio);
+            ltxAudioInjector.TryInject(detectedAudio);
             return;
         }
 
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
         AudioStageDetector.Detection detection = ResolveClipAudioSource(clips[0].Id, clips[0].AudioSource, detectedAudio, uploadedAudios);
-        LtxAudioCoordinator.TryInject(g, detection);
+        ltxAudioInjector.TryInject(detection);
     }
 
     /// <summary>Per-clip <see cref="AudioStageDetector.Detection"/> for upload audio; empty when no clip uses upload (avoids orphan load nodes for native-audio clips).</summary>

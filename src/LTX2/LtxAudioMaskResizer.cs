@@ -3,7 +3,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages.LTX2;
 
-/// <summary>Adjusts LTX audio latent noise-mask dimensions to match video resolution.</summary>
 internal static class LtxAudioMaskResizer
 {
     internal static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
