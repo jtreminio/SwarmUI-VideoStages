@@ -1,3 +1,7 @@
+# Git repo
+
+This extension is in a subdirectory that is gitignored by the SwarmUI project. This extension has its own repo. Do not look in the SwarmUI project for any git changes related to this extension.
+
 # Javascript files
 
 Do NOT manually modify Assets/video-stages.js. All Javascript modifications should be applied to the Typescript files in frontend directory (or scripts). It is OK to modify the CSS file(s) within this project directly.
