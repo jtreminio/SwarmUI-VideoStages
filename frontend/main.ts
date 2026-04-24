@@ -1,7 +1,7 @@
 import { audioSource } from "./audioSource";
-import { VideoStageEditor } from "./VideoStageEditorTemp";
+import { videoStageEditor } from "./videoStageEditor";
 
-const stageEditor = VideoStageEditor();
+const stageEditor = videoStageEditor();
 
 const tryRegisterStageEditor = (): boolean => {
     if (!Array.isArray(postParamBuildSteps)) {

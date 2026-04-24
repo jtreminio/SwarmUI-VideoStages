@@ -18,7 +18,7 @@ import {
     type RefImage,
     type RootDefaults,
     type Stage,
-} from "./TypesTemp";
+} from "./types";
 
 type ApplyRefFieldDeps = {
     getRootDefaults: () => RootDefaults;

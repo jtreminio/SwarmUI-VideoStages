@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { framesForClip } from "./RenderUtilsTemp";
+import { framesForClip } from "./renderUtils";
 
 describe("framesForClip", () => {
     it("aligns duration frames up to a multiple of eight plus one", () => {

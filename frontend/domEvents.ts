@@ -22,10 +22,10 @@ import {
     getReferenceFrameMax,
 } from "./normalization";
 import type { PersistenceCallbacks } from "./persistence";
-import { snapDurationToFps } from "./RenderUtilsTemp";
 import type { RefUploadCacheApi } from "./refUploadCache";
+import { snapDurationToFps } from "./renderUtils";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
-import type { Clip, VideoStagesConfig } from "./TypesTemp";
+import type { Clip, VideoStagesConfig } from "./types";
 
 export type DomEventsDeps = {
     getEditor: () => HTMLElement | null;

@@ -14,7 +14,7 @@ import {
     STAGE_REF_STRENGTH_MAX,
     STAGE_REF_STRENGTH_MIN,
 } from "./constants";
-import { framesForClip, snapDurationToFps } from "./RenderUtilsTemp";
+import { framesForClip, snapDurationToFps } from "./renderUtils";
 import {
     type Clip,
     REF_SOURCE_BASE,
@@ -22,8 +22,8 @@ import {
     type RootDefaults,
     type Stage,
     type UploadedAudio,
-} from "./TypesTemp";
-import { VideoStageUtils } from "./UtilsTemp";
+} from "./types";
+import { utils } from "./utils";
 
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
@@ -59,19 +59,19 @@ export const normalizeRootDimension = (
 ): number =>
     Math.max(
         ROOT_DIMENSION_MIN,
-        Math.round(VideoStageUtils.toNumber(`${value ?? fallback}`, fallback)),
+        Math.round(utils.toNumber(`${value ?? fallback}`, fallback)),
     );
 
 export const normalizeRootFps = (value: unknown, fallback: number): number =>
     Math.max(
         ROOT_FPS_MIN,
-        Math.round(VideoStageUtils.toNumber(`${value ?? fallback}`, fallback)),
+        Math.round(utils.toNumber(`${value ?? fallback}`, fallback)),
     );
 
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
     Math.round(
         clamp(
-            VideoStageUtils.toNumber(
+            utils.toNumber(
                 `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
                 STAGE_REF_STRENGTH_DEFAULT,
             ),
@@ -232,7 +232,7 @@ export const normalizeStage = (
               }
             : {
                   upscale: clamp(
-                      VideoStageUtils.toNumber(
+                      utils.toNumber(
                           `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
                           fallback.upscale,
                       ),
@@ -247,7 +247,7 @@ export const normalizeStage = (
         expanded: rawStage.expanded === undefined ? true : !!rawStage.expanded,
         skipped: !!rawStage.skipped,
         control: clamp(
-            VideoStageUtils.toNumber(
+            utils.toNumber(
                 `${rawStage.control ?? fallback.control}`,
                 fallback.control,
             ),
@@ -266,7 +266,7 @@ export const normalizeStage = (
             1,
             Math.round(
                 clamp(
-                    VideoStageUtils.toNumber(
+                    utils.toNumber(
                         `${rawStage.steps ?? fallback.steps}`,
                         fallback.steps,
                     ),
@@ -276,7 +276,7 @@ export const normalizeStage = (
             ),
         ),
         cfgScale: clamp(
-            VideoStageUtils.toNumber(
+            utils.toNumber(
                 `${rawStage.cfgScale ?? fallback.cfgScale}`,
                 fallback.cfgScale,
             ),
@@ -318,7 +318,7 @@ export const normalizeRef = (
             REF_FRAME_MIN,
             Math.round(
                 clamp(
-                    VideoStageUtils.toNumber(
+                    utils.toNumber(
                         `${rawRef.frame ?? fallback.frame}`,
                         fallback.frame,
                     ),
@@ -341,7 +341,7 @@ export const normalizeClip = (
     const defaults = getRootDefaults();
     const audioSourceOptions = buildAudioSourceOptions();
     const fps = Math.max(1, defaults.fps);
-    const rawDuration = VideoStageUtils.toNumber(
+    const rawDuration = utils.toNumber(
         `${rawClip.duration}`,
         defaults.frames / fps,
     );

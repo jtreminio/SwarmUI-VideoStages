@@ -4,7 +4,7 @@ import {
     parseRefUploadKey,
     refUploadKey,
 } from "./constants";
-import type { Clip } from "./TypesTemp";
+import type { Clip } from "./types";
 
 export type RefUploadCacheApi = {
     get: (key: string) => CachedRefUpload | undefined;

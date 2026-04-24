@@ -1,11 +1,11 @@
 "use strict";
 (() => {
-  // frontend/UtilsTemp.ts
+  // frontend/utils.ts
   var getElementByType = (id, ctor) => {
     const element = document.getElementById(id);
     return element instanceof ctor ? element : null;
   };
-  var VideoStageUtils = {
+  var utils = {
     getInputElement: (id) => getElementByType(id, HTMLInputElement),
     getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
     getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
@@ -28,7 +28,7 @@
   );
   var isSourceSelect = (target) => target instanceof HTMLSelectElement && target.matches(SOURCE_SELECT_SELECTOR);
   var isTextToAudioEnabled = () => {
-    const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
+    const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
     return !!toggle?.checked;
   };
   var getAceStepFunRefs = () => {
@@ -105,7 +105,7 @@
     };
     let lastBoundText2AudioToggle = null;
     const bindText2AudioToggle = () => {
-      const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
+      const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
       if (!toggle || toggle === lastBoundText2AudioToggle) {
         return;
       }
@@ -217,7 +217,7 @@
   };
   var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
-  // frontend/RenderUtilsTemp.ts
+  // frontend/renderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   var renderOptionList = (options, selected) => options.map((option) => {
     const value = escapeAttr(option.value);
@@ -268,7 +268,7 @@
     return Math.max(0.1, Math.floor(aligned * 10) / 10);
   };
 
-  // frontend/TypesTemp.ts
+  // frontend/types.ts
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
@@ -293,15 +293,15 @@
   };
   var normalizeRootDimension = (value, fallback) => Math.max(
     ROOT_DIMENSION_MIN,
-    Math.round(VideoStageUtils.toNumber(`${value ?? fallback}`, fallback))
+    Math.round(utils.toNumber(`${value ?? fallback}`, fallback))
   );
   var normalizeRootFps = (value, fallback) => Math.max(
     ROOT_FPS_MIN,
-    Math.round(VideoStageUtils.toNumber(`${value ?? fallback}`, fallback))
+    Math.round(utils.toNumber(`${value ?? fallback}`, fallback))
   );
   var normalizeStageRefStrengthValue = (value) => Math.round(
     clamp(
-      VideoStageUtils.toNumber(
+      utils.toNumber(
         `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
         STAGE_REF_STRENGTH_DEFAULT
       ),
@@ -412,7 +412,7 @@
       )
     } : {
       upscale: clamp(
-        VideoStageUtils.toNumber(
+        utils.toNumber(
           `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
           fallback.upscale
         ),
@@ -425,7 +425,7 @@
       expanded: rawStage.expanded === void 0 ? true : !!rawStage.expanded,
       skipped: !!rawStage.skipped,
       control: clamp(
-        VideoStageUtils.toNumber(
+        utils.toNumber(
           `${rawStage.control ?? fallback.control}`,
           fallback.control
         ),
@@ -444,7 +444,7 @@
         1,
         Math.round(
           clamp(
-            VideoStageUtils.toNumber(
+            utils.toNumber(
               `${rawStage.steps ?? fallback.steps}`,
               fallback.steps
             ),
@@ -454,7 +454,7 @@
         )
       ),
       cfgScale: clamp(
-        VideoStageUtils.toNumber(
+        utils.toNumber(
           `${rawStage.cfgScale ?? fallback.cfgScale}`,
           fallback.cfgScale
         ),
@@ -481,7 +481,7 @@
         REF_FRAME_MIN,
         Math.round(
           clamp(
-            VideoStageUtils.toNumber(
+            utils.toNumber(
               `${rawRef.frame ?? fallback.frame}`,
               fallback.frame
             ),
@@ -498,7 +498,7 @@
     const defaults = getRootDefaults2();
     const audioSourceOptions = buildAudioSourceOptions();
     const fps = Math.max(1, defaults.fps);
-    const rawDuration = VideoStageUtils.toNumber(
+    const rawDuration = utils.toNumber(
       `${rawClip.duration}`,
       defaults.frames / fps
     );
@@ -762,22 +762,22 @@
   };
 
   // frontend/swarmInputs.ts
-  var getClipsInput = () => VideoStageUtils.getInputElement("input_videostages");
-  var getRootDimensionParamInput = (field) => VideoStageUtils.getInputElement(
+  var getClipsInput = () => utils.getInputElement("input_videostages");
+  var getRootDimensionParamInput = (field) => utils.getInputElement(
     field === "width" ? "input_vswidth" : "input_vsheight"
   );
-  var getRootFpsParamInput = () => VideoStageUtils.getInputElement("input_vsfps");
+  var getRootFpsParamInput = () => utils.getInputElement("input_vsfps");
   var getCoreDimensionInput = (field) => {
     const primaryId = field === "width" ? "input_width" : "input_height";
     const fallbackId = field === "width" ? "input_aspectratiowidth" : "input_aspectratioheight";
-    return VideoStageUtils.getInputElement(primaryId) ?? VideoStageUtils.getInputElement(fallbackId);
+    return utils.getInputElement(primaryId) ?? utils.getInputElement(fallbackId);
   };
   var getRegisteredRootDimension = (field) => {
     const input = getRootDimensionParamInput(field);
     if (!input) {
       return null;
     }
-    const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+    const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_DIMENSION_MIN ? value : null;
   };
   var getRegisteredRootFps = () => {
@@ -785,7 +785,7 @@
     if (!input) {
       return null;
     }
-    const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+    const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_FPS_MIN ? value : null;
   };
   var getCoreDimension = (field) => {
@@ -793,7 +793,7 @@
     if (!input) {
       return null;
     }
-    const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+    const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_DIMENSION_MIN ? value : null;
   };
   var seedRegisteredDimensionsFromCore = () => {
@@ -803,9 +803,7 @@
       if (!ourInput) {
         continue;
       }
-      const ourValue = Math.round(
-        VideoStageUtils.toNumber(ourInput.value, 0)
-      );
+      const ourValue = Math.round(utils.toNumber(ourInput.value, 0));
       if (ourValue >= ROOT_DIMENSION_MIN) {
         continue;
       }
@@ -817,8 +815,8 @@
       triggerChangeFor(ourInput);
     }
   };
-  var getGroupToggle = () => VideoStageUtils.getInputElement("input_group_content_videostages_toggle");
-  var getRootModelInput = () => VideoStageUtils.getInputElement("input_model");
+  var getGroupToggle = () => utils.getInputElement("input_group_content_videostages_toggle");
+  var getRootModelInput = () => utils.getInputElement("input_model");
   var getBase2EditStageRefs = () => {
     const snapshot = window.base2editStageRegistry?.getSnapshot?.();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
@@ -867,10 +865,10 @@
         return { values: [...param.values], labels };
       }
     }
-    const select = VideoStageUtils.getSelectElement(fallbackSelectId);
+    const select = utils.getSelectElement(fallbackSelectId);
     return {
-      values: VideoStageUtils.getSelectValues(select),
-      labels: VideoStageUtils.getSelectLabels(select)
+      values: utils.getSelectValues(select),
+      labels: utils.getSelectLabels(select)
     };
   };
   var isVideoStagesEnabled = () => {
@@ -889,18 +887,16 @@
     return modelValues[0] ?? "";
   };
   var getRootDefaults = () => {
-    let model = VideoStageUtils.getSelectElement("input_videomodel");
+    let model = utils.getSelectElement("input_videomodel");
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
-      model = VideoStageUtils.getSelectElement("input_model");
+      model = utils.getSelectElement("input_model");
     }
-    const vae = VideoStageUtils.getSelectElement("input_vae");
+    const vae = utils.getSelectElement("input_vae");
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
-    const upscaleMethod = VideoStageUtils.getSelectElement(
-      "input_refinerupscalemethod"
-    );
-    const allUpscaleMethodValues = VideoStageUtils.getSelectValues(upscaleMethod);
-    const allUpscaleMethodLabels = VideoStageUtils.getSelectLabels(upscaleMethod);
+    const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
+    const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
+    const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
     const isStageMethod = (value) => value.startsWith("pixel-") || value.startsWith("model-") || value.startsWith("latent-") || value.startsWith("latentmodel-");
     const upscaleMethodValues = allUpscaleMethodValues.filter(isStageMethod);
     const upscaleMethodLabels = allUpscaleMethodLabels.filter(
@@ -913,25 +909,25 @@
       "pixel-bilinear",
       "pixel-nearest-exact"
     ];
-    const steps = VideoStageUtils.getInputElement("input_videosteps") ?? VideoStageUtils.getInputElement("input_steps");
-    const cfgScale = VideoStageUtils.getInputElement("input_videocfg") ?? VideoStageUtils.getInputElement("input_cfgscale");
-    const widthInput = VideoStageUtils.getInputElement("input_width") ?? VideoStageUtils.getInputElement("input_aspectratiowidth");
-    const heightInput = VideoStageUtils.getInputElement("input_height") ?? VideoStageUtils.getInputElement("input_aspectratioheight");
-    const fpsInput = VideoStageUtils.getInputElement("input_videofps") ?? VideoStageUtils.getInputElement("input_videoframespersecond");
-    const framesInput = VideoStageUtils.getInputElement("input_videoframes") ?? VideoStageUtils.getInputElement("input_text2videoframes");
+    const steps = utils.getInputElement("input_videosteps") ?? utils.getInputElement("input_steps");
+    const cfgScale = utils.getInputElement("input_videocfg") ?? utils.getInputElement("input_cfgscale");
+    const widthInput = utils.getInputElement("input_width") ?? utils.getInputElement("input_aspectratiowidth");
+    const heightInput = utils.getInputElement("input_height") ?? utils.getInputElement("input_aspectratioheight");
+    const fpsInput = utils.getInputElement("input_videofps") ?? utils.getInputElement("input_videoframespersecond");
+    const framesInput = utils.getInputElement("input_videoframes") ?? utils.getInputElement("input_text2videoframes");
     const fps = Math.max(
       1,
-      getRegisteredRootFps() ?? Math.round(VideoStageUtils.toNumber(fpsInput?.value, 24))
+      getRegisteredRootFps() ?? Math.round(utils.toNumber(fpsInput?.value, 24))
     );
     const frames = Math.max(
       1,
-      Math.round(VideoStageUtils.toNumber(framesInput?.value, 24))
+      Math.round(utils.toNumber(framesInput?.value, 24))
     );
     return {
-      modelValues: VideoStageUtils.getSelectValues(model),
-      modelLabels: VideoStageUtils.getSelectLabels(model),
-      vaeValues: VideoStageUtils.getSelectValues(vae),
-      vaeLabels: VideoStageUtils.getSelectLabels(vae),
+      modelValues: utils.getSelectValues(model),
+      modelLabels: utils.getSelectLabels(model),
+      vaeValues: utils.getSelectValues(vae),
+      vaeLabels: utils.getSelectLabels(vae),
       samplerValues: sampler.values,
       samplerLabels: sampler.labels,
       schedulerValues: scheduler.values,
@@ -940,11 +936,11 @@
       upscaleMethodLabels: upscaleMethodLabels.length > 0 ? upscaleMethodLabels : fallbackUpscaleMethods,
       width: getRegisteredRootDimension("width") ?? Math.max(
         ROOT_DIMENSION_MIN,
-        Math.round(VideoStageUtils.toNumber(widthInput?.value, 1024))
+        Math.round(utils.toNumber(widthInput?.value, 1024))
       ),
       height: getRegisteredRootDimension("height") ?? Math.max(
         ROOT_DIMENSION_MIN,
-        Math.round(VideoStageUtils.toNumber(heightInput?.value, 1024))
+        Math.round(utils.toNumber(heightInput?.value, 1024))
       ),
       fps,
       frames,
@@ -957,22 +953,16 @@
       upscaleMax: 4,
       upscaleStep: 0.25,
       steps: 8,
-      stepsMin: Math.max(
-        1,
-        Math.round(VideoStageUtils.toNumber(steps?.min, 1))
-      ),
+      stepsMin: Math.max(1, Math.round(utils.toNumber(steps?.min, 1))),
       stepsMax: Math.min(
         50,
-        Math.max(1, Math.round(VideoStageUtils.toNumber(steps?.max, 200)))
+        Math.max(1, Math.round(utils.toNumber(steps?.max, 200)))
       ),
-      stepsStep: Math.max(
-        1,
-        Math.round(VideoStageUtils.toNumber(steps?.step, 1))
-      ),
+      stepsStep: Math.max(1, Math.round(utils.toNumber(steps?.step, 1))),
       cfgScale: 1,
-      cfgScaleMin: VideoStageUtils.toNumber(cfgScale?.min, 0),
-      cfgScaleMax: Math.min(10, VideoStageUtils.toNumber(cfgScale?.max, 10)),
-      cfgScaleStep: VideoStageUtils.toNumber(cfgScale?.step, 0.5)
+      cfgScaleMin: utils.toNumber(cfgScale?.min, 0),
+      cfgScaleMax: Math.min(10, utils.toNumber(cfgScale?.max, 10)),
+      cfgScaleStep: utils.toNumber(cfgScale?.step, 0.5)
     };
   };
 
@@ -1645,7 +1635,7 @@
       ];
       let hasObservedSource = false;
       for (const sourceId of observableIds) {
-        const source = VideoStageUtils.getSelectElement(sourceId);
+        const source = utils.getSelectElement(sourceId);
         if (!source || observedDropdownIds.has(sourceId)) {
           continue;
         }
@@ -2347,8 +2337,8 @@ ${optionHtml}
     return `<div class="${groupClasses.join(" ")}" id="auto-group-vsclip${clipIdx}" data-clip-idx="${clipIdx}">${head}${body}</div>`;
   };
 
-  // frontend/VideoStageEditorTemp.ts
-  var VideoStageEditor = () => {
+  // frontend/videoStageEditor.ts
+  function videoStageEditor() {
     let editor = null;
     let clipsRefreshTimer = null;
     const refUploadCache = createRefUploadCache();
@@ -2496,10 +2486,10 @@ ${optionHtml}
       init,
       startGenerateWrapRetry
     };
-  };
+  }
 
   // frontend/main.ts
-  var stageEditor = VideoStageEditor();
+  var stageEditor = videoStageEditor();
   var tryRegisterStageEditor = () => {
     if (!Array.isArray(postParamBuildSteps)) {
       return false;

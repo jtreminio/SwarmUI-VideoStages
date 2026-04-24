@@ -7,7 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { stubBase2EditStageRegistry } from "./__test_helpers__/registries";
-import { VideoStageEditor } from "./VideoStageEditorTemp";
+import { videoStageEditor } from "./videoStageEditor";
 
 const flushReRender = async (): Promise<void> => {
     jest.runOnlyPendingTimers();
@@ -188,7 +188,7 @@ const parseStoredConfig = (): ParsedConfig => {
 
 const parseStored = (): ParsedClip[] => parseStoredConfig().clips;
 
-describe("VideoStageEditor", () => {
+describe("videoStageEditor", () => {
     beforeEach(() => {
         jest.useFakeTimers();
         setupParameterPanel();
@@ -201,7 +201,7 @@ describe("VideoStageEditor", () => {
 
     describe("init / seeding", () => {
         it("seeds a single default clip when no JSON is present", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const clips = parseStored();
@@ -224,7 +224,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "832";
             document.body.appendChild(coreHeightInput);
 
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -255,7 +255,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "832";
             document.body.appendChild(coreHeightInput);
 
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -269,7 +269,7 @@ describe("VideoStageEditor", () => {
             ) as HTMLInputElement;
             registeredFpsInput.value = "32";
 
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -277,7 +277,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("seeds the first stage with the frontend default values", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const defaultStage = parseStored()[0].stages?.[0];
@@ -288,7 +288,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders an editor div with a clip stack and add-clip button", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const editorDiv = document.getElementById(
@@ -304,7 +304,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("does not render its own root width/height fields (uses registered SwarmUI sliders)", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const widthNumber = document.querySelector(
@@ -330,7 +330,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "720";
             document.body.appendChild(coreHeightInput);
 
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const registeredWidth = document.getElementById(
@@ -365,7 +365,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "720";
             document.body.appendChild(coreHeightInput);
 
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             expect(registeredWidth.value).toBe("1024");
@@ -389,7 +389,7 @@ describe("VideoStageEditor", () => {
                 ],
             });
 
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -407,7 +407,7 @@ describe("VideoStageEditor", () => {
 
     describe("clip actions", () => {
         it("adds a new clip when the add-clip button is clicked", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const addBtn = document.querySelector(
@@ -422,7 +422,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("toggles collapse state for a clip when the native shrinkable header is clicked", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const header = document.querySelector(
@@ -437,7 +437,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("does not collapse the clip when the skip action button inside the header is clicked", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -462,7 +462,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("toggles skip state for a clip when more than one exists", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -482,7 +482,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("updates clip duration when the slider thumb moves", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const durationSlider = document.querySelector(
@@ -498,7 +498,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("reflects registered RootWidth/RootHeight slider changes in saved JSON", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const registeredWidth = document.getElementById(
@@ -530,7 +530,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("stores clip audio source at the clip level", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
@@ -545,7 +545,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders a hidden per-clip audio upload field directly below the audio source dropdown", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
@@ -568,7 +568,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("reveals the per-clip audio upload field when audioSource changes to Upload", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
@@ -590,7 +590,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("still reveals clip audio Upload when the editor DOM is rebuilt", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const originalEditor = document.getElementById(
@@ -627,7 +627,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("stores uploaded audio payload on the clip", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
@@ -665,7 +665,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("keeps per-clip uploads independent across multiple Upload clips", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -715,7 +715,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("does not rerender the duration number input while typing", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const durationNumber = document.querySelector(
@@ -747,7 +747,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("uses 0.5 second jumps for the duration slider but leaves manual entry unrestricted", () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const durationNumber = document.querySelector(
@@ -764,7 +764,7 @@ describe("VideoStageEditor", () => {
 
     describe("ref actions", () => {
         it("adds a new ref to a clip", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const addRefBtn = document.querySelector(
@@ -780,7 +780,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("uses the updated reverse frame count label", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -798,7 +798,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("adds a default ref strength slider for each stage when a ref is added", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -828,7 +828,7 @@ describe("VideoStageEditor", () => {
 
         it("includes Base2Edit refs in the source dropdown when registered", async () => {
             stubBase2EditStageRegistry(["edit0", "edit1"]);
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -848,7 +848,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders reference headers as Ref Image n labels", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -875,7 +875,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("reveals the upload field when the reference source changes to Upload", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -914,7 +914,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("stores ref upload image payload when Swarm provides filedata on the file input", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -952,7 +952,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("still reveals Upload when the editor DOM is rebuilt", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -1018,7 +1018,7 @@ describe("VideoStageEditor", () => {
                 },
             ]);
 
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const deleteBtn = document.querySelector(
@@ -1039,7 +1039,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("uses the aligned clip duration frame count for the reference frame slider max", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -1080,7 +1080,7 @@ describe("VideoStageEditor", () => {
 
     describe("stage actions", () => {
         it("adds a new stage to a clip", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const addStageBtn = document.querySelector(
@@ -1094,7 +1094,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("initializes new stages with default ref strengths for existing refs", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -1131,7 +1131,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders control, steps, cfg scale, and upscale; disables stage 0 upscale only", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const controlSlider = document.querySelector(
@@ -1175,7 +1175,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders stage headers as Stage n labels with zero-based indexes", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const firstHead = document.querySelector(
@@ -1218,7 +1218,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("disables first-stage upscale controls; stage 1 follows upscale vs method rules", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             const s0Method = document.querySelector(
@@ -1260,7 +1260,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("keeps stage upscale method when upscale slider changes", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -1315,7 +1315,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("updates stored ref strength when a stage ref slider moves", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -1337,7 +1337,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("toggles skip state for a stage", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (
@@ -1362,7 +1362,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("removes a stage when more than one exists", async () => {
-            const editor = VideoStageEditor();
+            const editor = videoStageEditor();
             editor.init();
 
             (

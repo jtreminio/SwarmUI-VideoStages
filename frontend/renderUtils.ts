@@ -1,4 +1,4 @@
-import type { ImageSourceOption } from "./TypesTemp";
+import type { ImageSourceOption } from "./types";
 
 export const escapeAttr = (value: unknown): string =>
     String(value ?? "")

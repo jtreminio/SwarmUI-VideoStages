@@ -11,7 +11,7 @@ import {
     getRegisteredRootDimension,
     getRegisteredRootFps,
 } from "./swarmInputs";
-import type { Clip, StoredClip, VideoStagesConfig } from "./TypesTemp";
+import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 
 type ParsedConfig = {
     width?: unknown;

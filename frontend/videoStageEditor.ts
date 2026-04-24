@@ -24,15 +24,15 @@ import { createRefUploadCache } from "./refUploadCache";
 import { renderClipCard } from "./renderHtml";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { seedRegisteredDimensionsFromCore } from "./swarmInputs";
-import type { Clip, VideoStagesConfig } from "./TypesTemp";
+import type { Clip, VideoStagesConfig } from "./types";
 import { validateClips } from "./validation";
 
-export type VideoStageEditor = {
+export interface videoStageEditor {
     init(): void;
     startGenerateWrapRetry(intervalMs?: number): void;
-};
+}
 
-export const VideoStageEditor = (): VideoStageEditor => {
+export function videoStageEditor(): videoStageEditor {
     let editor: HTMLElement | null = null;
     let clipsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -209,4 +209,4 @@ export const VideoStageEditor = (): VideoStageEditor => {
         init,
         startGenerateWrapRetry,
     };
-};
+}

@@ -1,7 +1,7 @@
 import { serializeClipsForStorage } from "./persistence";
 import { getClipsInput } from "./swarmInputs";
-import type { VideoStagesConfig } from "./TypesTemp";
-import { VideoStageUtils } from "./UtilsTemp";
+import type { VideoStagesConfig } from "./types";
+import { utils } from "./utils";
 
 const ROOT_VIDEO_TIMING_INPUT_IDS = new Set<string>([
     "input_videoframes",
@@ -79,7 +79,7 @@ export const createObservers = (deps: {
 
         let hasObservedSource = false;
         for (const sourceId of observableIds) {
-            const source = VideoStageUtils.getSelectElement(sourceId);
+            const source = utils.getSelectElement(sourceId);
             if (!source || observedDropdownIds.has(sourceId)) {
                 continue;
             }

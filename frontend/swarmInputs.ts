@@ -3,20 +3,20 @@ import {
     ROOT_DIMENSION_MIN,
     ROOT_FPS_MIN,
 } from "./constants";
-import { VideoStageUtils } from "./UtilsTemp";
+import { utils } from "./utils";
 
 export const getClipsInput = (): HTMLInputElement | null =>
-    VideoStageUtils.getInputElement("input_videostages");
+    utils.getInputElement("input_videostages");
 
 export const getRootDimensionParamInput = (
     field: "width" | "height",
 ): HTMLInputElement | null =>
-    VideoStageUtils.getInputElement(
+    utils.getInputElement(
         field === "width" ? "input_vswidth" : "input_vsheight",
     );
 
 export const getRootFpsParamInput = (): HTMLInputElement | null =>
-    VideoStageUtils.getInputElement("input_vsfps");
+    utils.getInputElement("input_vsfps");
 
 export const getCoreDimensionInput = (
     field: "width" | "height",
@@ -27,8 +27,7 @@ export const getCoreDimensionInput = (
             ? "input_aspectratiowidth"
             : "input_aspectratioheight";
     return (
-        VideoStageUtils.getInputElement(primaryId) ??
-        VideoStageUtils.getInputElement(fallbackId)
+        utils.getInputElement(primaryId) ?? utils.getInputElement(fallbackId)
     );
 };
 
@@ -39,7 +38,7 @@ export const getRegisteredRootDimension = (
     if (!input) {
         return null;
     }
-    const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+    const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_DIMENSION_MIN ? value : null;
 };
 
@@ -48,7 +47,7 @@ export const getRegisteredRootFps = (): number | null => {
     if (!input) {
         return null;
     }
-    const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+    const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_FPS_MIN ? value : null;
 };
 
@@ -57,7 +56,7 @@ export const getCoreDimension = (field: "width" | "height"): number | null => {
     if (!input) {
         return null;
     }
-    const value = Math.round(VideoStageUtils.toNumber(input.value, 0));
+    const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_DIMENSION_MIN ? value : null;
 };
 
@@ -72,9 +71,7 @@ export const seedRegisteredDimensionsFromCore = (): void => {
         if (!ourInput) {
             continue;
         }
-        const ourValue = Math.round(
-            VideoStageUtils.toNumber(ourInput.value, 0),
-        );
+        const ourValue = Math.round(utils.toNumber(ourInput.value, 0));
         if (ourValue >= ROOT_DIMENSION_MIN) {
             continue;
         }
@@ -88,10 +85,10 @@ export const seedRegisteredDimensionsFromCore = (): void => {
 };
 
 export const getGroupToggle = (): HTMLInputElement | null =>
-    VideoStageUtils.getInputElement("input_group_content_videostages_toggle");
+    utils.getInputElement("input_group_content_videostages_toggle");
 
 export const getRootModelInput = (): HTMLInputElement | null =>
-    VideoStageUtils.getInputElement("input_model");
+    utils.getInputElement("input_model");
 
 export const getBase2EditStageRefs = (): string[] => {
     const snapshot = window.base2editStageRegistry?.getSnapshot?.();
@@ -175,10 +172,10 @@ export const getDropdownOptions = (
         }
     }
 
-    const select = VideoStageUtils.getSelectElement(fallbackSelectId);
+    const select = utils.getSelectElement(fallbackSelectId);
     return {
-        values: VideoStageUtils.getSelectValues(select),
-        labels: VideoStageUtils.getSelectLabels(select),
+        values: utils.getSelectValues(select),
+        labels: utils.getSelectLabels(select),
     };
 };
 

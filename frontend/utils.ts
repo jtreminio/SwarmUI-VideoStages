@@ -6,7 +6,7 @@ const getElementByType = <T extends Element>(
     return element instanceof ctor ? element : null;
 };
 
-export const VideoStageUtils = {
+export const utils = {
     getInputElement: (id: string): HTMLInputElement | null =>
         getElementByType(id, HTMLInputElement),
 

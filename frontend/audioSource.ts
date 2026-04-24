@@ -1,4 +1,4 @@
-import { VideoStageUtils } from "./UtilsTemp";
+import { utils } from "./utils";
 
 export interface AudioSourceOption {
     value: string;
@@ -25,7 +25,7 @@ const isSourceSelect = (
     target.matches(SOURCE_SELECT_SELECTOR);
 
 const isTextToAudioEnabled = (): boolean => {
-    const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
+    const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
     return !!toggle?.checked;
 };
 
@@ -114,7 +114,7 @@ export const audioSource = () => {
 
     let lastBoundText2AudioToggle: HTMLInputElement | null = null;
     const bindText2AudioToggle = (): void => {
-        const toggle = VideoStageUtils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
+        const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
         if (!toggle || toggle === lastBoundText2AudioToggle) {
             return;
         }

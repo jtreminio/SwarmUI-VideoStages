@@ -6,8 +6,8 @@ import {
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
-import type { RootDefaults } from "./TypesTemp";
-import { VideoStageUtils } from "./UtilsTemp";
+import type { RootDefaults } from "./types";
+import { utils } from "./utils";
 
 export const getDefaultStageModel = (modelValues: string[]): string => {
     if (isRootTextToVideoModel()) {
@@ -20,20 +20,16 @@ export const getDefaultStageModel = (modelValues: string[]): string => {
 };
 
 export const getRootDefaults = (): RootDefaults => {
-    let model = VideoStageUtils.getSelectElement("input_videomodel");
+    let model = utils.getSelectElement("input_videomodel");
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
-        model = VideoStageUtils.getSelectElement("input_model");
+        model = utils.getSelectElement("input_model");
     }
-    const vae = VideoStageUtils.getSelectElement("input_vae");
+    const vae = utils.getSelectElement("input_vae");
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
-    const upscaleMethod = VideoStageUtils.getSelectElement(
-        "input_refinerupscalemethod",
-    );
-    const allUpscaleMethodValues =
-        VideoStageUtils.getSelectValues(upscaleMethod);
-    const allUpscaleMethodLabels =
-        VideoStageUtils.getSelectLabels(upscaleMethod);
+    const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
+    const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
+    const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
     const isStageMethod = (value: string): boolean =>
         value.startsWith("pixel-") ||
         value.startsWith("model-") ||
@@ -53,39 +49,39 @@ export const getRootDefaults = (): RootDefaults => {
     ];
 
     const steps =
-        VideoStageUtils.getInputElement("input_videosteps") ??
-        VideoStageUtils.getInputElement("input_steps");
+        utils.getInputElement("input_videosteps") ??
+        utils.getInputElement("input_steps");
     const cfgScale =
-        VideoStageUtils.getInputElement("input_videocfg") ??
-        VideoStageUtils.getInputElement("input_cfgscale");
+        utils.getInputElement("input_videocfg") ??
+        utils.getInputElement("input_cfgscale");
     const widthInput =
-        VideoStageUtils.getInputElement("input_width") ??
-        VideoStageUtils.getInputElement("input_aspectratiowidth");
+        utils.getInputElement("input_width") ??
+        utils.getInputElement("input_aspectratiowidth");
     const heightInput =
-        VideoStageUtils.getInputElement("input_height") ??
-        VideoStageUtils.getInputElement("input_aspectratioheight");
+        utils.getInputElement("input_height") ??
+        utils.getInputElement("input_aspectratioheight");
     const fpsInput =
-        VideoStageUtils.getInputElement("input_videofps") ??
-        VideoStageUtils.getInputElement("input_videoframespersecond");
+        utils.getInputElement("input_videofps") ??
+        utils.getInputElement("input_videoframespersecond");
     const framesInput =
-        VideoStageUtils.getInputElement("input_videoframes") ??
-        VideoStageUtils.getInputElement("input_text2videoframes");
+        utils.getInputElement("input_videoframes") ??
+        utils.getInputElement("input_text2videoframes");
 
     const fps = Math.max(
         1,
         getRegisteredRootFps() ??
-            Math.round(VideoStageUtils.toNumber(fpsInput?.value, 24)),
+            Math.round(utils.toNumber(fpsInput?.value, 24)),
     );
     const frames = Math.max(
         1,
-        Math.round(VideoStageUtils.toNumber(framesInput?.value, 24)),
+        Math.round(utils.toNumber(framesInput?.value, 24)),
     );
 
     return {
-        modelValues: VideoStageUtils.getSelectValues(model),
-        modelLabels: VideoStageUtils.getSelectLabels(model),
-        vaeValues: VideoStageUtils.getSelectValues(vae),
-        vaeLabels: VideoStageUtils.getSelectLabels(vae),
+        modelValues: utils.getSelectValues(model),
+        modelLabels: utils.getSelectLabels(model),
+        vaeValues: utils.getSelectValues(vae),
+        vaeLabels: utils.getSelectLabels(vae),
         samplerValues: sampler.values,
         samplerLabels: sampler.labels,
         schedulerValues: scheduler.values,
@@ -102,13 +98,13 @@ export const getRootDefaults = (): RootDefaults => {
             getRegisteredRootDimension("width") ??
             Math.max(
                 ROOT_DIMENSION_MIN,
-                Math.round(VideoStageUtils.toNumber(widthInput?.value, 1024)),
+                Math.round(utils.toNumber(widthInput?.value, 1024)),
             ),
         height:
             getRegisteredRootDimension("height") ??
             Math.max(
                 ROOT_DIMENSION_MIN,
-                Math.round(VideoStageUtils.toNumber(heightInput?.value, 1024)),
+                Math.round(utils.toNumber(heightInput?.value, 1024)),
             ),
         fps,
         frames,
@@ -121,21 +117,15 @@ export const getRootDefaults = (): RootDefaults => {
         upscaleMax: 4,
         upscaleStep: 0.25,
         steps: 8,
-        stepsMin: Math.max(
-            1,
-            Math.round(VideoStageUtils.toNumber(steps?.min, 1)),
-        ),
+        stepsMin: Math.max(1, Math.round(utils.toNumber(steps?.min, 1))),
         stepsMax: Math.min(
             50,
-            Math.max(1, Math.round(VideoStageUtils.toNumber(steps?.max, 200))),
+            Math.max(1, Math.round(utils.toNumber(steps?.max, 200))),
         ),
-        stepsStep: Math.max(
-            1,
-            Math.round(VideoStageUtils.toNumber(steps?.step, 1)),
-        ),
+        stepsStep: Math.max(1, Math.round(utils.toNumber(steps?.step, 1))),
         cfgScale: 1,
-        cfgScaleMin: VideoStageUtils.toNumber(cfgScale?.min, 0),
-        cfgScaleMax: Math.min(10, VideoStageUtils.toNumber(cfgScale?.max, 10)),
-        cfgScaleStep: VideoStageUtils.toNumber(cfgScale?.step, 0.5),
+        cfgScaleMin: utils.toNumber(cfgScale?.min, 0),
+        cfgScaleMax: Math.min(10, utils.toNumber(cfgScale?.max, 10)),
+        cfgScaleStep: utils.toNumber(cfgScale?.step, 0.5),
     };
 };

@@ -7,7 +7,7 @@ export type GenerateWrapApi = {
 };
 
 export const createGenerateWrap = (deps: {
-    getClips: () => import("./TypesTemp").Clip[];
+    getClips: () => import("./types").Clip[];
 }): GenerateWrapApi => {
     let genButtonWrapped = false;
     let genWrapInterval: ReturnType<typeof setInterval> | null = null;
