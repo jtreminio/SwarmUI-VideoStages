@@ -76,11 +76,7 @@ public sealed class AudioInjector(WorkflowGenerator g)
         {
             fps = g.UserInput.Get(T2IParamTypes.VideoFPS, 24);
         }
-        if (fps <= 0)
-        {
-            fps = 24;
-        }
-        return fps;
+        return fps > 0 ? fps : 24;
     }
 
     private JToken ResolveLengthToFramesAudioSource(JToken rawAudioPath)
@@ -92,23 +88,14 @@ public sealed class AudioInjector(WorkflowGenerator g)
 
         foreach (JProperty property in g.Workflow.Properties())
         {
-            if (property.Value is not JObject node)
-            {
-                continue;
-            }
-
-            if ($"{node["class_type"]}" != NodeTypes.SwarmEnsureAudio)
-            {
-                continue;
-            }
-
-            if (node["inputs"] is not JObject inputs
+            if (property.Value is not JObject node
+                || $"{node["class_type"]}" != NodeTypes.SwarmEnsureAudio
+                || node["inputs"] is not JObject inputs
                 || inputs["audio"] is not JArray audioInput
                 || audioInput.Count != 2)
             {
                 continue;
             }
-
             if (ConnectionRefsEqual(audioInput, rawRef))
             {
                 return new JArray(property.Name, 0);
@@ -174,10 +161,11 @@ public sealed class AudioInjector(WorkflowGenerator g)
     {
         g.RunOnNodesOfClass(NodeTypes.EmptyLTXVLatentVideo, (_, videoData) =>
         {
-            if (videoData["inputs"] is JObject videoInputs)
+            if (videoData["inputs"] is not JObject videoInputs)
             {
-                videoInputs["length"] = CloneConnection(framesConnection);
+                return;
             }
+            videoInputs["length"] = CloneConnection(framesConnection);
         });
     }
 

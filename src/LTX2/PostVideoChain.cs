@@ -7,11 +7,7 @@ using VideoStages;
 
 namespace VideoStages.LTX2;
 
-/// <summary>
-/// Captures and retargets the native LTX post-video decode chain so VideoStages can
-/// insert additional samplers before the existing decode/save nodes instead of
-/// appending a second final video save.
-/// </summary>
+/// <summary>Capture of the native LTX post-video decode chain for splicing samplers before decode/save (no second final save).</summary>
 internal sealed class PostVideoChain
 {
     private const string OriginalAudioLatentNodeHelperKey = "videostages.original-audio-latent";
@@ -134,11 +130,6 @@ internal sealed class PostVideoChain
 
     public WGNodeData CreateStageInputVae()
     {
-        if (VideoVaePath is null || VideoVaePath.Count != 2)
-        {
-            return g.CurrentVae;
-        }
-
         return new WGNodeData(new JArray(VideoVaePath[0], VideoVaePath[1]), g, WGNodeData.DT_VAE, ResolveVideoCompat());
     }
 
@@ -236,10 +227,7 @@ internal sealed class PostVideoChain
         AttachSourceAudio(g.CurrentMedia);
     }
 
-    /// <summary>
-    /// Like <see cref="SpliceCurrentOutput"/> but wires a new decode branch so later clips
-    /// do not retarget the shared root VAEDecode / audio decode nodes (required for parallel clips).
-    /// </summary>
+    /// <summary>Like <see cref="SpliceCurrentOutput"/>, with a dedicated decode branch for parallel clips (no shared root decode retarget).</summary>
     public void SpliceCurrentOutputToDedicatedBranch(
         WGNodeData vae,
         int outputWidth,
@@ -248,11 +236,6 @@ internal sealed class PostVideoChain
         int? outputFps)
     {
         if (g.CurrentMedia?.Path is not JArray stageOutputPath || stageOutputPath.Count != 2)
-        {
-            return;
-        }
-
-        if (AudioVaePath is null || AudioVaePath.Count != 2)
         {
             return;
         }
@@ -414,11 +397,6 @@ internal sealed class PostVideoChain
             return CloneAudioReference(CurrentOutputMedia.AttachedAudio);
         }
 
-        if (AudioLatentPath is null || AudioLatentPath.Count != 2)
-        {
-            return null;
-        }
-
         return new WGNodeData(
             new JArray(AudioLatentPath[0], AudioLatentPath[1]),
             g,
@@ -508,8 +486,7 @@ internal sealed class PostVideoChain
 
     private static void RememberOriginalAudioLatent(WorkflowGenerator generator, JArray audioLatentPath)
     {
-        if (generator is null
-            || audioLatentPath is null
+        if (audioLatentPath is null
             || audioLatentPath.Count != 2
             || generator.NodeHelpers.ContainsKey(OriginalAudioLatentNodeHelperKey))
         {

@@ -287,11 +287,6 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             return ApplyLatentUpscale(stageLatent, latentMethod, stage.Upscale, width, height);
         }
 
-        // Pixel/model upscales (pixel-* / model-*) are applied at the image level by
-        // StageRunner.ApplyStageUpscaleIfNeeded before BuildStageLatent re-encodes the
-        // upscaled frames. By the time we reach this point on the LTX-V2 latent path the
-        // dimension bump is already baked into stageLatent, so there is nothing further to
-        // do here. Unrecognized methods (no known prefix) silently fall through too.
         return stageLatent;
     }
 
@@ -469,11 +464,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         return new JArray(preprocessNode, 0);
     }
 
-    /// <summary>
-    /// Root video resolution may skip inserting <see cref="NodeTypes.ImageScale"/> on the live
-    /// decode branch (see <see cref="RootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia"/>),
-    /// but LTXVPreprocess still expects clip-sized frames. Match the root clip dimensions here.
-    /// </summary>
+    /// <summary>Scale guide images to root clip size when the live decode branch skipped ImageScale.</summary>
     private JArray EnsureClipResolutionBeforeLtxvPreprocess(JArray guideImagePath)
     {
         if (guideImagePath is null || guideImagePath.Count != 2)
@@ -654,8 +645,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             });
             genInfo.PosCond = [postSamplerCrop, 0];
             genInfo.NegCond = [postSamplerCrop, 1];
-            // Preserve DT_LATENT_AUDIOVIDEO after concat+sample; forcing DT_LATENT_VIDEO would skip
-            // LTXVSeparateAVLatent in DecodeLatents and feed combined AV samples straight to VAEDecode.
+            // null keeps DT_LATENT_AUDIOVIDEO so decode still separates AV before VAEDecode.
             g.CurrentMedia = g.CurrentMedia.WithPath([postSamplerCrop, 2], null, genInfo.Model.Compat);
             _needsLtxvCropGuidesAfterSampler = false;
         }
