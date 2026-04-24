@@ -5,10 +5,6 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
-/// <summary>
-/// Reads Base2Edit-published stage refs from <see cref="WorkflowGenerator.NodeHelpers"/> without
-/// taking a compile-time dependency on the Base2Edit extension assembly.
-/// </summary>
 internal static class Base2EditPublishedStageRefs
 {
     private const string Prefix = "b2e.published.edit.";

@@ -1,8 +1,5 @@
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using Xunit;
 
@@ -18,7 +15,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(
                 models.VideoModel.Name,
                 "Base",
@@ -32,8 +29,7 @@ public partial class StageFlowTests
                 control: 0.5,
                 upscale: 1.0,
                 upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
-                steps: 12)
-        ).ToString();
+                steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
@@ -66,7 +62,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
             MakeStage(
                 models.VideoModel.Name,
@@ -81,8 +77,7 @@ public partial class StageFlowTests
                 control: 0.5,
                 upscale: 2.0,
                 upscaleMethod: "pixel-lanczos",
-                steps: 8)
-        ).ToString();
+                steps: 8));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
@@ -116,7 +111,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(
                 models.VideoModel.Name,
                 "Generated",
@@ -130,8 +125,7 @@ public partial class StageFlowTests
                 control: 0.5,
                 upscale: 1.0,
                 upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
-                steps: 12)
-        ).ToString();
+                steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
@@ -168,10 +162,9 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(models.VideoModel.Name, "Base", steps: 10),
-            MakeStage(models.VideoModel.Name, secondStageReference, steps: 12)
-        ).ToString();
+            MakeStage(models.VideoModel.Name, secondStageReference, steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));

@@ -61,12 +61,11 @@ public class AudioInjectionTests
         return clip;
     }
 
-    private static JObject MakeRootConfig(JObject clip, JObject uploadedAudio = null) => new()
+    private static JObject MakeRootConfig(JObject clip) => new()
     {
         ["Width"] = 512,
         ["Height"] = 512,
         ["Clips"] = new JArray(clip),
-        ["UploadedAudio"] = uploadedAudio
     };
 
     private static JObject MakeMultiClipRootConfig(params JObject[] clips) => new()
@@ -378,10 +377,9 @@ public class AudioInjectionTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeRootConfig(
-            MakeClipConfig(
-                VideoStagesExtension.AudioSourceUpload,
-                MakeStage(models.VideoModel.Name)),
-            MakeUploadedAudio()
+            MakeClipConfigWithUpload(
+                MakeUploadedAudio(),
+                MakeStage(models.VideoModel.Name))
         ).ToString();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
@@ -420,7 +418,7 @@ public class AudioInjectionTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(MakeStage(models.VideoModel.Name)).ToString();
+        string stagesJson = new JArray(MakeClip(512, 512, MakeStage(models.VideoModel.Name))).ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));

@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -70,6 +68,12 @@ public partial class StageFlowTests
             ["Height"] = height,
             ["Clips"] = new JArray(clips)
         };
+
+    internal static string JsonSingleClipStages(int width, int height, params JObject[] stages) =>
+        new JArray(MakeClip(width, height, stages)).ToString();
+
+    internal static string JsonSingleClipStages512(params JObject[] stages) =>
+        JsonSingleClipStages(512, 512, stages);
 
     private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, string prompt = "unit test prompt")
     {

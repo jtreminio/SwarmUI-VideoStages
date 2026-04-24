@@ -246,7 +246,11 @@ internal class StageRunner(WorkflowGenerator g)
             return g.CurrentMedia;
         }
 
-        Logs.Warning($"VideoStages: Stage {stage.Id} uses unsupported upscale method '{stage.UpscaleMethod}'. Falling back to the unscaled input.");
+        if (stage.Upscale != 1)
+        {
+            Logs.Warning($"VideoStages: Stage {stage.Id} uses unsupported upscale method '{stage.UpscaleMethod}'. Ignoring upscale.");
+        }
+
         g.CurrentMedia = source;
         return source;
     }

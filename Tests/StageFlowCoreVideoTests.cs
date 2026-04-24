@@ -1,8 +1,5 @@
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using Xunit;
 
@@ -30,9 +27,8 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated")
-        ).ToString();
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Generated"));
 
         T2IParamInput input = BuildInput(models.BaseModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNoopSteps());
@@ -52,9 +48,8 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
-        ).ToString();
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
@@ -97,34 +92,6 @@ public partial class StageFlowTests
         Assert.Equal(768, scaleNode.Node["inputs"]?.Value<int>("width"));
         Assert.Equal(448, scaleNode.Node["inputs"]?.Value<int>("height"));
         Assert.Equal("lanczos", $"{scaleNode.Node["inputs"]?["upscale_method"]}");
-        Assert.Equal("center", $"{scaleNode.Node["inputs"]?["crop"]}");
-    }
-
-    [Fact]
-    public void Root_stage_resolution_prefers_root_object_dimensions_over_legacy_clip_dimensions()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        string stagesJson = MakeRootConfig(
-            width: 1024,
-            height: 576,
-            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
-        ).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-
-        WorkflowNode scaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
-            node => JToken.DeepEquals(
-                WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray("12", 0)));
-
-        Assert.Equal(1024, scaleNode.Node["inputs"]?.Value<int>("width"));
-        Assert.Equal(576, scaleNode.Node["inputs"]?.Value<int>("height"));
         Assert.Equal("center", $"{scaleNode.Node["inputs"]?["crop"]}");
     }
 
@@ -292,9 +259,8 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Base", control: 0.5, steps: 10)
-        ).ToString();
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Base", control: 0.5, steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
@@ -650,9 +616,8 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Base", steps: 10)
-        ).ToString();
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Base", steps: 10));
 
         T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
@@ -677,10 +642,9 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
-            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 14, cfgScale: 6.0, sampler: "dpmpp_2m", scheduler: "karras")
-        ).ToString();
+            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 14, cfgScale: 6.0, sampler: "dpmpp_2m", scheduler: "karras"));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
@@ -703,9 +667,8 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        string stagesJson = new JArray(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10)
-        ).ToString();
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         string prompt = "global-only words <video>video-only words";
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);

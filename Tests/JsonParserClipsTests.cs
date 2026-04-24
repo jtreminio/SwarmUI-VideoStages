@@ -1,9 +1,6 @@
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using Xunit;
@@ -71,20 +68,14 @@ public class JsonParserClipsTests
     private static JObject MakeRootConfig(
         int width,
         int height,
-        IEnumerable<JObject> clips,
-        JObject uploadedAudio = null)
+        IEnumerable<JObject> clips)
     {
-        JObject config = new()
+        return new JObject
         {
             ["Width"] = width,
             ["Height"] = height,
             ["Clips"] = new JArray(clips),
         };
-        if (uploadedAudio is not null)
-        {
-            config["UploadedAudio"] = uploadedAudio;
-        }
-        return config;
     }
 
     private static JObject MakeUploadedAudio(
@@ -113,25 +104,6 @@ public class JsonParserClipsTests
         return new JsonParser(generator);
     }
 
-    [Fact]
-    public void ParseClips_LegacyStageArray_TreatedAsSingleClip()
-    {
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeStage("model-a"),
-            MakeStage("model-b")
-        ));
-        JsonParser parser = BuildParser(json);
-
-        List<JsonParser.ClipSpec> clips = parser.ParseClips();
-
-        Assert.Single(clips);
-        Assert.Equal("Clip 0", clips[0].Name);
-        Assert.False(clips[0].Skipped);
-        Assert.Empty(clips[0].Refs);
-        Assert.Equal(2, clips[0].Stages.Count);
-        Assert.Equal("model-a", clips[0].Stages[0].Model);
-        Assert.Equal("model-b", clips[0].Stages[1].Model);
-    }
 
     [Fact]
     public void ParseClips_ClipShape_PopulatesPerClipFields()
@@ -194,28 +166,6 @@ public class JsonParserClipsTests
     }
 
     [Fact]
-    public void ParseUploadedAudio_RootShape_ReturnsEmbeddedAudioFile()
-    {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
-            width: 1344,
-            height: 832,
-            clips: [
-                MakeClip(
-                    "First Clip",
-                    stages: [MakeStage("model-a")],
-                    audioSource: VideoStagesExtension.AudioSourceUpload)
-            ],
-            uploadedAudio: MakeUploadedAudio()));
-        JsonParser parser = BuildParser(json);
-
-        AudioFile uploadedAudio = parser.ParseUploadedAudio();
-
-        Assert.NotNull(uploadedAudio);
-        Assert.Equal("clip.wav", uploadedAudio.SourceFilePath);
-        Assert.Equal("wav", uploadedAudio.Type.Extension);
-    }
-
-    [Fact]
     public void ParseClips_PerClipUploadedAudio_IsParsed()
     {
         string json = JsonConvert.SerializeObject(new JArray(
@@ -271,29 +221,6 @@ public class JsonParserClipsTests
         AudioFile audio = parser.ParseUploadedAudioForClip(clip);
 
         Assert.Null(audio);
-    }
-
-    [Fact]
-    public void ParseUploadedAudioForClip_FallsBackToRootLevelUpload_WhenClipHasNone()
-    {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
-            width: 1024,
-            height: 768,
-            clips: [
-                MakeClip(
-                    "First Clip",
-                    stages: [MakeStage("model-a")],
-                    audioSource: VideoStagesExtension.AudioSourceUpload)
-            ],
-            uploadedAudio: MakeUploadedAudio(fileName: "legacy.wav")));
-        JsonParser parser = BuildParser(json);
-
-        JsonParser.ClipSpec clip = parser.ParseClips().Single();
-        Assert.Null(clip.UploadedAudio);
-
-        AudioFile audio = parser.ParseUploadedAudioForClip(clip);
-        Assert.NotNull(audio);
-        Assert.Equal("legacy.wav", audio.SourceFilePath);
     }
 
     [Fact]

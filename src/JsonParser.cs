@@ -64,12 +64,10 @@ public class JsonParser(WorkflowGenerator g)
         IReadOnlyList<StageSpec> Stages
     );
 
-    /// <summary>Top-level parse result. <see cref="UploadedAudio"/> is legacy root-level only; new JSON uses per-clip uploads.</summary>
     public sealed record VideoStagesSpec(
         int? Width,
         int? Height,
         int? FPS,
-        UploadedAudioSpec UploadedAudio,
         IReadOnlyList<ClipSpec> Clips
     );
 
@@ -84,7 +82,7 @@ public class JsonParser(WorkflowGenerator g)
         string Scheduler
     );
 
-    /// <summary>Flattens all non-skipped stages from configured JSON (clip-shaped or legacy single clip). Stages get clip audio/dimensions.</summary>
+    /// <summary>Flattens all non-skipped stages from configured JSON. Stages get clip audio/dimensions.</summary>
     public List<StageSpec> ParseStages()
     {
         VideoStagesSpec config = ParseConfig();
@@ -162,28 +160,23 @@ public class JsonParser(WorkflowGenerator g)
             : null;
     }
 
-    /// <summary>Parses JSON into clips; legacy stage-only JSON becomes one synthetic clip.</summary>
+    /// <summary>Parses JSON into clips. Each top-level entry must be a clip object with a <c>Stages</c> array.</summary>
     public VideoStagesSpec ParseConfig()
     {
-        (int? width, int? height, int? fps, UploadedAudioSpec uploadedAudio, List<JObject> rawEntries) = GetJsonTopLevelConfig();
+        (int? width, int? height, int? fps, List<JObject> rawEntries) = GetJsonTopLevelConfig();
         if (rawEntries.Count == 0)
         {
-            return new VideoStagesSpec(width, height, fps, uploadedAudio, []);
+            return new VideoStagesSpec(width, height, fps, []);
         }
 
-        bool isClipShaped = rawEntries.Any(IsClipShape);
+        if (!rawEntries.All(IsClipShape))
+        {
+            Logs.Warning("VideoStages: Each Video Stages entry must be a clip object with a Stages array.");
+            return new VideoStagesSpec(width, height, fps, []);
+        }
+
         StageDefaults defaults = BuildDefaults();
         List<ClipSpec> parsed = [];
-
-        if (!isClipShaped)
-        {
-            ClipSpec legacyClip = ParseLegacyStageArrayAsSingleClip(rawEntries, defaults);
-            if (legacyClip.Stages.Count > 0)
-            {
-                parsed.Add(legacyClip);
-            }
-            return new VideoStagesSpec(width, height, fps, uploadedAudio, parsed);
-        }
 
         for (int i = 0; i < rawEntries.Count; i++)
         {
@@ -194,21 +187,12 @@ public class JsonParser(WorkflowGenerator g)
                 parsed.Add(clip);
             }
         }
-        return new VideoStagesSpec(width, height, fps, uploadedAudio, parsed);
+        return new VideoStagesSpec(width, height, fps, parsed);
     }
 
-    /// <summary>Root-level uploaded audio from JSON (legacy); prefer <see cref="ParseUploadedAudioForClip"/> for new payloads.</summary>
-    public AudioFile ParseUploadedAudio()
-    {
-        return MaterializeUploadedAudio(ParseConfig().UploadedAudio);
-    }
-
-    /// <summary>Per-clip upload, or root-level fallback from <see cref="ParseUploadedAudio"/>.</summary>
-    public AudioFile ParseUploadedAudioForClip(ClipSpec clip)
-    {
-        AudioFile perClip = MaterializeUploadedAudio(clip?.UploadedAudio);
-        return perClip ?? ParseUploadedAudio();
-    }
+    /// <summary>Resolves per-clip uploaded audio from JSON.</summary>
+    public AudioFile ParseUploadedAudioForClip(ClipSpec clip) =>
+        MaterializeUploadedAudio(clip?.UploadedAudio);
 
     private AudioFile MaterializeUploadedAudio(UploadedAudioSpec spec)
     {
@@ -265,30 +249,6 @@ public class JsonParser(WorkflowGenerator g)
 
     private static bool IsClipShape(JObject entry) =>
         entry.Properties().Any(p => string.Equals(p.Name, "Stages", StringComparison.OrdinalIgnoreCase));
-
-    private ClipSpec ParseLegacyStageArrayAsSingleClip(List<JObject> rawStages, StageDefaults defaults)
-    {
-        List<StageSpec> stages = [];
-        for (int i = 0; i < rawStages.Count; i++)
-        {
-            if (TryParseStage(rawStages[i], i, defaults, clipRefCount: 0, out StageSpec normalized))
-            {
-                stages.Add(normalized);
-            }
-        }
-        return new ClipSpec(
-            Id: 0,
-            Name: "Clip 0",
-            Skipped: false,
-            DurationSeconds: 0,
-            AudioSource: VideoStagesExtension.AudioSourceNative,
-            Width: null,
-            Height: null,
-            UploadedAudio: null,
-            Refs: [],
-            Stages: stages
-        );
-    }
 
     private ClipSpec ParseClip(JObject clipObj, int clipIndex, StageDefaults defaults)
     {
@@ -457,12 +417,12 @@ public class JsonParser(WorkflowGenerator g)
         return GetEmbeddedUploadSpec(obj, "UploadedAudio");
     }
 
-    private (int? Width, int? Height, int? FPS, UploadedAudioSpec UploadedAudio, List<JObject> Entries) GetJsonTopLevelConfig()
+    private (int? Width, int? Height, int? FPS, List<JObject> Entries) GetJsonTopLevelConfig()
     {
         if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
             || string.IsNullOrWhiteSpace(json))
         {
-            return (null, null, null, null, []);
+            return (null, null, null, []);
         }
 
         try
@@ -470,7 +430,7 @@ public class JsonParser(WorkflowGenerator g)
             JToken token = JToken.Parse(json);
             if (token is JArray array)
             {
-                return (null, null, null, null, [.. array.OfType<JObject>()]);
+                return (null, null, null, [.. array.OfType<JObject>()]);
             }
             if (token is JObject obj)
             {
@@ -478,16 +438,15 @@ public class JsonParser(WorkflowGenerator g)
                     GetOptionalNullableInt(obj, "Width"),
                     GetOptionalNullableInt(obj, "Height"),
                     GetOptionalNullableInt(obj, "FPS"),
-                    GetUploadedAudio(obj),
                     GetObjectArray(obj, "Clips")
                 );
             }
-            return (null, null, null, null, []);
+            return (null, null, null, []);
         }
         catch
         {
             Logs.Warning("VideoStages: Ignoring invalid Video Stages JSON.");
-            return (null, null, null, null, []);
+            return (null, null, null, []);
         }
     }
 
@@ -507,12 +466,12 @@ public class JsonParser(WorkflowGenerator g)
             : g.UserInput.Get(ComfyUIBackendExtension.SchedulerParam, "normal", autoFixDefault: true);
 
         return new StageDefaults(
-            Control: DefaultControl,
-            Upscale: DefaultUpscale,
+            Control: NormalizeControl(DefaultControl),
+            Upscale: NormalizeUpscale(DefaultUpscale),
             UpscaleMethod: DefaultUpscaleMethod,
             Vae: "",
             Steps: Math.Max(1, steps),
-            CfgScale: cfgScale,
+            CfgScale: NormalizeCfgScale(cfgScale),
             Sampler: sampler,
             Scheduler: scheduler
         );
@@ -527,17 +486,17 @@ public class JsonParser(WorkflowGenerator g)
             Logs.Warning($"VideoStages: Stage {index} is missing required field 'Model' and will be skipped.");
             return false;
         }
-        double control = GetOptionalDouble(stage, "Control", defaults.Control, index);
-        double upscale = GetOptionalDouble(stage, "Upscale", defaults.Upscale, index);
+        double control = NormalizeControl(GetOptionalDouble(stage, "Control", defaults.Control, index));
+        double upscale = NormalizeUpscale(GetOptionalDouble(stage, "Upscale", defaults.Upscale, index));
         string upscaleMethod = GetOptionalString(stage, "UpscaleMethod", defaults.UpscaleMethod, index, allowEmpty: false);
         if (index == 0)
         {
             bool hasUpscaleKey = JsonHasOwnProperty(stage, "Upscale");
             bool hasUpscaleMethodKey = JsonHasOwnProperty(stage, "UpscaleMethod");
-            if (ShouldWarnFirstStageUpscaleIgnored(hasUpscaleKey, hasUpscaleMethodKey, upscale, upscaleMethod))
+            if (ShouldWarnFirstStageUpscaleIgnored(hasUpscaleKey, hasUpscaleMethodKey, upscale))
             {
                 Logs.Warning(
-                    $"VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', which are ignored for that stage only. Proceeding with upscale {DefaultUpscale} and method '{DefaultUpscaleMethod}' for stage 0.");
+                    $"VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', which are ignored for that stage only.");
             }
             upscale = DefaultUpscale;
             upscaleMethod = DefaultUpscaleMethod;
@@ -548,7 +507,7 @@ public class JsonParser(WorkflowGenerator g)
         }
         string vae = NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, index, allowEmpty: true));
         int steps = GetOptionalInt(stage, "Steps", defaults.Steps, index);
-        double cfgScale = GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index);
+        double cfgScale = NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index));
         string sampler = GetOptionalString(stage, "Sampler", defaults.Sampler, index, allowEmpty: false);
         string scheduler = GetOptionalString(stage, "Scheduler", defaults.Scheduler, index, allowEmpty: false);
         string imageReference = NormalizeImageReference(GetString(stage, "ImageReference"), index);
@@ -557,7 +516,7 @@ public class JsonParser(WorkflowGenerator g)
 
         parsedStage = new StageSpec(
             Id: index,
-            Control: Clamp(control, 0, 1),
+            Control: control,
             Upscale: upscale,
             UpscaleMethod: upscaleMethod,
             Model: model,
@@ -788,28 +747,34 @@ public class JsonParser(WorkflowGenerator g)
     private static bool JsonHasOwnProperty(JObject obj, string key) =>
         obj.Properties().Any(p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
 
+    private static double TruncateToDecimals(double value, int decimals)
+    {
+        double factor = Math.Pow(10, decimals);
+        return Math.Truncate(value * factor) / factor;
+    }
+
+    private static double NormalizeControl(double control) =>
+        TruncateToDecimals(Clamp(control, 0, 1), 2);
+
+    private static double NormalizeUpscale(double upscale) =>
+        TruncateToDecimals(upscale, 2);
+
+    private static double NormalizeCfgScale(double cfgScale) =>
+        TruncateToDecimals(cfgScale, 1);
+
     private static bool ShouldWarnFirstStageUpscaleIgnored(
         bool hasUpscaleKey,
         bool hasUpscaleMethodKey,
-        double upscale,
-        string upscaleMethod)
+        double upscale)
     {
         if (!hasUpscaleKey && !hasUpscaleMethodKey)
         {
             return false;
         }
-        if (Math.Abs(upscale - DefaultUpscale) > 1e-9)
+        if (NormalizeUpscale(upscale) == 1)
         {
-            return true;
+            return false;
         }
-        if (hasUpscaleMethodKey
-            && !string.Equals(
-                (upscaleMethod ?? "").Trim(),
-                DefaultUpscaleMethod,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-        return false;
+        return true;
     }
 }
