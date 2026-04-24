@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages;
 
 namespace VideoStages.LTX2;
 
@@ -85,7 +82,7 @@ internal sealed class PostVideoChain
         string separateId = $"{samplesRef[0]}";
         if (!generator.Workflow.TryGetValue(separateId, out JToken separateToken)
             || separateToken is not JObject separateNode
-            || $"{separateNode["class_type"]}" != NodeTypes.LTXVSeparateAVLatent)
+            || $"{separateNode["class_type"]}" != LtxNodeTypes.LTXVSeparateAVLatent)
         {
             return null;
         }
@@ -149,7 +146,7 @@ internal sealed class PostVideoChain
             return detachedCurrent;
         }
 
-        string detachedSeparate = g.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
+        string detachedSeparate = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
         {
             ["av_latent"] = new JArray(AvLatentPath[0], AvLatentPath[1])
         });
@@ -212,7 +209,7 @@ internal sealed class PostVideoChain
             return;
         }
 
-        string newSeparate = g.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
+        string newSeparate = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
         {
             ["av_latent"] = stageOutputPath
         });
@@ -240,7 +237,7 @@ internal sealed class PostVideoChain
             return;
         }
 
-        string newSeparate = g.CreateNode(NodeTypes.LTXVSeparateAVLatent, new JObject()
+        string newSeparate = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
         {
             ["av_latent"] = stageOutputPath
         });
@@ -255,7 +252,7 @@ internal sealed class PostVideoChain
         {
             n["inputs"] = CreateFinalTiledDecodeInputs(vaeRef, new JArray(newSeparate, 0));
         });
-        string dedicatedAudioDecode = g.CreateNode(NodeTypes.LTXVAudioVAEDecode, new JObject()
+        string dedicatedAudioDecode = g.CreateNode(LtxNodeTypes.LTXVAudioVAEDecode, new JObject()
         {
             ["audio_vae"] = new JArray(AudioVaePath[0], AudioVaePath[1]),
             ["samples"] = new JArray(newSeparate, 1)
@@ -308,7 +305,7 @@ internal sealed class PostVideoChain
             {
                 continue;
             }
-            if ($"{node["class_type"]}" != NodeTypes.LTXVAudioVAEDecode)
+            if ($"{node["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode)
             {
                 continue;
             }

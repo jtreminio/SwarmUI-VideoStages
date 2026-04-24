@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -140,12 +137,7 @@ public class StageSequenceRunner(
     {
         WGNodeData referenceMedia = g.CurrentMedia;
         WGNodeData referenceVae = g.CurrentVae;
-        PostVideoChain postVideoChain = PostVideoChain.TryCapture(g);
-        if (postVideoChain is not null)
-        {
-            referenceMedia = postVideoChain.CreateStageInput();
-            referenceVae = postVideoChain.CreateStageInputVae();
-        }
+        LtxStageRefCapture.ApplyPostVideoChainCaptureIfPresent(g, ref referenceMedia, ref referenceVae);
         store.Capture(kind, index, referenceMedia, referenceVae);
     }
 

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
@@ -57,10 +55,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             if (!rootStageTakeover)
             {
                 AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, uploadedAudios);
-                if (firstClipAudio is not null)
-                {
-                    new AudioInjector(g).TryInject(firstClipAudio);
-                }
+                LtxAudioCoordinator.TryInject(g, firstClipAudio);
             }
 
             new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, uploadedAudios, rootStageTakeover).Run();
@@ -74,29 +69,16 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     private void TryInjectConfiguredAudio(JsonParser parser, List<JsonParser.ClipSpec> clips)
     {
-        if (!g.IsLTXV2() || g.CurrentAudioVae is null)
-        {
-            return;
-        }
-
         AudioStageDetector.Detection detectedAudio = new AudioStageDetector(g).Detect();
         if (clips.Count == 0)
         {
-            if (detectedAudio is not null)
-            {
-                new AudioInjector(g).TryInject(detectedAudio);
-            }
+            LtxAudioCoordinator.TryInject(g, detectedAudio);
             return;
         }
 
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
         AudioStageDetector.Detection detection = ResolveClipAudioSource(clips[0].Id, clips[0].AudioSource, detectedAudio, uploadedAudios);
-        if (detection is null)
-        {
-            return;
-        }
-
-        new AudioInjector(g).TryInject(detection);
+        LtxAudioCoordinator.TryInject(g, detection);
     }
 
     /// <summary>Per-clip <see cref="AudioStageDetector.Detection"/> for upload audio; empty when no clip uses upload (avoids orphan load nodes for native-audio clips).</summary>

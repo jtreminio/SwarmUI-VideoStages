@@ -1,0 +1,89 @@
+using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
+
+namespace VideoStages;
+
+/// <summary>Shared guide media resolution for native and LTX2 VideoStages paths.</summary>
+internal static class StageGuideMediaHelper
+{
+    internal static WGNodeData ResolveGuideMedia(
+        WorkflowGenerator g,
+        StageRefStore.StageRef guideReference,
+        LTX2.PostVideoChain postVideoChain)
+    {
+        if (guideReference?.Media is null)
+        {
+            return null;
+        }
+        if (postVideoChain is not null && IsLiveCurrentOutputReference(guideReference.Media, postVideoChain))
+        {
+            WGNodeData detachedGuideVae = guideReference.Vae ?? postVideoChain.CreateStageInputVae() ?? g.CurrentVae;
+            return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
+        }
+        if (guideReference.Media.DataType == WGNodeData.DT_IMAGE || guideReference.Media.DataType == WGNodeData.DT_VIDEO)
+        {
+            return guideReference.Media;
+        }
+
+        WGNodeData guideVae = guideReference.Vae ?? g.CurrentVae;
+        if (guideReference.Media.Path is JArray guidePath
+            && WorkflowUtils.TryResolveNearestDownstreamDecodeOutput(g.Workflow, guidePath, out JArray decodedGuidePath))
+        {
+            string rawDataType = guideReference.Media.DataType == WGNodeData.DT_LATENT_VIDEO
+                || guideReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
+                ? WGNodeData.DT_VIDEO
+                : WGNodeData.DT_IMAGE;
+            return guideReference.Media.WithPath(decodedGuidePath, rawDataType, guideVae?.Compat);
+        }
+        return guideReference.Media.AsRawImage(guideVae);
+    }
+
+    internal static bool IsLiveCurrentOutputReference(WGNodeData guideMedia, LTX2.PostVideoChain postVideoChain)
+    {
+        if (guideMedia?.Path is not JArray guidePath || postVideoChain is null)
+        {
+            return false;
+        }
+
+        return JToken.DeepEquals(guidePath, postVideoChain.CurrentOutputMedia?.Path)
+            || JToken.DeepEquals(guidePath, postVideoChain.DecodeOutputPath)
+            || JToken.DeepEquals(guidePath, postVideoChain.AvLatentPath);
+    }
+
+    internal static WGNodeData PrepareGuideMedia(
+        WorkflowGenerator g,
+        WGNodeData guideMedia,
+        WGNodeData sourceMedia,
+        bool scaleToSourceSize)
+    {
+        WGNodeData resolvedGuideMedia = guideMedia ?? sourceMedia;
+        if (!scaleToSourceSize)
+        {
+            return resolvedGuideMedia;
+        }
+
+        int targetWidth = sourceMedia.Width ?? g.UserInput.GetImageWidth();
+        int targetHeight = sourceMedia.Height ?? g.UserInput.GetImageHeight();
+        int currentWidth = resolvedGuideMedia.Width ?? targetWidth;
+        int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
+        if (currentWidth == targetWidth && currentHeight == targetHeight)
+        {
+            resolvedGuideMedia.Width = targetWidth;
+            resolvedGuideMedia.Height = targetHeight;
+            return resolvedGuideMedia;
+        }
+
+        string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
+        {
+            ["image"] = resolvedGuideMedia.Path,
+            ["width"] = targetWidth,
+            ["height"] = targetHeight,
+            ["upscale_method"] = "lanczos",
+            ["crop"] = "disabled"
+        });
+        resolvedGuideMedia = resolvedGuideMedia.WithPath([scaleNode, 0]);
+        resolvedGuideMedia.Width = targetWidth;
+        resolvedGuideMedia.Height = targetHeight;
+        return resolvedGuideMedia;
+    }
+}

@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
-using VideoStages;
 
 namespace VideoStages.LTX2;
 
@@ -165,7 +162,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         else
         {
             JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path);
-            string imgToVideoNode = g.CreateNode(NodeTypes.LTXVImgToVideoInplace, new JObject()
+            string imgToVideoNode = g.CreateNode(LtxNodeTypes.LTXVImgToVideoInplace, new JObject()
             {
                 ["vae"] = genInfo.Vae.Path,
                 ["image"] = preprocessedGuidePath,
@@ -176,7 +173,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             g.CurrentMedia = stageLatent.WithPath([imgToVideoNode, 0], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
         }
 
-        string conditioningNode = g.CreateNode(NodeTypes.LTXVConditioning, new JObject()
+        string conditioningNode = g.CreateNode(LtxNodeTypes.LTXVConditioning, new JObject()
         {
             ["positive"] = genInfo.PosCond,
             ["negative"] = genInfo.NegCond,
@@ -216,7 +213,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             }
 
             JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path);
-            string imgToVideoNode = g.CreateNode(NodeTypes.LTXVImgToVideoInplace, new JObject()
+            string imgToVideoNode = g.CreateNode(LtxNodeTypes.LTXVImgToVideoInplace, new JObject()
             {
                 ["vae"] = genInfo.Vae.Path,
                 ["image"] = preprocessed,
@@ -243,7 +240,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
 
             JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path);
             int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
-            string addGuideNode = g.CreateNode(NodeTypes.LTXVAddGuide, new JObject()
+            string addGuideNode = g.CreateNode(LtxNodeTypes.LTXVAddGuide, new JObject()
             {
                 ["positive"] = genInfo.PosCond,
                 ["negative"] = genInfo.NegCond,
@@ -313,7 +310,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         {
             ["model_name"] = modelName
         });
-        string upsamplerNode = g.CreateNode(NodeTypes.LTXVLatentUpsampler, new JObject()
+        string upsamplerNode = g.CreateNode(LtxNodeTypes.LTXVLatentUpsampler, new JObject()
         {
             ["vae"] = genInfo.Vae.Path,
             ["samples"] = stageLatent.Path,
@@ -368,7 +365,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         {
             int width = Math.Max(sourceMedia.Width ?? g.UserInput.GetImageWidth(), 16);
             int height = Math.Max(sourceMedia.Height ?? g.UserInput.GetImageHeight(), 16);
-            string emptyLatent = g.CreateNode(NodeTypes.EmptyLTXVLatentVideo, new JObject()
+            string emptyLatent = g.CreateNode(LtxNodeTypes.EmptyLTXVLatentVideo, new JObject()
             {
                 ["width"] = width,
                 ["height"] = height,
@@ -456,7 +453,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             return reusedPath;
         }
 
-        string preprocessNode = g.CreateNode(NodeTypes.LTXVPreprocess, new JObject()
+        string preprocessNode = g.CreateNode(LtxNodeTypes.LTXVPreprocess, new JObject()
         {
             ["image"] = scaledGuidePath,
             ["img_compression"] = ImgCompression
@@ -551,7 +548,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
 
                 string consumerType = $"{consumerNode["class_type"]}";
                 if (consumer.InputName == "image"
-                    && consumerType == NodeTypes.LTXVPreprocess
+                    && consumerType == LtxNodeTypes.LTXVPreprocess
                     && HasMatchingImgCompression(consumerNode))
                 {
                     preprocessOutputPath = new JArray(consumer.NodeId, 0);
@@ -583,7 +580,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         }
 
         return $"{imagePath[1]}" == "0"
-            && $"{node["class_type"]}" == NodeTypes.LTXVPreprocess
+            && $"{node["class_type"]}" == LtxNodeTypes.LTXVPreprocess
             && HasMatchingImgCompression(node);
     }
 
@@ -607,7 +604,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         string explicitScheduler = g.UserInput.Get(ComfyUIBackendExtension.SchedulerParam, null, sectionId: genInfo.ContextID, includeBase: false);
 
         g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
-        RootVideoStageResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
+        LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
         string samplerNode = g.CreateKSampler(
             genInfo.Model.Path,
             genInfo.PosCond,
@@ -637,7 +634,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
 
         if (_needsLtxvCropGuidesAfterSampler)
         {
-            string postSamplerCrop = g.CreateNode(NodeTypes.LTXVCropGuides, new JObject()
+            string postSamplerCrop = g.CreateNode(LtxNodeTypes.LTXVCropGuides, new JObject()
             {
                 ["positive"] = genInfo.PosCond,
                 ["negative"] = genInfo.NegCond,

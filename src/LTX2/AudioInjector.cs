@@ -44,7 +44,7 @@ public sealed class AudioInjector(WorkflowGenerator g)
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.LTXVConcatAVLatent
+                || $"{node["class_type"]}" != LtxNodeTypes.LTXVConcatAVLatent
                 || node["inputs"] is not JObject inputs
                 || inputs["audio_latent"] is not JArray audioLatent
                 || audioLatent.Count != 2)
@@ -54,7 +54,7 @@ public sealed class AudioInjector(WorkflowGenerator g)
             string sourceId = $"{audioLatent[0]}";
             if (!g.Workflow.TryGetValue(sourceId, out JToken sourceToken)
                 || sourceToken is not JObject sourceNode
-                || $"{sourceNode["class_type"]}" != NodeTypes.LTXVEmptyLatentAudio)
+                || $"{sourceNode["class_type"]}" != LtxNodeTypes.LTXVEmptyLatentAudio)
             {
                 continue;
             }
@@ -159,7 +159,7 @@ public sealed class AudioInjector(WorkflowGenerator g)
 
     private void ApplyFramesConnectionToVideoLatents(JArray framesConnection)
     {
-        g.RunOnNodesOfClass(NodeTypes.EmptyLTXVLatentVideo, (_, videoData) =>
+        g.RunOnNodesOfClass(LtxNodeTypes.EmptyLTXVLatentVideo, (_, videoData) =>
         {
             if (videoData["inputs"] is not JObject videoInputs)
             {

@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
-using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.LTX2;
@@ -13,7 +9,7 @@ namespace VideoStages;
 /// <summary>Runs one VideoStages image-to-video stage (native or local LTX-V2 path).</summary>
 internal class StageRunner(WorkflowGenerator g)
 {
-    private readonly StageExecutor _stageExecutor = new(g);
+    private readonly LtxStageOrchestrator _ltxStageOrchestrator = new(g);
 
     private sealed record StageGenerationPlan(
         WorkflowGenerator.ImageToVideoGenInfo GenInfo,
@@ -35,274 +31,27 @@ internal class StageRunner(WorkflowGenerator g)
         WGNodeData sourceMedia = ApplyStageUpscaleIfNeeded(stage, sectionId);
         StageGenerationPlan generationPlan = BuildGenInfo(stage, sectionId, sourceMedia);
         WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
-        bool useLocalLtxv2Path = ShouldUseLocalLtxv2Path(genInfo, sourceMedia);
-        List<ResolvedClipRef> clipRefs = null;
-        ResolvedClipRef primaryGuideClipRef = null;
-        double guideMergeStrength = 1.0;
-        if (useLocalLtxv2Path)
-        {
-            clipRefs = ResolveStageClipRefs(stage, refStore, postVideoChain, sourceMedia);
-            primaryGuideClipRef = ExtractPrimaryGuideClipRef(clipRefs);
-            clipRefs = RemovePrimaryGuideClipRef(clipRefs, primaryGuideClipRef);
-            if (primaryGuideClipRef is not null)
-            {
-                guideMergeStrength = primaryGuideClipRef.Strength;
-            }
-        }
-        bool skipGuideReinjection = useLocalLtxv2Path
-            && primaryGuideClipRef is null
-            && (clipRefs is { Count: > 0 }
-                || ShouldSkipGeneratedGuideReinjection(stage, sourceMedia, guideReference, genInfo, postVideoChain));
-        WGNodeData guideMedia = useLocalLtxv2Path
-            ? ResolveLocalGuideMedia(primaryGuideClipRef, skipGuideReinjection, sourceMedia, priorOutputPath, postVideoChain)
-            : PrepareGuideMedia(
-                ResolveGuideMedia(guideReference, postVideoChain),
-                sourceMedia,
-                scaleToSourceSize: true);
 
-        if (useLocalLtxv2Path)
-        {
-            _stageExecutor.RunStage(
+        if (_ltxStageOrchestrator.TryRunLocalLtxPath(
                 stage,
+                guideReference,
+                refStore,
                 genInfo,
-                sourceMedia,
-                guideMedia,
-                skipGuideReinjection,
                 generationPlan.ApplySourceVideoLatent,
-                postVideoChain,
-                clipRefs,
-                guideMergeStrength);
+                sourceMedia,
+                priorOutputPath,
+                postVideoChain))
+        {
             return;
         }
 
+        WGNodeData guideMedia = StageGuideMediaHelper.PrepareGuideMedia(
+            g,
+            StageGuideMediaHelper.ResolveGuideMedia(g, guideReference, postVideoChain),
+            sourceMedia,
+            scaleToSourceSize: true);
+
         RunNativeStage(generationPlan, sourceMedia, guideMedia, priorOutputPath);
-    }
-
-    private List<ResolvedClipRef> ResolveStageClipRefs(
-        JsonParser.StageSpec stage,
-        StageRefStore refStore,
-        PostVideoChain postVideoChain,
-        WGNodeData sourceMedia)
-    {
-        IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs ?? [];
-        IReadOnlyList<double> strengths = stage.RefStrengths ?? [];
-        List<ResolvedClipRef> resolved = [];
-        for (int i = 0; i < refs.Count; i++)
-        {
-            JsonParser.RefSpec spec = refs[i];
-            double strength = i < strengths.Count
-                ? strengths[i]
-                : VideoStagesExtension.DefaultStageRefStrength;
-            WGNodeData raw = ResolveClipRefSourceMedia(spec, refStore, postVideoChain);
-            if (raw is null)
-            {
-                Logs.Warning($"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; skipping.");
-                continue;
-            }
-
-            WGNodeData prepared;
-            if (PrimaryGuideMatchesScaledSource(raw, sourceMedia))
-            {
-                prepared = sourceMedia;
-            }
-            else
-            {
-                prepared = PrepareGuideMedia(raw, sourceMedia, scaleToSourceSize: false);
-            }
-            resolved.Add(new ResolvedClipRef(prepared, spec, strength));
-        }
-
-        return resolved;
-    }
-
-    private static ResolvedClipRef ExtractPrimaryGuideClipRef(IReadOnlyList<ResolvedClipRef> clipRefs)
-    {
-        foreach (ResolvedClipRef clipRef in clipRefs)
-        {
-            if (!clipRef.Spec.FromEnd && clipRef.Spec.Frame == 1)
-            {
-                return clipRef;
-            }
-        }
-
-        return null;
-    }
-
-    private static List<ResolvedClipRef> RemovePrimaryGuideClipRef(
-        IReadOnlyList<ResolvedClipRef> clipRefs,
-        ResolvedClipRef primaryGuideClipRef)
-    {
-        if (clipRefs is null || primaryGuideClipRef is null)
-        {
-            return clipRefs is null ? null : [.. clipRefs];
-        }
-
-        List<ResolvedClipRef> remaining = [];
-        bool removedPrimary = false;
-        foreach (ResolvedClipRef clipRef in clipRefs)
-        {
-            if (!removedPrimary && ReferenceEquals(clipRef, primaryGuideClipRef))
-            {
-                removedPrimary = true;
-                continue;
-            }
-
-            remaining.Add(clipRef);
-        }
-
-        return remaining;
-    }
-
-    private WGNodeData ResolveLocalGuideMedia(
-        ResolvedClipRef primaryGuideClipRef,
-        bool skipGuideReinjection,
-        WGNodeData sourceMedia,
-        JArray priorOutputPath,
-        PostVideoChain postVideoChain)
-    {
-        if (primaryGuideClipRef is null)
-        {
-            return ResolveDefaultLocalGuideMedia(skipGuideReinjection, sourceMedia, postVideoChain);
-        }
-
-        if (primaryGuideClipRef.Image?.Path is JArray guidePath
-            && priorOutputPath is not null
-            && JToken.DeepEquals(guidePath, priorOutputPath))
-        {
-            return ResolveDefaultLocalGuideMedia(skipGuideReinjection: false, sourceMedia, postVideoChain);
-        }
-
-        if (PrimaryGuideMatchesScaledSource(primaryGuideClipRef.Image, sourceMedia))
-        {
-            return ResolveDefaultLocalGuideMedia(skipGuideReinjection: false, sourceMedia, postVideoChain);
-        }
-
-        return PrepareGuideMedia(primaryGuideClipRef.Image, sourceMedia, scaleToSourceSize: true);
-    }
-
-    private bool PrimaryGuideMatchesScaledSource(WGNodeData primaryGuideMedia, WGNodeData sourceMedia)
-    {
-        if (primaryGuideMedia?.Path is not JArray primaryGuidePath
-            || sourceMedia?.Path is not JArray sourcePath
-            || sourcePath.Count != 2)
-        {
-            return false;
-        }
-
-        if (g.Workflow[$"{sourcePath[0]}"] is not JObject sourceNode
-            || $"{sourceNode["class_type"]}" != NodeTypes.ImageScale
-            || sourceNode["inputs"] is not JObject sourceInputs
-            || sourceInputs["image"] is not JArray scaledSourceInput)
-        {
-            return false;
-        }
-
-        return JToken.DeepEquals(primaryGuidePath, scaledSourceInput);
-    }
-
-    private WGNodeData ResolveDefaultLocalGuideMedia(
-        bool skipGuideReinjection,
-        WGNodeData sourceMedia,
-        PostVideoChain postVideoChain)
-    {
-        if (skipGuideReinjection)
-        {
-            return null;
-        }
-
-        if (postVideoChain is not null && IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
-        {
-            WGNodeData detachedGuideVae = postVideoChain.CreateStageInputVae() ?? g.CurrentVae;
-            return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
-        }
-
-        return sourceMedia;
-    }
-
-    private WGNodeData ResolveClipRefSourceMedia(
-        JsonParser.RefSpec spec,
-        StageRefStore refStore,
-        PostVideoChain postVideoChain)
-    {
-        if (string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
-        {
-            return MaterializeUploadedRefImage(spec);
-        }
-
-        StageRefStore.StageRef stageRef = null;
-        string src = spec.Source?.Trim() ?? "";
-        if (src.Equals("Base", StringComparison.OrdinalIgnoreCase))
-        {
-            stageRef = refStore.Base;
-        }
-        else if (src.Equals("Refiner", StringComparison.OrdinalIgnoreCase))
-        {
-            stageRef = refStore.Refiner;
-        }
-        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(src, out int editStage))
-        {
-            _ = Base2EditPublishedStageRefs.TryGetStageRef(g, editStage, out stageRef);
-        }
-
-        if (stageRef is null)
-        {
-            if (!string.IsNullOrWhiteSpace(src))
-            {
-                Logs.Warning($"VideoStages: Unsupported or unresolved clip reference source '{spec.Source}'.");
-            }
-            return null;
-        }
-
-        return ResolveGuideMedia(stageRef, postVideoChain);
-    }
-
-    private WGNodeData MaterializeUploadedRefImage(JsonParser.RefSpec spec)
-    {
-        string material = spec.Data?.Trim();
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            material = spec.UploadFileName?.Trim();
-        }
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            Logs.Warning("VideoStages: Upload clip reference is missing inline data and a file name.");
-            return null;
-        }
-
-        if (material.StartsWith("inputs/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
-        {
-            if (g.UserInput?.SourceSession is null)
-            {
-                Logs.Warning("VideoStages: reference image uses a server-side path but no session is available; cannot load the file.");
-                return null;
-            }
-
-            try
-            {
-                material = T2IParamTypes.FilePathToDataString(
-                    g.UserInput.SourceSession,
-                    material,
-                    "for VideoStages reference image");
-            }
-            catch (SwarmReadableErrorException ex)
-            {
-                Logs.Warning($"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
-                return null;
-            }
-        }
-
-        try
-        {
-            ImageFile img = ImageFile.FromDataString(material);
-            return g.LoadImage(img, "${videostagesrefimage}", false);
-        }
-        catch
-        {
-            Logs.Warning("VideoStages: Ignoring invalid clip reference image payload.");
-            return null;
-        }
     }
 
     private void RunNativeStage(
@@ -422,100 +171,6 @@ internal class StageRunner(WorkflowGenerator g)
             VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
         };
         return new StageGenerationPlan(genInfo, applySourceVideoLatent);
-    }
-
-    private static bool ShouldUseLocalLtxv2Path(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
-    {
-        return genInfo.VideoModel?.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID
-            && (sourceMedia?.DataType == WGNodeData.DT_VIDEO || sourceMedia?.DataType == WGNodeData.DT_IMAGE);
-    }
-
-    private WGNodeData ResolveGuideMedia(StageRefStore.StageRef guideReference, PostVideoChain postVideoChain)
-    {
-        if (guideReference?.Media is null)
-        {
-            return null;
-        }
-        if (postVideoChain is not null && IsLiveCurrentOutputReference(guideReference.Media, postVideoChain))
-        {
-            WGNodeData detachedGuideVae = guideReference.Vae ?? postVideoChain.CreateStageInputVae() ?? g.CurrentVae;
-            return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
-        }
-        if (guideReference.Media.DataType == WGNodeData.DT_IMAGE || guideReference.Media.DataType == WGNodeData.DT_VIDEO)
-        {
-            return guideReference.Media;
-        }
-
-        WGNodeData guideVae = guideReference.Vae ?? g.CurrentVae;
-        if (guideReference.Media.Path is JArray guidePath
-            && WorkflowUtils.TryResolveNearestDownstreamDecodeOutput(g.Workflow, guidePath, out JArray decodedGuidePath))
-        {
-            string rawDataType = guideReference.Media.DataType == WGNodeData.DT_LATENT_VIDEO
-                || guideReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
-                ? WGNodeData.DT_VIDEO
-                : WGNodeData.DT_IMAGE;
-            return guideReference.Media.WithPath(decodedGuidePath, rawDataType, guideVae?.Compat);
-        }
-        return guideReference.Media.AsRawImage(guideVae);
-    }
-
-    private static bool IsLiveCurrentOutputReference(WGNodeData guideMedia, PostVideoChain postVideoChain)
-    {
-        if (guideMedia?.Path is not JArray guidePath || postVideoChain is null)
-        {
-            return false;
-        }
-
-        return JToken.DeepEquals(guidePath, postVideoChain.CurrentOutputMedia?.Path)
-            || JToken.DeepEquals(guidePath, postVideoChain.DecodeOutputPath)
-            || JToken.DeepEquals(guidePath, postVideoChain.AvLatentPath);
-    }
-
-    private static bool ShouldSkipGeneratedGuideReinjection(
-        JsonParser.StageSpec stage,
-        WGNodeData sourceMedia,
-        StageRefStore.StageRef guideReference,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        PostVideoChain postVideoChain)
-    {
-        return stage.ImageReference == "Generated"
-            && postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true
-            && IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
-            && !string.IsNullOrWhiteSpace(guideReference?.Vae?.Compat?.ID)
-            && guideReference.Vae.Compat.ID == genInfo.VideoModel?.ModelClass?.CompatClass?.ID;
-    }
-
-    private WGNodeData PrepareGuideMedia(WGNodeData guideMedia, WGNodeData sourceMedia, bool scaleToSourceSize)
-    {
-        WGNodeData resolvedGuideMedia = guideMedia ?? sourceMedia;
-        if (!scaleToSourceSize)
-        {
-            return resolvedGuideMedia;
-        }
-
-        int targetWidth = sourceMedia.Width ?? g.UserInput.GetImageWidth();
-        int targetHeight = sourceMedia.Height ?? g.UserInput.GetImageHeight();
-        int currentWidth = resolvedGuideMedia.Width ?? targetWidth;
-        int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
-        if (currentWidth == targetWidth && currentHeight == targetHeight)
-        {
-            resolvedGuideMedia.Width = targetWidth;
-            resolvedGuideMedia.Height = targetHeight;
-            return resolvedGuideMedia;
-        }
-
-        string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
-        {
-            ["image"] = resolvedGuideMedia.Path,
-            ["width"] = targetWidth,
-            ["height"] = targetHeight,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "disabled"
-        });
-        resolvedGuideMedia = resolvedGuideMedia.WithPath([scaleNode, 0]);
-        resolvedGuideMedia.Width = targetWidth;
-        resolvedGuideMedia.Height = targetHeight;
-        return resolvedGuideMedia;
     }
 
     private WGNodeData ApplyStageUpscaleIfNeeded(JsonParser.StageSpec stage, int sectionId)
