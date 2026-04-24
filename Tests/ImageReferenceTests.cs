@@ -150,6 +150,18 @@ public class ImageReferenceTests
     }
 
     [Fact]
+    public void First_stage_json_control_is_normalized_to_default_when_non_trivial()
+    {
+        JObject stage = MakeStage("UnitTest_Video.safetensors");
+        stage["Control"] = 0.35;
+
+        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(stage));
+
+        Assert.Single(stages);
+        Assert.Equal(1.0, stages[0].Control);
+    }
+
+    [Fact]
     public void ParseStages_truncates_nearly_unity_upscale_to_exactly_one_point_zero()
     {
         JObject first = MakeStage("UnitTest_Video.safetensors");

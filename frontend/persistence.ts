@@ -33,7 +33,6 @@ const toParsedConfig = (value: unknown): ParsedConfig | null => {
 export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
     clips.map(
         (clip): StoredClip => ({
-            name: clip.name,
             expanded: clip.expanded,
             skipped: clip.skipped,
             duration: clip.duration,
@@ -105,7 +104,7 @@ const parseSerializedState = (
             const el = clipsRaw[i];
             const record: Record<string, unknown> = isRecord(el) ? el : {};
             clips.push(
-                normalizeClip(record, i, getRootDefaults, getDefaultStageModel),
+                normalizeClip(record, getRootDefaults, getDefaultStageModel),
             );
         }
         return {
@@ -197,6 +196,6 @@ export const ensureClipsSeeded = (callbacks?: PersistenceCallbacks): void => {
         return;
     }
 
-    state.clips = [buildDefaultClip(0, getRootDefaults, getDefaultStageModel)];
+    state.clips = [buildDefaultClip(getRootDefaults, getDefaultStageModel)];
     saveState(state, callbacks);
 };

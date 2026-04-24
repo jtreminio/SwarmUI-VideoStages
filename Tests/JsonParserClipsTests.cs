@@ -37,7 +37,6 @@ public class JsonParserClipsTests
     }
 
     private static JObject MakeClip(
-        string name,
         IEnumerable<JObject> stages,
         IEnumerable<JObject> refs = null,
         bool skipped = false,
@@ -49,7 +48,6 @@ public class JsonParserClipsTests
     {
         JObject clip = new()
         {
-            ["Name"] = name,
             ["Skipped"] = skipped,
             ["Duration"] = duration,
             ["AudioSource"] = audioSource,
@@ -109,13 +107,13 @@ public class JsonParserClipsTests
     public void ParseClips_ClipShape_PopulatesPerClipFields()
     {
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First Clip",
+            MakeClip(
                 stages: [MakeStage("model-a")],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 12, fromEnd: true)],
                 duration: 4.0,
                 width: 800,
                 height: 600),
-            MakeClip("Second Clip",
+            MakeClip(
                 stages: [MakeStage("model-b"), MakeStage("model-c")],
                 duration: 6.0)
         ));
@@ -124,7 +122,7 @@ public class JsonParserClipsTests
         List<JsonParser.ClipSpec> clips = parser.ParseClips();
 
         Assert.Equal(2, clips.Count);
-        Assert.Equal("First Clip", clips[0].Name);
+        Assert.Equal(0, clips[0].Id);
         Assert.Equal(4.0, clips[0].DurationSeconds);
         Assert.Equal(800, clips[0].Width);
         Assert.Equal(600, clips[0].Height);
@@ -137,7 +135,7 @@ public class JsonParserClipsTests
         Assert.Single(clips[0].Stages);
         Assert.Equal("model-a", clips[0].Stages[0].Model);
 
-        Assert.Equal("Second Clip", clips[1].Name);
+        Assert.Equal(1, clips[1].Id);
         Assert.Equal(6.0, clips[1].DurationSeconds);
         Assert.Empty(clips[1].Refs);
         Assert.Equal(2, clips[1].Stages.Count);
@@ -151,7 +149,6 @@ public class JsonParserClipsTests
             height: 832,
             clips: [
                 MakeClip(
-                    "First Clip",
                     stages: [MakeStage("model-a")],
                     audioSource: VideoStagesExtension.AudioSourceUpload)
             ]));
@@ -170,12 +167,10 @@ public class JsonParserClipsTests
     {
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
-                "First Clip",
                 stages: [MakeStage("model-a")],
                 audioSource: VideoStagesExtension.AudioSourceUpload,
                 uploadedAudio: MakeUploadedAudio(fileName: "first.wav")),
             MakeClip(
-                "Second Clip",
                 stages: [MakeStage("model-b")],
                 audioSource: VideoStagesExtension.AudioSourceUpload,
                 uploadedAudio: MakeUploadedAudio(fileName: "second.wav"))
@@ -203,7 +198,6 @@ public class JsonParserClipsTests
     {
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
-                "First Clip",
                 stages: [MakeStage("model-a")],
                 audioSource: VideoStagesExtension.AudioSourceUpload,
                 uploadedAudio: new JObject
@@ -227,8 +221,8 @@ public class JsonParserClipsTests
     public void ParseStages_Flattens_ClipShape_AcrossClips_AssigningSequentialIds()
     {
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First", stages: [MakeStage("model-a"), MakeStage("model-b")]),
-            MakeClip("Second", stages: [MakeStage("model-c")])
+            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]),
+            MakeClip(stages: [MakeStage("model-c")])
         ));
         JsonParser parser = BuildParser(json);
 
@@ -250,9 +244,9 @@ public class JsonParserClipsTests
         skippedStage["Skipped"] = true;
 
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First", stages: [MakeStage("model-a"), skippedStage]),
-            MakeClip("Second", stages: [MakeStage("model-skipped-clip")], skipped: true),
-            MakeClip("Third", stages: [MakeStage("model-c")])
+            MakeClip( stages: [MakeStage("model-a"), skippedStage]),
+            MakeClip( stages: [MakeStage("model-skipped-clip")], skipped: true),
+            MakeClip( stages: [MakeStage("model-c")])
         ));
         JsonParser parser = BuildParser(json);
 
@@ -271,7 +265,6 @@ public class JsonParserClipsTests
             height: 720,
             clips: [
                 MakeClip(
-                    "First",
                     stages: [MakeStage("model-a")],
                     duration: 4.0,
                     width: 800,
@@ -300,7 +293,6 @@ public class JsonParserClipsTests
             height: 720,
             clips: [
                 MakeClip(
-                    "First",
                     stages: [MakeStage("model-a")],
                     duration: 4.0,
                     width: 800,
@@ -329,7 +321,6 @@ public class JsonParserClipsTests
             height: 720,
             clips: [
                 MakeClip(
-                    "First",
                     stages: [MakeStage("model-a")],
                     duration: 4.0,
                     width: 800,
@@ -355,7 +346,7 @@ public class JsonParserClipsTests
         brokenStage["Model"] = "";
 
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First", stages: [brokenStage, MakeStage("model-a")])
+            MakeClip( stages: [brokenStage, MakeStage("model-a")])
         ));
         JsonParser parser = BuildParser(json);
 
@@ -387,7 +378,7 @@ public class JsonParserClipsTests
     {
         JObject brokenRef = new() { ["Frame"] = 4 };
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First",
+            MakeClip(
                 stages: [MakeStage("model-a")],
                 refs: [brokenRef, MakeRef("Base")])
         ));
@@ -404,12 +395,12 @@ public class JsonParserClipsTests
     public void ParseStages_PropagatesClipDimensionsAndFramesIntoEachStage()
     {
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First",
+            MakeClip(
                 stages: [MakeStage("model-a")],
                 duration: 4.0,
                 width: 800,
                 height: 600),
-            MakeClip("Second",
+            MakeClip(
                 stages: [MakeStage("model-b")],
                 duration: 2.0,
                 width: 1920,
@@ -441,7 +432,6 @@ public class JsonParserClipsTests
             height: 720,
             clips: [
                 MakeClip(
-                    "First",
                     stages: [MakeStage("model-a")],
                     duration: duration,
                     width: 800,
@@ -467,7 +457,7 @@ public class JsonParserClipsTests
             ["UploadFileName"] = "ref.png",
         };
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First",
+            MakeClip(
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
@@ -492,7 +482,7 @@ public class JsonParserClipsTests
             },
         };
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First",
+            MakeClip(
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
@@ -519,7 +509,7 @@ public class JsonParserClipsTests
             },
         };
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip("First",
+            MakeClip(
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
@@ -537,7 +527,6 @@ public class JsonParserClipsTests
         stage["refStrengths"] = new JArray(0.55, 0.66);
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
-                "Clip0",
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 9)])));
 
@@ -558,7 +547,6 @@ public class JsonParserClipsTests
         JObject stage = MakeStage("model-a");
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
-                "Clip0",
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)])));
 

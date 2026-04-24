@@ -4,7 +4,6 @@ import { type Clip, REF_SOURCE_BASE, REF_SOURCE_UPLOAD } from "./types";
 import { getRefSourceError, validateClips } from "./validation";
 
 const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
-    name: "C",
     expanded: true,
     skipped: false,
     duration: 2,

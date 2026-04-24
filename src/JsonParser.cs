@@ -53,7 +53,6 @@ public class JsonParser(WorkflowGenerator g)
 
     public sealed record ClipSpec(
         int Id,
-        string Name,
         bool Skipped,
         double DurationSeconds,
         string AudioSource,
@@ -253,7 +252,6 @@ public class JsonParser(WorkflowGenerator g)
     private ClipSpec ParseClip(JObject clipObj, int clipIndex, StageDefaults defaults)
     {
         bool skipped = GetOptionalBool(clipObj, "Skipped", defaultValue: false);
-        string name = GetOptionalString(clipObj, "Name", defaultValue: $"Clip {clipIndex}", clipIndex, allowEmpty: true);
         double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, clipIndex);
         string audioSource = GetString(clipObj, "AudioSource");
         if (string.IsNullOrWhiteSpace(audioSource))
@@ -292,7 +290,6 @@ public class JsonParser(WorkflowGenerator g)
 
         return new ClipSpec(
             Id: clipIndex,
-            Name: string.IsNullOrWhiteSpace(name) ? $"Clip {clipIndex}" : name,
             Skipped: skipped,
             DurationSeconds: Math.Max(0, duration),
             AudioSource: audioSource,
@@ -491,13 +488,20 @@ public class JsonParser(WorkflowGenerator g)
         string upscaleMethod = GetOptionalString(stage, "UpscaleMethod", defaults.UpscaleMethod, index, allowEmpty: false);
         if (index == 0)
         {
+            bool hasControlKey = JsonHasOwnProperty(stage, "Control");
             bool hasUpscaleKey = JsonHasOwnProperty(stage, "Upscale");
             bool hasUpscaleMethodKey = JsonHasOwnProperty(stage, "UpscaleMethod");
+            if (ShouldWarnFirstStageControlIgnored(hasControlKey, control))
+            {
+                Logs.Warning(
+                    $"VideoStages: The first stage in each clip (stage index 0) includes 'Control', which is ignored for that stage only.");
+            }
             if (ShouldWarnFirstStageUpscaleIgnored(hasUpscaleKey, hasUpscaleMethodKey, upscale))
             {
                 Logs.Warning(
                     $"VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', which are ignored for that stage only.");
             }
+            control = DefaultControl;
             upscale = DefaultUpscale;
             upscaleMethod = DefaultUpscaleMethod;
         }
@@ -772,6 +776,19 @@ public class JsonParser(WorkflowGenerator g)
             return false;
         }
         if (NormalizeUpscale(upscale) == 1)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private static bool ShouldWarnFirstStageControlIgnored(bool hasControlKey, double control)
+    {
+        if (!hasControlKey)
+        {
+            return false;
+        }
+        if (NormalizeControl(control) == DefaultControl)
         {
             return false;
         }

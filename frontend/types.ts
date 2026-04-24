@@ -68,7 +68,6 @@ export interface RefImage {
 }
 
 export interface Clip {
-    name: string;
     expanded: boolean;
     skipped: boolean;
     duration: number;
@@ -109,12 +108,7 @@ export type StoredStage = Pick<
 /** Clip tree shape written to JSON by `serializeClipsForStorage`. */
 export type StoredClip = Pick<
     Clip,
-    | "name"
-    | "expanded"
-    | "skipped"
-    | "duration"
-    | "audioSource"
-    | "uploadedAudio"
+    "expanded" | "skipped" | "duration" | "audioSource" | "uploadedAudio"
 > & {
     refs: StoredRefImage[];
     stages: StoredStage[];

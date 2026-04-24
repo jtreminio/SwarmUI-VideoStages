@@ -162,7 +162,7 @@ export function videoStageEditor(): VideoStageEditor {
         let clips = state.clips;
         if (clips.length === 0) {
             state.clips = [
-                buildDefaultClip(0, getRootDefaults, getDefaultStageModel),
+                buildDefaultClip(getRootDefaults, getDefaultStageModel),
             ];
             clips = state.clips;
             saveEditorState(state);

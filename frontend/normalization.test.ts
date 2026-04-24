@@ -88,7 +88,6 @@ describe("normalization", () => {
         };
         const clip = normalizeClip(
             rawClip,
-            0,
             getRootDefaults,
             getDefaultStageModel,
         );
@@ -125,6 +124,54 @@ describe("normalization", () => {
         );
         expect(stage1.upscale).toBe(2);
         expect(stage1.upscaleMethod).toBe("pixel-bicubic");
+    });
+
+    it("normalizeStage forces first-stage control to the root default", () => {
+        const stage0 = normalizeStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            {
+                Control: 0.4,
+                model: "ltx",
+                sampler: "euler",
+                scheduler: "normal",
+            },
+            null,
+            0,
+            0,
+        );
+
+        expect(stage0.control).toBe(1);
+    });
+
+    it("normalizeStage reads PascalCase control for non-first stage", () => {
+        const stage0 = normalizeStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            {
+                model: "ltx",
+                sampler: "euler",
+                scheduler: "normal",
+            },
+            null,
+            0,
+            0,
+        );
+        const stage1 = normalizeStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            {
+                Control: 0.4,
+                model: "ltx",
+                sampler: "euler",
+                scheduler: "normal",
+            },
+            stage0,
+            0,
+            1,
+        );
+
+        expect(stage1.control).toBe(0.4);
     });
 
     it("buildDefaultRef matches editor defaults", () => {

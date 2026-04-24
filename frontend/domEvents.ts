@@ -130,13 +130,7 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
     const refAction = target.dataset.refAction;
 
     if (clipAction === "add-clip") {
-        clips.push(
-            buildDefaultClip(
-                clips.length,
-                getRootDefaults,
-                getDefaultStageModel,
-            ),
-        );
+        clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
         deps.saveClips(clips);
         deps.scheduleClipsRefresh();
         return;

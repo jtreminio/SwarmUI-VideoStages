@@ -203,6 +203,7 @@ export const applyStageField = (
     target: HTMLInputElement | HTMLSelectElement,
     getRootDefaults: () => RootDefaults,
 ): void => {
+    const stageIdx = parseInt(target.dataset.stageIdx ?? "-1", 10);
     const refStrengthIdx = parseStageRefStrengthIndex(field);
     if (refStrengthIdx != null) {
         const value = parseFloat(target.value);
@@ -239,6 +240,15 @@ export const applyStageField = (
     }
 
     if (field === "control") {
+        if (stageIdx === 0) {
+            const defaults = getRootDefaults();
+            stage.control = clamp(
+                defaults.control,
+                defaults.controlMin,
+                defaults.controlMax,
+            );
+            return;
+        }
         const value = parseFloat(target.value);
         if (Number.isFinite(value)) {
             const defaults = getRootDefaults();

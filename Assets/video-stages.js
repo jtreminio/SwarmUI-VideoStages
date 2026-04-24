@@ -275,6 +275,7 @@
 
   // frontend/normalization.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : upscaleMethodValues[0] ?? "pixel-lanczos";
+  var resolveFirstStageControl = (defaults) => clamp(defaults.control, defaults.controlMin, defaults.controlMax);
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var normalizeUploadedAudio = (value) => {
     if (!isRecord(value)) {
@@ -366,10 +367,9 @@
     frame: REF_FRAME_MIN,
     fromEnd: false
   });
-  var buildDefaultClip = (index, getRootDefaults2, getDefaultStageModel2) => {
+  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     return {
-      name: `Clip ${index}`,
       expanded: true,
       skipped: false,
       duration: snapDurationToFps(
@@ -421,17 +421,18 @@
       ),
       upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
     };
+    const control = stageIndexInClip === 0 ? resolveFirstStageControl(defaults) : clamp(
+      utils.toNumber(
+        `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+        fallback.control
+      ),
+      defaults.controlMin,
+      defaults.controlMax
+    );
     const stage = {
       expanded: rawStage.expanded === void 0 ? true : !!rawStage.expanded,
       skipped: !!rawStage.skipped,
-      control: clamp(
-        utils.toNumber(
-          `${rawStage.control ?? fallback.control}`,
-          fallback.control
-        ),
-        defaults.controlMin,
-        defaults.controlMax
-      ),
+      control,
       refStrengths: normalizeStageRefStrengths(
         rawStage.refStrengths,
         refCount
@@ -494,7 +495,7 @@
     };
     return ref;
   };
-  var normalizeClip = (rawClip, index, getRootDefaults2, getDefaultStageModel2) => {
+  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     const audioSourceOptions = buildAudioSourceOptions();
     const fps = Math.max(1, defaults.fps);
@@ -537,7 +538,6 @@
       );
     }
     return {
-      name: typeof rawClip.name === "string" && rawClip.name.length > 0 ? rawClip.name : `Clip ${index}`,
       expanded: rawClip.expanded === void 0 ? true : !!rawClip.expanded,
       skipped: !!rawClip.skipped,
       duration,
@@ -685,6 +685,7 @@
     }
   };
   var applyStageField = (stage, field, target, getRootDefaults2) => {
+    const stageIdx = parseInt(target.dataset.stageIdx ?? "-1", 10);
     const refStrengthIdx = parseStageRefStrengthIndex(field);
     if (refStrengthIdx != null) {
       const value = parseFloat(target.value);
@@ -714,6 +715,15 @@
       return;
     }
     if (field === "control") {
+      if (stageIdx === 0) {
+        const defaults = getRootDefaults2();
+        stage.control = clamp(
+          defaults.control,
+          defaults.controlMin,
+          defaults.controlMax
+        );
+        return;
+      }
       const value = parseFloat(target.value);
       if (Number.isFinite(value)) {
         const defaults = getRootDefaults2();
@@ -1035,13 +1045,7 @@
     const stageAction = target.dataset.stageAction;
     const refAction = target.dataset.refAction;
     if (clipAction === "add-clip") {
-      clips.push(
-        buildDefaultClip(
-          clips.length,
-          getRootDefaults,
-          getDefaultStageModel
-        )
-      );
+      clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
       deps.saveClips(clips);
       deps.scheduleClipsRefresh();
       return;
@@ -1418,7 +1422,7 @@
       if (clip.skipped) {
         continue;
       }
-      const clipLabel = `VideoStages: ${clip.name || `Clip ${i}`}`;
+      const clipLabel = `VideoStages: Clip ${i}`;
       if (clip.stages.length === 0) {
         errors.push(`${clipLabel} requires at least one stage.`);
         continue;
@@ -1519,7 +1523,6 @@
   };
   var serializeClipsForStorage = (clips) => clips.map(
     (clip) => ({
-      name: clip.name,
       expanded: clip.expanded,
       skipped: clip.skipped,
       duration: clip.duration,
@@ -1571,7 +1574,7 @@
         const el = clipsRaw[i];
         const record = isRecord2(el) ? el : {};
         clips.push(
-          normalizeClip(record, i, getRootDefaults, getDefaultStageModel)
+          normalizeClip(record, getRootDefaults, getDefaultStageModel)
         );
       }
       return {
@@ -1650,7 +1653,7 @@
     if (state.clips.length > 0) {
       return;
     }
-    state.clips = [buildDefaultClip(0, getRootDefaults, getDefaultStageModel)];
+    state.clips = [buildDefaultClip(getRootDefaults, getDefaultStageModel)];
     saveState(state, callbacks);
   };
 
@@ -2230,7 +2233,8 @@ ${optionHtml}
       stage.control,
       defaults.controlMin,
       defaults.controlMax,
-      defaults.controlStep
+      defaults.controlStep,
+      stageIdx === 0
     );
     const stepsField = stageSliderField(
       "steps",
@@ -2338,7 +2342,7 @@ ${optionHtml}
       groupClasses.push("vs-skipped");
     }
     const contentStyle = clip.expanded ? "" : ' style="display: none;"';
-    const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">${escapeAttr(clip.name)}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip" ${totalClips === 1 ? "disabled" : ""}>&times;</button></span></span></span>`;
+    const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">Clip ${clipIdx}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip" ${totalClips === 1 ? "disabled" : ""}>&times;</button></span></span></span>`;
     const lengthField = injectFieldData(
       overrideSliderSteps(
         makeSliderInput(
@@ -2516,7 +2520,7 @@ ${optionHtml}
       let clips = state.clips;
       if (clips.length === 0) {
         state.clips = [
-          buildDefaultClip(0, getRootDefaults, getDefaultStageModel)
+          buildDefaultClip(getRootDefaults, getDefaultStageModel)
         ];
         clips = state.clips;
         saveEditorState(state);

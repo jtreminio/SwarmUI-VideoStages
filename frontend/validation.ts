@@ -37,7 +37,7 @@ export const validateClips = (clips: Clip[]): string[] => {
         if (clip.skipped) {
             continue;
         }
-        const clipLabel = `VideoStages: ${clip.name || `Clip ${i}`}`;
+        const clipLabel = `VideoStages: Clip ${i}`;
         if (clip.stages.length === 0) {
             errors.push(`${clipLabel} requires at least one stage.`);
             continue;

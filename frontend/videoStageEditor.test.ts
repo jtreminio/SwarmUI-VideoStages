@@ -50,7 +50,6 @@ interface ParsedStage {
 }
 
 interface ParsedClip {
-    name?: string;
     duration?: number;
     audioSource?: string;
     uploadedAudio?: {
@@ -210,7 +209,10 @@ describe("videoStageEditor", () => {
             expect(clips).toHaveLength(1);
             expect(clips[0].stages).toHaveLength(1);
             expect(clips[0].refs).toEqual([]);
-            expect(clips[0].name).toBe("Clip 0");
+            expect(
+                document.querySelector(".vs-clip-card .header-label")
+                    ?.textContent,
+            ).toBe("Clip 0");
         });
 
         it("seeds root dimensions from SwarmUI core width and height fields", () => {
@@ -381,7 +383,6 @@ describe("videoStageEditor", () => {
                 fps: 12,
                 clips: [
                     {
-                        name: "First",
                         duration: 4,
                         audioSource: "Upload",
                         refs: [{ source: "Refiner", frame: 5, fromEnd: true }],
@@ -401,11 +402,14 @@ describe("videoStageEditor", () => {
             expect(config.height).toBe(600);
             expect(config.fps).toBe(12);
             expect(clips).toHaveLength(1);
-            expect(clips[0].name).toBe("First");
             expect(clips[0].audioSource).toBe("Upload");
             expect(clips[0].refs?.[0].source).toBe("Refiner");
             expect(clips[0].refs?.[0].fromEnd).toBe(true);
             expect(clips[0].stages?.[0].steps).toBe(8);
+            expect(
+                document.querySelector(".vs-clip-card .header-label")
+                    ?.textContent,
+            ).toBe("Clip 0");
         });
     });
 
@@ -422,7 +426,62 @@ describe("videoStageEditor", () => {
 
             const clips = parseStored();
             expect(clips).toHaveLength(2);
-            expect(clips[1].name).toBe("Clip 1");
+            expect(
+                [
+                    ...document.querySelectorAll(".vs-clip-card .header-label"),
+                ].map((el) => el.textContent),
+            ).toEqual(["Clip 0", "Clip 1"]);
+        });
+
+        it("shows Clip 0 header after deleting the first clip when two existed", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-clip"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const deleteFirst = document.querySelector(
+                '[data-clip-action="delete"][data-clip-idx="0"]',
+            ) as HTMLButtonElement | null;
+            expect(deleteFirst).not.toBeNull();
+            must(deleteFirst).click();
+            await flushReRender();
+
+            const clips = parseStored();
+            expect(clips).toHaveLength(1);
+            expect(
+                document.querySelector(".vs-clip-card .header-label")
+                    ?.textContent,
+            ).toBe("Clip 0");
+        });
+
+        it("derives Clip 0 header from index even when legacy JSON had a different name field", () => {
+            getStagesInput().value = JSON.stringify({
+                width: 1024,
+                height: 768,
+                fps: 24,
+                clips: [
+                    {
+                        name: "Clip 1",
+                        duration: 2,
+                        audioSource: "Native",
+                        refs: [],
+                        stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
+                    },
+                ],
+            });
+
+            const editor = videoStageEditor();
+            editor.init();
+
+            expect(
+                document.querySelector(".vs-clip-card .header-label")
+                    ?.textContent,
+            ).toBe("Clip 0");
         });
 
         it("toggles collapse state for a clip when the native shrinkable header is clicked", async () => {
@@ -1084,7 +1143,6 @@ describe("videoStageEditor", () => {
         it("removes the matching ref strength from each stage when a ref is deleted", async () => {
             getStagesInput().value = JSON.stringify([
                 {
-                    name: "First",
                     duration: 4,
                     width: 800,
                     height: 600,
@@ -1221,12 +1279,15 @@ describe("videoStageEditor", () => {
             ).not.toBeNull();
         });
 
-        it("renders control, steps, cfg scale, and upscale; disables stage 0 upscale only", async () => {
+        it("renders control, steps, cfg scale, and upscale; disables stage 0 control and upscale only", async () => {
             const editor = videoStageEditor();
             editor.init();
 
             const controlSlider = document.querySelector(
-                '[data-stage-field="control"][type="range"]',
+                '[data-stage-field="control"][type="range"][data-stage-idx="0"]',
+            ) as HTMLInputElement | null;
+            const controlNumber = document.querySelector(
+                '[data-stage-field="control"][type="number"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
             const stepsSlider = document.querySelector(
                 '[data-stage-field="steps"][type="range"]',
@@ -1242,6 +1303,10 @@ describe("videoStageEditor", () => {
             expect(stepsSlider).not.toBeNull();
             expect(cfgScaleSlider).not.toBeNull();
             expect(upscale0).not.toBeNull();
+            expect(controlSlider?.disabled).toBe(true);
+            expect(controlNumber?.disabled).toBe(true);
+            expect(controlSlider?.value).toBe("1");
+            expect(controlNumber?.value).toBe("1");
             expect(upscale0?.disabled).toBe(true);
             expect(controlSlider?.min).toBe("0.05");
             expect(stepsSlider?.max).toBe("50");
@@ -1315,6 +1380,12 @@ describe("videoStageEditor", () => {
             const s0Method = document.querySelector(
                 '[data-stage-field="upscaleMethod"][data-stage-idx="0"]',
             ) as HTMLSelectElement | null;
+            const s0ControlRange = document.querySelector(
+                '[data-stage-field="control"][type="range"][data-stage-idx="0"]',
+            ) as HTMLInputElement | null;
+            const s0ControlNumber = document.querySelector(
+                '[data-stage-field="control"][type="number"][data-stage-idx="0"]',
+            ) as HTMLInputElement | null;
             const s0Range = document.querySelector(
                 '[data-stage-field="upscale"][type="range"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
@@ -1322,8 +1393,11 @@ describe("videoStageEditor", () => {
                 '[data-stage-field="upscale"][type="number"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
             expect(s0Method?.disabled).toBe(true);
+            expect(s0ControlRange?.disabled).toBe(true);
+            expect(s0ControlNumber?.disabled).toBe(true);
             expect(s0Range?.disabled).toBe(true);
             expect(s0Number?.disabled).toBe(true);
+            expect(parseStored()[0].stages?.[0].control).toBe(1);
             expect(parseStored()[0].stages?.[0].upscale).toBe(1);
 
             (
@@ -1336,10 +1410,14 @@ describe("videoStageEditor", () => {
             const s1Method = document.querySelector(
                 '[data-stage-field="upscaleMethod"][data-stage-idx="1"]',
             ) as HTMLSelectElement | null;
+            const s1ControlRange = document.querySelector(
+                '[data-stage-field="control"][type="range"][data-stage-idx="1"]',
+            ) as HTMLInputElement | null;
             const s1Range = document.querySelector(
                 '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
             ) as HTMLInputElement | null;
             expect(s1Range).not.toBeNull();
+            expect(s1ControlRange?.disabled).toBe(false);
             expect(s1Range?.disabled).toBe(false);
             expect(s1Method?.disabled).toBe(true);
 

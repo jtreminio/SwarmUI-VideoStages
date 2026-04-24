@@ -32,6 +32,9 @@ const resolveRootPreferredUpscaleMethod = (
         ? "pixel-lanczos"
         : (upscaleMethodValues[0] ?? "pixel-lanczos");
 
+const resolveFirstStageControl = (defaults: RootDefaults): number =>
+    clamp(defaults.control, defaults.controlMin, defaults.controlMax);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -168,13 +171,11 @@ export const buildDefaultRef = (): RefImage => ({
 });
 
 export const buildDefaultClip = (
-    index: number,
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
 ): Clip => {
     const defaults = getRootDefaults();
     return {
-        name: `Clip ${index}`,
         expanded: true,
         skipped: false,
         duration: snapDurationToFps(
@@ -243,17 +244,21 @@ export const normalizeStage = (
                       `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
                       fallback.upscaleMethod,
               };
+    const control =
+        stageIndexInClip === 0
+            ? resolveFirstStageControl(defaults)
+            : clamp(
+                  utils.toNumber(
+                      `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+                      fallback.control,
+                  ),
+                  defaults.controlMin,
+                  defaults.controlMax,
+              );
     const stage: Stage = {
         expanded: rawStage.expanded === undefined ? true : !!rawStage.expanded,
         skipped: !!rawStage.skipped,
-        control: clamp(
-            utils.toNumber(
-                `${rawStage.control ?? fallback.control}`,
-                fallback.control,
-            ),
-            defaults.controlMin,
-            defaults.controlMax,
-        ),
+        control,
         refStrengths: normalizeStageRefStrengths(
             rawStage.refStrengths,
             refCount,
@@ -334,7 +339,6 @@ export const normalizeRef = (
 
 export const normalizeClip = (
     rawClip: Record<string, unknown>,
-    index: number,
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
 ): Clip => {
@@ -383,10 +387,6 @@ export const normalizeClip = (
     }
 
     return {
-        name:
-            typeof rawClip.name === "string" && rawClip.name.length > 0
-                ? rawClip.name
-                : `Clip ${index}`,
         expanded: rawClip.expanded === undefined ? true : !!rawClip.expanded,
         skipped: !!rawClip.skipped,
         duration,

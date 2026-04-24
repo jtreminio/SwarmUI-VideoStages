@@ -7,7 +7,6 @@ describe("persistence", () => {
         it("serializes clip tree with stable keys", () => {
             const clips: Clip[] = [
                 {
-                    name: "A",
                     expanded: true,
                     skipped: false,
                     duration: 3,
@@ -43,7 +42,6 @@ describe("persistence", () => {
             ];
             expect(serializeClipsForStorage(clips)).toEqual([
                 expect.objectContaining({
-                    name: "A",
                     refs: expect.any(Array),
                     stages: expect.arrayContaining([
                         expect.objectContaining({ refStrengths: [0.8] }),
