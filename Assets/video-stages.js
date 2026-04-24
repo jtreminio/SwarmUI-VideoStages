@@ -2,24 +2,10 @@
 (() => {
   // frontend/Utils.ts
   var VideoStageUtils = {
-    getInputElement: (id) => {
-      return document.getElementById(id);
-    },
-    getSelectElement: (id) => {
-      return document.getElementById(id);
-    },
-    getSelectValues: (select) => {
-      if (!select) {
-        return [];
-      }
-      return Array.from(select.options).map((option) => option.value);
-    },
-    getSelectLabels: (select) => {
-      if (!select) {
-        return [];
-      }
-      return Array.from(select.options).map((option) => option.label);
-    },
+    getInputElement: (id) => document.getElementById(id),
+    getSelectElement: (id) => document.getElementById(id),
+    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
+    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
     toNumber: (value, fallback) => {
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : fallback;

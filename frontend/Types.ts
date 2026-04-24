@@ -62,7 +62,6 @@ export interface RefImage {
     expanded: boolean;
     source: string;
     uploadFileName: string | null;
-    /** Inline image payload when source is Upload (same shape as {@link UploadedAudio}). */
     uploadedImage: UploadedAudio | null;
     frame: number;
     fromEnd: boolean;
