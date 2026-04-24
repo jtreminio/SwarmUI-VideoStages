@@ -14,6 +14,8 @@
  */
 
 #videostages_stage_editor {
+    --vs-transition-surface: border-color 0.15s, background 0.15s,
+        box-shadow 0.15s;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -48,10 +50,7 @@
     min-width: 0;
     flex: 1 1 100%;
     max-width: 100%;
-    transition:
-        border-color 0.15s,
-        background 0.15s,
-        box-shadow 0.15s;
+    transition: var(--vs-transition-surface);
 }
 
 #videostages_stage_editor .vs-clip-card.input-group.input-group-open {
@@ -105,8 +104,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 6px;
-    margin-bottom: 6px;
+    margin-block: 6px;
     border: 1px solid var(--light-border);
     border-radius: 10px;
     padding: 10px 12px 12px;
@@ -137,8 +135,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 4px;
-    margin-bottom: 4px;
+    margin-block: 4px;
     width: 100%;
     min-width: 0;
     align-items: stretch;
@@ -159,10 +156,7 @@
     border-radius: 6px;
     padding: 6px 8px;
     min-width: 0;
-    transition:
-        border-color 0.15s,
-        background 0.15s,
-        box-shadow 0.15s;
+    transition: var(--vs-transition-surface);
 }
 
 #videostages_stage_editor .vs-card.input-group {
@@ -172,10 +166,6 @@
     max-width: 100%;
     margin-top: 0;
     margin-bottom: 0;
-}
-
-#videostages_stage_editor .vs-ref-card {
-    width: 100%;
 }
 
 #videostages_stage_editor .vs-card.vs-skipped {
@@ -201,21 +191,6 @@
     color: var(--text);
 }
 
-#videostages_stage_editor .vs-card-index {
-    flex-shrink: 0;
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-monospace);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text);
-    background: var(--background-soft);
-}
-
 #videostages_stage_editor .vs-card-actions {
     display: flex;
     align-items: center;
@@ -225,10 +200,7 @@
 
 #videostages_stage_editor .vs-card-body {
     margin-top: 8px;
-    transition:
-        border-color 0.15s,
-        background 0.15s,
-        box-shadow 0.15s;
+    transition: var(--vs-transition-surface);
 }
 
 #videostages_stage_editor .vs-card-body.input-group-content {
@@ -328,7 +300,10 @@
 
 #videostages_stage_editor [data-clip-action="delete"],
 #videostages_stage_editor [data-ref-action="delete"],
-#videostages_stage_editor [data-stage-action="delete"] {
+#videostages_stage_editor [data-stage-action="delete"],
+#videostages_stage_editor [data-clip-action="delete"]:disabled,
+#videostages_stage_editor [data-ref-action="delete"]:disabled,
+#videostages_stage_editor [data-stage-action="delete"]:disabled {
     cursor: pointer !important;
 }
 
@@ -340,21 +315,10 @@
     border-color: var(--danger-button-border);
 }
 
-#videostages_stage_editor [data-clip-action="delete"]:disabled,
-#videostages_stage_editor [data-ref-action="delete"]:disabled,
-#videostages_stage_editor [data-stage-action="delete"]:disabled {
-    cursor: pointer !important;
-}
-
-#videostages_stage_editor .vs-clip-card:has([data-clip-action="delete"]:hover) {
-    border-color: color-mix(in srgb, var(--red) 50%, transparent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 40%, transparent);
-}
-
+#videostages_stage_editor .vs-clip-card:has([data-clip-action="delete"]:hover),
 #videostages_stage_editor .vs-ref-card:has([data-ref-action="delete"]:hover),
-#videostages_stage_editor .vs-card[data-stage-idx]:has(
-    [data-stage-action="delete"]:hover
-) {
+#videostages_stage_editor
+    .vs-card[data-stage-idx]:has([data-stage-action="delete"]:hover) {
     border-color: color-mix(in srgb, var(--red) 50%, transparent);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 40%, transparent);
 }
