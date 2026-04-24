@@ -16,7 +16,7 @@
     }
   };
 
-  // frontend/AudioSourceController.ts
+  // frontend/audioSource.ts
   var AUDIO_SOURCE_NATIVE = "Native";
   var AUDIO_SOURCE_UPLOAD = "Upload";
   var AUDIO_SOURCE_SWARM = "Swarm Audio";
@@ -71,7 +71,7 @@
     }
     return AUDIO_SOURCE_NATIVE;
   };
-  var AudioSourceController = () => {
+  var audioSource = () => {
     const refreshOptions = () => {
       const selects = getSourceSelects();
       if (selects.length === 0) {
@@ -118,7 +118,7 @@
         refreshOptions();
       } catch (error) {
         console.warn(
-          "AudioSourceController: param build sync failed",
+          "audioSource: param build sync failed",
           error
         );
       }
@@ -1944,7 +1944,7 @@ ${optionHtml}
     }
     return options;
   };
-  var renderClipAudioUploadField = (clip, clipIdx, audioSource) => {
+  var renderClipAudioUploadField = (clip, clipIdx, audioSource2) => {
     const id = clipFieldId(clipIdx, CLIP_AUDIO_UPLOAD_FIELD);
     return decorateAutoInputWrapper(
       injectFieldData(
@@ -1966,7 +1966,7 @@ ${optionHtml}
         }
       ),
       "vs-clip-audio-upload-field",
-      audioSource !== AUDIO_SOURCE_UPLOAD
+      audioSource2 !== AUDIO_SOURCE_UPLOAD
     );
   };
   var renderRefRow = (ref, clip, clipIdx, refIdx, getRootDefaults2) => {
@@ -2302,7 +2302,7 @@ ${optionHtml}
       { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) }
     );
     const audioSourceOptions = buildAudioSourceOptions();
-    const audioSource = resolveAudioSourceValue(
+    const audioSource2 = resolveAudioSourceValue(
       clip.audioSource,
       audioSourceOptions
     );
@@ -2312,7 +2312,7 @@ ${optionHtml}
         "audioSource",
         "Audio Source",
         audioSourceOptions,
-        audioSource
+        audioSource2
       ),
       {
         "data-clip-field": "audioSource",
@@ -2322,7 +2322,7 @@ ${optionHtml}
     const audioUploadField = renderClipAudioUploadField(
       clip,
       clipIdx,
-      audioSource
+      audioSource2
     );
     const body = `
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
@@ -2524,6 +2524,6 @@ ${optionHtml}
     }, 200);
   }
   stageEditor.startGenerateWrapRetry();
-  AudioSourceController();
+  audioSource();
 })();
 //# sourceMappingURL=video-stages.js.map

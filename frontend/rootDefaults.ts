@@ -1,5 +1,3 @@
-import type { RootDefaults } from "./Types";
-import { VideoStageUtils } from "./Utils";
 import { ROOT_DIMENSION_MIN } from "./constants";
 import {
     getDropdownOptions,
@@ -8,6 +6,8 @@ import {
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
+import type { RootDefaults } from "./Types";
+import { VideoStageUtils } from "./Utils";
 
 export const getDefaultStageModel = (modelValues: string[]): string => {
     if (isRootTextToVideoModel()) {

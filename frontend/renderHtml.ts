@@ -2,26 +2,7 @@ import {
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
     resolveAudioSourceValue,
-} from "./AudioSourceController";
-import {
-    clipFieldId,
-    escapeAttr,
-    injectFieldData,
-    overrideSliderSteps,
-    refFieldId,
-    renderOptionList,
-    stageFieldId,
-} from "./RenderUtils";
-import {
-    type Clip,
-    type ImageSourceOption,
-    REF_SOURCE_BASE,
-    REF_SOURCE_REFINER,
-    REF_SOURCE_UPLOAD,
-    type RefImage,
-    type RootDefaults,
-    type Stage,
-} from "./Types";
+} from "./audioSource";
 import {
     CLIP_AUDIO_UPLOAD_DESCRIPTION,
     CLIP_AUDIO_UPLOAD_FIELD,
@@ -39,7 +20,26 @@ import {
     stageRefStrengthField,
 } from "./constants";
 import { getReferenceFrameMax } from "./normalization";
+import {
+    clipFieldId,
+    escapeAttr,
+    injectFieldData,
+    overrideSliderSteps,
+    refFieldId,
+    renderOptionList,
+    stageFieldId,
+} from "./RenderUtils";
 import { getBase2EditStageRefs } from "./swarmInputs";
+import {
+    type Clip,
+    type ImageSourceOption,
+    REF_SOURCE_BASE,
+    REF_SOURCE_REFINER,
+    REF_SOURCE_UPLOAD,
+    type RefImage,
+    type RootDefaults,
+    type Stage,
+} from "./Types";
 import { getRefSourceError } from "./validation";
 
 export const decorateAutoInputWrapper = (

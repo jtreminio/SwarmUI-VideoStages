@@ -1,7 +1,7 @@
-import type { VideoStagesConfig } from "./Types";
-import { VideoStageUtils } from "./Utils";
 import { serializeClipsForStorage } from "./persistence";
 import { getClipsInput } from "./swarmInputs";
+import type { VideoStagesConfig } from "./Types";
+import { VideoStageUtils } from "./Utils";
 
 const ROOT_VIDEO_TIMING_INPUT_IDS = new Set<string>([
     "input_videoframes",

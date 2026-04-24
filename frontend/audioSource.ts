@@ -75,7 +75,7 @@ export const resolveAudioSourceValue = (
     return AUDIO_SOURCE_NATIVE;
 };
 
-export const AudioSourceController = () => {
+export const audioSource = () => {
     const refreshOptions = (): void => {
         const selects = getSourceSelects();
         if (selects.length === 0) {
@@ -127,10 +127,7 @@ export const AudioSourceController = () => {
             bindText2AudioToggle();
             refreshOptions();
         } catch (error) {
-            console.warn(
-                "AudioSourceController: param build sync failed",
-                error,
-            );
+            console.warn("audioSource: param build sync failed", error);
         }
     };
 

@@ -4,9 +4,9 @@ import {
     stubAceStepFunRegistry,
     stubAceStepFunRegistryThrowing,
 } from "./__test_helpers__/registries";
-import { AudioSourceController } from "./AudioSourceController";
+import { audioSource } from "./audioSource";
 
-type Controller = ReturnType<typeof AudioSourceController>;
+type Controller = ReturnType<typeof audioSource>;
 
 const SOURCE_ID = "vsclip0_audioSource";
 const T2A_ID = "input_group_content_texttoaudio_toggle";
@@ -51,7 +51,7 @@ const setupDom = (options: DomFixtureOptions = {}): DomFixture => {
     return fixture;
 };
 
-describe("AudioSourceController", () => {
+describe("audioSource", () => {
     let controller: Controller | null = null;
 
     afterEach(() => {
@@ -62,7 +62,7 @@ describe("AudioSourceController", () => {
     describe("buildOptions", () => {
         it("returns Native + Upload by default", () => {
             setupDom();
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const values = controller.buildOptions().map((o) => o.value);
             expect(values).toEqual(["Native", "Upload"]);
@@ -70,7 +70,7 @@ describe("AudioSourceController", () => {
 
         it("appends Swarm Audio when the text-to-audio toggle is checked", () => {
             setupDom({ t2aChecked: true });
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const values = controller.buildOptions().map((o) => o.value);
             expect(values).toEqual(["Native", "Upload", "Swarm Audio"]);
@@ -78,7 +78,7 @@ describe("AudioSourceController", () => {
 
         it("omits Swarm Audio when the text-to-audio toggle is missing", () => {
             setupDom({ omitToggle: true });
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const values = controller.buildOptions().map((o) => o.value);
             expect(values).not.toContain("Swarm Audio");
@@ -87,7 +87,7 @@ describe("AudioSourceController", () => {
         it("appends AceStepFun refs when the registry is enabled", () => {
             setupDom();
             stubAceStepFunRegistry(["track-a", "track-b"]);
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const values = controller.buildOptions().map((o) => o.value);
             expect(values).toEqual(["Native", "Upload", "track-a", "track-b"]);
@@ -96,7 +96,7 @@ describe("AudioSourceController", () => {
         it("ignores AceStepFun refs when the registry is disabled", () => {
             setupDom();
             stubAceStepFunRegistry(["track-a"], false);
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const values = controller.buildOptions().map((o) => o.value);
             expect(values).toEqual(["Native", "Upload"]);
@@ -111,7 +111,7 @@ describe("AudioSourceController", () => {
                 "  ",
                 "track-b",
             ]);
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const values = controller.buildOptions().map((o) => o.value);
             expect(values).toEqual(["Native", "Upload", "track-a", "track-b"]);
@@ -127,7 +127,7 @@ describe("AudioSourceController", () => {
                     refs: "not an array",
                 }),
             };
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const values = controller.buildOptions().map((o) => o.value);
             expect(values).toEqual(["Native", "Upload"]);
@@ -137,7 +137,7 @@ describe("AudioSourceController", () => {
     describe("resolveSelectedValue", () => {
         it("preserves the current value when it exists in the option set", () => {
             setupDom();
-            controller = AudioSourceController();
+            controller = audioSource();
             const options = controller.buildOptions();
 
             expect(controller.resolveSelectedValue("Upload", options)).toBe(
@@ -147,7 +147,7 @@ describe("AudioSourceController", () => {
 
         it("falls back to Native when the current value is unknown", () => {
             setupDom();
-            controller = AudioSourceController();
+            controller = audioSource();
             const options = controller.buildOptions();
 
             expect(controller.resolveSelectedValue("ghost", options)).toBe(
@@ -157,7 +157,7 @@ describe("AudioSourceController", () => {
 
         it("falls back to Native for null/undefined input", () => {
             setupDom();
-            controller = AudioSourceController();
+            controller = audioSource();
             const options = controller.buildOptions();
 
             expect(controller.resolveSelectedValue(null, options)).toBe(
@@ -175,7 +175,7 @@ describe("AudioSourceController", () => {
                 initialValue: "Upload",
                 initialOptions: ["Native", "Upload", "stale-extra"],
             });
-            controller = AudioSourceController();
+            controller = audioSource();
 
             controller.refreshOptions();
 
@@ -191,7 +191,7 @@ describe("AudioSourceController", () => {
                 initialValue: "stale",
                 initialOptions: ["Native", "Upload", "stale"],
             });
-            controller = AudioSourceController();
+            controller = audioSource();
 
             controller.refreshOptions();
 
@@ -203,7 +203,7 @@ describe("AudioSourceController", () => {
                 initialValue: "Upload",
                 initialOptions: ["Native", "Upload", "stale"],
             });
-            controller = AudioSourceController();
+            controller = audioSource();
             const changeSpy = jest.fn();
             select?.addEventListener("change", changeSpy);
 
@@ -217,7 +217,7 @@ describe("AudioSourceController", () => {
                 initialValue: "Native",
                 initialOptions: ["Native", "Upload"],
             });
-            controller = AudioSourceController();
+            controller = audioSource();
             const originalOptions = select ? Array.from(select.options) : [];
 
             controller.refreshOptions();
@@ -231,7 +231,7 @@ describe("AudioSourceController", () => {
 
         it("is a no-op when the source <select> is missing", () => {
             setupDom({ omitSource: true });
-            const c = AudioSourceController();
+            const c = audioSource();
             controller = c;
             expect(() => c.refreshOptions()).not.toThrow();
         });
@@ -240,7 +240,7 @@ describe("AudioSourceController", () => {
     describe("event wiring", () => {
         it("refreshes options when the acestepfun:tracks-changed event fires", () => {
             const { select } = setupDom();
-            controller = AudioSourceController();
+            controller = audioSource();
 
             stubAceStepFunRegistry(["new-track"]);
             document.dispatchEvent(new Event(ACESTEPFUN_EVENT));
@@ -256,7 +256,7 @@ describe("AudioSourceController", () => {
                 initialValue: "Upload",
                 initialOptions: ["Native", "Upload", "stale"],
             });
-            controller = AudioSourceController();
+            controller = audioSource();
 
             select?.dispatchEvent(new Event("focusin", { bubbles: true }));
 
@@ -268,7 +268,7 @@ describe("AudioSourceController", () => {
 
         it("refreshes options when the text-to-audio toggle changes", () => {
             const { select, toggle } = setupDom();
-            controller = AudioSourceController();
+            controller = audioSource();
             controller.runOnEachBuild();
 
             expect(toggle).not.toBeNull();
@@ -287,7 +287,7 @@ describe("AudioSourceController", () => {
 
         it("stops responding to acestepfun events after dispose", () => {
             const { select } = setupDom();
-            controller = AudioSourceController();
+            controller = audioSource();
             const originalCount = select?.options.length ?? 0;
             controller.dispose();
             controller = null;
@@ -304,7 +304,7 @@ describe("AudioSourceController", () => {
             setupDom();
             expect(postParamBuildSteps).toEqual([]);
 
-            controller = AudioSourceController();
+            controller = audioSource();
 
             const steps = postParamBuildSteps;
             expect(steps).toHaveLength(1);
@@ -316,7 +316,7 @@ describe("AudioSourceController", () => {
                 initialValue: "Upload",
                 initialOptions: ["Native", "Upload", "stale"],
             });
-            controller = AudioSourceController();
+            controller = audioSource();
             for (const step of postParamBuildSteps) {
                 step();
             }
@@ -332,7 +332,7 @@ describe("AudioSourceController", () => {
                 omitSource: true,
                 omitToggle: true,
             });
-            const c = AudioSourceController();
+            const c = audioSource();
             controller = c;
             expect(() => c.runOnEachBuild()).not.toThrow();
         });
@@ -343,12 +343,12 @@ describe("AudioSourceController", () => {
             const consoleSpy = jest
                 .spyOn(console, "warn")
                 .mockImplementation(() => {});
-            const c = AudioSourceController();
+            const c = audioSource();
             controller = c;
 
             expect(() => c.runOnEachBuild()).not.toThrow();
             expect(consoleSpy).toHaveBeenCalledWith(
-                "AudioSourceController: param build sync failed",
+                "audioSource: param build sync failed",
                 expect.any(Error),
             );
 

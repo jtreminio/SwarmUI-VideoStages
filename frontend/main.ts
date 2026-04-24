@@ -1,4 +1,4 @@
-import { AudioSourceController } from "./AudioSourceController";
+import { audioSource } from "./audioSource";
 import { VideoStageEditor } from "./VideoStageEditor";
 
 const stageEditor = VideoStageEditor();
@@ -28,4 +28,4 @@ if (!tryRegisterStageEditor()) {
 
 stageEditor.startGenerateWrapRetry();
 
-AudioSourceController();
+audioSource();

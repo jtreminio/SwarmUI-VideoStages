@@ -1,11 +1,11 @@
+import { parseBase2EditStageIndex } from "./constants";
+import { isAvailableBase2EditReference } from "./swarmInputs";
 import {
     type Clip,
     REF_SOURCE_BASE,
     REF_SOURCE_REFINER,
     REF_SOURCE_UPLOAD,
 } from "./Types";
-import { parseBase2EditStageIndex } from "./constants";
-import { isAvailableBase2EditReference } from "./swarmInputs";
 
 export const getRefSourceError = (source: string): string | null => {
     const compact = `${source || ""}`.trim().replace(/\s+/g, "");

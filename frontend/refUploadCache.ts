@@ -1,10 +1,10 @@
-import type { Clip } from "./Types";
 import {
     type CachedRefUpload,
     normalizeUploadFileName,
     parseRefUploadKey,
     refUploadKey,
 } from "./constants";
+import type { Clip } from "./Types";
 
 export type RefUploadCacheApi = {
     get: (key: string) => CachedRefUpload | undefined;

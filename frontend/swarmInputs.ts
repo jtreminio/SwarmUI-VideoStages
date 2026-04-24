@@ -1,9 +1,9 @@
-import { VideoStageUtils } from "./Utils";
 import {
     parseBase2EditStageIndex,
     ROOT_DIMENSION_MIN,
     ROOT_FPS_MIN,
 } from "./constants";
+import { VideoStageUtils } from "./Utils";
 
 export const getClipsInput = (): HTMLInputElement | null =>
     VideoStageUtils.getInputElement("input_videostages");

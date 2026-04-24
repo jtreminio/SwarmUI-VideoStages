@@ -1,4 +1,3 @@
-import type { Clip, StoredClip, VideoStagesConfig } from "./Types";
 import {
     buildDefaultClip,
     normalizeClip,
@@ -12,6 +11,7 @@ import {
     getRegisteredRootDimension,
     getRegisteredRootFps,
 } from "./swarmInputs";
+import type { Clip, StoredClip, VideoStagesConfig } from "./Types";
 
 type ParsedConfig = {
     width?: unknown;

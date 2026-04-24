@@ -1,4 +1,3 @@
-import type { Clip, VideoStagesConfig } from "./Types";
 import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_AUDIO_UPLOAD_LABEL,
@@ -25,6 +24,7 @@ import { createRefUploadCache } from "./refUploadCache";
 import { renderClipCard } from "./renderHtml";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { seedRegisteredDimensionsFromCore } from "./swarmInputs";
+import type { Clip, VideoStagesConfig } from "./Types";
 import { validateClips } from "./validation";
 
 export type VideoStageEditor = {

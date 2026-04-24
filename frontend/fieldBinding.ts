@@ -1,12 +1,4 @@
-import { AUDIO_SOURCE_UPLOAD } from "./AudioSourceController";
-import {
-    type Clip,
-    REF_SOURCE_BASE,
-    REF_SOURCE_UPLOAD,
-    type RefImage,
-    type RootDefaults,
-    type Stage,
-} from "./Types";
+import { AUDIO_SOURCE_UPLOAD } from "./audioSource";
 import {
     clamp,
     normalizeUploadFileName,
@@ -19,6 +11,14 @@ import {
     normalizeStageRefStrengthValue,
 } from "./normalization";
 import type { RefUploadCacheApi } from "./refUploadCache";
+import {
+    type Clip,
+    REF_SOURCE_BASE,
+    REF_SOURCE_UPLOAD,
+    type RefImage,
+    type RootDefaults,
+    type Stage,
+} from "./Types";
 
 type ApplyRefFieldDeps = {
     getRootDefaults: () => RootDefaults;

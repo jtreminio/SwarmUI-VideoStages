@@ -1,6 +1,4 @@
-import { AUDIO_SOURCE_NATIVE } from "./AudioSourceController";
-import { snapDurationToFps } from "./RenderUtils";
-import type { Clip, VideoStagesConfig } from "./Types";
+import { AUDIO_SOURCE_NATIVE } from "./audioSource";
 import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_DURATION_MIN,
@@ -24,8 +22,10 @@ import {
     getReferenceFrameMax,
 } from "./normalization";
 import type { PersistenceCallbacks } from "./persistence";
+import { snapDurationToFps } from "./RenderUtils";
 import type { RefUploadCacheApi } from "./refUploadCache";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import type { Clip, VideoStagesConfig } from "./Types";
 
 export type DomEventsDeps = {
     getEditor: () => HTMLElement | null;

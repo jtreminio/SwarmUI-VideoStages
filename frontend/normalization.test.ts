@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@jest/globals";
-import { REF_SOURCE_BASE, type RootDefaults } from "./Types";
 import {
     buildDefaultRef,
     normalizeClip,
@@ -8,6 +7,7 @@ import {
     readRawStageProp,
     readRawStageString,
 } from "./normalization";
+import { REF_SOURCE_BASE, type RootDefaults } from "./Types";
 
 const stubDefaults = (): RootDefaults => ({
     modelValues: ["ltx"],
