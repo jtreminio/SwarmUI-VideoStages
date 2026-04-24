@@ -23,21 +23,18 @@ public class AudioSourceParamTests
         ["UpscaleMethod"] = "pixel-lanczos",
     };
 
-    private static string BuildConfigJson(string audioSource)
+    private static string BuildConfigJson(string audioSource) => JsonConvert.SerializeObject(new JObject
     {
-        return JsonConvert.SerializeObject(new JObject
-        {
-            ["Width"] = 1024,
-            ["Height"] = 576,
-            ["Clips"] = new JArray(
-                new JObject
-                {
-                    ["Name"] = "Clip 0",
-                    ["AudioSource"] = audioSource,
-                    ["Stages"] = new JArray(MakeStage())
-                })
-        });
-    }
+        ["Width"] = 1024,
+        ["Height"] = 576,
+        ["Clips"] = new JArray(
+            new JObject
+            {
+                ["Name"] = "Clip 0",
+                ["AudioSource"] = audioSource,
+                ["Stages"] = new JArray(MakeStage())
+            })
+    });
 
     [Theory]
     [InlineData(VideoStagesExtension.AudioSourceSwarm)]

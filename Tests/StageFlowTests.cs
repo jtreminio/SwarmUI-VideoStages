@@ -36,19 +36,13 @@ public partial class StageFlowTests
             ["ImageReference"] = imageReference
         };
 
-    /// <summary>
-    /// Wraps one or more stage objects in a clip that carries width / height
-    /// metadata; the first non-skipped clip's resolution drives the root
-    /// video resizer in the runtime, replacing the legacy Root Width /
-    /// Root Height parameters.
-    /// </summary>
     private static JObject MakeClip(int width, int height, params JObject[] stages) =>
         new()
         {
             ["Name"] = "Clip 0",
             ["Width"] = width,
             ["Height"] = height,
-            ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
+            ["Stages"] = new JArray(stages)
         };
 
     private static JObject MakeClipWithRefs(int width, int height, IEnumerable<JObject> refs, params JObject[] stages) =>
@@ -57,8 +51,8 @@ public partial class StageFlowTests
             ["Name"] = "Clip 0",
             ["Width"] = width,
             ["Height"] = height,
-            ["Refs"] = new JArray((refs ?? []).Cast<JToken>().ToArray()),
-            ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
+            ["Refs"] = new JArray(refs ?? []),
+            ["Stages"] = new JArray(stages)
         };
 
     private static JObject MakeRef(string source, int frame = 1, bool fromEnd = false) =>
@@ -74,7 +68,7 @@ public partial class StageFlowTests
         {
             ["Width"] = width,
             ["Height"] = height,
-            ["Clips"] = new JArray(clips.Cast<JToken>().ToArray())
+            ["Clips"] = new JArray(clips)
         };
 
     private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, string prompt = "unit test prompt")
@@ -187,12 +181,6 @@ public partial class StageFlowTests
             decodeNode.Node,
             decodeNode.Node["inputs"]?["samples"] is not null ? "samples"
                 : "latent");
-
-        if (expectedReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO)
-        {
-            Assert.True(OutputTracesBackToSource(workflow, latentRef, expectedReference.Media.Path));
-            return;
-        }
 
         Assert.True(OutputTracesBackToSource(workflow, latentRef, expectedReference.Media.Path));
     }
@@ -414,11 +402,6 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    /// <summary>
-    /// Like <see cref="BuildCoreVideoWorkflowSteps"/> but includes the core priority-10
-    /// pre-video save step so <c>willHaveFollowupVideo</c> pins an image save before native
-    /// Image→Video (mirrors full SwarmUI workflows with VideoStages takeover).
-    /// </summary>
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPreVideoSave() =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CorePreVideoSavePrepStep(), WorkflowTestHarness.CoreImageToVideoStep()])

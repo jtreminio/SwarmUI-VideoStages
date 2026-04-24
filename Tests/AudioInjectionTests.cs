@@ -18,6 +18,7 @@ public class AudioInjectionTests
     private const string LtxvAudioVaeDecode = "LTXVAudioVAEDecode";
     private const string SwarmSaveAnimationWs = "SwarmSaveAnimationWS";
     private const string SwarmAudioLengthToFrames = "SwarmAudioLengthToFrames";
+    private const string SwarmLoadAudioB64 = "SwarmLoadAudioB64";
     private const string SwarmEnsureAudio = "SwarmEnsureAudio";
     private const string LtxvAudioVaeEncode = "LTXVAudioVAEEncode";
     private const string SetLatentNoiseMask = "SetLatentNoiseMask";
@@ -41,7 +42,7 @@ public class AudioInjectionTests
         ["Name"] = "Clip 0",
         ["Width"] = width,
         ["Height"] = height,
-        ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
+        ["Stages"] = new JArray(stages)
     };
 
     private static JObject MakeClipConfig(string audioSource, params JObject[] stages) => new()
@@ -50,7 +51,7 @@ public class AudioInjectionTests
         ["Width"] = 512,
         ["Height"] = 512,
         ["AudioSource"] = audioSource,
-        ["Stages"] = new JArray(stages.Cast<JToken>().ToArray())
+        ["Stages"] = new JArray(stages)
     };
 
     private static JObject MakeClipConfigWithUpload(JObject uploadedAudio, params JObject[] stages)
@@ -72,7 +73,7 @@ public class AudioInjectionTests
     {
         ["Width"] = 512,
         ["Height"] = 512,
-        ["Clips"] = new JArray(clips.Cast<JToken>().ToArray())
+        ["Clips"] = new JArray(clips)
     };
 
     private static JObject MakeUploadedAudio(
@@ -356,7 +357,7 @@ public class AudioInjectionTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
         Assert.Empty(WorkflowUtils.NodesOfType(workflow, SwarmAudioLengthToFrames));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "SwarmLoadAudioB64"));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, SwarmLoadAudioB64));
         Assert.Empty(WorkflowUtils.NodesOfType(workflow, SetLatentNoiseMask));
 
         WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
@@ -389,7 +390,7 @@ public class AudioInjectionTests
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
-        WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, "SwarmLoadAudioB64");
+        WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmLoadAudioB64);
         WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
         JArray lengthAudioIn = WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio");
         WorkflowNode lengthEnsure = WorkflowAssertions.RequireNodeById(workflow, $"{lengthAudioIn[0]}");
@@ -476,7 +477,7 @@ public class AudioInjectionTests
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
-        IReadOnlyList<WorkflowNode> uploadNodes = WorkflowUtils.NodesOfType(workflow, "SwarmLoadAudioB64");
+        IReadOnlyList<WorkflowNode> uploadNodes = WorkflowUtils.NodesOfType(workflow, SwarmLoadAudioB64);
         Assert.Equal(2, uploadNodes.Count);
     }
 
@@ -503,7 +504,7 @@ public class AudioInjectionTests
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
-        WorkflowNode uploadedAudioNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "SwarmLoadAudioB64"));
+        WorkflowNode uploadedAudioNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, SwarmLoadAudioB64));
         IReadOnlyList<WorkflowInputConnection> uploadConsumers = WorkflowUtils.FindInputConnections(
             workflow,
             new JArray(uploadedAudioNode.Id, 0));

@@ -94,11 +94,6 @@ public partial class StageFlowTests
 
         Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
 
-        // Upscaling chains additively from the prior stage's dimensions:
-        //   512x512 base -> latentmodel x2 -> 1024x1024 -> pixel-lanczos x2 -> 2048x2048
-        // The third stage's pixel-lanczos must therefore add an ImageScale at 2048x2048.
-        // Without that node the third sampler reuses the prior dimensions and the chain
-        // is not additive.
         WorkflowNode pixelUpscaleScaleNode = Assert.Single(
             WorkflowUtils.NodesOfType(workflow, "ImageScale"),
             node => node.Node["inputs"]?.Value<int>("width") == 2048

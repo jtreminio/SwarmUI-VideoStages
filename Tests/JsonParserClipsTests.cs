@@ -152,7 +152,6 @@ public class JsonParserClipsTests
         List<JsonParser.ClipSpec> clips = parser.ParseClips();
 
         Assert.Equal(2, clips.Count);
-
         Assert.Equal("First Clip", clips[0].Name);
         Assert.Equal(4.0, clips[0].DurationSeconds);
         Assert.Equal(800, clips[0].Width);
@@ -259,15 +258,15 @@ public class JsonParserClipsTests
                 audioSource: VideoStagesExtension.AudioSourceUpload,
                 uploadedAudio: new JObject
                 {
-                    ["Data"] = "inputs/_comfy1/the-harlem-shake_part02.wav",
-                    ["FileName"] = "the-harlem-shake_part02.wav",
+                    ["Data"] = "inputs/_comfy1/clip_part02.wav",
+                    ["FileName"] = "clip_part02.wav",
                 })));
         JsonParser parser = BuildParser(json);
 
         JsonParser.ClipSpec clip = parser.ParseClips().Single();
 
         Assert.NotNull(clip.UploadedAudio);
-        Assert.Equal("inputs/_comfy1/the-harlem-shake_part02.wav", clip.UploadedAudio.Data);
+        Assert.Equal("inputs/_comfy1/clip_part02.wav", clip.UploadedAudio.Data);
 
         AudioFile audio = parser.ParseUploadedAudioForClip(clip);
 

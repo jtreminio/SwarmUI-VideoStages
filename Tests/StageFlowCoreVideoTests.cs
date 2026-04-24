@@ -219,8 +219,8 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithPreVideoSave());
 
-        Assert.Equal(1280, generator.CurrentMedia?.Width);
-        Assert.Equal(1024, generator.CurrentMedia?.Height);
+        Assert.Equal(1280, generator.CurrentMedia.Width);
+        Assert.Equal(1024, generator.CurrentMedia.Height);
 
         foreach (WorkflowNode scale in WorkflowUtils.NodesOfType(workflow, "ImageScale"))
         {
@@ -308,7 +308,6 @@ public partial class StageFlowTests
         WorkflowNode imgToVideoNode = Assert.Single(
             WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace").OrderBy(node => int.Parse(node.Id)));
 
-        Assert.NotNull(WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
             new JArray(preprocessNode.Id, 0)));
@@ -373,14 +372,9 @@ public partial class StageFlowTests
         WorkflowNode preprocessNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
         StageRefStore store = new(generator);
         Assert.NotNull(store.Base);
-        AssertGuideReferenceResolvesToPreprocessInput(
-            workflow,
-            WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
-            store.Base);
-        Assert.False(OutputTracesBackToSource(
-            workflow,
-            WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
-            new JArray(rootScaleNode.Id, 0)));
+        JArray preprocessImageIn = WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image");
+        AssertGuideReferenceResolvesToPreprocessInput(workflow, preprocessImageIn, store.Base);
+        Assert.False(OutputTracesBackToSource(workflow, preprocessImageIn, new JArray(rootScaleNode.Id, 0)));
 
         WorkflowNode imgToVideoNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
         Assert.Equal(0.55, imgToVideoNode.Node["inputs"]?.Value<double>("strength"));
