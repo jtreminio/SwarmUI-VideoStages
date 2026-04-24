@@ -2048,6 +2048,40 @@ describe("videoStageEditor", () => {
             );
         });
 
+        it("updates stored stage upscale method from non-bubbling dropdown changes", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const s1Range = document.querySelector(
+                '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
+            ) as HTMLInputElement | null;
+            const s1Method = document.querySelector(
+                '[data-stage-field="upscaleMethod"][data-stage-idx="1"]',
+            ) as HTMLSelectElement | null;
+            expect(s1Range).not.toBeNull();
+            expect(s1Method).not.toBeNull();
+
+            const range1 = must(s1Range);
+            range1.value = "1.5";
+            range1.dispatchEvent(new Event("input", { bubbles: true }));
+            await flushReRender();
+
+            const method1 = must(s1Method);
+            method1.value = "pixel-bicubic";
+            method1.dispatchEvent(new Event("change"));
+
+            expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
+                "pixel-bicubic",
+            );
+        });
+
         it("updates stored stage upscale when the numeric slider half syncs through a non-bubbling range change", async () => {
             const editor = videoStageEditor();
             editor.init();

@@ -566,11 +566,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
             if (!isFieldTarget(inputTarget)) {
                 return;
             }
-            if (
-                !(inputTarget instanceof HTMLInputElement) ||
-                inputTarget.type !== "range" ||
-                event.bubbles
-            ) {
+            if (event.bubbles) {
                 return;
             }
             handleFieldChange(inputTarget, deps, true);

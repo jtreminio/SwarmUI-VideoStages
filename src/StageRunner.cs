@@ -196,13 +196,15 @@ internal class StageRunner(WorkflowGenerator g)
         bool isLtxv2Stage = stageVideoModel?.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID;
         if (isLtxv2Stage)
         {
-            bool supportedLtxUpscale = stage.UpscaleMethod.StartsWith("latent-", StringComparison.OrdinalIgnoreCase)
-                || stage.UpscaleMethod.StartsWith("latentmodel-", StringComparison.OrdinalIgnoreCase);
-            if (supportedLtxUpscale)
+            if (IsSupportedLtxUpscaleMethod(stage.UpscaleMethod))
             {
                 g.CurrentMedia = source;
                 return source;
             }
+
+            Logs.Warning($"VideoStages: Stage {stage.Id} uses unsupported LTX upscale method '{stage.UpscaleMethod}'. Ignoring upscale.");
+            g.CurrentMedia = source;
+            return source;
         }
 
         if (stage.UpscaleMethod.StartsWith("pixel-", StringComparison.OrdinalIgnoreCase))
@@ -253,6 +255,12 @@ internal class StageRunner(WorkflowGenerator g)
 
         g.CurrentMedia = source;
         return source;
+    }
+
+    private static bool IsSupportedLtxUpscaleMethod(string upscaleMethod)
+    {
+        return upscaleMethod.StartsWith("latent-", StringComparison.OrdinalIgnoreCase)
+            || upscaleMethod.StartsWith("latentmodel-", StringComparison.OrdinalIgnoreCase);
     }
 
     private void StampCurrentMediaMetadata(WGNodeData sourceMedia, WorkflowGenerator.ImageToVideoGenInfo genInfo)

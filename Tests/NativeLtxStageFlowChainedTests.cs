@@ -55,7 +55,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Chained_native_ltx_pixel_upscale_after_latent_upscale_chains_additively_through_decoded_video()
+    public void Chained_native_ltx_pixel_upscale_after_latent_upscale_is_ignored_without_image_scale_scaffolding()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -89,18 +89,11 @@ public partial class StageFlowTests
 
         Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
 
-        WorkflowNode pixelUpscaleScaleNode = Assert.Single(
+        Assert.DoesNotContain(
             WorkflowUtils.NodesOfType(workflow, "ImageScale"),
             node => node.Node["inputs"]?.Value<int>("width") == 2048
                 && node.Node["inputs"]?.Value<int>("height") == 2048
-                && $"{node.Node["inputs"]?["crop"]}" == "disabled"
-                && $"{node.Node["inputs"]?["upscale_method"]}" == "lanczos");
-
-        WorkflowNode finalSampler = samplerNodes[2];
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowAssertions.RequireConnectionInput(finalSampler.Node, "latent_image"),
-            new JArray(pixelUpscaleScaleNode.Id, 0)));
+                && $"{node.Node["inputs"]?["crop"]}" == "disabled");
     }
 
     [Fact]

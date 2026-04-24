@@ -279,6 +279,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
             return ApplyLatentUpscale(stageLatent, latentMethod, stage.Upscale, width, height);
         }
 
+        Logs.Warning($"VideoStages: Stage {stage.Id} uses unsupported LTX upscale method '{stage.UpscaleMethod}'. Ignoring upscale.");
         return stageLatent;
     }
 
