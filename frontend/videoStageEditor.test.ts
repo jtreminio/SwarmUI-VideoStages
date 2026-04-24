@@ -442,6 +442,33 @@ describe("videoStageEditor", () => {
             ).toBe("Clip 0");
         });
 
+        it("disables stored clip duration when Clip Length from Audio is enabled", () => {
+            getStagesInput().value = JSON.stringify({
+                clips: [
+                    {
+                        duration: 4,
+                        audioSource: "Upload",
+                        clipLengthFromAudio: true,
+                        refs: [],
+                        stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
+                    },
+                ],
+            });
+
+            const editor = videoStageEditor();
+            editor.init();
+
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"].auto-slider-number',
+            ) as HTMLInputElement | null;
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(parseStored()[0].clipLengthFromAudio).toBe(true);
+            expect(durationNumber?.disabled).toBe(true);
+            expect(durationSlider?.disabled).toBe(true);
+        });
+
         it("renders stored AceStepFun audio source with a friendly label", () => {
             getStagesInput().value = JSON.stringify({
                 clips: [
@@ -860,7 +887,11 @@ describe("videoStageEditor", () => {
             expect(clipLengthFromAudioField?.style.display).toBe("none");
 
             const saveAudioTrackRow = saveAudioTrack?.closest(".auto-input");
-            expect(saveAudioTrackRow?.nextElementSibling).toBe(uploadField);
+            const nextAutoInput =
+                saveAudioTrackRow?.parentElement?.querySelector(
+                    ".vs-clip-audio-upload-field",
+                );
+            expect(nextAutoInput).toBe(uploadField);
             expect(saveAudioTrackRow).toBe(saveAudioTrackField);
         });
 
@@ -903,7 +934,7 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].saveAudioTrack).toBe(false);
         });
 
-        it("renders the Save Audio Track tooltip before the label text", () => {
+        it("renders checkbox tooltip buttons on the left and leaves Audio Upload as core renders it", () => {
             stubAceStepFunRegistry(["audio0"]);
             const editor = videoStageEditor();
             editor.init();
@@ -911,13 +942,41 @@ describe("videoStageEditor", () => {
             const saveAudioTrackField = document.querySelector(
                 ".vs-clip-save-audio-track-field .auto-input-name",
             );
-            expect(saveAudioTrackField).not.toBeNull();
-
-            const firstChild = saveAudioTrackField?.firstElementChild;
-            expect(firstChild?.classList.contains("auto-input-qbutton")).toBe(
-                true,
+            const clipLengthFromAudioField = document.querySelector(
+                ".vs-clip-length-from-audio-field .auto-input-name",
             );
+            const audioUploadField = document.querySelector(
+                ".vs-clip-audio-upload-field .auto-input-name",
+            );
+            expect(saveAudioTrackField).not.toBeNull();
+            expect(clipLengthFromAudioField).not.toBeNull();
+            expect(audioUploadField).not.toBeNull();
+
+            expect(
+                saveAudioTrackField?.firstElementChild?.classList.contains(
+                    "auto-input-qbutton",
+                ),
+            ).toBe(true);
+            expect(
+                clipLengthFromAudioField?.firstElementChild?.classList.contains(
+                    "auto-input-qbutton",
+                ),
+            ).toBe(true);
+            expect(
+                audioUploadField?.lastElementChild?.classList.contains(
+                    "auto-input-qbutton",
+                ),
+            ).toBe(true);
             expect(saveAudioTrackField?.textContent).toBe("?Save Audio Track");
+            expect(clipLengthFromAudioField?.textContent).toBe(
+                "?Clip Length from Audio",
+            );
+            expect(audioUploadField?.textContent).toBe("Audio Upload?");
+
+            const audioUploadPopover = document.getElementById(
+                "popover_vsclip0_uploadedAudio",
+            );
+            expect(audioUploadPopover).toBeNull();
         });
 
         it("shows Clip Length from Audio for upload and AceStepFun sources", () => {
@@ -1066,6 +1125,35 @@ describe("videoStageEditor", () => {
                 unknown
             >;
             expect(rawConfig.uploadedAudio).toBeUndefined();
+        });
+
+        it("stores audio selected from the input browser after SwarmUI updates file data", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            expect(audioSource).not.toBeNull();
+            const clipAudioSource = must(audioSource);
+            clipAudioSource.value = "Upload";
+            clipAudioSource.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+
+            const uploadInput = document.querySelector(
+                '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            expect(uploadInput).not.toBeNull();
+            const fileInput = must(uploadInput);
+
+            fileInput.dataset.filename = "inputs/clip.wav";
+            fileInput.dataset.filedata = "inputs/clip.wav";
+            await Promise.resolve();
+
+            const clips = parseStored();
+            expect(clips[0].uploadedAudio?.data).toBe("inputs/clip.wav");
+            expect(clips[0].uploadedAudio?.fileName).toBe("clip.wav");
         });
 
         it("stores uploaded audio payload when the browser provides a File", async () => {
@@ -1619,6 +1707,11 @@ describe("videoStageEditor", () => {
             ) as HTMLInputElement | null;
             expect(frameNumber?.max).toBe("121");
             expect(frameRange?.max).toBe("121");
+            expect(
+                frameNumber
+                    ?.closest(".auto-slider-box")
+                    ?.querySelector(".auto-input-name")?.textContent,
+            ).toBe("Frame");
 
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"].auto-slider-number',

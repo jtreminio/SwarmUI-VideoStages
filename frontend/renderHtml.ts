@@ -67,15 +67,13 @@ const moveQButtonBeforeLabelText = (html: string): string =>
         );
 
 const disableSliderInputs = (html: string): string =>
-    html
-        .replace(
-            /<input class="auto-slider-number nogrow"/g,
-            '<input class="auto-slider-number nogrow" disabled',
-        )
-        .replace(
-            /<input class="auto-slider-range nogrow"/g,
-            '<input class="auto-slider-range nogrow" disabled',
-        );
+    html.replace(
+        /<input\b([^>]*\sclass="[^"]*\bauto-slider-(?:number|range)\b[^"]*"[^>]*)>/g,
+        (match, attrs) =>
+            /\sdisabled(?:[\s=>]|$)/.test(match)
+                ? match
+                : `<input${attrs} disabled>`,
+    );
 
 const hideFirstStageField = (html: string, stageIdx: number): string =>
     stageIdx === 0
@@ -221,6 +219,15 @@ export const renderClipAudioUploadField = (
     );
 };
 
+const renderLeftTooltipCheckboxField = (
+    html: string,
+    className: string,
+    hidden: boolean,
+): string =>
+    moveQButtonBeforeLabelText(
+        decorateAutoInputWrapper(html, className, hidden),
+    );
+
 export const renderRefRow = (
     ref: RefImage,
     clip: Clip,
@@ -293,7 +300,7 @@ export const renderRefRow = (
             "",
             refFieldId(clipIdx, refIdx, "frame"),
             "frame",
-            `Frame (max ${frameCount})`,
+            "Frame",
             "",
             String(ref.frame),
             REF_FRAME_MIN,
@@ -408,15 +415,7 @@ export const renderStageRow = (
         if (!disabled) {
             return html;
         }
-        return html
-            .replace(
-                /<input class="auto-slider-number nogrow"/g,
-                '<input class="auto-slider-number nogrow" disabled',
-            )
-            .replace(
-                /<input class="auto-slider-range nogrow"/g,
-                '<input class="auto-slider-range nogrow" disabled',
-            );
+        return disableSliderInputs(html);
     };
     const stageDropdownField = (
         field: string,
@@ -645,51 +644,47 @@ export const renderClipCard = (
             "data-clip-idx": String(clipIdx),
         },
     );
-    const clipLengthFromAudioField = moveQButtonBeforeLabelText(
-        decorateAutoInputWrapper(
-            injectFieldData(
-                makeCheckboxInput(
-                    "",
-                    clipFieldId(clipIdx, "clipLengthFromAudio"),
-                    "clipLengthFromAudio",
-                    "Clip Length from Audio",
-                    "Sets the video clip length to be the same length as the selected audio track.",
-                    clipLengthFromAudio,
-                    false,
-                    true,
-                    true,
-                ),
-                {
-                    "data-clip-field": "clipLengthFromAudio",
-                    "data-clip-idx": String(clipIdx),
-                },
+    const clipLengthFromAudioField = renderLeftTooltipCheckboxField(
+        injectFieldData(
+            makeCheckboxInput(
+                "",
+                clipFieldId(clipIdx, "clipLengthFromAudio"),
+                "clipLengthFromAudio",
+                "Clip Length from Audio",
+                "Sets the video clip length to be the same length as the selected audio track.",
+                clipLengthFromAudio,
+                false,
+                true,
+                true,
             ),
-            "vs-clip-length-from-audio-field",
-            !canUseAudioLength,
+            {
+                "data-clip-field": "clipLengthFromAudio",
+                "data-clip-idx": String(clipIdx),
+            },
         ),
+        "vs-clip-length-from-audio-field",
+        !canUseAudioLength,
     );
-    const saveAudioTrackField = moveQButtonBeforeLabelText(
-        decorateAutoInputWrapper(
-            injectFieldData(
-                makeCheckboxInput(
-                    "",
-                    clipFieldId(clipIdx, "saveAudioTrack"),
-                    "saveAudioTrack",
-                    "Save Audio Track",
-                    "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
-                    clip.saveAudioTrack,
-                    false,
-                    true,
-                    true,
-                ),
-                {
-                    "data-clip-field": "saveAudioTrack",
-                    "data-clip-idx": String(clipIdx),
-                },
+    const saveAudioTrackField = renderLeftTooltipCheckboxField(
+        injectFieldData(
+            makeCheckboxInput(
+                "",
+                clipFieldId(clipIdx, "saveAudioTrack"),
+                "saveAudioTrack",
+                "Save Audio Track",
+                "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
+                clip.saveAudioTrack,
+                false,
+                true,
+                true,
             ),
-            "vs-clip-save-audio-track-field",
-            !isAceStepFunAudioSource(audioSource),
+            {
+                "data-clip-field": "saveAudioTrack",
+                "data-clip-idx": String(clipIdx),
+            },
         ),
+        "vs-clip-save-audio-track-field",
+        !isAceStepFunAudioSource(audioSource),
     );
     const audioUploadField = renderClipAudioUploadField(
         clip,

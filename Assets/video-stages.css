@@ -264,19 +264,14 @@
     opacity: 0.7;
 }
 
-#videostages_stage_editor
-    .vs-card-body
-    .auto-slider-number[data-stage-field="upscale"]:disabled,
-#videostages_stage_editor
-    .vs-card-body
-    .auto-slider-range[data-stage-field="upscale"]:disabled {
+#videostages_stage_editor .auto-slider-number:disabled,
+#videostages_stage_editor .auto-slider-range:disabled {
     opacity: 0.45;
     color: var(--text-soft);
 }
 
-#videostages_stage_editor .vs-card-body .auto-slider-box:has(
-    [data-stage-field="upscale"]:disabled
-) {
+#videostages_stage_editor .auto-slider-box:has(.auto-slider-number:disabled),
+#videostages_stage_editor .auto-slider-box:has(.auto-slider-range:disabled) {
     opacity: 0.7;
 }
 

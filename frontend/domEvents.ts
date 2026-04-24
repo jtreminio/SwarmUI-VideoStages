@@ -65,6 +65,13 @@ const isDurationInput = (
 ): value is HTMLInputElement =>
     isSliderNumericInput(value) && value.dataset.clipField === "duration";
 
+const isClipAudioUploadInput = (
+    value: EventTarget | null,
+): value is HTMLInputElement =>
+    value instanceof HTMLInputElement &&
+    value.type === "file" &&
+    value.dataset.clipField === CLIP_AUDIO_UPLOAD_FIELD;
+
 const cacheClipAudioSelection = (
     clipIdx: number,
     fileInput: HTMLInputElement,
@@ -427,6 +434,7 @@ export const handleFieldChange = (
 let latestDomEventDeps: DomEventsDeps | null = null;
 let stageEditorDocumentClickBound = false;
 const stageEditorsWithFieldListeners = new WeakSet<HTMLElement>();
+const stageEditorsWithUploadObservers = new WeakSet<HTMLElement>();
 
 const getClickTargetElement = (event: MouseEvent): Element | null => {
     if (event.target instanceof Element) {
@@ -497,6 +505,35 @@ const handleStageEditorDocumentClick = (event: MouseEvent): void => {
     }
 };
 
+const observeMediaFileDatasetChanges = (
+    editor: HTMLElement,
+    deps: DomEventsDeps,
+): void => {
+    if (
+        stageEditorsWithUploadObservers.has(editor) ||
+        typeof MutationObserver === "undefined"
+    ) {
+        return;
+    }
+    stageEditorsWithUploadObservers.add(editor);
+
+    new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (!isClipAudioUploadInput(mutation.target)) {
+                continue;
+            }
+            if (!editor.contains(mutation.target)) {
+                continue;
+            }
+            handleFieldChange(mutation.target, deps);
+        }
+    }).observe(editor, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-filedata", "data-filename"],
+    });
+};
+
 export const attachEventListeners = (deps: DomEventsDeps): void => {
     latestDomEventDeps = deps;
     deps.ensureEditorRoot();
@@ -512,6 +549,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
             true,
         );
     }
+    observeMediaFileDatasetChanges(editor, deps);
 
     if (stageEditorsWithFieldListeners.has(editor)) {
         return;
