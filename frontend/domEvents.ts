@@ -450,6 +450,24 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
     editor.addEventListener("change", (event: Event) => {
         handleFieldChange(event.target, deps);
     });
+    editor.addEventListener(
+        "change",
+        (event: Event) => {
+            const inputTarget = event.target;
+            if (!isFieldTarget(inputTarget)) {
+                return;
+            }
+            if (
+                !(inputTarget instanceof HTMLInputElement) ||
+                inputTarget.type !== "range" ||
+                event.bubbles
+            ) {
+                return;
+            }
+            handleFieldChange(inputTarget, deps, true);
+        },
+        true,
+    );
     editor.addEventListener("input", (event: Event) => {
         const inputTarget = event.target;
         if (!isFieldTarget(inputTarget)) {

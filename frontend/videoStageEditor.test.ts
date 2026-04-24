@@ -378,6 +378,7 @@ describe("videoStageEditor", () => {
             getStagesInput().value = JSON.stringify({
                 width: 800,
                 height: 600,
+                fps: 12,
                 clips: [
                     {
                         name: "First",
@@ -398,6 +399,7 @@ describe("videoStageEditor", () => {
             const clips = parseStored();
             expect(config.width).toBe(800);
             expect(config.height).toBe(600);
+            expect(config.fps).toBe(12);
             expect(clips).toHaveLength(1);
             expect(clips[0].name).toBe("First");
             expect(clips[0].audioSource).toBe("Upload");
@@ -1401,6 +1403,29 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
                 "pixel-bicubic",
             );
+        });
+
+        it("updates stored stage upscale when the numeric slider half syncs through a non-bubbling range change", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const range = document.querySelector(
+                '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
+            ) as HTMLInputElement | null;
+            expect(range).not.toBeNull();
+
+            const syncedRange = must(range);
+            syncedRange.value = "1.75";
+            syncedRange.dispatchEvent(new Event("change"));
+
+            expect(parseStored()[0].stages?.[1].upscale).toBe(1.75);
         });
 
         it("updates stored ref strength when a stage ref slider moves", async () => {

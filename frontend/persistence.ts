@@ -5,12 +5,7 @@ import {
     normalizeRootFps,
 } from "./normalization";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
-import {
-    getClipsInput,
-    getCoreDimension,
-    getRegisteredRootDimension,
-    getRegisteredRootFps,
-} from "./swarmInputs";
+import { getClipsInput } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 
 type ParsedConfig = {
@@ -70,13 +65,9 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
     );
 
 const getEffectiveRootDimension = (
-    field: "width" | "height",
     persistedValue: unknown,
     fallback: number,
-): number =>
-    getRegisteredRootDimension(field) ??
-    getCoreDimension(field) ??
-    normalizeRootDimension(persistedValue, fallback);
+): number => normalizeRootDimension(persistedValue, fallback);
 
 export interface PersistenceCallbacks {
     onAfterSerialize?: (serialized: string) => void;
@@ -119,18 +110,14 @@ const parseSerializedState = (
         }
         return {
             width: getEffectiveRootDimension(
-                "width",
                 parsedConfig?.width ?? firstClip?.width,
                 fallbackDefaults.width,
             ),
             height: getEffectiveRootDimension(
-                "height",
                 parsedConfig?.height ?? firstClip?.height,
                 fallbackDefaults.height,
             ),
-            fps:
-                getRegisteredRootFps() ??
-                normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
+            fps: normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
             clips,
         };
     } catch {

@@ -1325,6 +1325,20 @@
     editor.addEventListener("change", (event) => {
       handleFieldChange(event.target, deps);
     });
+    editor.addEventListener(
+      "change",
+      (event) => {
+        const inputTarget = event.target;
+        if (!isFieldTarget(inputTarget)) {
+          return;
+        }
+        if (!(inputTarget instanceof HTMLInputElement) || inputTarget.type !== "range" || event.bubbles) {
+          return;
+        }
+        handleFieldChange(inputTarget, deps, true);
+      },
+      true
+    );
     editor.addEventListener("input", (event) => {
       const inputTarget = event.target;
       if (!isFieldTarget(inputTarget)) {
@@ -1535,7 +1549,7 @@
       }))
     })
   );
-  var getEffectiveRootDimension = (field, persistedValue, fallback) => getRegisteredRootDimension(field) ?? getCoreDimension(field) ?? normalizeRootDimension(persistedValue, fallback);
+  var getEffectiveRootDimension = (persistedValue, fallback) => normalizeRootDimension(persistedValue, fallback);
   var lastSerializedState = "";
   var getSerializedStateSource = () => {
     const inputValue = getClipsInput()?.value ?? "";
@@ -1562,16 +1576,14 @@
       }
       return {
         width: getEffectiveRootDimension(
-          "width",
           parsedConfig?.width ?? firstClip?.width,
           fallbackDefaults.width
         ),
         height: getEffectiveRootDimension(
-          "height",
           parsedConfig?.height ?? firstClip?.height,
           fallbackDefaults.height
         ),
-        fps: getRegisteredRootFps() ?? normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
+        fps: normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
         clips
       };
     } catch {
@@ -1716,6 +1728,10 @@
         return;
       }
       const state = deps.getState();
+      const rootDefaults = getRootDefaults();
+      state.width = rootDefaults.width;
+      state.height = rootDefaults.height;
+      state.fps = rootDefaults.fps;
       const serialized = JSON.stringify({
         width: state.width,
         height: state.height,
