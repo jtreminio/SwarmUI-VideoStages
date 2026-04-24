@@ -110,7 +110,8 @@ internal sealed class LtxPostVideoChain
             return null;
         }
 
-        if (!TryFindAudioDecode(generator.Workflow, separateId, out string audioDecodeId, out JArray audioVaeRef))
+        if (!TryFindAudioDecode(generator.Workflow, separateId, out string audioDecodeId, out JArray audioVaeRef)
+            && !TryResolveCurrentAudioVae(generator, out audioVaeRef))
         {
             return null;
         }
@@ -341,6 +342,18 @@ internal sealed class LtxPostVideoChain
         }
 
         return false;
+    }
+
+    private static bool TryResolveCurrentAudioVae(WorkflowGenerator generator, out JArray audioVaeRef)
+    {
+        audioVaeRef = null;
+        if (generator?.CurrentAudioVae?.Path is not JArray currentAudioVaePath || currentAudioVaePath.Count != 2)
+        {
+            return false;
+        }
+
+        audioVaeRef = new JArray(currentAudioVaePath[0], currentAudioVaePath[1]);
+        return true;
     }
 
     private static WGNodeData CloneMedia(WorkflowGenerator generator, WGNodeData media)

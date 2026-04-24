@@ -28,8 +28,9 @@ internal class StageRunner(WorkflowGenerator g)
 
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, stage);
-        LtxPostVideoChain postVideoChain = LtxPostVideoChain.TryCapture(g, stage);
-        WGNodeData sourceMedia = ApplyStageUpscaleIfNeeded(stage, sectionId);
+        bool replaceTextToVideoRootStage = RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage);
+        LtxPostVideoChain postVideoChain = replaceTextToVideoRootStage ? null : LtxPostVideoChain.TryCapture(g, stage);
+        WGNodeData sourceMedia = replaceTextToVideoRootStage ? CloneMedia(g.CurrentMedia) : ApplyStageUpscaleIfNeeded(stage, sectionId);
         StageGenerationPlan generationPlan = BuildGenInfo(stage, sectionId, sourceMedia);
         WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
 
@@ -43,6 +44,8 @@ internal class StageRunner(WorkflowGenerator g)
                 priorOutputPath,
                 postVideoChain))
         {
+            RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path, retargetAudio: replaceTextToVideoRootStage);
+            CleanupReplacedTextToVideoRootStage(priorOutputPath, replaceTextToVideoRootStage);
             return;
         }
 
@@ -53,6 +56,7 @@ internal class StageRunner(WorkflowGenerator g)
             scaleToSourceSize: true);
 
         RunNativeStage(generationPlan, sourceMedia, guideMedia, priorOutputPath);
+        CleanupReplacedTextToVideoRootStage(priorOutputPath, replaceTextToVideoRootStage);
     }
 
     private void RunNativeStage(
@@ -277,7 +281,7 @@ internal class StageRunner(WorkflowGenerator g)
         g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
     }
 
-    private void RetargetExistingAnimationSaves(JArray priorOutputPath, JArray newOutputPath)
+    private void RetargetExistingAnimationSaves(JArray priorOutputPath, JArray newOutputPath, bool retargetAudio = false)
     {
         if (priorOutputPath is null
             || newOutputPath is null
@@ -288,22 +292,54 @@ internal class StageRunner(WorkflowGenerator g)
             return;
         }
 
-        _ = WorkflowUtils.RetargetInputConnections(
-            g.Workflow,
-            priorOutputPath,
-            newOutputPath,
-            connection =>
+        JArray newAudioPath = retargetAudio ? g.CurrentMedia?.AttachedAudio?.Path : null;
+        List<JArray> staleAudioPaths = [];
+        foreach (WorkflowInputConnection connection in WorkflowUtils.FindInputConnections(g.Workflow, priorOutputPath))
+        {
+            if (!string.Equals(connection.InputName, "images", StringComparison.Ordinal))
             {
-                if (!string.Equals(connection.InputName, "images", StringComparison.Ordinal))
-                {
-                    return false;
-                }
-                if (g.Workflow[connection.NodeId] is not JObject node)
-                {
-                    return false;
-                }
-                return $"{node["class_type"]}" == NodeTypes.SwarmSaveAnimationWS;
-            });
+                continue;
+            }
+            if (g.Workflow[connection.NodeId] is not JObject node
+                || $"{node["class_type"]}" != NodeTypes.SwarmSaveAnimationWS
+                || node["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+
+            connection.Connection[0] = newOutputPath[0];
+            connection.Connection[1] = newOutputPath[1];
+            if (!retargetAudio)
+            {
+                continue;
+            }
+            if (inputs["audio"] is JArray oldAudioPath && oldAudioPath.Count == 2)
+            {
+                staleAudioPaths.Add(new JArray(oldAudioPath[0], oldAudioPath[1]));
+            }
+            if (newAudioPath is not null && newAudioPath.Count == 2)
+            {
+                inputs["audio"] = new JArray(newAudioPath[0], newAudioPath[1]);
+            }
+            else
+            {
+                inputs.Remove("audio");
+            }
+        }
+
+        HashSet<string> protectedNodes = [];
+        if (g.CurrentMedia?.Path is JArray currentPath && currentPath.Count == 2)
+        {
+            protectedNodes.Add($"{currentPath[0]}");
+        }
+        if (newAudioPath is not null && newAudioPath.Count == 2)
+        {
+            protectedNodes.Add($"{newAudioPath[0]}");
+        }
+        foreach (JArray staleAudioPath in staleAudioPaths)
+        {
+            WorkflowUtils.RemoveUnusedUpstreamNodes(g.Workflow, staleAudioPath, protectedNodes);
+        }
     }
 
     private static JArray CopyPath(JArray path)
@@ -313,5 +349,41 @@ internal class StageRunner(WorkflowGenerator g)
             return null;
         }
         return new JArray(path[0], path[1]);
+    }
+
+    private void CleanupReplacedTextToVideoRootStage(JArray priorOutputPath, bool replaceTextToVideoRootStage)
+    {
+        if (!replaceTextToVideoRootStage || priorOutputPath is null || priorOutputPath.Count != 2)
+        {
+            return;
+        }
+
+        HashSet<string> protectedNodes = [];
+        if (g.CurrentMedia?.Path is JArray currentPath && currentPath.Count == 2)
+        {
+            protectedNodes.Add($"{currentPath[0]}");
+        }
+        WorkflowUtils.RemoveUnusedUpstreamNodes(g.Workflow, priorOutputPath, protectedNodes);
+    }
+
+    private static WGNodeData CloneMedia(WGNodeData media)
+    {
+        if (media?.Path is not JArray path || path.Count != 2)
+        {
+            return null;
+        }
+        WGNodeData clone = media.WithPath(new JArray(path[0], path[1]), media.DataType, media.Compat);
+        clone.Width = media.Width;
+        clone.Height = media.Height;
+        clone.Frames = media.Frames;
+        clone.FPS = media.FPS;
+        if (media.AttachedAudio?.Path is JArray audioPath && audioPath.Count == 2)
+        {
+            clone.AttachedAudio = media.AttachedAudio.WithPath(
+                new JArray(audioPath[0], audioPath[1]),
+                media.AttachedAudio.DataType,
+                media.AttachedAudio.Compat);
+        }
+        return clone;
     }
 }

@@ -34,8 +34,10 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             guideMergeStrength = primaryGuideClipRef.Strength;
         }
 
+        bool replacesTextToVideoRoot = RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage);
         bool skipGuideReinjection = primaryGuideClipRef is null
-            && (clipRefs is { Count: > 0 }
+            && (replacesTextToVideoRoot
+                || clipRefs is { Count: > 0 }
                 || ShouldSkipGeneratedGuideReinjection(stage, sourceMedia, guideReference, genInfo, postVideoChain));
 
         WGNodeData guideMedia = ResolveLocalGuideMedia(primaryGuideClipRef, skipGuideReinjection, sourceMedia, priorOutputPath, postVideoChain);
@@ -68,9 +70,14 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs ?? [];
         IReadOnlyList<double> strengths = stage.RefStrengths ?? [];
         List<ResolvedClipRef> resolved = [];
+        bool textToVideoRootWorkflow = RootVideoStageTakeover.IsTextToVideoRootWorkflow(g);
         for (int i = 0; i < refs.Count; i++)
         {
             JsonParser.RefSpec spec = refs[i];
+            if (textToVideoRootWorkflow && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
             double strength = i < strengths.Count
                 ? strengths[i]
                 : VideoStagesExtension.DefaultStageRefStrength;

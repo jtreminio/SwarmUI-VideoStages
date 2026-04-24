@@ -144,6 +144,10 @@ public class StageSequenceRunner(
             }
             return clipAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection clipDetection) ? clipDetection : null;
         }
+        if (_rootStageTakeover && RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage))
+        {
+            return null;
+        }
         return _nativeAudioDetection;
     }
 

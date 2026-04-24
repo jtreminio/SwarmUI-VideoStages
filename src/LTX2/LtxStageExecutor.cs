@@ -345,6 +345,11 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
     {
         genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
 
+        if (RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage))
+        {
+            return CreateEmptyVideoLatent(genInfo, stage, sourceMedia);
+        }
+
         if (postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true)
         {
             WGNodeData nativeStageInput = postVideoChain.CreateStageInput();
@@ -422,6 +427,53 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         stageVideoInput.Frames = Math.Min(genInfo.Frames.Value, stageVideoInput.Frames ?? int.MaxValue);
         WGNodeData encodedLatent = stageVideoInput.AsLatentImage(genInfo.Vae);
         return encodedLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
+    }
+
+    private WGNodeData CreateEmptyVideoLatent(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        JsonParser.StageSpec stage,
+        WGNodeData sourceMedia)
+    {
+        int width = Math.Max(sourceMedia?.Width ?? g.UserInput.GetImageWidth(), 16);
+        int height = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
+        int frames = genInfo.Frames ?? sourceMedia?.Frames ?? DefaultVideoFrameCount;
+        WGNodeData attachedAudio = sourceMedia?.AttachedAudio;
+        JArray audioLengthFrames = null;
+        if (ShouldMatchStageLengthToAudio(stage)
+            && attachedAudio?.Path is JToken audioPath)
+        {
+            int fps = ResolveStageFps(genInfo, sourceMedia);
+            JToken lengthFramesAudioSource = ResolveLengthToFramesAudioSource(audioPath);
+            string lengthToFrames = g.CreateNode(NodeTypes.AudioLengthToFrames, new JObject()
+            {
+                ["audio"] = lengthFramesAudioSource,
+                ["frame_rate"] = fps
+            });
+            audioLengthFrames = new JArray(lengthToFrames, 1);
+            attachedAudio = new WGNodeData(
+                new JArray(lengthToFrames, 0),
+                g,
+                WGNodeData.DT_AUDIO,
+                g.CurrentAudioVae?.Compat ?? attachedAudio.Compat);
+        }
+
+        JToken latentLength = audioLengthFrames is null ? new JValue(frames) : audioLengthFrames;
+        string emptyLatent = g.CreateNode(LtxNodeTypes.EmptyLTXVLatentVideo, new JObject()
+        {
+            ["width"] = width,
+            ["height"] = height,
+            ["length"] = latentLength,
+            ["batch_size"] = 1
+        });
+        WGNodeData stageLatent = new([emptyLatent, 0], g, WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat)
+        {
+            Width = width,
+            Height = height,
+            Frames = audioLengthFrames is null ? frames : null,
+            FPS = genInfo.VideoFPS,
+            AttachedAudio = attachedAudio
+        };
+        return stageLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
     }
 
     private static bool CanReuseDecodedVideoLatent(

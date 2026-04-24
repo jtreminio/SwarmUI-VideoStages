@@ -670,7 +670,7 @@ public partial class StageFlowTests
             string audioVaeNode = g.CreateNode("UnitTest_AudioVae", new JObject(), id: "105", idMandatory: false);
             g.CurrentAudioVae = new WGNodeData([audioVaeNode, 0], g, WGNodeData.DT_AUDIOVAE, g.CurrentCompat());
 
-            string avLatent = g.CreateNode("UnitTest_InitialAvLatent", new JObject(), id: "200", idMandatory: false);
+            string avLatent = g.CreateNode("SwarmKSampler", new JObject(), id: "200", idMandatory: false);
             string separate = g.CreateNode("LTXVSeparateAVLatent", new JObject()
             {
                 ["av_latent"] = new JArray(avLatent, 0)

@@ -610,15 +610,20 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Text_to_video_root_model_without_video_model_still_runs_configured_stage()
+    public void Text_to_video_root_model_without_video_model_replaces_core_stage_and_ignores_non_upload_refs()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = JsonSingleClipStages512(
-            MakeStage(models.VideoModel.Name, "Base", steps: 10));
+        string stagesJson = new JArray(
+            MakeClipWithRefs(
+                width: 512,
+                height: 512,
+                refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)],
+                MakeStage(models.VideoModel.Name, "Base", steps: 10)))
+            .ToString();
 
         T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
@@ -627,12 +632,49 @@ public partial class StageFlowTests
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
         Assert.Single(samplers);
+        Assert.False(workflow.ContainsKey("200"));
+        Assert.False(workflow.ContainsKey("201"));
+        Assert.False(workflow.ContainsKey("202"));
         Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
         Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide"));
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
 
         StageRefStore store = new(generator);
         Assert.NotNull(store.Generated);
+    }
+
+    [Fact]
+    public void Text_to_video_chained_ltx_stages_without_upload_refs_reuse_av_latent_directly()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Base", steps: 8),
+            MakeStage(models.VideoModel.Name, "Refiner", steps: 8),
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8));
+
+        T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildTextToVideoSteps(attachAudioToCurrentMedia: true));
+
+        Assert.Equal(3, WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler").Count);
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ImageScale"));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Equal(3, WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent").Count);
+
+        foreach (WorkflowNode concatNode in WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent").Skip(1))
+        {
+            WorkflowNode videoSource = WorkflowAssertions.RequireNodeById(
+                workflow,
+                $"{WorkflowAssertions.RequireConnectionInput(concatNode.Node, "video_latent")[0]}");
+            Assert.Equal("LTXVSeparateAVLatent", $"{videoSource.Node["class_type"]}");
+        }
     }
 
     [Fact]

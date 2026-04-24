@@ -9,6 +9,27 @@ internal static class RootVideoStageTakeover
     private const int StashSectionId = VideoStagesExtension.SectionID_VideoStages;
     private const string SynthesizedRootVideoModelKey = "videostages.synth-root-video-model";
 
+    public static bool IsTextToVideoRootWorkflow(WorkflowGenerator g)
+    {
+        if (g is null || g.UserInput is null)
+        {
+            return false;
+        }
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
+        {
+            return false;
+        }
+        return g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
+            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
+    }
+
+    public static bool ShouldReplaceTextToVideoRootStage(WorkflowGenerator g, JsonParser.StageSpec stage)
+    {
+        return stage is not null
+            && stage.ClipStageIndex == 0
+            && IsTextToVideoRootWorkflow(g);
+    }
+
     public static void EnsureRootVideoStageModel(WorkflowGenerator g)
     {
         if (g is null || g.UserInput is null)
@@ -56,11 +77,13 @@ internal static class RootVideoStageTakeover
         {
             return false;
         }
-        if (!WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep))
+        bool hasNativeImageToVideoModel = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _);
+        bool hasTextToVideoRootModel = IsTextToVideoRootWorkflow(g);
+        if (!hasNativeImageToVideoModel && !hasTextToVideoRootModel)
         {
             return false;
         }
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
+        if (hasNativeImageToVideoModel && !WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep))
         {
             return false;
         }

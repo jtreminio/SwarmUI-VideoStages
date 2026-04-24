@@ -122,6 +122,55 @@ public static class WorkflowUtils
         return false;
     }
 
+    public static void RemoveUnusedUpstreamNodes(JObject workflow, JArray outputRef, ISet<string> protectedNodeIds = null)
+    {
+        ArgumentNullException.ThrowIfNull(workflow);
+        RequirePairOutputRef(outputRef, nameof(outputRef));
+
+        Queue<string> pending = new();
+        HashSet<string> seen = [];
+        pending.Enqueue($"{outputRef[0]}");
+
+        while (pending.Count > 0)
+        {
+            string nodeId = pending.Dequeue();
+            if (string.IsNullOrWhiteSpace(nodeId)
+                || !seen.Add(nodeId)
+                || protectedNodeIds?.Contains(nodeId) == true
+                || !workflow.TryGetValue(nodeId, out JToken nodeToken)
+                || nodeToken is not JObject node)
+            {
+                continue;
+            }
+            if (HasAnyInputConnectionToNode(workflow, nodeId))
+            {
+                continue;
+            }
+
+            List<string> upstreamNodeIds = [];
+            if (node["inputs"] is JObject inputs)
+            {
+                foreach (JProperty input in inputs.Properties())
+                {
+                    foreach (JArray upstreamRef in ExtractNodeRefs(workflow, input.Value))
+                    {
+                        string upstreamId = $"{upstreamRef[0]}";
+                        if (!string.IsNullOrWhiteSpace(upstreamId))
+                        {
+                            upstreamNodeIds.Add(upstreamId);
+                        }
+                    }
+                }
+            }
+
+            workflow.Remove(nodeId);
+            foreach (string upstreamId in upstreamNodeIds)
+            {
+                pending.Enqueue(upstreamId);
+            }
+        }
+    }
+
     public static bool TryResolveNearestUpstreamDecode(
         JObject workflow,
         JArray outputRef,
@@ -261,6 +310,28 @@ public static class WorkflowUtils
         }
 
         return forwardEdges;
+    }
+
+    private static bool HasAnyInputConnectionToNode(JObject workflow, string nodeId)
+    {
+        foreach (JProperty property in workflow.Properties())
+        {
+            if (property.Value is not JObject node || node["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+            foreach (JProperty input in inputs.Properties())
+            {
+                foreach (JArray upstreamRef in ExtractNodeRefs(workflow, input.Value))
+                {
+                    if ($"{upstreamRef[0]}" == nodeId)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private static IEnumerable<JArray> ExtractNodeRefs(JObject workflow, JToken token)
