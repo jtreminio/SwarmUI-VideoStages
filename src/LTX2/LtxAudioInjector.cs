@@ -9,7 +9,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
     private const int AudioInjectionIdBase = 52300;
     private const int AudioInjectionEnsureFallbackSlot = 50;
 
-    public bool TryInject(AudioStageDetector.Detection detection)
+    public bool TryInject(AudioStageDetector.Detection detection, bool matchVideoLengthToAudio = true)
     {
         if (detection?.Audio is null || !g.IsLTXV2() || g.CurrentAudioVae is null)
         {
@@ -22,13 +22,17 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
             return false;
         }
 
-        int fps = ResolveFps(workflowFps);
-        JToken lengthFramesAudioSource = ResolveLengthToFramesAudioSource(detection.Audio.Path);
-        string lengthToFramesId = CreateLengthToFramesNode(lengthFramesAudioSource, fps);
-        JArray framesConnection = MakeConnection(lengthToFramesId, 1);
-        ApplyFramesConnectionToSources(removableSourceIds, framesConnection);
-        ApplyFramesConnectionToVideoLatents(framesConnection);
-        WGNodeData adjustedAudio = new(new JArray(lengthToFramesId, 0), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+        WGNodeData adjustedAudio = detection.Audio;
+        if (matchVideoLengthToAudio)
+        {
+            int fps = ResolveFps(workflowFps);
+            JToken lengthFramesAudioSource = ResolveLengthToFramesAudioSource(detection.Audio.Path);
+            string lengthToFramesId = CreateLengthToFramesNode(lengthFramesAudioSource, fps);
+            JArray framesConnection = MakeConnection(lengthToFramesId, 1);
+            ApplyFramesConnectionToSources(removableSourceIds, framesConnection);
+            ApplyFramesConnectionToVideoLatents(framesConnection);
+            adjustedAudio = new(new JArray(lengthToFramesId, 0), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+        }
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
         string setMaskId = CreateAudioMaskNode(encodedAudio.Path);
         ReplaceAudioLatentConnections(audioLatentsToReplace, setMaskId);

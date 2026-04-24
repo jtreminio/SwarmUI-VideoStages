@@ -57,7 +57,9 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             if (!rootStageTakeover)
             {
                 AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, clipAudios, uploadedAudios);
-                _ = new LTX2.LtxAudioInjector(g).TryInject(firstClipAudio);
+                _ = new LTX2.LtxAudioInjector(g).TryInject(
+                    firstClipAudio,
+                    ShouldMatchVideoLengthToAudio(stages[0].ClipAudioSource, stages[0].ClipLengthFromAudio));
             }
 
             new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, clipAudios, uploadedAudios, rootStageTakeover).Run();
@@ -84,7 +86,9 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
         AceStepFunAudioSavePruner.Apply(g, clips);
         AudioStageDetector.Detection detection = ResolveClipAudioSource(clips[0].Id, clips[0].AudioSource, detectedAudio, clipAudios, uploadedAudios);
-        ltxAudioInjector.TryInject(detection);
+        ltxAudioInjector.TryInject(
+            detection,
+            ShouldMatchVideoLengthToAudio(clips[0].AudioSource, clips[0].ClipLengthFromAudio));
     }
 
     private static IReadOnlyDictionary<int, AudioStageDetector.Detection> BuildPerClipAudioDetections(
@@ -147,6 +151,16 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             return clipAudios.TryGetValue(clipId, out AudioStageDetector.Detection clipDetection) ? clipDetection : null;
         }
         return detectedAudio;
+    }
+
+    private static bool ShouldMatchVideoLengthToAudio(string source, bool clipLengthFromAudio)
+    {
+        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
+            || AudioStageDetector.TryParseAceStepFunAudioSource(source, out _))
+        {
+            return clipLengthFromAudio;
+        }
+        return true;
     }
 
     private bool HasRootVideoModel()

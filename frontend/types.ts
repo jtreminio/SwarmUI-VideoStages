@@ -73,6 +73,7 @@ export interface Clip {
     duration: number;
     audioSource: string;
     saveAudioTrack: boolean;
+    clipLengthFromAudio: boolean;
     uploadedAudio: UploadedAudio | null;
     refs: RefImage[];
     stages: Stage[];
@@ -113,6 +114,7 @@ export type StoredClip = Pick<
     | "duration"
     | "audioSource"
     | "saveAudioTrack"
+    | "clipLengthFromAudio"
     | "uploadedAudio"
 > & {
     refs: StoredRefImage[];

@@ -7,6 +7,10 @@
   var SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
   var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
   var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+  var canUseClipLengthFromAudio = (source) => {
+    const normalized = `${source ?? ""}`.trim();
+    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized);
+  };
   var getSourceSelects = () => Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
     (elem) => elem instanceof HTMLSelectElement
   );
@@ -372,6 +376,7 @@
       ),
       audioSource: AUDIO_SOURCE_NATIVE,
       saveAudioTrack: false,
+      clipLengthFromAudio: false,
       uploadedAudio: null,
       refs: [],
       stages: [
@@ -520,15 +525,17 @@
         )
       );
     }
+    const audioSource2 = resolveAudioSourceValue(
+      rawAudioSource,
+      audioSourceOptions
+    );
     return {
       expanded: rawClip.expanded === void 0 ? true : !!rawClip.expanded,
       skipped: !!rawClip.skipped,
       duration,
-      audioSource: resolveAudioSourceValue(
-        rawAudioSource,
-        audioSourceOptions
-      ),
+      audioSource: audioSource2,
       saveAudioTrack: !!rawClip.saveAudioTrack,
+      clipLengthFromAudio: canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio,
       uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
       refs,
       stages
@@ -641,6 +648,31 @@
     );
     if (saveAudioTrackField) {
       saveAudioTrackField.style.display = isAceStepFunAudioSource(source) ? "" : "none";
+    }
+    const canUseAudioLength = canUseClipLengthFromAudio(source);
+    const lengthFromAudioField = clipCard.querySelector(
+      ".vs-clip-length-from-audio-field"
+    );
+    if (lengthFromAudioField) {
+      lengthFromAudioField.style.display = canUseAudioLength ? "" : "none";
+    }
+    const lengthFromAudio = clipCard.querySelector(
+      '[data-clip-field="clipLengthFromAudio"]'
+    );
+    if (lengthFromAudio && !canUseAudioLength) {
+      lengthFromAudio.checked = false;
+    }
+    syncClipDurationDisabled(
+      clipCard,
+      canUseAudioLength && !!lengthFromAudio?.checked
+    );
+  };
+  var syncClipDurationDisabled = (clipCard, disabled) => {
+    const durationInputs = clipCard.querySelectorAll(
+      '.vs-clip-duration-field [data-clip-field="duration"]'
+    );
+    for (const durationInput of durationInputs) {
+      durationInput.disabled = disabled;
     }
   };
   var applyRefField = (clip, ref, field, target, deps) => {
@@ -983,6 +1015,28 @@
   var isStageFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
   var isSliderNumericInput = (value) => value instanceof HTMLInputElement && (value.type === "number" || value.type === "range");
   var isDurationInput = (value) => isSliderNumericInput(value) && value.dataset.clipField === "duration";
+  var cacheClipAudioSelection = (clipIdx, fileInput, deps) => {
+    const file = fileInput.files?.[0];
+    if (!file) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result !== "string") {
+        return;
+      }
+      const clips = deps.getClips();
+      if (clipIdx < 0 || clipIdx >= clips.length) {
+        return;
+      }
+      clips[clipIdx].uploadedAudio = {
+        data: reader.result,
+        fileName: normalizeUploadFileName(file.name)
+      };
+      deps.saveClips(clips);
+    });
+    reader.readAsDataURL(file);
+  };
   var toggleClipExpanded = (clipIdx, deps) => {
     const clips = deps.getClips();
     if (clipIdx < 0 || clipIdx >= clips.length) {
@@ -1172,9 +1226,23 @@
           saveAudioTrack.checked = false;
         }
       }
+      if (!canUseClipLengthFromAudio(clip.audioSource)) {
+        clip.clipLengthFromAudio = false;
+        const clipLengthFromAudio = elem.closest(".vs-clip-card")?.querySelector(
+          '[data-clip-field="clipLengthFromAudio"]'
+        );
+        if (clipLengthFromAudio) {
+          clipLengthFromAudio.checked = false;
+        }
+      }
     } else if (clipField === "saveAudioTrack") {
       clip.saveAudioTrack = elem instanceof HTMLInputElement && isAceStepFunAudioSource(clip.audioSource) ? !!elem.checked : false;
       if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
+        elem.checked = false;
+      }
+    } else if (clipField === "clipLengthFromAudio") {
+      clip.clipLengthFromAudio = elem instanceof HTMLInputElement && canUseClipLengthFromAudio(clip.audioSource) ? !!elem.checked : false;
+      if (elem instanceof HTMLInputElement && !clip.clipLengthFromAudio) {
         elem.checked = false;
       }
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
@@ -1189,6 +1257,10 @@
           )
         };
       } else if (elem.files?.length) {
+        cacheClipAudioSelection(clipIdx, elem, {
+          getClips: deps.getClips,
+          saveClips: deps.saveClips
+        });
         return;
       } else {
         clip.uploadedAudio = null;
@@ -1238,6 +1310,12 @@
     deps.saveState(state);
     if (clipField === "audioSource") {
       syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
+    }
+    if (clipField === "clipLengthFromAudio") {
+      const clipCard = elem.closest(".vs-clip-card");
+      if (clipCard instanceof HTMLElement) {
+        syncClipDurationDisabled(clipCard, clip.clipLengthFromAudio);
+      }
     }
     if (clipField === "duration" && !fromInputEvent) {
       deps.scheduleClipsRefresh();
@@ -1546,6 +1624,7 @@
       duration: clip.duration,
       audioSource: clip.audioSource,
       saveAudioTrack: clip.saveAudioTrack,
+      clipLengthFromAudio: clip.clipLengthFromAudio,
       uploadedAudio: clip.uploadedAudio,
       refs: clip.refs.map((ref) => ({
         expanded: ref.expanded,
@@ -1956,6 +2035,13 @@
   ).replace(
     /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
     "$1$3$2"
+  );
+  var disableSliderInputs = (html) => html.replace(
+    /<input class="auto-slider-number nogrow"/g,
+    '<input class="auto-slider-number nogrow" disabled'
+  ).replace(
+    /<input class="auto-slider-range nogrow"/g,
+    '<input class="auto-slider-range nogrow" disabled'
   );
   var hideFirstStageField = (html, stageIdx) => stageIdx === 0 ? decorateAutoInputWrapper(html, "vs-first-stage-field-hidden", true) : html;
   var dropdownOptions = (values, labels, selected) => {
@@ -2379,24 +2465,32 @@ ${optionHtml}
     }
     const contentStyle = clip.expanded ? "" : ' style="display: none;"';
     const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">Clip ${clipIdx}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip">&times;</button></span></span></span>`;
-    const lengthField = injectFieldData(
+    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
+    const audioSource2 = resolveAudioSourceValue(
+      clip.audioSource,
+      audioSourceOptions
+    );
+    const canUseAudioLength = canUseClipLengthFromAudio(audioSource2);
+    const clipLengthFromAudio = canUseAudioLength && !!clip.clipLengthFromAudio;
+    const lengthInputHtml = makeSliderInput(
+      "",
+      clipFieldId(clipIdx, "duration"),
+      "duration",
+      "Length (seconds)",
+      "",
+      clip.duration.toFixed(1),
+      CLIP_DURATION_MIN,
+      CLIP_DURATION_MAX,
+      CLIP_DURATION_MIN,
+      CLIP_DURATION_SLIDER_MAX,
+      CLIP_DURATION_SLIDER_STEP,
+      false,
+      false,
+      false
+    );
+    const lengthFieldWithSteps = injectFieldData(
       overrideSliderSteps(
-        makeSliderInput(
-          "",
-          clipFieldId(clipIdx, "duration"),
-          "duration",
-          "Length (seconds)",
-          "",
-          clip.duration.toFixed(1),
-          CLIP_DURATION_MIN,
-          CLIP_DURATION_MAX,
-          CLIP_DURATION_MIN,
-          CLIP_DURATION_SLIDER_MAX,
-          CLIP_DURATION_SLIDER_STEP,
-          false,
-          false,
-          false
-        ),
+        clipLengthFromAudio ? disableSliderInputs(lengthInputHtml) : lengthInputHtml,
         {
           numberStep: "any",
           rangeStep: CLIP_DURATION_SLIDER_STEP
@@ -2404,10 +2498,9 @@ ${optionHtml}
       ),
       { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) }
     );
-    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
-    const audioSource2 = resolveAudioSourceValue(
-      clip.audioSource,
-      audioSourceOptions
+    const decoratedLengthField = decorateAutoInputWrapper(
+      lengthFieldWithSteps,
+      "vs-clip-duration-field"
     );
     const audioSourceField = injectFieldData(
       buildNativeDropdown(
@@ -2421,6 +2514,29 @@ ${optionHtml}
         "data-clip-field": "audioSource",
         "data-clip-idx": String(clipIdx)
       }
+    );
+    const clipLengthFromAudioField = moveQButtonBeforeLabelText(
+      decorateAutoInputWrapper(
+        injectFieldData(
+          makeCheckboxInput(
+            "",
+            clipFieldId(clipIdx, "clipLengthFromAudio"),
+            "clipLengthFromAudio",
+            "Clip Length from Audio",
+            "Sets the video clip length to be the same length as the selected audio track.",
+            clipLengthFromAudio,
+            false,
+            true,
+            true
+          ),
+          {
+            "data-clip-field": "clipLengthFromAudio",
+            "data-clip-idx": String(clipIdx)
+          }
+        ),
+        "vs-clip-length-from-audio-field",
+        !canUseAudioLength
+      )
     );
     const saveAudioTrackField = moveQButtonBeforeLabelText(
       decorateAutoInputWrapper(
@@ -2452,13 +2568,14 @@ ${optionHtml}
     );
     const body = `
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
-                ${lengthField}
+                ${decoratedLengthField}
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">AUDIO</div>
                     </div>
                     ${audioSourceField}
+                    ${clipLengthFromAudioField}
                     ${saveAudioTrackField}
                     ${audioUploadField}
                 </div>

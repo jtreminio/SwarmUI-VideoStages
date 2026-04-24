@@ -12,6 +12,7 @@ describe("persistence", () => {
                     duration: 3,
                     audioSource: "Native",
                     saveAudioTrack: false,
+                    clipLengthFromAudio: false,
                     uploadedAudio: null,
                     refs: [
                         {

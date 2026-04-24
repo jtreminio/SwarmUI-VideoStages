@@ -112,8 +112,13 @@ public class StageSequenceRunner(
 
         _preparedClipId = stage.ClipId;
         WGNodeData currentMedia = g.CurrentMedia.Duplicate();
-        currentMedia.AttachedAudio = ResolveClipAudio(stage)?.Audio;
+        AudioStageDetector.Detection clipAudio = ResolveClipAudio(stage);
+        currentMedia.AttachedAudio = clipAudio?.Audio;
         g.CurrentMedia = currentMedia;
+        if (_rootStageTakeover && ShouldMatchVideoLengthToAudio(stage))
+        {
+            _ = new LtxAudioInjector(g).TryInject(clipAudio);
+        }
     }
 
     private AudioStageDetector.Detection ResolveClipAudio(JsonParser.StageSpec stage)
@@ -140,6 +145,19 @@ public class StageSequenceRunner(
             return clipAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection clipDetection) ? clipDetection : null;
         }
         return _nativeAudioDetection;
+    }
+
+    private static bool ShouldMatchVideoLengthToAudio(JsonParser.StageSpec stage)
+    {
+        if (!stage.ClipLengthFromAudio)
+        {
+            return false;
+        }
+        if (string.Equals(stage.ClipAudioSource, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return AudioStageDetector.TryParseAceStepFunAudioSource(stage.ClipAudioSource, out _);
     }
 
     private void CaptureReference(StageRefStore.StageKind kind, int? index = null)

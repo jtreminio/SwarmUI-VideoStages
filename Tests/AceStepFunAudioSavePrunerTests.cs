@@ -20,6 +20,7 @@ public class AceStepFunAudioSavePrunerTests
         DurationSeconds: 3,
         AudioSource: audioSource,
         SaveAudioTrack: saveAudioTrack,
+        ClipLengthFromAudio: false,
         Width: null,
         Height: null,
         UploadedAudio: null,

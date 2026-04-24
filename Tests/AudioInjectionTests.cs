@@ -389,6 +389,47 @@ public class AudioInjectionTests
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
         WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmLoadAudioB64);
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, SwarmAudioLengthToFrames));
+
+        WorkflowNode audioEncode = Assert.Single(WorkflowUtils.NodesOfType(workflow, LtxvAudioVaeEncode));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(audioEncode.Node, "audio"),
+            new JArray(uploadedAudioNode.Id, 0)));
+        WorkflowNode setMask = Assert.Single(WorkflowUtils.NodesOfType(workflow, SetLatentNoiseMask));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(setMask.Node, "samples"),
+            new JArray(audioEncode.Id, 0)));
+        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowUtils.FindInputConnections(workflow, new JArray(setMask.Id, 0));
+        Assert.Contains(maskConsumers, connection =>
+            connection.InputName == "audio_latent"
+            && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == LtxvConcatAvLatent);
+        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
+        JArray saveAudio = WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio");
+        Assert.True(OutputTracesBackToNode(workflow, saveAudio, uploadedAudioNode.Id));
+        Assert.False(OutputTracesBackToNode(workflow, saveAudio, "300"));
+    }
+
+    [Fact]
+    public void Save_audio_stage_matches_video_length_to_uploaded_audio_when_enabled()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClipConfigWithUpload(
+            MakeUploadedAudio(),
+            MakeStage(models.VideoModel.Name));
+        clip["ClipLengthFromAudio"] = true;
+        string stagesJson = MakeRootConfig(clip).ToString();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            stagesJson);
+
+        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+
+        WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmLoadAudioB64);
         WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
         JArray lengthAudioIn = WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio");
         WorkflowNode lengthEnsure = WorkflowAssertions.RequireNodeById(workflow, $"{lengthAudioIn[0]}");
@@ -399,15 +440,10 @@ public class AudioInjectionTests
         Assert.NotEqual(uploadedAudioNode.Id, $"{lengthAudioIn[0]}");
         Assert.NotEqual("300", $"{lengthAudioIn[0]}");
 
-        WorkflowNode audioEncode = Assert.Single(WorkflowUtils.NodesOfType(workflow, LtxvAudioVaeEncode));
-        WorkflowNode setMask = Assert.Single(WorkflowUtils.NodesOfType(workflow, SetLatentNoiseMask));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(setMask.Node, "samples"),
-            new JArray(audioEncode.Id, 0)));
-        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowUtils.FindInputConnections(workflow, new JArray(setMask.Id, 0));
-        Assert.Contains(maskConsumers, connection =>
-            connection.InputName == "audio_latent"
-            && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == LtxvConcatAvLatent);
+        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
+        JArray saveAudio = WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio");
+        Assert.True(OutputTracesBackToNode(workflow, saveAudio, uploadedAudioNode.Id));
+        Assert.False(OutputTracesBackToNode(workflow, saveAudio, "300"));
     }
 
     [Fact]
@@ -533,5 +569,39 @@ public class AudioInjectionTests
 
         Assert.Equal(384, solidMask.Node["inputs"]?.Value<int>("width"));
         Assert.Equal(640, solidMask.Node["inputs"]?.Value<int>("height"));
+    }
+
+    private static bool OutputTracesBackToNode(JObject workflow, JArray outputRef, string expectedNodeId)
+    {
+        Queue<JArray> pending = new();
+        HashSet<string> visited = [];
+        pending.Enqueue(new JArray(outputRef[0], outputRef[1]));
+        while (pending.Count > 0)
+        {
+            JArray current = pending.Dequeue();
+            string key = $"{current[0]}::{current[1]}";
+            if (!visited.Add(key))
+            {
+                continue;
+            }
+            if ($"{current[0]}" == expectedNodeId)
+            {
+                return true;
+            }
+            if (!workflow.TryGetValue($"{current[0]}", out JToken nodeToken)
+                || nodeToken is not JObject node
+                || node["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+            foreach (JProperty input in inputs.Properties())
+            {
+                if (input.Value is JArray inputPath && inputPath.Count == 2)
+                {
+                    pending.Enqueue(new JArray(inputPath[0], inputPath[1]));
+                }
+            }
+        }
+        return false;
     }
 }

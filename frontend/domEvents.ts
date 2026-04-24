@@ -1,4 +1,8 @@
-import { AUDIO_SOURCE_NATIVE, isAceStepFunAudioSource } from "./audioSource";
+import {
+    AUDIO_SOURCE_NATIVE,
+    canUseClipLengthFromAudio,
+    isAceStepFunAudioSource,
+} from "./audioSource";
 import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_DURATION_MIN,
@@ -12,6 +16,7 @@ import {
     applyRefField,
     applyStageField,
     syncClipAudioUploadFieldVisibility,
+    syncClipDurationDisabled,
     syncRefUploadFieldVisibility,
     syncStageUpscaleMethodDisabled,
 } from "./fieldBinding";
@@ -59,6 +64,34 @@ const isDurationInput = (
     value: EventTarget | null,
 ): value is HTMLInputElement =>
     isSliderNumericInput(value) && value.dataset.clipField === "duration";
+
+const cacheClipAudioSelection = (
+    clipIdx: number,
+    fileInput: HTMLInputElement,
+    deps: Pick<DomEventsDeps, "getClips" | "saveClips">,
+): void => {
+    const file = fileInput.files?.[0];
+    if (!file) {
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+        if (typeof reader.result !== "string") {
+            return;
+        }
+        const clips = deps.getClips();
+        if (clipIdx < 0 || clipIdx >= clips.length) {
+            return;
+        }
+        clips[clipIdx].uploadedAudio = {
+            data: reader.result,
+            fileName: normalizeUploadFileName(file.name),
+        };
+        deps.saveClips(clips);
+    });
+    reader.readAsDataURL(file);
+};
 
 export const toggleClipExpanded = (
     clipIdx: number,
@@ -281,6 +314,17 @@ export const handleFieldChange = (
                 saveAudioTrack.checked = false;
             }
         }
+        if (!canUseClipLengthFromAudio(clip.audioSource)) {
+            clip.clipLengthFromAudio = false;
+            const clipLengthFromAudio = elem
+                .closest(".vs-clip-card")
+                ?.querySelector<HTMLInputElement>(
+                    '[data-clip-field="clipLengthFromAudio"]',
+                );
+            if (clipLengthFromAudio) {
+                clipLengthFromAudio.checked = false;
+            }
+        }
     } else if (clipField === "saveAudioTrack") {
         clip.saveAudioTrack =
             elem instanceof HTMLInputElement &&
@@ -288,6 +332,15 @@ export const handleFieldChange = (
                 ? !!elem.checked
                 : false;
         if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
+            elem.checked = false;
+        }
+    } else if (clipField === "clipLengthFromAudio") {
+        clip.clipLengthFromAudio =
+            elem instanceof HTMLInputElement &&
+            canUseClipLengthFromAudio(clip.audioSource)
+                ? !!elem.checked
+                : false;
+        if (elem instanceof HTMLInputElement && !clip.clipLengthFromAudio) {
             elem.checked = false;
         }
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
@@ -302,6 +355,10 @@ export const handleFieldChange = (
                 ),
             };
         } else if (elem.files?.length) {
+            cacheClipAudioSelection(clipIdx, elem, {
+                getClips: deps.getClips,
+                saveClips: deps.saveClips,
+            });
             return;
         } else {
             clip.uploadedAudio = null;
@@ -355,6 +412,12 @@ export const handleFieldChange = (
     deps.saveState(state);
     if (clipField === "audioSource") {
         syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
+    }
+    if (clipField === "clipLengthFromAudio") {
+        const clipCard = elem.closest(".vs-clip-card");
+        if (clipCard instanceof HTMLElement) {
+            syncClipDurationDisabled(clipCard, clip.clipLengthFromAudio);
+        }
     }
     if (clipField === "duration" && !fromInputEvent) {
         deps.scheduleClipsRefresh();

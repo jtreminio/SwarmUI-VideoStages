@@ -466,10 +466,61 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
-        string sourceNodeId = $"{audioPath[0]}";
-        return g.Workflow.TryGetValue(sourceNodeId, out JToken sourceToken)
-            && sourceToken is JObject sourceNode
-            && $"{sourceNode["class_type"]}" == UploadedAudioLoadClassType;
+        return AudioPathTracesToNodeType(audioPath, UploadedAudioLoadClassType);
+    }
+
+    private bool AudioPathTracesToNodeType(JArray audioPath, string classType)
+    {
+        if (audioPath is null
+            || audioPath.Count != 2
+            || string.IsNullOrWhiteSpace(classType))
+        {
+            return false;
+        }
+
+        Queue<string> pending = new();
+        HashSet<string> visited = [];
+        pending.Enqueue($"{audioPath[0]}");
+        while (pending.Count > 0)
+        {
+            string nodeId = pending.Dequeue();
+            if (!visited.Add(nodeId))
+            {
+                continue;
+            }
+
+            if (!g.Workflow.TryGetValue(nodeId, out JToken token)
+                || token is not JObject node)
+            {
+                continue;
+            }
+
+            if ($"{node["class_type"]}" == classType)
+            {
+                return true;
+            }
+
+            if (node["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+
+            foreach (JProperty input in inputs.Properties())
+            {
+                if (input.Value is not JArray inputPath || inputPath.Count != 2)
+                {
+                    continue;
+                }
+
+                string upstreamId = $"{inputPath[0]}";
+                if (!string.IsNullOrWhiteSpace(upstreamId))
+                {
+                    pending.Enqueue(upstreamId);
+                }
+            }
+        }
+
+        return false;
     }
 
     private static void RememberOriginalAudioLatent(WorkflowGenerator generator, JArray audioLatentPath)

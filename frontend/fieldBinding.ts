@@ -1,4 +1,8 @@
-import { AUDIO_SOURCE_UPLOAD, isAceStepFunAudioSource } from "./audioSource";
+import {
+    AUDIO_SOURCE_UPLOAD,
+    canUseClipLengthFromAudio,
+    isAceStepFunAudioSource,
+} from "./audioSource";
 import {
     clamp,
     normalizeUploadFileName,
@@ -158,6 +162,37 @@ export const syncClipAudioUploadFieldVisibility = (
         saveAudioTrackField.style.display = isAceStepFunAudioSource(source)
             ? ""
             : "none";
+    }
+
+    const canUseAudioLength = canUseClipLengthFromAudio(source);
+    const lengthFromAudioField = clipCard.querySelector<HTMLElement>(
+        ".vs-clip-length-from-audio-field",
+    );
+    if (lengthFromAudioField) {
+        lengthFromAudioField.style.display = canUseAudioLength ? "" : "none";
+    }
+
+    const lengthFromAudio = clipCard.querySelector<HTMLInputElement>(
+        '[data-clip-field="clipLengthFromAudio"]',
+    );
+    if (lengthFromAudio && !canUseAudioLength) {
+        lengthFromAudio.checked = false;
+    }
+    syncClipDurationDisabled(
+        clipCard,
+        canUseAudioLength && !!lengthFromAudio?.checked,
+    );
+};
+
+export const syncClipDurationDisabled = (
+    clipCard: HTMLElement,
+    disabled: boolean,
+): void => {
+    const durationInputs = clipCard.querySelectorAll<HTMLInputElement>(
+        '.vs-clip-duration-field [data-clip-field="duration"]',
+    );
+    for (const durationInput of durationInputs) {
+        durationInput.disabled = disabled;
     }
 };
 

@@ -56,6 +56,7 @@ interface ParsedClip {
     duration?: number;
     audioSource?: string;
     saveAudioTrack?: boolean;
+    clipLengthFromAudio?: boolean;
     uploadedAudio?: {
         data?: string;
         fileName?: string | null;
@@ -833,8 +834,14 @@ describe("videoStageEditor", () => {
             const saveAudioTrackField = audioSection?.querySelector(
                 ".vs-clip-save-audio-track-field",
             ) as HTMLElement | null;
+            const clipLengthFromAudioField = audioSection?.querySelector(
+                ".vs-clip-length-from-audio-field",
+            ) as HTMLElement | null;
             const uploadInput = audioSection?.querySelector(
                 '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            const clipLengthFromAudio = audioSection?.querySelector(
+                '[data-clip-field="clipLengthFromAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
             const saveAudioTrack = audioSection?.querySelector(
                 '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
@@ -844,10 +851,13 @@ describe("videoStageEditor", () => {
             expect(audioSource).not.toBeNull();
             expect(uploadField).not.toBeNull();
             expect(saveAudioTrackField).not.toBeNull();
+            expect(clipLengthFromAudioField).not.toBeNull();
             expect(uploadInput).not.toBeNull();
+            expect(clipLengthFromAudio).not.toBeNull();
             expect(saveAudioTrack).not.toBeNull();
             expect(uploadField?.style.display).toBe("none");
             expect(saveAudioTrackField?.style.display).toBe("none");
+            expect(clipLengthFromAudioField?.style.display).toBe("none");
 
             const saveAudioTrackRow = saveAudioTrack?.closest(".auto-input");
             expect(saveAudioTrackRow?.nextElementSibling).toBe(uploadField);
@@ -908,6 +918,57 @@ describe("videoStageEditor", () => {
                 true,
             );
             expect(saveAudioTrackField?.textContent).toBe("?Save Audio Track");
+        });
+
+        it("shows Clip Length from Audio for upload and AceStepFun sources", () => {
+            stubAceStepFunRegistry(["audio0"]);
+            const editor = videoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const lengthFromAudioField = document.querySelector(
+                ".vs-clip-length-from-audio-field",
+            ) as HTMLElement | null;
+            const lengthFromAudio = document.querySelector(
+                '[data-clip-field="clipLengthFromAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"].auto-slider-number',
+            ) as HTMLInputElement | null;
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(audioSource).not.toBeNull();
+            expect(lengthFromAudioField).not.toBeNull();
+            expect(lengthFromAudio).not.toBeNull();
+            expect(lengthFromAudioField?.style.display).toBe("none");
+
+            const src = must(audioSource);
+            src.value = "Upload";
+            src.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(lengthFromAudioField?.style.display).toBe("");
+
+            const checkbox = must(lengthFromAudio);
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(parseStored()[0].clipLengthFromAudio).toBe(true);
+            expect(durationNumber?.disabled).toBe(true);
+            expect(durationSlider?.disabled).toBe(true);
+
+            src.value = "audio0";
+            src.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(lengthFromAudioField?.style.display).toBe("");
+            expect(parseStored()[0].clipLengthFromAudio).toBe(true);
+
+            src.value = "Native";
+            src.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(lengthFromAudioField?.style.display).toBe("none");
+            expect(checkbox.checked).toBe(false);
+            expect(parseStored()[0].clipLengthFromAudio).toBe(false);
+            expect(durationNumber?.disabled).toBe(false);
+            expect(durationSlider?.disabled).toBe(false);
         });
 
         it("reveals the per-clip audio upload field when audioSource changes to Upload", () => {
@@ -1005,6 +1066,77 @@ describe("videoStageEditor", () => {
                 unknown
             >;
             expect(rawConfig.uploadedAudio).toBeUndefined();
+        });
+
+        it("stores uploaded audio payload when the browser provides a File", async () => {
+            const originalFileReader = globalThis.FileReader;
+            class ImmediateFileReader {
+                result: string | ArrayBuffer | null = null;
+                private loadListener: EventListenerOrEventListenerObject | null =
+                    null;
+
+                addEventListener(
+                    type: string,
+                    listener: EventListenerOrEventListenerObject,
+                ): void {
+                    if (type === "load") {
+                        this.loadListener = listener;
+                    }
+                }
+
+                readAsDataURL(): void {
+                    this.result = "data:audio/mpeg;base64,QUJD";
+                    const event = new ProgressEvent("load");
+                    if (typeof this.loadListener === "function") {
+                        this.loadListener.call(this, event);
+                    } else {
+                        this.loadListener?.handleEvent(event);
+                    }
+                }
+            }
+            Object.defineProperty(globalThis, "FileReader", {
+                value: ImmediateFileReader,
+                configurable: true,
+            });
+            const editor = videoStageEditor();
+            try {
+                editor.init();
+
+                const audioSource = document.querySelector(
+                    '[data-clip-field="audioSource"][data-clip-idx="0"]',
+                ) as HTMLSelectElement | null;
+                expect(audioSource).not.toBeNull();
+                const clipAudioSource = must(audioSource);
+                clipAudioSource.value = "Upload";
+                clipAudioSource.dispatchEvent(
+                    new Event("change", { bubbles: true }),
+                );
+
+                const uploadInput = document.querySelector(
+                    '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+                ) as HTMLInputElement | null;
+                expect(uploadInput).not.toBeNull();
+                const fileInput = must(uploadInput);
+                const file = new File(["ABC"], "clip.mp3", {
+                    type: "audio/mpeg",
+                });
+                Object.defineProperty(fileInput, "files", {
+                    value: [file],
+                    configurable: true,
+                });
+                fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+                const clips = parseStored();
+                expect(clips[0].uploadedAudio?.data).toBe(
+                    "data:audio/mpeg;base64,QUJD",
+                );
+                expect(clips[0].uploadedAudio?.fileName).toBe("clip.mp3");
+            } finally {
+                Object.defineProperty(globalThis, "FileReader", {
+                    value: originalFileReader,
+                    configurable: true,
+                });
+            }
         });
 
         it("keeps per-clip uploads independent across multiple Upload clips", async () => {

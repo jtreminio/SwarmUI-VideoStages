@@ -30,6 +30,7 @@ public class JsonParser(WorkflowGenerator g)
         bool Skipped = false,
         int ClipId = 0,
         string ClipAudioSource = null,
+        bool ClipLengthFromAudio = false,
         int? ClipWidth = null,
         int? ClipHeight = null,
         int? ClipFrames = null,
@@ -57,6 +58,7 @@ public class JsonParser(WorkflowGenerator g)
         double DurationSeconds,
         string AudioSource,
         bool SaveAudioTrack,
+        bool ClipLengthFromAudio,
         int? Width,
         int? Height,
         UploadedAudioSpec UploadedAudio,
@@ -116,6 +118,7 @@ public class JsonParser(WorkflowGenerator g)
                     Id = globalStageIndex,
                     ClipId = clip.Id,
                     ClipAudioSource = clip.AudioSource,
+                    ClipLengthFromAudio = clip.ClipLengthFromAudio,
                     ClipWidth = effectiveRootWidth ?? clip.Width,
                     ClipHeight = effectiveRootHeight ?? clip.Height,
                     ClipFrames = clipFrames,
@@ -264,6 +267,7 @@ public class JsonParser(WorkflowGenerator g)
             audioSource = audioSource.Trim();
         }
         bool saveAudioTrack = GetOptionalBool(clipObj, "SaveAudioTrack", defaultValue: false);
+        bool clipLengthFromAudio = GetOptionalBool(clipObj, "ClipLengthFromAudio", defaultValue: false);
         int? width = GetOptionalNullableInt(clipObj, "Width");
         int? height = GetOptionalNullableInt(clipObj, "Height");
         UploadedAudioSpec uploadedAudio = GetUploadedAudio(clipObj);
@@ -296,6 +300,7 @@ public class JsonParser(WorkflowGenerator g)
             DurationSeconds: Math.Max(0, duration),
             AudioSource: audioSource,
             SaveAudioTrack: saveAudioTrack,
+            ClipLengthFromAudio: clipLengthFromAudio,
             Width: width,
             Height: height,
             UploadedAudio: uploadedAudio,

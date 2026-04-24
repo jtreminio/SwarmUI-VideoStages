@@ -1,6 +1,7 @@
 import {
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
+    canUseClipLengthFromAudio,
     isAceStepFunAudioSource,
     resolveAudioSourceValue,
 } from "./audioSource";
@@ -63,6 +64,17 @@ const moveQButtonBeforeLabelText = (html: string): string =>
         .replace(
             /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
             "$1$3$2",
+        );
+
+const disableSliderInputs = (html: string): string =>
+    html
+        .replace(
+            /<input class="auto-slider-number nogrow"/g,
+            '<input class="auto-slider-number nogrow" disabled',
+        )
+        .replace(
+            /<input class="auto-slider-range nogrow"/g,
+            '<input class="auto-slider-range nogrow" disabled',
         );
 
 const hideFirstStageField = (html: string, stageIdx: number): string =>
@@ -581,24 +593,34 @@ export const renderClipCard = (
 
     const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">Clip ${clipIdx}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip">&times;</button></span></span></span>`;
 
-    const lengthField = injectFieldData(
+    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
+    const audioSource = resolveAudioSourceValue(
+        clip.audioSource,
+        audioSourceOptions,
+    );
+    const canUseAudioLength = canUseClipLengthFromAudio(audioSource);
+    const clipLengthFromAudio = canUseAudioLength && !!clip.clipLengthFromAudio;
+    const lengthInputHtml = makeSliderInput(
+        "",
+        clipFieldId(clipIdx, "duration"),
+        "duration",
+        "Length (seconds)",
+        "",
+        clip.duration.toFixed(1),
+        CLIP_DURATION_MIN,
+        CLIP_DURATION_MAX,
+        CLIP_DURATION_MIN,
+        CLIP_DURATION_SLIDER_MAX,
+        CLIP_DURATION_SLIDER_STEP,
+        false,
+        false,
+        false,
+    );
+    const lengthFieldWithSteps = injectFieldData(
         overrideSliderSteps(
-            makeSliderInput(
-                "",
-                clipFieldId(clipIdx, "duration"),
-                "duration",
-                "Length (seconds)",
-                "",
-                clip.duration.toFixed(1),
-                CLIP_DURATION_MIN,
-                CLIP_DURATION_MAX,
-                CLIP_DURATION_MIN,
-                CLIP_DURATION_SLIDER_MAX,
-                CLIP_DURATION_SLIDER_STEP,
-                false,
-                false,
-                false,
-            ),
+            clipLengthFromAudio
+                ? disableSliderInputs(lengthInputHtml)
+                : lengthInputHtml,
             {
                 numberStep: "any",
                 rangeStep: CLIP_DURATION_SLIDER_STEP,
@@ -606,10 +628,9 @@ export const renderClipCard = (
         ),
         { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) },
     );
-    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
-    const audioSource = resolveAudioSourceValue(
-        clip.audioSource,
-        audioSourceOptions,
+    const decoratedLengthField = decorateAutoInputWrapper(
+        lengthFieldWithSteps,
+        "vs-clip-duration-field",
     );
     const audioSourceField = injectFieldData(
         buildNativeDropdown(
@@ -623,6 +644,29 @@ export const renderClipCard = (
             "data-clip-field": "audioSource",
             "data-clip-idx": String(clipIdx),
         },
+    );
+    const clipLengthFromAudioField = moveQButtonBeforeLabelText(
+        decorateAutoInputWrapper(
+            injectFieldData(
+                makeCheckboxInput(
+                    "",
+                    clipFieldId(clipIdx, "clipLengthFromAudio"),
+                    "clipLengthFromAudio",
+                    "Clip Length from Audio",
+                    "Sets the video clip length to be the same length as the selected audio track.",
+                    clipLengthFromAudio,
+                    false,
+                    true,
+                    true,
+                ),
+                {
+                    "data-clip-field": "clipLengthFromAudio",
+                    "data-clip-idx": String(clipIdx),
+                },
+            ),
+            "vs-clip-length-from-audio-field",
+            !canUseAudioLength,
+        ),
     );
     const saveAudioTrackField = moveQButtonBeforeLabelText(
         decorateAutoInputWrapper(
@@ -655,13 +699,14 @@ export const renderClipCard = (
 
     const body = `
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
-                ${lengthField}
+                ${decoratedLengthField}
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">AUDIO</div>
                     </div>
                     ${audioSourceField}
+                    ${clipLengthFromAudioField}
                     ${saveAudioTrackField}
                     ${audioUploadField}
                 </div>

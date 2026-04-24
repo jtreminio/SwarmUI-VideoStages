@@ -13,6 +13,14 @@ const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 export const isAceStepFunAudioSource = (source: string): boolean =>
     ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
 
+export const canUseClipLengthFromAudio = (source: string): boolean => {
+    const normalized = `${source ?? ""}`.trim();
+    return (
+        normalized === AUDIO_SOURCE_UPLOAD ||
+        isAceStepFunAudioSource(normalized)
+    );
+};
+
 const getSourceSelects = (): HTMLSelectElement[] =>
     Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
         (elem): elem is HTMLSelectElement => elem instanceof HTMLSelectElement,

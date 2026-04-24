@@ -1,6 +1,7 @@
 import {
     AUDIO_SOURCE_NATIVE,
     buildAudioSourceOptions,
+    canUseClipLengthFromAudio,
     resolveAudioSourceValue,
 } from "./audioSource";
 import {
@@ -185,6 +186,7 @@ export const buildDefaultClip = (
         ),
         audioSource: AUDIO_SOURCE_NATIVE,
         saveAudioTrack: false,
+        clipLengthFromAudio: false,
         uploadedAudio: null,
         refs: [],
         stages: [
@@ -375,15 +377,19 @@ export const normalizeClip = (
             ),
         );
     }
+    const audioSource = resolveAudioSourceValue(
+        rawAudioSource,
+        audioSourceOptions,
+    );
     return {
         expanded: rawClip.expanded === undefined ? true : !!rawClip.expanded,
         skipped: !!rawClip.skipped,
         duration,
-        audioSource: resolveAudioSourceValue(
-            rawAudioSource,
-            audioSourceOptions,
-        ),
+        audioSource,
         saveAudioTrack: !!rawClip.saveAudioTrack,
+        clipLengthFromAudio:
+            canUseClipLengthFromAudio(audioSource) &&
+            !!rawClip.clipLengthFromAudio,
         uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
         refs,
         stages,
