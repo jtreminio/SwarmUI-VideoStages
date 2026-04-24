@@ -1239,63 +1239,85 @@
       deps.scheduleClipsRefresh();
     }
   };
+  var latestDomEventDeps = null;
+  var stageEditorDocumentClickBound = false;
+  var stageEditorsWithFieldListeners = /* @__PURE__ */ new WeakSet();
+  var handleStageEditorDocumentClick = (event) => {
+    const deps = latestDomEventDeps;
+    if (!deps) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const host = target.closest("#videostages_stage_editor");
+    if (!(host instanceof HTMLElement) || !host.isConnected) {
+      return;
+    }
+    deps.ensureEditorRoot();
+    const refUploadRemoveButton = target.closest(
+      ".vs-ref-upload-field .auto-input-remove-button"
+    );
+    if (refUploadRemoveButton) {
+      handleRefUploadRemove(refUploadRemoveButton, deps);
+      return;
+    }
+    const clipUploadRemoveButton = target.closest(
+      ".vs-clip-audio-upload-field .auto-input-remove-button"
+    );
+    if (clipUploadRemoveButton) {
+      handleClipAudioUploadRemove(clipUploadRemoveButton, deps);
+      return;
+    }
+    const actionElem = target.closest(
+      "[data-clip-action], [data-stage-action], [data-ref-action]"
+    );
+    if (actionElem) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleAction(actionElem, deps);
+      return;
+    }
+    const clipHeader = target.closest(
+      ".vs-clip-card > .input-group-shrinkable"
+    );
+    if (clipHeader) {
+      event.stopPropagation();
+      const group = clipHeader.closest(".vs-clip-card");
+      const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
+      toggleClipExpanded(clipIdx, deps);
+    }
+  };
   var attachEventListeners = (deps) => {
+    latestDomEventDeps = deps;
+    deps.ensureEditorRoot();
     const editor = deps.getEditor();
     if (!editor) {
       return;
     }
-    if (editor.dataset.vsListenersAttached === "1") {
+    if (!stageEditorDocumentClickBound) {
+      stageEditorDocumentClickBound = true;
+      document.addEventListener(
+        "click",
+        handleStageEditorDocumentClick,
+        true
+      );
+    }
+    if (stageEditorsWithFieldListeners.has(editor)) {
       return;
     }
-    editor.dataset.vsListenersAttached = "1";
-    editor.addEventListener("click", (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-      const refUploadRemoveButton = target.closest(
-        ".vs-ref-upload-field .auto-input-remove-button"
-      );
-      if (refUploadRemoveButton) {
-        handleRefUploadRemove(refUploadRemoveButton, deps);
-        return;
-      }
-      const clipUploadRemoveButton = target.closest(
-        ".vs-clip-audio-upload-field .auto-input-remove-button"
-      );
-      if (clipUploadRemoveButton) {
-        handleClipAudioUploadRemove(clipUploadRemoveButton, deps);
-        return;
-      }
-      const actionElem = target.closest(
-        "[data-clip-action], [data-stage-action], [data-ref-action]"
-      );
-      if (actionElem) {
-        event.preventDefault();
-        event.stopPropagation();
-        handleAction(actionElem, deps);
-        return;
-      }
-      const clipHeader = target.closest(
-        ".vs-clip-card > .input-group-shrinkable"
-      );
-      if (clipHeader) {
-        event.stopPropagation();
-        const group = clipHeader.closest(".vs-clip-card");
-        const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
-        toggleClipExpanded(clipIdx, deps);
-      }
-    });
+    stageEditorsWithFieldListeners.add(editor);
     editor.addEventListener("change", (event) => {
       handleFieldChange(event.target, deps);
     });
     editor.addEventListener("input", (event) => {
-      const target = event.target;
-      if (!isFieldTarget(target)) {
+      const inputTarget = event.target;
+      if (!isFieldTarget(inputTarget)) {
         return;
       }
-      if (target instanceof HTMLInputElement && (target.type === "number" || target.type === "range")) {
-        handleFieldChange(target, deps, true);
+      if (inputTarget instanceof HTMLInputElement && (inputTarget.type === "number" || inputTarget.type === "range")) {
+        handleFieldChange(inputTarget, deps, true);
       }
     });
   };
@@ -2368,16 +2390,6 @@ ${optionHtml}
       observers.markPersisted(serialized);
     };
     const generateWrap = createGenerateWrap({ getClips: getEditorClips });
-    const getDomDeps = () => ({
-      getEditor: () => editor,
-      getClips: getEditorClips,
-      saveClips: saveEditorClips,
-      getState: getEditorState,
-      saveState: saveEditorState,
-      persistenceCallbacks,
-      scheduleClipsRefresh,
-      refUploadCache
-    });
     const createEditor = () => {
       let el = document.getElementById("videostages_stage_editor");
       if (!el) {
@@ -2393,6 +2405,17 @@ ${optionHtml}
       el.style.overflow = "visible";
       editor = el;
     };
+    const getDomDeps = () => ({
+      ensureEditorRoot: createEditor,
+      getEditor: () => editor,
+      getClips: getEditorClips,
+      saveClips: saveEditorClips,
+      getState: getEditorState,
+      saveState: saveEditorState,
+      persistenceCallbacks,
+      scheduleClipsRefresh,
+      refUploadCache
+    });
     const restoreClipAudioUploadPreviews = (clips) => {
       if (!editor) {
         return;
@@ -2421,6 +2444,7 @@ ${optionHtml}
       }
     };
     const renderClips = () => {
+      createEditor();
       if (!editor) {
         return [];
       }

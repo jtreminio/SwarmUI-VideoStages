@@ -27,12 +27,12 @@ import { seedRegisteredDimensionsFromCore } from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
 import { validateClips } from "./validation";
 
-export interface videoStageEditor {
+export interface VideoStageEditor {
     init(): void;
     startGenerateWrapRetry(intervalMs?: number): void;
 }
 
-export function videoStageEditor(): videoStageEditor {
+export function videoStageEditor(): VideoStageEditor {
     let editor: HTMLElement | null = null;
     let clipsRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -70,17 +70,6 @@ export function videoStageEditor(): videoStageEditor {
 
     const generateWrap = createGenerateWrap({ getClips: getEditorClips });
 
-    const getDomDeps = (): DomEventsDeps => ({
-        getEditor: () => editor,
-        getClips: getEditorClips,
-        saveClips: saveEditorClips,
-        getState: getEditorState,
-        saveState: saveEditorState,
-        persistenceCallbacks,
-        scheduleClipsRefresh,
-        refUploadCache,
-    });
-
     const createEditor = (): void => {
         let el = document.getElementById("videostages_stage_editor");
         if (!el) {
@@ -99,6 +88,18 @@ export function videoStageEditor(): videoStageEditor {
         el.style.overflow = "visible";
         editor = el;
     };
+
+    const getDomDeps = (): DomEventsDeps => ({
+        ensureEditorRoot: createEditor,
+        getEditor: () => editor,
+        getClips: getEditorClips,
+        saveClips: saveEditorClips,
+        getState: getEditorState,
+        saveState: saveEditorState,
+        persistenceCallbacks,
+        scheduleClipsRefresh,
+        refUploadCache,
+    });
 
     const restoreClipAudioUploadPreviews = (clips: Clip[]): void => {
         if (!editor) {
@@ -133,6 +134,7 @@ export function videoStageEditor(): videoStageEditor {
     };
 
     const renderClips = (): string[] => {
+        createEditor();
         if (!editor) {
             return [];
         }

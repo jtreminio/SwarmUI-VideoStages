@@ -28,6 +28,8 @@ import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import type { Clip, VideoStagesConfig } from "./types";
 
 export type DomEventsDeps = {
+    /** Re-resolve `#videostages_stage_editor` after SwarmUI rebuilds the param panel. */
+    ensureEditorRoot: () => void;
     getEditor: () => HTMLElement | null;
     getClips: () => Clip[];
     saveClips: (clips: Clip[]) => void;
@@ -365,69 +367,94 @@ export const handleFieldChange = (
     }
 };
 
+let latestDomEventDeps: DomEventsDeps | null = null;
+let stageEditorDocumentClickBound = false;
+const stageEditorsWithFieldListeners = new WeakSet<HTMLElement>();
+
+const handleStageEditorDocumentClick = (event: MouseEvent): void => {
+    const deps = latestDomEventDeps;
+    if (!deps) {
+        return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+        return;
+    }
+    const host = target.closest("#videostages_stage_editor");
+    if (!(host instanceof HTMLElement) || !host.isConnected) {
+        return;
+    }
+    deps.ensureEditorRoot();
+
+    const refUploadRemoveButton = target.closest<HTMLElement>(
+        ".vs-ref-upload-field .auto-input-remove-button",
+    );
+    if (refUploadRemoveButton) {
+        handleRefUploadRemove(refUploadRemoveButton, deps);
+        return;
+    }
+    const clipUploadRemoveButton = target.closest<HTMLElement>(
+        ".vs-clip-audio-upload-field .auto-input-remove-button",
+    );
+    if (clipUploadRemoveButton) {
+        handleClipAudioUploadRemove(clipUploadRemoveButton, deps);
+        return;
+    }
+    const actionElem = target.closest<HTMLElement>(
+        "[data-clip-action], [data-stage-action], [data-ref-action]",
+    );
+    if (actionElem) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleAction(actionElem, deps);
+        return;
+    }
+
+    const clipHeader = target.closest<HTMLElement>(
+        ".vs-clip-card > .input-group-shrinkable",
+    );
+    if (clipHeader) {
+        event.stopPropagation();
+        const group = clipHeader.closest<HTMLElement>(".vs-clip-card");
+        const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
+        toggleClipExpanded(clipIdx, deps);
+    }
+};
+
 export const attachEventListeners = (deps: DomEventsDeps): void => {
+    latestDomEventDeps = deps;
+    deps.ensureEditorRoot();
     const editor = deps.getEditor();
     if (!editor) {
         return;
     }
-    if (editor.dataset.vsListenersAttached === "1") {
+    if (!stageEditorDocumentClickBound) {
+        stageEditorDocumentClickBound = true;
+        document.addEventListener(
+            "click",
+            handleStageEditorDocumentClick,
+            true,
+        );
+    }
+
+    if (stageEditorsWithFieldListeners.has(editor)) {
         return;
     }
-    editor.dataset.vsListenersAttached = "1";
-
-    editor.addEventListener("click", (event: MouseEvent) => {
-        const target = event.target;
-        if (!(target instanceof Element)) {
-            return;
-        }
-        const refUploadRemoveButton = target.closest<HTMLElement>(
-            ".vs-ref-upload-field .auto-input-remove-button",
-        );
-        if (refUploadRemoveButton) {
-            handleRefUploadRemove(refUploadRemoveButton, deps);
-            return;
-        }
-        const clipUploadRemoveButton = target.closest<HTMLElement>(
-            ".vs-clip-audio-upload-field .auto-input-remove-button",
-        );
-        if (clipUploadRemoveButton) {
-            handleClipAudioUploadRemove(clipUploadRemoveButton, deps);
-            return;
-        }
-        const actionElem = target.closest<HTMLElement>(
-            "[data-clip-action], [data-stage-action], [data-ref-action]",
-        );
-        if (actionElem) {
-            event.preventDefault();
-            event.stopPropagation();
-            handleAction(actionElem, deps);
-            return;
-        }
-
-        const clipHeader = target.closest<HTMLElement>(
-            ".vs-clip-card > .input-group-shrinkable",
-        );
-        if (clipHeader) {
-            event.stopPropagation();
-            const group = clipHeader.closest<HTMLElement>(".vs-clip-card");
-            const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
-            toggleClipExpanded(clipIdx, deps);
-        }
-    });
+    stageEditorsWithFieldListeners.add(editor);
 
     editor.addEventListener("change", (event: Event) => {
         handleFieldChange(event.target, deps);
     });
     editor.addEventListener("input", (event: Event) => {
-        const target = event.target;
-        if (!isFieldTarget(target)) {
+        const inputTarget = event.target;
+        if (!isFieldTarget(inputTarget)) {
             return;
         }
         if (
-            target instanceof HTMLInputElement &&
-            (target.type === "number" || target.type === "range")
+            inputTarget instanceof HTMLInputElement &&
+            (inputTarget.type === "number" || inputTarget.type === "range")
         ) {
-            handleFieldChange(target, deps, true);
+            handleFieldChange(inputTarget, deps, true);
         }
     });
 };
