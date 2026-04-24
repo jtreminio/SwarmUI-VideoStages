@@ -57,7 +57,7 @@ internal static class Base2EditPublishedStageRefs
             return null;
         }
 
-        return stageRef.Media.AsRawImage(stageRef.Vae);
+        return VaeDecodePreference.AsRawImage(stageRef.Media.Gen, stageRef.Media, stageRef.Vae);
     }
 
     private static WGNodeData DeserializeNodeData(WorkflowGenerator g, JObject data, WGNodeData fallbackVae)

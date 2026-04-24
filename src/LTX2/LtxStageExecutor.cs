@@ -697,7 +697,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         }
         else
         {
-            g.CurrentMedia = g.CurrentMedia.AsRawImage(genInfo.Vae);
+            g.CurrentMedia = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, genInfo.Vae);
             ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, genInfo.Frames, genInfo.VideoFPS);
         }
 

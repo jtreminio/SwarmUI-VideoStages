@@ -34,7 +34,7 @@ internal static class StageGuideMediaHelper
                 : WGNodeData.DT_IMAGE;
             return guideReference.Media.WithPath(decodedGuidePath, rawDataType, guideVae?.Compat);
         }
-        return guideReference.Media.AsRawImage(guideVae);
+        return VaeDecodePreference.AsRawImage(g, guideReference.Media, guideVae);
     }
 
     internal static bool IsLiveCurrentOutputReference(WGNodeData guideMedia, LTX2.LtxPostVideoChain postVideoChain)

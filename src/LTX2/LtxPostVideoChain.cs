@@ -149,17 +149,9 @@ internal sealed class LtxPostVideoChain
         {
             ["av_latent"] = new JArray(AvLatentPath[0], AvLatentPath[1])
         });
-        string detachedDecode = g.CreateNode(NodeTypes.VAEDecodeTiled, (_, n) =>
+        string detachedDecode = g.CreateNode(FinalVideoDecodeNodeType(), (_, n) =>
         {
-            n["inputs"] = new JObject()
-            {
-                ["vae"] = new JArray(vaePath[0], vaePath[1]),
-                ["samples"] = new JArray(detachedSeparate, 0),
-                ["tile_size"] = 2048,
-                ["overlap"] = 256,
-                ["temporal_size"] = 64,
-                ["temporal_overlap"] = 16
-            };
+            n["inputs"] = CreateFinalDecodeInputs(vaePath, new JArray(detachedSeparate, 0));
         });
         WGNodeData detachedGuide = new(new JArray(detachedDecode, 0), g, WGNodeData.DT_VIDEO, vae.Compat)
         {
@@ -213,7 +205,7 @@ internal sealed class LtxPostVideoChain
             ["av_latent"] = stageOutputPath
         });
 
-        RetargetVideoDecodeAsTiled(VideoDecodeNodeId, vae?.Path ?? g.CurrentVae?.Path, new JArray(newSeparate, 0));
+        RetargetVideoDecode(VideoDecodeNodeId, vae?.Path ?? g.CurrentVae?.Path, new JArray(newSeparate, 0));
         WorkflowUtils.RetargetInputConnections(
             g.Workflow,
             new JArray($"{AudioLatentPath[0]}", AudioLatentPath[1]),
@@ -247,9 +239,9 @@ internal sealed class LtxPostVideoChain
             return;
         }
 
-        string dedicatedVideoDecode = g.CreateNode(NodeTypes.VAEDecodeTiled, (_, n) =>
+        string dedicatedVideoDecode = g.CreateNode(FinalVideoDecodeNodeType(), (_, n) =>
         {
-            n["inputs"] = CreateFinalTiledDecodeInputs(vaeRef, new JArray(newSeparate, 0));
+            n["inputs"] = CreateFinalDecodeInputs(vaeRef, new JArray(newSeparate, 0));
         });
         string dedicatedAudioDecode = g.CreateNode(LtxNodeTypes.LTXVAudioVAEDecode, new JObject()
         {
@@ -517,7 +509,7 @@ internal sealed class LtxPostVideoChain
         }
     }
 
-    private void RetargetVideoDecodeAsTiled(string videoDecodeNodeId, JArray vaeRef, JArray latentRef)
+    private void RetargetVideoDecode(string videoDecodeNodeId, JArray vaeRef, JArray latentRef)
     {
         if (string.IsNullOrWhiteSpace(videoDecodeNodeId)
             || vaeRef is null
@@ -528,8 +520,32 @@ internal sealed class LtxPostVideoChain
             return;
         }
 
-        decodeNode["class_type"] = NodeTypes.VAEDecodeTiled;
-        decodeNode["inputs"] = CreateFinalTiledDecodeInputs(vaeRef, latentRef);
+        decodeNode["class_type"] = FinalVideoDecodeNodeType();
+        decodeNode["inputs"] = CreateFinalDecodeInputs(vaeRef, latentRef);
+    }
+
+    private string FinalVideoDecodeNodeType()
+    {
+        return ShouldUseTiledVaeDecode() ? NodeTypes.VAEDecodeTiled : NodeTypes.VAEDecode;
+    }
+
+    private bool ShouldUseTiledVaeDecode()
+    {
+        return g.UserInput.TryGet(T2IParamTypes.VAETileSize, out _);
+    }
+
+    private JObject CreateFinalDecodeInputs(JArray vaeRef, JArray latentRef)
+    {
+        if (ShouldUseTiledVaeDecode())
+        {
+            return CreateFinalTiledDecodeInputs(vaeRef, latentRef);
+        }
+
+        return new JObject()
+        {
+            ["vae"] = new JArray(vaeRef[0], vaeRef[1]),
+            ["samples"] = new JArray(latentRef[0], latentRef[1])
+        };
     }
 
     private JObject CreateFinalTiledDecodeInputs(JArray vaeRef, JArray latentRef)

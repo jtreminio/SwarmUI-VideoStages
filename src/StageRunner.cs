@@ -175,7 +175,7 @@ internal class StageRunner(WorkflowGenerator g)
 
     private WGNodeData ApplyStageUpscaleIfNeeded(JsonParser.StageSpec stage, int sectionId)
     {
-        WGNodeData source = g.CurrentMedia.AsRawImage(g.CurrentVae);
+        WGNodeData source = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, g.CurrentVae);
         int width = Math.Max(source.Width ?? g.UserInput.GetImageWidth(), 16);
         int height = Math.Max(source.Height ?? g.UserInput.GetImageHeight(), 16);
         source.Width = width;

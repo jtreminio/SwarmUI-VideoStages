@@ -213,9 +213,17 @@ public partial class StageFlowTests
         Assert.Equal(temporalOverlap, inputs.Value<int>("temporal_overlap"));
     }
 
-    private static void AssertLtxFinalTiledDecodeUsesUpdatedDefaults(WorkflowNode decodeNode)
+    private static void AssertLtxFinalDecodeUsesPlainVaeDecode(WorkflowNode decodeNode)
     {
-        AssertLtxFinalTiledDecodeUsesTiling(decodeNode, 768, 64, 4096, 4);
+        Assert.Equal("VAEDecode", $"{decodeNode.Node["class_type"]}");
+        Assert.True(decodeNode.Node["inputs"] is JObject, "Expected decode node to have inputs.");
+        JObject inputs = (JObject)decodeNode.Node["inputs"];
+        Assert.True(inputs["vae"] is JArray, "Expected decode node to have a VAE input.");
+        Assert.True(inputs["samples"] is JArray, "Expected decode node to have a samples input.");
+        Assert.False(inputs.ContainsKey("tile_size"));
+        Assert.False(inputs.ContainsKey("overlap"));
+        Assert.False(inputs.ContainsKey("temporal_size"));
+        Assert.False(inputs.ContainsKey("temporal_overlap"));
     }
 
     private static void AssertStageLtxConcatsReuseOriginalAudio(JObject workflow, WorkflowNode originalSeparate)

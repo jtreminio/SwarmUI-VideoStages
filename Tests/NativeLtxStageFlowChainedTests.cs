@@ -142,10 +142,8 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(samplerNodes[1].Node, "latent_image"),
             new JArray(samplerNodes[0].Id, 0)));
 
-        IReadOnlyList<WorkflowNode> tiledDecodeNodes = WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled");
-        WorkflowNode finalVideoDecode = Assert.Single(tiledDecodeNodes);
-        Assert.Equal("202", finalVideoDecode.Id);
-        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
+        WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
+        AssertLtxFinalDecodeUsesPlainVaeDecode(finalVideoDecode);
         RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -215,8 +213,7 @@ public partial class StageFlowTests
         AssertStageLtxConcatsReuseOriginalAudio(workflow, originalSeparate);
 
         WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
-        Assert.Equal("VAEDecodeTiled", $"{finalVideoDecode.Node["class_type"]}");
-        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
+        AssertLtxFinalDecodeUsesPlainVaeDecode(finalVideoDecode);
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         WorkflowNode finalAudioDecode = WorkflowAssertions.RequireNodeById(workflow, "203");

@@ -5,6 +5,7 @@ internal static class NodeTypes
     public const string VAEDecode = "VAEDecode";
     public const string VAEDecodeTiled = "VAEDecodeTiled";
     public const string VAEEncode = "VAEEncode";
+    public const string VAEEncodeTiled = "VAEEncodeTiled";
     public const string VAEDecodeAudio = "VAEDecodeAudio";
     public const string SaveImage = "SaveImage";
     public const string SwarmSaveImageWS = "SwarmSaveImageWS";

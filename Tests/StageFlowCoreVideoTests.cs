@@ -430,11 +430,12 @@ public partial class StageFlowTests
                 return workflow.TryGetValue($"{avIn[0]}", out JToken upstream)
                     && $"{upstream["class_type"]}" == "LTXVCropGuides";
             });
-        Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled"),
+        WorkflowNode finalDecode = Assert.Single(
+            WorkflowAssertions.NodesOfAnyType(workflow, "VAEDecode", "VAEDecodeTiled"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "samples"),
                 new JArray(separateAfterCrop.Id, 0)));
+        AssertLtxFinalDecodeUsesPlainVaeDecode(finalDecode);
     }
 
     [Fact]
