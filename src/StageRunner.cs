@@ -10,9 +10,7 @@ using VideoStages.LTX2;
 
 namespace VideoStages;
 
-/// <summary>
-/// Executes a single VideoStages stage.
-/// </summary>
+/// <summary>Runs one VideoStages image-to-video stage (native or local LTX-V2 path).</summary>
 internal class StageRunner(WorkflowGenerator g)
 {
     private readonly StageExecutor _stageExecutor = new(g);
@@ -21,9 +19,6 @@ internal class StageRunner(WorkflowGenerator g)
         WorkflowGenerator.ImageToVideoGenInfo GenInfo,
         Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
 
-    /// <summary>
-    /// Runs one image-to-video stage using the current generator state as input.
-    /// </summary>
     public void RunStage(
         JsonParser.StageSpec stage,
         int sectionId,
@@ -56,7 +51,7 @@ internal class StageRunner(WorkflowGenerator g)
         }
         bool skipGuideReinjection = useLocalLtxv2Path
             && primaryGuideClipRef is null
-            && (HasOnlyNonPrimaryClipRefs(clipRefs)
+            && (clipRefs is { Count: > 0 }
                 || ShouldSkipGeneratedGuideReinjection(stage, sourceMedia, guideReference, genInfo, postVideoChain));
         WGNodeData guideMedia = useLocalLtxv2Path
             ? ResolveLocalGuideMedia(primaryGuideClipRef, skipGuideReinjection, sourceMedia, priorOutputPath, postVideoChain)
@@ -122,11 +117,6 @@ internal class StageRunner(WorkflowGenerator g)
 
     private static ResolvedClipRef ExtractPrimaryGuideClipRef(IReadOnlyList<ResolvedClipRef> clipRefs)
     {
-        if (clipRefs is null)
-        {
-            return null;
-        }
-
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
             if (!clipRef.Spec.FromEnd && clipRef.Spec.Frame == 1)
@@ -397,7 +387,6 @@ internal class StageRunner(WorkflowGenerator g)
                     {
                         return;
                     }
-
                     string fromBatch = g.CreateNode("ImageFromBatch", new JObject()
                     {
                         ["image"] = sourceMedia.Path,
@@ -496,11 +485,6 @@ internal class StageRunner(WorkflowGenerator g)
             && guideReference.Vae.Compat.ID == genInfo.VideoModel?.ModelClass?.CompatClass?.ID;
     }
 
-    private static bool HasOnlyNonPrimaryClipRefs(IReadOnlyList<ResolvedClipRef> clipRefs)
-    {
-        return clipRefs is { Count: > 0 };
-    }
-
     private WGNodeData PrepareGuideMedia(WGNodeData guideMedia, WGNodeData sourceMedia, bool scaleToSourceSize)
     {
         WGNodeData resolvedGuideMedia = guideMedia ?? sourceMedia;
@@ -561,14 +545,9 @@ internal class StageRunner(WorkflowGenerator g)
                 || stage.UpscaleMethod.StartsWith("latentmodel-", StringComparison.OrdinalIgnoreCase);
             if (supportedLtxUpscale)
             {
-                // Local LTX-V2 stages apply latent upscales later after the stage latent exists.
                 g.CurrentMedia = source;
                 return source;
             }
-            // Pixel/model upscales fall through to the standard ImageScale path below.
-            // ImageScale operates on each frame in a video tensor batch, so the next
-            // stage's BuildStageLatent re-encodes the upscaled frames into a fresh latent
-            // at the new dimensions, keeping the chain additive across stages.
         }
 
         if (stage.UpscaleMethod.StartsWith("pixel-", StringComparison.OrdinalIgnoreCase))

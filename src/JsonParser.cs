@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
@@ -67,14 +64,7 @@ public class JsonParser(WorkflowGenerator g)
         IReadOnlyList<StageSpec> Stages
     );
 
-    /// <summary>
-    /// Top-level spec for a parsed VideoStages JSON payload.
-    /// <para>
-    /// <see cref="UploadedAudio"/> is the legacy root-level shared upload that
-    /// older saved JSON used before per-clip uploads existed; it is kept as a
-    /// fallback for any clip that requests Upload but has no per-clip payload.
-    /// </para>
-    /// </summary>
+    /// <summary>Top-level parse result. <see cref="UploadedAudio"/> is legacy root-level only; new JSON uses per-clip uploads.</summary>
     public sealed record VideoStagesSpec(
         int? Width,
         int? Height,
@@ -94,14 +84,7 @@ public class JsonParser(WorkflowGenerator g)
         string Scheduler
     );
 
-    /// <summary>
-    /// Parses the configured JSON. If the JSON is in clip-shape (each entry
-    /// has a "Stages" array), returns a flattened list of every clip's stages
-    /// in render order; legacy stage-shape JSON is treated as a single clip's
-    /// stages. Each stage carries its parent clip's optional audio source,
-    /// width/height/frames so the runner can apply per-clip overrides. Use
-    /// <see cref="ParseClips"/> for clip-aware behavior.
-    /// </summary>
+    /// <summary>Flattens all non-skipped stages from configured JSON (clip-shaped or legacy single clip). Stages get clip audio/dimensions.</summary>
     public List<StageSpec> ParseStages()
     {
         VideoStagesSpec config = ParseConfig();
@@ -179,11 +162,7 @@ public class JsonParser(WorkflowGenerator g)
             : null;
     }
 
-    /// <summary>
-    /// Parses the configured JSON into clip-shaped data. Legacy stage-only
-    /// JSON is wrapped in a single default clip so the rest of the pipeline
-    /// can always reason in terms of clips.
-    /// </summary>
+    /// <summary>Parses JSON into clips; legacy stage-only JSON becomes one synthetic clip.</summary>
     public VideoStagesSpec ParseConfig()
     {
         (int? width, int? height, int? fps, UploadedAudioSpec uploadedAudio, List<JObject> rawEntries) = GetJsonTopLevelConfig();
@@ -218,21 +197,13 @@ public class JsonParser(WorkflowGenerator g)
         return new VideoStagesSpec(width, height, fps, uploadedAudio, parsed);
     }
 
-    /// <summary>
-    /// Returns the legacy root-level shared uploaded audio, or null. Modern
-    /// payloads place the upload inside the clip itself (see
-    /// <see cref="ParseUploadedAudioForClip"/>); this is kept as a fallback so
-    /// older saved metadata still loads correctly.
-    /// </summary>
+    /// <summary>Root-level uploaded audio from JSON (legacy); prefer <see cref="ParseUploadedAudioForClip"/> for new payloads.</summary>
     public AudioFile ParseUploadedAudio()
     {
         return MaterializeUploadedAudio(ParseConfig().UploadedAudio);
     }
 
-    /// <summary>
-    /// Returns the uploaded audio attached to a specific clip, falling back to
-    /// the legacy root-level upload when the clip itself does not carry one.
-    /// </summary>
+    /// <summary>Per-clip upload, or root-level fallback from <see cref="ParseUploadedAudio"/>.</summary>
     public AudioFile ParseUploadedAudioForClip(ClipSpec clip)
     {
         AudioFile perClip = MaterializeUploadedAudio(clip?.UploadedAudio);
@@ -292,17 +263,8 @@ public class JsonParser(WorkflowGenerator g)
         return [.. ParseConfig().Clips];
     }
 
-    private static bool IsClipShape(JObject entry)
-    {
-        foreach (JProperty property in entry.Properties())
-        {
-            if (string.Equals(property.Name, "Stages", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
+    private static bool IsClipShape(JObject entry) =>
+        entry.Properties().Any(p => string.Equals(p.Name, "Stages", StringComparison.OrdinalIgnoreCase));
 
     private ClipSpec ParseLegacyStageArrayAsSingleClip(List<JObject> rawStages, StageDefaults defaults)
     {
@@ -399,9 +361,9 @@ public class JsonParser(WorkflowGenerator g)
         }
         bool fromEnd = false;
         string rawFromEnd = GetString(refObj, "FromEnd");
-        if (!string.IsNullOrWhiteSpace(rawFromEnd))
+        if (!string.IsNullOrWhiteSpace(rawFromEnd) && bool.TryParse(rawFromEnd.Trim(), out bool parsedFromEnd))
         {
-            _ = bool.TryParse(rawFromEnd.Trim(), out fromEnd);
+            fromEnd = parsedFromEnd;
         }
         string uploadFileName = GetString(refObj, "UploadFileName");
         string data = GetString(refObj, "Data");
@@ -469,10 +431,7 @@ public class JsonParser(WorkflowGenerator g)
         return null;
     }
 
-    /// <summary>
-    /// Reads a nested upload payload (e.g. <c>uploadedAudio</c> / <c>UploadedAudio</c>,
-    /// <c>uploadedImage</c> / <c>UploadedImage</c>) with <c>Data</c> and optional <c>FileName</c>.
-    /// </summary>
+    /// <summary>Nested object with <c>Data</c> and optional <c>FileName</c> (property name passed in).</summary>
     private static UploadedAudioSpec GetEmbeddedUploadSpec(JObject parent, string containerPropertyName)
     {
         JObject nested = GetObject(parent, containerPropertyName);
@@ -714,7 +673,6 @@ public class JsonParser(WorkflowGenerator g)
             {
                 return $"Stage{explicitStage}";
             }
-
             Logs.Warning($"VideoStages: Stage {index} has forward ImageReference '{rawValue}'. Using '{defaultReference}' instead.");
             return defaultReference;
         }
@@ -754,8 +712,9 @@ public class JsonParser(WorkflowGenerator g)
         {
             return false;
         }
-        return !string.Equals(rawVae.Trim(), "Automatic", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(rawVae.Trim(), "None", StringComparison.OrdinalIgnoreCase);
+        string t = rawVae.Trim();
+        return !string.Equals(t, "Automatic", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(t, "None", StringComparison.OrdinalIgnoreCase);
     }
 
     private static double Clamp(double value, double min, double max)
@@ -826,17 +785,8 @@ public class JsonParser(WorkflowGenerator g)
         return null;
     }
 
-    private static bool JsonHasOwnProperty(JObject obj, string key)
-    {
-        foreach (JProperty property in obj.Properties())
-        {
-            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
+    private static bool JsonHasOwnProperty(JObject obj, string key) =>
+        obj.Properties().Any(p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
 
     private static bool ShouldWarnFirstStageUpscaleIgnored(
         bool hasUpscaleKey,

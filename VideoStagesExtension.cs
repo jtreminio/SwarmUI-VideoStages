@@ -1,5 +1,4 @@
 using System.IO;
-using System.Linq;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
@@ -14,7 +13,7 @@ public class VideoStagesExtension : Extension
     public const int RootDimensionMin = 256;
     public const int RootDimensionMax = 16384;
     public const string RootDimensionsDescription = "These are the starting dimensions for each clip. The first stage in each clip cannot apply per-stage upscale; use later stages or the main workflow for scaling if needed.";
-
+    private const string ComfyUIFeatureFlag = "comfyui";
     public const string AudioSourceNative = "Native";
     public const string AudioSourceUpload = "Upload";
     public const string AudioSourceSwarm = "Swarm Audio";
@@ -103,7 +102,7 @@ public class VideoStagesExtension : Extension
             DoNotPreview: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui"
+            FeatureFlag: ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
@@ -121,7 +120,7 @@ public class VideoStagesExtension : Extension
             DoNotPreview: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui"
+            FeatureFlag: ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
@@ -139,7 +138,7 @@ public class VideoStagesExtension : Extension
             DoNotPreview: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui"
+            FeatureFlag: ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
@@ -152,7 +151,7 @@ public class VideoStagesExtension : Extension
             HideFromMetadata: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,
-            FeatureFlag: "comfyui"
+            FeatureFlag: ComfyUIFeatureFlag
         ));
     }
 }

@@ -24,20 +24,13 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
                 continue;
             }
             string classType = $"{node["class_type"]}";
-            Detection candidate = null;
-
-            if (classType == NodeTypes.SwarmSaveAudioWS)
+            Detection candidate = classType switch
             {
-                candidate = BuildSaveCandidate(property.Name, classType, node, 3);
-            }
-            else if (IsSaveAudioNode(classType))
-            {
-                candidate = BuildSaveCandidate(property.Name, classType, node, 2);
-            }
-            else if (classType == NodeTypes.VAEDecodeAudio)
-            {
-                candidate = BuildDecodeCandidate(property.Name, classType, 1);
-            }
+                NodeTypes.SwarmSaveAudioWS => BuildSaveCandidate(property.Name, classType, node, 3),
+                _ when IsSaveAudioNode(classType) => BuildSaveCandidate(property.Name, classType, node, 2),
+                NodeTypes.VAEDecodeAudio => BuildDecodeCandidate(property.Name, classType, 1),
+                _ => null,
+            };
 
             if (ShouldReplace(best, candidate))
             {
@@ -47,6 +40,9 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
 
         return best;
     }
+
+    private WGNodeData CreateAudioNode(JArray path) =>
+        new(path, g, WGNodeData.DT_AUDIO, g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
 
     private Detection BuildSaveCandidate(
         string nodeId,
@@ -62,11 +58,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         }
 
         string sourceId = $"{audioRef[0]}";
-        WGNodeData audio = new(
-            new JArray(audioRef[0], audioRef[1]),
-            g,
-            WGNodeData.DT_AUDIO,
-            g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
+        WGNodeData audio = CreateAudioNode(new JArray(audioRef[0], audioRef[1]));
         return new Detection(audio, nodeId, classType, sourceId, priority);
     }
 
@@ -75,11 +67,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         string classType,
         int priority)
     {
-        WGNodeData audio = new(
-            new JArray(nodeId, 0),
-            g,
-            WGNodeData.DT_AUDIO,
-            g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
+        WGNodeData audio = CreateAudioNode(new JArray(nodeId, 0));
         return new Detection(audio, nodeId, classType, nodeId, priority);
     }
 

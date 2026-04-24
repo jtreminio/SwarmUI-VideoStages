@@ -12,14 +12,8 @@ public static class WorkflowUtils
 {
     public static IReadOnlyList<WorkflowNode> NodesOfType(JObject workflow, string classType)
     {
-        if (workflow is null)
-        {
-            throw new ArgumentNullException(nameof(workflow));
-        }
-        if (string.IsNullOrWhiteSpace(classType))
-        {
-            throw new ArgumentException("classType is required.", nameof(classType));
-        }
+        ArgumentNullException.ThrowIfNull(workflow);
+        ArgumentException.ThrowIfNullOrWhiteSpace(classType);
 
         List<WorkflowNode> nodes = [];
         foreach (JProperty property in workflow.Properties())
@@ -34,14 +28,8 @@ public static class WorkflowUtils
 
     public static IReadOnlyList<WorkflowInputConnection> FindInputConnections(JObject workflow, JArray outputRef)
     {
-        if (workflow is null)
-        {
-            throw new ArgumentNullException(nameof(workflow));
-        }
-        if (outputRef is null || outputRef.Count != 2)
-        {
-            throw new ArgumentException("outputRef must be a [nodeId, outputIndex] pair.", nameof(outputRef));
-        }
+        ArgumentNullException.ThrowIfNull(workflow);
+        RequirePairOutputRef(outputRef, nameof(outputRef));
 
         string targetNode = $"{outputRef[0]}";
         string targetIndex = $"{outputRef[1]}";
@@ -70,18 +58,9 @@ public static class WorkflowUtils
         JArray toOutputRef,
         Func<WorkflowInputConnection, bool> shouldRetarget = null)
     {
-        if (workflow is null)
-        {
-            throw new ArgumentNullException(nameof(workflow));
-        }
-        if (fromOutputRef is null || fromOutputRef.Count != 2)
-        {
-            throw new ArgumentException("fromOutputRef must be a [nodeId, outputIndex] pair.", nameof(fromOutputRef));
-        }
-        if (toOutputRef is null || toOutputRef.Count != 2)
-        {
-            throw new ArgumentException("toOutputRef must be a [nodeId, outputIndex] pair.", nameof(toOutputRef));
-        }
+        ArgumentNullException.ThrowIfNull(workflow);
+        RequirePairOutputRef(fromOutputRef, nameof(fromOutputRef));
+        RequirePairOutputRef(toOutputRef, nameof(toOutputRef));
 
         int rewritten = 0;
         foreach (WorkflowInputConnection connection in FindInputConnections(workflow, fromOutputRef))
@@ -100,18 +79,9 @@ public static class WorkflowUtils
 
     public static bool IsNodeTypeReachableFromOutput(JObject workflow, JArray outputRef, string classType)
     {
-        if (workflow is null)
-        {
-            throw new ArgumentNullException(nameof(workflow));
-        }
-        if (outputRef is null || outputRef.Count != 2)
-        {
-            throw new ArgumentException("outputRef must be a [nodeId, outputIndex] pair.", nameof(outputRef));
-        }
-        if (string.IsNullOrWhiteSpace(classType))
-        {
-            throw new ArgumentException("classType is required.", nameof(classType));
-        }
+        ArgumentNullException.ThrowIfNull(workflow);
+        RequirePairOutputRef(outputRef, nameof(outputRef));
+        ArgumentException.ThrowIfNullOrWhiteSpace(classType);
 
         string startNodeId = $"{outputRef[0]}";
         if (string.IsNullOrWhiteSpace(startNodeId))
@@ -159,14 +129,8 @@ public static class WorkflowUtils
         JArray outputRef,
         out WorkflowNode decodeNode)
     {
-        if (workflow is null)
-        {
-            throw new ArgumentNullException(nameof(workflow));
-        }
-        if (outputRef is null || outputRef.Count != 2)
-        {
-            throw new ArgumentException("outputRef must be a [nodeId, outputIndex] pair.", nameof(outputRef));
-        }
+        ArgumentNullException.ThrowIfNull(workflow);
+        RequirePairOutputRef(outputRef, nameof(outputRef));
 
         decodeNode = default;
         Queue<JArray> pending = new();
@@ -188,8 +152,7 @@ public static class WorkflowUtils
             }
 
             string classType = $"{node["class_type"]}";
-            if (classType == NodeTypes.VAEDecode
-                || classType == NodeTypes.VAEDecodeTiled)
+            if (classType == NodeTypes.VAEDecode || classType == NodeTypes.VAEDecodeTiled)
             {
                 decodeNode = new WorkflowNode(nodeId, node);
                 return true;
@@ -217,14 +180,8 @@ public static class WorkflowUtils
         JArray outputRef,
         out JArray decodeOutputRef)
     {
-        if (workflow is null)
-        {
-            throw new ArgumentNullException(nameof(workflow));
-        }
-        if (outputRef is null || outputRef.Count != 2)
-        {
-            throw new ArgumentException("outputRef must be a [nodeId, outputIndex] pair.", nameof(outputRef));
-        }
+        ArgumentNullException.ThrowIfNull(workflow);
+        RequirePairOutputRef(outputRef, nameof(outputRef));
 
         decodeOutputRef = null;
         Queue<JArray> pending = new();
@@ -248,8 +205,7 @@ public static class WorkflowUtils
                 }
 
                 string classType = $"{node["class_type"]}";
-                if (classType == NodeTypes.VAEDecode
-                    || classType == NodeTypes.VAEDecodeTiled)
+                if (classType == NodeTypes.VAEDecode || classType == NodeTypes.VAEDecodeTiled)
                 {
                     decodeOutputRef = new JArray(connection.NodeId, 0);
                     return true;
@@ -260,6 +216,14 @@ public static class WorkflowUtils
         }
 
         return false;
+    }
+
+    private static void RequirePairOutputRef(JArray outputRef, string paramName)
+    {
+        if (outputRef is null || outputRef.Count != 2)
+        {
+            throw new ArgumentException("Expected [nodeId, outputIndex].", paramName);
+        }
     }
 
     private static Dictionary<string, List<string>> BuildForwardAdjacency(JObject workflow)

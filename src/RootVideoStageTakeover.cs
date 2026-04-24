@@ -16,7 +16,7 @@ internal static class RootVideoStageTakeover
         {
             return;
         }
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel existingModel) && existingModel is not null)
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
         {
             return;
         }
@@ -33,7 +33,7 @@ internal static class RootVideoStageTakeover
         }
 
         g.UserInput.Set(T2IParamTypes.VideoModel.Type, firstStage.Model);
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel resolvedModel) && resolvedModel is not null)
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
         {
             g.NodeHelpers[SynthesizedRootVideoModelKey] = "1";
             return;
@@ -61,7 +61,7 @@ internal static class RootVideoStageTakeover
         {
             return false;
         }
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel) || videoModel is null)
+        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
         {
             return false;
         }
@@ -74,7 +74,7 @@ internal static class RootVideoStageTakeover
         {
             return;
         }
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel) || videoModel is null)
+        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel))
         {
             return;
         }
@@ -89,14 +89,12 @@ internal static class RootVideoStageTakeover
         {
             return;
         }
-
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel activeModel) && activeModel is not null)
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
         {
             CleanupStashSection(g);
             return;
         }
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel stashedModel, sectionId: StashSectionId, includeBase: false)
-            || stashedModel is null)
+        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel stashedModel, sectionId: StashSectionId, includeBase: false))
         {
             CleanupStashSection(g);
             return;

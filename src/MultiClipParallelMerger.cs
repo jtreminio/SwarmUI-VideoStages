@@ -10,18 +10,9 @@ internal static class MultiClipParallelWorkflowFlags
     internal const string NodeHelperKey = "videostages.parallel-multi-clip";
 }
 
-/// <summary>
-/// When multiple clips run in parallel, merges each clip's final decoded video and
-/// audio with <see cref="NodeTypes.BatchImagesNode"/> (autogrow <c>images.image*</c>, up to 50 per node) and
-/// cascading <see cref="NodeTypes.AudioConcat"/> nodes, then retargets all
-/// <see cref="NodeTypes.SwarmSaveAnimationWS"/> nodes to the merged result.
-/// </summary>
+/// <summary>Merges parallel-clip video (and audio when present) via BatchImages/AudioConcat, then retargets SwarmSaveAnimationWS to the merge.</summary>
 internal static class MultiClipParallelMerger
 {
-    /// <param name="parallelRootVideoPath">
-    /// Optional path to the shared root VAEDecode output each clip restarts from; saves still wired here
-    /// (typical default Swarm save) are retargeted to the merged output alongside per-clip terminals.
-    /// </param>
     public static void Apply(
         WorkflowGenerator g,
         IReadOnlyList<WGNodeData> clipOutputsInOrder,
@@ -67,12 +58,12 @@ internal static class MultiClipParallelMerger
                 continue;
             }
 
-            _ = retargetKeys.Add(TerminalPathKey(vp));
+            retargetKeys.Add(TerminalPathKey(vp));
         }
 
         if (parallelRootVideoPath is { Count: 2 })
         {
-            _ = retargetKeys.Add(TerminalPathKey(parallelRootVideoPath));
+            retargetKeys.Add(TerminalPathKey(parallelRootVideoPath));
         }
 
         RetargetSwarmSaveAnimationWsForClipTerminals(g.Workflow, retargetKeys, mergedVideo, mergedAudio);
@@ -81,7 +72,7 @@ internal static class MultiClipParallelMerger
         int? totalFrames = 0;
         foreach (WGNodeData c in clipOutputsInOrder)
         {
-            if (!totalFrames.HasValue || c?.Frames is not int f)
+            if (c?.Frames is not int f)
             {
                 totalFrames = null;
                 break;
@@ -106,11 +97,7 @@ internal static class MultiClipParallelMerger
         }
     }
 
-    /// <summary>
-    /// Per-clip final video often carries <see cref="WGNodeData.DT_LATENT_AUDIO"/> on
-    /// <see cref="WGNodeData.AttachedAudio"/> after VAEDecode; only decoded
-    /// <see cref="WGNodeData.DT_AUDIO"/> can feed <see cref="NodeTypes.AudioConcat"/>.
-    /// </summary>
+    /// <summary>Uses decoded audio for AudioConcat; decodes <see cref="WGNodeData.DT_LATENT_AUDIO"/> when a VAE is available.</summary>
     private static JArray TryGetClipConcatenatableAudioPath(WorkflowGenerator g, WGNodeData clip)
     {
         WGNodeData attached = clip?.AttachedAudio;
@@ -138,7 +125,6 @@ internal static class MultiClipParallelMerger
         return null;
     }
 
-    /// <summary>Comfy <see cref="NodeTypes.BatchImagesNode"/> allows up to 50 images per node (schema max).</summary>
     private const int BatchImagesNodeMaxInputs = 50;
 
     private static JArray MergeClipVideosWithBatchImagesNode(WorkflowGenerator g, IReadOnlyList<JArray> paths)
@@ -148,11 +134,7 @@ internal static class MultiClipParallelMerger
             return null;
         }
 
-        List<JArray> layer = new(paths.Count);
-        foreach (JArray p in paths)
-        {
-            layer.Add(p);
-        }
+        List<JArray> layer = [.. paths];
 
         while (layer.Count > BatchImagesNodeMaxInputs)
         {
@@ -201,10 +183,6 @@ internal static class MultiClipParallelMerger
 
     private static string TerminalPathKey(JArray path) => $"{path[0]}::{path[1]}";
 
-    /// <summary>
-    /// Only retarget saves that already pointed at a clip's terminal video tensor, so intermediate
-    /// per-stage saves stay intact when enabled.
-    /// </summary>
     private static void RetargetSwarmSaveAnimationWsForClipTerminals(
         JObject workflow,
         HashSet<string> terminalPathKeys,
@@ -247,7 +225,7 @@ internal static class MultiClipParallelMerger
             }
             else
             {
-                _ = inputs.Remove("audio");
+                inputs.Remove("audio");
             }
         }
     }

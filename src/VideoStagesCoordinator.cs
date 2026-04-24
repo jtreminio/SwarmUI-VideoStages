@@ -59,7 +59,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
                 AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, uploadedAudios);
                 if (firstClipAudio is not null)
                 {
-                    _ = new AudioInjector(g).TryInject(firstClipAudio);
+                    new AudioInjector(g).TryInject(firstClipAudio);
                 }
             }
 
@@ -84,7 +84,7 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         {
             if (detectedAudio is not null)
             {
-                _ = new AudioInjector(g).TryInject(detectedAudio);
+                new AudioInjector(g).TryInject(detectedAudio);
             }
             return;
         }
@@ -96,16 +96,10 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             return;
         }
 
-        _ = new AudioInjector(g).TryInject(detection);
+        new AudioInjector(g).TryInject(detection);
     }
 
-    /// <summary>
-    /// Creates a separate <see cref="AudioStageDetector.Detection"/> per
-    /// upload-mode clip so each clip can carry its own uploaded audio file.
-    /// Returns an empty dictionary when no clip uses Upload (avoids creating
-    /// orphan SwarmLoadAudioB64 nodes for clips that pull from the native
-    /// workflow audio instead).
-    /// </summary>
+    /// <summary>Per-clip <see cref="AudioStageDetector.Detection"/> for upload audio; empty when no clip uses upload (avoids orphan load nodes for native-audio clips).</summary>
     private IReadOnlyDictionary<int, AudioStageDetector.Detection> BuildPerClipUploadDetections(
         JsonParser parser,
         IReadOnlyList<JsonParser.ClipSpec> clips)
@@ -153,9 +147,9 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     private T2IModel GetRootVideoModel()
     {
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel) && videoModel is not null)
         {
-            return imageToVideoModel;
+            return videoModel;
         }
 
         if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)

@@ -71,11 +71,7 @@ internal static class RootVideoStageResizer
             return;
         }
 
-        // When VideoStages takes over the native Image→Video step, CreateImageToVideo is skipped
-        // (VideoModel is temporarily removed at priority 11). If the core priority-10 step already
-        // emitted SwarmSaveImageWS from this same image tensor (willHaveFollowupVideo), adding a
-        // root ImageScale here duplicates the branch: the save stays on the raw decode while the
-        // VideoStages chain reads clip refs / other paths, leaving the new ImageScale output unused.
+        // Takeover skips CreateImageToVideo; do not insert ImageScale if this tensor already feeds SwarmSaveImageWS/SaveImage.
         if (RootVideoStageTakeover.ShouldTakeOverRootStage(g)
             && g.CurrentMedia?.Path is JArray mediaPath
             && mediaPath.Count == 2
@@ -120,11 +116,7 @@ internal static class RootVideoStageResizer
             && imageToVideoModel is not null;
     }
 
-    /// <summary>
-    /// Returns the resolution to use for the root video stage. The current
-    /// editor stores Width / Height at the top level; older clip-scoped JSON
-    /// is still accepted as a fallback for backward compatibility.
-    /// </summary>
+    /// <summary>Root stage width/height from registered input or parsed JSON (top-level, else first non-skipped clip).</summary>
     internal static bool TryGetRootStageResolution(WorkflowGenerator g, out int width, out int height)
     {
         width = 0;

@@ -120,7 +120,7 @@ public class StageSequenceRunner(
 
     private AudioStageDetector.Detection ResolveClipAudio(JsonParser.StageSpec stage)
     {
-        string source = $"{stage.ClipAudioSource ?? VideoStagesExtension.AudioSourceNative}".Trim();
+        string source = (stage.ClipAudioSource ?? VideoStagesExtension.AudioSourceNative).Trim();
         if (string.IsNullOrWhiteSpace(source))
         {
             return null;
@@ -193,7 +193,6 @@ public class StageSequenceRunner(
         }
         if (stage.ImageReference.Equals("Generated", StringComparison.Ordinal))
         {
-            // "Generated" follows the latest generated output entering this stage.
             if (stage.Id > 0 && store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
             {
                 return previousGenerated;
@@ -233,7 +232,7 @@ public class StageSequenceRunner(
 
     private static AudioStageDetector.Detection BuildCurrentMediaAudioDetection(WorkflowGenerator g)
     {
-        if (g?.CurrentMedia?.AttachedAudio is null)
+        if (g.CurrentMedia?.AttachedAudio is null)
         {
             return null;
         }
