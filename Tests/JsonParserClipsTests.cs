@@ -42,6 +42,7 @@ public class JsonParserClipsTests
         bool skipped = false,
         double duration = 3.0,
         string audioSource = VideoStagesExtension.AudioSourceNative,
+        bool saveAudioTrack = false,
         int width = 1024,
         int height = 768,
         JObject uploadedAudio = null)
@@ -51,6 +52,7 @@ public class JsonParserClipsTests
             ["Skipped"] = skipped,
             ["Duration"] = duration,
             ["AudioSource"] = audioSource,
+            ["SaveAudioTrack"] = saveAudioTrack,
             ["Width"] = width,
             ["Height"] = height,
             ["Refs"] = new JArray(refs ?? []),
@@ -111,6 +113,7 @@ public class JsonParserClipsTests
                 stages: [MakeStage("model-a")],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 12, fromEnd: true)],
                 duration: 4.0,
+                saveAudioTrack: true,
                 width: 800,
                 height: 600),
             MakeClip(
@@ -124,6 +127,7 @@ public class JsonParserClipsTests
         Assert.Equal(2, clips.Count);
         Assert.Equal(0, clips[0].Id);
         Assert.Equal(4.0, clips[0].DurationSeconds);
+        Assert.True(clips[0].SaveAudioTrack);
         Assert.Equal(800, clips[0].Width);
         Assert.Equal(600, clips[0].Height);
         Assert.Equal(2, clips[0].Refs.Count);
@@ -137,6 +141,7 @@ public class JsonParserClipsTests
 
         Assert.Equal(1, clips[1].Id);
         Assert.Equal(6.0, clips[1].DurationSeconds);
+        Assert.False(clips[1].SaveAudioTrack);
         Assert.Empty(clips[1].Refs);
         Assert.Equal(2, clips[1].Stages.Count);
     }

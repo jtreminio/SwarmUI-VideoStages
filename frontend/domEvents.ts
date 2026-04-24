@@ -270,6 +270,9 @@ export const handleFieldChange = (
         }
     } else if (clipField === "audioSource") {
         clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
+    } else if (clipField === "saveAudioTrack") {
+        clip.saveAudioTrack =
+            elem instanceof HTMLInputElement ? !!elem.checked : false;
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
         if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
             return;

@@ -184,6 +184,7 @@ export const buildDefaultClip = (
             defaults.fps,
         ),
         audioSource: AUDIO_SOURCE_NATIVE,
+        saveAudioTrack: false,
         uploadedAudio: null,
         refs: [],
         stages: [
@@ -381,6 +382,7 @@ export const normalizeClip = (
             `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
             audioSourceOptions,
         ),
+        saveAudioTrack: !!rawClip.saveAudioTrack,
         uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
         refs,
         stages,

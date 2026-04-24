@@ -612,6 +612,23 @@ export const renderClipCard = (
             "data-clip-idx": String(clipIdx),
         },
     );
+    const saveAudioTrackField = injectFieldData(
+        makeCheckboxInput(
+            "",
+            clipFieldId(clipIdx, "saveAudioTrack"),
+            "saveAudioTrack",
+            "Save Audio Track",
+            "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
+            clip.saveAudioTrack,
+            false,
+            true,
+            true,
+        ),
+        {
+            "data-clip-field": "saveAudioTrack",
+            "data-clip-idx": String(clipIdx),
+        },
+    );
     const audioUploadField = renderClipAudioUploadField(
         clip,
         clipIdx,
@@ -622,6 +639,7 @@ export const renderClipCard = (
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${lengthField}
                 ${audioSourceField}
+                ${saveAudioTrackField}
                 ${audioUploadField}
 
                 <div class="vs-section-block">

@@ -1,5 +1,3 @@
-import { utils } from "./utils";
-
 export interface AudioSourceOption {
     value: string;
     label: string;
@@ -7,9 +5,7 @@ export interface AudioSourceOption {
 
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
-export const AUDIO_SOURCE_SWARM = "Swarm Audio";
 
-const TEXT2AUDIO_TOGGLE_ID = "input_group_content_texttoaudio_toggle";
 const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
 const SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
@@ -24,11 +20,6 @@ const isSourceSelect = (
 ): target is HTMLSelectElement =>
     target instanceof HTMLSelectElement &&
     target.matches(SOURCE_SELECT_SELECTOR);
-
-const isTextToAudioEnabled = (): boolean => {
-    const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
-    return !!toggle?.checked;
-};
 
 const getAceStepFunRefs = (): string[] => {
     const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
@@ -61,12 +52,6 @@ export const buildAudioSourceOptions = (): AudioSourceOption[] => {
         { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
         { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
     ];
-    if (isTextToAudioEnabled()) {
-        options.push({
-            value: AUDIO_SOURCE_SWARM,
-            label: AUDIO_SOURCE_SWARM,
-        });
-    }
     for (const ref of getAceStepFunRefs()) {
         options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
     }
@@ -126,19 +111,8 @@ export const audioSource = () => {
         }
     };
 
-    let lastBoundText2AudioToggle: HTMLInputElement | null = null;
-    const bindText2AudioToggle = (): void => {
-        const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
-        if (!toggle || toggle === lastBoundText2AudioToggle) {
-            return;
-        }
-        toggle.addEventListener("change", refreshOptions);
-        lastBoundText2AudioToggle = toggle;
-    };
-
     const runOnEachBuild = (): void => {
         try {
-            bindText2AudioToggle();
             refreshOptions();
         } catch (error) {
             console.warn("audioSource: param build sync failed", error);
@@ -174,13 +148,6 @@ export const audioSource = () => {
                 onDocumentDropdownInteraction,
             );
             document.removeEventListener(ACESTEPFUN_EVENT, refreshOptions);
-            if (lastBoundText2AudioToggle) {
-                lastBoundText2AudioToggle.removeEventListener(
-                    "change",
-                    refreshOptions,
-                );
-                lastBoundText2AudioToggle = null;
-            }
         },
     };
 };

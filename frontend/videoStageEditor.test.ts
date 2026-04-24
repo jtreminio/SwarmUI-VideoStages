@@ -52,6 +52,7 @@ interface ParsedStage {
 interface ParsedClip {
     duration?: number;
     audioSource?: string;
+    saveAudioTrack?: boolean;
     uploadedAudio?: {
         data?: string;
         fileName?: string | null;
@@ -758,7 +759,25 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].audioSource).toBe("Upload");
         });
 
-        it("renders a hidden per-clip audio upload field directly below the audio source dropdown", () => {
+        it("stores the Save Audio Track checkbox at the clip level", () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const saveAudioTrack = document.querySelector(
+                '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            expect(saveAudioTrack).not.toBeNull();
+            const checkbox = must(saveAudioTrack);
+            expect(checkbox.checked).toBe(false);
+            expect(parseStored()[0].saveAudioTrack).toBe(false);
+
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].saveAudioTrack).toBe(true);
+        });
+
+        it("renders a hidden per-clip audio upload field below the audio controls", () => {
             const editor = videoStageEditor();
             editor.init();
 
@@ -771,14 +790,18 @@ describe("videoStageEditor", () => {
             const uploadInput = document.querySelector(
                 '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
+            const saveAudioTrack = document.querySelector(
+                '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
 
             expect(audioSource).not.toBeNull();
             expect(uploadField).not.toBeNull();
             expect(uploadInput).not.toBeNull();
+            expect(saveAudioTrack).not.toBeNull();
             expect(uploadField?.style.display).toBe("none");
 
-            const audioSourceRow = audioSource?.closest(".auto-input");
-            expect(audioSourceRow?.nextElementSibling).toBe(uploadField);
+            const saveAudioTrackRow = saveAudioTrack?.closest(".auto-input");
+            expect(saveAudioTrackRow?.nextElementSibling).toBe(uploadField);
         });
 
         it("reveals the per-clip audio upload field when audioSource changes to Upload", () => {

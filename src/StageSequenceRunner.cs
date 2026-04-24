@@ -10,6 +10,7 @@ public class StageSequenceRunner(
     StageRefStore store,
     IReadOnlyList<JsonParser.StageSpec> stages,
     AudioStageDetector.Detection detectedAudio = null,
+    IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios = null,
     IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null,
     bool rootStageTakeover = false)
 {
@@ -129,6 +130,11 @@ public class StageSequenceRunner(
                 return null;
             }
             return uploadedAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection detection) ? detection : null;
+        }
+        if (clipAudios is not null
+            && clipAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection clipDetection))
+        {
+            return clipDetection;
         }
         return _nativeAudioDetection;
     }

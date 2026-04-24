@@ -37,8 +37,8 @@ public class AudioSourceParamTests
     });
 
     [Theory]
-    [InlineData(VideoStagesExtension.AudioSourceSwarm)]
-    [InlineData("acestepfun0")]
+    [InlineData("audio0")]
+    [InlineData("audio1")]
     public void Clip_audio_source_preserves_runtime_augmented_values(string value)
     {
         _ = WorkflowTestHarness.VideoStagesSteps();

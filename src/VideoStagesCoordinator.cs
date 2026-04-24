@@ -49,15 +49,18 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
                 return;
             }
 
-            AudioStageDetector.Detection detectedAudio = new AudioStageDetector(g).Detect();
+            AudioStageDetector audioDetector = new(g);
+            AudioStageDetector.Detection detectedAudio = audioDetector.Detect();
+            IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios = BuildPerClipAudioDetections(audioDetector, clips);
             IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
+            AceStepFunAudioSavePruner.Apply(g, clips);
             if (!rootStageTakeover)
             {
-                AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, uploadedAudios);
+                AudioStageDetector.Detection firstClipAudio = ResolveClipAudioSource(stages[0].ClipId, stages[0].ClipAudioSource, detectedAudio, clipAudios, uploadedAudios);
                 _ = new LTX2.LtxAudioInjector(g).TryInject(firstClipAudio);
             }
 
-            new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, uploadedAudios, rootStageTakeover).Run();
+            new StageSequenceRunner(g, new StageRefStore(g), stages, detectedAudio, clipAudios, uploadedAudios, rootStageTakeover).Run();
             EnsureFinalStageOutputSaved();
         }
         finally
@@ -68,7 +71,8 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
 
     private void TryInjectConfiguredAudio(JsonParser parser, List<JsonParser.ClipSpec> clips)
     {
-        AudioStageDetector.Detection detectedAudio = new AudioStageDetector(g).Detect();
+        AudioStageDetector audioDetector = new(g);
+        AudioStageDetector.Detection detectedAudio = audioDetector.Detect();
         LTX2.LtxAudioInjector ltxAudioInjector = new(g);
         if (clips.Count == 0)
         {
@@ -76,9 +80,27 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
             return;
         }
 
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios = BuildPerClipAudioDetections(audioDetector, clips);
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = BuildPerClipUploadDetections(parser, clips);
-        AudioStageDetector.Detection detection = ResolveClipAudioSource(clips[0].Id, clips[0].AudioSource, detectedAudio, uploadedAudios);
+        AceStepFunAudioSavePruner.Apply(g, clips);
+        AudioStageDetector.Detection detection = ResolveClipAudioSource(clips[0].Id, clips[0].AudioSource, detectedAudio, clipAudios, uploadedAudios);
         ltxAudioInjector.TryInject(detection);
+    }
+
+    private static IReadOnlyDictionary<int, AudioStageDetector.Detection> BuildPerClipAudioDetections(
+        AudioStageDetector detector,
+        IReadOnlyList<JsonParser.ClipSpec> clips)
+    {
+        Dictionary<int, AudioStageDetector.Detection> detections = [];
+        foreach (JsonParser.ClipSpec clip in clips)
+        {
+            AudioStageDetector.Detection detection = detector.DetectAceStepFunTrack(clip.AudioSource);
+            if (detection is not null)
+            {
+                detections[clip.Id] = detection;
+            }
+        }
+        return detections;
     }
 
     /// <summary>Per-clip <see cref="AudioStageDetector.Detection"/> for upload audio; empty when no clip uses upload (avoids orphan load nodes for native-audio clips).</summary>
@@ -113,11 +135,16 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         int clipId,
         string source,
         AudioStageDetector.Detection detectedAudio,
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios,
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios)
     {
         if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
         {
             return uploadedAudios.TryGetValue(clipId, out AudioStageDetector.Detection detection) ? detection : null;
+        }
+        if (clipAudios.TryGetValue(clipId, out AudioStageDetector.Detection clipDetection))
+        {
+            return clipDetection;
         }
         return detectedAudio;
     }

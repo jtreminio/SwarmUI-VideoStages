@@ -72,6 +72,7 @@ export interface Clip {
     skipped: boolean;
     duration: number;
     audioSource: string;
+    saveAudioTrack: boolean;
     uploadedAudio: UploadedAudio | null;
     refs: RefImage[];
     stages: Stage[];
@@ -105,10 +106,14 @@ export type StoredStage = Pick<
     | "scheduler"
 >;
 
-/** Clip tree shape written to JSON by `serializeClipsForStorage`. */
 export type StoredClip = Pick<
     Clip,
-    "expanded" | "skipped" | "duration" | "audioSource" | "uploadedAudio"
+    | "expanded"
+    | "skipped"
+    | "duration"
+    | "audioSource"
+    | "saveAudioTrack"
+    | "uploadedAudio"
 > & {
     refs: StoredRefImage[];
     stages: StoredStage[];

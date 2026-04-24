@@ -94,4 +94,46 @@ public class AudioStageDetectorTests
         Assert.Equal(VaeDecodeAudio, detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("150", 0)));
     }
+
+    [Fact]
+    public void DetectAceStepFunTrack_UsesMatchingTrackSaveNode()
+    {
+        JObject workflow = new()
+        {
+            ["64160"] = Node(VaeDecodeAudio),
+            ["64260"] = Node(VaeDecodeAudio),
+            ["64170"] = Node("SaveAudioMP3", new JObject()
+            {
+                ["audio"] = new JArray("64160", 0),
+                ["filename_prefix"] = "SwarmUI_track_1_"
+            }),
+            ["64270"] = Node("SaveAudioMP3", new JObject()
+            {
+                ["audio"] = new JArray("64260", 0),
+                ["filename_prefix"] = "SwarmUI_track_2_"
+            })
+        };
+
+        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).DetectAceStepFunTrack("audio0");
+
+        Assert.NotNull(detection);
+        Assert.Equal("64170", detection.MatchedNodeId);
+        Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("64160", 0)));
+    }
+
+    [Fact]
+    public void DetectAceStepFunTrack_FallsBackToStableDecodeNode()
+    {
+        JObject workflow = new()
+        {
+            ["64160"] = Node(VaeDecodeAudio),
+            ["64260"] = Node(VaeDecodeAudio)
+        };
+
+        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).DetectAceStepFunTrack("audio1");
+
+        Assert.NotNull(detection);
+        Assert.Equal("64260", detection.MatchedNodeId);
+        Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("64260", 0)));
+    }
 }

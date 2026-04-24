@@ -8,6 +8,7 @@ const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     skipped: false,
     duration: 2,
     audioSource: "Native",
+    saveAudioTrack: false,
     uploadedAudio: null,
     refs: [],
     stages: [

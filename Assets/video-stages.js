@@ -1,26 +1,8 @@
 "use strict";
 (() => {
-  // frontend/utils.ts
-  var getElementByType = (id, ctor) => {
-    const element = document.getElementById(id);
-    return element instanceof ctor ? element : null;
-  };
-  var utils = {
-    getInputElement: (id) => getElementByType(id, HTMLInputElement),
-    getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
-    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
-    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
-    toNumber: (value, fallback) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    }
-  };
-
   // frontend/audioSource.ts
   var AUDIO_SOURCE_NATIVE = "Native";
   var AUDIO_SOURCE_UPLOAD = "Upload";
-  var AUDIO_SOURCE_SWARM = "Swarm Audio";
-  var TEXT2AUDIO_TOGGLE_ID = "input_group_content_texttoaudio_toggle";
   var ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
   var SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
   var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
@@ -28,10 +10,6 @@
     (elem) => elem instanceof HTMLSelectElement
   );
   var isSourceSelect = (target) => target instanceof HTMLSelectElement && target.matches(SOURCE_SELECT_SELECTOR);
-  var isTextToAudioEnabled = () => {
-    const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
-    return !!toggle?.checked;
-  };
   var getAceStepFunRefs = () => {
     const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
@@ -61,12 +39,6 @@
       { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
       { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
     ];
-    if (isTextToAudioEnabled()) {
-      options.push({
-        value: AUDIO_SOURCE_SWARM,
-        label: AUDIO_SOURCE_SWARM
-      });
-    }
     for (const ref of getAceStepFunRefs()) {
       options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
     }
@@ -116,18 +88,8 @@
         refreshOptions();
       }
     };
-    let lastBoundText2AudioToggle = null;
-    const bindText2AudioToggle = () => {
-      const toggle = utils.getInputElement(TEXT2AUDIO_TOGGLE_ID);
-      if (!toggle || toggle === lastBoundText2AudioToggle) {
-        return;
-      }
-      toggle.addEventListener("change", refreshOptions);
-      lastBoundText2AudioToggle = toggle;
-    };
     const runOnEachBuild = () => {
       try {
-        bindText2AudioToggle();
         refreshOptions();
       } catch (error) {
         console.warn("audioSource: param build sync failed", error);
@@ -159,13 +121,6 @@
           onDocumentDropdownInteraction
         );
         document.removeEventListener(ACESTEPFUN_EVENT, refreshOptions);
-        if (lastBoundText2AudioToggle) {
-          lastBoundText2AudioToggle.removeEventListener(
-            "change",
-            refreshOptions
-          );
-          lastBoundText2AudioToggle = null;
-        }
       }
     };
   };
@@ -287,6 +242,22 @@
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
 
+  // frontend/utils.ts
+  var getElementByType = (id, ctor) => {
+    const element = document.getElementById(id);
+    return element instanceof ctor ? element : null;
+  };
+  var utils = {
+    getInputElement: (id) => getElementByType(id, HTMLInputElement),
+    getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
+    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
+    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
+    toNumber: (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+  };
+
   // frontend/normalization.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : upscaleMethodValues[0] ?? "pixel-lanczos";
   var resolveFirstStageControl = (defaults) => clamp(defaults.control, defaults.controlMin, defaults.controlMax);
@@ -391,6 +362,7 @@
         defaults.fps
       ),
       audioSource: AUDIO_SOURCE_NATIVE,
+      saveAudioTrack: false,
       uploadedAudio: null,
       refs: [],
       stages: [
@@ -546,6 +518,7 @@
         `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
         audioSourceOptions
       ),
+      saveAudioTrack: !!rawClip.saveAudioTrack,
       uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
       refs,
       stages
@@ -1174,6 +1147,8 @@
       }
     } else if (clipField === "audioSource") {
       clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
+    } else if (clipField === "saveAudioTrack") {
+      clip.saveAudioTrack = elem instanceof HTMLInputElement ? !!elem.checked : false;
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
       if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
         return;
@@ -1542,6 +1517,7 @@
       skipped: clip.skipped,
       duration: clip.duration,
       audioSource: clip.audioSource,
+      saveAudioTrack: clip.saveAudioTrack,
       uploadedAudio: clip.uploadedAudio,
       refs: clip.refs.map((ref) => ({
         expanded: ref.expanded,
@@ -2411,6 +2387,23 @@ ${optionHtml}
         "data-clip-idx": String(clipIdx)
       }
     );
+    const saveAudioTrackField = injectFieldData(
+      makeCheckboxInput(
+        "",
+        clipFieldId(clipIdx, "saveAudioTrack"),
+        "saveAudioTrack",
+        "Save Audio Track",
+        "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
+        clip.saveAudioTrack,
+        false,
+        true,
+        true
+      ),
+      {
+        "data-clip-field": "saveAudioTrack",
+        "data-clip-idx": String(clipIdx)
+      }
+    );
     const audioUploadField = renderClipAudioUploadField(
       clip,
       clipIdx,
@@ -2420,6 +2413,7 @@ ${optionHtml}
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${lengthField}
                 ${audioSourceField}
+                ${saveAudioTrackField}
                 ${audioUploadField}
 
                 <div class="vs-section-block">
