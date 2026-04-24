@@ -460,6 +460,26 @@ describe("videoStageEditor", () => {
             ).toBe("Clip 0");
         });
 
+        it("allows deleting the only clip", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const deleteBtn = document.querySelector(
+                '[data-clip-action="delete"][data-clip-idx="0"]',
+            ) as HTMLButtonElement | null;
+            expect(deleteBtn).not.toBeNull();
+            expect(deleteBtn?.disabled).toBe(false);
+
+            must(deleteBtn).click();
+            await flushReRender();
+
+            expect(parseStored()).toHaveLength(0);
+            expect(document.querySelector(".vs-clip-card")).toBeNull();
+            expect(
+                document.querySelector('[data-clip-action="add-clip"]'),
+            ).not.toBeNull();
+        });
+
         it("derives Clip 0 header from index even when legacy JSON had a different name field", () => {
             getStagesInput().value = JSON.stringify({
                 width: 1024,
@@ -1687,6 +1707,29 @@ describe("videoStageEditor", () => {
 
             const clips = parseStored();
             expect(clips[0].stages).toHaveLength(1);
+        });
+
+        it("allows deleting the only stage in a clip", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const deleteBtn = document.querySelector(
+                '[data-stage-action="delete"][data-stage-idx="0"]',
+            ) as HTMLButtonElement | null;
+            expect(deleteBtn).not.toBeNull();
+            expect(deleteBtn?.disabled).toBe(false);
+
+            must(deleteBtn).click();
+            await flushReRender();
+
+            const clips = parseStored();
+            expect(clips[0].stages).toHaveLength(0);
+            expect(
+                document.querySelector(".vs-card[data-stage-idx]"),
+            ).toBeNull();
+            expect(
+                document.querySelector('[data-clip-action="add-stage"]'),
+            ).not.toBeNull();
         });
     });
 });

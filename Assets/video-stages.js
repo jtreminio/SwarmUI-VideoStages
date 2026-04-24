@@ -525,16 +525,6 @@
         )
       );
     }
-    if (stages.length === 0) {
-      stages.push(
-        buildDefaultStage(
-          getRootDefaults2,
-          getDefaultStageModel2,
-          null,
-          refs.length
-        )
-      );
-    }
     return {
       expanded: rawClip.expanded === void 0 ? true : !!rawClip.expanded,
       skipped: !!rawClip.skipped,
@@ -1061,9 +1051,6 @@
     }
     const clip = clips[clipIdx];
     if (clipAction === "delete") {
-      if (clips.length <= 1) {
-        return;
-      }
       clips.splice(clipIdx, 1);
       deps.refUploadCache.reindexAfterClipDelete(clipIdx);
       deps.saveClips(clips);
@@ -1130,9 +1117,6 @@
       }
       const stage = clip.stages[stageIdx];
       if (stageAction === "delete") {
-        if (clip.stages.length <= 1) {
-          return;
-        }
         clip.stages.splice(stageIdx, 1);
       } else if (stageAction === "skip") {
         stage.skipped = !stage.skipped;
@@ -1434,10 +1418,6 @@
   };
   var validateClips = (clips) => {
     const errors = [];
-    if (clips.length === 0) {
-      errors.push("VideoStages requires at least one clip.");
-      return errors;
-    }
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];
       if (clip.skipped) {
@@ -1445,7 +1425,6 @@
       }
       const clipLabel = `VideoStages: Clip ${i}`;
       if (clip.stages.length === 0) {
-        errors.push(`${clipLabel} requires at least one stage.`);
         continue;
       }
       for (let j = 0; j < clip.stages.length; j++) {
@@ -2179,7 +2158,7 @@ ${optionHtml}
                 <div class="vs-card-title">Stage ${stageIdx}</div>
                 <div class="vs-card-actions">
                     <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-stage-action="skip" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="${skipTitle}">&#x23ED;&#xFE0E;</button>
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage" ${clip.stages.length === 1 ? "disabled" : ""}>&times;</button>
+                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage">&times;</button>
                 </div>
             </div>
         `;
@@ -2359,7 +2338,7 @@ ${optionHtml}
             </div>
         </section>`;
   };
-  var renderClipCard = (clip, clipIdx, totalClips, getRootDefaults2) => {
+  var renderClipCard = (clip, clipIdx, getRootDefaults2) => {
     const stagesCount = clip.stages.length;
     const refsCount = clip.refs.length;
     const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
@@ -2373,7 +2352,7 @@ ${optionHtml}
       groupClasses.push("vs-skipped");
     }
     const contentStyle = clip.expanded ? "" : ' style="display: none;"';
-    const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">Clip ${clipIdx}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip" ${totalClips === 1 ? "disabled" : ""}>&times;</button></span></span></span>`;
+    const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">Clip ${clipIdx}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip">&times;</button></span></span></span>`;
     const lengthField = injectFieldData(
       overrideSliderSteps(
         makeSliderInput(
@@ -2548,14 +2527,7 @@ ${optionHtml}
       }
       seedRegisteredDimensionsFromCore();
       const state = getEditorState();
-      let clips = state.clips;
-      if (clips.length === 0) {
-        state.clips = [
-          buildDefaultClip(getRootDefaults, getDefaultStageModel)
-        ];
-        clips = state.clips;
-        saveEditorState(state);
-      }
+      const clips = state.clips;
       const focusSnapshot = captureFocus();
       editor.innerHTML = "";
       const stack = document.createElement("div");
@@ -2571,7 +2543,7 @@ ${optionHtml}
         for (let i = 0; i < clips.length; i++) {
           stack.insertAdjacentHTML(
             "beforeend",
-            renderClipCard(clips[i], i, clips.length, getRootDefaults)
+            renderClipCard(clips[i], i, getRootDefaults)
           );
         }
       }

@@ -27,10 +27,6 @@ export const getRefSourceError = (source: string): string | null => {
 
 export const validateClips = (clips: Clip[]): string[] => {
     const errors: string[] = [];
-    if (clips.length === 0) {
-        errors.push("VideoStages requires at least one clip.");
-        return errors;
-    }
 
     for (let i = 0; i < clips.length; i++) {
         const clip = clips[i];
@@ -39,7 +35,6 @@ export const validateClips = (clips: Clip[]): string[] => {
         }
         const clipLabel = `VideoStages: Clip ${i}`;
         if (clip.stages.length === 0) {
-            errors.push(`${clipLabel} requires at least one stage.`);
             continue;
         }
 

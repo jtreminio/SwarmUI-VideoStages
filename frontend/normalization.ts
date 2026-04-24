@@ -373,17 +373,6 @@ export const normalizeClip = (
             ),
         );
     }
-    if (stages.length === 0) {
-        stages.push(
-            buildDefaultStage(
-                getRootDefaults,
-                getDefaultStageModel,
-                null,
-                refs.length,
-            ),
-        );
-    }
-
     return {
         expanded: rawClip.expanded === undefined ? true : !!rawClip.expanded,
         skipped: !!rawClip.skipped,

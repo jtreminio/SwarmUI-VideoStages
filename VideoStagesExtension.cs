@@ -92,8 +92,8 @@ public class VideoStagesExtension : Extension
         RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Width",
             Description: RootDimensionsDescription,
-            Default: "0",
-            Min: 0,
+            Default: "1024",
+            Min: 256,
             Max: RootDimensionMax,
             ViewMin: RootDimensionMin,
             ViewMax: 4096,
@@ -101,6 +101,7 @@ public class VideoStagesExtension : Extension
             ViewType: ParamViewType.POT_SLIDER,
             HideFromMetadata: false,
             DoNotPreview: true,
+            Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
             FeatureFlag: ComfyUIFeatureFlag
@@ -110,8 +111,8 @@ public class VideoStagesExtension : Extension
         RootHeight = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Height",
             Description: RootDimensionsDescription,
-            Default: "0",
-            Min: 0,
+            Default: "1024",
+            Min: 256,
             Max: RootDimensionMax,
             ViewMin: RootDimensionMin,
             ViewMax: 4096,
@@ -119,6 +120,7 @@ public class VideoStagesExtension : Extension
             ViewType: ParamViewType.POT_SLIDER,
             HideFromMetadata: false,
             DoNotPreview: true,
+            Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
             FeatureFlag: ComfyUIFeatureFlag
@@ -137,6 +139,7 @@ public class VideoStagesExtension : Extension
             ViewType: ParamViewType.SLIDER,
             HideFromMetadata: false,
             DoNotPreview: true,
+            Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
             FeatureFlag: ComfyUIFeatureFlag

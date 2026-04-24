@@ -57,10 +57,12 @@ describe("validation", () => {
     });
 
     describe("validateClips", () => {
-        it("requires at least one clip", () => {
-            expect(validateClips([])).toEqual([
-                "VideoStages requires at least one clip.",
-            ]);
+        it("allows an empty clip list while editing", () => {
+            expect(validateClips([])).toEqual([]);
+        });
+
+        it("allows clips with no stages while editing", () => {
+            expect(validateClips([minimalClip({ stages: [] })])).toEqual([]);
         });
 
         it("flags missing model/sampler/scheduler", () => {

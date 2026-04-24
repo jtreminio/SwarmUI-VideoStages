@@ -10,7 +10,6 @@ import {
 } from "./domEvents";
 import { captureFocus, restoreFocus } from "./focusRestore";
 import { createGenerateWrap } from "./generateWrap";
-import { buildDefaultClip } from "./normalization";
 import { createObservers } from "./observers";
 import {
     ensureClipsSeeded,
@@ -22,7 +21,7 @@ import {
 } from "./persistence";
 import { createRefUploadCache } from "./refUploadCache";
 import { renderClipCard } from "./renderHtml";
-import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import { getRootDefaults } from "./rootDefaults";
 import { seedRegisteredDimensionsFromCore } from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
 import { validateClips } from "./validation";
@@ -159,14 +158,7 @@ export function videoStageEditor(): VideoStageEditor {
         seedRegisteredDimensionsFromCore();
 
         const state = getEditorState();
-        let clips = state.clips;
-        if (clips.length === 0) {
-            state.clips = [
-                buildDefaultClip(getRootDefaults, getDefaultStageModel),
-            ];
-            clips = state.clips;
-            saveEditorState(state);
-        }
+        const clips = state.clips;
 
         const focusSnapshot = captureFocus();
         editor.innerHTML = "";
@@ -185,7 +177,7 @@ export function videoStageEditor(): VideoStageEditor {
             for (let i = 0; i < clips.length; i++) {
                 stack.insertAdjacentHTML(
                     "beforeend",
-                    renderClipCard(clips[i], i, clips.length, getRootDefaults),
+                    renderClipCard(clips[i], i, getRootDefaults),
                 );
             }
         }

@@ -155,9 +155,6 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
     const clip = clips[clipIdx];
 
     if (clipAction === "delete") {
-        if (clips.length <= 1) {
-            return;
-        }
         clips.splice(clipIdx, 1);
         deps.refUploadCache.reindexAfterClipDelete(clipIdx);
         deps.saveClips(clips);
@@ -227,9 +224,6 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
         }
         const stage = clip.stages[stageIdx];
         if (stageAction === "delete") {
-            if (clip.stages.length <= 1) {
-                return;
-            }
             clip.stages.splice(stageIdx, 1);
         } else if (stageAction === "skip") {
             stage.skipped = !stage.skipped;
