@@ -987,6 +987,8 @@
   // frontend/domEvents.ts
   var isFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement || value instanceof HTMLTextAreaElement;
   var isStageFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
+  var isSliderNumericInput = (value) => value instanceof HTMLInputElement && (value.type === "number" || value.type === "range");
+  var isDurationInput = (value) => isSliderNumericInput(value) && value.dataset.clipField === "duration";
   var toggleClipExpanded = (clipIdx, deps) => {
     const clips = deps.getClips();
     if (clipIdx < 0 || clipIdx >= clips.length) {
@@ -1235,9 +1237,7 @@
     if (clipField === "audioSource") {
       syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
     }
-    const isSliderDrag = fromInputEvent && elem instanceof HTMLInputElement && elem.type === "range";
-    const needsRerender = !isSliderDrag && clipField === "duration" && !fromInputEvent;
-    if (needsRerender) {
+    if (clipField === "duration" && !fromInputEvent) {
       deps.scheduleClipsRefresh();
     }
   };
@@ -1350,9 +1350,19 @@
       if (!isFieldTarget(inputTarget)) {
         return;
       }
-      if (inputTarget instanceof HTMLInputElement && (inputTarget.type === "number" || inputTarget.type === "range")) {
+      if (isSliderNumericInput(inputTarget)) {
         handleFieldChange(inputTarget, deps, true);
       }
+    });
+    editor.addEventListener("focusout", (event) => {
+      const inputTarget = event.target;
+      if (!isDurationInput(inputTarget)) {
+        return;
+      }
+      if (inputTarget.value === inputTarget.defaultValue) {
+        return;
+      }
+      deps.scheduleClipsRefresh();
     });
   };
 
@@ -1362,14 +1372,18 @@
     if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLSelectElement)) {
       return null;
     }
+    if (el instanceof HTMLInputElement && el.type === "range") {
+      return null;
+    }
     const dataset = el.dataset;
+    const typeQualifier = el instanceof HTMLInputElement ? `[type="${el.type}"]` : "";
     let selector = null;
     if (dataset.clipField && dataset.clipIdx) {
-      selector = `[data-clip-field="${dataset.clipField}"][data-clip-idx="${dataset.clipIdx}"]`;
+      selector = `[data-clip-field="${dataset.clipField}"][data-clip-idx="${dataset.clipIdx}"]${typeQualifier}`;
     } else if (dataset.stageField && dataset.stageIdx && dataset.clipIdx) {
-      selector = `[data-stage-field="${dataset.stageField}"][data-stage-idx="${dataset.stageIdx}"][data-clip-idx="${dataset.clipIdx}"]`;
+      selector = `[data-stage-field="${dataset.stageField}"][data-stage-idx="${dataset.stageIdx}"][data-clip-idx="${dataset.clipIdx}"]${typeQualifier}`;
     } else if (dataset.refField && dataset.refIdx && dataset.clipIdx) {
-      selector = `[data-ref-field="${dataset.refField}"][data-ref-idx="${dataset.refIdx}"][data-clip-idx="${dataset.clipIdx}"]`;
+      selector = `[data-ref-field="${dataset.refField}"][data-ref-idx="${dataset.refIdx}"][data-clip-idx="${dataset.clipIdx}"]${typeQualifier}`;
     }
     if (!selector) {
       return null;
@@ -1379,6 +1393,11 @@
     if (el instanceof HTMLInputElement) {
       start = el.selectionStart;
       end = el.selectionEnd;
+      if ((start == null || end == null) && el.type === "number") {
+        const len = el.value.length;
+        start = len;
+        end = len;
+      }
     }
     return { selector, start, end };
   };

@@ -561,6 +561,61 @@ describe("videoStageEditor", () => {
             expect(clips[0].duration).toBe(6);
         });
 
+        it("does not rerender the duration slider while dragging", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(durationSlider).not.toBeNull();
+            const slider = must(durationSlider);
+            const originalSlider = slider;
+
+            slider.value = "6";
+            slider.dispatchEvent(new Event("input", { bubbles: true }));
+            await flushReRender();
+
+            expect(parseStored()[0].duration).toBe(6);
+            expect(originalSlider.isConnected).toBe(true);
+            expect(
+                document.querySelector(
+                    '[data-clip-field="duration"][type="range"]',
+                ),
+            ).toBe(originalSlider);
+
+            slider.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            expect(
+                document.querySelector(
+                    '[data-clip-field="duration"][type="range"]',
+                ),
+            ).not.toBe(originalSlider);
+        });
+
+        it("does not restore focus to the duration slider after rerender", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(durationSlider).not.toBeNull();
+            const slider = must(durationSlider);
+
+            slider.focus();
+            slider.value = "6";
+            slider.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const refreshedSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(refreshedSlider).not.toBeNull();
+            expect(document.activeElement).not.toBe(refreshedSlider);
+        });
+
         it("reflects registered RootWidth/RootHeight slider changes in saved JSON", () => {
             const editor = videoStageEditor();
             editor.init();
@@ -783,7 +838,7 @@ describe("videoStageEditor", () => {
             editor.init();
 
             const durationNumber = document.querySelector(
-                '[data-clip-field="duration"][type="number"]',
+                '[data-clip-field="duration"].auto-slider-number',
             ) as HTMLInputElement | null;
             expect(durationNumber).not.toBeNull();
             const durationEl = must(durationNumber);
@@ -796,7 +851,7 @@ describe("videoStageEditor", () => {
             expect(originalDurationNumber.isConnected).toBe(true);
             expect(
                 document.querySelector(
-                    '[data-clip-field="duration"][type="number"]',
+                    '[data-clip-field="duration"].auto-slider-number',
                 ),
             ).toBe(originalDurationNumber);
 
@@ -805,7 +860,7 @@ describe("videoStageEditor", () => {
 
             expect(
                 document.querySelector(
-                    '[data-clip-field="duration"][type="number"]',
+                    '[data-clip-field="duration"].auto-slider-number',
                 ),
             ).not.toBe(originalDurationNumber);
         });
@@ -815,12 +870,13 @@ describe("videoStageEditor", () => {
             editor.init();
 
             const durationNumber = document.querySelector(
-                '[data-clip-field="duration"][type="number"]',
+                '[data-clip-field="duration"].auto-slider-number',
             ) as HTMLInputElement | null;
             const durationSlider = document.querySelector(
                 '[data-clip-field="duration"][type="range"]',
             ) as HTMLInputElement | null;
 
+            expect(durationNumber?.type).toBe("number");
             expect(durationNumber?.step).toBe("any");
             expect(durationSlider?.step).toBe("0.5");
         });
@@ -1209,12 +1265,46 @@ describe("videoStageEditor", () => {
             expect(frameRange?.max).toBe("121");
 
             const durationNumber = document.querySelector(
-                '[data-clip-field="duration"][type="number"]',
+                '[data-clip-field="duration"].auto-slider-number',
             ) as HTMLInputElement | null;
             expect(durationNumber).not.toBeNull();
             const clipDuration = must(durationNumber);
             clipDuration.value = "21.5";
             clipDuration.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const refreshedFrameNumber = document.querySelector(
+                '[data-ref-field="frame"][type="number"]',
+            ) as HTMLInputElement | null;
+            const refreshedFrameRange = document.querySelector(
+                '[data-ref-field="frame"][type="range"]',
+            ) as HTMLInputElement | null;
+            expect(refreshedFrameNumber?.max).toBe("521");
+            expect(refreshedFrameRange?.max).toBe("521");
+        });
+
+        it("refreshes dependent fields when duration changes commit on focusout", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"].auto-slider-number',
+            ) as HTMLInputElement | null;
+            expect(durationNumber).not.toBeNull();
+            const durationEl = must(durationNumber);
+
+            durationEl.value = "21.5";
+            durationEl.dispatchEvent(new Event("input", { bubbles: true }));
+            durationEl.dispatchEvent(
+                new FocusEvent("focusout", { bubbles: true }),
+            );
             await flushReRender();
 
             const refreshedFrameNumber = document.querySelector(

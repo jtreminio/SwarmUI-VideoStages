@@ -54,6 +54,17 @@ const isFieldTarget = (value: EventTarget | null): value is FieldTarget =>
 const isStageFieldTarget = (value: FieldTarget): value is StageFieldTarget =>
     value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
 
+const isSliderNumericInput = (
+    value: EventTarget | null,
+): value is HTMLInputElement =>
+    value instanceof HTMLInputElement &&
+    (value.type === "number" || value.type === "range");
+
+const isDurationInput = (
+    value: EventTarget | null,
+): value is HTMLInputElement =>
+    isSliderNumericInput(value) && value.dataset.clipField === "duration";
+
 export const toggleClipExpanded = (
     clipIdx: number,
     deps: DomEventsDeps,
@@ -336,13 +347,7 @@ export const handleFieldChange = (
     if (clipField === "audioSource") {
         syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
     }
-    const isSliderDrag =
-        fromInputEvent &&
-        elem instanceof HTMLInputElement &&
-        elem.type === "range";
-    const needsRerender =
-        !isSliderDrag && clipField === "duration" && !fromInputEvent;
-    if (needsRerender) {
+    if (clipField === "duration" && !fromInputEvent) {
         deps.scheduleClipsRefresh();
     }
 };
@@ -467,11 +472,18 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
         if (!isFieldTarget(inputTarget)) {
             return;
         }
-        if (
-            inputTarget instanceof HTMLInputElement &&
-            (inputTarget.type === "number" || inputTarget.type === "range")
-        ) {
+        if (isSliderNumericInput(inputTarget)) {
             handleFieldChange(inputTarget, deps, true);
         }
+    });
+    editor.addEventListener("focusout", (event: FocusEvent) => {
+        const inputTarget = event.target;
+        if (!isDurationInput(inputTarget)) {
+            return;
+        }
+        if (inputTarget.value === inputTarget.defaultValue) {
+            return;
+        }
+        deps.scheduleClipsRefresh();
     });
 };
