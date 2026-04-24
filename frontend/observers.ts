@@ -1,4 +1,4 @@
-import { serializeClipsForStorage } from "./persistence";
+import { type SaveStateOptions, serializeClipsForStorage } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { getClipsInput } from "./swarmInputs";
 import type { VideoStagesConfig } from "./types";
@@ -27,7 +27,7 @@ export type ObserversApi = {
 export const createObservers = (deps: {
     scheduleRefresh: () => void;
     getState: () => VideoStagesConfig;
-    saveState: (state: VideoStagesConfig) => void;
+    saveState: (state: VideoStagesConfig, options?: SaveStateOptions) => void;
 }): ObserversApi => {
     let clipsInputSyncInterval: ReturnType<typeof setInterval> | null = null;
     let lastKnownClipsJson = "";
@@ -116,7 +116,7 @@ export const createObservers = (deps: {
             clips: serializeClipsForStorage(state.clips),
         });
         if (serialized !== input.value) {
-            deps.saveState(state);
+            deps.saveState(state, { notifyDomChange: false });
         }
         deps.scheduleRefresh();
     };

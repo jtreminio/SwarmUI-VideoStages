@@ -86,9 +86,6 @@ public class VideoStagesExtension : Extension
 
         int OrderPriority = 0;
 
-        // Min: 0 lets us use 0 as a sentinel for "no custom value yet" so the
-        // frontend can mirror the user's currently-selected core Width/Height
-        // into our slider on each panel build until the user moves it.
         RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Width",
             Description: RootDimensionsDescription,

@@ -72,6 +72,10 @@ export interface PersistenceCallbacks {
     onAfterSerialize?: (serialized: string) => void;
 }
 
+export interface SaveStateOptions {
+    notifyDomChange?: boolean;
+}
+
 let lastSerializedState = "";
 
 const getSerializedStateSource = (): string => {
@@ -161,6 +165,7 @@ export const getState = (): VideoStagesConfig => {
 export const saveState = (
     state: VideoStagesConfig,
     callbacks?: PersistenceCallbacks,
+    options?: SaveStateOptions,
 ): void => {
     const serialized = JSON.stringify({
         width: state.width,
@@ -174,7 +179,7 @@ export const saveState = (
         input.value = serialized;
     }
     callbacks?.onAfterSerialize?.(serialized);
-    if (input) {
+    if (input && options?.notifyDomChange !== false) {
         triggerChangeFor(input);
     }
 };
@@ -190,12 +195,15 @@ export const saveClips = (
     saveState(state, callbacks);
 };
 
-export const ensureClipsSeeded = (callbacks?: PersistenceCallbacks): void => {
+export const ensureClipsSeeded = (
+    callbacks?: PersistenceCallbacks,
+    options?: SaveStateOptions,
+): void => {
     const state = getState();
     if (state.clips.length > 0) {
         return;
     }
 
     state.clips = [buildDefaultClip(getRootDefaults, getDefaultStageModel)];
-    saveState(state, callbacks);
+    saveState(state, callbacks, options);
 };

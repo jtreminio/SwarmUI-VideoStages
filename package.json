@@ -5,7 +5,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "npm run check && node ./scripts/build.mjs",
+        "build": "npm run lint && npm run check && node ./scripts/build.mjs",
         "check": "npm run format:check && npm run lint && npm run typecheck",
         "clean": "rm -f Assets/video-stages.js Assets/video-stages.js.map",
         "coverage:functions": "npm run test:coverage && node ./scripts/report-uncovered-functions.mjs",

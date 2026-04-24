@@ -201,6 +201,30 @@ describe("videoStageEditor", () => {
     });
 
     describe("init / seeding", () => {
+        it("does not re-enable a disabled VideoStages group while seeding startup JSON", () => {
+            const groupToggle = document.getElementById(
+                "input_group_content_videostages_toggle",
+            ) as HTMLInputElement;
+            groupToggle.checked = false;
+            for (const inputId of [
+                "input_videostages",
+                "input_vswidth",
+                "input_vsheight",
+            ]) {
+                const input = document.getElementById(inputId);
+                input?.addEventListener("change", () => {
+                    groupToggle.checked = true;
+                });
+            }
+
+            const editor = videoStageEditor();
+            editor.init();
+
+            const clips = parseStored();
+            expect(clips).toHaveLength(1);
+            expect(groupToggle.checked).toBe(false);
+        });
+
         it("seeds a single default clip when no JSON is present", () => {
             const editor = videoStageEditor();
             editor.init();
@@ -666,6 +690,57 @@ describe("videoStageEditor", () => {
             const config = parseStoredConfig();
             expect(config.width).toBe(1536);
             expect(config.height).toBe(864);
+        });
+
+        it("keeps the VideoStages group disabled when a late root FPS change syncs JSON", () => {
+            const groupToggle = document.getElementById(
+                "input_group_content_videostages_toggle",
+            ) as HTMLInputElement;
+            groupToggle.checked = false;
+
+            const stagesInput = getStagesInput();
+            stagesInput.addEventListener("change", () => {
+                groupToggle.checked = true;
+            });
+
+            const editor = videoStageEditor();
+            editor.init();
+
+            const fpsInput = document.getElementById(
+                "input_vsfps",
+            ) as HTMLInputElement;
+            fpsInput.value = "32";
+            fpsInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const config = parseStoredConfig();
+            expect(config.fps).toBe(32);
+            expect(groupToggle.checked).toBe(false);
+        });
+
+        it("re-enables the VideoStages group when a user edits clip fields", () => {
+            const groupToggle = document.getElementById(
+                "input_group_content_videostages_toggle",
+            ) as HTMLInputElement;
+            groupToggle.checked = false;
+
+            const stagesInput = getStagesInput();
+            stagesInput.addEventListener("change", () => {
+                groupToggle.checked = true;
+            });
+
+            const editor = videoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"]',
+            ) as HTMLSelectElement | null;
+            expect(audioSource).not.toBeNull();
+            const source = must(audioSource);
+            source.value = "Upload";
+            source.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].audioSource).toBe("Upload");
+            expect(groupToggle.checked).toBe(true);
         });
 
         it("stores clip audio source at the clip level", () => {

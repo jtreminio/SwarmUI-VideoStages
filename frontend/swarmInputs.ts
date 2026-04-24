@@ -80,7 +80,9 @@ export const getCoreDimension = (field: "width" | "height"): number | null => {
  * Seeds registered Root width/height from core inputs while this slider is
  * still below {@link ROOT_DIMENSION_MIN}; above that, manual values stick.
  */
-export const seedRegisteredDimensionsFromCore = (): void => {
+export const seedRegisteredDimensionsFromCore = (
+    notifyDomChange = true,
+): void => {
     const fields: Array<"width" | "height"> = ["width", "height"];
     for (const field of fields) {
         const ourInput = getRootDimensionParamInput(field);
@@ -96,7 +98,9 @@ export const seedRegisteredDimensionsFromCore = (): void => {
             continue;
         }
         ourInput.value = `${coreValue}`;
-        triggerChangeFor(ourInput);
+        if (notifyDomChange) {
+            triggerChangeFor(ourInput);
+        }
     }
 };
 

@@ -804,7 +804,7 @@
     const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_DIMENSION_MIN ? value : null;
   };
-  var seedRegisteredDimensionsFromCore = () => {
+  var seedRegisteredDimensionsFromCore = (notifyDomChange = true) => {
     const fields = ["width", "height"];
     for (const field of fields) {
       const ourInput = getRootDimensionParamInput(field);
@@ -820,7 +820,9 @@
         continue;
       }
       ourInput.value = `${coreValue}`;
-      triggerChangeFor(ourInput);
+      if (notifyDomChange) {
+        triggerChangeFor(ourInput);
+      }
     }
   };
   var getGroupToggle = () => utils.getInputElement("input_group_content_videostages_toggle");
@@ -1217,7 +1219,7 @@
     } else {
       return;
     }
-    deps.saveState(state, deps.persistenceCallbacks);
+    deps.saveState(state);
     if (clipField === "audioSource") {
       syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
     }
@@ -1625,7 +1627,7 @@
       clips: []
     };
   };
-  var saveState = (state, callbacks) => {
+  var saveState = (state, callbacks, options) => {
     const serialized = JSON.stringify({
       width: state.width,
       height: state.height,
@@ -1638,7 +1640,7 @@
       input.value = serialized;
     }
     callbacks?.onAfterSerialize?.(serialized);
-    if (input) {
+    if (input && options?.notifyDomChange !== false) {
       triggerChangeFor(input);
     }
   };
@@ -1648,13 +1650,13 @@
     state.clips = clips;
     saveState(state, callbacks);
   };
-  var ensureClipsSeeded = (callbacks) => {
+  var ensureClipsSeeded = (callbacks, options) => {
     const state = getState();
     if (state.clips.length > 0) {
       return;
     }
     state.clips = [buildDefaultClip(getRootDefaults, getDefaultStageModel)];
-    saveState(state, callbacks);
+    saveState(state, callbacks, options);
   };
 
   // frontend/observers.ts
@@ -1742,7 +1744,7 @@
         clips: serializeClipsForStorage(state.clips)
       });
       if (serialized !== input.value) {
-        deps.saveState(state);
+        deps.saveState(state, { notifyDomChange: false });
       }
       deps.scheduleRefresh();
     };
@@ -2434,7 +2436,7 @@ ${optionHtml}
     const refUploadCache = createRefUploadCache();
     const persistenceCallbacks = {};
     const getEditorState = () => getState();
-    const saveEditorState = (state) => saveState(state, persistenceCallbacks);
+    const saveEditorState = (state, options) => saveState(state, persistenceCallbacks, options);
     const getEditorClips = () => getClips();
     const saveEditorClips = (clips) => saveClips(clips, persistenceCallbacks);
     const scheduleClipsRefresh = () => {
@@ -2489,7 +2491,6 @@ ${optionHtml}
       saveClips: saveEditorClips,
       getState: getEditorState,
       saveState: saveEditorState,
-      persistenceCallbacks,
       scheduleClipsRefresh,
       refUploadCache
     });
@@ -2525,7 +2526,7 @@ ${optionHtml}
       if (!editor) {
         return [];
       }
-      seedRegisteredDimensionsFromCore();
+      seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
       const state = getEditorState();
       const clips = state.clips;
       const focusSnapshot = captureFocus();
@@ -2553,17 +2554,19 @@ ${optionHtml}
       addClipButton.dataset.clipAction = "add-clip";
       addClipButton.innerText = "+ Add Video Clip";
       editor.appendChild(addClipButton);
-      attachEventListeners(getDomDeps());
       enableSlidersIn(editor);
       restoreClipAudioUploadPreviews(clips);
       refUploadCache.restorePreviews(editor, clips);
+      attachEventListeners(getDomDeps());
       restoreFocus(focusSnapshot);
       return validateClips(clips);
     };
     const init = () => {
       createEditor();
       observers.startClipsInputSync();
-      ensureClipsSeeded(persistenceCallbacks);
+      ensureClipsSeeded(persistenceCallbacks, {
+        notifyDomChange: isVideoStagesEnabled()
+      });
       generateWrap.tryWrap();
       renderClips();
       observers.installSourceDropdownObserver();

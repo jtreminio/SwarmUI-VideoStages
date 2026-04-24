@@ -16,13 +16,17 @@ import {
     getClips,
     getState,
     type PersistenceCallbacks,
+    type SaveStateOptions,
     saveClips,
     saveState,
 } from "./persistence";
 import { createRefUploadCache } from "./refUploadCache";
 import { renderClipCard } from "./renderHtml";
 import { getRootDefaults } from "./rootDefaults";
-import { seedRegisteredDimensionsFromCore } from "./swarmInputs";
+import {
+    isVideoStagesEnabled,
+    seedRegisteredDimensionsFromCore,
+} from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
 import { validateClips } from "./validation";
 
@@ -39,8 +43,10 @@ export function videoStageEditor(): VideoStageEditor {
     const persistenceCallbacks: PersistenceCallbacks = {};
 
     const getEditorState = (): VideoStagesConfig => getState();
-    const saveEditorState = (state: VideoStagesConfig): void =>
-        saveState(state, persistenceCallbacks);
+    const saveEditorState = (
+        state: VideoStagesConfig,
+        options?: SaveStateOptions,
+    ): void => saveState(state, persistenceCallbacks, options);
     const getEditorClips = (): Clip[] => getClips();
     const saveEditorClips = (clips: Clip[]): void =>
         saveClips(clips, persistenceCallbacks);
@@ -112,7 +118,6 @@ export function videoStageEditor(): VideoStageEditor {
         saveClips: saveEditorClips,
         getState: getEditorState,
         saveState: saveEditorState,
-        persistenceCallbacks,
         scheduleClipsRefresh,
         refUploadCache,
     });
@@ -155,7 +160,7 @@ export function videoStageEditor(): VideoStageEditor {
             return [];
         }
 
-        seedRegisteredDimensionsFromCore();
+        seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
 
         const state = getEditorState();
         const clips = state.clips;
@@ -189,10 +194,10 @@ export function videoStageEditor(): VideoStageEditor {
         addClipButton.innerText = "+ Add Video Clip";
         editor.appendChild(addClipButton);
 
-        attachEventListeners(getDomDeps());
         enableSlidersIn(editor);
         restoreClipAudioUploadPreviews(clips);
         refUploadCache.restorePreviews(editor, clips);
+        attachEventListeners(getDomDeps());
         restoreFocus(focusSnapshot);
 
         return validateClips(clips);
@@ -201,7 +206,9 @@ export function videoStageEditor(): VideoStageEditor {
     const init = (): void => {
         createEditor();
         observers.startClipsInputSync();
-        ensureClipsSeeded(persistenceCallbacks);
+        ensureClipsSeeded(persistenceCallbacks, {
+            notifyDomChange: isVideoStagesEnabled(),
+        });
         generateWrap.tryWrap();
         renderClips();
         observers.installSourceDropdownObserver();

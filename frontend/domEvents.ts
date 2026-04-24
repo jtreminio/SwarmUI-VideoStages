@@ -21,7 +21,6 @@ import {
     buildDefaultStage,
     getReferenceFrameMax,
 } from "./normalization";
-import type { PersistenceCallbacks } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
 import { snapDurationToFps } from "./renderUtils";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
@@ -34,11 +33,7 @@ export type DomEventsDeps = {
     getClips: () => Clip[];
     saveClips: (clips: Clip[]) => void;
     getState: () => VideoStagesConfig;
-    saveState: (
-        state: VideoStagesConfig,
-        callbacks?: PersistenceCallbacks,
-    ) => void;
-    persistenceCallbacks?: PersistenceCallbacks;
+    saveState: (state: VideoStagesConfig) => void;
     scheduleClipsRefresh: () => void;
     refUploadCache: RefUploadCacheApi;
 };
@@ -337,7 +332,7 @@ export const handleFieldChange = (
         return;
     }
 
-    deps.saveState(state, deps.persistenceCallbacks);
+    deps.saveState(state);
     if (clipField === "audioSource") {
         syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
     }
