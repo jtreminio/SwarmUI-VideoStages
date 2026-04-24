@@ -5,14 +5,9 @@ using SwarmUI.Utils;
 
 namespace VideoStages.LTX2;
 
-/// <summary>Resolved clip-level reference image for one VideoStages stage.</summary>
 internal sealed record ResolvedClipRef(WGNodeData Image, JsonParser.RefSpec Spec, double Strength);
 
-/// <summary>
-/// Local LTXV2 stage execution for VideoStages. This is intentionally isolated so the
-/// rest of the extension can stay on the native CreateImageToVideo path.
-/// </summary>
-internal sealed class StageExecutor(WorkflowGenerator g)
+internal sealed class LtxStageExecutor(WorkflowGenerator g)
 {
     private bool _needsLtxvCropGuidesAfterSampler;
 
@@ -31,7 +26,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         WGNodeData guideMedia,
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
-        PostVideoChain postVideoChain,
+        LtxPostVideoChain postVideoChain,
         IReadOnlyList<ResolvedClipRef> clipRefs = null,
         double guideMergeStrength = DefaultGuideMergeStrength)
     {
@@ -134,7 +129,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         WGNodeData guideMedia,
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
-        PostVideoChain postVideoChain,
+        LtxPostVideoChain postVideoChain,
         IReadOnlyList<ResolvedClipRef> clipRefs,
         double guideMergeStrength)
     {
@@ -345,7 +340,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         JsonParser.StageSpec stage,
         WGNodeData sourceMedia,
-        PostVideoChain postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
 
@@ -428,7 +423,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             && JToken.DeepEquals(decodeVaePath, vaePath);
     }
 
-    private static bool ReferencesCurrentOutputPath(WGNodeData media, PostVideoChain postVideoChain)
+    private static bool ReferencesCurrentOutputPath(WGNodeData media, LtxPostVideoChain postVideoChain)
     {
         if (media?.Path is not JArray mediaPath || postVideoChain is null)
         {
@@ -461,7 +456,6 @@ internal sealed class StageExecutor(WorkflowGenerator g)
         return new JArray(preprocessNode, 0);
     }
 
-    /// <summary>Scale guide images to root clip size when the live decode branch skipped ImageScale.</summary>
     private JArray EnsureClipResolutionBeforeLtxvPreprocess(JArray guideImagePath)
     {
         if (guideImagePath is null || guideImagePath.Count != 2)
@@ -642,7 +636,6 @@ internal sealed class StageExecutor(WorkflowGenerator g)
             });
             genInfo.PosCond = [postSamplerCrop, 0];
             genInfo.NegCond = [postSamplerCrop, 1];
-            // null keeps DT_LATENT_AUDIOVIDEO so decode still separates AV before VAEDecode.
             g.CurrentMedia = g.CurrentMedia.WithPath([postSamplerCrop, 2], null, genInfo.Model.Compat);
             _needsLtxvCropGuidesAfterSampler = false;
         }
@@ -670,7 +663,7 @@ internal sealed class StageExecutor(WorkflowGenerator g)
     private void FinalizeOutput(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData sourceMedia,
-        PostVideoChain postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         int outputWidth = g.CurrentMedia?.Width ?? sourceMedia.Width ?? g.UserInput.GetImageWidth();
         int outputHeight = g.CurrentMedia?.Height ?? sourceMedia.Height ?? g.UserInput.GetImageHeight();

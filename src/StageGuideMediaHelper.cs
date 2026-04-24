@@ -3,13 +3,12 @@ using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages;
 
-/// <summary>Shared guide media resolution for native and LTX2 VideoStages paths.</summary>
 internal static class StageGuideMediaHelper
 {
     internal static WGNodeData ResolveGuideMedia(
         WorkflowGenerator g,
         StageRefStore.StageRef guideReference,
-        LTX2.PostVideoChain postVideoChain)
+        LTX2.LtxPostVideoChain postVideoChain)
     {
         if (guideReference?.Media is null)
         {
@@ -38,7 +37,7 @@ internal static class StageGuideMediaHelper
         return guideReference.Media.AsRawImage(guideVae);
     }
 
-    internal static bool IsLiveCurrentOutputReference(WGNodeData guideMedia, LTX2.PostVideoChain postVideoChain)
+    internal static bool IsLiveCurrentOutputReference(WGNodeData guideMedia, LTX2.LtxPostVideoChain postVideoChain)
     {
         if (guideMedia?.Path is not JArray guidePath || postVideoChain is null)
         {

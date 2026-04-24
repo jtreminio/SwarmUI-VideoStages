@@ -4,8 +4,7 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.LTX2;
 
-/// <summary>Capture of the native LTX post-video decode chain for splicing samplers before decode/save (no second final save).</summary>
-internal sealed class PostVideoChain
+internal sealed class LtxPostVideoChain
 {
     private const string OriginalAudioLatentNodeHelperKey = "videostages.original-audio-latent";
     private const string UploadedAudioLoadClassType = "SwarmLoadAudioB64";
@@ -20,7 +19,7 @@ internal sealed class PostVideoChain
     public readonly JArray DecodeOutputPath;
     public readonly bool HasPostDecodeWrappers;
 
-    private PostVideoChain(
+    private LtxPostVideoChain(
         WorkflowGenerator generator,
         WGNodeData currentOutputMedia,
         JArray avLatentPath,
@@ -44,7 +43,7 @@ internal sealed class PostVideoChain
         HasPostDecodeWrappers = hasPostDecodeWrappers;
     }
 
-    public static PostVideoChain TryCapture(WorkflowGenerator generator)
+    public static LtxPostVideoChain TryCapture(WorkflowGenerator generator)
     {
         if (generator.CurrentMedia?.IsRawMedia != true
             || generator.CurrentMedia.Path is not JArray mediaPath
@@ -99,7 +98,7 @@ internal sealed class PostVideoChain
 
         RememberOriginalAudioLatent(generator, new JArray(separateId, 1));
 
-        return new PostVideoChain(
+        return new LtxPostVideoChain(
             generator,
             CloneMedia(generator, generator.CurrentMedia),
             new JArray(avLatentRef[0], avLatentRef[1]),

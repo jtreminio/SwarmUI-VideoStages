@@ -6,10 +6,9 @@ using SwarmUI.Utils;
 
 namespace VideoStages.LTX2;
 
-/// <summary>Orchestrates the local LTXV2 stage path (clip refs, guide media, <see cref="StageExecutor"/>).</summary>
 internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
 {
-    private readonly StageExecutor _stageExecutor = new(g);
+    private readonly LtxStageExecutor _stageExecutor = new(g);
 
     internal bool TryRunLocalLtxPath(
         JsonParser.StageSpec stage,
@@ -19,7 +18,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
-        PostVideoChain postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         if (!ShouldUseLocalLtxv2Path(genInfo, sourceMedia))
         {
@@ -63,7 +62,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
     private List<ResolvedClipRef> ResolveStageClipRefs(
         JsonParser.StageSpec stage,
         StageRefStore refStore,
-        PostVideoChain postVideoChain,
+        LtxPostVideoChain postVideoChain,
         WGNodeData sourceMedia)
     {
         IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs ?? [];
@@ -140,7 +139,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         bool skipGuideReinjection,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
-        PostVideoChain postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         if (primaryGuideClipRef is null)
         {
@@ -185,7 +184,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
     private WGNodeData ResolveDefaultLocalGuideMedia(
         bool skipGuideReinjection,
         WGNodeData sourceMedia,
-        PostVideoChain postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         if (skipGuideReinjection)
         {
@@ -204,7 +203,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
     private WGNodeData ResolveClipRefSourceMedia(
         JsonParser.RefSpec spec,
         StageRefStore refStore,
-        PostVideoChain postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         if (string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
         {
@@ -292,7 +291,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         WGNodeData sourceMedia,
         StageRefStore.StageRef guideReference,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        PostVideoChain postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         return stage.ImageReference == "Generated"
             && postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true

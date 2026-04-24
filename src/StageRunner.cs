@@ -27,7 +27,7 @@ internal class StageRunner(WorkflowGenerator g)
         }
 
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
-        PostVideoChain postVideoChain = PostVideoChain.TryCapture(g);
+        LtxPostVideoChain postVideoChain = LtxPostVideoChain.TryCapture(g);
         WGNodeData sourceMedia = ApplyStageUpscaleIfNeeded(stage, sectionId);
         StageGenerationPlan generationPlan = BuildGenInfo(stage, sectionId, sourceMedia);
         WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
