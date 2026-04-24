@@ -31,8 +31,8 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
             Detection candidate = classType switch
             {
                 NodeTypes.SwarmSaveAudioWS => BuildSaveCandidate(property.Name, classType, node, 3),
-                _ when IsSaveAudioNode(classType) => BuildSaveCandidate(property.Name, classType, node, 2),
-                NodeTypes.VAEDecodeAudio => BuildDecodeCandidate(property.Name, classType, 1),
+                _ when IsSaveAudioNode(classType) && !IsAceStepFunSaveNode(node) => BuildSaveCandidate(property.Name, classType, node, 2),
+                NodeTypes.VAEDecodeAudio when !IsAceStepFunDecodeNode(property.Name) => BuildDecodeCandidate(property.Name, classType, 1),
                 _ => null,
             };
 
@@ -144,6 +144,26 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         }
         return int.TryParse(suffix[..underscore], out int oneBasedTrack)
             && oneBasedTrack == trackIndex + 1;
+    }
+
+    private static bool IsAceStepFunSaveNode(JObject node)
+    {
+        if (node["inputs"] is not JObject inputs)
+        {
+            return false;
+        }
+        string prefix = $"{inputs["filename_prefix"] ?? ""}";
+        return prefix.StartsWith(AceStepFunFilenamePrefix, StringComparison.Ordinal);
+    }
+
+    private static bool IsAceStepFunDecodeNode(string nodeId)
+    {
+        if (!long.TryParse(nodeId, out long numericId))
+        {
+            return false;
+        }
+        long diff = numericId - AceStepFunDecodeNodeBase;
+        return diff >= 0 && diff % 100 == 0;
     }
 
     private static bool IsAceStepFunDecodeNodeForTrack(string nodeId, int trackIndex)

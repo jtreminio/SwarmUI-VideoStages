@@ -15,19 +15,21 @@ public static class AceStepFunAudioSavePruner
             return;
         }
 
-        Dictionary<int, bool> shouldSaveTrack = [];
+        HashSet<int> tracksToSave = [];
+        HashSet<int> selectedAceStepFunTracks = [];
         foreach (JsonParser.ClipSpec clip in clips)
         {
             if (!AudioStageDetector.TryParseAceStepFunAudioSource(clip.AudioSource, out int trackIndex))
             {
                 continue;
             }
-            shouldSaveTrack[trackIndex] = shouldSaveTrack.TryGetValue(trackIndex, out bool existing)
-                ? existing || clip.SaveAudioTrack
-                : clip.SaveAudioTrack;
+            selectedAceStepFunTracks.Add(trackIndex);
+            if (clip.SaveAudioTrack)
+            {
+                tracksToSave.Add(trackIndex);
+            }
         }
-
-        if (shouldSaveTrack.Count == 0)
+        if (selectedAceStepFunTracks.Count == 0)
         {
             return;
         }
@@ -38,8 +40,8 @@ public static class AceStepFunAudioSavePruner
             if (property.Value is not JObject node
                 || $"{node["class_type"]}" != SaveAudioMp3
                 || !TryGetAceStepFunTrackIndex(node, out int trackIndex)
-                || !shouldSaveTrack.TryGetValue(trackIndex, out bool saveTrack)
-                || saveTrack)
+                || !selectedAceStepFunTracks.Contains(trackIndex)
+                || tracksToSave.Contains(trackIndex))
             {
                 continue;
             }

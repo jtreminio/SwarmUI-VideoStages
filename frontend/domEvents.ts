@@ -1,4 +1,4 @@
-import { AUDIO_SOURCE_NATIVE } from "./audioSource";
+import { AUDIO_SOURCE_NATIVE, isAceStepFunAudioSource } from "./audioSource";
 import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_DURATION_MIN,
@@ -270,9 +270,26 @@ export const handleFieldChange = (
         }
     } else if (clipField === "audioSource") {
         clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
+        if (!isAceStepFunAudioSource(clip.audioSource)) {
+            clip.saveAudioTrack = false;
+            const saveAudioTrack = elem
+                .closest(".vs-clip-card")
+                ?.querySelector<HTMLInputElement>(
+                    '[data-clip-field="saveAudioTrack"]',
+                );
+            if (saveAudioTrack) {
+                saveAudioTrack.checked = false;
+            }
+        }
     } else if (clipField === "saveAudioTrack") {
         clip.saveAudioTrack =
-            elem instanceof HTMLInputElement ? !!elem.checked : false;
+            elem instanceof HTMLInputElement &&
+            isAceStepFunAudioSource(clip.audioSource)
+                ? !!elem.checked
+                : false;
+        if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
+            elem.checked = false;
+        }
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
         if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
             return;

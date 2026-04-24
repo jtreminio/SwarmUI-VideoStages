@@ -1,6 +1,7 @@
 import {
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
+    isAceStepFunAudioSource,
     resolveAudioSourceValue,
 } from "./audioSource";
 import {
@@ -48,10 +49,21 @@ export const decorateAutoInputWrapper = (
     hidden = false,
 ): string =>
     html.replace(
-        /<div class="([^"]*)"([^>]*)>/,
+        /<div class="([^"]*\bauto-input\b[^"]*)"([^>]*)>/,
         (_match, classes, attrs) =>
             `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`,
     );
+
+const moveQButtonBeforeLabelText = (html: string): string =>
+    html
+        .replace(
+            /(<span class="auto-input-name">)(<span class="translate"[^>]*>[^<]*<\/span>)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
+            "$1$3$2",
+        )
+        .replace(
+            /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
+            "$1$3$2",
+        );
 
 const hideFirstStageField = (html: string, stageIdx: number): string =>
     stageIdx === 0
@@ -124,7 +136,7 @@ export const buildNativeDropdown = (
         false,
         false,
         labels,
-        false,
+        true,
     );
     return options
         .filter((o) => o.disabled)
@@ -594,7 +606,7 @@ export const renderClipCard = (
         ),
         { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) },
     );
-    const audioSourceOptions = buildAudioSourceOptions();
+    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
     const audioSource = resolveAudioSourceValue(
         clip.audioSource,
         audioSourceOptions,
@@ -612,22 +624,28 @@ export const renderClipCard = (
             "data-clip-idx": String(clipIdx),
         },
     );
-    const saveAudioTrackField = injectFieldData(
-        makeCheckboxInput(
-            "",
-            clipFieldId(clipIdx, "saveAudioTrack"),
-            "saveAudioTrack",
-            "Save Audio Track",
-            "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
-            clip.saveAudioTrack,
-            false,
-            true,
-            true,
+    const saveAudioTrackField = moveQButtonBeforeLabelText(
+        decorateAutoInputWrapper(
+            injectFieldData(
+                makeCheckboxInput(
+                    "",
+                    clipFieldId(clipIdx, "saveAudioTrack"),
+                    "saveAudioTrack",
+                    "Save Audio Track",
+                    "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
+                    clip.saveAudioTrack,
+                    false,
+                    true,
+                    true,
+                ),
+                {
+                    "data-clip-field": "saveAudioTrack",
+                    "data-clip-idx": String(clipIdx),
+                },
+            ),
+            "vs-clip-save-audio-track-field",
+            !isAceStepFunAudioSource(audioSource),
         ),
-        {
-            "data-clip-field": "saveAudioTrack",
-            "data-clip-idx": String(clipIdx),
-        },
     );
     const audioUploadField = renderClipAudioUploadField(
         clip,
@@ -638,9 +656,15 @@ export const renderClipCard = (
     const body = `
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${lengthField}
-                ${audioSourceField}
-                ${saveAudioTrackField}
-                ${audioUploadField}
+
+                <div class="vs-section-block">
+                    <div class="vs-section-block-head">
+                        <div class="vs-section-block-title">AUDIO</div>
+                    </div>
+                    ${audioSourceField}
+                    ${saveAudioTrackField}
+                    ${audioUploadField}
+                </div>
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">

@@ -342,7 +342,8 @@ export const normalizeClip = (
     getDefaultStageModel: (modelValues: string[]) => string,
 ): Clip => {
     const defaults = getRootDefaults();
-    const audioSourceOptions = buildAudioSourceOptions();
+    const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
+    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource);
     const fps = Math.max(1, defaults.fps);
     const rawDuration = utils.toNumber(
         `${rawClip.duration}`,
@@ -379,7 +380,7 @@ export const normalizeClip = (
         skipped: !!rawClip.skipped,
         duration,
         audioSource: resolveAudioSourceValue(
-            `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
+            rawAudioSource,
             audioSourceOptions,
         ),
         saveAudioTrack: !!rawClip.saveAudioTrack,

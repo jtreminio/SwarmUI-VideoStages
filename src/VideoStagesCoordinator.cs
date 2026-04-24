@@ -142,9 +142,9 @@ public class VideoStagesCoordinator(WorkflowGenerator g)
         {
             return uploadedAudios.TryGetValue(clipId, out AudioStageDetector.Detection detection) ? detection : null;
         }
-        if (clipAudios.TryGetValue(clipId, out AudioStageDetector.Detection clipDetection))
+        if (AudioStageDetector.TryParseAceStepFunAudioSource(source, out _))
         {
-            return clipDetection;
+            return clipAudios.TryGetValue(clipId, out AudioStageDetector.Detection clipDetection) ? clipDetection : null;
         }
         return detectedAudio;
     }

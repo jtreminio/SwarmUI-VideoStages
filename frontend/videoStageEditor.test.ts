@@ -6,7 +6,10 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import { stubBase2EditStageRegistry } from "./__test_helpers__/registries";
+import {
+    stubAceStepFunRegistry,
+    stubBase2EditStageRegistry,
+} from "./__test_helpers__/registries";
 import { __resetPersistenceForTests } from "./persistence";
 import { videoStageEditor } from "./videoStageEditor";
 
@@ -437,6 +440,31 @@ describe("videoStageEditor", () => {
                     ?.textContent,
             ).toBe("Clip 0");
         });
+
+        it("renders stored AceStepFun audio source with a friendly label", () => {
+            getStagesInput().value = JSON.stringify({
+                clips: [
+                    {
+                        duration: 4,
+                        audioSource: "audio0",
+                        refs: [],
+                        stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
+                    },
+                ],
+            });
+
+            const editor = videoStageEditor();
+            editor.init();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            expect(audioSource).not.toBeNull();
+            expect(audioSource?.value).toBe("audio0");
+            expect(audioSource?.selectedOptions[0]?.textContent).toBe(
+                "AceStepFun Audio 0",
+            );
+        });
     });
 
     describe("clip actions", () => {
@@ -760,13 +788,21 @@ describe("videoStageEditor", () => {
         });
 
         it("stores the Save Audio Track checkbox at the clip level", () => {
+            stubAceStepFunRegistry(["audio0"]);
             const editor = videoStageEditor();
             editor.init();
 
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
             const saveAudioTrack = document.querySelector(
                 '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
+            expect(audioSource).not.toBeNull();
             expect(saveAudioTrack).not.toBeNull();
+            const source = must(audioSource);
+            source.value = "audio0";
+            source.dispatchEvent(new Event("change", { bubbles: true }));
             const checkbox = must(saveAudioTrack);
             expect(checkbox.checked).toBe(false);
             expect(parseStored()[0].saveAudioTrack).toBe(false);
@@ -777,31 +813,101 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].saveAudioTrack).toBe(true);
         });
 
-        it("renders a hidden per-clip audio upload field below the audio controls", () => {
+        it("renders clip audio controls inside an AUDIO section", () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const audioSection = Array.from(
+                document.querySelectorAll(".vs-section-block"),
+            ).find(
+                (section) =>
+                    section.querySelector(".vs-section-block-title")
+                        ?.textContent === "AUDIO",
+            ) as HTMLElement | undefined;
+            const audioSource = audioSection?.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const uploadField = audioSection?.querySelector(
+                ".vs-clip-audio-upload-field",
+            ) as HTMLElement | null;
+            const saveAudioTrackField = audioSection?.querySelector(
+                ".vs-clip-save-audio-track-field",
+            ) as HTMLElement | null;
+            const uploadInput = audioSection?.querySelector(
+                '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            const saveAudioTrack = audioSection?.querySelector(
+                '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+
+            expect(audioSection).toBeDefined();
+            expect(audioSource).not.toBeNull();
+            expect(uploadField).not.toBeNull();
+            expect(saveAudioTrackField).not.toBeNull();
+            expect(uploadInput).not.toBeNull();
+            expect(saveAudioTrack).not.toBeNull();
+            expect(uploadField?.style.display).toBe("none");
+            expect(saveAudioTrackField?.style.display).toBe("none");
+
+            const saveAudioTrackRow = saveAudioTrack?.closest(".auto-input");
+            expect(saveAudioTrackRow?.nextElementSibling).toBe(uploadField);
+            expect(saveAudioTrackRow).toBe(saveAudioTrackField);
+        });
+
+        it("only shows Save Audio Track for AceStepFun audio sources", () => {
+            stubAceStepFunRegistry(["audio0"]);
             const editor = videoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
             ) as HTMLSelectElement | null;
-            const uploadField = document.querySelector(
-                ".vs-clip-audio-upload-field",
+            const saveAudioTrackField = document.querySelector(
+                ".vs-clip-save-audio-track-field",
             ) as HTMLElement | null;
-            const uploadInput = document.querySelector(
-                '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
-            ) as HTMLInputElement | null;
             const saveAudioTrack = document.querySelector(
                 '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-
             expect(audioSource).not.toBeNull();
-            expect(uploadField).not.toBeNull();
-            expect(uploadInput).not.toBeNull();
+            expect(saveAudioTrackField).not.toBeNull();
             expect(saveAudioTrack).not.toBeNull();
-            expect(uploadField?.style.display).toBe("none");
+            expect(saveAudioTrackField?.style.display).toBe("none");
 
-            const saveAudioTrackRow = saveAudioTrack?.closest(".auto-input");
-            expect(saveAudioTrackRow?.nextElementSibling).toBe(uploadField);
+            const src = must(audioSource);
+            src.value = "audio0";
+            src.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(src.selectedOptions[0]?.textContent).toBe(
+                "AceStepFun Audio 0",
+            );
+            expect(saveAudioTrackField?.style.display).toBe("");
+
+            const checkbox = must(saveAudioTrack);
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(parseStored()[0].saveAudioTrack).toBe(true);
+
+            src.value = "Upload";
+            src.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(saveAudioTrackField?.style.display).toBe("none");
+            expect(checkbox.checked).toBe(false);
+            expect(parseStored()[0].saveAudioTrack).toBe(false);
+        });
+
+        it("renders the Save Audio Track tooltip before the label text", () => {
+            stubAceStepFunRegistry(["audio0"]);
+            const editor = videoStageEditor();
+            editor.init();
+
+            const saveAudioTrackField = document.querySelector(
+                ".vs-clip-save-audio-track-field .auto-input-name",
+            );
+            expect(saveAudioTrackField).not.toBeNull();
+
+            const firstChild = saveAudioTrackField?.firstElementChild;
+            expect(firstChild?.classList.contains("auto-input-qbutton")).toBe(
+                true,
+            );
+            expect(saveAudioTrackField?.textContent).toBe("?Save Audio Track");
         });
 
         it("reveals the per-clip audio upload field when audioSource changes to Upload", () => {

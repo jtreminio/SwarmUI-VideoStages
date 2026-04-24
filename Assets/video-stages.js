@@ -6,6 +6,7 @@
   var ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
   var SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
   var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
+  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
   var getSourceSelects = () => Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
     (elem) => elem instanceof HTMLSelectElement
   );
@@ -34,13 +35,20 @@
     }
     return ref;
   };
-  var buildAudioSourceOptions = () => {
+  var buildAudioSourceOptions = (currentValue = "") => {
     const options = [
       { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
       { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
     ];
     for (const ref of getAceStepFunRefs()) {
       options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+    const selected = `${currentValue || ""}`.trim();
+    if (isAceStepFunAudioSource(selected) && !options.some((option) => option.value === selected)) {
+      options.push({
+        value: selected,
+        label: getAceStepFunRefLabel(selected)
+      });
     }
     return options;
   };
@@ -57,8 +65,8 @@
       if (selects.length === 0) {
         return;
       }
-      const options = buildAudioSourceOptions();
       for (const select of selects) {
+        const options = buildAudioSourceOptions(select.value);
         const desired = resolveAudioSourceValue(select.value, options);
         const newOptionsJson = JSON.stringify(
           options.map((o) => [o.value, o.label])
@@ -77,6 +85,7 @@
           const elem = document.createElement("option");
           elem.value = option.value;
           elem.textContent = option.label;
+          elem.dataset.cleanname = option.label;
           elem.selected = option.value === desired;
           select.appendChild(elem);
         }
@@ -480,7 +489,8 @@
   };
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
-    const audioSourceOptions = buildAudioSourceOptions();
+    const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
+    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource);
     const fps = Math.max(1, defaults.fps);
     const rawDuration = utils.toNumber(
       `${rawClip.duration}`,
@@ -515,7 +525,7 @@
       skipped: !!rawClip.skipped,
       duration,
       audioSource: resolveAudioSourceValue(
-        `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
+        rawAudioSource,
         audioSourceOptions
       ),
       saveAudioTrack: !!rawClip.saveAudioTrack,
@@ -626,6 +636,12 @@
       return;
     }
     uploadField.style.display = source === AUDIO_SOURCE_UPLOAD ? "" : "none";
+    const saveAudioTrackField = clipCard.querySelector(
+      ".vs-clip-save-audio-track-field"
+    );
+    if (saveAudioTrackField) {
+      saveAudioTrackField.style.display = isAceStepFunAudioSource(source) ? "" : "none";
+    }
   };
   var applyRefField = (clip, ref, field, target, deps) => {
     const { getRootDefaults: getRootDefaults2, refUploadCache, getClips: getClips2, saveClips: saveClips2 } = deps;
@@ -1147,8 +1163,20 @@
       }
     } else if (clipField === "audioSource") {
       clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
+      if (!isAceStepFunAudioSource(clip.audioSource)) {
+        clip.saveAudioTrack = false;
+        const saveAudioTrack = elem.closest(".vs-clip-card")?.querySelector(
+          '[data-clip-field="saveAudioTrack"]'
+        );
+        if (saveAudioTrack) {
+          saveAudioTrack.checked = false;
+        }
+      }
     } else if (clipField === "saveAudioTrack") {
-      clip.saveAudioTrack = elem instanceof HTMLInputElement ? !!elem.checked : false;
+      clip.saveAudioTrack = elem instanceof HTMLInputElement && isAceStepFunAudioSource(clip.audioSource) ? !!elem.checked : false;
+      if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
+        elem.checked = false;
+      }
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
       if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
         return;
@@ -1919,8 +1947,15 @@
 
   // frontend/renderHtml.ts
   var decorateAutoInputWrapper = (html, className, hidden = false) => html.replace(
-    /<div class="([^"]*)"([^>]*)>/,
+    /<div class="([^"]*\bauto-input\b[^"]*)"([^>]*)>/,
     (_match, classes, attrs) => `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`
+  );
+  var moveQButtonBeforeLabelText = (html) => html.replace(
+    /(<span class="auto-input-name">)(<span class="translate"[^>]*>[^<]*<\/span>)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
+    "$1$3$2"
+  ).replace(
+    /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
+    "$1$3$2"
   );
   var hideFirstStageField = (html, stageIdx) => stageIdx === 0 ? decorateAutoInputWrapper(html, "vs-first-stage-field-hidden", true) : html;
   var dropdownOptions = (values, labels, selected) => {
@@ -1969,7 +2004,7 @@ ${optionHtml}
       false,
       false,
       labels,
-      false
+      true
     );
     return options.filter((o) => o.disabled).reduce((acc, option) => {
       const optionValue = escapeAttr(option.value);
@@ -2369,7 +2404,7 @@ ${optionHtml}
       ),
       { "data-clip-field": "duration", "data-clip-idx": String(clipIdx) }
     );
-    const audioSourceOptions = buildAudioSourceOptions();
+    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
     const audioSource2 = resolveAudioSourceValue(
       clip.audioSource,
       audioSourceOptions
@@ -2387,22 +2422,28 @@ ${optionHtml}
         "data-clip-idx": String(clipIdx)
       }
     );
-    const saveAudioTrackField = injectFieldData(
-      makeCheckboxInput(
-        "",
-        clipFieldId(clipIdx, "saveAudioTrack"),
-        "saveAudioTrack",
-        "Save Audio Track",
-        "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
-        clip.saveAudioTrack,
-        false,
-        true,
-        true
-      ),
-      {
-        "data-clip-field": "saveAudioTrack",
-        "data-clip-idx": String(clipIdx)
-      }
+    const saveAudioTrackField = moveQButtonBeforeLabelText(
+      decorateAutoInputWrapper(
+        injectFieldData(
+          makeCheckboxInput(
+            "",
+            clipFieldId(clipIdx, "saveAudioTrack"),
+            "saveAudioTrack",
+            "Save Audio Track",
+            "Keep a standalone MP3 output for AceStepFun audio selected as this clip's Audio Source.",
+            clip.saveAudioTrack,
+            false,
+            true,
+            true
+          ),
+          {
+            "data-clip-field": "saveAudioTrack",
+            "data-clip-idx": String(clipIdx)
+          }
+        ),
+        "vs-clip-save-audio-track-field",
+        !isAceStepFunAudioSource(audioSource2)
+      )
     );
     const audioUploadField = renderClipAudioUploadField(
       clip,
@@ -2412,9 +2453,15 @@ ${optionHtml}
     const body = `
             <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${lengthField}
-                ${audioSourceField}
-                ${saveAudioTrackField}
-                ${audioUploadField}
+
+                <div class="vs-section-block">
+                    <div class="vs-section-block-head">
+                        <div class="vs-section-block-title">AUDIO</div>
+                    </div>
+                    ${audioSourceField}
+                    ${saveAudioTrackField}
+                    ${audioUploadField}
+                </div>
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">

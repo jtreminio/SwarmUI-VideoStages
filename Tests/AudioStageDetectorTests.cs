@@ -96,6 +96,28 @@ public class AudioStageDetectorTests
     }
 
     [Fact]
+    public void Detector_ignores_acestepfun_nodes_for_native_audio_detection()
+    {
+        JObject workflow = new()
+        {
+            ["100"] = Node(VaeDecodeAudio),
+            ["64160"] = Node(VaeDecodeAudio),
+            ["64170"] = Node("SaveAudioMP3", new JObject()
+            {
+                ["audio"] = new JArray("64160", 0),
+                ["filename_prefix"] = "SwarmUI_track_1_"
+            })
+        };
+
+        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
+
+        Assert.NotNull(detection);
+        Assert.Equal("100", detection.MatchedNodeId);
+        Assert.Equal(VaeDecodeAudio, detection.MatchedClassType);
+        Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("100", 0)));
+    }
+
+    [Fact]
     public void DetectAceStepFunTrack_UsesMatchingTrackSaveNode()
     {
         JObject workflow = new()

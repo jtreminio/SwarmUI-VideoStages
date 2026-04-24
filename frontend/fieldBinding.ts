@@ -1,4 +1,4 @@
-import { AUDIO_SOURCE_UPLOAD } from "./audioSource";
+import { AUDIO_SOURCE_UPLOAD, isAceStepFunAudioSource } from "./audioSource";
 import {
     clamp,
     normalizeUploadFileName,
@@ -150,6 +150,15 @@ export const syncClipAudioUploadFieldVisibility = (
         return;
     }
     uploadField.style.display = source === AUDIO_SOURCE_UPLOAD ? "" : "none";
+
+    const saveAudioTrackField = clipCard.querySelector<HTMLElement>(
+        ".vs-clip-save-audio-track-field",
+    );
+    if (saveAudioTrackField) {
+        saveAudioTrackField.style.display = isAceStepFunAudioSource(source)
+            ? ""
+            : "none";
+    }
 };
 
 export const applyRefField = (

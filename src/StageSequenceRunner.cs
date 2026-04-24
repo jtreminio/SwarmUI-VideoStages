@@ -131,10 +131,13 @@ public class StageSequenceRunner(
             }
             return uploadedAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection detection) ? detection : null;
         }
-        if (clipAudios is not null
-            && clipAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection clipDetection))
+        if (AudioStageDetector.TryParseAceStepFunAudioSource(source, out _))
         {
-            return clipDetection;
+            if (clipAudios is null)
+            {
+                return null;
+            }
+            return clipAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection clipDetection) ? clipDetection : null;
         }
         return _nativeAudioDetection;
     }

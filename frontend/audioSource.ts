@@ -10,6 +10,9 @@ const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
 const SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
+export const isAceStepFunAudioSource = (source: string): boolean =>
+    ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+
 const getSourceSelects = (): HTMLSelectElement[] =>
     Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
         (elem): elem is HTMLSelectElement => elem instanceof HTMLSelectElement,
@@ -47,13 +50,25 @@ const getAceStepFunRefLabel = (ref: string): string => {
     return ref;
 };
 
-export const buildAudioSourceOptions = (): AudioSourceOption[] => {
+export const buildAudioSourceOptions = (
+    currentValue = "",
+): AudioSourceOption[] => {
     const options: AudioSourceOption[] = [
         { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
         { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
     ];
     for (const ref of getAceStepFunRefs()) {
         options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+    const selected = `${currentValue || ""}`.trim();
+    if (
+        isAceStepFunAudioSource(selected) &&
+        !options.some((option) => option.value === selected)
+    ) {
+        options.push({
+            value: selected,
+            label: getAceStepFunRefLabel(selected),
+        });
     }
     return options;
 };
@@ -75,8 +90,8 @@ export const audioSource = () => {
         if (selects.length === 0) {
             return;
         }
-        const options = buildAudioSourceOptions();
         for (const select of selects) {
+            const options = buildAudioSourceOptions(select.value);
             const desired = resolveAudioSourceValue(select.value, options);
             const newOptionsJson = JSON.stringify(
                 options.map((o) => [o.value, o.label]),
@@ -98,6 +113,7 @@ export const audioSource = () => {
                 const elem = document.createElement("option");
                 elem.value = option.value;
                 elem.textContent = option.label;
+                elem.dataset.cleanname = option.label;
                 elem.selected = option.value === desired;
                 select.appendChild(elem);
             }

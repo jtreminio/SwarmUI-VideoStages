@@ -78,6 +78,16 @@ describe("audioSource", () => {
             });
         });
 
+        it("keeps a selected AceStepFun ref labeled when the registry omits it", () => {
+            setupDom();
+            controller = audioSource();
+
+            expect(controller.buildOptions("audio0")).toContainEqual({
+                value: "audio0",
+                label: "AceStepFun Audio 0",
+            });
+        });
+
         it("ignores AceStepFun refs when the registry is disabled", () => {
             setupDom();
             stubAceStepFunRegistry(["track-a"], false);
@@ -228,6 +238,9 @@ describe("audioSource", () => {
                 (o) => o.value === "audio0",
             );
             expect(aceStepFunOption?.textContent).toBe("AceStepFun Audio 0");
+            expect(aceStepFunOption?.dataset.cleanname).toBe(
+                "AceStepFun Audio 0",
+            );
             expect(select?.value).toBe("audio0");
         });
 
