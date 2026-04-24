@@ -2404,36 +2404,29 @@ ${optionHtml}
     };
   };
 
-  // frontend/VideoStages.ts
-  var VideoStages = (stageEditor) => {
-    const tryRegisterStageEditor = () => {
-      if (!Array.isArray(postParamBuildSteps)) {
-        return false;
-      }
-      postParamBuildSteps.push(() => {
-        try {
-          stageEditor.init();
-        } catch (error) {
-          console.warn(
-            "VideoStages: failed to build stage editor",
-            error
-          );
-        }
-      });
-      return true;
-    };
-    if (!tryRegisterStageEditor()) {
-      const interval = setInterval(() => {
-        if (tryRegisterStageEditor()) {
-          clearInterval(interval);
-        }
-      }, 200);
-    }
-    stageEditor.startGenerateWrapRetry();
-  };
-
   // frontend/main.ts
-  VideoStages(VideoStageEditor());
+  var stageEditor = VideoStageEditor();
+  var tryRegisterStageEditor = () => {
+    if (!Array.isArray(postParamBuildSteps)) {
+      return false;
+    }
+    postParamBuildSteps.push(() => {
+      try {
+        stageEditor.init();
+      } catch (error) {
+        console.warn("VideoStages: failed to build stage editor", error);
+      }
+    });
+    return true;
+  };
+  if (!tryRegisterStageEditor()) {
+    const interval = setInterval(() => {
+      if (tryRegisterStageEditor()) {
+        clearInterval(interval);
+      }
+    }, 200);
+  }
+  stageEditor.startGenerateWrapRetry();
   AudioSourceController();
 })();
 //# sourceMappingURL=video-stages.js.map
