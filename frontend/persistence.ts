@@ -82,20 +82,19 @@ export interface PersistenceCallbacks {
     onAfterSerialize?: (serialized: string) => void;
 }
 
-export const getState = (): VideoStagesConfig => {
-    const defaults = getRootDefaults();
-    const input = getClipsInput();
-    if (!input?.value) {
-        return {
-            width: defaults.width,
-            height: defaults.height,
-            fps: defaults.fps,
-            clips: [],
-        };
-    }
+let lastSerializedState = "";
 
+const getSerializedStateSource = (): string => {
+    const inputValue = getClipsInput()?.value ?? "";
+    return inputValue || lastSerializedState;
+};
+
+const parseSerializedState = (
+    serialized: string,
+    fallbackDefaults: Pick<VideoStagesConfig, "width" | "height" | "fps">,
+): VideoStagesConfig | null => {
     try {
-        const parsed = JSON.parse(input.value);
+        const parsed = JSON.parse(serialized);
         const parsedConfig = toParsedConfig(parsed);
         let clipsRaw: unknown[] = [];
         if (Array.isArray(parsed)) {
@@ -118,19 +117,27 @@ export const getState = (): VideoStagesConfig => {
             width: getEffectiveRootDimension(
                 "width",
                 parsedConfig?.width ?? firstClip?.width,
-                defaults.width,
+                fallbackDefaults.width,
             ),
             height: getEffectiveRootDimension(
                 "height",
                 parsedConfig?.height ?? firstClip?.height,
-                defaults.height,
+                fallbackDefaults.height,
             ),
             fps:
                 getRegisteredRootFps() ??
-                normalizeRootFps(parsedConfig?.fps, defaults.fps),
+                normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
             clips,
         };
     } catch {
+        return null;
+    }
+};
+
+export const getState = (): VideoStagesConfig => {
+    const defaults = getRootDefaults();
+    const serialized = getSerializedStateSource();
+    if (!serialized) {
         return {
             width: defaults.width,
             height: defaults.height,
@@ -138,26 +145,48 @@ export const getState = (): VideoStagesConfig => {
             clips: [],
         };
     }
+
+    const parsedState = parseSerializedState(serialized, defaults);
+    if (parsedState) {
+        lastSerializedState = serialized;
+        return parsedState;
+    }
+    if (serialized !== lastSerializedState && lastSerializedState) {
+        const fallbackState = parseSerializedState(
+            lastSerializedState,
+            defaults,
+        );
+        if (fallbackState) {
+            return fallbackState;
+        }
+    }
+    return {
+        width: defaults.width,
+        height: defaults.height,
+        fps: defaults.fps,
+        clips: [],
+    };
 };
 
 export const saveState = (
     state: VideoStagesConfig,
     callbacks?: PersistenceCallbacks,
 ): void => {
-    const input = getClipsInput();
-    if (!input) {
-        return;
-    }
-
     const serialized = JSON.stringify({
         width: state.width,
         height: state.height,
         fps: state.fps,
         clips: serializeClipsForStorage(state.clips),
     });
-    input.value = serialized;
+    lastSerializedState = serialized;
+    const input = getClipsInput();
+    if (input) {
+        input.value = serialized;
+    }
     callbacks?.onAfterSerialize?.(serialized);
-    triggerChangeFor(input);
+    if (input) {
+        triggerChangeFor(input);
+    }
 };
 
 export const getClips = (): Clip[] => getState().clips;

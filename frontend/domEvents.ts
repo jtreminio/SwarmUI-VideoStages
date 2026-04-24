@@ -29,7 +29,7 @@ import type { Clip, VideoStagesConfig } from "./types";
 
 export type DomEventsDeps = {
     /** Re-resolve `#videostages_stage_editor` after SwarmUI rebuilds the param panel. */
-    ensureEditorRoot: () => void;
+    ensureEditorRoot: (preferredRoot?: HTMLElement | null) => void;
     getEditor: () => HTMLElement | null;
     getClips: () => Clip[];
     saveClips: (clips: Clip[]) => void;
@@ -53,17 +53,6 @@ const isFieldTarget = (value: EventTarget | null): value is FieldTarget =>
 
 const isStageFieldTarget = (value: FieldTarget): value is StageFieldTarget =>
     value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
-
-export const getEditorActionTarget = (
-    getEditor: () => HTMLElement | null,
-    elem: HTMLElement,
-): HTMLElement | null => {
-    const editor = getEditor();
-    if (!editor?.contains(elem)) {
-        return null;
-    }
-    return elem;
-};
 
 export const toggleClipExpanded = (
     clipIdx: number,
@@ -133,10 +122,7 @@ export const handleClipAudioUploadRemove = (
 };
 
 export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
-    const target = getEditorActionTarget(deps.getEditor, elem);
-    if (!target) {
-        return;
-    }
+    const target = elem;
     const clips = deps.getClips();
 
     const clipAction = target.dataset.clipAction;
@@ -371,20 +357,39 @@ let latestDomEventDeps: DomEventsDeps | null = null;
 let stageEditorDocumentClickBound = false;
 const stageEditorsWithFieldListeners = new WeakSet<HTMLElement>();
 
+const getClickTargetElement = (event: MouseEvent): Element | null => {
+    if (event.target instanceof Element) {
+        return event.target;
+    }
+    if (event.target instanceof Node) {
+        return event.target.parentElement;
+    }
+    const path = event.composedPath();
+    for (const entry of path) {
+        if (entry instanceof Element) {
+            return entry;
+        }
+        if (entry instanceof Node && entry.parentElement) {
+            return entry.parentElement;
+        }
+    }
+    return null;
+};
+
 const handleStageEditorDocumentClick = (event: MouseEvent): void => {
     const deps = latestDomEventDeps;
     if (!deps) {
         return;
     }
-    const target = event.target;
-    if (!(target instanceof Element)) {
+    const target = getClickTargetElement(event);
+    if (!target) {
         return;
     }
     const host = target.closest("#videostages_stage_editor");
     if (!(host instanceof HTMLElement) || !host.isConnected) {
         return;
     }
-    deps.ensureEditorRoot();
+    deps.ensureEditorRoot(host);
 
     const refUploadRemoveButton = target.closest<HTMLElement>(
         ".vs-ref-upload-field .auto-input-remove-button",

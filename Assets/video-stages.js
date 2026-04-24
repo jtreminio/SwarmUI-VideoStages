@@ -969,13 +969,6 @@
   // frontend/domEvents.ts
   var isFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement || value instanceof HTMLTextAreaElement;
   var isStageFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
-  var getEditorActionTarget = (getEditor, elem) => {
-    const editor = getEditor();
-    if (!editor?.contains(elem)) {
-      return null;
-    }
-    return elem;
-  };
   var toggleClipExpanded = (clipIdx, deps) => {
     const clips = deps.getClips();
     if (clipIdx < 0 || clipIdx >= clips.length) {
@@ -1030,10 +1023,7 @@
     deps.saveClips(clips);
   };
   var handleAction = (elem, deps) => {
-    const target = getEditorActionTarget(deps.getEditor, elem);
-    if (!target) {
-      return;
-    }
+    const target = elem;
     const clips = deps.getClips();
     const clipAction = target.dataset.clipAction;
     const stageAction = target.dataset.stageAction;
@@ -1242,20 +1232,38 @@
   var latestDomEventDeps = null;
   var stageEditorDocumentClickBound = false;
   var stageEditorsWithFieldListeners = /* @__PURE__ */ new WeakSet();
+  var getClickTargetElement = (event) => {
+    if (event.target instanceof Element) {
+      return event.target;
+    }
+    if (event.target instanceof Node) {
+      return event.target.parentElement;
+    }
+    const path = event.composedPath();
+    for (const entry of path) {
+      if (entry instanceof Element) {
+        return entry;
+      }
+      if (entry instanceof Node && entry.parentElement) {
+        return entry.parentElement;
+      }
+    }
+    return null;
+  };
   var handleStageEditorDocumentClick = (event) => {
     const deps = latestDomEventDeps;
     if (!deps) {
       return;
     }
-    const target = event.target;
-    if (!(target instanceof Element)) {
+    const target = getClickTargetElement(event);
+    if (!target) {
       return;
     }
     const host = target.closest("#videostages_stage_editor");
     if (!(host instanceof HTMLElement) || !host.isConnected) {
       return;
     }
-    deps.ensureEditorRoot();
+    deps.ensureEditorRoot(host);
     const refUploadRemoveButton = target.closest(
       ".vs-ref-upload-field .auto-input-remove-button"
     );
@@ -1287,6 +1295,7 @@
       const group = clipHeader.closest(".vs-clip-card");
       const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
       toggleClipExpanded(clipIdx, deps);
+      return;
     }
   };
   var attachEventListeners = (deps) => {
@@ -1522,19 +1531,14 @@
     })
   );
   var getEffectiveRootDimension = (field, persistedValue, fallback) => getRegisteredRootDimension(field) ?? getCoreDimension(field) ?? normalizeRootDimension(persistedValue, fallback);
-  var getState = () => {
-    const defaults = getRootDefaults();
-    const input = getClipsInput();
-    if (!input?.value) {
-      return {
-        width: defaults.width,
-        height: defaults.height,
-        fps: defaults.fps,
-        clips: []
-      };
-    }
+  var lastSerializedState = "";
+  var getSerializedStateSource = () => {
+    const inputValue = getClipsInput()?.value ?? "";
+    return inputValue || lastSerializedState;
+  };
+  var parseSerializedState = (serialized, fallbackDefaults) => {
     try {
-      const parsed = JSON.parse(input.value);
+      const parsed = JSON.parse(serialized);
       const parsedConfig = toParsedConfig(parsed);
       let clipsRaw = [];
       if (Array.isArray(parsed)) {
@@ -1555,17 +1559,24 @@
         width: getEffectiveRootDimension(
           "width",
           parsedConfig?.width ?? firstClip?.width,
-          defaults.width
+          fallbackDefaults.width
         ),
         height: getEffectiveRootDimension(
           "height",
           parsedConfig?.height ?? firstClip?.height,
-          defaults.height
+          fallbackDefaults.height
         ),
-        fps: getRegisteredRootFps() ?? normalizeRootFps(parsedConfig?.fps, defaults.fps),
+        fps: getRegisteredRootFps() ?? normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
         clips
       };
     } catch {
+      return null;
+    }
+  };
+  var getState = () => {
+    const defaults = getRootDefaults();
+    const serialized = getSerializedStateSource();
+    if (!serialized) {
       return {
         width: defaults.width,
         height: defaults.height,
@@ -1573,21 +1584,43 @@
         clips: []
       };
     }
+    const parsedState = parseSerializedState(serialized, defaults);
+    if (parsedState) {
+      lastSerializedState = serialized;
+      return parsedState;
+    }
+    if (serialized !== lastSerializedState && lastSerializedState) {
+      const fallbackState = parseSerializedState(
+        lastSerializedState,
+        defaults
+      );
+      if (fallbackState) {
+        return fallbackState;
+      }
+    }
+    return {
+      width: defaults.width,
+      height: defaults.height,
+      fps: defaults.fps,
+      clips: []
+    };
   };
   var saveState = (state, callbacks) => {
-    const input = getClipsInput();
-    if (!input) {
-      return;
-    }
     const serialized = JSON.stringify({
       width: state.width,
       height: state.height,
       fps: state.fps,
       clips: serializeClipsForStorage(state.clips)
     });
-    input.value = serialized;
+    lastSerializedState = serialized;
+    const input = getClipsInput();
+    if (input) {
+      input.value = serialized;
+    }
     callbacks?.onAfterSerialize?.(serialized);
-    triggerChangeFor(input);
+    if (input) {
+      triggerChangeFor(input);
+    }
   };
   var getClips = () => getState().clips;
   var saveClips = (clips, callbacks) => {
@@ -2390,8 +2423,17 @@ ${optionHtml}
       observers.markPersisted(serialized);
     };
     const generateWrap = createGenerateWrap({ getClips: getEditorClips });
-    const createEditor = () => {
-      let el = document.getElementById("videostages_stage_editor");
+    const createEditor = (preferredRoot) => {
+      let el = preferredRoot instanceof HTMLElement && preferredRoot.isConnected ? preferredRoot : editor?.isConnected ? editor : null;
+      if (!el) {
+        const groupContent = document.getElementById(
+          "input_group_content_videostages"
+        );
+        const existingEditors = groupContent?.querySelectorAll(
+          "#videostages_stage_editor"
+        );
+        el = existingEditors && existingEditors.length > 0 ? existingEditors[existingEditors.length - 1] : null;
+      }
       if (!el) {
         el = document.createElement("div");
         el.id = "videostages_stage_editor";

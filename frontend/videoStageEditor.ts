@@ -70,8 +70,25 @@ export function videoStageEditor(): VideoStageEditor {
 
     const generateWrap = createGenerateWrap({ getClips: getEditorClips });
 
-    const createEditor = (): void => {
-        let el = document.getElementById("videostages_stage_editor");
+    const createEditor = (preferredRoot?: HTMLElement | null): void => {
+        let el =
+            preferredRoot instanceof HTMLElement && preferredRoot.isConnected
+                ? preferredRoot
+                : editor?.isConnected
+                  ? editor
+                  : null;
+        if (!el) {
+            const groupContent = document.getElementById(
+                "input_group_content_videostages",
+            );
+            const existingEditors = groupContent?.querySelectorAll<HTMLElement>(
+                "#videostages_stage_editor",
+            );
+            el =
+                existingEditors && existingEditors.length > 0
+                    ? existingEditors[existingEditors.length - 1]
+                    : null;
+        }
         if (!el) {
             el = document.createElement("div");
             el.id = "videostages_stage_editor";

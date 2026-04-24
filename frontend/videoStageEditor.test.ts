@@ -779,6 +779,27 @@ describe("videoStageEditor", () => {
             expect(clips[0].refs?.[0].source).toBe("Base");
         });
 
+        it("adds a ref when the click bubbles from button text", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const addRefBtn = document.querySelector(
+                '[data-clip-action="add-ref"]',
+            ) as HTMLButtonElement | null;
+            expect(addRefBtn).not.toBeNull();
+
+            const addRefLabel = addRefBtn?.firstChild;
+            expect(addRefLabel).not.toBeNull();
+            expect(addRefLabel?.nodeType).toBe(Node.TEXT_NODE);
+
+            must(addRefLabel).dispatchEvent(
+                new MouseEvent("click", { bubbles: true, cancelable: true }),
+            );
+            await flushReRender();
+
+            expect(parseStored()[0].refs).toHaveLength(1);
+        });
+
         it("adds a ref after the editor root was replaced (clone does not copy listeners)", async () => {
             const editor = videoStageEditor();
             editor.init();
@@ -797,6 +818,49 @@ describe("videoStageEditor", () => {
             ) as HTMLButtonElement;
             expect(addRefBtn).not.toBeNull();
             addRefBtn.click();
+            await flushReRender();
+
+            expect(parseStored()[0].refs).toHaveLength(1);
+        });
+
+        it("adds a ref from the clicked editor when duplicate editor ids exist during a rebuild", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            const originalEditor = document.getElementById(
+                "videostages_stage_editor",
+            ) as HTMLElement | null;
+            expect(originalEditor).not.toBeNull();
+
+            const rebuiltEditor = must(originalEditor).cloneNode(
+                true,
+            ) as HTMLElement;
+            must(originalEditor.parentElement).appendChild(rebuiltEditor);
+
+            const addRefBtn = rebuiltEditor.querySelector(
+                '[data-clip-action="add-ref"]',
+            ) as HTMLButtonElement | null;
+            expect(addRefBtn).not.toBeNull();
+
+            must(addRefBtn).click();
+            await flushReRender();
+
+            expect(parseStored()[0].refs).toHaveLength(1);
+            expect(rebuiltEditor.querySelector(".vs-ref-card")).not.toBeNull();
+        });
+
+        it("adds a ref when the persisted input is temporarily empty", async () => {
+            const editor = videoStageEditor();
+            editor.init();
+
+            getStagesInput().value = "";
+
+            const addRefBtn = document.querySelector(
+                '[data-clip-action="add-ref"]',
+            ) as HTMLButtonElement | null;
+            expect(addRefBtn).not.toBeNull();
+
+            must(addRefBtn).click();
             await flushReRender();
 
             expect(parseStored()[0].refs).toHaveLength(1);
