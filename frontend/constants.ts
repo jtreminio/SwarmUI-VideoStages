@@ -14,6 +14,7 @@ export const STAGE_REF_STRENGTH_MIN = 0.1;
 export const STAGE_REF_STRENGTH_MAX = 1;
 export const STAGE_REF_STRENGTH_STEP = 0.1;
 export const STAGE_REF_STRENGTH_DEFAULT = 0.8;
+export const IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
 export const STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
 
 export interface CachedRefUpload {

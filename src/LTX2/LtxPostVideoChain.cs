@@ -230,11 +230,15 @@ internal sealed class LtxPostVideoChain
         });
 
         RetargetVideoDecode(VideoDecodeNodeId, vae?.Path ?? g.CurrentVae?.Path, new JArray(newSeparate, 0));
-        WorkflowUtils.RetargetInputConnections(
+        int retargetedAudioDecodes = WorkflowUtils.RetargetInputConnections(
             g.Workflow,
             new JArray($"{AudioLatentPath[0]}", AudioLatentPath[1]),
             new JArray(newSeparate, 1),
             connection => connection.NodeId == AudioDecodeNodeId && connection.InputName == "samples");
+        if (retargetedAudioDecodes == 0)
+        {
+            RetargetCapturedAudioDecode(new JArray(newSeparate, 1));
+        }
         g.CurrentMedia = CloneMedia(g, CurrentOutputMedia);
         AttachSourceAudio(g.CurrentMedia);
     }
@@ -308,6 +312,26 @@ internal sealed class LtxPostVideoChain
                 }
                 return $"{node["class_type"]}" == NodeTypes.SwarmSaveAnimationWS;
             });
+    }
+
+    private void RetargetCapturedAudioDecode(JArray newSamplesPath)
+    {
+        if (string.IsNullOrWhiteSpace(AudioDecodeNodeId)
+            || newSamplesPath is null
+            || newSamplesPath.Count != 2
+            || g.Workflow[AudioDecodeNodeId] is not JObject audioDecode
+            || $"{audioDecode["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode)
+        {
+            return;
+        }
+
+        JObject inputs = audioDecode["inputs"] as JObject;
+        if (inputs is null)
+        {
+            inputs = [];
+            audioDecode["inputs"] = inputs;
+        }
+        inputs["samples"] = new JArray(newSamplesPath[0], newSamplesPath[1]);
     }
 
     private static bool TryFindAudioDecode(JObject workflow, string separateId, out string audioDecodeId, out JArray audioVaeRef)

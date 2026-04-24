@@ -172,6 +172,14 @@ export const isRootTextToVideoModel = (): boolean => {
     return false;
 };
 
+export const isImageToVideoWorkflow = (): boolean => {
+    if (isRootTextToVideoModel()) {
+        return false;
+    }
+    const videoModel = utils.getSelectElement("input_videomodel");
+    return !!`${videoModel?.value ?? ""}`.trim();
+};
+
 export const getDropdownOptions = (
     paramId: string,
     fallbackSelectId: string,

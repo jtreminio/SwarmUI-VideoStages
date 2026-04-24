@@ -113,11 +113,15 @@ const setupParameterPanel = (): void => {
 
     const videoModel = document.createElement("select");
     videoModel.id = "input_videomodel";
+    const noVideoModelOption = document.createElement("option");
+    noVideoModelOption.value = "";
+    noVideoModelOption.text = "None";
+    videoModel.appendChild(noVideoModelOption);
     const videoModelOption = document.createElement("option");
     videoModelOption.value = "ltx-2.3-22b-dev";
     videoModelOption.text = "ltx-2.3-22b-dev";
     videoModel.appendChild(videoModelOption);
-    videoModel.value = "ltx-2.3-22b-dev";
+    videoModel.value = "";
     document.body.appendChild(videoModel);
 
     for (const id of ["input_sampler", "input_scheduler"]) {
@@ -176,6 +180,13 @@ const setupParameterPanel = (): void => {
 
 const getStagesInput = (): HTMLInputElement =>
     document.getElementById("input_videostages") as HTMLInputElement;
+
+const setImageToVideoWorkflow = (): void => {
+    const videoModel = document.getElementById(
+        "input_videomodel",
+    ) as HTMLSelectElement;
+    videoModel.value = "ltx-2.3-22b-dev";
+};
 
 const parseStoredConfig = (): ParsedConfig => {
     const parsed = JSON.parse(getStagesInput().value || "[]") as
@@ -244,6 +255,19 @@ describe("videoStageEditor", () => {
                 document.querySelector(".vs-clip-card .header-label")
                     ?.textContent,
             ).toBe("Clip 0");
+        });
+
+        it("seeds image-to-video defaults with a refiner reference", () => {
+            setImageToVideoWorkflow();
+
+            const editor = videoStageEditor();
+            editor.init();
+
+            const clips = parseStored();
+            expect(clips[0].refs).toHaveLength(1);
+            expect(clips[0].refs?.[0].source).toBe("Refiner");
+            expect(clips[0].refs?.[0].frame).toBe(1);
+            expect(clips[0].stages?.[0].refStrengths).toEqual([1]);
         });
 
         it("seeds root dimensions from SwarmUI core width and height fields", () => {
@@ -514,6 +538,23 @@ describe("videoStageEditor", () => {
                     ...document.querySelectorAll(".vs-clip-card .header-label"),
                 ].map((el) => el.textContent),
             ).toEqual(["Clip 0", "Clip 1"]);
+        });
+
+        it("adds new image-to-video clips with a refiner reference", async () => {
+            setImageToVideoWorkflow();
+            const editor = videoStageEditor();
+            editor.init();
+
+            const addBtn = document.querySelector(
+                '[data-clip-action="add-clip"]',
+            ) as HTMLButtonElement;
+            addBtn.click();
+            await flushReRender();
+
+            const clips = parseStored();
+            expect(clips[1].refs).toHaveLength(1);
+            expect(clips[1].refs?.[0].source).toBe("Refiner");
+            expect(clips[1].stages?.[0].refStrengths).toEqual([1]);
         });
 
         it("shows Clip 0 header after deleting the first clip when two existed", async () => {
@@ -1377,7 +1418,7 @@ describe("videoStageEditor", () => {
 
             const clips = parseStored();
             expect(clips[0].refs).toHaveLength(1);
-            expect(clips[0].refs?.[0].source).toBe("Base");
+            expect(clips[0].refs?.[0].source).toBe("Refiner");
         });
 
         it("adds a ref when the click bubbles from button text", async () => {

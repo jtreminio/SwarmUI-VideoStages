@@ -69,6 +69,15 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
     {
         IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs ?? [];
         IReadOnlyList<double> strengths = stage.RefStrengths ?? [];
+        if (refs.Count == 0 && !stage.ImageReferenceWasExplicit)
+        {
+            JsonParser.RefSpec defaultRef = ResolveDefaultImageToVideoRef(refStore);
+            if (defaultRef is not null)
+            {
+                refs = [defaultRef];
+                strengths = [1.0];
+            }
+        }
         List<ResolvedClipRef> resolved = [];
         bool textToVideoRootWorkflow = RootVideoStageTakeover.IsTextToVideoRootWorkflow(g);
         for (int i = 0; i < refs.Count; i++)
@@ -101,6 +110,25 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         }
 
         return resolved;
+    }
+
+    private JsonParser.RefSpec ResolveDefaultImageToVideoRef(StageRefStore refStore)
+    {
+        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _)
+            || RootVideoStageTakeover.IsTextToVideoRootWorkflow(g))
+        {
+            return null;
+        }
+
+        if (refStore.Refiner is not null)
+        {
+            return new JsonParser.RefSpec("Refiner", 1, false, null);
+        }
+        if (refStore.Base is not null)
+        {
+            return new JsonParser.RefSpec("Base", 1, false, null);
+        }
+        return null;
     }
 
     private static ResolvedClipRef ExtractPrimaryGuideClipRef(IReadOnlyList<ResolvedClipRef> clipRefs)

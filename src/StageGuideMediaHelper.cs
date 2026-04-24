@@ -72,17 +72,58 @@ internal static class StageGuideMediaHelper
             return resolvedGuideMedia;
         }
 
+        if (TryFindReusableImageScale(g.Workflow, resolvedGuideMedia.Path, targetWidth, targetHeight, out JArray reusableScalePath))
+        {
+            resolvedGuideMedia = resolvedGuideMedia.WithPath(reusableScalePath);
+            resolvedGuideMedia.Width = targetWidth;
+            resolvedGuideMedia.Height = targetHeight;
+            return resolvedGuideMedia;
+        }
+
         string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
         {
             ["image"] = resolvedGuideMedia.Path,
             ["width"] = targetWidth,
             ["height"] = targetHeight,
             ["upscale_method"] = "lanczos",
-            ["crop"] = "disabled"
+            ["crop"] = "center"
         });
         resolvedGuideMedia = resolvedGuideMedia.WithPath([scaleNode, 0]);
         resolvedGuideMedia.Width = targetWidth;
         resolvedGuideMedia.Height = targetHeight;
         return resolvedGuideMedia;
+    }
+
+    private static bool TryFindReusableImageScale(
+        JObject workflow,
+        JArray sourcePath,
+        int targetWidth,
+        int targetHeight,
+        out JArray scaledPath)
+    {
+        scaledPath = null;
+        if (workflow is null || sourcePath is not { Count: 2 })
+        {
+            return false;
+        }
+
+        foreach (JProperty property in workflow.Properties())
+        {
+            if (property.Value is not JObject node
+                || $"{node["class_type"]}" != NodeTypes.ImageScale
+                || node["inputs"] is not JObject inputs
+                || inputs["image"] is not JArray imagePath
+                || !JToken.DeepEquals(imagePath, sourcePath)
+                || inputs.Value<int?>("width") != targetWidth
+                || inputs.Value<int?>("height") != targetHeight)
+            {
+                continue;
+            }
+
+            inputs["crop"] = "center";
+            scaledPath = [property.Name, 0];
+            return true;
+        }
+        return false;
     }
 }

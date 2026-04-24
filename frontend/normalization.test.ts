@@ -7,7 +7,11 @@ import {
     readRawStageProp,
     readRawStageString,
 } from "./normalization";
-import { REF_SOURCE_BASE, type RootDefaults } from "./types";
+import {
+    REF_SOURCE_BASE,
+    REF_SOURCE_REFINER,
+    type RootDefaults,
+} from "./types";
 
 const stubDefaults = (): RootDefaults => ({
     modelValues: ["ltx"],
@@ -176,7 +180,7 @@ describe("normalization", () => {
 
     it("buildDefaultRef matches editor defaults", () => {
         const ref = buildDefaultRef();
-        expect(ref.source).toBe(REF_SOURCE_BASE);
+        expect(ref.source).toBe(REF_SOURCE_REFINER);
         expect(ref.frame).toBe(1);
         expect(ref.uploadedImage).toBeNull();
     });

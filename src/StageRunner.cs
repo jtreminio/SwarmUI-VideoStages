@@ -44,7 +44,7 @@ internal class StageRunner(WorkflowGenerator g)
                 priorOutputPath,
                 postVideoChain))
         {
-            RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path, retargetAudio: replaceTextToVideoRootStage);
+            RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path, retargetAudio: g.CurrentMedia?.AttachedAudio is not null);
             CleanupReplacedTextToVideoRootStage(priorOutputPath, replaceTextToVideoRootStage);
             return;
         }

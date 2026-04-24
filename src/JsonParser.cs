@@ -39,7 +39,8 @@ public class JsonParser(WorkflowGenerator g)
         int ClipStageIndex = 0,
         int ClipStageCount = 0,
         IReadOnlyList<RefSpec> ClipRefs = null,
-        IReadOnlyList<double> RefStrengths = null
+        IReadOnlyList<double> RefStrengths = null,
+        bool ImageReferenceWasExplicit = false
     );
 
     public sealed record RefSpec(
@@ -529,6 +530,7 @@ public class JsonParser(WorkflowGenerator g)
         double cfgScale = NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index));
         string sampler = GetOptionalString(stage, "Sampler", defaults.Sampler, index, allowEmpty: false);
         string scheduler = GetOptionalString(stage, "Scheduler", defaults.Scheduler, index, allowEmpty: false);
+        bool hasImageReferenceKey = JsonHasOwnProperty(stage, "ImageReference");
         string imageReference = NormalizeImageReference(GetString(stage, "ImageReference"), index);
         bool skipped = GetOptionalBool(stage, "Skipped", defaultValue: false);
         IReadOnlyList<double> refStrengths = ParseStageRefStrengths(stage, index, clipRefCount);
@@ -547,7 +549,8 @@ public class JsonParser(WorkflowGenerator g)
             ImageReference: imageReference,
             Skipped: skipped,
             ClipRefs: null,
-            RefStrengths: refStrengths
+            RefStrengths: refStrengths,
+            ImageReferenceWasExplicit: hasImageReferenceKey
         );
         return true;
     }

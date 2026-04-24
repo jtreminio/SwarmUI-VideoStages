@@ -7,6 +7,7 @@ import {
     CLIP_AUDIO_UPLOAD_FIELD,
     CLIP_DURATION_MIN,
     clamp,
+    IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     normalizeUploadFileName,
     REF_FRAME_MIN,
     refUploadKey,
@@ -29,6 +30,7 @@ import {
 import type { RefUploadCacheApi } from "./refUploadCache";
 import { snapDurationToFps } from "./renderUtils";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import { isImageToVideoWorkflow } from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
 
 export type DomEventsDeps = {
@@ -176,7 +178,13 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
     const refAction = target.dataset.refAction;
 
     if (clipAction === "add-clip") {
-        clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
+        clips.push(
+            buildDefaultClip(
+                getRootDefaults,
+                getDefaultStageModel,
+                isImageToVideoWorkflow(),
+            ),
+        );
         deps.saveClips(clips);
         deps.scheduleClipsRefresh();
         return;
@@ -220,7 +228,11 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
     if (clipAction === "add-ref") {
         clip.refs.push(buildDefaultRef());
         for (const stage of clip.stages) {
-            stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+            stage.refStrengths.push(
+                isImageToVideoWorkflow()
+                    ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH
+                    : STAGE_REF_STRENGTH_DEFAULT,
+            );
         }
         deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
         deps.saveClips(clips);

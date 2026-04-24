@@ -5,7 +5,7 @@ import {
     normalizeRootFps,
 } from "./normalization";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
-import { getClipsInput } from "./swarmInputs";
+import { getClipsInput, isImageToVideoWorkflow } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 
 type ParsedConfig = {
@@ -207,6 +207,12 @@ export const ensureClipsSeeded = (
         return;
     }
 
-    state.clips = [buildDefaultClip(getRootDefaults, getDefaultStageModel)];
+    state.clips = [
+        buildDefaultClip(
+            getRootDefaults,
+            getDefaultStageModel,
+            isImageToVideoWorkflow(),
+        ),
+    ];
     saveState(state, callbacks, options);
 };

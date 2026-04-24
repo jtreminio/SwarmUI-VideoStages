@@ -16,6 +16,11 @@ export const getDefaultStageModel = (modelValues: string[]): string => {
             return modelName;
         }
     }
+    const videoModel =
+        `${utils.getSelectElement("input_videomodel")?.value ?? ""}`.trim();
+    if (videoModel) {
+        return videoModel;
+    }
     return modelValues[0] ?? "";
 };
 

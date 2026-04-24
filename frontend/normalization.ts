@@ -8,6 +8,7 @@ import {
     CLIP_DURATION_MIN,
     clamp,
     DEFAULT_CLIP_DURATION_SECONDS,
+    IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     normalizeUploadFileName,
     REF_FRAME_MIN,
     ROOT_DIMENSION_MIN,
@@ -19,7 +20,7 @@ import {
 import { framesForClip, snapDurationToFps } from "./renderUtils";
 import {
     type Clip,
-    REF_SOURCE_BASE,
+    REF_SOURCE_REFINER,
     type RefImage,
     type RootDefaults,
     type Stage,
@@ -85,10 +86,13 @@ export const normalizeStageRefStrengthValue = (value: unknown): number =>
         ) * 10,
     ) / 10;
 
-export const buildDefaultStageRefStrengths = (refCount: number): number[] => {
+export const buildDefaultStageRefStrengths = (
+    refCount: number,
+    defaultStrength = STAGE_REF_STRENGTH_DEFAULT,
+): number[] => {
     const strengths: number[] = [];
     for (let i = 0; i < refCount; i++) {
-        strengths.push(STAGE_REF_STRENGTH_DEFAULT);
+        strengths.push(defaultStrength);
     }
     return strengths;
 };
@@ -163,9 +167,11 @@ export const buildDefaultStage = (
     };
 };
 
-export const buildDefaultRef = (): RefImage => ({
+export const buildDefaultRef = (
+    source: string = REF_SOURCE_REFINER,
+): RefImage => ({
     expanded: true,
-    source: REF_SOURCE_BASE,
+    source,
     uploadFileName: null,
     uploadedImage: null,
     frame: REF_FRAME_MIN,
@@ -175,8 +181,10 @@ export const buildDefaultRef = (): RefImage => ({
 export const buildDefaultClip = (
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
+    includeDefaultRef = false,
 ): Clip => {
     const defaults = getRootDefaults();
+    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
     return {
         expanded: true,
         skipped: false,
@@ -189,9 +197,22 @@ export const buildDefaultClip = (
         clipLengthFromAudio: false,
         reuseAudio: false,
         uploadedAudio: null,
-        refs: [],
+        refs,
         stages: [
-            buildDefaultStage(getRootDefaults, getDefaultStageModel, null, 0),
+            {
+                ...buildDefaultStage(
+                    getRootDefaults,
+                    getDefaultStageModel,
+                    null,
+                    refs.length,
+                ),
+                refStrengths: buildDefaultStageRefStrengths(
+                    refs.length,
+                    includeDefaultRef
+                        ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH
+                        : STAGE_REF_STRENGTH_DEFAULT,
+                ),
+            },
         ],
     };
 };

@@ -65,6 +65,72 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Two_defaulted_ltx_stages_use_root_image_refs_and_save_second_stage_audio()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject stage0 = MakeStage(models.VideoModel.Name, "Generated", steps: 8);
+        JObject stage1 = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8);
+        stage0.Remove("ImageReference");
+        stage1.Remove("ImageReference");
+        string stagesJson = new JArray(
+            MakeClipWithRefs(width: 1024, height: 1024, refs: [], stage0, stage1)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+
+        StageRefStore store = new(generator);
+        Assert.NotNull(store.Refiner);
+
+        List<WorkflowNode> imgToVideoNodes = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(2, imgToVideoNodes.Count);
+        WorkflowNode preprocessNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        foreach (WorkflowNode imgToVideo in imgToVideoNodes)
+        {
+            AssertGuideReferenceResolvesToPreprocessInput(
+                workflow,
+                WorkflowAssertions.RequireConnectionInput(imgToVideo.Node, "image"),
+                store.Refiner);
+            Assert.True(JToken.DeepEquals(
+                WorkflowAssertions.RequireConnectionInput(imgToVideo.Node, "image"),
+                new JArray(preprocessNode.Id, 0)));
+        }
+
+        WorkflowNode guideScale = Assert.Single(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => node.Node["inputs"]?.Value<int>("width") == 1024
+                && node.Node["inputs"]?.Value<int>("height") == 1024);
+        Assert.Equal("center", $"{guideScale.Node["inputs"]?["crop"]}");
+
+        List<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(2, samplers.Count);
+        WorkflowNode saveNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS"));
+        Assert.True(OutputTracesBackToSource(
+            workflow,
+            WorkflowAssertions.RequireConnectionInput(saveNode.Node, "images"),
+            new JArray(samplers[1].Id, 0)));
+
+        JArray saveAudio = WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio");
+        WorkflowNode finalAudioDecode = WorkflowAssertions.RequireNodeById(workflow, $"{saveAudio[0]}");
+        Assert.Equal("LTXVAudioVAEDecode", $"{finalAudioDecode.Node["class_type"]}");
+        JArray finalAudioSamples = WorkflowAssertions.RequireConnectionInput(finalAudioDecode.Node, "samples");
+        WorkflowNode finalSeparate = WorkflowAssertions.RequireNodeById(workflow, $"{finalAudioSamples[0]}");
+        Assert.Equal("LTXVSeparateAVLatent", $"{finalSeparate.Node["class_type"]}");
+        JArray finalSeparateAvLatent = WorkflowAssertions.RequireConnectionInput(finalSeparate.Node, "av_latent");
+        Assert.True(
+            OutputTracesBackToSource(workflow, finalSeparateAvLatent, new JArray(samplers[1].Id, 0)),
+            $"Expected save audio to decode stage 1 latent [{samplers[1].Id}, 0], but audio decode samples [{finalAudioSamples[0]}, {finalAudioSamples[1]}] came from separate {finalSeparate.Id} with av_latent [{finalSeparateAvLatent[0]}, {finalSeparateAvLatent[1]}].");
+    }
+
+    [Fact]
     public void Root_stage_resolution_inserts_center_crop_upscale_before_first_native_video_stage_batch_extract()
     {
         using SwarmUiTestContext _ = new();

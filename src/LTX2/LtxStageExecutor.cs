@@ -657,7 +657,13 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
 
         int? width = inputs.Value<int?>("width");
         int? height = inputs.Value<int?>("height");
-        return width == targetW && height == targetH;
+        if (width != targetW || height != targetH)
+        {
+            return false;
+        }
+
+        inputs["crop"] = "center";
+        return true;
     }
 
     private bool TryFindReusablePreprocessOutput(JArray guideImagePath, out JArray preprocessOutputPath)
@@ -848,10 +854,12 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
             {
                 ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, genInfo.Frames, genInfo.VideoFPS);
             }
+            AttachDecodedLtxAudioFromCurrentVideo();
         }
         else
         {
             g.CurrentMedia = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, genInfo.Vae);
+            AttachDecodedLtxAudioFromCurrentVideo();
             ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, genInfo.Frames, genInfo.VideoFPS);
         }
 
@@ -877,6 +885,67 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         }
 
         g.CurrentVae = genInfo.Vae;
+    }
+
+    private void AttachDecodedLtxAudioFromCurrentVideo()
+    {
+        if (g.CurrentMedia?.Path is not JArray currentPath
+            || currentPath.Count != 2
+            || g.Workflow[$"{currentPath[0]}"] is not JObject decodeNode
+            || decodeNode["inputs"] is not JObject decodeInputs)
+        {
+            return;
+        }
+
+        string decodeType = $"{decodeNode["class_type"]}";
+        if (decodeType != NodeTypes.VAEDecode && decodeType != NodeTypes.VAEDecodeTiled)
+        {
+            return;
+        }
+
+        JArray videoSamples = decodeInputs["samples"] as JArray
+            ?? decodeInputs["latent"] as JArray
+            ?? decodeInputs["latents"] as JArray;
+        if (videoSamples is null
+            || videoSamples.Count != 2
+            || g.Workflow[$"{videoSamples[0]}"] is not JObject separateNode
+            || $"{separateNode["class_type"]}" != LtxNodeTypes.LTXVSeparateAVLatent
+            || !TryResolveAudioVaePath(out JArray audioVaePath))
+        {
+            return;
+        }
+
+        string audioDecode = g.CreateNode(LtxNodeTypes.LTXVAudioVAEDecode, new JObject()
+        {
+            ["samples"] = new JArray(videoSamples[0], 1),
+            ["audio_vae"] = new JArray(audioVaePath[0], audioVaePath[1])
+        });
+        g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae?.Compat);
+    }
+
+    private bool TryResolveAudioVaePath(out JArray audioVaePath)
+    {
+        audioVaePath = null;
+        if (g.CurrentAudioVae?.Path is JArray currentAudioVaePath && currentAudioVaePath.Count == 2)
+        {
+            audioVaePath = new JArray(currentAudioVaePath[0], currentAudioVaePath[1]);
+            return true;
+        }
+
+        foreach (JProperty property in g.Workflow.Properties())
+        {
+            if (property.Value is not JObject node
+                || $"{node["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode
+                || node["inputs"]?["audio_vae"] is not JArray foundAudioVaePath
+                || foundAudioVaePath.Count != 2)
+            {
+                continue;
+            }
+
+            audioVaePath = new JArray(foundAudioVaePath[0], foundAudioVaePath[1]);
+            return true;
+        }
+        return false;
     }
 
     private void ApplyCurrentMediaOutputMetadata(int width, int height, int? frames, int? fps)

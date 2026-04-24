@@ -154,6 +154,7 @@
   var STAGE_REF_STRENGTH_MAX = 1;
   var STAGE_REF_STRENGTH_STEP = 0.1;
   var STAGE_REF_STRENGTH_DEFAULT = 0.8;
+  var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
   var STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
   var stageRefStrengthField = (refIdx) => `${STAGE_REF_STRENGTH_FIELD_PREFIX}${refIdx}`;
   var parseStageRefStrengthIndex = (field) => {
@@ -308,10 +309,10 @@
       STAGE_REF_STRENGTH_MAX
     ) * 10
   ) / 10;
-  var buildDefaultStageRefStrengths = (refCount) => {
+  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => {
     const strengths = [];
     for (let i = 0; i < refCount; i++) {
-      strengths.push(STAGE_REF_STRENGTH_DEFAULT);
+      strengths.push(defaultStrength);
     }
     return strengths;
   };
@@ -357,16 +358,17 @@
       scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
     };
   };
-  var buildDefaultRef = () => ({
+  var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
     expanded: true,
-    source: REF_SOURCE_BASE,
+    source,
     uploadFileName: null,
     uploadedImage: null,
     frame: REF_FRAME_MIN,
     fromEnd: false
   });
-  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2) => {
+  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false) => {
     const defaults = getRootDefaults2();
+    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
     return {
       expanded: true,
       skipped: false,
@@ -379,9 +381,20 @@
       clipLengthFromAudio: false,
       reuseAudio: false,
       uploadedAudio: null,
-      refs: [],
+      refs,
       stages: [
-        buildDefaultStage(getRootDefaults2, getDefaultStageModel2, null, 0)
+        {
+          ...buildDefaultStage(
+            getRootDefaults2,
+            getDefaultStageModel2,
+            null,
+            refs.length
+          ),
+          refStrengths: buildDefaultStageRefStrengths(
+            refs.length,
+            includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
+          )
+        }
       ]
     };
   };
@@ -903,6 +916,13 @@
     }
     return false;
   };
+  var isImageToVideoWorkflow = () => {
+    if (isRootTextToVideoModel()) {
+      return false;
+    }
+    const videoModel = utils.getSelectElement("input_videomodel");
+    return !!`${videoModel?.value ?? ""}`.trim();
+  };
   var getDropdownOptions = (paramId, fallbackSelectId) => {
     if (typeof getParamById === "function") {
       const param = getParamById(paramId);
@@ -929,6 +949,10 @@
       if (modelName) {
         return modelName;
       }
+    }
+    const videoModel = `${utils.getSelectElement("input_videomodel")?.value ?? ""}`.trim();
+    if (videoModel) {
+      return videoModel;
     }
     return modelValues[0] ?? "";
   };
@@ -1100,7 +1124,13 @@
     const stageAction = target.dataset.stageAction;
     const refAction = target.dataset.refAction;
     if (clipAction === "add-clip") {
-      clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
+      clips.push(
+        buildDefaultClip(
+          getRootDefaults,
+          getDefaultStageModel,
+          isImageToVideoWorkflow()
+        )
+      );
       deps.saveClips(clips);
       deps.scheduleClipsRefresh();
       return;
@@ -1141,7 +1171,9 @@
     if (clipAction === "add-ref") {
       clip.refs.push(buildDefaultRef());
       for (const stage of clip.stages) {
-        stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+        stage.refStrengths.push(
+          isImageToVideoWorkflow() ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
+        );
       }
       deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
       deps.saveClips(clips);
@@ -1780,7 +1812,13 @@
     if (state.clips.length > 0) {
       return;
     }
-    state.clips = [buildDefaultClip(getRootDefaults, getDefaultStageModel)];
+    state.clips = [
+      buildDefaultClip(
+        getRootDefaults,
+        getDefaultStageModel,
+        isImageToVideoWorkflow()
+      )
+    ];
     saveState(state, callbacks, options);
   };
 
