@@ -12,6 +12,7 @@ export const AUDIO_SOURCE_SWARM = "Swarm Audio";
 const TEXT2AUDIO_TOGGLE_ID = "input_group_content_texttoaudio_toggle";
 const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
 const SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
+const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
 const getSourceSelects = (): HTMLSelectElement[] =>
     Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
@@ -47,6 +48,14 @@ const getAceStepFunRefs = (): string[] => {
     return refs;
 };
 
+const getAceStepFunRefLabel = (ref: string): string => {
+    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
+    if (audioRef) {
+        return `AceStepFun Audio ${audioRef[1]}`;
+    }
+    return ref;
+};
+
 export const buildAudioSourceOptions = (): AudioSourceOption[] => {
     const options: AudioSourceOption[] = [
         { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
@@ -59,7 +68,7 @@ export const buildAudioSourceOptions = (): AudioSourceOption[] => {
         });
     }
     for (const ref of getAceStepFunRefs()) {
-        options.push({ value: ref, label: ref });
+        options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
     }
     return options;
 };
@@ -84,12 +93,17 @@ export const audioSource = () => {
         const options = buildAudioSourceOptions();
         for (const select of selects) {
             const desired = resolveAudioSourceValue(select.value, options);
-            const newValuesJson = JSON.stringify(options.map((o) => o.value));
-            const currentValuesJson = JSON.stringify(
-                Array.from(select.options).map((o) => o.value),
+            const newOptionsJson = JSON.stringify(
+                options.map((o) => [o.value, o.label]),
+            );
+            const currentOptionsJson = JSON.stringify(
+                Array.from(select.options).map((o) => [
+                    o.value,
+                    o.textContent ?? "",
+                ]),
             );
             if (
-                newValuesJson === currentValuesJson &&
+                newOptionsJson === currentOptionsJson &&
                 select.value === desired
             ) {
                 continue;

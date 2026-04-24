@@ -93,6 +93,18 @@ describe("audioSource", () => {
             expect(values).toEqual(["Native", "Upload", "track-a", "track-b"]);
         });
 
+        it("labels AceStepFun audio refs with a friendly display name", () => {
+            setupDom();
+            stubAceStepFunRegistry(["audio0"]);
+            controller = audioSource();
+
+            const options = controller.buildOptions();
+            expect(options).toContainEqual({
+                value: "audio0",
+                label: "AceStepFun Audio 0",
+            });
+        });
+
         it("ignores AceStepFun refs when the registry is disabled", () => {
             setupDom();
             stubAceStepFunRegistry(["track-a"], false);
@@ -227,6 +239,23 @@ describe("audioSource", () => {
             for (let i = 0; i < originalOptions.length; i += 1) {
                 expect(afterOptions[i]).toBe(originalOptions[i]);
             }
+        });
+
+        it("rebuilds options when labels change but values are unchanged", () => {
+            const { select } = setupDom({
+                initialValue: "audio0",
+                initialOptions: ["Native", "Upload", "audio0"],
+            });
+            stubAceStepFunRegistry(["audio0"]);
+            controller = audioSource();
+
+            controller.refreshOptions();
+
+            const aceStepFunOption = Array.from(select?.options ?? []).find(
+                (o) => o.value === "audio0",
+            );
+            expect(aceStepFunOption?.textContent).toBe("AceStepFun Audio 0");
+            expect(select?.value).toBe("audio0");
         });
 
         it("is a no-op when the source <select> is missing", () => {

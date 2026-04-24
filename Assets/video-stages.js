@@ -23,6 +23,7 @@
   var TEXT2AUDIO_TOGGLE_ID = "input_group_content_texttoaudio_toggle";
   var ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
   var SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
+  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
   var getSourceSelects = () => Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
     (elem) => elem instanceof HTMLSelectElement
   );
@@ -48,6 +49,13 @@
     }
     return refs;
   };
+  var getAceStepFunRefLabel = (ref) => {
+    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
+    if (audioRef) {
+      return `AceStepFun Audio ${audioRef[1]}`;
+    }
+    return ref;
+  };
   var buildAudioSourceOptions = () => {
     const options = [
       { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
@@ -60,7 +68,7 @@
       });
     }
     for (const ref of getAceStepFunRefs()) {
-      options.push({ value: ref, label: ref });
+      options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
     }
     return options;
   };
@@ -80,11 +88,16 @@
       const options = buildAudioSourceOptions();
       for (const select of selects) {
         const desired = resolveAudioSourceValue(select.value, options);
-        const newValuesJson = JSON.stringify(options.map((o) => o.value));
-        const currentValuesJson = JSON.stringify(
-          Array.from(select.options).map((o) => o.value)
+        const newOptionsJson = JSON.stringify(
+          options.map((o) => [o.value, o.label])
         );
-        if (newValuesJson === currentValuesJson && select.value === desired) {
+        const currentOptionsJson = JSON.stringify(
+          Array.from(select.options).map((o) => [
+            o.value,
+            o.textContent ?? ""
+          ])
+        );
+        if (newOptionsJson === currentOptionsJson && select.value === desired) {
           continue;
         }
         select.innerHTML = "";
