@@ -1,0 +1,401 @@
+import {
+    AUDIO_SOURCE_NATIVE,
+    buildAudioSourceOptions,
+    resolveAudioSourceValue,
+} from "../AudioSourceController";
+import { framesForClip, snapDurationToFps } from "../RenderUtils";
+import {
+    type Clip,
+    REF_SOURCE_BASE,
+    type RefImage,
+    type RootDefaults,
+    type Stage,
+    type UploadedAudio,
+} from "../Types";
+import { VideoStageUtils } from "../Utils";
+import {
+    CLIP_DURATION_MIN,
+    clamp,
+    normalizeUploadFileName,
+    REF_FRAME_MIN,
+    ROOT_DIMENSION_MIN,
+    ROOT_FPS_MIN,
+    STAGE_REF_STRENGTH_DEFAULT,
+    STAGE_REF_STRENGTH_MAX,
+    STAGE_REF_STRENGTH_MIN,
+} from "./constants";
+
+export const normalizeUploadedAudio = (
+    value: unknown,
+): UploadedAudio | null => {
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+    const raw = value as { data?: unknown; fileName?: unknown };
+    const data = `${raw.data ?? ""}`.trim();
+    if (!data) {
+        return null;
+    }
+    return {
+        data,
+        fileName: normalizeUploadFileName(
+            raw.fileName == null ? null : `${raw.fileName}`,
+        ),
+    };
+};
+
+export const normalizeRootDimension = (
+    value: unknown,
+    fallback: number,
+): number =>
+    Math.max(
+        ROOT_DIMENSION_MIN,
+        Math.round(VideoStageUtils.toNumber(`${value ?? fallback}`, fallback)),
+    );
+
+export const normalizeRootFps = (value: unknown, fallback: number): number =>
+    Math.max(
+        ROOT_FPS_MIN,
+        Math.round(VideoStageUtils.toNumber(`${value ?? fallback}`, fallback)),
+    );
+
+export const normalizeStageRefStrengthValue = (value: unknown): number =>
+    Math.round(
+        clamp(
+            VideoStageUtils.toNumber(
+                `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
+                STAGE_REF_STRENGTH_DEFAULT,
+            ),
+            STAGE_REF_STRENGTH_MIN,
+            STAGE_REF_STRENGTH_MAX,
+        ) * 10,
+    ) / 10;
+
+export const buildDefaultStageRefStrengths = (refCount: number): number[] => {
+    const strengths: number[] = [];
+    for (let i = 0; i < refCount; i++) {
+        strengths.push(STAGE_REF_STRENGTH_DEFAULT);
+    }
+    return strengths;
+};
+
+export const normalizeStageRefStrengths = (
+    rawStrengths: unknown,
+    refCount: number,
+): number[] => {
+    const strengths: number[] = [];
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    for (let i = 0; i < refCount; i++) {
+        strengths.push(normalizeStageRefStrengthValue(rawValues[i]));
+    }
+    return strengths;
+};
+
+export const readRawStageProp = (
+    raw: Record<string, unknown>,
+    camel: string,
+    pascal: string,
+): unknown => {
+    if (Object.hasOwn(raw, camel)) {
+        return raw[camel];
+    }
+    if (Object.hasOwn(raw, pascal)) {
+        return raw[pascal];
+    }
+    return undefined;
+};
+
+export const readRawStageString = (
+    raw: Record<string, unknown>,
+    camel: string,
+    pascal: string,
+): string | undefined => {
+    const v = readRawStageProp(raw, camel, pascal);
+    if (v == null) {
+        return undefined;
+    }
+    const s = `${v}`.trim();
+    return s.length > 0 ? s : undefined;
+};
+
+export const buildDefaultStage = (
+    getRootDefaults: () => RootDefaults,
+    getDefaultStageModel: (modelValues: string[]) => string,
+    previousStage: Stage | null,
+    refCount: number,
+): Stage => {
+    const defaults = getRootDefaults();
+    return {
+        expanded: true,
+        skipped: false,
+        control: previousStage ? previousStage.control : defaults.control,
+        refStrengths: buildDefaultStageRefStrengths(refCount),
+        upscale: previousStage ? previousStage.upscale : defaults.upscale,
+        upscaleMethod: previousStage
+            ? previousStage.upscaleMethod
+            : defaults.upscaleMethodValues.includes("pixel-lanczos")
+              ? "pixel-lanczos"
+              : (defaults.upscaleMethodValues[0] ?? "pixel-lanczos"),
+        model: previousStage
+            ? previousStage.model
+            : getDefaultStageModel(defaults.modelValues),
+        vae: previousStage ? previousStage.vae : (defaults.vaeValues[0] ?? ""),
+        steps: previousStage ? previousStage.steps : defaults.steps,
+        cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
+        sampler: previousStage
+            ? previousStage.sampler
+            : (defaults.samplerValues[0] ?? "euler"),
+        scheduler: previousStage
+            ? previousStage.scheduler
+            : (defaults.schedulerValues[0] ?? "normal"),
+    };
+};
+
+export const buildDefaultRef = (): RefImage => ({
+    expanded: true,
+    source: REF_SOURCE_BASE,
+    uploadFileName: null,
+    uploadedImage: null,
+    frame: REF_FRAME_MIN,
+    fromEnd: false,
+});
+
+export const buildDefaultClip = (
+    index: number,
+    getRootDefaults: () => RootDefaults,
+    getDefaultStageModel: (modelValues: string[]) => string,
+): Clip => {
+    const defaults = getRootDefaults();
+    return {
+        name: `Clip ${index}`,
+        expanded: true,
+        skipped: false,
+        duration: snapDurationToFps(
+            Math.max(
+                CLIP_DURATION_MIN,
+                defaults.frames / Math.max(1, defaults.fps),
+            ),
+            defaults.fps,
+        ),
+        audioSource: AUDIO_SOURCE_NATIVE,
+        uploadedAudio: null,
+        refs: [],
+        stages: [
+            buildDefaultStage(getRootDefaults, getDefaultStageModel, null, 0),
+        ],
+    };
+};
+
+export const getReferenceFrameMax = (
+    getRootDefaults: () => RootDefaults,
+    clip?: Pick<Clip, "duration">,
+): number => {
+    const defaults = getRootDefaults();
+    if (clip) {
+        return Math.max(
+            REF_FRAME_MIN,
+            framesForClip(clip.duration, defaults.fps),
+        );
+    }
+    return Math.max(REF_FRAME_MIN, defaults.frames);
+};
+
+export const normalizeStage = (
+    getRootDefaults: () => RootDefaults,
+    getDefaultStageModel: (modelValues: string[]) => string,
+    rawStage: Partial<Stage> & Record<string, unknown>,
+    previousStage: Stage | null,
+    refCount: number,
+    stageIndexInClip: number,
+): Stage => {
+    const defaults = getRootDefaults();
+    const fallback = buildDefaultStage(
+        getRootDefaults,
+        getDefaultStageModel,
+        previousStage,
+        refCount,
+    );
+    const rawRecord = rawStage as Record<string, unknown>;
+    const firstStageUpscale =
+        stageIndexInClip === 0
+            ? {
+                  upscale: defaults.upscale,
+                  upscaleMethod: defaults.upscaleMethodValues.includes(
+                      "pixel-lanczos",
+                  )
+                      ? "pixel-lanczos"
+                      : (defaults.upscaleMethodValues[0] ?? "pixel-lanczos"),
+              }
+            : {
+                  upscale: clamp(
+                      VideoStageUtils.toNumber(
+                          `${readRawStageProp(rawRecord, "upscale", "Upscale") ?? fallback.upscale}`,
+                          fallback.upscale,
+                      ),
+                      defaults.upscaleMin,
+                      defaults.upscaleMax,
+                  ),
+                  upscaleMethod:
+                      `${readRawStageString(rawRecord, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
+                      fallback.upscaleMethod,
+              };
+    const stage: Stage = {
+        expanded: rawStage.expanded === undefined ? true : !!rawStage.expanded,
+        skipped: !!rawStage.skipped,
+        control: clamp(
+            VideoStageUtils.toNumber(
+                `${rawStage.control ?? fallback.control}`,
+                fallback.control,
+            ),
+            defaults.controlMin,
+            defaults.controlMax,
+        ),
+        refStrengths: normalizeStageRefStrengths(
+            rawStage.refStrengths,
+            refCount,
+        ),
+        upscale: firstStageUpscale.upscale,
+        upscaleMethod: firstStageUpscale.upscaleMethod,
+        model: `${rawStage.model ?? fallback.model}` || fallback.model,
+        vae: `${rawStage.vae ?? fallback.vae ?? ""}`,
+        steps: Math.max(
+            1,
+            Math.round(
+                clamp(
+                    VideoStageUtils.toNumber(
+                        `${rawStage.steps ?? fallback.steps}`,
+                        fallback.steps,
+                    ),
+                    defaults.stepsMin,
+                    defaults.stepsMax,
+                ),
+            ),
+        ),
+        cfgScale: clamp(
+            VideoStageUtils.toNumber(
+                `${rawStage.cfgScale ?? fallback.cfgScale}`,
+                fallback.cfgScale,
+            ),
+            defaults.cfgScaleMin,
+            defaults.cfgScaleMax,
+        ),
+        sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
+        scheduler:
+            `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
+    };
+
+    if (
+        !defaults.upscaleMethodValues.includes(stage.upscaleMethod) &&
+        defaults.upscaleMethodValues.length > 0
+    ) {
+        stage.upscaleMethod =
+            stageIndexInClip === 0
+                ? (defaults.upscaleMethodValues[0] ?? "pixel-lanczos")
+                : stage.upscaleMethod || fallback.upscaleMethod;
+    }
+    return stage;
+};
+
+export const normalizeRef = (
+    rawRef: Partial<RefImage> & Record<string, unknown>,
+    frameMax: number,
+): RefImage => {
+    const fallback = buildDefaultRef();
+    const source = `${rawRef.source ?? fallback.source}` || fallback.source;
+    const ref: RefImage = {
+        expanded: rawRef.expanded === undefined ? true : !!rawRef.expanded,
+        source,
+        uploadFileName:
+            rawRef.uploadFileName == null || rawRef.uploadFileName === ""
+                ? null
+                : `${rawRef.uploadFileName}`,
+        uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
+        frame: Math.max(
+            REF_FRAME_MIN,
+            Math.round(
+                clamp(
+                    VideoStageUtils.toNumber(
+                        `${rawRef.frame ?? fallback.frame}`,
+                        fallback.frame,
+                    ),
+                    REF_FRAME_MIN,
+                    frameMax,
+                ),
+            ),
+        ),
+        fromEnd: !!rawRef.fromEnd,
+    };
+    return ref;
+};
+
+export const normalizeClip = (
+    rawClip: Partial<Clip> & Record<string, unknown>,
+    index: number,
+    getRootDefaults: () => RootDefaults,
+    getDefaultStageModel: (modelValues: string[]) => string,
+): Clip => {
+    const defaults = getRootDefaults();
+    const audioSourceOptions = buildAudioSourceOptions();
+    const fps = Math.max(1, defaults.fps);
+    const rawDuration = VideoStageUtils.toNumber(
+        `${rawClip.duration}`,
+        defaults.frames / fps,
+    );
+    const duration = snapDurationToFps(
+        Math.max(CLIP_DURATION_MIN, rawDuration),
+        fps,
+    );
+    const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
+    const refFrameMax = getReferenceFrameMax(getRootDefaults, { duration });
+    const refs = refsRaw.map((rawRef) =>
+        normalizeRef(
+            (rawRef ?? {}) as Partial<RefImage> & Record<string, unknown>,
+            refFrameMax,
+        ),
+    );
+
+    const stages: Stage[] = [];
+    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+
+    for (let i = 0; i < stagesRaw.length; i++) {
+        const previousStage = i > 0 ? stages[i - 1] : null;
+        stages.push(
+            normalizeStage(
+                getRootDefaults,
+                getDefaultStageModel,
+                (stagesRaw[i] ?? {}) as Partial<Stage> &
+                    Record<string, unknown>,
+                previousStage,
+                refs.length,
+                i,
+            ),
+        );
+    }
+    if (stages.length === 0) {
+        stages.push(
+            buildDefaultStage(
+                getRootDefaults,
+                getDefaultStageModel,
+                null,
+                refs.length,
+            ),
+        );
+    }
+
+    return {
+        name:
+            typeof rawClip.name === "string" && rawClip.name.length > 0
+                ? rawClip.name
+                : `Clip ${index}`,
+        expanded: rawClip.expanded === undefined ? true : !!rawClip.expanded,
+        skipped: !!rawClip.skipped,
+        duration,
+        audioSource: resolveAudioSourceValue(
+            `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
+            audioSourceOptions,
+        ),
+        uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
+        refs,
+        stages,
+    };
+};
