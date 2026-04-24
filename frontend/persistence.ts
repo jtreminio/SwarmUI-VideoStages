@@ -89,6 +89,10 @@ const getSerializedStateSource = (): string => {
     return inputValue || lastSerializedState;
 };
 
+export const __resetPersistenceForTests = (): void => {
+    lastSerializedState = "";
+};
+
 const parseSerializedState = (
     serialized: string,
     fallbackDefaults: Pick<VideoStagesConfig, "width" | "height" | "fps">,

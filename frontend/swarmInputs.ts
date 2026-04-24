@@ -5,8 +5,24 @@ import {
 } from "./constants";
 import { utils } from "./utils";
 
-export const getClipsInput = (): HTMLInputElement | null =>
-    utils.getInputElement("input_videostages");
+/**
+ * SwarmUI may render long-text params as either an `<input>` or a `<textarea>`
+ * (decided by string length / param hints). The clips JSON routinely overflows
+ * the input threshold, so we must accept both — otherwise `getInputElement`
+ * returns null, `saveState` silently skips writing, and the polling loop
+ * detects an apparent value loss every 150ms and tears down the editor
+ * mid-slider-drag.
+ */
+export const getClipsInput = ():
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | null => {
+    const el = document.getElementById("input_videostages");
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        return el;
+    }
+    return null;
+};
 
 export const getRootDimensionParamInput = (
     field: "width" | "height",

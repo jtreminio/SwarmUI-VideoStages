@@ -762,7 +762,13 @@
   };
 
   // frontend/swarmInputs.ts
-  var getClipsInput = () => utils.getInputElement("input_videostages");
+  var getClipsInput = () => {
+    const el = document.getElementById("input_videostages");
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      return el;
+    }
+    return null;
+  };
   var getRootDimensionParamInput = (field) => utils.getInputElement(
     field === "width" ? "input_vswidth" : "input_vsheight"
   );
@@ -1295,7 +1301,6 @@
       const group = clipHeader.closest(".vs-clip-card");
       const clipIdx = parseInt(group?.dataset.clipIdx ?? "-1", 10);
       toggleClipExpanded(clipIdx, deps);
-      return;
     }
   };
   var attachEventListeners = (deps) => {

@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { stubBase2EditStageRegistry } from "./__test_helpers__/registries";
+import { __resetPersistenceForTests } from "./persistence";
 import { videoStageEditor } from "./videoStageEditor";
 
 const flushReRender = async (): Promise<void> => {
@@ -191,6 +192,7 @@ const parseStored = (): ParsedClip[] => parseStoredConfig().clips;
 describe("videoStageEditor", () => {
     beforeEach(() => {
         jest.useFakeTimers();
+        __resetPersistenceForTests();
         setupParameterPanel();
     });
 
