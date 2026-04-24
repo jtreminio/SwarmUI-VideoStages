@@ -11,8 +11,7 @@
         "coverage:functions": "npm run test:coverage && node ./scripts/report-uncovered-functions.mjs",
         "format": "biome format --write .",
         "format:check": "biome format .",
-        "lint": "biome lint .",
-        "lint:fix": "biome check --write .",
+        "lint": "biome check --write .",
         "test": "jest --config ./jest.config.cjs --passWithNoTests",
         "test:coverage": "jest --config ./jest.config.cjs --coverage --passWithNoTests",
         "typecheck": "tsc --noEmit"
