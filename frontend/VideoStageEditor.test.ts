@@ -14,6 +14,14 @@ const flushReRender = async (): Promise<void> => {
     await Promise.resolve();
 };
 
+function must<T>(value: T | null | undefined): T {
+    if (value == null) {
+        expect(value).not.toBeNull();
+        throw new Error("unreachable");
+    }
+    return value;
+}
+
 const OPEN_GROUP_GLYPH = "\u2B9F";
 
 interface ParsedRef {
@@ -193,7 +201,7 @@ describe("VideoStageEditor", () => {
 
     describe("init / seeding", () => {
         it("seeds a single default clip when no JSON is present", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const clips = parseStored();
@@ -216,7 +224,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "832";
             document.body.appendChild(coreHeightInput);
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -247,7 +255,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "832";
             document.body.appendChild(coreHeightInput);
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -261,7 +269,7 @@ describe("VideoStageEditor", () => {
             ) as HTMLInputElement;
             registeredFpsInput.value = "32";
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -269,7 +277,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("seeds the first stage with the frontend default values", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const defaultStage = parseStored()[0].stages?.[0];
@@ -280,7 +288,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders an editor div with a clip stack and add-clip button", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const editorDiv = document.getElementById(
@@ -296,7 +304,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("does not render its own root width/height fields (uses registered SwarmUI sliders)", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const widthNumber = document.querySelector(
@@ -322,7 +330,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "720";
             document.body.appendChild(coreHeightInput);
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const registeredWidth = document.getElementById(
@@ -357,7 +365,7 @@ describe("VideoStageEditor", () => {
             coreHeightInput.value = "720";
             document.body.appendChild(coreHeightInput);
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             expect(registeredWidth.value).toBe("1024");
@@ -381,7 +389,7 @@ describe("VideoStageEditor", () => {
                 ],
             });
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const config = parseStoredConfig();
@@ -399,7 +407,7 @@ describe("VideoStageEditor", () => {
 
     describe("clip actions", () => {
         it("adds a new clip when the add-clip button is clicked", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const addBtn = document.querySelector(
@@ -414,7 +422,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("toggles collapse state for a clip when the native shrinkable header is clicked", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const header = document.querySelector(
@@ -429,7 +437,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("does not collapse the clip when the skip action button inside the header is clicked", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -454,7 +462,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("toggles skip state for a clip when more than one exists", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -474,26 +482,23 @@ describe("VideoStageEditor", () => {
         });
 
         it("updates clip duration when the slider thumb moves", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const durationSlider = document.querySelector(
                 '[data-clip-field="duration"][type="range"]',
             ) as HTMLInputElement | null;
             expect(durationSlider).not.toBeNull();
-            if (!durationSlider) {
-                throw new Error("Expected duration slider to exist.");
-            }
-
-            durationSlider.value = "6";
-            durationSlider.dispatchEvent(new Event("input", { bubbles: true }));
+            const slider = must(durationSlider);
+            slider.value = "6";
+            slider.dispatchEvent(new Event("input", { bubbles: true }));
 
             const clips = parseStored();
             expect(clips[0].duration).toBe(6);
         });
 
         it("reflects registered RootWidth/RootHeight slider changes in saved JSON", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const registeredWidth = document.getElementById(
@@ -525,25 +530,22 @@ describe("VideoStageEditor", () => {
         });
 
         it("stores clip audio source at the clip level", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"]',
             ) as HTMLSelectElement | null;
             expect(audioSource).not.toBeNull();
-            if (!audioSource) {
-                throw new Error("Expected clip audio source select to exist.");
-            }
-
-            audioSource.value = "Upload";
-            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+            const source = must(audioSource);
+            source.value = "Upload";
+            source.dispatchEvent(new Event("change", { bubbles: true }));
 
             expect(parseStored()[0].audioSource).toBe("Upload");
         });
 
         it("renders a hidden per-clip audio upload field directly below the audio source dropdown", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
@@ -561,14 +563,12 @@ describe("VideoStageEditor", () => {
             expect(uploadInput).not.toBeNull();
             expect(uploadField?.style.display).toBe("none");
 
-            // The upload field must be the very next sibling (below) the
-            // audio-source row inside the clip body.
             const audioSourceRow = audioSource?.closest(".auto-input");
             expect(audioSourceRow?.nextElementSibling).toBe(uploadField);
         });
 
         it("reveals the per-clip audio upload field when audioSource changes to Upload", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
@@ -577,34 +577,32 @@ describe("VideoStageEditor", () => {
             const uploadField = document.querySelector(
                 ".vs-clip-audio-upload-field",
             ) as HTMLElement | null;
-            if (!audioSource || !uploadField) {
-                throw new Error("Expected per-clip audio controls to exist.");
-            }
-            expect(uploadField.style.display).toBe("none");
+            expect(audioSource).not.toBeNull();
+            expect(uploadField).not.toBeNull();
+            const upload = must(uploadField);
+            expect(upload.style.display).toBe("none");
 
-            audioSource.value = "Upload";
-            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+            const src = must(audioSource);
+            src.value = "Upload";
+            src.dispatchEvent(new Event("change", { bubbles: true }));
 
-            expect(uploadField.style.display).toBe("");
+            expect(upload.style.display).toBe("");
         });
 
         it("still reveals clip audio Upload when the editor DOM is rebuilt", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const originalEditor = document.getElementById(
                 "videostages_stage_editor",
             ) as HTMLElement | null;
             expect(originalEditor).not.toBeNull();
-            if (!originalEditor?.parentElement) {
-                throw new Error("Expected original editor to be mounted.");
-            }
+            const root = must(originalEditor);
+            expect(root.parentElement).not.toBeNull();
+            const parent = must(root.parentElement);
 
-            const rebuiltEditor = originalEditor.cloneNode(true) as HTMLElement;
-            originalEditor.parentElement.replaceChild(
-                rebuiltEditor,
-                originalEditor,
-            );
+            const rebuiltEditor = root.cloneNode(true) as HTMLElement;
+            parent.replaceChild(rebuiltEditor, root);
 
             const audioSource = rebuiltEditor.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
@@ -619,45 +617,39 @@ describe("VideoStageEditor", () => {
             expect(uploadField).not.toBeNull();
             expect(uploadInput?.type).toBe("file");
             expect(uploadField?.style.display).toBe("none");
-            if (!audioSource) {
-                throw new Error("Expected rebuilt clip audio source to exist.");
-            }
 
-            audioSource.value = "Upload";
-            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+            const clipSource = must(audioSource);
+            clipSource.value = "Upload";
+            clipSource.dispatchEvent(new Event("change", { bubbles: true }));
 
             expect(parseStored()[0].audioSource).toBe("Upload");
             expect(uploadField?.style.display).toBe("");
         });
 
         it("stores uploaded audio payload on the clip", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
             ) as HTMLSelectElement | null;
-            if (!audioSource) {
-                throw new Error("Expected clip audio source select to exist.");
-            }
-            audioSource.value = "Upload";
-            audioSource.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(audioSource).not.toBeNull();
+            const clipAudioSource = must(audioSource);
+            clipAudioSource.value = "Upload";
+            clipAudioSource.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
 
             const uploadInput = document.querySelector(
                 '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-            if (!uploadInput) {
-                throw new Error("Expected per-clip upload input to exist.");
-            }
+            expect(uploadInput).not.toBeNull();
+            const fileInput = must(uploadInput);
 
-            // SwarmUI's inline `onchange="load_media_file(...)"` runs before our
-            // delegated handler and would clear dataset.filedata when no real
-            // File object exists; nulling onchange lets the test stub the
-            // loaded audio payload synchronously.
-            uploadInput.onchange = null;
-            uploadInput.dataset.filedata = "data:audio/wav;base64,QUJD";
-            uploadInput.dataset.filename = "clip.wav";
-            uploadInput.dispatchEvent(new Event("change", { bubbles: true }));
+            fileInput.onchange = null;
+            fileInput.dataset.filedata = "data:audio/wav;base64,QUJD";
+            fileInput.dataset.filename = "clip.wav";
+            fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
             const clips = parseStored();
             expect(clips[0].uploadedAudio?.data).toBe(
@@ -665,7 +657,6 @@ describe("VideoStageEditor", () => {
             );
             expect(clips[0].uploadedAudio?.fileName).toBe("clip.wav");
 
-            // The legacy root-level uploadedAudio should not be present.
             const rawConfig = JSON.parse(getStagesInput().value) as Record<
                 string,
                 unknown
@@ -674,7 +665,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("keeps per-clip uploads independent across multiple Upload clips", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -753,7 +744,7 @@ describe("VideoStageEditor", () => {
                 ],
             });
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const clips = parseStored();
@@ -761,10 +752,8 @@ describe("VideoStageEditor", () => {
                 "data:audio/wav;base64,LEGACY",
             );
             expect(clips[0].uploadedAudio?.fileName).toBe("legacy.wav");
-            // Native clips should never inherit a legacy root upload.
             expect(clips[1].uploadedAudio).toBeFalsy();
 
-            // The migration should drop the legacy root field on the next save.
             const rawConfig = JSON.parse(getStagesInput().value) as Record<
                 string,
                 unknown
@@ -773,20 +762,17 @@ describe("VideoStageEditor", () => {
         });
 
         it("does not rerender the duration number input while typing", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"][type="number"]',
             ) as HTMLInputElement | null;
             expect(durationNumber).not.toBeNull();
-            if (!durationNumber) {
-                throw new Error("Expected duration number input to exist.");
-            }
-
-            const originalDurationNumber = durationNumber;
-            durationNumber.value = "15";
-            durationNumber.dispatchEvent(new Event("input", { bubbles: true }));
+            const durationEl = must(durationNumber);
+            const originalDurationNumber = durationEl;
+            durationEl.value = "15";
+            durationEl.dispatchEvent(new Event("input", { bubbles: true }));
             await flushReRender();
 
             expect(parseStored()[0].duration).toBe(15);
@@ -797,9 +783,7 @@ describe("VideoStageEditor", () => {
                 ),
             ).toBe(originalDurationNumber);
 
-            durationNumber.dispatchEvent(
-                new Event("change", { bubbles: true }),
-            );
+            durationEl.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
             expect(
@@ -810,7 +794,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("uses 0.5 second jumps for the duration slider but leaves manual entry unrestricted", () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const durationNumber = document.querySelector(
@@ -827,7 +811,7 @@ describe("VideoStageEditor", () => {
 
     describe("ref actions", () => {
         it("adds a new ref to a clip", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const addRefBtn = document.querySelector(
@@ -843,7 +827,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("uses the updated reverse frame count label", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -861,7 +845,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("adds a default ref strength slider for each stage when a ref is added", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -891,7 +875,7 @@ describe("VideoStageEditor", () => {
 
         it("includes Base2Edit refs in the source dropdown when registered", async () => {
             stubBase2EditStageRegistry(["edit0", "edit1"]);
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -911,7 +895,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders reference headers as Ref Image n labels", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -938,7 +922,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("reveals the upload field when the reference source changes to Upload", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -960,15 +944,14 @@ describe("VideoStageEditor", () => {
             expect(sourceSelect).not.toBeNull();
             expect(uploadField).not.toBeNull();
             expect(uploadInput).not.toBeNull();
-            expect(uploadField?.style.display).toBe("none");
-            if (!sourceSelect) {
-                throw new Error("Expected ref source select to exist.");
-            }
+            const refUploadField = must(uploadField);
+            expect(refUploadField.style.display).toBe("none");
 
-            sourceSelect.value = "Upload";
-            sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
-            expect(uploadField?.style.display).toBe("");
-            expect(uploadInput?.type).toBe("file");
+            const refSource = must(sourceSelect);
+            refSource.value = "Upload";
+            refSource.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(refUploadField.style.display).toBe("");
+            expect(must(uploadInput).type).toBe("file");
 
             const refreshedUploadField = document.querySelector(
                 ".vs-ref-upload-field",
@@ -978,7 +961,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("stores ref upload image payload when Swarm provides filedata on the file input", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -991,24 +974,21 @@ describe("VideoStageEditor", () => {
             const sourceSelect = document.querySelector(
                 '[data-ref-field="source"]',
             ) as HTMLSelectElement | null;
-            if (!sourceSelect) {
-                throw new Error("Expected ref source select to exist.");
-            }
-            sourceSelect.value = "Upload";
-            sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(sourceSelect).not.toBeNull();
+            const refSrc = must(sourceSelect);
+            refSrc.value = "Upload";
+            refSrc.dispatchEvent(new Event("change", { bubbles: true }));
 
             const uploadInput = document.querySelector(
                 '.vs-ref-upload-field .auto-file[data-ref-field="uploadFileName"]',
             ) as HTMLInputElement | null;
             expect(uploadInput).not.toBeNull();
-            if (!uploadInput) {
-                throw new Error("Expected ref upload input to exist.");
-            }
+            const refFileInput = must(uploadInput);
 
-            uploadInput.onchange = null;
-            uploadInput.dataset.filedata = "data:image/png;base64,QUJD";
-            uploadInput.dataset.filename = "ref.png";
-            uploadInput.dispatchEvent(new Event("change", { bubbles: true }));
+            refFileInput.onchange = null;
+            refFileInput.dataset.filedata = "data:image/png;base64,QUJD";
+            refFileInput.dataset.filename = "ref.png";
+            refFileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
             const clips = parseStored();
             expect(clips[0].refs?.[0].uploadFileName).toBe("ref.png");
@@ -1019,7 +999,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("still reveals Upload when the editor DOM is rebuilt", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -1033,15 +1013,12 @@ describe("VideoStageEditor", () => {
                 "videostages_stage_editor",
             ) as HTMLElement | null;
             expect(originalEditor).not.toBeNull();
-            if (!originalEditor?.parentElement) {
-                throw new Error("Expected original editor to be mounted.");
-            }
+            const refRoot = must(originalEditor);
+            expect(refRoot.parentElement).not.toBeNull();
+            const refParent = must(refRoot.parentElement);
 
-            const rebuiltEditor = originalEditor.cloneNode(true) as HTMLElement;
-            originalEditor.parentElement.replaceChild(
-                rebuiltEditor,
-                originalEditor,
-            );
+            const rebuiltEditor = refRoot.cloneNode(true) as HTMLElement;
+            refParent.replaceChild(rebuiltEditor, refRoot);
 
             const sourceSelect = rebuiltEditor.querySelector(
                 '[data-ref-field="source"]',
@@ -1051,12 +1028,10 @@ describe("VideoStageEditor", () => {
             ) as HTMLElement | null;
             expect(sourceSelect).not.toBeNull();
             expect(uploadField?.style.display).toBe("none");
-            if (!sourceSelect) {
-                throw new Error("Expected rebuilt ref source select to exist.");
-            }
 
-            sourceSelect.value = "Upload";
-            sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            const rebuiltSource = must(sourceSelect);
+            rebuiltSource.value = "Upload";
+            rebuiltSource.dispatchEvent(new Event("change", { bubbles: true }));
 
             expect(parseStored()[0].refs?.[0].source).toBe("Upload");
             expect(uploadField?.style.display).toBe("");
@@ -1090,14 +1065,14 @@ describe("VideoStageEditor", () => {
                 },
             ]);
 
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const deleteBtn = document.querySelector(
                 '[data-ref-action="delete"][data-ref-idx="0"]',
             ) as HTMLButtonElement | null;
             expect(deleteBtn).not.toBeNull();
-            deleteBtn?.click();
+            must(deleteBtn).click();
             await flushReRender();
 
             const clips = parseStored();
@@ -1111,7 +1086,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("uses the aligned clip duration frame count for the reference frame slider max", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -1134,14 +1109,9 @@ describe("VideoStageEditor", () => {
                 '[data-clip-field="duration"][type="number"]',
             ) as HTMLInputElement | null;
             expect(durationNumber).not.toBeNull();
-            if (!durationNumber) {
-                throw new Error("Expected clip duration input to exist.");
-            }
-
-            durationNumber.value = "21.5";
-            durationNumber.dispatchEvent(
-                new Event("change", { bubbles: true }),
-            );
+            const clipDuration = must(durationNumber);
+            clipDuration.value = "21.5";
+            clipDuration.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
             const refreshedFrameNumber = document.querySelector(
@@ -1157,7 +1127,7 @@ describe("VideoStageEditor", () => {
 
     describe("stage actions", () => {
         it("adds a new stage to a clip", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const addStageBtn = document.querySelector(
@@ -1171,7 +1141,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("initializes new stages with default ref strengths for existing refs", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -1208,7 +1178,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders control, steps, cfg scale, and upscale; disables stage 0 upscale only", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const controlSlider = document.querySelector(
@@ -1252,7 +1222,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("renders stage headers as Stage n labels with zero-based indexes", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const firstHead = document.querySelector(
@@ -1295,7 +1265,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("disables first-stage upscale controls; stage 1 follows upscale vs method rules", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             const s0Method = document.querySelector(
@@ -1325,20 +1295,19 @@ describe("VideoStageEditor", () => {
             const s1Range = document.querySelector(
                 '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
             ) as HTMLInputElement | null;
+            expect(s1Range).not.toBeNull();
             expect(s1Range?.disabled).toBe(false);
             expect(s1Method?.disabled).toBe(true);
 
-            if (!s1Range) {
-                throw new Error("Expected stage 1 upscale range.");
-            }
-            s1Range.value = "1.25";
-            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
+            const stage1Upscale = must(s1Range);
+            stage1Upscale.value = "1.25";
+            stage1Upscale.dispatchEvent(new Event("input", { bubbles: true }));
             expect(parseStored()[0].stages?.[1].upscale).toBe(1.25);
             expect(s1Method?.disabled).toBe(false);
         });
 
         it("keeps stage upscale method when upscale slider changes", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -1354,45 +1323,46 @@ describe("VideoStageEditor", () => {
             const s1Method = document.querySelector(
                 '[data-stage-field="upscaleMethod"][data-stage-idx="1"]',
             ) as HTMLSelectElement | null;
-            if (!s1Range || !s1Method) {
-                throw new Error("Expected stage 1 upscale controls.");
-            }
+            expect(s1Range).not.toBeNull();
+            expect(s1Method).not.toBeNull();
+            const range1 = must(s1Range);
+            const method1 = must(s1Method);
 
-            s1Range.value = "1.25";
-            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
+            range1.value = "1.25";
+            range1.dispatchEvent(new Event("input", { bubbles: true }));
             await flushReRender();
 
-            s1Method.value = "pixel-bicubic";
-            s1Method.dispatchEvent(new Event("change", { bubbles: true }));
+            method1.value = "pixel-bicubic";
+            method1.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
             expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
                 "pixel-bicubic",
             );
 
-            s1Range.value = "1.5";
-            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
-            s1Range.dispatchEvent(new Event("change", { bubbles: true }));
+            range1.value = "1.5";
+            range1.dispatchEvent(new Event("input", { bubbles: true }));
+            range1.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
             const stored = parseStored()[0].stages?.[1];
             expect(stored?.upscale).toBe(1.5);
             expect(stored?.upscaleMethod).toBe("pixel-bicubic");
 
-            s1Range.value = "1";
-            s1Range.dispatchEvent(new Event("input", { bubbles: true }));
-            s1Range.dispatchEvent(new Event("change", { bubbles: true }));
+            range1.value = "1";
+            range1.dispatchEvent(new Event("input", { bubbles: true }));
+            range1.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
-            expect(s1Method.disabled).toBe(true);
-            expect(s1Method.value).toBe("pixel-bicubic");
+            expect(method1.disabled).toBe(true);
+            expect(method1.value).toBe("pixel-bicubic");
             expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
                 "pixel-bicubic",
             );
         });
 
         it("updates stored ref strength when a stage ref slider moves", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -1406,20 +1376,15 @@ describe("VideoStageEditor", () => {
                 '[data-stage-field="refStrength_0"][type="range"]',
             ) as HTMLInputElement | null;
             expect(refStrengthSlider).not.toBeNull();
-            if (!refStrengthSlider) {
-                throw new Error("Expected stage ref strength slider to exist.");
-            }
-
-            refStrengthSlider.value = "0.5";
-            refStrengthSlider.dispatchEvent(
-                new Event("input", { bubbles: true }),
-            );
+            const refStrength = must(refStrengthSlider);
+            refStrength.value = "0.5";
+            refStrength.dispatchEvent(new Event("input", { bubbles: true }));
 
             expect(parseStored()[0].stages?.[0].refStrengths).toEqual([0.5]);
         });
 
         it("toggles skip state for a stage", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
@@ -1444,7 +1409,7 @@ describe("VideoStageEditor", () => {
         });
 
         it("removes a stage when more than one exists", async () => {
-            const editor = new VideoStageEditor();
+            const editor = VideoStageEditor();
             editor.init();
 
             (
