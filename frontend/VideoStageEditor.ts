@@ -1435,9 +1435,7 @@ export class VideoStageEditor {
                 return;
             }
 
-            // `change` fires when the user commits root video timing
-            // (typically blur/tab-away), which avoids per-keystroke rerenders
-            // while still refreshing every ref slider's max promptly.
+            // Root timing: use change (not input) to limit rerenders while syncing ref maxes.
             this.handleRootVideoTimingCommittedChange();
         });
     }
@@ -1470,10 +1468,7 @@ export class VideoStageEditor {
                     return;
                 }
 
-                // SwarmUI can rebuild the parameter panel after our init hook,
-                // leaving the old editor element (and its delegated listeners)
-                // detached. Mirror source-select changes here so Upload still
-                // reveals its native file picker on the live DOM.
+                // Panel rebuilds can detach the editor; recreate so listeners match live DOM.
                 this.createEditor();
                 this.handleFieldChange(target);
             },
@@ -1582,7 +1577,7 @@ export class VideoStageEditor {
         const refsCount = clip.refs.length;
         const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
         const skipBtnVariant = clip.skipped ? "vs-btn-skip-active" : "";
-        // SwarmUI's native group: open uses ⮟ (U+2B9F), closed uses ⮞ (U+2B9E).
+        // Match SwarmUI shrinkable glyphs (open U+2B9F, closed U+2B9E).
         const collapseGlyph = clip.expanded ? "&#x2B9F;" : "&#x2B9E;";
 
         const groupClasses = ["input-group", "vs-clip-card"];
@@ -2105,15 +2100,8 @@ export class VideoStageEditor {
     }
 
     /**
-     * Aligns SwarmUI's `makeDropdownInput` with our value/label pairs and
-     * preserves the selected value even when it is not in the canonical list
-     * (e.g. an unknown model name carried over from a reused image).
-     */
-    /**
-     * Same layout as {@link buildNativeDropdown} but uses strict option matching.
-     * SwarmUI's `makeDropdownInput` uses `==`, which can mark the wrong option as
-     * selected for some value shapes and makes the browser fall back to the first
-     * option (typically pixel-lanczos) after re-renders.
+     * Native select like {@link buildNativeDropdown}, but with strict option matching.
+     * `makeDropdownInput` uses loose equality and can select the wrong option after re-render.
      */
     private buildNativeDropdownStrict(
         id: string,
@@ -2168,8 +2156,7 @@ ${optionHtml}
             labels,
             false,
         );
-        // makeDropdownInput cannot disable individual options, so reapply any
-        // explicit `disabled` flags from our option list after the fact.
+        // makeDropdownInput omits per-option disabled; patch from our option list.
         return options.reduce((acc, option) => {
             if (!option.disabled) {
                 return acc;
@@ -2203,10 +2190,7 @@ ${optionHtml}
         if (!this.editor) {
             return;
         }
-        // Mark the actual DOM element so re-renders or full editor element
-        // replacements (e.g. SwarmUI rebuilding the parameter panel) re-attach
-        // listeners on the fresh element. A class-level boolean would
-        // incorrectly skip re-attachment after the old editor is wiped.
+        // data-* on the element so panel rebuilds re-run setup (a class flag would not).
         if (this.editor.dataset.vsListenersAttached === "1") {
             return;
         }
@@ -2234,20 +2218,14 @@ ${optionHtml}
                 "[data-clip-action], [data-stage-action], [data-ref-action]",
             ) as HTMLElement | null;
             if (actionElem) {
-                // Skip / delete buttons live inside the clip's
-                // `input-group-shrinkable` header. Stop propagation so the
-                // document-level handler that toggles shrinkable groups does
-                // not also fire and flip the clip open/closed state.
+                // Actions sit in the shrinkable header; do not let it toggle open/closed.
                 event.preventDefault();
                 event.stopPropagation();
                 this.handleAction(actionElem);
                 return;
             }
 
-            // Native shrinkable header click for our clip groups: re-render
-            // from our state instead of letting SwarmUI's document handler
-            // mutate `style.display` directly (the next render would clobber
-            // it). We still stop propagation to avoid the double-toggle.
+            // Own expand/collapse so SwarmUI does not set display before our re-render.
             const clipHeader = target?.closest(
                 ".vs-clip-card > .input-group-shrinkable",
             ) as HTMLElement | null;

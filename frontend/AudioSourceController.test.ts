@@ -338,14 +338,14 @@ describe("AudioSourceController", () => {
             setupDom();
             stubAceStepFunRegistryThrowing(new Error("boom"));
             const consoleSpy = jest
-                .spyOn(console, "log")
+                .spyOn(console, "warn")
                 .mockImplementation(() => {});
             const c = AudioSourceController();
             controller = c;
 
             expect(() => c.runOnEachBuild()).not.toThrow();
             expect(consoleSpy).toHaveBeenCalledWith(
-                "AudioSourceController: sync failed",
+                "AudioSourceController: param build sync failed",
                 expect.any(Error),
             );
 
