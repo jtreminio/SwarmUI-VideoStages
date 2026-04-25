@@ -19,6 +19,24 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), SeedRootRawAudioAttachmentStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    private static WorkflowNode AssertCropGuidesLatentUsesVideoTensor(JObject workflow, WorkflowNode cropGuidesNode)
+    {
+        JArray cropLatentSource = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "latent");
+        WorkflowNode cropLatentSourceNode = WorkflowAssertions.RequireNodeById(workflow, $"{cropLatentSource[0]}");
+        string cropLatentSourceType = $"{cropLatentSourceNode.Node["class_type"]}";
+        if (cropLatentSourceType is "SwarmKSampler" or "KSamplerAdvanced")
+        {
+            return cropLatentSourceNode;
+        }
+
+        Assert.Equal("LTXVSeparateAVLatent", cropLatentSourceType);
+        Assert.Equal("0", $"{cropLatentSource[1]}");
+        JArray avLatentSource = WorkflowAssertions.RequireConnectionInput(cropLatentSourceNode.Node, "av_latent");
+        WorkflowNode samplerNode = WorkflowAssertions.RequireNodeById(workflow, $"{avLatentSource[0]}");
+        Assert.Contains($"{samplerNode.Node["class_type"]}", new[] { "SwarmKSampler", "KSamplerAdvanced" });
+        return samplerNode;
+    }
+
     [Fact]
     public void Configured_video_stages_without_native_image_to_video_toggle_run_from_stage_model()
     {
@@ -479,28 +497,15 @@ public partial class StageFlowTests
             new JArray(preprocessNode.Id, 0)));
 
         WorkflowNode cropGuidesNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"));
-        JArray cropLatentSource = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "latent");
-        Assert.True(workflow.TryGetValue($"{cropLatentSource[0]}", out JToken upstreamSampler));
-        string upstreamSamplerType = $"{upstreamSampler["class_type"]}";
-        Assert.True(
-            upstreamSamplerType is "SwarmKSampler" or "KSamplerAdvanced",
-            $"LTXVCropGuides.latent must follow the stage sampler (SwarmKSampler or KSamplerAdvanced); got {upstreamSamplerType}.");
+        AssertCropGuidesLatentUsesVideoTensor(workflow, cropGuidesNode);
         JArray cropPositiveIn = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "positive");
         Assert.Equal(addGuideNode.Id, $"{cropPositiveIn[0]}");
 
-        WorkflowNode separateAfterCrop = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVSeparateAVLatent"),
-            node =>
-            {
-                JArray avIn = WorkflowAssertions.RequireConnectionInput(node.Node, "av_latent");
-                return workflow.TryGetValue($"{avIn[0]}", out JToken upstream)
-                    && $"{upstream["class_type"]}" == "LTXVCropGuides";
-            });
         WorkflowNode finalDecode = Assert.Single(
             WorkflowAssertions.NodesOfAnyType(workflow, "VAEDecode", "VAEDecodeTiled"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "samples"),
-                new JArray(separateAfterCrop.Id, 0)));
+                new JArray(cropGuidesNode.Id, 2)));
         AssertLtxFinalDecodeUsesPlainVaeDecode(finalDecode);
     }
 
@@ -538,7 +543,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Chained_ltx_latent_model_upscale_uses_separated_video_latent_directly()
+    public void Chained_ltx_latent_model_upscale_uses_video_latent_directly()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -564,14 +569,12 @@ public partial class StageFlowTests
         WorkflowNode upsamplerNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
         JArray upsamplerSamples = WorkflowAssertions.RequireConnectionInput(upsamplerNode.Node, "samples");
         WorkflowNode upsamplerSource = WorkflowAssertions.RequireNodeById(workflow, $"{upsamplerSamples[0]}");
-        Assert.Equal("LTXVSeparateAVLatent", $"{upsamplerSource.Node["class_type"]}");
-        Assert.Equal("0", $"{upsamplerSamples[1]}");
+        Assert.Equal("LTXVCropGuides", $"{upsamplerSource.Node["class_type"]}");
+        Assert.Equal("2", $"{upsamplerSamples[1]}");
 
         foreach (WorkflowNode cropGuidesNode in WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"))
         {
-            JArray cropLatentSource = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "latent");
-            WorkflowNode cropLatentSourceNode = WorkflowAssertions.RequireNodeById(workflow, $"{cropLatentSource[0]}");
-            Assert.Contains($"{cropLatentSourceNode.Node["class_type"]}", new[] { "SwarmKSampler", "KSamplerAdvanced" });
+            AssertCropGuidesLatentUsesVideoTensor(workflow, cropGuidesNode);
         }
     }
 

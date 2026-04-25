@@ -291,14 +291,6 @@
       )
     };
   };
-  var normalizeRootDimension = (value, fallback) => Math.max(
-    ROOT_DIMENSION_MIN,
-    Math.round(utils.toNumber(`${value ?? fallback}`, fallback))
-  );
-  var normalizeRootFps = (value, fallback) => Math.max(
-    ROOT_FPS_MIN,
-    Math.round(utils.toNumber(`${value ?? fallback}`, fallback))
-  );
   var normalizeStageRefStrengthValue = (value) => Math.round(
     clamp(
       utils.toNumber(
@@ -1671,9 +1663,6 @@
       return null;
     }
     return {
-      width: value.width,
-      height: value.height,
-      fps: value.fps,
       clips: Array.isArray(value.clips) ? value.clips : void 0
     };
   };
@@ -1711,7 +1700,9 @@
       }))
     })
   );
-  var getEffectiveRootDimension = (persistedValue, fallback) => normalizeRootDimension(persistedValue, fallback);
+  var serializeStateForStorage = (state) => JSON.stringify({
+    clips: serializeClipsForStorage(state.clips)
+  });
   var lastSerializedState = "";
   var getSerializedStateSource = () => {
     const inputValue = getClipsInput()?.value ?? "";
@@ -1727,7 +1718,6 @@
       } else if (Array.isArray(parsedConfig?.clips)) {
         clipsRaw = parsedConfig.clips;
       }
-      const firstClip = clipsRaw.length > 0 && isRecord2(clipsRaw[0]) ? clipsRaw[0] : null;
       const clips = [];
       for (let i = 0; i < clipsRaw.length; i++) {
         const el = clipsRaw[i];
@@ -1737,15 +1727,9 @@
         );
       }
       return {
-        width: getEffectiveRootDimension(
-          parsedConfig?.width ?? firstClip?.width,
-          fallbackDefaults.width
-        ),
-        height: getEffectiveRootDimension(
-          parsedConfig?.height ?? firstClip?.height,
-          fallbackDefaults.height
-        ),
-        fps: normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
+        width: fallbackDefaults.width,
+        height: fallbackDefaults.height,
+        fps: fallbackDefaults.fps,
         clips
       };
     } catch {
@@ -1785,12 +1769,7 @@
     };
   };
   var saveState = (state, callbacks, options) => {
-    const serialized = JSON.stringify({
-      width: state.width,
-      height: state.height,
-      fps: state.fps,
-      clips: serializeClipsForStorage(state.clips)
-    });
+    const serialized = serializeStateForStorage(state);
     lastSerializedState = serialized;
     const input = getClipsInput();
     if (input) {
@@ -1900,12 +1879,7 @@
       state.width = rootDefaults.width;
       state.height = rootDefaults.height;
       state.fps = rootDefaults.fps;
-      const serialized = JSON.stringify({
-        width: state.width,
-        height: state.height,
-        fps: state.fps,
-        clips: serializeClipsForStorage(state.clips)
-      });
+      const serialized = serializeStateForStorage(state);
       if (serialized !== input.value) {
         deps.saveState(state, { notifyDomChange: false });
       }
@@ -2837,6 +2811,21 @@ ${optionHtml}
 
   // frontend/main.ts
   var stageEditor = videoStageEditor();
+  var registerVideoClipPromptPrefix = () => {
+    if (typeof promptTabComplete === "undefined") {
+      return;
+    }
+    promptTabComplete.registerPrefix(
+      "videoclip",
+      "Add a prompt section that applies to VideoStages clips.",
+      () => [
+        '\nUse "<videoclip>..." to apply to ALL VideoStages clips (including LoRAs inside the section).',
+        '\nUse "<videoclip[0]>..." to apply to clip 0, "<videoclip[1]>..." for clip 1, etc.',
+        '\nIf no "<videoclip>" / "<videoclip[0]>" section exists for a clip, VideoStages falls back to the global prompt.'
+      ],
+      true
+    );
+  };
   var tryRegisterStageEditor = () => {
     if (!Array.isArray(postParamBuildSteps)) {
       return false;
@@ -2857,6 +2846,7 @@ ${optionHtml}
       }
     }, 200);
   }
+  registerVideoClipPromptPrefix();
   stageEditor.startGenerateWrapRetry();
   audioSource();
 })();

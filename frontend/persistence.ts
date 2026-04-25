@@ -1,17 +1,9 @@
-import {
-    buildDefaultClip,
-    normalizeClip,
-    normalizeRootDimension,
-    normalizeRootFps,
-} from "./normalization";
+import { buildDefaultClip, normalizeClip } from "./normalization";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { getClipsInput, isImageToVideoWorkflow } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 
 type ParsedConfig = {
-    width?: unknown;
-    height?: unknown;
-    fps?: unknown;
     clips?: unknown[];
 };
 
@@ -23,9 +15,6 @@ const toParsedConfig = (value: unknown): ParsedConfig | null => {
         return null;
     }
     return {
-        width: value.width,
-        height: value.height,
-        fps: value.fps,
         clips: Array.isArray(value.clips) ? value.clips : undefined,
     };
 };
@@ -66,10 +55,12 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
         }),
     );
 
-const getEffectiveRootDimension = (
-    persistedValue: unknown,
-    fallback: number,
-): number => normalizeRootDimension(persistedValue, fallback);
+export const serializeStateForStorage = (
+    state: Pick<VideoStagesConfig, "clips">,
+): string =>
+    JSON.stringify({
+        clips: serializeClipsForStorage(state.clips),
+    });
 
 export interface PersistenceCallbacks {
     onAfterSerialize?: (serialized: string) => void;
@@ -103,8 +94,6 @@ const parseSerializedState = (
         } else if (Array.isArray(parsedConfig?.clips)) {
             clipsRaw = parsedConfig.clips;
         }
-        const firstClip =
-            clipsRaw.length > 0 && isRecord(clipsRaw[0]) ? clipsRaw[0] : null;
 
         const clips: Clip[] = [];
         for (let i = 0; i < clipsRaw.length; i++) {
@@ -115,15 +104,9 @@ const parseSerializedState = (
             );
         }
         return {
-            width: getEffectiveRootDimension(
-                parsedConfig?.width ?? firstClip?.width,
-                fallbackDefaults.width,
-            ),
-            height: getEffectiveRootDimension(
-                parsedConfig?.height ?? firstClip?.height,
-                fallbackDefaults.height,
-            ),
-            fps: normalizeRootFps(parsedConfig?.fps, fallbackDefaults.fps),
+            width: fallbackDefaults.width,
+            height: fallbackDefaults.height,
+            fps: fallbackDefaults.fps,
             clips,
         };
     } catch {
@@ -170,12 +153,7 @@ export const saveState = (
     callbacks?: PersistenceCallbacks,
     options?: SaveStateOptions,
 ): void => {
-    const serialized = JSON.stringify({
-        width: state.width,
-        height: state.height,
-        fps: state.fps,
-        clips: serializeClipsForStorage(state.clips),
-    });
+    const serialized = serializeStateForStorage(state);
     lastSerializedState = serialized;
     const input = getClipsInput();
     if (input) {

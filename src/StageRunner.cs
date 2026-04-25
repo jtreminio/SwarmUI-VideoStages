@@ -26,37 +26,45 @@ internal class StageRunner(WorkflowGenerator g)
             throw new SwarmReadableErrorException($"VideoStages: Stage {stage.Id} has no input media available.");
         }
 
-        JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
-        LtxAudioReuseState.PrepareReusableAudio(g, stage);
-        bool replaceTextToVideoRootStage = RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage);
-        LtxPostVideoChain postVideoChain = replaceTextToVideoRootStage ? null : LtxPostVideoChain.TryCapture(g, stage);
-        WGNodeData sourceMedia = replaceTextToVideoRootStage ? CloneMedia(g.CurrentMedia) : ApplyStageUpscaleIfNeeded(stage, sectionId);
-        StageGenerationPlan generationPlan = BuildGenInfo(stage, sectionId, sourceMedia);
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
-
-        if (_ltxStageOrchestrator.TryRunLocalLtxPath(
-                stage,
-                guideReference,
-                refStore,
-                genInfo,
-                generationPlan.ApplySourceVideoLatent,
-                sourceMedia,
-                priorOutputPath,
-                postVideoChain))
+        VideoClipPromptParser.LoraOverrideScope loraScope = VideoClipPromptParser.ApplyLoraScope(g.UserInput, stage.ClipId);
+        try
         {
-            RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path, retargetAudio: g.CurrentMedia?.AttachedAudio is not null);
+            JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
+            LtxAudioReuseState.PrepareReusableAudio(g, stage);
+            bool replaceTextToVideoRootStage = RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage);
+            LtxPostVideoChain postVideoChain = replaceTextToVideoRootStage ? null : LtxPostVideoChain.TryCapture(g, stage);
+            WGNodeData sourceMedia = replaceTextToVideoRootStage ? CloneMedia(g.CurrentMedia) : ApplyStageUpscaleIfNeeded(stage, sectionId);
+            StageGenerationPlan generationPlan = BuildGenInfo(stage, sectionId, sourceMedia);
+            WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
+
+            if (_ltxStageOrchestrator.TryRunLocalLtxPath(
+                    stage,
+                    guideReference,
+                    refStore,
+                    genInfo,
+                    generationPlan.ApplySourceVideoLatent,
+                    sourceMedia,
+                    priorOutputPath,
+                    postVideoChain))
+            {
+                RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path, retargetAudio: g.CurrentMedia?.AttachedAudio is not null);
+                CleanupReplacedTextToVideoRootStage(priorOutputPath, replaceTextToVideoRootStage);
+                return;
+            }
+
+            WGNodeData guideMedia = StageGuideMediaHelper.PrepareGuideMedia(
+                g,
+                StageGuideMediaHelper.ResolveGuideMedia(g, guideReference, postVideoChain),
+                sourceMedia,
+                scaleToSourceSize: true);
+
+            RunNativeStage(generationPlan, sourceMedia, guideMedia, priorOutputPath);
             CleanupReplacedTextToVideoRootStage(priorOutputPath, replaceTextToVideoRootStage);
-            return;
         }
-
-        WGNodeData guideMedia = StageGuideMediaHelper.PrepareGuideMedia(
-            g,
-            StageGuideMediaHelper.ResolveGuideMedia(g, guideReference, postVideoChain),
-            sourceMedia,
-            scaleToSourceSize: true);
-
-        RunNativeStage(generationPlan, sourceMedia, guideMedia, priorOutputPath);
-        CleanupReplacedTextToVideoRootStage(priorOutputPath, replaceTextToVideoRootStage);
+        finally
+        {
+            loraScope?.Dispose();
+        }
     }
 
     private void RunNativeStage(
@@ -106,6 +114,8 @@ internal class StageRunner(WorkflowGenerator g)
         {
             throw new SwarmReadableErrorException($"VideoStages: Stage {stage.Id} could not resolve video model '{stage.Model}'.");
         }
+        // Clip-scoped LoRAs can vary per clip, so the image-to-video loader must reflect the current scope.
+        _ = g.NodeHelpers.Remove($"modelloader_{videoModel.Name}_image2video");
 
         bool shouldUseLocalLtxv2Path = videoModel.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID
             && sourceMedia.DataType == WGNodeData.DT_VIDEO;
@@ -155,6 +165,11 @@ internal class StageRunner(WorkflowGenerator g)
             }
         }
 
+        string positivePrompt = g.UserInput.Get(T2IParamTypes.Prompt, "");
+        string negativePrompt = g.UserInput.Get(T2IParamTypes.NegativePrompt, "");
+        string originalPositivePrompt = VideoClipPromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.Prompt.Type.ID, positivePrompt);
+        string originalNegativePrompt = VideoClipPromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.NegativePrompt.Type.ID, negativePrompt);
+
         WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
         {
             Generator = g,
@@ -166,8 +181,8 @@ internal class StageRunner(WorkflowGenerator g)
             VideoFPS = fps,
             Width = sourceMedia.Width ?? g.UserInput.GetImageWidth(),
             Height = sourceMedia.Height ?? g.UserInput.GetImageHeight(),
-            Prompt = g.UserInput.Get(T2IParamTypes.Prompt, ""),
-            NegativePrompt = g.UserInput.Get(T2IParamTypes.NegativePrompt, ""),
+            Prompt = VideoClipPromptParser.ExtractPrompt(positivePrompt, originalPositivePrompt, stage.ClipId),
+            NegativePrompt = VideoClipPromptParser.ExtractPrompt(negativePrompt, originalNegativePrompt, stage.ClipId),
             Steps = stage.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.Id,
             BatchIndex = batchIndex,

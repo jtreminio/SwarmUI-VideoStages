@@ -10,6 +10,7 @@ namespace VideoStages;
 public class VideoStagesExtension : Extension
 {
     public const int SectionID_VideoStages = 48823;
+    public const int SectionID_VideoClip = 58823;
     public const double DefaultStageRefStrength = 0.8;
     public const int RootDimensionMin = 256;
     public const int RootDimensionMax = 16384;
@@ -20,6 +21,7 @@ public class VideoStagesExtension : Extension
     public const string AudioSourceSwarm = "Swarm Audio";
 
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
+    public static int VideoClipSectionIdForClip(int clipIndex) => SectionID_VideoClip + 1 + clipIndex;
     public static T2IRegisteredParam<int> RootWidth;
     public static T2IRegisteredParam<int> RootHeight;
     public static T2IRegisteredParam<int> RootFPS;
@@ -28,6 +30,21 @@ public class VideoStagesExtension : Extension
 
     public override void OnPreInit()
     {
+        PromptRegion.RegisterCustomPrefix("videoclip");
+        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (data, context) =>
+        {
+            if (int.TryParse(context.PreData, out int clipIndex) && clipIndex >= 0)
+            {
+                context.SectionID = VideoClipSectionIdForClip(clipIndex);
+            }
+            else
+            {
+                context.SectionID = SectionID_VideoClip;
+            }
+            return $"<videoclip//cid={context.SectionID}>";
+        };
+        T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (data, context) => "<break>";
+
         StyleSheetFiles.Add("Assets/video-stages.css");
         ScriptFiles.Add("Assets/video-stages.js");
     }

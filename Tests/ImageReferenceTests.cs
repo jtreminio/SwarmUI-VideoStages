@@ -150,7 +150,7 @@ public class ImageReferenceTests
     }
 
     [Fact]
-    public void First_stage_json_control_is_normalized_to_default_when_non_trivial()
+    public void First_stage_json_control_is_enforced_to_one_when_non_trivial()
     {
         JObject stage = MakeStage("UnitTest_Video.safetensors");
         stage["Control"] = 0.35;
@@ -158,7 +158,7 @@ public class ImageReferenceTests
         List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(stage));
 
         Assert.Single(stages);
-        Assert.Equal(0.5, stages[0].Control);
+        Assert.Equal(1.0, stages[0].Control);
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class ImageReferenceTests
         List<JsonParser.StageSpec> stages = ParseStages(input);
 
         Assert.Single(stages);
-        Assert.Equal(0.5, stages[0].Control);
+        Assert.Equal(1.0, stages[0].Control);
         Assert.Equal(1.0, stages[0].Upscale);
         Assert.Equal("pixel-lanczos", stages[0].UpscaleMethod);
         Assert.Equal("", stages[0].Vae);

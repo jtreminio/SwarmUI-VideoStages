@@ -270,7 +270,7 @@ describe("videoStageEditor", () => {
             expect(clips[0].stages?.[0].refStrengths).toEqual([1]);
         });
 
-        it("seeds root dimensions from SwarmUI core width and height fields", () => {
+        it("does not serialize root dimensions from SwarmUI core width and height fields", () => {
             const coreWidthInput = document.createElement("input");
             coreWidthInput.type = "number";
             coreWidthInput.id = "input_width";
@@ -287,11 +287,11 @@ describe("videoStageEditor", () => {
             editor.init();
 
             const config = parseStoredConfig();
-            expect(config.width).toBe(1344);
-            expect(config.height).toBe(832);
+            expect(config.width).toBeUndefined();
+            expect(config.height).toBeUndefined();
         });
 
-        it("prefers registered VideoStages root params over core width and height defaults", () => {
+        it("does not serialize registered VideoStages root width and height", () => {
             const registeredWidthInput = document.getElementById(
                 "input_vswidth",
             ) as HTMLInputElement;
@@ -318,11 +318,11 @@ describe("videoStageEditor", () => {
             editor.init();
 
             const config = parseStoredConfig();
-            expect(config.width).toBe(1536);
-            expect(config.height).toBe(864);
+            expect(config.width).toBeUndefined();
+            expect(config.height).toBeUndefined();
         });
 
-        it("prefers registered VideoStages root FPS over core video FPS", () => {
+        it("does not serialize registered VideoStages root FPS", () => {
             const registeredFpsInput = document.getElementById(
                 "input_vsfps",
             ) as HTMLInputElement;
@@ -332,7 +332,7 @@ describe("videoStageEditor", () => {
             editor.init();
 
             const config = parseStoredConfig();
-            expect(config.fps).toBe(32);
+            expect(config.fps).toBeUndefined();
         });
 
         it("seeds the first stage with the frontend default values", () => {
@@ -433,9 +433,6 @@ describe("videoStageEditor", () => {
 
         it("preserves existing JSON state", () => {
             getStagesInput().value = JSON.stringify({
-                width: 800,
-                height: 600,
-                fps: 12,
                 clips: [
                     {
                         duration: 4,
@@ -453,9 +450,9 @@ describe("videoStageEditor", () => {
 
             const config = parseStoredConfig();
             const clips = parseStored();
-            expect(config.width).toBe(800);
-            expect(config.height).toBe(600);
-            expect(config.fps).toBe(12);
+            expect(config.width).toBeUndefined();
+            expect(config.height).toBeUndefined();
+            expect(config.fps).toBeUndefined();
             expect(clips).toHaveLength(1);
             expect(clips[0].audioSource).toBe("Upload");
             expect(clips[0].refs?.[0].source).toBe("Refiner");
@@ -759,7 +756,7 @@ describe("videoStageEditor", () => {
             expect(document.activeElement).not.toBe(refreshedSlider);
         });
 
-        it("reflects registered RootWidth/RootHeight slider changes in saved JSON", () => {
+        it("does not write registered RootWidth/RootHeight slider changes into saved JSON", () => {
             const editor = videoStageEditor();
             editor.init();
 
@@ -787,8 +784,8 @@ describe("videoStageEditor", () => {
             );
 
             const config = parseStoredConfig();
-            expect(config.width).toBe(1536);
-            expect(config.height).toBe(864);
+            expect(config.width).toBeUndefined();
+            expect(config.height).toBeUndefined();
         });
 
         it("keeps the VideoStages group disabled when a late root FPS change syncs JSON", () => {
@@ -812,7 +809,7 @@ describe("videoStageEditor", () => {
             fpsInput.dispatchEvent(new Event("change", { bubbles: true }));
 
             const config = parseStoredConfig();
-            expect(config.fps).toBe(32);
+            expect(config.fps).toBeUndefined();
             expect(groupToggle.checked).toBe(false);
         });
 

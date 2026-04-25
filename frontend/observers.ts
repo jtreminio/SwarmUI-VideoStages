@@ -1,4 +1,4 @@
-import { type SaveStateOptions, serializeClipsForStorage } from "./persistence";
+import { type SaveStateOptions, serializeStateForStorage } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { getClipsInput } from "./swarmInputs";
 import type { VideoStagesConfig } from "./types";
@@ -109,12 +109,7 @@ export const createObservers = (deps: {
         state.width = rootDefaults.width;
         state.height = rootDefaults.height;
         state.fps = rootDefaults.fps;
-        const serialized = JSON.stringify({
-            width: state.width,
-            height: state.height,
-            fps: state.fps,
-            clips: serializeClipsForStorage(state.clips),
-        });
+        const serialized = serializeStateForStorage(state);
         if (serialized !== input.value) {
             deps.saveState(state, { notifyDomChange: false });
         }

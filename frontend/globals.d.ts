@@ -125,6 +125,17 @@ declare function setMediaFileDirect(
 ): void;
 declare let postParamBuildSteps: (() => void)[] | undefined;
 
+declare const promptTabComplete:
+    | {
+          registerPrefix: (
+              prefix: string,
+              description: string,
+              dataProvider: () => string[],
+              insertable?: boolean,
+          ) => void;
+      }
+    | undefined;
+
 interface Base2EditStageSnapshot {
     enabled: boolean;
     stageCount: number;

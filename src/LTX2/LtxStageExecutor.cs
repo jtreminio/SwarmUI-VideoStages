@@ -788,15 +788,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
 
         if (_needsLtxvCropGuidesAfterSampler)
         {
-            string postSamplerCrop = g.CreateNode(LtxNodeTypes.LTXVCropGuides, new JObject()
-            {
-                ["positive"] = genInfo.PosCond,
-                ["negative"] = genInfo.NegCond,
-                ["latent"] = g.CurrentMedia.Path
-            });
-            genInfo.PosCond = [postSamplerCrop, 0];
-            genInfo.NegCond = [postSamplerCrop, 1];
-            g.CurrentMedia = g.CurrentMedia.WithPath([postSamplerCrop, 2], null, genInfo.Model.Compat);
+            CropGuidesAfterSampler(genInfo);
             _needsLtxvCropGuidesAfterSampler = false;
         }
 
@@ -818,6 +810,44 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
             });
             g.CurrentMedia = g.CurrentMedia.WithPath([normalizeNode, 0]);
         }
+    }
+
+    private void CropGuidesAfterSampler(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        JArray cropLatentPath = g.CurrentMedia.Path;
+        JArray audioLatentPath = null;
+        bool shouldRestoreAudioVideoLatent = g.CurrentMedia.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO;
+        if (shouldRestoreAudioVideoLatent)
+        {
+            string separateNode = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
+            {
+                ["av_latent"] = g.CurrentMedia.Path
+            });
+            cropLatentPath = [separateNode, 0];
+            audioLatentPath = [separateNode, 1];
+        }
+
+        string postSamplerCrop = g.CreateNode(LtxNodeTypes.LTXVCropGuides, new JObject()
+        {
+            ["positive"] = genInfo.PosCond,
+            ["negative"] = genInfo.NegCond,
+            ["latent"] = cropLatentPath
+        });
+        genInfo.PosCond = [postSamplerCrop, 0];
+        genInfo.NegCond = [postSamplerCrop, 1];
+
+        if (shouldRestoreAudioVideoLatent)
+        {
+            string concatNode = g.CreateNode(LtxNodeTypes.LTXVConcatAVLatent, new JObject()
+            {
+                ["video_latent"] = new JArray(postSamplerCrop, 2),
+                ["audio_latent"] = audioLatentPath
+            });
+            g.CurrentMedia = g.CurrentMedia.WithPath([concatNode, 0], WGNodeData.DT_LATENT_AUDIOVIDEO, genInfo.Model.Compat);
+            return;
+        }
+
+        g.CurrentMedia = g.CurrentMedia.WithPath([postSamplerCrop, 2], null, genInfo.Model.Compat);
     }
 
     private void FinalizeOutput(

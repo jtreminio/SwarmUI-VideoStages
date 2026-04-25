@@ -251,6 +251,30 @@ public class JsonParserClipsTests
     }
 
     [Fact]
+    public void ParseStages_EnforcesStageZeroControlPerClip()
+    {
+        JObject clipZeroStageZero = MakeStage("model-a");
+        clipZeroStageZero["Control"] = 0.25;
+        JObject clipZeroStageOne = MakeStage("model-b");
+        clipZeroStageOne["Control"] = 0.35;
+        JObject clipOneStageZero = MakeStage("model-c");
+        clipOneStageZero["Control"] = 0.45;
+
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [clipZeroStageZero, clipZeroStageOne]),
+            MakeClip(stages: [clipOneStageZero])
+        ));
+        JsonParser parser = BuildParser(json);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        Assert.Equal(3, stages.Count);
+        Assert.Equal(1.0, stages[0].Control);
+        Assert.Equal(0.35, stages[1].Control);
+        Assert.Equal(1.0, stages[2].Control);
+    }
+
+    [Fact]
     public void ParseStages_SkipsSkippedClipsAndStages()
     {
         JObject skippedStage = MakeStage("model-skip");

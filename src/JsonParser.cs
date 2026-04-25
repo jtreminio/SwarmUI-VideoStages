@@ -9,6 +9,7 @@ namespace VideoStages;
 public class JsonParser(WorkflowGenerator g)
 {
     private const double DefaultControl = 0.5;
+    private const double FirstStageControl = 1.0;
     private const double DefaultUpscale = 1.0;
     private const string DefaultUpscaleMethod = "pixel-lanczos";
     private const string DefaultGeneratedReference = "Generated";
@@ -504,20 +505,14 @@ public class JsonParser(WorkflowGenerator g)
         string upscaleMethod = GetOptionalString(stage, "UpscaleMethod", defaults.UpscaleMethod, index, allowEmpty: false);
         if (index == 0)
         {
-            bool hasControlKey = JsonHasOwnProperty(stage, "Control");
             bool hasUpscaleKey = JsonHasOwnProperty(stage, "Upscale");
             bool hasUpscaleMethodKey = JsonHasOwnProperty(stage, "UpscaleMethod");
-            if (ShouldWarnFirstStageControlIgnored(hasControlKey, control))
-            {
-                Logs.Warning(
-                    $"VideoStages: The first stage in each clip (stage index 0) includes 'Control', which is ignored for that stage only.");
-            }
             if (ShouldWarnFirstStageUpscaleIgnored(hasUpscaleKey, hasUpscaleMethodKey, upscale))
             {
                 Logs.Warning(
                     $"VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', which are ignored for that stage only.");
             }
-            control = DefaultControl;
+            control = FirstStageControl;
             upscale = DefaultUpscale;
             upscaleMethod = DefaultUpscaleMethod;
         }
@@ -794,19 +789,6 @@ public class JsonParser(WorkflowGenerator g)
             return false;
         }
         if (NormalizeUpscale(upscale) == 1)
-        {
-            return false;
-        }
-        return true;
-    }
-
-    private static bool ShouldWarnFirstStageControlIgnored(bool hasControlKey, double control)
-    {
-        if (!hasControlKey)
-        {
-            return false;
-        }
-        if (NormalizeControl(control) == DefaultControl)
         {
             return false;
         }
