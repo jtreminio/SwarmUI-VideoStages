@@ -1,8 +1,5 @@
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using Xunit;
 
@@ -18,7 +15,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(
                 models.VideoModel.Name,
                 "Base",
@@ -32,8 +29,7 @@ public partial class StageFlowTests
                 control: 0.5,
                 upscale: 1.0,
                 upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
-                steps: 12)
-        ).ToString();
+                steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
@@ -59,6 +55,48 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Chained_native_ltx_pixel_upscale_after_latent_upscale_is_ignored_without_image_scale_scaffolding()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 2.0,
+                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+                steps: 8),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 2.0,
+                upscaleMethod: "pixel-lanczos",
+                steps: 8));
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        List<WorkflowNode> samplerNodes = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler")
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(3, samplerNodes.Count);
+
+        Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
+
+        Assert.DoesNotContain(
+            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            node => node.Node["inputs"]?.Value<int>("width") == 2048
+                && node.Node["inputs"]?.Value<int>("height") == 2048
+                && $"{node.Node["inputs"]?["crop"]}" == "disabled");
+    }
+
+    [Fact]
     public void Chained_native_ltx_generated_reference_tracks_previous_stage_output_and_skips_redundant_guide_reinjection()
     {
         using SwarmUiTestContext _ = new();
@@ -66,7 +104,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(
                 models.VideoModel.Name,
                 "Generated",
@@ -80,8 +118,7 @@ public partial class StageFlowTests
                 control: 0.5,
                 upscale: 1.0,
                 upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
-                steps: 12)
-        ).ToString();
+                steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
@@ -98,10 +135,8 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(samplerNodes[1].Node, "latent_image"),
             new JArray(samplerNodes[0].Id, 0)));
 
-        IReadOnlyList<WorkflowNode> tiledDecodeNodes = WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled");
-        WorkflowNode finalVideoDecode = Assert.Single(tiledDecodeNodes);
-        Assert.Equal("202", finalVideoDecode.Id);
-        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
+        WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
+        AssertLtxFinalDecodeUsesPlainVaeDecode(finalVideoDecode);
         RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -118,10 +153,9 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = JsonSingleClipStages512(
             MakeStage(models.VideoModel.Name, "Base", steps: 10),
-            MakeStage(models.VideoModel.Name, secondStageReference, steps: 12)
-        ).ToString();
+            MakeStage(models.VideoModel.Name, secondStageReference, steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
@@ -169,11 +203,10 @@ public partial class StageFlowTests
         IReadOnlyList<WorkflowNode> separateNodes = WorkflowUtils.NodesOfType(workflow, "LTXVSeparateAVLatent");
         Assert.True(separateNodes.Count >= 3);
         WorkflowNode originalSeparate = RequireOriginalNativeLtxSeparate(workflow);
-        AssertStageLtxConcatsReuseOriginalAudio(workflow, originalSeparate);
+        AssertStageLtxConcatsUseProgressiveAudio(workflow, originalSeparate);
 
         WorkflowNode finalVideoDecode = WorkflowAssertions.RequireNodeById(workflow, "202");
-        Assert.Equal("VAEDecodeTiled", $"{finalVideoDecode.Node["class_type"]}");
-        AssertLtxFinalTiledDecodeUsesUpdatedDefaults(finalVideoDecode);
+        AssertLtxFinalDecodeUsesPlainVaeDecode(finalVideoDecode);
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         WorkflowNode finalAudioDecode = WorkflowAssertions.RequireNodeById(workflow, "203");
@@ -185,5 +218,30 @@ public partial class StageFlowTests
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
+    }
+
+    [Fact]
+    public void Chained_native_ltx_reuse_audio_uses_first_stage_audio_for_later_stages()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClip(
+            width: 512,
+            height: 512,
+            MakeStage(models.VideoModel.Name, "Base", steps: 10),
+            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 12),
+            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 14));
+        clip["reuseAudio"] = true;
+        string stagesJson = new JArray(clip).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        WorkflowNode originalSeparate = RequireOriginalNativeLtxSeparate(workflow);
+        AssertStageLtxConcatsReuseFirstStageAudio(workflow, originalSeparate);
+        AssertWorkflowHasNoCycles(workflow);
     }
 }

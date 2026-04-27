@@ -31,8 +31,8 @@ def _num_samples(waveform: torch.Tensor | object) -> int:
 
 
 def _aligned_frames(duration_sec: float, frame_rate: int) -> int:
-    """Compute ceil(duration * fps), aligned to `FRAME_ALIGNMENT`, plus one."""
-    raw_frames = max(1, math.ceil(duration_sec * frame_rate))
+    """Compute ceil(duration * fps) aligned up to `FRAME_ALIGNMENT`, plus one."""
+    raw_frames = max(0, math.ceil(duration_sec * frame_rate))
     aligned_frames = int(math.ceil(raw_frames / float(FRAME_ALIGNMENT)) * FRAME_ALIGNMENT)
 
     return max(1, aligned_frames + 1)
@@ -49,7 +49,7 @@ class SwarmAudioLengthToFrames(io.ComfyNode):
             category="SwarmUI/Audio",
             description=(
                 "Compute frame count from audio duration: "
-                "ceil(duration * frame_rate), aligned to a multiple of 8, then +1."
+                "ceil(duration * frame_rate), aligned up to a multiple of 8, then +1."
             ),
             inputs=[
                 io.Audio.Input("audio"),

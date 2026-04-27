@@ -1,4 +1,3 @@
-using System;
 using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -35,11 +34,11 @@ public class StageRefStore(WorkflowGenerator g)
 
     private static string NodeKey(StageKind kind, int? index, string property) => $"{Prefix}{StageName(kind, index)}.{property}";
 
-    public StageRef Base => HasCaptured(StageKind.Base) ? LoadStageRef(StageKind.Base) : null;
+    public StageRef Base => GetIfCaptured(StageKind.Base);
 
-    public StageRef Refiner => HasCaptured(StageKind.Refiner) ? LoadStageRef(StageKind.Refiner) : null;
+    public StageRef Refiner => GetIfCaptured(StageKind.Refiner);
 
-    public StageRef Generated => HasCaptured(StageKind.Generated) ? LoadStageRef(StageKind.Generated) : null;
+    public StageRef Generated => GetIfCaptured(StageKind.Generated);
 
     public void Capture(StageKind kind, int? index = null, WGNodeData mediaOverride = null, WGNodeData vaeOverride = null)
     {
@@ -58,6 +57,8 @@ public class StageRefStore(WorkflowGenerator g)
         stageRef = LoadStageRef(StageKind.Stage, index);
         return true;
     }
+
+    private StageRef GetIfCaptured(StageKind kind) => HasCaptured(kind) ? LoadStageRef(kind) : null;
 
     private bool HasCaptured(StageKind kind, int? index = null) => g.NodeHelpers.ContainsKey(NodeKey(kind, index, "media"));
 
@@ -91,12 +92,9 @@ public class StageRefStore(WorkflowGenerator g)
 
         try
         {
-            JToken token = JToken.Parse(encoded);
-            if (token is not JObject obj)
-            {
-                return null;
-            }
-            return DeserializeNodeData(obj, fallbackVae);
+            return JToken.Parse(encoded) is JObject obj
+                ? DeserializeNodeData(obj, fallbackVae)
+                : null;
         }
         catch
         {
@@ -159,26 +157,22 @@ public class StageRefStore(WorkflowGenerator g)
             result["compatId"] = data.Compat.ID;
         }
 
-        if (data.Width.HasValue)
-        {
-            result["width"] = data.Width.Value;
-        }
-        if (data.Height.HasValue)
-        {
-            result["height"] = data.Height.Value;
-        }
-        if (data.Frames.HasValue)
-        {
-            result["frames"] = data.Frames.Value;
-        }
-        if (data.FPS.HasValue)
-        {
-            result["fps"] = data.FPS.Value;
-        }
+        AddIfHasValue(result, "width", data.Width);
+        AddIfHasValue(result, "height", data.Height);
+        AddIfHasValue(result, "frames", data.Frames);
+        AddIfHasValue(result, "fps", data.FPS);
         if (data.AttachedAudio is not null)
         {
             result["attachedAudio"] = SerializeNodeData(data.AttachedAudio);
         }
         return result;
+    }
+
+    private static void AddIfHasValue(JObject o, string key, int? value)
+    {
+        if (value.HasValue)
+        {
+            o[key] = value.Value;
+        }
     }
 }

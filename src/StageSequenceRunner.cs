@@ -1,41 +1,101 @@
-using System;
-using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.LTX2;
 
 namespace VideoStages;
 
-public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IReadOnlyList<JsonParser.StageSpec> stages)
+public class StageSequenceRunner(
+    WorkflowGenerator g,
+    StageRefStore store,
+    IReadOnlyList<JsonParser.StageSpec> stages,
+    AudioStageDetector.Detection detectedAudio = null,
+    IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios = null,
+    IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null,
+    bool rootStageTakeover = false)
 {
     private const int IntermediateStageSaveId = 52100;
 
     private readonly StageRunner _singleStageRunner = new(g);
+    private readonly AudioStageDetector.Detection _nativeAudioDetection =
+        detectedAudio ?? BuildCurrentMediaAudioDetection(g);
+    private int? _preparedClipId = null;
+    private readonly bool _rootStageTakeover = rootStageTakeover;
 
     public void Run()
     {
         List<int> usedSectionIds = [];
+        bool parallelMultiClip = stages.Count > 0 && stages.Select(s => s.ClipId).Distinct().Count() > 1;
+        List<WGNodeData> clipParallelOutputs = [];
         try
         {
-            CaptureReference(StageRefStore.StageKind.Generated);
-            foreach (JsonParser.StageSpec stage in stages)
+            if (_rootStageTakeover)
             {
+                RootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia(g);
+            }
+            CaptureReference(StageRefStore.StageKind.Generated);
+            WGNodeData parallelClipSourceMedia = g.CurrentMedia?.Duplicate();
+            WGNodeData parallelClipSourceVae = g.CurrentVae?.Duplicate();
+            if (parallelMultiClip)
+            {
+                g.NodeHelpers[MultiClipParallelWorkflowFlags.NodeHelperKey] = "1";
+            }
+
+            for (int i = 0; i < stages.Count; i++)
+            {
+                JsonParser.StageSpec stage = stages[i];
+                if (parallelMultiClip
+                    && i > 0
+                    && stage.ClipId != stages[i - 1].ClipId)
+                {
+                    if (parallelClipSourceMedia is null)
+                    {
+                        throw new InvalidOperationException("VideoStages: parallel clips require root media before the first stage.");
+                    }
+
+                    g.CurrentMedia = parallelClipSourceMedia.Duplicate();
+                    if (parallelClipSourceVae is not null)
+                    {
+                        g.CurrentVae = parallelClipSourceVae.Duplicate();
+                    }
+                }
+
+                PrepareClipAudio(stage);
                 StageRefStore.StageRef guideRef = ResolveGuideReference(stage);
 
                 int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
                 usedSectionIds.Add(sectionId);
                 PrepareStageOverrides(stage, sectionId);
-                _singleStageRunner.RunStage(stage, sectionId, guideRef);
+                _singleStageRunner.RunStage(stage, sectionId, guideRef, store);
                 CaptureReference(StageRefStore.StageKind.Stage, stage.Id);
+
+                if (parallelMultiClip
+                    && (i == stages.Count - 1 || stages[i + 1].ClipId != stage.ClipId))
+                {
+                    clipParallelOutputs.Add(g.CurrentMedia.Duplicate());
+                }
 
                 if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false) && stage.Id < stages.Count - 1)
                 {
                     g.CurrentMedia.SaveOutput(g.CurrentVae, g.CurrentAudioVae, g.GetStableDynamicID(IntermediateStageSaveId, stage.Id));
                 }
             }
+
+            if (parallelMultiClip && clipParallelOutputs.Count > 1)
+            {
+                JArray rootVideoPath = parallelClipSourceMedia?.Path is JArray rp && rp.Count == 2
+                    ? new JArray(rp[0], rp[1])
+                    : null;
+                MultiClipParallelMerger.Apply(g, clipParallelOutputs, rootVideoPath);
+            }
         }
         finally
         {
+            if (parallelMultiClip)
+            {
+                _ = g.NodeHelpers.Remove(MultiClipParallelWorkflowFlags.NodeHelperKey);
+            }
+
             foreach (int sectionId in usedSectionIds)
             {
                 g.UserInput.SectionParamOverrides.Remove(sectionId);
@@ -43,16 +103,72 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
         }
     }
 
+    private void PrepareClipAudio(JsonParser.StageSpec stage)
+    {
+        if (_preparedClipId == stage.ClipId || g.CurrentMedia is null)
+        {
+            return;
+        }
+
+        _preparedClipId = stage.ClipId;
+        WGNodeData currentMedia = g.CurrentMedia.Duplicate();
+        AudioStageDetector.Detection clipAudio = ResolveClipAudio(stage);
+        currentMedia.AttachedAudio = clipAudio?.Audio;
+        g.CurrentMedia = currentMedia;
+        if (_rootStageTakeover && ShouldMatchVideoLengthToAudio(stage))
+        {
+            _ = new LtxAudioInjector(g).TryInject(clipAudio);
+        }
+    }
+
+    private AudioStageDetector.Detection ResolveClipAudio(JsonParser.StageSpec stage)
+    {
+        string source = (stage.ClipAudioSource ?? VideoStagesExtension.AudioSourceNative).Trim();
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return null;
+        }
+        if (string.Equals(source, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
+        {
+            if (uploadedAudios is null)
+            {
+                return null;
+            }
+            return uploadedAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection detection) ? detection : null;
+        }
+        if (AudioStageDetector.TryParseAceStepFunAudioSource(source, out _))
+        {
+            if (clipAudios is null)
+            {
+                return null;
+            }
+            return clipAudios.TryGetValue(stage.ClipId, out AudioStageDetector.Detection clipDetection) ? clipDetection : null;
+        }
+        if (_rootStageTakeover && RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage))
+        {
+            return null;
+        }
+        return _nativeAudioDetection;
+    }
+
+    private static bool ShouldMatchVideoLengthToAudio(JsonParser.StageSpec stage)
+    {
+        if (!stage.ClipLengthFromAudio)
+        {
+            return false;
+        }
+        if (string.Equals(stage.ClipAudioSource, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return AudioStageDetector.TryParseAceStepFunAudioSource(stage.ClipAudioSource, out _);
+    }
+
     private void CaptureReference(StageRefStore.StageKind kind, int? index = null)
     {
         WGNodeData referenceMedia = g.CurrentMedia;
         WGNodeData referenceVae = g.CurrentVae;
-        PostVideoChain postVideoChain = PostVideoChain.TryCapture(g);
-        if (postVideoChain is not null)
-        {
-            referenceMedia = postVideoChain.CreateStageInput();
-            referenceVae = postVideoChain.CreateStageInputVae();
-        }
+        LtxStageRefCapture.ApplyPostVideoChainCaptureIfPresent(g, ref referenceMedia, ref referenceVae);
         store.Capture(kind, index, referenceMedia, referenceVae);
     }
 
@@ -70,6 +186,22 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
         {
             g.UserInput.Set(T2IParamTypes.VAE.Type, stage.Vae, sectionId);
         }
+        if (stage.ClipFrames.HasValue && stage.ClipFrames.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.VideoFrames, stage.ClipFrames.Value, sectionId);
+        }
+        if (stage.ClipFPS.HasValue && stage.ClipFPS.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.VideoFPS, stage.ClipFPS.Value, sectionId);
+        }
+        if (stage.ClipWidth.HasValue && stage.ClipWidth.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.Width, stage.ClipWidth.Value, sectionId);
+        }
+        if (stage.ClipHeight.HasValue && stage.ClipHeight.Value > 0)
+        {
+            g.UserInput.Set(T2IParamTypes.Height, stage.ClipHeight.Value, sectionId);
+        }
     }
 
     private StageRefStore.StageRef ResolveGuideReference(JsonParser.StageSpec stage)
@@ -84,7 +216,6 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
         }
         if (stage.ImageReference.Equals("Generated", StringComparison.Ordinal))
         {
-            // "Generated" follows the latest generated output entering this stage.
             if (stage.Id > 0 && store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
             {
                 return previousGenerated;
@@ -120,5 +251,19 @@ public class StageSequenceRunner(WorkflowGenerator g, StageRefStore store, IRead
             return publishedEditRef;
         }
         throw new InvalidOperationException($"Unknown ImageReference value '{stage.ImageReference}'.");
+    }
+
+    private static AudioStageDetector.Detection BuildCurrentMediaAudioDetection(WorkflowGenerator g)
+    {
+        if (g.CurrentMedia?.AttachedAudio is null)
+        {
+            return null;
+        }
+        return new AudioStageDetector.Detection(
+            g.CurrentMedia.AttachedAudio,
+            "videostages.current-media-audio",
+            "CurrentMediaAttachedAudio",
+            "videostages.current-media-audio",
+            0);
     }
 }

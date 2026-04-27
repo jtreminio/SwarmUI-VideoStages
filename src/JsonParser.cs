@@ -1,8 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
@@ -10,11 +8,13 @@ namespace VideoStages;
 
 public class JsonParser(WorkflowGenerator g)
 {
-    private const double DefaultControl = 1.0;
+    private const double DefaultControl = 0.5;
+    private const double FirstStageControl = 1.0;
     private const double DefaultUpscale = 1.0;
     private const string DefaultUpscaleMethod = "pixel-lanczos";
     private const string DefaultGeneratedReference = "Generated";
     private const string DefaultPreviousStageReference = "PreviousStage";
+    private const int FrameAlignment = 8;
 
     public sealed record StageSpec(
         int Id,
@@ -27,7 +27,56 @@ public class JsonParser(WorkflowGenerator g)
         double CfgScale,
         string Sampler,
         string Scheduler,
-        string ImageReference
+        string ImageReference,
+        bool Skipped = false,
+        int ClipId = 0,
+        string ClipAudioSource = null,
+        bool ClipLengthFromAudio = false,
+        int? ClipWidth = null,
+        int? ClipHeight = null,
+        int? ClipFrames = null,
+        int? ClipFPS = null,
+        bool ClipReuseAudio = false,
+        int ClipStageIndex = 0,
+        int ClipStageCount = 0,
+        IReadOnlyList<RefSpec> ClipRefs = null,
+        IReadOnlyList<double> RefStrengths = null,
+        bool ImageReferenceWasExplicit = false
+    );
+
+    public sealed record RefSpec(
+        string Source,
+        int Frame,
+        bool FromEnd,
+        string UploadFileName,
+        string Data = null
+    );
+
+    public sealed record UploadedAudioSpec(
+        string Data,
+        string FileName
+    );
+
+    public sealed record ClipSpec(
+        int Id,
+        bool Skipped,
+        double DurationSeconds,
+        string AudioSource,
+        bool SaveAudioTrack,
+        bool ClipLengthFromAudio,
+        bool ReuseAudio,
+        int? Width,
+        int? Height,
+        UploadedAudioSpec UploadedAudio,
+        IReadOnlyList<RefSpec> Refs,
+        IReadOnlyList<StageSpec> Stages
+    );
+
+    public sealed record VideoStagesSpec(
+        int? Width,
+        int? Height,
+        int? FPS,
+        IReadOnlyList<ClipSpec> Clips
     );
 
     private sealed record StageDefaults(
@@ -41,51 +90,377 @@ public class JsonParser(WorkflowGenerator g)
         string Scheduler
     );
 
+    /// <summary>Flattens all non-skipped stages from configured JSON. Stages get clip audio/dimensions.</summary>
     public List<StageSpec> ParseStages()
     {
-        List<JObject> stages = GetJsonStagesArray();
-        if (stages.Count == 0)
+        VideoStagesSpec config = ParseConfig();
+        List<ClipSpec> clips = [.. config.Clips];
+        int? registeredRootWidth = ResolveRegisteredRootDimension(VideoStagesExtension.RootWidth);
+        int? registeredRootHeight = ResolveRegisteredRootDimension(VideoStagesExtension.RootHeight);
+        int? effectiveRootWidth = registeredRootWidth ?? config.Width;
+        int? effectiveRootHeight = registeredRootHeight ?? config.Height;
+        int fps = ResolveFps();
+        List<StageSpec> flattened = [];
+        int globalStageIndex = 0;
+        foreach (ClipSpec clip in clips)
         {
-            return [];
-        }
-
-        StageDefaults defaults = BuildDefaults();
-        List<StageSpec> parsed = [];
-        for (int i = 0; i < stages.Count; i++)
-        {
-            JObject stage = stages[i];
-            if (!TryParseStage(stage, i, defaults, out StageSpec normalized))
+            if (clip.Skipped)
             {
                 continue;
             }
-
-            parsed.Add(normalized);
+            int? clipFrames = null;
+            if (clip.DurationSeconds > 0 && fps > 0)
+            {
+                clipFrames = CalculateAlignedFrameCount(clip.DurationSeconds, fps);
+            }
+            List<StageSpec> activeStages = [.. clip.Stages.Where(stage => !stage.Skipped)];
+            for (int clipStageIndex = 0; clipStageIndex < activeStages.Count; clipStageIndex++)
+            {
+                StageSpec stage = activeStages[clipStageIndex];
+                flattened.Add(stage with
+                {
+                    Id = globalStageIndex,
+                    ClipId = clip.Id,
+                    ClipAudioSource = clip.AudioSource,
+                    ClipLengthFromAudio = clip.ClipLengthFromAudio,
+                    ClipReuseAudio = clip.ReuseAudio,
+                    ClipStageIndex = clipStageIndex,
+                    ClipStageCount = activeStages.Count,
+                    ClipWidth = effectiveRootWidth ?? clip.Width,
+                    ClipHeight = effectiveRootHeight ?? clip.Height,
+                    ClipFrames = clipFrames,
+                    ClipFPS = fps,
+                    ClipRefs = clip.Refs,
+                });
+                globalStageIndex++;
+            }
         }
-
-        return parsed;
+        return flattened;
     }
 
-    private List<JObject> GetJsonStagesArray()
+    public int ResolveFps()
+    {
+        if (g.UserInput.TryGet(VideoStagesExtension.RootFPS, out int rootFps) && rootFps > 0)
+        {
+            return rootFps;
+        }
+        int? configFps = ParseConfig().FPS;
+        if (configFps.HasValue && configFps.Value > 0)
+        {
+            return configFps.Value;
+        }
+        if (g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int videoFps))
+        {
+            return videoFps;
+        }
+        return 24;
+    }
+
+    private static int CalculateAlignedFrameCount(double durationSeconds, int fps)
+    {
+        int rawFrames = Math.Max(0, (int)Math.Ceiling(durationSeconds * fps));
+        int alignedFrames = (int)Math.Ceiling(rawFrames / (double)FrameAlignment) * FrameAlignment;
+        return Math.Max(1, alignedFrames + 1);
+    }
+
+    private int? ResolveRegisteredRootDimension(T2IRegisteredParam<int> param)
+    {
+        return g.UserInput.TryGet(param, out int value) && value >= VideoStagesExtension.RootDimensionMin
+            ? value
+            : null;
+    }
+
+    /// <summary>Parses JSON into clips. Each top-level entry must be a clip object with a <c>Stages</c> array.</summary>
+    public VideoStagesSpec ParseConfig()
+    {
+        (int? width, int? height, int? fps, List<JObject> rawEntries) = GetJsonTopLevelConfig();
+        if (rawEntries.Count == 0)
+        {
+            return new VideoStagesSpec(width, height, fps, []);
+        }
+
+        if (!rawEntries.All(IsClipShape))
+        {
+            Logs.Warning("VideoStages: Each Video Stages entry must be a clip object with a Stages array.");
+            return new VideoStagesSpec(width, height, fps, []);
+        }
+
+        StageDefaults defaults = BuildDefaults();
+        List<ClipSpec> parsed = [];
+
+        for (int i = 0; i < rawEntries.Count; i++)
+        {
+            JObject clipObj = rawEntries[i];
+            ClipSpec clip = ParseClip(clipObj, i, defaults);
+            if (clip.Stages.Count > 0)
+            {
+                parsed.Add(clip);
+            }
+        }
+        return new VideoStagesSpec(width, height, fps, parsed);
+    }
+
+    /// <summary>Resolves per-clip uploaded audio from JSON.</summary>
+    public AudioFile ParseUploadedAudioForClip(ClipSpec clip) =>
+        MaterializeUploadedAudio(clip?.UploadedAudio);
+
+    private AudioFile MaterializeUploadedAudio(UploadedAudioSpec spec)
+    {
+        if (spec is null || string.IsNullOrWhiteSpace(spec.Data))
+        {
+            return null;
+        }
+
+        string trimmed = spec.Data.Trim();
+        string material = trimmed;
+        if (trimmed.StartsWith("inputs/")
+            || trimmed.StartsWith("raw/")
+            || trimmed.StartsWith("Starred/"))
+        {
+            if (g.UserInput?.SourceSession is null)
+            {
+                Logs.Warning("VideoStages: uploaded audio uses a server-side path (inputs/, raw/, or Starred/) but no session is available; cannot load the file.");
+                return null;
+            }
+
+            try
+            {
+                material = T2IParamTypes.FilePathToDataString(
+                    g.UserInput.SourceSession,
+                    trimmed,
+                    "for VideoStages uploaded audio");
+            }
+            catch (SwarmReadableErrorException ex)
+            {
+                Logs.Warning($"VideoStages: Could not resolve uploaded audio path '{trimmed}': {ex.Message}");
+                return null;
+            }
+        }
+
+        try
+        {
+            AudioFile audio = AudioFile.FromDataString(material);
+            audio.SourceFilePath = string.IsNullOrWhiteSpace(spec.FileName)
+                ? null
+                : spec.FileName.Trim();
+            return audio;
+        }
+        catch
+        {
+            Logs.Warning("VideoStages: Ignoring invalid uploaded audio embedded in Video Stages JSON.");
+            return null;
+        }
+    }
+
+    public List<ClipSpec> ParseClips()
+    {
+        return [.. ParseConfig().Clips];
+    }
+
+    private static bool IsClipShape(JObject entry) =>
+        entry.Properties().Any(p => string.Equals(p.Name, "Stages", StringComparison.OrdinalIgnoreCase));
+
+    private ClipSpec ParseClip(JObject clipObj, int clipIndex, StageDefaults defaults)
+    {
+        bool skipped = GetOptionalBool(clipObj, "Skipped", defaultValue: false);
+        double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, clipIndex);
+        string audioSource = GetString(clipObj, "AudioSource");
+        if (string.IsNullOrWhiteSpace(audioSource))
+        {
+            audioSource = VideoStagesExtension.AudioSourceNative;
+        }
+        else
+        {
+            audioSource = audioSource.Trim();
+        }
+        bool saveAudioTrack = GetOptionalBool(clipObj, "SaveAudioTrack", defaultValue: false);
+        bool clipLengthFromAudio = GetOptionalBool(clipObj, "ClipLengthFromAudio", defaultValue: false);
+        bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
+        int? width = GetOptionalNullableInt(clipObj, "Width");
+        int? height = GetOptionalNullableInt(clipObj, "Height");
+        UploadedAudioSpec uploadedAudio = GetUploadedAudio(clipObj);
+
+        List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
+        List<StageSpec> stages = [];
+        List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
+        List<RefSpec> refs = [];
+        for (int i = 0; i < rawRefs.Count; i++)
+        {
+            RefSpec parsedRef = ParseRef(rawRefs[i], clipIndex, i);
+            if (parsedRef is not null)
+            {
+                refs.Add(parsedRef);
+            }
+        }
+
+        for (int i = 0; i < rawStages.Count; i++)
+        {
+            if (!TryParseStage(rawStages[i], i, defaults, refs.Count, out StageSpec parsed))
+            {
+                continue;
+            }
+            stages.Add(parsed);
+        }
+
+        return new ClipSpec(
+            Id: clipIndex,
+            Skipped: skipped,
+            DurationSeconds: Math.Max(0, duration),
+            AudioSource: audioSource,
+            SaveAudioTrack: saveAudioTrack,
+            ClipLengthFromAudio: clipLengthFromAudio,
+            ReuseAudio: reuseAudio,
+            Width: width,
+            Height: height,
+            UploadedAudio: uploadedAudio,
+            Refs: refs,
+            Stages: stages
+        );
+    }
+
+    private static RefSpec ParseRef(JObject refObj, int clipIndex, int refIndex)
+    {
+        string source = GetString(refObj, "Source");
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            Logs.Warning($"VideoStages: Clip {clipIndex} reference {refIndex} is missing a Source value; skipping.");
+            return null;
+        }
+
+        int frame = 1;
+        string rawFrame = GetString(refObj, "Frame");
+        if (!string.IsNullOrWhiteSpace(rawFrame) && int.TryParse(rawFrame.Trim(), out int parsedFrame))
+        {
+            frame = Math.Max(1, parsedFrame);
+        }
+        bool fromEnd = false;
+        string rawFromEnd = GetString(refObj, "FromEnd");
+        if (!string.IsNullOrWhiteSpace(rawFromEnd) && bool.TryParse(rawFromEnd.Trim(), out bool parsedFromEnd))
+        {
+            fromEnd = parsedFromEnd;
+        }
+        string uploadFileName = GetString(refObj, "UploadFileName");
+        string data = GetString(refObj, "Data");
+        UploadedAudioSpec embeddedImage = GetEmbeddedUploadSpec(refObj, "UploadedImage");
+        if (embeddedImage is not null)
+        {
+            data = embeddedImage.Data;
+            if (string.IsNullOrWhiteSpace(uploadFileName)
+                && !string.IsNullOrWhiteSpace(embeddedImage.FileName))
+            {
+                uploadFileName = embeddedImage.FileName;
+            }
+        }
+
+        return new RefSpec(
+            Source: source.Trim(),
+            Frame: frame,
+            FromEnd: fromEnd,
+            UploadFileName: string.IsNullOrWhiteSpace(uploadFileName) ? null : uploadFileName.Trim(),
+            Data: string.IsNullOrWhiteSpace(data) ? null : data.Trim()
+        );
+    }
+
+    private static bool GetOptionalBool(JObject obj, string key, bool defaultValue)
+    {
+        string raw = GetString(obj, key);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return defaultValue;
+        }
+        return bool.TryParse(raw.Trim(), out bool value) ? value : defaultValue;
+    }
+
+    private static int? GetOptionalNullableInt(JObject obj, string key)
+    {
+        string raw = GetString(obj, key);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+        return int.TryParse(raw.Trim(), out int value) ? value : null;
+    }
+
+    private static List<JObject> GetObjectArray(JObject obj, string key)
+    {
+        foreach (JProperty property in obj.Properties())
+        {
+            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase) && property.Value is JArray array)
+            {
+                return [.. array.OfType<JObject>()];
+            }
+        }
+        return [];
+    }
+
+    private static JObject GetObject(JObject obj, string key)
+    {
+        foreach (JProperty property in obj.Properties())
+        {
+            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase) && property.Value is JObject nested)
+            {
+                return nested;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Nested object with <c>Data</c> and optional <c>FileName</c> (property name passed in).</summary>
+    private static UploadedAudioSpec GetEmbeddedUploadSpec(JObject parent, string containerPropertyName)
+    {
+        JObject nested = GetObject(parent, containerPropertyName);
+        if (nested is null)
+        {
+            return null;
+        }
+
+        string data = GetString(nested, "Data");
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            return null;
+        }
+
+        return new UploadedAudioSpec(
+            Data: data.Trim(),
+            FileName: GetString(nested, "FileName")?.Trim()
+        );
+    }
+
+    private static UploadedAudioSpec GetUploadedAudio(JObject obj)
+    {
+        return GetEmbeddedUploadSpec(obj, "UploadedAudio");
+    }
+
+    private (int? Width, int? Height, int? FPS, List<JObject> Entries) GetJsonTopLevelConfig()
     {
         if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
             || string.IsNullOrWhiteSpace(json))
         {
-            return [];
+            return (null, null, null, []);
         }
 
         try
         {
             JToken token = JToken.Parse(json);
-            if (token is not JArray array)
+            if (token is JArray array)
             {
-                return [];
+                return (null, null, null, [.. array.OfType<JObject>()]);
             }
-            return [.. array.OfType<JObject>()];
+            if (token is JObject obj)
+            {
+                return (
+                    GetOptionalNullableInt(obj, "Width"),
+                    GetOptionalNullableInt(obj, "Height"),
+                    GetOptionalNullableInt(obj, "FPS"),
+                    GetObjectArray(obj, "Clips")
+                );
+            }
+            return (null, null, null, []);
         }
         catch
         {
             Logs.Warning("VideoStages: Ignoring invalid Video Stages JSON.");
-            return [];
+            return (null, null, null, []);
         }
     }
 
@@ -93,10 +468,10 @@ public class JsonParser(WorkflowGenerator g)
     {
         int steps = g.UserInput.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
             ? explicitVideoSteps
-            : g.UserInput.Get(T2IParamTypes.Steps, 20, autoFixDefault: true);
+            : g.UserInput.Get(T2IParamTypes.Steps, 8, autoFixDefault: true);
         double cfgScale = g.UserInput.TryGet(T2IParamTypes.VideoCFG, out double explicitVideoCfg)
             ? explicitVideoCfg
-            : g.UserInput.Get(T2IParamTypes.CFGScale, 7, autoFixDefault: true);
+            : g.UserInput.Get(T2IParamTypes.CFGScale, 1, autoFixDefault: true);
         string sampler = ComfyUIBackendExtension.SamplerParam is null
             ? "euler"
             : g.UserInput.Get(ComfyUIBackendExtension.SamplerParam, "euler", autoFixDefault: true);
@@ -105,18 +480,18 @@ public class JsonParser(WorkflowGenerator g)
             : g.UserInput.Get(ComfyUIBackendExtension.SchedulerParam, "normal", autoFixDefault: true);
 
         return new StageDefaults(
-            Control: DefaultControl,
-            Upscale: DefaultUpscale,
+            Control: NormalizeControl(DefaultControl),
+            Upscale: NormalizeUpscale(DefaultUpscale),
             UpscaleMethod: DefaultUpscaleMethod,
             Vae: "",
             Steps: Math.Max(1, steps),
-            CfgScale: cfgScale,
+            CfgScale: NormalizeCfgScale(cfgScale),
             Sampler: sampler,
             Scheduler: scheduler
         );
     }
 
-    private bool TryParseStage(JObject stage, int index, StageDefaults defaults, out StageSpec parsedStage)
+    private bool TryParseStage(JObject stage, int index, StageDefaults defaults, int clipRefCount, out StageSpec parsedStage)
     {
         parsedStage = null;
         string model = GetOptionalString(stage, "Model", defaultValue: null, index, allowEmpty: false);
@@ -125,20 +500,40 @@ public class JsonParser(WorkflowGenerator g)
             Logs.Warning($"VideoStages: Stage {index} is missing required field 'Model' and will be skipped.");
             return false;
         }
-        double control = GetOptionalDouble(stage, "Control", defaults.Control, index);
-        double upscale = GetOptionalDouble(stage, "Upscale", defaults.Upscale, index);
+        double control = NormalizeControl(GetOptionalDouble(stage, "Control", defaults.Control, index));
+        double upscale = NormalizeUpscale(GetOptionalDouble(stage, "Upscale", defaults.Upscale, index));
         string upscaleMethod = GetOptionalString(stage, "UpscaleMethod", defaults.UpscaleMethod, index, allowEmpty: false);
+        if (index == 0)
+        {
+            bool hasUpscaleKey = JsonHasOwnProperty(stage, "Upscale");
+            bool hasUpscaleMethodKey = JsonHasOwnProperty(stage, "UpscaleMethod");
+            if (ShouldWarnFirstStageUpscaleIgnored(hasUpscaleKey, hasUpscaleMethodKey, upscale))
+            {
+                Logs.Warning(
+                    $"VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', which are ignored for that stage only.");
+            }
+            control = FirstStageControl;
+            upscale = DefaultUpscale;
+            upscaleMethod = DefaultUpscaleMethod;
+        }
+        else
+        {
+            upscale = Math.Max(0.25, upscale);
+        }
         string vae = NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, index, allowEmpty: true));
         int steps = GetOptionalInt(stage, "Steps", defaults.Steps, index);
-        double cfgScale = GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index);
+        double cfgScale = NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index));
         string sampler = GetOptionalString(stage, "Sampler", defaults.Sampler, index, allowEmpty: false);
         string scheduler = GetOptionalString(stage, "Scheduler", defaults.Scheduler, index, allowEmpty: false);
+        bool hasImageReferenceKey = JsonHasOwnProperty(stage, "ImageReference");
         string imageReference = NormalizeImageReference(GetString(stage, "ImageReference"), index);
+        bool skipped = GetOptionalBool(stage, "Skipped", defaultValue: false);
+        IReadOnlyList<double> refStrengths = ParseStageRefStrengths(stage, index, clipRefCount);
 
         parsedStage = new StageSpec(
             Id: index,
-            Control: Clamp(control, 0, 1),
-            Upscale: Math.Max(0.25, upscale),
+            Control: control,
+            Upscale: upscale,
             UpscaleMethod: upscaleMethod,
             Model: model,
             Vae: vae,
@@ -146,9 +541,67 @@ public class JsonParser(WorkflowGenerator g)
             CfgScale: cfgScale,
             Sampler: sampler,
             Scheduler: scheduler,
-            ImageReference: imageReference
+            ImageReference: imageReference,
+            Skipped: skipped,
+            ClipRefs: null,
+            RefStrengths: refStrengths,
+            ImageReferenceWasExplicit: hasImageReferenceKey
         );
         return true;
+    }
+
+    private static IReadOnlyList<double> ParseStageRefStrengths(JObject stage, int index, int clipRefCount)
+    {
+        if (clipRefCount <= 0)
+        {
+            return [];
+        }
+
+        double defaultStrength = VideoStagesExtension.DefaultStageRefStrength;
+        List<double> strengths = [];
+        foreach (JProperty property in stage.Properties())
+        {
+            if (!string.Equals(property.Name, "refStrengths", StringComparison.OrdinalIgnoreCase)
+                || property.Value is not JArray array)
+            {
+                continue;
+            }
+
+            foreach (JToken entry in array)
+            {
+                if (entry.Type == JTokenType.Float || entry.Type == JTokenType.Integer)
+                {
+                    strengths.Add(ClampRefStrength(entry.Value<double>()));
+                }
+                else if (entry.Type == JTokenType.String
+                    && double.TryParse($"{entry}".Trim(), out double parsed))
+                {
+                    strengths.Add(ClampRefStrength(parsed));
+                }
+            }
+            break;
+        }
+
+        while (strengths.Count < clipRefCount)
+        {
+            strengths.Add(defaultStrength);
+        }
+
+        if (strengths.Count > clipRefCount)
+        {
+            strengths.RemoveRange(clipRefCount, strengths.Count - clipRefCount);
+        }
+
+        return strengths;
+    }
+
+    private static double ClampRefStrength(double value)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+        {
+            return VideoStagesExtension.DefaultStageRefStrength;
+        }
+        return Clamp(value, 0.01, 1.0);
     }
 
     private string NormalizeImageReference(string rawValue, int index)
@@ -196,7 +649,6 @@ public class JsonParser(WorkflowGenerator g)
             {
                 return $"Stage{explicitStage}";
             }
-
             Logs.Warning($"VideoStages: Stage {index} has forward ImageReference '{rawValue}'. Using '{defaultReference}' instead.");
             return defaultReference;
         }
@@ -236,8 +688,9 @@ public class JsonParser(WorkflowGenerator g)
         {
             return false;
         }
-        return !string.Equals(rawVae.Trim(), "Automatic", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(rawVae.Trim(), "None", StringComparison.OrdinalIgnoreCase);
+        string t = rawVae.Trim();
+        return !string.Equals(t, "Automatic", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(t, "None", StringComparison.OrdinalIgnoreCase);
     }
 
     private static double Clamp(double value, double min, double max)
@@ -306,5 +759,39 @@ public class JsonParser(WorkflowGenerator g)
             }
         }
         return null;
+    }
+
+    private static bool JsonHasOwnProperty(JObject obj, string key) =>
+        obj.Properties().Any(p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
+
+    private static double TruncateToDecimals(double value, int decimals)
+    {
+        double factor = Math.Pow(10, decimals);
+        return Math.Truncate(value * factor) / factor;
+    }
+
+    private static double NormalizeControl(double control) =>
+        TruncateToDecimals(Clamp(control, 0, 1), 2);
+
+    private static double NormalizeUpscale(double upscale) =>
+        TruncateToDecimals(upscale, 2);
+
+    private static double NormalizeCfgScale(double cfgScale) =>
+        TruncateToDecimals(cfgScale, 1);
+
+    private static bool ShouldWarnFirstStageUpscaleIgnored(
+        bool hasUpscaleKey,
+        bool hasUpscaleMethodKey,
+        double upscale)
+    {
+        if (!hasUpscaleKey && !hasUpscaleMethodKey)
+        {
+            return false;
+        }
+        if (NormalizeUpscale(upscale) == 1)
+        {
+            return false;
+        }
+        return true;
     }
 }

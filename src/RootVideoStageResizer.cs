@@ -1,14 +1,11 @@
-using System;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
 internal static class RootVideoStageResizer
 {
-    private const string DefaultRootGuideReference = "Default";
     private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PreHandler = ApplyIfNeeded;
     private static readonly Action<WorkflowGenerator.ImageToVideoGenInfo> PostHandler = ApplyLatentDimensionsIfNeeded;
 
@@ -29,25 +26,131 @@ internal static class RootVideoStageResizer
         WorkflowGenerator g = genInfo?.Generator;
         if (g is null
             || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !HasRootStageOverrides(g))
-        {
-            return;
-        }
-
-        ApplyRootGuideReferenceIfNeeded(genInfo);
-        if (!TryGetRootStageResolution(g.UserInput, out int width, out int height))
+            || !TryGetRootStageResolution(g, out int width, out int height))
         {
             return;
         }
 
         genInfo.Width = width;
         genInfo.Height = height;
-        if (g.CurrentMedia is not null)
+        ApplyCurrentMediaResolution(g, width, height);
+    }
+
+    private static void ApplyLatentDimensionsIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        WorkflowGenerator g = genInfo?.Generator;
+        if (g is null
+            || genInfo.ContextID != T2IParamInput.SectionID_Video
+            || !TryGetRootStageResolution(g, out int width, out int height)
+            || g.CurrentMedia is null)
+        {
+            return;
+        }
+
+        g.CurrentMedia.Width = width;
+        g.CurrentMedia.Height = height;
+    }
+
+    internal static void ApplyConfiguredRootStageResolutionToCurrentMedia(WorkflowGenerator g)
+    {
+        if (!TryGetConfiguredRootStageResolution(g, out int width, out int height))
+        {
+            return;
+        }
+
+        // Takeover skips CreateImageToVideo; do not insert ImageScale if this tensor already feeds SwarmSaveImageWS/SaveImage.
+        if (RootVideoStageTakeover.ShouldTakeOverRootStage(g)
+            && g.CurrentMedia?.Path is JArray mediaPath
+            && mediaPath.Count == 2
+            && WorkflowUtils.FindInputConnections(g.Workflow, mediaPath)
+                .Any(connection =>
+                    g.Workflow.TryGetValue(connection.NodeId, out JToken nodeToken)
+                    && nodeToken is JObject node
+                    && ($"{node["class_type"]}" == NodeTypes.SwarmSaveImageWS
+                        || $"{node["class_type"]}" == "SaveImage")))
         {
             g.CurrentMedia.Width = width;
             g.CurrentMedia.Height = height;
+            return;
         }
 
+        ApplyCurrentMediaResolution(g, width, height);
+    }
+
+    private static bool HasNativeRootVideoModel(WorkflowGenerator g)
+    {
+        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel)
+            && imageToVideoModel is not null;
+    }
+
+    /// <summary>Root stage width/height from registered input or parsed JSON (top-level, else first non-skipped clip).</summary>
+    internal static bool TryGetRootStageResolution(WorkflowGenerator g, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (g is null)
+        {
+            return false;
+        }
+
+        if (TryGetRegisteredRootStageResolution(g, out width, out height))
+        {
+            return true;
+        }
+
+        JsonParser parser = new(g);
+        JsonParser.VideoStagesSpec config = parser.ParseConfig();
+        if (config.Width.HasValue && config.Height.HasValue && config.Width.Value > 0 && config.Height.Value > 0)
+        {
+            width = config.Width.Value;
+            height = config.Height.Value;
+            return true;
+        }
+        foreach (JsonParser.ClipSpec clip in config.Clips)
+        {
+            if (clip.Skipped)
+            {
+                continue;
+            }
+            if (clip.Width.HasValue && clip.Height.HasValue && clip.Width.Value > 0 && clip.Height.Value > 0)
+            {
+                width = clip.Width.Value;
+                height = clip.Height.Value;
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    private static bool TryGetRegisteredRootStageResolution(WorkflowGenerator g, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        return g.UserInput.TryGet(VideoStagesExtension.RootWidth, out width)
+            && g.UserInput.TryGet(VideoStagesExtension.RootHeight, out height)
+            && width >= VideoStagesExtension.RootDimensionMin
+            && height >= VideoStagesExtension.RootDimensionMin;
+    }
+
+    internal static bool TryGetConfiguredRootStageResolution(WorkflowGenerator g, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        return g is not null
+            && HasNativeRootVideoModel(g)
+            && TryGetRootStageResolution(g, out width, out height);
+    }
+
+    private static void ApplyCurrentMediaResolution(WorkflowGenerator g, int width, int height)
+    {
+        if (g.CurrentMedia is null)
+        {
+            return;
+        }
+
+        g.CurrentMedia.Width = width;
+        g.CurrentMedia.Height = height;
         if (TryUpdateExistingScaleNode(g, imagePath: null, width, height, crop: "center"))
         {
             return;
@@ -64,192 +167,6 @@ internal static class RootVideoStageResizer
         g.CurrentMedia = g.CurrentMedia.WithPath([scaleNode, 0]);
         g.CurrentMedia.Width = width;
         g.CurrentMedia.Height = height;
-    }
-
-    private static void ApplyRootGuideReferenceIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        WorkflowGenerator g = genInfo?.Generator;
-        if (g is null)
-        {
-            return;
-        }
-
-        string guideReference = NormalizeRootGuideImageReference(g);
-        if (guideReference == DefaultRootGuideReference)
-        {
-            return;
-        }
-
-        StageRefStore.StageRef stageRef = ResolveRootGuideReference(g, guideReference);
-        WGNodeData guideImage = Base2EditPublishedStageRefs.ResolveToRawImage(stageRef);
-        if (guideImage is null)
-        {
-            throw new InvalidOperationException($"Root Guide Image Reference '{guideReference}' could not be resolved to an image.");
-        }
-
-        if (TryUpdateExistingScaleNode(g, imagePath: guideImage.Path))
-        {
-            return;
-        }
-
-        string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
-        {
-            ["image"] = guideImage.Path,
-            ["width"] = genInfo.Width,
-            ["height"] = genInfo.Height,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "disabled"
-        });
-        g.CurrentMedia = g.CurrentMedia.WithPath([scaleNode, 0]);
-    }
-
-    private static void ApplyLatentDimensionsIfNeeded(WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        WorkflowGenerator g = genInfo?.Generator;
-        if (g is null
-            || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !HasRootStageOverrides(g)
-            || !TryGetRootStageResolution(g.UserInput, out int width, out int height)
-            || g.CurrentMedia is null)
-        {
-            return;
-        }
-
-        g.CurrentMedia.Width = width;
-        g.CurrentMedia.Height = height;
-    }
-
-    internal static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
-    {
-        if (!TryGetConfiguredRootStageResolution(g, out int width, out int height))
-        {
-            return;
-        }
-
-        UpdateAllAudioMaskDimensions(g, width, height);
-    }
-
-    internal static void ApplyCurrentAudioMaskDimensions(WGNodeData media)
-    {
-        if (media?.Gen is not WorkflowGenerator g
-            || !media.Width.HasValue
-            || !media.Height.HasValue
-            || media.Path is not { Count: 2 } mediaPath
-            || !g.Workflow.TryGetValue($"{mediaPath[0]}", out JToken concatToken)
-            || concatToken is not JObject concatNode
-            || $"{concatNode["class_type"]}" != NodeTypes.LTXVConcatAVLatent
-            || concatNode["inputs"] is not JObject concatInputs
-            || concatInputs["audio_latent"] is not JArray audioLatentPath
-            || !TryGetSolidMaskInputsForAudioLatentPath(g, audioLatentPath, out JObject solidMaskInputs))
-        {
-            return;
-        }
-
-        solidMaskInputs["width"] = media.Width.Value;
-        solidMaskInputs["height"] = media.Height.Value;
-    }
-
-    private static bool HasRootStageOverrides(WorkflowGenerator g)
-    {
-        return HasExplicitRootGuideReference(g)
-            || TryGetRootStageResolution(g.UserInput, out _, out _);
-    }
-
-    private static bool HasExplicitRootGuideReference(WorkflowGenerator g)
-    {
-        return g.UserInput.TryGet(VideoStagesExtension.RootGuideImageReference, out string _);
-    }
-
-    private static string NormalizeRootGuideImageReference(WorkflowGenerator g)
-    {
-        string rawValue = g.UserInput.Get(VideoStagesExtension.RootGuideImageReference, DefaultRootGuideReference);
-        if (IsTextToVideoRootWorkflow(g))
-        {
-            string compactT2v = ImageReferenceSyntax.Compact(rawValue);
-            if (!string.IsNullOrWhiteSpace(compactT2v)
-                && !string.Equals(compactT2v, DefaultRootGuideReference, StringComparison.OrdinalIgnoreCase))
-            {
-                Logs.Warning($"VideoStages: Root guide reference '{rawValue}' is invalid on a text-to-video workflow. Using '{DefaultRootGuideReference}' instead.");
-            }
-            return DefaultRootGuideReference;
-        }
-
-        string compact = ImageReferenceSyntax.Compact(rawValue);
-        if (string.IsNullOrWhiteSpace(compact)
-            || string.Equals(compact, DefaultRootGuideReference, StringComparison.OrdinalIgnoreCase))
-        {
-            return DefaultRootGuideReference;
-        }
-        if (string.Equals(compact, "Base", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Base";
-        }
-        if (string.Equals(compact, "Refiner", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Refiner";
-        }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(compact, out int editStage))
-        {
-            return ImageReferenceSyntax.FormatBase2EditStageIndex(editStage);
-        }
-
-        Logs.Warning($"VideoStages: Root guide reference '{rawValue}' is invalid. Using '{DefaultRootGuideReference}' instead.");
-        return DefaultRootGuideReference;
-    }
-
-    private static StageRefStore.StageRef ResolveRootGuideReference(WorkflowGenerator g, string guideReference)
-    {
-        StageRefStore store = new(g);
-        if (guideReference == "Base")
-        {
-            return store.Base ?? throw new InvalidOperationException("Root Guide Image Reference 'Base' requested, but no base reference exists.");
-        }
-        if (guideReference == "Refiner")
-        {
-            return store.Refiner ?? throw new InvalidOperationException("Root Guide Image Reference 'Refiner' requested, but no refiner reference exists.");
-        }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(guideReference, out int editStage))
-        {
-            return Base2EditPublishedStageRefs.TryGetStageRef(g, editStage, out StageRefStore.StageRef editRef)
-                ? editRef
-                : throw new InvalidOperationException($"Root Guide Image Reference '{guideReference}' requested, but Base2Edit stage {editStage} does not exist.");
-        }
-
-        throw new InvalidOperationException($"Unknown Root Guide Image Reference value '{guideReference}'.");
-    }
-
-    private static bool IsTextToVideoRootWorkflow(WorkflowGenerator g)
-    {
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
-        {
-            return false;
-        }
-
-        return g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
-            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
-    }
-
-    private static bool HasNativeRootVideoModel(WorkflowGenerator g)
-    {
-        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel)
-            && imageToVideoModel is not null;
-    }
-
-    private static bool TryGetRootStageResolution(T2IParamInput input, out int width, out int height)
-    {
-        width = 0;
-        height = 0;
-        return input.TryGet(VideoStagesExtension.RootStageWidth, out width)
-            && input.TryGet(VideoStagesExtension.RootStageHeight, out height);
-    }
-
-    internal static bool TryGetConfiguredRootStageResolution(WorkflowGenerator g, out int width, out int height)
-    {
-        width = 0;
-        height = 0;
-        return g is not null
-            && HasNativeRootVideoModel(g)
-            && TryGetRootStageResolution(g.UserInput, out width, out height);
     }
 
     private static bool TryUpdateExistingScaleNode(WorkflowGenerator g, JArray imagePath = null, int? width = null, int? height = null, string crop = null)
@@ -283,68 +200,6 @@ internal static class RootVideoStageResizer
         {
             inputs["upscale_method"] = "lanczos";
         }
-        return true;
-    }
-
-    private static void UpdateAllAudioMaskDimensions(WorkflowGenerator g, int width, int height)
-    {
-        foreach (var setMaskNode in WorkflowUtils.NodesOfType(g.Workflow, NodeTypes.SetLatentNoiseMask))
-        {
-            if (!IsAudioNoiseMaskNode(g, setMaskNode.Node)
-                || !TryGetSolidMaskInputsForSetMaskNode(g, setMaskNode.Node, out JObject solidMaskInputs))
-            {
-                continue;
-            }
-
-            solidMaskInputs["width"] = width;
-            solidMaskInputs["height"] = height;
-        }
-    }
-
-    private static bool IsAudioNoiseMaskNode(WorkflowGenerator g, JObject setMaskNode)
-    {
-        if (setMaskNode["inputs"] is not JObject inputs
-            || inputs["samples"] is not JArray samplesPath
-            || samplesPath.Count != 2
-            || !g.Workflow.TryGetValue($"{samplesPath[0]}", out JToken samplesToken)
-            || samplesToken is not JObject samplesNode)
-        {
-            return false;
-        }
-
-        string classType = $"{samplesNode["class_type"]}";
-        return classType == "LTXVAudioVAEEncode" || classType == "VAEEncodeAudio";
-    }
-
-    private static bool TryGetSolidMaskInputsForAudioLatentPath(WorkflowGenerator g, JArray audioLatentPath, out JObject solidMaskInputs)
-    {
-        solidMaskInputs = null;
-        if (audioLatentPath is not { Count: 2 }
-            || !g.Workflow.TryGetValue($"{audioLatentPath[0]}", out JToken setMaskToken)
-            || setMaskToken is not JObject setMaskNode
-            || $"{setMaskNode["class_type"]}" != NodeTypes.SetLatentNoiseMask)
-        {
-            return false;
-        }
-
-        return TryGetSolidMaskInputsForSetMaskNode(g, setMaskNode, out solidMaskInputs);
-    }
-
-    private static bool TryGetSolidMaskInputsForSetMaskNode(WorkflowGenerator g, JObject setMaskNode, out JObject solidMaskInputs)
-    {
-        solidMaskInputs = null;
-        if (setMaskNode["inputs"] is not JObject setMaskInputs
-            || setMaskInputs["mask"] is not JArray solidMaskPath
-            || solidMaskPath.Count != 2
-            || !g.Workflow.TryGetValue($"{solidMaskPath[0]}", out JToken solidMaskToken)
-            || solidMaskToken is not JObject solidMaskNode
-            || $"{solidMaskNode["class_type"]}" != NodeTypes.SolidMask
-            || solidMaskNode["inputs"] is not JObject inputs)
-        {
-            return false;
-        }
-
-        solidMaskInputs = inputs;
         return true;
     }
 }

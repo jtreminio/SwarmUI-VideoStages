@@ -17,5 +17,6 @@ Properties/
 # Node / TypeScript
 node_modules/
 *.js.map
+coverage/
 
 __pycache__/

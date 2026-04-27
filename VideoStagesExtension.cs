@@ -3,25 +3,48 @@ using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.LTX2;
 
 namespace VideoStages;
 
 public class VideoStagesExtension : Extension
 {
     public const int SectionID_VideoStages = 48823;
-    public const double DefaultLTXVImgToVideoInplaceStrength = 0.8;
+    public const int SectionID_VideoClip = 58823;
+    public const double DefaultStageRefStrength = 0.8;
+    public const int RootDimensionMin = 256;
+    public const int RootDimensionMax = 16384;
+    public const string RootDimensionsDescription = "These are the starting dimensions for each clip. The first stage in each clip cannot apply per-stage upscale; use later stages or the main workflow for scaling if needed.";
+    private const string ComfyUIFeatureFlag = "comfyui";
+    public const string AudioSourceNative = "Native";
+    public const string AudioSourceUpload = "Upload";
+    public const string AudioSourceSwarm = "Swarm Audio";
 
     public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
-    public static T2IRegisteredParam<bool> ConnectAudioToVideo;
-    public static T2IRegisteredParam<bool> EnableVideoStages;
-    public static T2IRegisteredParam<int> RootStageWidth;
-    public static T2IRegisteredParam<int> RootStageHeight;
-    public static T2IRegisteredParam<string> RootGuideImageReference;
+    public static int VideoClipSectionIdForClip(int clipIndex) => SectionID_VideoClip + 1 + clipIndex;
+    public static T2IRegisteredParam<int> RootWidth;
+    public static T2IRegisteredParam<int> RootHeight;
+    public static T2IRegisteredParam<int> RootFPS;
     public static T2IRegisteredParam<string> VideoStagesJson;
-    public static T2IRegisteredParam<double> LTXVImgToVideoInplaceStrength;
+    public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
 
     public override void OnPreInit()
     {
+        PromptRegion.RegisterCustomPrefix("videoclip");
+        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (data, context) =>
+        {
+            if (int.TryParse(context.PreData, out int clipIndex) && clipIndex >= 0)
+            {
+                context.SectionID = VideoClipSectionIdForClip(clipIndex);
+            }
+            else
+            {
+                context.SectionID = SectionID_VideoClip;
+            }
+            return $"<videoclip//cid={context.SectionID}>";
+        };
+        T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (data, context) => "<break>";
+
         StyleSheetFiles.Add("Assets/video-stages.css");
         ScriptFiles.Add("Assets/video-stages.js");
     }
@@ -29,13 +52,26 @@ public class VideoStagesExtension : Extension
     public override void OnInit()
     {
         Logs.Info("VideoStages Extension initializing...");
+        CaptureCoreImageToVideoStep();
         RegisterParameters();
         RegisterComfyNodes();
         RootVideoStageResizer.EnsureRegistered();
+        WorkflowGenerator.AddStep(RootVideoStageTakeover.EnsureRootVideoStageModel, -4.3);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureBase(), -4.2);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureRefiner(), 5.9);
-        WorkflowGenerator.AddStep(RootVideoStageResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo, 11.4);
+        WorkflowGenerator.AddStep(RootVideoStageTakeover.SuppressCoreRootVideoStage, 10.95);
+        WorkflowGenerator.AddStep(RootVideoStageTakeover.RestoreCoreRootVideoStageModel, 11.05);
+        WorkflowGenerator.AddStep(LtxAudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo, 11.4);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).RunConfiguredStages(), 11.5);
+    }
+
+    private static void CaptureCoreImageToVideoStep()
+    {
+        if (CoreImageToVideoStep is not null)
+        {
+            return;
+        }
+        CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(step => step.Priority == 11);
     }
 
     private void RegisterComfyNodes()
@@ -65,71 +101,62 @@ public class VideoStagesExtension : Extension
             OrderPriority: -2.9
         );
 
-        double OrderPriority = 0;
+        int OrderPriority = 0;
 
-        ConnectAudioToVideo = T2IParamTypes.Register<bool>(new T2IParamType(
-            Name: "Connect Audio to Video",
-            Description: "Connect detected audio (if any) to your videos.",
-            Default: "true",
-            Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui"
-        ));
-        OrderPriority += 1;
-
-        RootStageWidth = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Root Width",
-            Description: "Optional width override for the first additional video stage input. When both Root Width and Root Height are set, the first stage input is scaled before extracting frames.",
-            Default: "512",
+        RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Video Stages Width",
+            Description: RootDimensionsDescription,
+            Default: "1024",
             Min: 256,
-            ViewMin: 256,
-            Max: 16384,
-            ViewMax: 2048,
+            Max: RootDimensionMax,
+            ViewMin: RootDimensionMin,
+            ViewMax: 4096,
             Step: 32,
+            ViewType: ParamViewType.POT_SLIDER,
+            HideFromMetadata: false,
+            DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui",
-            DoNotPreview: true
+            FeatureFlag: ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
-        RootStageHeight = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Root Height",
-            Description: "Optional height override for the first additional video stage input. When both Root Width and Root Height are set, the first stage input is scaled before extracting frames.",
-            Default: "512",
+        RootHeight = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Video Stages Height",
+            Description: RootDimensionsDescription,
+            Default: "1024",
             Min: 256,
-            ViewMin: 256,
-            Max: 16384,
-            ViewMax: 2048,
+            Max: RootDimensionMax,
+            ViewMin: RootDimensionMin,
+            ViewMax: 4096,
             Step: 32,
+            ViewType: ParamViewType.POT_SLIDER,
+            HideFromMetadata: false,
+            DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui",
-            DoNotPreview: true
+            FeatureFlag: ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
-        RootGuideImageReference = T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Guide Image Reference",
-            Description: "Which earlier image should be used as the root video guide image before the first video pass. 'Default' keeps the current root image behavior; 'Base', 'Refiner', and 'editN' options can be selected from the frontend when available.",
-            Default: "Default",
-            GetValues: (_) => ["Default", "Base", "Refiner"],
+        RootFPS = T2IParamTypes.Register<int>(new T2IParamType(
+            Name: "Video Stages FPS",
+            Description: "Frames per second for VideoStages clips. Clip duration controls total frame count.",
+            Default: "24",
+            Min: 4,
+            Max: 60,
+            ViewMin: 4,
+            ViewMax: 60,
+            Step: 4,
+            ViewType: ParamViewType.SLIDER,
+            HideFromMetadata: false,
+            DoNotPreview: true,
+            Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui",
-            DoNotPreview: true
-        ));
-        OrderPriority += 1;
-
-        EnableVideoStages = T2IParamTypes.Register<bool>(new T2IParamType(
-            Name: "Enable additional Video Stages",
-            Description: "Enable additional video stages.",
-            Default: "false",
-            Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
-            FeatureFlag: "comfyui"
+            FeatureFlag: ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
@@ -142,21 +169,7 @@ public class VideoStagesExtension : Extension
             HideFromMetadata: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,
-            FeatureFlag: "comfyui"
-        ));
-
-        LTXVImgToVideoInplaceStrength = T2IParamTypes.Register<double>(new T2IParamType(
-            Name: "Video Stages LTXVImgToVideoInplaceStrength",
-            Description: ".",
-            Default: $"{DefaultLTXVImgToVideoInplaceStrength}",
-            Min: 0.1,
-            Max: 1,
-            VisibleNormally: false,
-            IsAdvanced: true,
-            HideFromMetadata: false,
-            DoNotPreview: true,
-            Group: VideoStagesGroup,
-            FeatureFlag: "comfyui"
+            FeatureFlag: ComfyUIFeatureFlag
         ));
     }
 }

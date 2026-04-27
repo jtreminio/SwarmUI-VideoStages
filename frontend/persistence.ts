@@ -1,0 +1,196 @@
+import { buildDefaultClip, normalizeClip } from "./normalization";
+import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import { getClipsInput, isImageToVideoWorkflow } from "./swarmInputs";
+import type { Clip, StoredClip, VideoStagesConfig } from "./types";
+
+type ParsedConfig = {
+    clips?: unknown[];
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+const toParsedConfig = (value: unknown): ParsedConfig | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+    return {
+        clips: Array.isArray(value.clips) ? value.clips : undefined,
+    };
+};
+
+export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
+    clips.map(
+        (clip): StoredClip => ({
+            expanded: clip.expanded,
+            skipped: clip.skipped,
+            duration: clip.duration,
+            audioSource: clip.audioSource,
+            saveAudioTrack: clip.saveAudioTrack,
+            clipLengthFromAudio: clip.clipLengthFromAudio,
+            reuseAudio: clip.reuseAudio,
+            uploadedAudio: clip.uploadedAudio,
+            refs: clip.refs.map((ref) => ({
+                expanded: ref.expanded,
+                source: ref.source,
+                uploadFileName: ref.uploadFileName,
+                uploadedImage: ref.uploadedImage,
+                frame: ref.frame,
+                fromEnd: ref.fromEnd,
+            })),
+            stages: clip.stages.map((stage) => ({
+                expanded: stage.expanded,
+                skipped: stage.skipped,
+                control: stage.control,
+                refStrengths: stage.refStrengths,
+                upscale: stage.upscale,
+                upscaleMethod: stage.upscaleMethod,
+                model: stage.model,
+                vae: stage.vae,
+                steps: stage.steps,
+                cfgScale: stage.cfgScale,
+                sampler: stage.sampler,
+                scheduler: stage.scheduler,
+            })),
+        }),
+    );
+
+export const serializeStateForStorage = (
+    state: Pick<VideoStagesConfig, "clips">,
+): string =>
+    JSON.stringify({
+        clips: serializeClipsForStorage(state.clips),
+    });
+
+export interface PersistenceCallbacks {
+    onAfterSerialize?: (serialized: string) => void;
+}
+
+export interface SaveStateOptions {
+    notifyDomChange?: boolean;
+}
+
+let lastSerializedState = "";
+
+const getSerializedStateSource = (): string => {
+    const inputValue = getClipsInput()?.value ?? "";
+    return inputValue || lastSerializedState;
+};
+
+export const __resetPersistenceForTests = (): void => {
+    lastSerializedState = "";
+};
+
+const parseSerializedState = (
+    serialized: string,
+    fallbackDefaults: Pick<VideoStagesConfig, "width" | "height" | "fps">,
+): VideoStagesConfig | null => {
+    try {
+        const parsed = JSON.parse(serialized);
+        const parsedConfig = toParsedConfig(parsed);
+        let clipsRaw: unknown[] = [];
+        if (Array.isArray(parsed)) {
+            clipsRaw = parsed;
+        } else if (Array.isArray(parsedConfig?.clips)) {
+            clipsRaw = parsedConfig.clips;
+        }
+
+        const clips: Clip[] = [];
+        for (let i = 0; i < clipsRaw.length; i++) {
+            const el = clipsRaw[i];
+            const record: Record<string, unknown> = isRecord(el) ? el : {};
+            clips.push(
+                normalizeClip(record, getRootDefaults, getDefaultStageModel),
+            );
+        }
+        return {
+            width: fallbackDefaults.width,
+            height: fallbackDefaults.height,
+            fps: fallbackDefaults.fps,
+            clips,
+        };
+    } catch {
+        return null;
+    }
+};
+
+export const getState = (): VideoStagesConfig => {
+    const defaults = getRootDefaults();
+    const serialized = getSerializedStateSource();
+    if (!serialized) {
+        return {
+            width: defaults.width,
+            height: defaults.height,
+            fps: defaults.fps,
+            clips: [],
+        };
+    }
+
+    const parsedState = parseSerializedState(serialized, defaults);
+    if (parsedState) {
+        lastSerializedState = serialized;
+        return parsedState;
+    }
+    if (serialized !== lastSerializedState && lastSerializedState) {
+        const fallbackState = parseSerializedState(
+            lastSerializedState,
+            defaults,
+        );
+        if (fallbackState) {
+            return fallbackState;
+        }
+    }
+    return {
+        width: defaults.width,
+        height: defaults.height,
+        fps: defaults.fps,
+        clips: [],
+    };
+};
+
+export const saveState = (
+    state: VideoStagesConfig,
+    callbacks?: PersistenceCallbacks,
+    options?: SaveStateOptions,
+): void => {
+    const serialized = serializeStateForStorage(state);
+    lastSerializedState = serialized;
+    const input = getClipsInput();
+    if (input) {
+        input.value = serialized;
+    }
+    callbacks?.onAfterSerialize?.(serialized);
+    if (input && options?.notifyDomChange !== false) {
+        triggerChangeFor(input);
+    }
+};
+
+export const getClips = (): Clip[] => getState().clips;
+
+export const saveClips = (
+    clips: Clip[],
+    callbacks?: PersistenceCallbacks,
+): void => {
+    const state = getState();
+    state.clips = clips;
+    saveState(state, callbacks);
+};
+
+export const ensureClipsSeeded = (
+    callbacks?: PersistenceCallbacks,
+    options?: SaveStateOptions,
+): void => {
+    const state = getState();
+    if (state.clips.length > 0) {
+        return;
+    }
+
+    state.clips = [
+        buildDefaultClip(
+            getRootDefaults,
+            getDefaultStageModel,
+            isImageToVideoWorkflow(),
+        ),
+    ];
+    saveState(state, callbacks, options);
+};

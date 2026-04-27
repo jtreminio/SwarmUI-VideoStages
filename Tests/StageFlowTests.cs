@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -36,7 +34,48 @@ public partial class StageFlowTests
             ["ImageReference"] = imageReference
         };
 
-    private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, bool enableVideoStages = true, string prompt = "unit test prompt")
+    private static JObject MakeClip(int width, int height, params JObject[] stages) =>
+        new()
+        {
+            ["Name"] = "Clip 0",
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Stages"] = new JArray(stages)
+        };
+
+    private static JObject MakeClipWithRefs(int width, int height, IEnumerable<JObject> refs, params JObject[] stages) =>
+        new()
+        {
+            ["Name"] = "Clip 0",
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Refs"] = new JArray(refs ?? []),
+            ["Stages"] = new JArray(stages)
+        };
+
+    private static JObject MakeRef(string source, int frame = 1, bool fromEnd = false) =>
+        new()
+        {
+            ["Source"] = source,
+            ["Frame"] = frame,
+            ["FromEnd"] = fromEnd
+        };
+
+    private static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
+        new()
+        {
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Clips"] = new JArray(clips)
+        };
+
+    internal static string JsonSingleClipStages(int width, int height, params JObject[] stages) =>
+        new JArray(MakeClip(width, height, stages)).ToString();
+
+    internal static string JsonSingleClipStages512(params JObject[] stages) =>
+        JsonSingleClipStages(512, 512, stages);
+
+    private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, string prompt = "unit test prompt")
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
@@ -46,7 +85,6 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, baseModel);
         input.Set(T2IParamTypes.RefinerModel, baseModel);
-        input.Set(VideoStagesExtension.EnableVideoStages, enableVideoStages);
         input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
         return input;
     }
@@ -55,10 +93,9 @@ public partial class StageFlowTests
         T2IModel baseModel,
         T2IModel videoModel,
         string stagesJson,
-        bool enableVideoStages = true,
         string prompt = "unit test prompt")
     {
-        T2IParamInput input = BuildInput(baseModel, stagesJson, enableVideoStages: enableVideoStages, prompt: prompt);
+        T2IParamInput input = BuildInput(baseModel, stagesJson, prompt: prompt);
         input.Set(T2IParamTypes.VideoModel, videoModel);
         input.Set(T2IParamTypes.VideoFrames, 16);
         input.Set(T2IParamTypes.VideoFPS, 24);
@@ -73,7 +110,6 @@ public partial class StageFlowTests
     private static T2IParamInput BuildTextToVideoInput(
         T2IModel videoModel,
         string stagesJson,
-        bool enableVideoStages = true,
         string prompt = "unit test prompt")
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
@@ -83,7 +119,6 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.Width, 512);
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, videoModel);
-        input.Set(VideoStagesExtension.EnableVideoStages, enableVideoStages);
         input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
         input.Set(T2IParamTypes.Text2VideoFrames, 25);
         if (Program.T2IModelSets.TryGetValue("Clip", out T2IModelHandler clipHandler)
@@ -127,25 +162,29 @@ public partial class StageFlowTests
 
         if (expectedReference.Media.DataType == WGNodeData.DT_IMAGE || expectedReference.Media.DataType == WGNodeData.DT_VIDEO)
         {
-            Assert.True(JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path));
+            Assert.True(
+                JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path)
+                || OutputTracesBackToSource(workflow, actualGuidePath, expectedReference.Media.Path));
             return;
         }
 
         Assert.False(JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path));
-        WorkflowNode decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{actualGuidePath[0]}");
+        JArray tracePath = actualGuidePath;
+        WorkflowNode decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{tracePath[0]}");
         string decodeType = $"{decodeNode.Node["class_type"]}";
+        if (decodeType == "ImageScale")
+        {
+            tracePath = WorkflowAssertions.RequireConnectionInput(decodeNode.Node, "image");
+            decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{tracePath[0]}");
+            decodeType = $"{decodeNode.Node["class_type"]}";
+        }
+
         Assert.Contains(decodeType, new[] { "VAEDecode", "VAEDecodeTiled" });
 
         JArray latentRef = WorkflowAssertions.RequireConnectionInput(
             decodeNode.Node,
             decodeNode.Node["inputs"]?["samples"] is not null ? "samples"
                 : "latent");
-
-        if (expectedReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO)
-        {
-            Assert.True(OutputTracesBackToSource(workflow, latentRef, expectedReference.Media.Path));
-            return;
-        }
 
         Assert.True(OutputTracesBackToSource(workflow, latentRef, expectedReference.Media.Path));
     }
@@ -174,16 +213,69 @@ public partial class StageFlowTests
         Assert.Equal(temporalOverlap, inputs.Value<int>("temporal_overlap"));
     }
 
-    private static void AssertLtxFinalTiledDecodeUsesUpdatedDefaults(WorkflowNode decodeNode)
+    private static void AssertLtxFinalDecodeUsesPlainVaeDecode(WorkflowNode decodeNode)
     {
-        AssertLtxFinalTiledDecodeUsesTiling(decodeNode, 768, 64, 4096, 4);
+        Assert.Equal("VAEDecode", $"{decodeNode.Node["class_type"]}");
+        Assert.True(decodeNode.Node["inputs"] is JObject, "Expected decode node to have inputs.");
+        JObject inputs = (JObject)decodeNode.Node["inputs"];
+        Assert.True(inputs["vae"] is JArray, "Expected decode node to have a VAE input.");
+        Assert.True(inputs["samples"] is JArray, "Expected decode node to have a samples input.");
+        Assert.False(inputs.ContainsKey("tile_size"));
+        Assert.False(inputs.ContainsKey("overlap"));
+        Assert.False(inputs.ContainsKey("temporal_size"));
+        Assert.False(inputs.ContainsKey("temporal_overlap"));
     }
 
     private static void AssertStageLtxConcatsReuseOriginalAudio(JObject workflow, WorkflowNode originalSeparate)
     {
         JArray originalAudioLatent = new(originalSeparate.Id, 1);
 
-        List<WorkflowNode> concatNodes = WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent")
+        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        Assert.NotEmpty(concatNodes);
+
+        foreach (WorkflowNode concatNode in concatNodes)
+        {
+            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNode.Node, "audio_latent");
+            Assert.True(
+                JToken.DeepEquals(audioLatent, originalAudioLatent),
+                $"Expected concat {concatNode.Id} audio_latent to be [{originalSeparate.Id}, 1] but found [{audioLatent[0]}, {audioLatent[1]}].");
+        }
+    }
+
+    private static void AssertStageLtxConcatsUseProgressiveAudio(JObject workflow, WorkflowNode originalSeparate)
+    {
+        JArray originalAudioLatent = new(originalSeparate.Id, 1);
+        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        Assert.True(concatNodes.Count >= 2);
+
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(concatNodes[0].Node, "audio_latent"),
+            originalAudioLatent));
+        Assert.False(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(concatNodes[1].Node, "audio_latent"),
+            originalAudioLatent));
+    }
+
+    private static void AssertStageLtxConcatsReuseFirstStageAudio(JObject workflow, WorkflowNode originalSeparate)
+    {
+        JArray originalAudioLatent = new(originalSeparate.Id, 1);
+        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        Assert.True(concatNodes.Count >= 3);
+
+        JArray firstStageAudioLatent = WorkflowAssertions.RequireConnectionInput(concatNodes[1].Node, "audio_latent");
+        Assert.False(JToken.DeepEquals(firstStageAudioLatent, originalAudioLatent));
+        for (int i = 2; i < concatNodes.Count; i++)
+        {
+            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNodes[i].Node, "audio_latent");
+            Assert.True(
+                JToken.DeepEquals(audioLatent, firstStageAudioLatent),
+                $"Expected concat {concatNodes[i].Id} audio_latent to reuse [{firstStageAudioLatent[0]}, {firstStageAudioLatent[1]}] but found [{audioLatent[0]}, {audioLatent[1]}].");
+        }
+    }
+
+    private static List<WorkflowNode> GetSamplerConcatNodes(JObject workflow)
+    {
+        return WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent")
             .Where(node => WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 0))
                 .Any(connection =>
                 {
@@ -200,15 +292,6 @@ public partial class StageFlowTests
                 }))
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
-        Assert.NotEmpty(concatNodes);
-
-        foreach (WorkflowNode concatNode in concatNodes)
-        {
-            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNode.Node, "audio_latent");
-            Assert.True(
-                JToken.DeepEquals(audioLatent, originalAudioLatent),
-                $"Expected concat {concatNode.Id} audio_latent to be [{originalSeparate.Id}, 1] but found [{audioLatent[0]}, {audioLatent[1]}].");
-        }
     }
 
     private static WorkflowNode RequireOriginalNativeLtxSeparate(JObject workflow)
@@ -367,9 +450,14 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPublishedBase2EditImage(int editStageIndex) =>
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPreVideoSave() =>
         WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRefinerImageStep(), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 10.9), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CorePreVideoSavePrepStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithoutRefiner() =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
@@ -582,7 +670,7 @@ public partial class StageFlowTests
             string audioVaeNode = g.CreateNode("UnitTest_AudioVae", new JObject(), id: "105", idMandatory: false);
             g.CurrentAudioVae = new WGNodeData([audioVaeNode, 0], g, WGNodeData.DT_AUDIOVAE, g.CurrentCompat());
 
-            string avLatent = g.CreateNode("UnitTest_InitialAvLatent", new JObject(), id: "200", idMandatory: false);
+            string avLatent = g.CreateNode("SwarmKSampler", new JObject(), id: "200", idMandatory: false);
             string separate = g.CreateNode("LTXVSeparateAVLatent", new JObject()
             {
                 ["av_latent"] = new JArray(avLatent, 0)

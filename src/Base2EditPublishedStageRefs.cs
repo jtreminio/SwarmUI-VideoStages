@@ -1,13 +1,10 @@
+using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
-/// <summary>
-/// Reads Base2Edit-published stage refs from <see cref="WorkflowGenerator.NodeHelpers"/> without
-/// taking a compile-time dependency on the Base2Edit extension assembly.
-/// </summary>
 internal static class Base2EditPublishedStageRefs
 {
     private const string Prefix = "b2e.published.edit.";
@@ -29,7 +26,7 @@ internal static class Base2EditPublishedStageRefs
                 return false;
             }
 
-            WGNodeData vae = DeserializeNodeData(g, payload["vae"] as JObject, fallbackVae: null);
+            WGNodeData vae = DeserializeNodeData(g, payload["vae"] as JObject, null);
             WGNodeData media = DeserializeNodeData(g, payload["media"] as JObject, vae);
             if (media is null)
             {
@@ -60,7 +57,7 @@ internal static class Base2EditPublishedStageRefs
             return null;
         }
 
-        return stageRef.Media.AsRawImage(stageRef.Vae);
+        return VaeDecodePreference.AsRawImage(stageRef.Media.Gen, stageRef.Media, stageRef.Vae);
     }
 
     private static WGNodeData DeserializeNodeData(WorkflowGenerator g, JObject data, WGNodeData fallbackVae)
@@ -82,10 +79,10 @@ internal static class Base2EditPublishedStageRefs
         return restored;
     }
 
-    private static T2IModelCompatClass ResolveCompatFor(string dataType, WGNodeData fallbackVae, string compatId, WorkflowGenerator g = null)
+    private static T2IModelCompatClass ResolveCompatFor(WorkflowGenerator g, string dataType, WGNodeData fallbackVae, string compatId)
     {
         if (!string.IsNullOrWhiteSpace(compatId)
-            && T2IModelClassSorter.CompatClasses.TryGetValue(compatId.ToLowerInvariant(), out T2IModelCompatClass explicitCompat))
+            && T2IModelClassSorter.CompatClasses.TryGetValue(compatId.ToLowerFast(), out T2IModelCompatClass explicitCompat))
         {
             return explicitCompat;
         }
@@ -94,10 +91,5 @@ internal static class Base2EditPublishedStageRefs
             return g.CurrentVae.Compat;
         }
         return fallbackVae?.Compat ?? g?.CurrentVae?.Compat ?? g?.CurrentCompat();
-    }
-
-    private static T2IModelCompatClass ResolveCompatFor(WorkflowGenerator g, string dataType, WGNodeData fallbackVae, string compatId)
-    {
-        return ResolveCompatFor(dataType, fallbackVae, compatId, g);
     }
 }

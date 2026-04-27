@@ -1,13 +1,29 @@
 {
-  "name": "swarmui-video-stages-extension",
-  "version": "1.0.0",
-  "description": "VideoStages extension for SwarmUI - multi-stage video workflows",
-  "private": true,
-  "scripts": {
-    "build": "npm run clean && node node_modules/typescript/bin/tsc",
-    "clean": "rm -f Assets/video-stages.js Assets/video-stages.js.map"
-  },
-  "devDependencies": {
-    "typescript": "^5.9"
-  }
+    "name": "swarmui-video-stages-extension",
+    "version": "1.0.0",
+    "description": "VideoStages extension for SwarmUI - multi-stage video workflows",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "npm run lint && npm run check && node ./scripts/build.mjs",
+        "check": "npm run format:check && npm run lint && npm run typecheck",
+        "clean": "rm -f Assets/video-stages.js Assets/video-stages.js.map",
+        "coverage:functions": "npm run test:coverage && node ./scripts/report-uncovered-functions.mjs",
+        "format": "biome format --write .",
+        "format:check": "biome format .",
+        "lint": "biome check --write .",
+        "test": "jest --config ./jest.config.cjs --passWithNoTests",
+        "test:coverage": "jest --config ./jest.config.cjs --coverage --passWithNoTests",
+        "typecheck": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.4.11",
+        "@jest/globals": "^30.3.0",
+        "esbuild": "^0.28.0",
+        "html-template-tag": "^5.0.0",
+        "jest": "^30.3.0",
+        "jest-environment-jsdom": "^30.3.0",
+        "ts-jest": "^29.4.9",
+        "typescript": "^6.0.2"
+    }
 }

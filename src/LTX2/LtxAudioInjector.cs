@@ -1,17 +1,15 @@
-using System;
-using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages;
 
 namespace VideoStages.LTX2;
 
-public sealed class AudioInjector(WorkflowGenerator g)
+public sealed class LtxAudioInjector(WorkflowGenerator g)
 {
     private const int AudioInjectionIdBase = 52300;
+    private const int AudioInjectionEnsureFallbackSlot = 50;
 
-    public bool TryInject(AudioStageDetector.Detection detection)
+    public bool TryInject(AudioStageDetector.Detection detection, bool matchVideoLengthToAudio = true)
     {
         if (detection?.Audio is null || !g.IsLTXV2() || g.CurrentAudioVae is null)
         {
@@ -24,12 +22,17 @@ public sealed class AudioInjector(WorkflowGenerator g)
             return false;
         }
 
-        int fps = ResolveFps(workflowFps);
-        string lengthToFramesId = CreateLengthToFramesNode(detection.Audio.Path, fps);
-        JArray framesConnection = MakeConnection(lengthToFramesId, 1);
-        ApplyFramesConnectionToSources(removableSourceIds, framesConnection);
-        ApplyFramesConnectionToVideoLatents(framesConnection);
-        WGNodeData adjustedAudio = new(new JArray(lengthToFramesId, 0), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+        WGNodeData adjustedAudio = detection.Audio;
+        if (matchVideoLengthToAudio)
+        {
+            int fps = ResolveFps(workflowFps);
+            JToken lengthFramesAudioSource = ResolveLengthToFramesAudioSource(detection.Audio.Path);
+            string lengthToFramesId = CreateLengthToFramesNode(lengthFramesAudioSource, fps);
+            JArray framesConnection = MakeConnection(lengthToFramesId, 1);
+            ApplyFramesConnectionToSources(removableSourceIds, framesConnection);
+            ApplyFramesConnectionToVideoLatents(framesConnection);
+            adjustedAudio = new(new JArray(lengthToFramesId, 0), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+        }
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
         string setMaskId = CreateAudioMaskNode(encodedAudio.Path);
         ReplaceAudioLatentConnections(audioLatentsToReplace, setMaskId);
@@ -45,7 +48,7 @@ public sealed class AudioInjector(WorkflowGenerator g)
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.LTXVConcatAVLatent
+                || $"{node["class_type"]}" != LtxNodeTypes.LTXVConcatAVLatent
                 || node["inputs"] is not JObject inputs
                 || inputs["audio_latent"] is not JArray audioLatent
                 || audioLatent.Count != 2)
@@ -55,7 +58,7 @@ public sealed class AudioInjector(WorkflowGenerator g)
             string sourceId = $"{audioLatent[0]}";
             if (!g.Workflow.TryGetValue(sourceId, out JToken sourceToken)
                 || sourceToken is not JObject sourceNode
-                || $"{sourceNode["class_type"]}" != NodeTypes.LTXVEmptyLatentAudio)
+                || $"{sourceNode["class_type"]}" != LtxNodeTypes.LTXVEmptyLatentAudio)
             {
                 continue;
             }
@@ -68,16 +71,73 @@ public sealed class AudioInjector(WorkflowGenerator g)
 
     private int ResolveFps(int? workflowFps)
     {
-        int fps = workflowFps ?? g.Text2VideoFPS();
+        int fps = new JsonParser(g).ResolveFps();
+        if (fps <= 0)
+        {
+            fps = workflowFps ?? g.Text2VideoFPS();
+        }
         if (fps <= 0)
         {
             fps = g.UserInput.Get(T2IParamTypes.VideoFPS, 24);
         }
-        if (fps <= 0)
+        return fps > 0 ? fps : 24;
+    }
+
+    private JToken ResolveLengthToFramesAudioSource(JToken rawAudioPath)
+    {
+        if (rawAudioPath is not JArray rawRef || rawRef.Count != 2)
         {
-            fps = 24;
+            return rawAudioPath;
         }
-        return fps;
+
+        foreach (JProperty property in g.Workflow.Properties())
+        {
+            if (property.Value is not JObject node
+                || $"{node["class_type"]}" != NodeTypes.SwarmEnsureAudio
+                || node["inputs"] is not JObject inputs
+                || inputs["audio"] is not JArray audioInput
+                || audioInput.Count != 2)
+            {
+                continue;
+            }
+            if (ConnectionRefsEqual(audioInput, rawRef))
+            {
+                return new JArray(property.Name, 0);
+            }
+        }
+
+        if (!IsSwarmLoadAudioB64Output(rawRef))
+        {
+            return rawAudioPath;
+        }
+
+        string ensured = g.CreateNode(NodeTypes.SwarmEnsureAudio, new JObject()
+        {
+            ["audio"] = rawRef,
+            ["target_duration"] = 0.1
+        }, g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
+        return new JArray(ensured, 0);
+    }
+
+    private bool IsSwarmLoadAudioB64Output(JArray rawRef)
+    {
+        string sourceId = $"{rawRef[0]}";
+        if (!g.Workflow.TryGetValue(sourceId, out JToken token) || token is not JObject node)
+        {
+            return false;
+        }
+
+        return $"{node["class_type"]}" == NodeTypes.SwarmLoadAudioB64;
+    }
+
+    private static bool ConnectionRefsEqual(JToken left, JToken right)
+    {
+        if (left is not JArray la || right is not JArray ra || la.Count != 2 || ra.Count != 2)
+        {
+            return false;
+        }
+
+        return $"{la[0]}" == $"{ra[0]}" && la[1].Value<int>() == ra[1].Value<int>();
     }
 
     private string CreateLengthToFramesNode(JToken audioPath, int fps)
@@ -103,12 +163,13 @@ public sealed class AudioInjector(WorkflowGenerator g)
 
     private void ApplyFramesConnectionToVideoLatents(JArray framesConnection)
     {
-        g.RunOnNodesOfClass(NodeTypes.EmptyLTXVLatentVideo, (_, videoData) =>
+        g.RunOnNodesOfClass(LtxNodeTypes.EmptyLTXVLatentVideo, (_, videoData) =>
         {
-            if (videoData["inputs"] is JObject videoInputs)
+            if (videoData["inputs"] is not JObject videoInputs)
             {
-                videoInputs["length"] = CloneConnection(framesConnection);
+                return;
             }
+            videoInputs["length"] = CloneConnection(framesConnection);
         });
     }
 
