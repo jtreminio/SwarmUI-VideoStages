@@ -462,45 +462,10 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
-        Queue<string> pending = new();
-        HashSet<string> visited = [];
-        pending.Enqueue($"{audioLatentPath[0]}");
-        while (pending.Count > 0)
-        {
-            string nodeId = pending.Dequeue();
-            if (!visited.Add(nodeId))
-            {
-                continue;
-            }
-
-            if (StringUtils.Equals(nodeId, uploadNodeId))
-            {
-                return true;
-            }
-
-            if (!g.Workflow.TryGetValue(nodeId, out JToken token)
-                || token is not JObject node
-                || node["inputs"] is not JObject inputs)
-            {
-                continue;
-            }
-
-            foreach (JProperty input in inputs.Properties())
-            {
-                if (input.Value is not JArray inputPath || inputPath.Count != 2)
-                {
-                    continue;
-                }
-
-                string upstreamId = $"{inputPath[0]}";
-                if (!string.IsNullOrWhiteSpace(upstreamId))
-                {
-                    pending.Enqueue(upstreamId);
-                }
-            }
-        }
-
-        return false;
+        return WalkUpstreamFromAudioOutputRef(
+            audioLatentPath,
+            tryMatchNodeId: id => StringUtils.Equals(id, uploadNodeId),
+            tryMatchNode: null);
     }
 
     private WGNodeData CloneAudioReference(WGNodeData audio)
@@ -539,6 +504,22 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
+        return WalkUpstreamFromAudioOutputRef(
+            audioPath,
+            tryMatchNodeId: null,
+            tryMatchNode: node => StringUtils.NodeTypeMatches(node, classType));
+    }
+
+    private bool WalkUpstreamFromAudioOutputRef(
+        JArray audioPath,
+        Func<string, bool> tryMatchNodeId,
+        Func<JObject, bool> tryMatchNode)
+    {
+        if (audioPath is null || audioPath.Count != 2)
+        {
+            return false;
+        }
+
         Queue<string> pending = new();
         HashSet<string> visited = [];
         pending.Enqueue($"{audioPath[0]}");
@@ -550,13 +531,18 @@ internal sealed class LtxPostVideoChain
                 continue;
             }
 
+            if (tryMatchNodeId is not null && tryMatchNodeId(nodeId))
+            {
+                return true;
+            }
+
             if (!g.Workflow.TryGetValue(nodeId, out JToken token)
                 || token is not JObject node)
             {
                 continue;
             }
 
-            if (StringUtils.NodeTypeMatches(node, classType))
+            if (tryMatchNode is not null && tryMatchNode(node))
             {
                 return true;
             }

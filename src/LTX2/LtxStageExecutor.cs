@@ -400,45 +400,14 @@ internal sealed class LtxStageExecutor(
         {
             int width = Math.Max(sourceMedia.Width ?? g.UserInput.GetImageWidth(), 16);
             int height = Math.Max(sourceMedia.Height ?? g.UserInput.GetImageHeight(), 16);
-            JArray audioLengthFrames = null;
-            WGNodeData attachedAudio = sourceMedia.AttachedAudio;
-            if (ShouldMatchStageLengthToAudio(stage)
-                && attachedAudio?.Path is JToken audioPath)
-            {
-                int fps = ResolveStageFps(genInfo, sourceMedia);
-                JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
-                    g,
-                    audioPath,
-                    null);
-                string lengthToFrames = g.CreateNode(NodeTypes.AudioLengthToFrames, new JObject()
-                {
-                    ["audio"] = lengthFramesAudioSource,
-                    ["frame_rate"] = fps
-                });
-                audioLengthFrames = new JArray(lengthToFrames, 1);
-                attachedAudio = new WGNodeData(
-                    new JArray(lengthToFrames, 0),
-                    g,
-                    WGNodeData.DT_AUDIO,
-                    g.CurrentAudioVae?.Compat ?? attachedAudio.Compat);
-            }
-            JToken latentLength = audioLengthFrames is null ? new JValue(genInfo.Frames.Value) : audioLengthFrames;
-            string emptyLatent = g.CreateNode(LtxNodeTypes.EmptyLTXVLatentVideo, new JObject()
-            {
-                ["width"] = width,
-                ["height"] = height,
-                ["length"] = latentLength,
-                ["batch_size"] = 1
-            });
-            WGNodeData imageStageLatent = new([emptyLatent, 0], g, WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat)
-            {
-                Width = width,
-                Height = height,
-                Frames = audioLengthFrames is null ? genInfo.Frames.Value : null,
-                FPS = genInfo.VideoFPS
-            };
-            imageStageLatent.AttachedAudio = attachedAudio;
-            return imageStageLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
+            return CreateEmptyVideoLatentWithOptionalAudioLength(
+                stage,
+                genInfo,
+                sourceMedia,
+                width,
+                height,
+                genInfo.Frames.Value,
+                sourceMedia.AttachedAudio);
         }
 
         if (CanReuseDecodedVideoLatent(sourceMedia, genInfo))
@@ -475,9 +444,29 @@ internal sealed class LtxStageExecutor(
         int height = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
         int frames = genInfo.Frames ?? sourceMedia?.Frames ?? DefaultVideoFrameCount;
         WGNodeData attachedAudio = sourceMedia?.AttachedAudio;
+        return CreateEmptyVideoLatentWithOptionalAudioLength(
+            stage,
+            genInfo,
+            sourceMedia,
+            width,
+            height,
+            frames,
+            attachedAudio);
+    }
+
+    private WGNodeData CreateEmptyVideoLatentWithOptionalAudioLength(
+        JsonParser.StageSpec stage,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData sourceMedia,
+        int width,
+        int height,
+        int frames,
+        WGNodeData attachedAudio)
+    {
         JArray audioLengthFrames = null;
+        WGNodeData effectiveAttached = attachedAudio;
         if (ShouldMatchStageLengthToAudio(stage)
-            && attachedAudio?.Path is JToken audioPath)
+            && effectiveAttached?.Path is JToken audioPath)
         {
             int fps = ResolveStageFps(genInfo, sourceMedia);
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
@@ -490,11 +479,11 @@ internal sealed class LtxStageExecutor(
                 ["frame_rate"] = fps
             });
             audioLengthFrames = new JArray(lengthToFrames, 1);
-            attachedAudio = new WGNodeData(
+            effectiveAttached = new WGNodeData(
                 new JArray(lengthToFrames, 0),
                 g,
                 WGNodeData.DT_AUDIO,
-                g.CurrentAudioVae?.Compat ?? attachedAudio.Compat);
+                g.CurrentAudioVae?.Compat ?? effectiveAttached.Compat);
         }
 
         JToken latentLength = audioLengthFrames is null ? new JValue(frames) : audioLengthFrames;
@@ -511,7 +500,7 @@ internal sealed class LtxStageExecutor(
             Height = height,
             Frames = audioLengthFrames is null ? frames : null,
             FPS = genInfo.VideoFPS,
-            AttachedAudio = attachedAudio
+            AttachedAudio = effectiveAttached
         };
         return stageLatent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
     }
