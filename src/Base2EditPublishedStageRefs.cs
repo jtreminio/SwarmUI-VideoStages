@@ -15,8 +15,7 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
         [MaybeNullWhen(false)] out StageRefStore.StageRef stageRef)
     {
         stageRef = null;
-        if (g is null
-            || !g.NodeHelpers.TryGetValue($"{Prefix}{stageIndex}", out string encoded)
+        if (!g.NodeHelpers.TryGetValue($"{Prefix}{stageIndex}", out string encoded)
             || string.IsNullOrWhiteSpace(encoded))
         {
             return false;
@@ -89,10 +88,10 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
         {
             return explicitCompat;
         }
-        if (dataType == WGNodeData.DT_VAE && g?.CurrentVae is not null)
+        if (dataType == WGNodeData.DT_VAE && g.CurrentVae is not null)
         {
             return g.CurrentVae.Compat;
         }
-        return fallbackVae?.Compat ?? g?.CurrentVae?.Compat ?? g?.CurrentCompat();
+        return fallbackVae?.Compat ?? g.CurrentVae?.Compat ?? g.CurrentCompat();
     }
 }

@@ -9,7 +9,6 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
     private const long AceStepFunDecodeNodeBase = 64160;
     public const string AceStepFunSaveNodeType = "SaveAudioMP3";
     public const string AceStepFunFilenamePrefix = "SwarmUI_track_";
-
     private const int PrioritySwarmSaveWsOrAceStepFunSave = 3;
     private const int PriorityGenericSaveAudio = 2;
     private const int PriorityDecode = 1;
@@ -25,7 +24,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
     {
         return ScanWorkflow((nodeId, node) =>
         {
-            string classType = ClassTypeOf(node);
+            string classType = StringUtils.ClassTypeOf(node);
             return classType switch
             {
                 NodeTypes.SwarmSaveAudioWS => BuildSaveCandidate(nodeId, classType, node, PrioritySwarmSaveWsOrAceStepFunSave),
@@ -46,7 +45,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         }
         return ScanWorkflow((nodeId, node) =>
         {
-            string classType = ClassTypeOf(node);
+            string classType = StringUtils.ClassTypeOf(node);
             return classType switch
             {
                 AceStepFunSaveNodeType when IsAceStepFunSaveNodeForTrack(node, trackIndex) =>
@@ -106,11 +105,8 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         {
             return false;
         }
-        zeroBasedTrackIndex = oneBasedTrack - 1;
-        return zeroBasedTrackIndex >= 0;
+        return oneBasedTrack - 1 >= 0;
     }
-
-    internal static string ClassTypeOf(JObject node) => node["class_type"]?.Value<string>() ?? "";
 
     private WGNodeData CreateAudioNode(JArray path) =>
         new(path, g, WGNodeData.DT_AUDIO, g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
@@ -128,9 +124,8 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
             return null;
         }
 
-        string sourceId = $"{audioRef[0]}";
         WGNodeData audio = CreateAudioNode(new JArray(audioRef[0], audioRef[1]));
-        return new Detection(audio, nodeId, classType, sourceId, priority);
+        return new Detection(audio, nodeId, classType, $"{audioRef[0]}", priority);
     }
 
     private Detection? BuildDecodeCandidate(

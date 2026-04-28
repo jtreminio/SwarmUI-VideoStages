@@ -33,8 +33,7 @@ public static class AceStepFunAudioSavePruner
             {
                 continue;
             }
-            string classType = AudioStageDetector.ClassTypeOf(node);
-            if (!string.Equals(classType, AudioStageDetector.AceStepFunSaveNodeType, StringComparison.Ordinal))
+            if (!StringUtils.NodeTypeMatches(node, AudioStageDetector.AceStepFunSaveNodeType))
             {
                 continue;
             }

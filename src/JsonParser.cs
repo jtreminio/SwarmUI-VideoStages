@@ -278,9 +278,13 @@ public class JsonParser(WorkflowGenerator g)
     }
 
     private static bool IsClipShape(JObject entry) =>
-        entry.Properties().Any(p => string.Equals(p.Name, "Stages", StringComparison.OrdinalIgnoreCase));
+        entry.Properties().Any(p => StringUtils.Equals(p.Name, "Stages"));
 
-    private ClipSpec ParseClip(JObject clipObj, int clipIndex, StageDefaults defaults, bool isTextToVideoRootWorkflow)
+    private ClipSpec ParseClip(
+        JObject clipObj,
+        int clipIndex,
+        StageDefaults defaults,
+        bool isTextToVideoRootWorkflow)
     {
         bool skipped = GetOptionalBool(clipObj, "Skipped", defaultValue: false);
         double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, clipIndex);
@@ -415,7 +419,7 @@ public class JsonParser(WorkflowGenerator g)
     {
         foreach (JProperty property in obj.Properties())
         {
-            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase)
+            if (StringUtils.Equals(property.Name, key)
                 && property.Value is JArray array)
             {
                 return [.. array.OfType<JObject>()];
@@ -428,7 +432,7 @@ public class JsonParser(WorkflowGenerator g)
     {
         foreach (JProperty property in obj.Properties())
         {
-            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase)
+            if (StringUtils.Equals(property.Name, key)
                 && property.Value is JObject nested)
             {
                 return nested;
@@ -619,7 +623,7 @@ public class JsonParser(WorkflowGenerator g)
         List<double> strengths = [];
         foreach (JProperty property in stage.Properties())
         {
-            if (!string.Equals(property.Name, "refStrengths", StringComparison.OrdinalIgnoreCase)
+            if (!StringUtils.Equals(property.Name, "refStrengths")
                 || property.Value is not JArray array)
             {
                 continue;
@@ -668,8 +672,8 @@ public class JsonParser(WorkflowGenerator g)
         {
             if (!string.IsNullOrWhiteSpace(rawValue))
             {
-                string rawCompact = ImageReferenceSyntax.Compact(rawValue);
-                if (!string.Equals(rawCompact, DefaultGeneratedReference, StringComparison.OrdinalIgnoreCase))
+                string rawCompact = StringUtils.Compact(rawValue);
+                if (!StringUtils.Equals(rawCompact, DefaultGeneratedReference))
                 {
                     Logs.Warning(
                         $"VideoStages: Stage {index} uses ImageReference '{rawValue}' on a text-to-video workflow. "
@@ -686,20 +690,20 @@ public class JsonParser(WorkflowGenerator g)
             return defaultReference;
         }
 
-        string compact = ImageReferenceSyntax.Compact(rawValue);
-        if (string.Equals(compact, DefaultGeneratedReference, StringComparison.OrdinalIgnoreCase))
+        string compact = StringUtils.Compact(rawValue);
+        if (StringUtils.Equals(compact, DefaultGeneratedReference))
         {
             return DefaultGeneratedReference;
         }
-        if (string.Equals(compact, "Base", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(compact, "Base"))
         {
             return "Base";
         }
-        if (string.Equals(compact, "Refiner", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(compact, "Refiner"))
         {
             return "Refiner";
         }
-        if (string.Equals(compact, "PreviousStage", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(compact, "PreviousStage"))
         {
             return index == 0 ? defaultReference : DefaultPreviousStageReference;
         }
@@ -746,8 +750,7 @@ public class JsonParser(WorkflowGenerator g)
             return false;
         }
         string t = rawVae.Trim();
-        return !string.Equals(t, "Automatic", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(t, "None", StringComparison.OrdinalIgnoreCase);
+        return !StringUtils.Equals(t, "Automatic") && !StringUtils.Equals(t, "None");
     }
 
     private static string GetOptionalString(
@@ -809,7 +812,7 @@ public class JsonParser(WorkflowGenerator g)
     {
         foreach (JProperty property in obj.Properties())
         {
-            if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
+            if (StringUtils.Equals(property.Name, key))
             {
                 return property.Value?.Type == JTokenType.Null ? null : $"{property.Value}";
             }
@@ -818,7 +821,7 @@ public class JsonParser(WorkflowGenerator g)
     }
 
     private static bool JsonHasOwnProperty(JObject obj, string key) =>
-        obj.Properties().Any(p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase));
+        obj.Properties().Any(p => StringUtils.Equals(p.Name, key));
 
     private static double TruncateToDecimals(double value, int decimals)
     {
@@ -853,12 +856,12 @@ public class JsonParser(WorkflowGenerator g)
 
     private static string NormalizeControlNetSource(string source)
     {
-        string compact = (source ?? "").Trim().Replace(" ", "", StringComparison.OrdinalIgnoreCase);
-        if (compact.Equals("ControlNet3", StringComparison.OrdinalIgnoreCase))
+        string compact = StringUtils.Compact(source);
+        if (StringUtils.Equals(compact, "ControlNet3"))
         {
             return Constants.ControlNetSourceThree;
         }
-        if (compact.Equals("ControlNet2", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(compact, "ControlNet2"))
         {
             return Constants.ControlNetSourceTwo;
         }
