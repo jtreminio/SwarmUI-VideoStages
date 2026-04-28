@@ -4,7 +4,11 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
-internal sealed class RootVideoStageResizer(WorkflowGenerator g, RootVideoStageTakeover takeover)
+internal sealed class RootVideoStageResizer(
+    WorkflowGenerator g,
+    RootVideoStageTakeover takeover,
+    JsonParser jsonParser,
+    StageGuideMediaHelper stageGuideMediaHelper)
 {
     private readonly record struct Resolution(int Width, int Height);
 
@@ -50,7 +54,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g, RootVideoStageT
         }
 
         WorkflowGenerator g = genInfo.Generator;
-        resizer = new RootVideoStageResizer(g, new RootVideoStageTakeover(g, new JsonParser(g)));
+        resizer = new Runner(g).RootVideoStageResizer;
         return resizer.TryGetRootStageResolution(out resolution);
     }
 
@@ -147,8 +151,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g, RootVideoStageT
             return true;
         }
 
-        JsonParser parser = new(g);
-        JsonParser.VideoStagesSpec config = parser.ParseConfig();
+        JsonParser.VideoStagesSpec config = jsonParser.ParseConfig();
         if (TryPositiveDimensionPair(config.Width, config.Height, out resolution))
         {
             return true;
@@ -229,7 +232,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g, RootVideoStageT
             return;
         }
 
-        JObject scaleInputs = StageGuideMediaHelper.BuildCenterLanczosImageScaleInputs(
+        JObject scaleInputs = stageGuideMediaHelper.BuildCenterLanczosImageScaleInputs(
             g.CurrentMedia.Path,
             resolution.Width,
             resolution.Height);

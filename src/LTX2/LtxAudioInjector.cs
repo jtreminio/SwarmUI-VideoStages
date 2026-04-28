@@ -4,7 +4,10 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.LTX2;
 
-public sealed class LtxAudioInjector(WorkflowGenerator g)
+internal sealed class LtxAudioInjector(
+    WorkflowGenerator g,
+    JsonParser jsonParser,
+    RootVideoStageResizer rootVideoStageResizer)
 {
     private const int AudioInjectionIdBase = 52300;
     private const int AudioInjectionEnsureFallbackSlot = 50;
@@ -48,7 +51,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != LtxNodeTypes.LTXVConcatAVLatent
+                || !StringUtils.NodeTypeMatches(node, LtxNodeTypes.LTXVConcatAVLatent)
                 || node["inputs"] is not JObject inputs
                 || inputs["audio_latent"] is not JArray audioLatent
                 || audioLatent.Count != 2)
@@ -58,7 +61,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
             string sourceId = $"{audioLatent[0]}";
             if (!g.Workflow.TryGetValue(sourceId, out JToken sourceToken)
                 || sourceToken is not JObject sourceNode
-                || $"{sourceNode["class_type"]}" != LtxNodeTypes.LTXVEmptyLatentAudio)
+                || !StringUtils.NodeTypeMatches(sourceNode, LtxNodeTypes.LTXVEmptyLatentAudio))
             {
                 continue;
             }
@@ -71,7 +74,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
 
     private int ResolveFps(int? workflowFps)
     {
-        int fps = new JsonParser(g).ResolveFps();
+        int fps = jsonParser.ResolveFps();
         if (fps <= 0)
         {
             fps = workflowFps ?? g.Text2VideoFPS();
@@ -93,7 +96,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.SwarmEnsureAudio
+                || !StringUtils.NodeTypeMatches(node, NodeTypes.SwarmEnsureAudio)
                 || node["inputs"] is not JObject inputs
                 || inputs["audio"] is not JArray audioInput
                 || audioInput.Count != 2)
@@ -127,7 +130,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
             return false;
         }
 
-        return $"{node["class_type"]}" == NodeTypes.SwarmLoadAudioB64;
+        return StringUtils.NodeTypeMatches(node, NodeTypes.SwarmLoadAudioB64);
     }
 
     private static bool ConnectionRefsEqual(JToken left, JToken right)
@@ -177,7 +180,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
     {
         int width = g.UserInput.GetImageWidth();
         int height = g.UserInput.GetImageHeight();
-        if (RootVideoStageResizer.TryGetConfiguredRootStageResolution(g, out int rootWidth, out int rootHeight))
+        if (rootVideoStageResizer.TryGetConfiguredRootStageResolution(out int rootWidth, out int rootHeight))
         {
             width = rootWidth;
             height = rootHeight;

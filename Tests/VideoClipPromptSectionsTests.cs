@@ -115,7 +115,7 @@ public partial class StageFlowTests
         Assert.True(input.TryGet(T2IParamTypes.Loras, out List<string> parsedLoras));
         Assert.Contains("UnitTest_VideoClipLora", parsedLoras);
         Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
-        Assert.Contains($"{VideoStagesExtension.VideoClipSectionIdForClip(1)}", parsedConfinements);
+        Assert.Contains($"{VideoStagesExtension.SectionIdForClip(1)}", parsedConfinements);
         WorkflowNode loraLoader = Assert.Single(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
         string loraId = loraLoader.Id;
         List<JArray> positiveEncoderClips = WorkflowUtils.NodesOfType(workflow, "CLIPTextEncode")
@@ -126,5 +126,39 @@ public partial class StageFlowTests
         Assert.Equal(2, positiveEncoderClips.Count);
         Assert.Contains(positiveEncoderClips, clip => !OutputTracesBackToSource(workflow, clip, new JArray(loraId, 1)));
         Assert.Contains(positiveEncoderClips, clip => OutputTracesBackToSource(workflow, clip, new JArray(loraId, 1)));
+    }
+
+    [Fact]
+    public void Controlnet_lora_dropdown_uses_ltx_ic_model_only_loader()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        loraHandler.Models[loraModel.Name] = loraModel;
+
+        JObject clip = MakeClip(
+            width: 512,
+            height: 512,
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        string stagesJson = new JArray(clip).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+
+        WorkflowNode icLora = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXICLoRALoaderModelOnly"));
+        Assert.Equal("UnitTest_ControlNetLora.safetensors", $"{icLora.Node["inputs"]?["lora_name"]}");
+        Assert.Empty(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
+
+        IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
+        List<WorkflowInputConnection> samplerModelConsumers = WorkflowUtils.FindInputConnections(workflow, new JArray(icLora.Id, 0))
+            .Where(connection => connection.InputName == "model" && samplers.Any(sampler => sampler.Id == connection.NodeId))
+            .ToList();
+        Assert.NotEmpty(samplerModelConsumers);
     }
 }

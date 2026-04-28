@@ -19,6 +19,8 @@ public class AceStepFunAudioSavePrunerTests
         Skipped: false,
         DurationSeconds: 3,
         AudioSource: audioSource,
+        ControlNetSource: Constants.ControlNetSourceOne,
+        ControlNetLora: "",
         SaveAudioTrack: saveAudioTrack,
         ClipLengthFromAudio: false,
         ReuseAudio: false,

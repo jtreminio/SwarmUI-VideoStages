@@ -16,7 +16,7 @@ public static class WorkflowUtils
         List<WorkflowNode> nodes = [];
         foreach (JProperty property in workflow.Properties())
         {
-            if (property.Value is JObject node && $"{node["class_type"]}" == classType)
+            if (property.Value is JObject node && StringUtils.NodeTypeMatches(node, classType))
             {
                 nodes.Add(new WorkflowNode(property.Name, node));
             }
@@ -100,7 +100,7 @@ public static class WorkflowUtils
             {
                 continue;
             }
-            if ($"{node["class_type"]}" == classType)
+            if (StringUtils.NodeTypeMatches(node, classType))
             {
                 return true;
             }
@@ -198,8 +198,8 @@ public static class WorkflowUtils
                 continue;
             }
 
-            string classType = $"{node["class_type"]}";
-            if (classType == NodeTypes.VAEDecode || classType == NodeTypes.VAEDecodeTiled)
+            if (StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecode)
+                || StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecodeTiled))
             {
                 decodeNode = new WorkflowNode(nodeId, node);
                 return true;
@@ -251,8 +251,8 @@ public static class WorkflowUtils
                     continue;
                 }
 
-                string classType = $"{node["class_type"]}";
-                if (classType == NodeTypes.VAEDecode || classType == NodeTypes.VAEDecodeTiled)
+                if (StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecode)
+                    || StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecodeTiled))
                 {
                     decodeOutputRef = new JArray(connection.NodeId, 0);
                     return true;

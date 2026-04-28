@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="SwarmUI-VideoStages.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="bin/**/*.cs" />
     <Compile Remove="obj/**/*.cs" />
     <Compile Remove="Tests/**/*.cs" />

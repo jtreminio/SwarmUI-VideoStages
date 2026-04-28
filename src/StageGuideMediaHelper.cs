@@ -3,10 +3,9 @@ using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages;
 
-internal static class StageGuideMediaHelper
+internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
 {
-    internal static WGNodeData ResolveGuideMedia(
-        WorkflowGenerator g,
+    internal WGNodeData ResolveGuideMedia(
         StageRefStore.StageRef guideReference,
         LTX2.LtxPostVideoChain postVideoChain)
     {
@@ -43,7 +42,7 @@ internal static class StageGuideMediaHelper
         return VaeDecodePreference.AsRawImage(g, guideReference.Media, guideVae);
     }
 
-    internal static bool IsLiveCurrentOutputReference(
+    internal bool IsLiveCurrentOutputReference(
         WGNodeData guideMedia,
         LTX2.LtxPostVideoChain postVideoChain)
     {
@@ -57,8 +56,7 @@ internal static class StageGuideMediaHelper
             || JToken.DeepEquals(guidePath, postVideoChain.AvLatentPath);
     }
 
-    internal static WGNodeData PrepareGuideMedia(
-        WorkflowGenerator g,
+    internal WGNodeData PrepareGuideMedia(
         WGNodeData guideMedia,
         WGNodeData sourceMedia,
         bool scaleToSourceSize)
@@ -76,7 +74,6 @@ internal static class StageGuideMediaHelper
         if (currentWidth != targetWidth || currentHeight != targetHeight)
         {
             if (TryFindReusableImageScale(
-                    g.Workflow,
                     resolvedGuideMedia.Path,
                     targetWidth,
                     targetHeight,
@@ -102,7 +99,7 @@ internal static class StageGuideMediaHelper
         return resolvedGuideMedia;
     }
 
-    internal static JObject BuildCenterLanczosImageScaleInputs(JToken image, int width, int height)
+    internal JObject BuildCenterLanczosImageScaleInputs(JToken image, int width, int height)
     {
         return new JObject()
         {
@@ -114,20 +111,19 @@ internal static class StageGuideMediaHelper
         };
     }
 
-    private static bool TryFindReusableImageScale(
-        JObject workflow,
+    private bool TryFindReusableImageScale(
         JArray sourcePath,
         int targetWidth,
         int targetHeight,
         out JArray scaledPath)
     {
         scaledPath = null;
-        if (workflow is null || sourcePath is not { Count: 2 })
+        if (g.Workflow is null || sourcePath is not { Count: 2 })
         {
             return false;
         }
 
-        foreach (JProperty property in workflow.Properties())
+        foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
                 || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)

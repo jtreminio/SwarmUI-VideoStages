@@ -3,11 +3,13 @@ using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages.LTX2;
 
-internal static class LtxAudioMaskResizer
+internal sealed class LtxAudioMaskResizer(
+    WorkflowGenerator g,
+    RootVideoStageResizer rootVideoStageResizer)
 {
-    internal static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
+    internal void ApplyRootAudioMaskDimensionsAfterNativeVideo()
     {
-        if (!RootVideoStageResizer.TryGetConfiguredRootStageResolution(g, out int width, out int height))
+        if (!rootVideoStageResizer.TryGetConfiguredRootStageResolution(out int width, out int height))
         {
             return;
         }
@@ -15,18 +17,18 @@ internal static class LtxAudioMaskResizer
         UpdateAllAudioMaskDimensions(g, width, height);
     }
 
-    internal static void ApplyCurrentAudioMaskDimensions(WGNodeData media)
+    internal void ApplyCurrentAudioMaskDimensions(WGNodeData media)
     {
-        if (media?.Gen is not WorkflowGenerator g
+        if (media?.Gen is not WorkflowGenerator generator
             || !media.Width.HasValue
             || !media.Height.HasValue
             || media.Path is not { Count: 2 } mediaPath
-            || !g.Workflow.TryGetValue($"{mediaPath[0]}", out JToken concatToken)
+            || !generator.Workflow.TryGetValue($"{mediaPath[0]}", out JToken concatToken)
             || concatToken is not JObject concatNode
-            || $"{concatNode["class_type"]}" != LtxNodeTypes.LTXVConcatAVLatent
+            || !StringUtils.NodeTypeMatches(concatNode, LtxNodeTypes.LTXVConcatAVLatent)
             || concatNode["inputs"] is not JObject concatInputs
             || concatInputs["audio_latent"] is not JArray audioLatentPath
-            || !TryGetSolidMaskInputsForAudioLatentPath(g, audioLatentPath, out JObject solidMaskInputs))
+            || !TryGetSolidMaskInputsForAudioLatentPath(generator, audioLatentPath, out JObject solidMaskInputs))
         {
             return;
         }
@@ -61,8 +63,8 @@ internal static class LtxAudioMaskResizer
             return false;
         }
 
-        string classType = $"{samplesNode["class_type"]}";
-        return classType == LtxNodeTypes.LTXVAudioVAEEncode || classType == "VAEEncodeAudio";
+        return StringUtils.NodeTypeMatches(samplesNode, LtxNodeTypes.LTXVAudioVAEEncode)
+            || StringUtils.NodeTypeMatches(samplesNode, "VAEEncodeAudio");
     }
 
     private static bool TryGetSolidMaskInputsForAudioLatentPath(WorkflowGenerator g, JArray audioLatentPath, out JObject solidMaskInputs)
@@ -71,7 +73,7 @@ internal static class LtxAudioMaskResizer
         if (audioLatentPath is not { Count: 2 }
             || !g.Workflow.TryGetValue($"{audioLatentPath[0]}", out JToken setMaskToken)
             || setMaskToken is not JObject setMaskNode
-            || $"{setMaskNode["class_type"]}" != NodeTypes.SetLatentNoiseMask)
+            || !StringUtils.NodeTypeMatches(setMaskNode, NodeTypes.SetLatentNoiseMask))
         {
             return false;
         }
@@ -87,7 +89,7 @@ internal static class LtxAudioMaskResizer
             || solidMaskPath.Count != 2
             || !g.Workflow.TryGetValue($"{solidMaskPath[0]}", out JToken solidMaskToken)
             || solidMaskToken is not JObject solidMaskNode
-            || $"{solidMaskNode["class_type"]}" != NodeTypes.SolidMask
+            || !StringUtils.NodeTypeMatches(solidMaskNode, NodeTypes.SolidMask)
             || solidMaskNode["inputs"] is not JObject inputs)
         {
             return false;

@@ -7,7 +7,12 @@ namespace VideoStages.LTX2;
 
 internal sealed record ResolvedClipRef(WGNodeData Image, JsonParser.RefSpec Spec, double Strength);
 
-internal sealed class LtxStageExecutor(WorkflowGenerator g)
+internal sealed class LtxStageExecutor(
+    WorkflowGenerator g,
+    RootVideoStageTakeover rootVideoStageTakeover,
+    RootVideoStageResizer rootVideoStageResizer,
+    JsonParser jsonParser,
+    LtxAudioMaskResizer audioMaskResizer)
 {
     private bool _needsLtxvCropGuidesAfterSampler;
 
@@ -58,6 +63,10 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
             foreach (Action<WorkflowGenerator.ImageToVideoGenInfo> handler in WorkflowGenerator.AltImageToVideoPostHandlers)
             {
                 handler(genInfo);
+            }
+            if (VideoStageControlNetApplicator.ConsumeNeedsLtxIcloraGuideCrop(g))
+            {
+                _needsLtxvCropGuidesAfterSampler = true;
             }
 
             ExecuteSampler(genInfo);
@@ -156,7 +165,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         }
         else
         {
-            JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path);
+            JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path, stageLatent);
             string imgToVideoNode = g.CreateNode(LtxNodeTypes.LTXVImgToVideoInplace, new JObject()
             {
                 ["vae"] = genInfo.Vae.Path,
@@ -207,7 +216,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
                 continue;
             }
 
-            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path);
+            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, stageLatent);
             string imgToVideoNode = g.CreateNode(LtxNodeTypes.LTXVImgToVideoInplace, new JObject()
             {
                 ["vae"] = genInfo.Vae.Path,
@@ -233,7 +242,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
                 continue;
             }
 
-            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path);
+            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, g.CurrentMedia);
             int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
             string addGuideNode = g.CreateNode(LtxNodeTypes.LTXVAddGuide, new JObject()
             {
@@ -345,7 +354,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
     {
         genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
 
-        if (RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage))
+        if (rootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(stage))
         {
             return CreateEmptyVideoLatent(genInfo, stage, sourceMedia);
         }
@@ -502,7 +511,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         {
             return false;
         }
-        if (string.Equals(stage.ClipAudioSource, VideoStagesExtension.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(stage.ClipAudioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -516,7 +525,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         {
             return fps.Value;
         }
-        fps = new JsonParser(g).ResolveFps();
+        fps = jsonParser.ResolveFps();
         return fps.HasValue && fps.Value > 0 ? fps.Value : DefaultVideoFps;
     }
 
@@ -588,16 +597,10 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
             || JToken.DeepEquals(mediaPath, postVideoChain.DecodeOutputPath);
     }
 
-    private JArray ResolvePreprocessedGuidePath(JArray guideImagePath)
+    private JArray ResolvePreprocessedGuidePath(JArray guideImagePath, WGNodeData targetMedia)
     {
-        if (TryFindReusablePreprocessOutput(guideImagePath, out JArray reusedPath))
-        {
-            return reusedPath;
-        }
-
-        JArray scaledGuidePath = EnsureClipResolutionBeforeLtxvPreprocess(guideImagePath);
-        if (!JToken.DeepEquals(scaledGuidePath, guideImagePath)
-            && TryFindReusablePreprocessOutput(scaledGuidePath, out reusedPath))
+        JArray scaledGuidePath = EnsureClipResolutionBeforeLtxvPreprocess(guideImagePath, targetMedia);
+        if (TryFindReusablePreprocessOutput(scaledGuidePath, out JArray reusedPath))
         {
             return reusedPath;
         }
@@ -610,17 +613,23 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         return new JArray(preprocessNode, 0);
     }
 
-    private JArray EnsureClipResolutionBeforeLtxvPreprocess(JArray guideImagePath)
+    private JArray EnsureClipResolutionBeforeLtxvPreprocess(JArray guideImagePath, WGNodeData targetMedia)
     {
         if (guideImagePath is null || guideImagePath.Count != 2)
         {
             return guideImagePath;
         }
 
-        if (!RootVideoStageResizer.TryGetRootStageResolution(g, out int targetW, out int targetH))
+        int targetW = Math.Max(16, targetMedia?.Width ?? 0);
+        int targetH = Math.Max(16, targetMedia?.Height ?? 0);
+        if (targetMedia?.Width is null
+            || targetMedia.Height is null)
         {
-            targetW = Math.Max(16, g.UserInput.GetImageWidth());
-            targetH = Math.Max(16, g.UserInput.GetImageHeight());
+            if (!rootVideoStageResizer.TryGetRootStageResolution(out targetW, out targetH))
+            {
+                targetW = Math.Max(16, g.UserInput.GetImageWidth());
+                targetH = Math.Max(16, g.UserInput.GetImageHeight());
+            }
         }
 
         if (TryPathEndsWithClipResolutionImageScale(g.Workflow, guideImagePath, targetW, targetH))
@@ -628,15 +637,41 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
             return guideImagePath;
         }
 
+        JArray scaleSourcePath = ResolveImageScaleBaseSource(guideImagePath);
+        if (TryFindReusableImageScale(scaleSourcePath, targetW, targetH, out JArray reusedScalePath))
+        {
+            return reusedScalePath;
+        }
+
         string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
         {
-            ["image"] = guideImagePath,
+            ["image"] = scaleSourcePath,
             ["width"] = targetW,
             ["height"] = targetH,
             ["upscale_method"] = "lanczos",
             ["crop"] = "center"
         });
         return new JArray(scaleNode, 0);
+    }
+
+    private JArray ResolveImageScaleBaseSource(JArray imagePath)
+    {
+        JArray currentPath = imagePath;
+        HashSet<string> visited = [];
+        while (currentPath is { Count: 2 } && visited.Add($"{currentPath[0]}::{currentPath[1]}"))
+        {
+            if (!g.Workflow.TryGetValue($"{currentPath[0]}", out JToken token)
+                || token is not JObject node
+                || $"{node["class_type"]}" != NodeTypes.ImageScale
+                || node["inputs"] is not JObject inputs
+                || inputs["image"] is not JArray sourcePath
+                || sourcePath.Count != 2)
+            {
+                break;
+            }
+            currentPath = sourcePath;
+        }
+        return currentPath is { Count: 2 } ? new JArray(currentPath[0], currentPath[1]) : imagePath;
     }
 
     private static bool TryPathEndsWithClipResolutionImageScale(
@@ -664,6 +699,38 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
 
         inputs["crop"] = "center";
         return true;
+    }
+
+    private bool TryFindReusableImageScale(
+        JArray sourcePath,
+        int targetW,
+        int targetH,
+        out JArray scaledPath)
+    {
+        scaledPath = null;
+        if (sourcePath is not { Count: 2 })
+        {
+            return false;
+        }
+        foreach (JProperty property in g.Workflow.Properties())
+        {
+            if (property.Value is not JObject node
+                || $"{node["class_type"]}" != NodeTypes.ImageScale
+                || node["inputs"] is not JObject inputs
+                || inputs["image"] is not JArray imageInput
+                || imageInput.Count != 2
+                || !JToken.DeepEquals(imageInput, sourcePath)
+                || inputs.Value<int?>("width") != targetW
+                || inputs.Value<int?>("height") != targetH)
+            {
+                continue;
+            }
+
+            inputs["crop"] = "center";
+            scaledPath = new JArray(property.Name, 0);
+            return true;
+        }
+        return false;
     }
 
     private bool TryFindReusablePreprocessOutput(JArray guideImagePath, out JArray preprocessOutputPath)
@@ -758,7 +825,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         string explicitScheduler = g.UserInput.Get(ComfyUIBackendExtension.SchedulerParam, null, sectionId: genInfo.ContextID, includeBase: false);
 
         g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
-        LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
+        audioMaskResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
         string samplerNode = g.CreateKSampler(
             genInfo.Model.Path,
             genInfo.PosCond,
@@ -858,7 +925,7 @@ internal sealed class LtxStageExecutor(WorkflowGenerator g)
         int outputWidth = g.CurrentMedia?.Width ?? sourceMedia.Width ?? g.UserInput.GetImageWidth();
         int outputHeight = g.CurrentMedia?.Height ?? sourceMedia.Height ?? g.UserInput.GetImageHeight();
         bool splicedIntoNativeChain = postVideoChain is not null;
-        bool parallelMultiClip = g.NodeHelpers.TryGetValue(MultiClipParallelWorkflowFlags.NodeHelperKey, out string parallelFlag)
+        bool parallelMultiClip = g.NodeHelpers.TryGetValue(MultiClipParallelMerger.NodeHelperKey, out string parallelFlag)
             && string.Equals(parallelFlag, "1", StringComparison.Ordinal);
         if (splicedIntoNativeChain)
         {

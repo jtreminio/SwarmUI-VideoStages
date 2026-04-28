@@ -11,6 +11,8 @@ internal static class LtxNodeTypes
     public const string LTXVPreprocess = "LTXVPreprocess";
     public const string LTXVImgToVideoInplace = "LTXVImgToVideoInplace";
     public const string LTXVAddGuide = "LTXVAddGuide";
+    public const string LTXAddVideoICLoRAGuide = "LTXAddVideoICLoRAGuide";
+    public const string LTXICLoRALoaderModelOnly = "LTXICLoRALoaderModelOnly";
     public const string LTXVCropGuides = "LTXVCropGuides";
     public const string LTXVLatentUpsampler = "LTXVLatentUpsampler";
     public const string LTXVConditioning = "LTXVConditioning";

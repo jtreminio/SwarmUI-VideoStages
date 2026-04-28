@@ -3,8 +3,10 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
-internal static class VideoClipPromptParser
+internal static class PromptParser
 {
+    private const string VideoClipCidMarker = "//cid=";
+
     private static readonly HashSet<string> SectionEndingTags = [
         "base",
         "refiner",
@@ -54,15 +56,38 @@ internal static class VideoClipPromptParser
         return !string.IsNullOrWhiteSpace(prefixName);
     }
 
+    private static bool VideoClipTagAppliesToClip(
+        string tag,
+        string preData,
+        int clipIndex,
+        int globalCid,
+        int clipCid)
+    {
+        int cidCut = tag.LastIndexOf(VideoClipCidMarker, StringComparison.OrdinalIgnoreCase);
+        if (cidCut != -1)
+        {
+            if (int.TryParse(tag[(cidCut + VideoClipCidMarker.Length)..], out int cid))
+            {
+                return cid == globalCid || cid == clipCid;
+            }
+        }
+        if (preData is null)
+        {
+            return true;
+        }
+        return int.TryParse(preData, out int tagClip) && tagClip == clipIndex;
+    }
+
     public static bool HasAnyVideoClipSectionForClip(string prompt, int clipIndex)
     {
-        if (string.IsNullOrWhiteSpace(prompt) || !prompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(prompt)
+            || !prompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        int globalCid = VideoStagesExtension.SectionID_VideoClip;
-        int clipCid = VideoStagesExtension.VideoClipSectionIdForClip(clipIndex);
+        int globalCid = Constants.SectionID_VideoClip;
+        int clipCid = VideoStagesExtension.SectionIdForClip(clipIndex);
 
         foreach (string piece in prompt.Split('<'))
         {
@@ -79,26 +104,12 @@ internal static class VideoClipPromptParser
 
             string tag = piece[..end];
             if (!TryExtractTagPrefix(tag, out string prefixName, out string preData)
-                || !string.Equals(prefixName, "videoclip", StringComparison.OrdinalIgnoreCase))
+                || !StringUtils.Equals(prefixName, "videoclip"))
             {
                 continue;
             }
 
-            int cidCut = tag.LastIndexOf("//cid=", StringComparison.OrdinalIgnoreCase);
-            if (cidCut != -1 && int.TryParse(tag[(cidCut + "//cid=".Length)..], out int cid))
-            {
-                if (cid == globalCid || cid == clipCid)
-                {
-                    return true;
-                }
-                continue;
-            }
-
-            if (preData is null)
-            {
-                return true;
-            }
-            if (int.TryParse(preData, out int tagClip) && tagClip == clipIndex)
+            if (VideoClipTagAppliesToClip(tag, preData, clipIndex, globalCid, clipCid))
             {
                 return true;
             }
@@ -117,7 +128,7 @@ internal static class VideoClipPromptParser
 
         if (!ShouldFallbackForTagOnlyVideoClipSection(prompt, originalPrompt, clipIndex))
         {
-            return (extracted ?? "").Trim();
+            return extracted.Trim();
         }
 
         for (int prevClip = clipIndex - 1; prevClip >= 0; prevClip--)
@@ -144,7 +155,10 @@ internal static class VideoClipPromptParser
         return fallback ?? "";
     }
 
-    public static bool ShouldFallbackForTagOnlyVideoClipSection(string parsedPrompt, string originalPrompt, int clipIndex)
+    public static bool ShouldFallbackForTagOnlyVideoClipSection(
+        string parsedPrompt,
+        string originalPrompt,
+        int clipIndex)
     {
         if (clipIndex < 0 || !HasAnyVideoClipSectionForClip(parsedPrompt, clipIndex))
         {
@@ -208,9 +222,9 @@ internal static class VideoClipPromptParser
             return prompt.Trim();
         }
 
-        int globalCid = VideoStagesExtension.SectionID_VideoClip;
-        int clipCid = VideoStagesExtension.VideoClipSectionIdForClip(clipIndex);
-        string result = "";
+        int globalCid = Constants.SectionID_VideoClip;
+        int clipCid = VideoStagesExtension.SectionIdForClip(clipIndex);
+        StringBuilder result = new();
         string[] pieces = prompt.Split('<');
         bool inWantedSection = false;
         bool sawRelevantVideoClipTag = false;
@@ -227,7 +241,7 @@ internal static class VideoClipPromptParser
             {
                 if (inWantedSection)
                 {
-                    result += "<" + piece;
+                    result.Append('<').Append(piece);
                 }
                 continue;
             }
@@ -238,7 +252,7 @@ internal static class VideoClipPromptParser
             {
                 if (inWantedSection)
                 {
-                    result += "<" + piece;
+                    result.Append('<').Append(piece);
                 }
                 continue;
             }
@@ -247,20 +261,12 @@ internal static class VideoClipPromptParser
             bool isVideoClipTag = tagPrefixLower == "videoclip";
             if (isVideoClipTag)
             {
-                bool wantThisSection = false;
-                int cidCut = tag.LastIndexOf("//cid=", StringComparison.OrdinalIgnoreCase);
-                if (cidCut != -1 && int.TryParse(tag[(cidCut + "//cid=".Length)..], out int cid))
-                {
-                    wantThisSection = cid == globalCid || cid == clipCid;
-                }
-                else if (preData is null)
-                {
-                    wantThisSection = true;
-                }
-                else if (int.TryParse(preData, out int tagClip) && tagClip == clipIndex)
-                {
-                    wantThisSection = true;
-                }
+                bool wantThisSection = VideoClipTagAppliesToClip(
+                    tag,
+                    preData,
+                    clipIndex,
+                    globalCid,
+                    clipCid);
 
                 if (wantThisSection)
                 {
@@ -270,7 +276,7 @@ internal static class VideoClipPromptParser
                 inWantedSection = wantThisSection;
                 if (inWantedSection)
                 {
-                    AppendWithBoundarySpace(ref result, content);
+                    AppendWithBoundarySpace(result, content);
                 }
             }
             else if (inWantedSection)
@@ -281,7 +287,7 @@ internal static class VideoClipPromptParser
                 }
                 else
                 {
-                    result += "<" + piece;
+                    result.Append('<').Append(piece);
                 }
             }
         }
@@ -291,7 +297,7 @@ internal static class VideoClipPromptParser
             return RemoveAllVideoClipSections(prompt);
         }
 
-        return result.Trim();
+        return result.ToString().Trim();
     }
 
     public static string GetGlobalPromptText(string prompt)
@@ -322,8 +328,8 @@ internal static class VideoClipPromptParser
 
         List<string> weights = input.Get(T2IParamTypes.LoraWeights) ?? [];
         List<string> tencWeights = input.Get(T2IParamTypes.LoraTencWeights) ?? [];
-        int globalCid = VideoStagesExtension.SectionID_VideoClip;
-        int clipCid = VideoStagesExtension.VideoClipSectionIdForClip(clipIndex);
+        int globalCid = Constants.SectionID_VideoClip;
+        int clipCid = VideoStagesExtension.SectionIdForClip(clipIndex);
         List<int> selectedIndices = [];
 
         for (int i = 0; i < loras.Count; i++)
@@ -379,29 +385,30 @@ internal static class VideoClipPromptParser
         return scope;
     }
 
-    private static void AppendWithBoundarySpace(ref string dest, string add)
+    private static void AppendWithBoundarySpace(StringBuilder dest, string add)
     {
         if (string.IsNullOrEmpty(add))
         {
             return;
         }
-        if (!string.IsNullOrEmpty(dest)
-            && !char.IsWhiteSpace(dest[^1])
+        if (dest.Length > 0
+            && !char.IsWhiteSpace(dest[dest.Length - 1])
             && !char.IsWhiteSpace(add[0]))
         {
-            dest += " ";
+            dest.Append(' ');
         }
-        dest += add;
+        dest.Append(add);
     }
 
     private static string RemoveAllVideoClipSections(string fullPrompt)
     {
-        if (string.IsNullOrWhiteSpace(fullPrompt) || !fullPrompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(fullPrompt)
+            || !fullPrompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
         {
             return (fullPrompt ?? "").Trim();
         }
 
-        string result = "";
+        StringBuilder result = new();
         bool inAnyVideoClipSection = false;
         string[] pieces = fullPrompt.Split('<');
         bool isFirstPiece = true;
@@ -413,7 +420,7 @@ internal static class VideoClipPromptParser
                 isFirstPiece = false;
                 if (!inAnyVideoClipSection)
                 {
-                    result += piece;
+                    result.Append(piece);
                 }
                 continue;
             }
@@ -428,7 +435,7 @@ internal static class VideoClipPromptParser
             {
                 if (!inAnyVideoClipSection)
                 {
-                    result += "<" + piece;
+                    result.Append('<').Append(piece);
                 }
                 continue;
             }
@@ -438,7 +445,7 @@ internal static class VideoClipPromptParser
             {
                 if (!inAnyVideoClipSection)
                 {
-                    result += "<" + piece;
+                    result.Append('<').Append(piece);
                 }
                 continue;
             }
@@ -463,10 +470,10 @@ internal static class VideoClipPromptParser
                 }
             }
 
-            result += "<" + piece;
+            result.Append('<').Append(piece);
         }
 
-        return result.Trim();
+        return result.ToString().Trim();
     }
 
     internal sealed class LoraOverrideScope : IDisposable

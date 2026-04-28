@@ -1,12 +1,71 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.LTX2;
 
 namespace VideoStages;
 
-public class Runner(WorkflowGenerator g)
+public class Runner
 {
-    private readonly RootVideoStageTakeover _rootVideoStageTakeover = new(g);
-    private readonly VideoStagesCoordinator _videoStagesCoordinator = new(g);
+    private readonly WorkflowGenerator g;
+    private readonly JsonParser jsonParser;
+    private readonly RootVideoStageTakeover rootVideoStageTakeover;
+    private readonly VideoStagesCoordinator coordinator;
+    private readonly StageGuideMediaHelper stageGuideMediaHelper;
+    private readonly RootVideoStageResizer rootVideoStageResizer;
+    private readonly StageRefStore stageRefStore;
+    private readonly AudioStageDetector audioStageDetector;
+    private readonly Base2EditPublishedStageRefs base2EditPublishedStageRefs;
+    private readonly MultiClipParallelMerger multiClipParallelMerger;
+    private readonly LtxManager ltxManager;
+    private readonly StageRunner stageRunner;
+    private readonly StageSequenceRunner stageSequenceRunner;
+
+    public Runner(WorkflowGenerator g)
+    {
+        this.g = g;
+        jsonParser = new JsonParser(g);
+        rootVideoStageTakeover = new RootVideoStageTakeover(g, jsonParser);
+        stageGuideMediaHelper = new StageGuideMediaHelper(g);
+        rootVideoStageResizer = new RootVideoStageResizer(
+            g,
+            rootVideoStageTakeover,
+            jsonParser,
+            stageGuideMediaHelper);
+        stageRefStore = new StageRefStore(g);
+        audioStageDetector = new AudioStageDetector(g);
+        base2EditPublishedStageRefs = new Base2EditPublishedStageRefs(g);
+        multiClipParallelMerger = new MultiClipParallelMerger(g);
+        ltxManager = new LtxManager(
+            g,
+            jsonParser,
+            rootVideoStageTakeover,
+            rootVideoStageResizer,
+            stageGuideMediaHelper,
+            base2EditPublishedStageRefs);
+        stageRunner = new StageRunner(g, stageGuideMediaHelper, ltxManager);
+        stageSequenceRunner = new StageSequenceRunner(
+            g,
+            stageRefStore,
+            stageRunner,
+            base2EditPublishedStageRefs,
+            rootVideoStageTakeover,
+            rootVideoStageResizer,
+            multiClipParallelMerger,
+            ltxManager);
+        coordinator = new VideoStagesCoordinator(
+            g,
+            jsonParser,
+            rootVideoStageTakeover,
+            stageRefStore,
+            stageSequenceRunner,
+            audioStageDetector,
+            ltxManager);
+    }
+
+    internal RootVideoStageResizer RootVideoStageResizer => rootVideoStageResizer;
+
+    public bool TryInjectLtxAudio(AudioStageDetector.Detection detection, bool matchVideoLengthToAudio = true) =>
+        ltxManager.TryInjectAudio(detection, matchVideoLengthToAudio);
 
     public void CaptureCoreVideoControlNetPreprocessors()
     {
@@ -25,7 +84,7 @@ public class Runner(WorkflowGenerator g)
             return;
         }
 
-        _rootVideoStageTakeover.EnsureRootVideoStageModel();
+        rootVideoStageTakeover.EnsureRootVideoStageModel();
     }
 
     public void CaptureBase()
@@ -35,7 +94,7 @@ public class Runner(WorkflowGenerator g)
             return;
         }
 
-        _videoStagesCoordinator.CaptureBase();
+        coordinator.CaptureBase();
     }
 
     public void CaptureRefiner()
@@ -45,7 +104,7 @@ public class Runner(WorkflowGenerator g)
             return;
         }
 
-        _videoStagesCoordinator.CaptureRefiner();
+        coordinator.CaptureRefiner();
     }
 
     public void SuppressCoreRootVideoStage()
@@ -55,7 +114,7 @@ public class Runner(WorkflowGenerator g)
             return;
         }
 
-        _rootVideoStageTakeover.SuppressCoreRootVideoStage();
+        rootVideoStageTakeover.SuppressCoreRootVideoStage();
     }
 
     public void RestoreCoreRootVideoStageModel()
@@ -65,7 +124,7 @@ public class Runner(WorkflowGenerator g)
             return;
         }
 
-        _rootVideoStageTakeover.RestoreCoreRootVideoStageModel();
+        rootVideoStageTakeover.RestoreCoreRootVideoStageModel();
     }
 
     public void ApplyRootAudioMaskDimensionsAfterNativeVideo()
@@ -75,7 +134,7 @@ public class Runner(WorkflowGenerator g)
             return;
         }
 
-        LTX2.LtxAudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo(g);
+        ltxManager.ApplyRootAudioMaskDimensionsAfterNativeVideo();
     }
 
     public void RunConfiguredStages()
@@ -85,7 +144,7 @@ public class Runner(WorkflowGenerator g)
             return;
         }
 
-        _videoStagesCoordinator.RunConfiguredStages();
+        coordinator.RunConfiguredStages();
     }
 
     private bool IsExtensionActive()
