@@ -3,7 +3,6 @@ using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.LTX2;
 
 namespace VideoStages;
 
@@ -20,7 +19,7 @@ public class VideoStagesExtension : Extension
     public override void OnPreInit()
     {
         PromptRegion.RegisterCustomPrefix("videoclip");
-        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (data, context) =>
+        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (_, context) =>
         {
             if (int.TryParse(context.PreData, out int clipIndex) && clipIndex >= 0)
             {
@@ -32,7 +31,7 @@ public class VideoStagesExtension : Extension
             }
             return $"<videoclip//cid={context.SectionID}>";
         };
-        T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (data, context) => "<break>";
+        T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (_, _) => "<break>";
 
         StyleSheetFiles.Add("Assets/video-stages.css");
         ScriptFiles.Add("Assets/video-stages.js");
@@ -43,16 +42,33 @@ public class VideoStagesExtension : Extension
         Logs.Info("VideoStages Extension initializing...");
         RegisterParameters();
         RegisterComfyNodes();
-        CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(step => step.Priority == 11);
+        CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
+            step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
         RootVideoStageResizer.EnsureRegistered();
-        WorkflowGenerator.AddStep(VideoStageControlNetApplicator.CaptureCoreVideoControlNetPreprocessors, -5.9);
-        WorkflowGenerator.AddStep(RootVideoStageTakeover.EnsureRootVideoStageModel, -4.3);
-        WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureBase(), -4.2);
-        WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureRefiner(), 5.9);
-        WorkflowGenerator.AddStep(RootVideoStageTakeover.SuppressCoreRootVideoStage, 10.95);
-        WorkflowGenerator.AddStep(RootVideoStageTakeover.RestoreCoreRootVideoStageModel, 11.05);
-        WorkflowGenerator.AddStep(LtxAudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo, 11.4);
-        WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).RunConfiguredStages(), 11.5);
+        WorkflowGenerator.AddStep(
+            VideoStageControlNetApplicator.CaptureCoreVideoControlNetPreprocessors,
+            Constants.WorkflowStepPriority.ControlNetPreprocessors);
+        WorkflowGenerator.AddStep(
+            RootVideoStageTakeover.EnsureRootVideoStageModel,
+            Constants.WorkflowStepPriority.EnsureRootVideoStageModel);
+        WorkflowGenerator.AddStep(
+            g => new VideoStagesCoordinator(g).CaptureBase(),
+            Constants.WorkflowStepPriority.CaptureBase);
+        WorkflowGenerator.AddStep(
+            g => new VideoStagesCoordinator(g).CaptureRefiner(),
+            Constants.WorkflowStepPriority.CaptureRefiner);
+        WorkflowGenerator.AddStep(
+            RootVideoStageTakeover.SuppressCoreRootVideoStage,
+            Constants.WorkflowStepPriority.SuppressCoreRootVideoStage);
+        WorkflowGenerator.AddStep(
+            RootVideoStageTakeover.RestoreCoreRootVideoStageModel,
+            Constants.WorkflowStepPriority.RestoreCoreRootVideoStageModel);
+        WorkflowGenerator.AddStep(
+            LTX2.LtxAudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo,
+            Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
+        WorkflowGenerator.AddStep(
+            g => new VideoStagesCoordinator(g).RunConfiguredStages(),
+            Constants.WorkflowStepPriority.RunConfiguredStages);
     }
 
     private static void RegisterParameters()
@@ -65,7 +81,7 @@ public class VideoStagesExtension : Extension
             OrderPriority: -2.9
         );
 
-        int OrderPriority = 0;
+        int orderPriority = 0;
 
         RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Width",
@@ -80,10 +96,9 @@ public class VideoStagesExtension : Extension
             DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
+            OrderPriority: orderPriority++,
             FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
-        OrderPriority += 1;
 
         RootHeight = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Height",
@@ -98,10 +113,9 @@ public class VideoStagesExtension : Extension
             DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
+            OrderPriority: orderPriority++,
             FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
-        OrderPriority += 1;
 
         RootFPS = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages FPS",
@@ -116,10 +130,9 @@ public class VideoStagesExtension : Extension
             DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
-            OrderPriority: OrderPriority,
+            OrderPriority: orderPriority++,
             FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
-        OrderPriority += 1;
 
         VideoStagesJson = T2IParamTypes.Register<string>(new T2IParamType(
             Name: "Video Stages",
