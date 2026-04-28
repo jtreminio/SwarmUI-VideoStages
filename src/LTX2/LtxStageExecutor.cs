@@ -595,14 +595,16 @@ internal sealed class LtxStageExecutor(
             }
         }
 
-        if (TryPathEndsWithClipResolutionImageScale(g.Workflow, guideImagePath, targetW, targetH))
+        if (ClipResolutionImageScaleMatchesDimensions(g.Workflow, guideImagePath, targetW, targetH))
         {
+            ApplyImageScaleCropCenter(g.Workflow, guideImagePath);
             return guideImagePath;
         }
 
         JArray scaleSourcePath = ResolveImageScaleBaseSource(guideImagePath);
         if (TryFindReusableImageScale(scaleSourcePath, targetW, targetH, out JArray reusedScalePath))
         {
+            ApplyImageScaleCropCenter(g.Workflow, reusedScalePath);
             return reusedScalePath;
         }
 
@@ -637,7 +639,7 @@ internal sealed class LtxStageExecutor(
         return currentPath is { Count: 2 } ? new JArray(currentPath[0], currentPath[1]) : imagePath;
     }
 
-    private static bool TryPathEndsWithClipResolutionImageScale(
+    private static bool ClipResolutionImageScaleMatchesDimensions(
         JObject workflow,
         JArray imagePath,
         int targetW,
@@ -655,13 +657,22 @@ internal sealed class LtxStageExecutor(
 
         int? width = inputs.Value<int?>("width");
         int? height = inputs.Value<int?>("height");
-        if (width != targetW || height != targetH)
+        return width == targetW && height == targetH;
+    }
+
+    private static void ApplyImageScaleCropCenter(JObject workflow, JArray imageScalePath)
+    {
+        if (workflow is null
+            || imageScalePath is not { Count: 2 }
+            || !workflow.TryGetValue($"{imageScalePath[0]}", out JToken token)
+            || token is not JObject node
+            || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
+            || node["inputs"] is not JObject inputs)
         {
-            return false;
+            return;
         }
 
         inputs["crop"] = "center";
-        return true;
     }
 
     private bool TryFindReusableImageScale(
@@ -689,7 +700,6 @@ internal sealed class LtxStageExecutor(
                 continue;
             }
 
-            inputs["crop"] = "center";
             scaledPath = new JArray(property.Name, 0);
             return true;
         }

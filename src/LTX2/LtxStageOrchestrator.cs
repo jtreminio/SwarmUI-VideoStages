@@ -239,7 +239,7 @@ internal sealed class LtxStageOrchestrator(
         if (postVideoChain is not null
             && stageGuideMediaHelper.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
         {
-            WGNodeData detachedGuideVae = postVideoChain.CreateStageInputVae() ?? g.CurrentVae;
+            WGNodeData detachedGuideVae = postVideoChain.CreateStageInputVae();
             return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
         }
 

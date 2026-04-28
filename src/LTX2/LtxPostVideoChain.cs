@@ -338,7 +338,7 @@ internal sealed class LtxPostVideoChain
         inputs["samples"] = new JArray(newSamplesPath[0], newSamplesPath[1]);
     }
 
-    private static bool TryFindAudioDecode(
+    internal static bool TryFindAudioDecode(
         JObject workflow,
         string separateId,
         out string audioDecodeId,
@@ -364,7 +364,7 @@ internal sealed class LtxPostVideoChain
             {
                 if (node["inputs"]?["audio_vae"] is not JArray foundAudioVaeRef || foundAudioVaeRef.Count != 2)
                 {
-                    return false;
+                    continue;
                 }
 
                 audioDecodeId = entry.Key;
