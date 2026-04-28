@@ -8,6 +8,8 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     internal const string NodeHelperKey = "videostages.parallel-multi-clip";
     private const int BatchImagesNodeMaxInputs = 50;
 
+    private static string TerminalPathKey(JArray path) => $"{path[0]}::{path[1]}";
+
     public void Apply(
         IReadOnlyList<WGNodeData> clipOutputsInOrder,
         JArray? parallelRootVideoPath = null)
@@ -163,8 +165,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         return acc;
     }
 
-    private static string TerminalPathKey(JArray path) => $"{path[0]}::{path[1]}";
-
     private static void RetargetSwarmSaveAnimationWsForClipTerminals(
         JObject workflow,
         HashSet<string> terminalPathKeys,
@@ -187,7 +187,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 continue;
             }
 
-            if ($"{node["class_type"]}" != NodeTypes.SwarmSaveAnimationWS)
+            if (!StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveAnimationWS))
             {
                 continue;
             }

@@ -44,7 +44,7 @@ public class VideoStagesExtension : Extension
         RegisterComfyNodes();
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
             step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
-        RootVideoStageResizer.EnsureRegistered();
+        RootVideoStageResizer.RegisterHandlers();
 
         WorkflowGenerator.AddStep(
             g => new Runner(g).CaptureCoreVideoControlNetPreprocessors(),

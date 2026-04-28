@@ -105,7 +105,8 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         {
             return false;
         }
-        return oneBasedTrack - 1 >= 0;
+        zeroBasedTrackIndex = oneBasedTrack - 1;
+        return zeroBasedTrackIndex >= 0;
     }
 
     private WGNodeData CreateAudioNode(JArray path) =>
