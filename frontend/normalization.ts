@@ -6,6 +6,7 @@ import {
 } from "./audioSource";
 import {
     CLIP_DURATION_MIN,
+    CONTROLNET_SOURCE_OPTIONS,
     clamp,
     DEFAULT_CLIP_DURATION_SECONDS,
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
@@ -13,9 +14,14 @@ import {
     REF_FRAME_MIN,
     ROOT_DIMENSION_MIN,
     ROOT_FPS_MIN,
+    STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_STEP,
     STAGE_REF_STRENGTH_DEFAULT,
     STAGE_REF_STRENGTH_MAX,
     STAGE_REF_STRENGTH_MIN,
+    STAGE_REF_STRENGTH_STEP,
 } from "./constants";
 import { framesForClip, snapDurationToFps } from "./renderUtils";
 import {
@@ -35,11 +41,40 @@ const resolveRootPreferredUpscaleMethod = (
         ? "pixel-lanczos"
         : (upscaleMethodValues[0] ?? "pixel-lanczos");
 
-const resolveFirstStageControl = (defaults: RootDefaults): number =>
-    clamp(defaults.control, defaults.controlMin, defaults.controlMax);
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
+
+const normalizeExpanded = (raw: { expanded?: unknown }): boolean =>
+    raw.expanded === undefined ? true : !!raw.expanded;
+
+const normalizeRootPositiveInt = (
+    value: unknown,
+    fallback: number,
+    min: number,
+): number =>
+    Math.max(
+        min,
+        Math.round(utils.toNumber(`${value ?? fallback}`, fallback)),
+    );
+
+const snapStrengthToStep = (
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number,
+    step: number,
+): number => {
+    const unitScale = 1 / step;
+    return (
+        Math.round(
+            clamp(
+                utils.toNumber(`${value ?? fallback}`, fallback),
+                min,
+                max,
+            ) * unitScale,
+        ) / unitScale
+    );
+};
 
 export const normalizeUploadedAudio = (
     value: unknown,
@@ -62,40 +97,49 @@ export const normalizeUploadedAudio = (
 export const normalizeRootDimension = (
     value: unknown,
     fallback: number,
-): number =>
-    Math.max(
-        ROOT_DIMENSION_MIN,
-        Math.round(utils.toNumber(`${value ?? fallback}`, fallback)),
-    );
+): number => normalizeRootPositiveInt(value, fallback, ROOT_DIMENSION_MIN);
 
 export const normalizeRootFps = (value: unknown, fallback: number): number =>
-    Math.max(
-        ROOT_FPS_MIN,
-        Math.round(utils.toNumber(`${value ?? fallback}`, fallback)),
-    );
+    normalizeRootPositiveInt(value, fallback, ROOT_FPS_MIN);
+
+export const normalizeControlNetSource = (value: unknown): string => {
+    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    for (const option of CONTROLNET_SOURCE_OPTIONS) {
+        if (option.replace(/\s+/g, "").toLowerCase() === compact) {
+            return option;
+        }
+    }
+    return CONTROLNET_SOURCE_OPTIONS[0];
+};
+
+export const normalizeOptionalModelName = (value: unknown): string => {
+    const raw = `${value ?? ""}`.trim();
+    return raw || "";
+};
 
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
-    Math.round(
-        clamp(
-            utils.toNumber(
-                `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
-                STAGE_REF_STRENGTH_DEFAULT,
-            ),
-            STAGE_REF_STRENGTH_MIN,
-            STAGE_REF_STRENGTH_MAX,
-        ) * 10,
-    ) / 10;
+    snapStrengthToStep(
+        value,
+        STAGE_REF_STRENGTH_DEFAULT,
+        STAGE_REF_STRENGTH_MIN,
+        STAGE_REF_STRENGTH_MAX,
+        STAGE_REF_STRENGTH_STEP,
+    );
+
+export const normalizeStageControlNetStrengthValue = (value: unknown): number =>
+    snapStrengthToStep(
+        value,
+        STAGE_CONTROLNET_STRENGTH_DEFAULT,
+        STAGE_CONTROLNET_STRENGTH_MIN,
+        STAGE_CONTROLNET_STRENGTH_MAX,
+        STAGE_CONTROLNET_STRENGTH_STEP,
+    );
 
 export const buildDefaultStageRefStrengths = (
     refCount: number,
     defaultStrength = STAGE_REF_STRENGTH_DEFAULT,
-): number[] => {
-    const strengths: number[] = [];
-    for (let i = 0; i < refCount; i++) {
-        strengths.push(defaultStrength);
-    }
-    return strengths;
-};
+): number[] =>
+    Array.from({ length: refCount }, () => defaultStrength);
 
 export const normalizeStageRefStrengths = (
     rawStrengths: unknown,
@@ -147,6 +191,9 @@ export const buildDefaultStage = (
         expanded: true,
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
+        controlNetStrength: previousStage
+            ? previousStage.controlNetStrength
+            : STAGE_CONTROLNET_STRENGTH_DEFAULT,
         refStrengths: buildDefaultStageRefStrengths(refCount),
         upscale: previousStage ? previousStage.upscale : defaults.upscale,
         upscaleMethod: previousStage
@@ -193,6 +240,8 @@ export const buildDefaultClip = (
             defaults.fps,
         ),
         audioSource: AUDIO_SOURCE_NATIVE,
+        controlNetSource: CONTROLNET_SOURCE_OPTIONS[0],
+        controlNetLora: "",
         saveAudioTrack: false,
         clipLengthFromAudio: false,
         reuseAudio: false,
@@ -246,42 +295,55 @@ export const normalizeStage = (
         previousStage,
         refCount,
     );
-    const firstStageUpscale =
-        stageIndexInClip === 0
-            ? {
-                  upscale: defaults.upscale,
-                  upscaleMethod: resolveRootPreferredUpscaleMethod(
-                      defaults.upscaleMethodValues,
-                  ),
-              }
-            : {
-                  upscale: clamp(
-                      utils.toNumber(
-                          `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
-                          fallback.upscale,
-                      ),
-                      defaults.upscaleMin,
-                      defaults.upscaleMax,
-                  ),
-                  upscaleMethod:
-                      `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
-                      fallback.upscaleMethod,
-              };
-    const control =
-        stageIndexInClip === 0
-            ? resolveFirstStageControl(defaults)
-            : clamp(
-                  utils.toNumber(
-                      `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
-                      fallback.control,
-                  ),
-                  defaults.controlMin,
-                  defaults.controlMax,
-              );
+    let firstStageUpscale: { upscale: number; upscaleMethod: string };
+    let control: number;
+    if (stageIndexInClip === 0) {
+        firstStageUpscale = {
+            upscale: defaults.upscale,
+            upscaleMethod: resolveRootPreferredUpscaleMethod(
+                defaults.upscaleMethodValues,
+            ),
+        };
+        control = clamp(
+            defaults.control,
+            defaults.controlMin,
+            defaults.controlMax,
+        );
+    }
+    else {
+        firstStageUpscale = {
+            upscale: clamp(
+                utils.toNumber(
+                    `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+                    fallback.upscale,
+                ),
+                defaults.upscaleMin,
+                defaults.upscaleMax,
+            ),
+            upscaleMethod:
+                `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
+                fallback.upscaleMethod,
+        };
+        control = clamp(
+            utils.toNumber(
+                `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+                fallback.control,
+            ),
+            defaults.controlMin,
+            defaults.controlMax,
+        );
+    }
     const stage: Stage = {
-        expanded: rawStage.expanded === undefined ? true : !!rawStage.expanded,
+        expanded: normalizeExpanded(rawStage),
         skipped: !!rawStage.skipped,
         control,
+        controlNetStrength: normalizeStageControlNetStrengthValue(
+            readRawStageProp(
+                rawStage,
+                "controlNetStrength",
+                "ControlNetStrength",
+            ) ?? fallback.controlNetStrength,
+        ),
         refStrengths: normalizeStageRefStrengths(
             rawStage.refStrengths,
             refCount,
@@ -335,7 +397,7 @@ export const normalizeRef = (
     const fallback = buildDefaultRef();
     const source = `${rawRef.source ?? fallback.source}` || fallback.source;
     const ref: RefImage = {
-        expanded: rawRef.expanded === undefined ? true : !!rawRef.expanded,
+        expanded: normalizeExpanded(rawRef),
         source,
         uploadFileName:
             rawRef.uploadFileName == null || rawRef.uploadFileName === ""
@@ -404,10 +466,16 @@ export const normalizeClip = (
         audioSourceOptions,
     );
     return {
-        expanded: rawClip.expanded === undefined ? true : !!rawClip.expanded,
+        expanded: normalizeExpanded(rawClip),
         skipped: !!rawClip.skipped,
         duration,
         audioSource,
+        controlNetSource: normalizeControlNetSource(
+            rawClip.controlNetSource ?? rawClip.ControlNetSource,
+        ),
+        controlNetLora: normalizeOptionalModelName(
+            rawClip.controlNetLora ?? rawClip.ControlNetLora,
+        ),
         saveAudioTrack: !!rawClip.saveAudioTrack,
         clipLengthFromAudio:
             canUseClipLengthFromAudio(audioSource) &&
