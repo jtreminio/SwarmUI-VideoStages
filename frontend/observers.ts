@@ -76,6 +76,7 @@ export const createObservers = (deps: {
             "input_sampler",
             "input_scheduler",
             "input_refinerupscalemethod",
+            "input_loras",
         ];
 
         let hasObservedSource = false;
@@ -160,9 +161,17 @@ export const createObservers = (deps: {
                 }
                 const target = event.target;
                 const isRefSourceChange = target.dataset.refField === "source";
-                const isClipAudioSourceChange =
-                    target.dataset.clipField === "audioSource";
-                if (!isRefSourceChange && !isClipAudioSourceChange) {
+                const clipField = target.dataset.clipField;
+                const isClipAudioSourceChange = clipField === "audioSource";
+                const isControlNetSourceChange =
+                    clipField === "controlNetSource";
+                const isControlNetLoraChange = clipField === "controlNetLora";
+                if (
+                    !isRefSourceChange &&
+                    !isClipAudioSourceChange &&
+                    !isControlNetSourceChange &&
+                    !isControlNetLoraChange
+                ) {
                     return;
                 }
                 const liveEditor = document.getElementById(

@@ -1145,6 +1145,52 @@ describe("videoStageEditor", () => {
             expect(rebuiltUploadField.style.display).toBe("");
         });
 
+        it("still stores ControlNet source when the editor DOM is rebuilt", () => {
+            initEditor();
+
+            const originalEditor = document.getElementById(
+                "videostages_stage_editor",
+            ) as HTMLElement | null;
+            const root = must(originalEditor);
+            const parent = must(root.parentElement);
+
+            const rebuiltEditor = root.cloneNode(true) as HTMLElement;
+            parent.replaceChild(rebuiltEditor, root);
+
+            const controlNetSource = rebuiltEditor.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const select = must(controlNetSource);
+            select.value = "ControlNet 3";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].controlNetSource).toBe("ControlNet 3");
+        });
+
+        it("still stores ControlNet LoRA when the editor DOM is rebuilt", () => {
+            initEditor();
+
+            const originalEditor = document.getElementById(
+                "videostages_stage_editor",
+            ) as HTMLElement | null;
+            const root = must(originalEditor);
+            const parent = must(root.parentElement);
+
+            const rebuiltEditor = root.cloneNode(true) as HTMLElement;
+            parent.replaceChild(rebuiltEditor, root);
+
+            const controlNetLora = rebuiltEditor.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const select = must(controlNetLora);
+            select.value = "ltx-ic-lora.safetensors";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].controlNetLora).toBe(
+                "ltx-ic-lora.safetensors",
+            );
+        });
+
         it("stores uploaded audio payload on the clip", () => {
             initEditor();
 
@@ -2136,6 +2182,28 @@ describe("videoStageEditor", () => {
             );
 
             expect(parseStored()[0].stages?.[0].controlNetStrength).toBe(0.3);
+        });
+
+        it("renders ControlNet strength slider with expected bounds and step", () => {
+            initEditor();
+
+            const range = document.querySelector(
+                '[data-stage-field="controlNetStrength"][type="range"]',
+            ) as HTMLInputElement | null;
+            const controlNetRange = must(range);
+            expect(controlNetRange.min).toBe("0");
+            expect(controlNetRange.max).toBe("1");
+            expect(controlNetRange.step).toBe("0.1");
+            expect(controlNetRange.value).toBe("0.8");
+
+            const numberInput = document.querySelector(
+                '[data-stage-field="controlNetStrength"][type="number"]',
+            ) as HTMLInputElement | null;
+            const controlNetNumber = must(numberInput);
+            expect(controlNetNumber.min).toBe("0");
+            expect(controlNetNumber.max).toBe("1");
+            expect(controlNetNumber.step).toBe("0.1");
+            expect(controlNetNumber.value).toBe("0.8");
         });
 
         it("toggles skip state for a stage", async () => {

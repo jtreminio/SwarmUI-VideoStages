@@ -156,6 +156,19 @@ describe("normalization", () => {
         expect(controlNetClip.controlNetLora).toBe("ltx-ic-lora.safetensors");
     });
 
+    it("normalizeClip reads camelCase controlNetSource and controlNetLora from stored JSON", () => {
+        const clip = normalizeClip(
+            {
+                controlNetSource: "ControlNet 2",
+                controlNetLora: " detail-lora.safetensors ",
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.controlNetSource).toBe("ControlNet 2");
+        expect(clip.controlNetLora).toBe("detail-lora.safetensors");
+    });
+
     it("normalizeStage reads PascalCase upscale fields for non-first stage", () => {
         const stage0 = normalizeStage(
             getRootDefaults,
