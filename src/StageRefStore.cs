@@ -32,7 +32,10 @@ public class StageRefStore(WorkflowGenerator g)
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
-    private static string NodeKey(StageKind kind, int? index, string property) => $"{Prefix}{StageName(kind, index)}.{property}";
+    private static string NodeKey(StageKind kind, int? index, string property)
+    {
+        return $"{Prefix}{StageName(kind, index)}.{property}";
+    }
 
     public StageRef Base => GetIfCaptured(StageKind.Base);
 
@@ -40,7 +43,11 @@ public class StageRefStore(WorkflowGenerator g)
 
     public StageRef Generated => GetIfCaptured(StageKind.Generated);
 
-    public void Capture(StageKind kind, int? index = null, WGNodeData mediaOverride = null, WGNodeData vaeOverride = null)
+    public void Capture(
+        StageKind kind,
+        int? index = null,
+        WGNodeData mediaOverride = null,
+        WGNodeData vaeOverride = null)
     {
         StoreNodeData(NodeKey(kind, index, "media"), mediaOverride ?? g.CurrentMedia);
         StoreNodeData(NodeKey(kind, index, "vae"), vaeOverride ?? g.CurrentVae);
@@ -60,11 +67,14 @@ public class StageRefStore(WorkflowGenerator g)
 
     private StageRef GetIfCaptured(StageKind kind) => HasCaptured(kind) ? LoadStageRef(kind) : null;
 
-    private bool HasCaptured(StageKind kind, int? index = null) => g.NodeHelpers.ContainsKey(NodeKey(kind, index, "media"));
+    private bool HasCaptured(StageKind kind, int? index = null)
+    {
+        return g.NodeHelpers.ContainsKey(NodeKey(kind, index, "media"));
+    }
 
     private void StoreNodeData(string key, WGNodeData data)
     {
-        if (data?.Path is not JArray path || path.Count != 2)
+        if (data is null || !IsTwoElementPath(data.Path, out _))
         {
             g.NodeHelpers.Remove(key);
             return;
@@ -76,9 +86,11 @@ public class StageRefStore(WorkflowGenerator g)
 
     private StageRef LoadStageRef(StageKind kind, int? index = null)
     {
-        WGNodeData vae = LoadNodeData(NodeKey(kind, index, "vae"), fallbackVae: null);
+        string vaeKey = NodeKey(kind, index, "vae");
+        string mediaKey = NodeKey(kind, index, "media");
+        WGNodeData vae = LoadNodeData(vaeKey, fallbackVae: null);
         return new StageRef(
-            Media: LoadNodeData(NodeKey(kind, index, "media"), vae),
+            Media: LoadNodeData(mediaKey, vae),
             Vae: vae
         );
     }
@@ -90,21 +102,26 @@ public class StageRefStore(WorkflowGenerator g)
             return null;
         }
 
+        JObject obj;
         try
         {
-            return JToken.Parse(encoded) is JObject obj
-                ? DeserializeNodeData(obj, fallbackVae)
-                : null;
+            if (JToken.Parse(encoded) is not JObject parsed)
+            {
+                return null;
+            }
+            obj = parsed;
         }
-        catch
+        catch (JsonException)
         {
             return null;
         }
+
+        return DeserializeNodeData(obj, fallbackVae);
     }
 
     private WGNodeData DeserializeNodeData(JObject data, WGNodeData fallbackVae)
     {
-        if (data["path"] is not JArray path || path.Count != 2)
+        if (!IsTwoElementPath(data["path"], out JArray path))
         {
             return null;
         }
@@ -129,11 +146,15 @@ public class StageRefStore(WorkflowGenerator g)
     private T2IModelCompatClass ResolveCompatFor(string dataType, WGNodeData fallbackVae, string compatId)
     {
         if (!string.IsNullOrWhiteSpace(compatId)
-            && T2IModelClassSorter.CompatClasses.TryGetValue(compatId.ToLowerFast(), out T2IModelCompatClass explicitCompat))
+            && T2IModelClassSorter.CompatClasses.TryGetValue(
+                compatId.ToLowerFast(),
+                out T2IModelCompatClass explicitCompat))
         {
             return explicitCompat;
         }
-        if (dataType == WGNodeData.DT_AUDIO || dataType == WGNodeData.DT_LATENT_AUDIO || dataType == WGNodeData.DT_AUDIOVAE)
+        if (dataType == WGNodeData.DT_AUDIO
+            || dataType == WGNodeData.DT_LATENT_AUDIO
+            || dataType == WGNodeData.DT_AUDIOVAE)
         {
             return g.CurrentAudioVae?.Compat;
         }
@@ -174,5 +195,11 @@ public class StageRefStore(WorkflowGenerator g)
         {
             o[key] = value.Value;
         }
+    }
+
+    private static bool IsTwoElementPath(JToken token, out JArray path)
+    {
+        path = token as JArray;
+        return path is not null && path.Count == 2;
     }
 }

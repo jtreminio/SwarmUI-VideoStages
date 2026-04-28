@@ -14,30 +14,38 @@ internal static class StageGuideMediaHelper
         {
             return null;
         }
-        if (postVideoChain is not null && IsLiveCurrentOutputReference(guideReference.Media, postVideoChain))
+        if (postVideoChain is not null
+            && IsLiveCurrentOutputReference(guideReference.Media, postVideoChain))
         {
-            WGNodeData detachedGuideVae = guideReference.Vae ?? postVideoChain.CreateStageInputVae() ?? g.CurrentVae;
+            WGNodeData detachedGuideVae = guideReference.Vae
+                ?? postVideoChain.CreateStageInputVae()
+                ?? g.CurrentVae;
             return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
         }
-        if (guideReference.Media.DataType == WGNodeData.DT_IMAGE || guideReference.Media.DataType == WGNodeData.DT_VIDEO)
+        if (guideReference.Media.DataType == WGNodeData.DT_IMAGE
+            || guideReference.Media.DataType == WGNodeData.DT_VIDEO)
         {
             return guideReference.Media;
         }
 
         WGNodeData guideVae = guideReference.Vae ?? g.CurrentVae;
         if (guideReference.Media.Path is JArray guidePath
-            && WorkflowUtils.TryResolveNearestDownstreamDecodeOutput(g.Workflow, guidePath, out JArray decodedGuidePath))
+            && WorkflowUtils.TryResolveNearestDownstreamDecodeOutput(
+                g.Workflow, guidePath, out JArray decodedGuidePath))
         {
-            string rawDataType = guideReference.Media.DataType == WGNodeData.DT_LATENT_VIDEO
+            string rawDataType =
+                guideReference.Media.DataType == WGNodeData.DT_LATENT_VIDEO
                 || guideReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
-                ? WGNodeData.DT_VIDEO
-                : WGNodeData.DT_IMAGE;
+                    ? WGNodeData.DT_VIDEO
+                    : WGNodeData.DT_IMAGE;
             return guideReference.Media.WithPath(decodedGuidePath, rawDataType, guideVae?.Compat);
         }
         return VaeDecodePreference.AsRawImage(g, guideReference.Media, guideVae);
     }
 
-    internal static bool IsLiveCurrentOutputReference(WGNodeData guideMedia, LTX2.LtxPostVideoChain postVideoChain)
+    internal static bool IsLiveCurrentOutputReference(
+        WGNodeData guideMedia,
+        LTX2.LtxPostVideoChain postVideoChain)
     {
         if (guideMedia?.Path is not JArray guidePath || postVideoChain is null)
         {
@@ -65,33 +73,45 @@ internal static class StageGuideMediaHelper
         int targetHeight = sourceMedia.Height ?? g.UserInput.GetImageHeight();
         int currentWidth = resolvedGuideMedia.Width ?? targetWidth;
         int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
-        if (currentWidth == targetWidth && currentHeight == targetHeight)
+        if (currentWidth != targetWidth || currentHeight != targetHeight)
         {
-            resolvedGuideMedia.Width = targetWidth;
-            resolvedGuideMedia.Height = targetHeight;
-            return resolvedGuideMedia;
+            if (TryFindReusableImageScale(
+                    g.Workflow,
+                    resolvedGuideMedia.Path,
+                    targetWidth,
+                    targetHeight,
+                    out JArray reusableScalePath))
+            {
+                resolvedGuideMedia = resolvedGuideMedia.WithPath(reusableScalePath);
+            }
+            else
+            {
+                JObject scaleInputs = BuildCenterLanczosImageScaleInputs(
+                    resolvedGuideMedia.Path,
+                    targetWidth,
+                    targetHeight);
+                string scaleNode = g.CreateNode(
+                    NodeTypes.ImageScale,
+                    scaleInputs);
+                resolvedGuideMedia = resolvedGuideMedia.WithPath([scaleNode, 0]);
+            }
         }
 
-        if (TryFindReusableImageScale(g.Workflow, resolvedGuideMedia.Path, targetWidth, targetHeight, out JArray reusableScalePath))
-        {
-            resolvedGuideMedia = resolvedGuideMedia.WithPath(reusableScalePath);
-            resolvedGuideMedia.Width = targetWidth;
-            resolvedGuideMedia.Height = targetHeight;
-            return resolvedGuideMedia;
-        }
-
-        string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
-        {
-            ["image"] = resolvedGuideMedia.Path,
-            ["width"] = targetWidth,
-            ["height"] = targetHeight,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "center"
-        });
-        resolvedGuideMedia = resolvedGuideMedia.WithPath([scaleNode, 0]);
         resolvedGuideMedia.Width = targetWidth;
         resolvedGuideMedia.Height = targetHeight;
         return resolvedGuideMedia;
+    }
+
+    internal static JObject BuildCenterLanczosImageScaleInputs(JToken image, int width, int height)
+    {
+        return new JObject()
+        {
+            ["image"] = image,
+            ["width"] = width,
+            ["height"] = height,
+            ["upscale_method"] = "lanczos",
+            ["crop"] = "center"
+        };
     }
 
     private static bool TryFindReusableImageScale(
@@ -110,9 +130,10 @@ internal static class StageGuideMediaHelper
         foreach (JProperty property in workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.ImageScale
+                || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
                 || node["inputs"] is not JObject inputs
                 || inputs["image"] is not JArray imagePath
+                || imagePath.Count != 2
                 || !JToken.DeepEquals(imagePath, sourcePath)
                 || inputs.Value<int?>("width") != targetWidth
                 || inputs.Value<int?>("height") != targetHeight)

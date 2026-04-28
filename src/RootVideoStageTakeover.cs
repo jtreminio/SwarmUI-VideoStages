@@ -4,7 +4,7 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
-internal sealed class RootVideoStageTakeover(WorkflowGenerator g)
+internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jsonParser)
 {
     private const int StashSectionId = Constants.SectionID_VideoStages;
     private const string SynthesizedRootVideoModelKey = "videostages.synth-root-video-model";
@@ -38,7 +38,7 @@ internal sealed class RootVideoStageTakeover(WorkflowGenerator g)
             return;
         }
 
-        JsonParser.StageSpec firstStage = new JsonParser(g).ParseStages().FirstOrDefault();
+        JsonParser.StageSpec firstStage = jsonParser.ParseStages().FirstOrDefault();
         if (firstStage is null || string.IsNullOrWhiteSpace(firstStage.Model))
         {
             return;
@@ -80,7 +80,7 @@ internal sealed class RootVideoStageTakeover(WorkflowGenerator g)
         {
             return false;
         }
-        return new JsonParser(g).ParseStages().Count > 0;
+        return jsonParser.ParseStages().Count > 0;
     }
 
     public void SuppressCoreRootVideoStage()

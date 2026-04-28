@@ -50,7 +50,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g, RootVideoStageT
         }
 
         WorkflowGenerator g = genInfo.Generator;
-        resizer = new RootVideoStageResizer(g, new RootVideoStageTakeover(g));
+        resizer = new RootVideoStageResizer(g, new RootVideoStageTakeover(g, new JsonParser(g)));
         return resizer.TryGetRootStageResolution(out resolution);
     }
 
