@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -9,7 +10,10 @@ internal static class Base2EditPublishedStageRefs
 {
     private const string Prefix = "b2e.published.edit.";
 
-    public static bool TryGetStageRef(WorkflowGenerator g, int stageIndex, out StageRefStore.StageRef stageRef)
+    public static bool TryGetStageRef(
+        WorkflowGenerator g,
+        int stageIndex,
+        [MaybeNullWhen(false)] out StageRefStore.StageRef stageRef)
     {
         stageRef = null;
         if (g is null
@@ -21,13 +25,9 @@ internal static class Base2EditPublishedStageRefs
 
         try
         {
-            if (JToken.Parse(encoded) is not JObject payload)
-            {
-                return false;
-            }
-
-            WGNodeData vae = DeserializeNodeData(g, payload["vae"] as JObject, null);
-            WGNodeData media = DeserializeNodeData(g, payload["media"] as JObject, vae);
+            JObject payload = JObject.Parse(encoded);
+            WGNodeData vae = payload["vae"] is JObject vaeObj ? DeserializeNodeData(g, vaeObj, null) : null;
+            WGNodeData media = payload["media"] is JObject mediaObj ? DeserializeNodeData(g, mediaObj, vae) : null;
             if (media is null)
             {
                 return false;
@@ -62,27 +62,32 @@ internal static class Base2EditPublishedStageRefs
 
     private static WGNodeData DeserializeNodeData(WorkflowGenerator g, JObject data, WGNodeData fallbackVae)
     {
-        if (data?["path"] is not JArray path || path.Count != 2)
+        if (data["path"] is not JArray path || path.Count != 2)
         {
             return null;
         }
 
         string dataType = data.Value<string>("dataType") ?? WGNodeData.DT_IMAGE;
         T2IModelCompatClass compat = ResolveCompatFor(g, dataType, fallbackVae, data.Value<string>("compatId"));
-        WGNodeData restored = new(path, g, dataType, compat)
+        return new WGNodeData(path, g, dataType, compat)
         {
             Width = data.Value<int?>("width"),
             Height = data.Value<int?>("height"),
             Frames = data.Value<int?>("frames"),
             FPS = data.Value<int?>("fps")
         };
-        return restored;
     }
 
-    private static T2IModelCompatClass ResolveCompatFor(WorkflowGenerator g, string dataType, WGNodeData fallbackVae, string compatId)
+    private static T2IModelCompatClass ResolveCompatFor(
+        WorkflowGenerator g,
+        string dataType,
+        WGNodeData fallbackVae,
+        string compatId)
     {
         if (!string.IsNullOrWhiteSpace(compatId)
-            && T2IModelClassSorter.CompatClasses.TryGetValue(compatId.ToLowerFast(), out T2IModelCompatClass explicitCompat))
+            && T2IModelClassSorter.CompatClasses.TryGetValue(
+                compatId.ToLowerFast(),
+                out T2IModelCompatClass explicitCompat))
         {
             return explicitCompat;
         }

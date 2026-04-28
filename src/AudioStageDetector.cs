@@ -6,9 +6,13 @@ namespace VideoStages;
 public sealed class AudioStageDetector(WorkflowGenerator g)
 {
     private const string AceStepFunAudioSourcePrefix = "audio";
-    private const string AceStepFunSaveNodeType = "SaveAudioMP3";
-    private const string AceStepFunFilenamePrefix = "SwarmUI_track_";
     private const long AceStepFunDecodeNodeBase = 64160;
+    public const string AceStepFunSaveNodeType = "SaveAudioMP3";
+    public const string AceStepFunFilenamePrefix = "SwarmUI_track_";
+
+    private const int PrioritySwarmSaveWsOrAceStepFunSave = 3;
+    private const int PriorityGenericSaveAudio = 2;
+    private const int PriorityDecode = 1;
 
     public sealed record Detection(
         WGNodeData Audio,
@@ -17,58 +21,53 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         string SourceNodeId,
         int Priority);
 
-    public Detection Detect()
+    public Detection? Detect()
     {
-        Detection best = null;
-
-        foreach (JProperty property in g.Workflow.Properties())
+        return ScanWorkflow((nodeId, node) =>
         {
-            if (property.Value is not JObject node)
+            string classType = ClassTypeOf(node);
+            return classType switch
             {
-                continue;
-            }
-            string classType = $"{node["class_type"]}";
-            Detection candidate = classType switch
-            {
-                NodeTypes.SwarmSaveAudioWS => BuildSaveCandidate(property.Name, classType, node, 3),
-                _ when IsSaveAudioNode(classType) && !IsAceStepFunSaveNode(node) => BuildSaveCandidate(property.Name, classType, node, 2),
-                NodeTypes.VAEDecodeAudio when !IsAceStepFunDecodeNode(property.Name) => BuildDecodeCandidate(property.Name, classType, 1),
+                NodeTypes.SwarmSaveAudioWS => BuildSaveCandidate(nodeId, classType, node, PrioritySwarmSaveWsOrAceStepFunSave),
+                _ when IsSaveAudioNode(classType) && !IsAceStepFunSaveNode(node) =>
+                    BuildSaveCandidate(nodeId, classType, node, PriorityGenericSaveAudio),
+                NodeTypes.VAEDecodeAudio when !IsAceStepFunDecodeNode(nodeId) =>
+                    BuildDecodeCandidate(nodeId, classType, PriorityDecode),
                 _ => null,
             };
-
-            if (ShouldReplace(best, candidate))
-            {
-                best = candidate;
-            }
-        }
-
-        return best;
+        });
     }
 
-    public Detection DetectAceStepFunTrack(string source)
+    public Detection? DetectAceStepFunTrack(string source)
     {
         if (!TryParseAceStepFunAudioSource(source, out int trackIndex))
         {
             return null;
         }
+        return ScanWorkflow((nodeId, node) =>
+        {
+            string classType = ClassTypeOf(node);
+            return classType switch
+            {
+                AceStepFunSaveNodeType when IsAceStepFunSaveNodeForTrack(node, trackIndex) =>
+                    BuildSaveCandidate(nodeId, classType, node, PrioritySwarmSaveWsOrAceStepFunSave),
+                NodeTypes.VAEDecodeAudio when IsAceStepFunDecodeNodeForTrack(nodeId, trackIndex) =>
+                    BuildDecodeCandidate(nodeId, classType, PriorityDecode),
+                _ => null,
+            };
+        });
+    }
 
-        Detection best = null;
+    private Detection? ScanWorkflow(Func<string, JObject, Detection?> classifyNode)
+    {
+        Detection? best = null;
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node)
             {
                 continue;
             }
-            string classType = $"{node["class_type"]}";
-            Detection candidate = classType switch
-            {
-                AceStepFunSaveNodeType when IsAceStepFunSaveNodeForTrack(node, trackIndex) =>
-                    BuildSaveCandidate(property.Name, classType, node, 3),
-                NodeTypes.VAEDecodeAudio when IsAceStepFunDecodeNodeForTrack(property.Name, trackIndex) =>
-                    BuildDecodeCandidate(property.Name, classType, 1),
-                _ => null,
-            };
-
+            Detection? candidate = classifyNode(property.Name, node);
             if (ShouldReplace(best, candidate))
             {
                 best = candidate;
@@ -80,7 +79,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
     public static bool TryParseAceStepFunAudioSource(string source, out int trackIndex)
     {
         trackIndex = -1;
-        string trimmed = $"{source ?? ""}".Trim();
+        string trimmed = (source ?? "").Trim();
         if (!trimmed.StartsWith(AceStepFunAudioSourcePrefix, StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -89,10 +88,34 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         return int.TryParse(indexText, out trackIndex) && trackIndex >= 0;
     }
 
+    public static bool TryParseAceStepFunSaveNodeTrackIndex(JObject node, out int zeroBasedTrackIndex)
+    {
+        zeroBasedTrackIndex = -1;
+        if (node["inputs"] is not JObject inputs)
+        {
+            return false;
+        }
+        string prefix = inputs["filename_prefix"]?.Value<string>() ?? "";
+        if (!prefix.StartsWith(AceStepFunFilenamePrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        string suffix = prefix[AceStepFunFilenamePrefix.Length..];
+        int underscore = suffix.IndexOf('_', StringComparison.Ordinal);
+        if (underscore < 0 || !int.TryParse(suffix[..underscore], out int oneBasedTrack))
+        {
+            return false;
+        }
+        zeroBasedTrackIndex = oneBasedTrack - 1;
+        return zeroBasedTrackIndex >= 0;
+    }
+
+    internal static string ClassTypeOf(JObject node) => node["class_type"]?.Value<string>() ?? "";
+
     private WGNodeData CreateAudioNode(JArray path) =>
         new(path, g, WGNodeData.DT_AUDIO, g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
 
-    private Detection BuildSaveCandidate(
+    private Detection? BuildSaveCandidate(
         string nodeId,
         string classType,
         JObject node,
@@ -110,7 +133,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         return new Detection(audio, nodeId, classType, sourceId, priority);
     }
 
-    private Detection BuildDecodeCandidate(
+    private Detection? BuildDecodeCandidate(
         string nodeId,
         string classType,
         int priority)
@@ -127,23 +150,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
 
     private static bool IsAceStepFunSaveNodeForTrack(JObject node, int trackIndex)
     {
-        if (node["inputs"] is not JObject inputs)
-        {
-            return false;
-        }
-        string prefix = $"{inputs["filename_prefix"] ?? ""}";
-        if (!prefix.StartsWith(AceStepFunFilenamePrefix, StringComparison.Ordinal))
-        {
-            return false;
-        }
-        string suffix = prefix[AceStepFunFilenamePrefix.Length..];
-        int underscore = suffix.IndexOf('_', StringComparison.Ordinal);
-        if (underscore < 0)
-        {
-            return false;
-        }
-        return int.TryParse(suffix[..underscore], out int oneBasedTrack)
-            && oneBasedTrack == trackIndex + 1;
+        return TryParseAceStepFunSaveNodeTrackIndex(node, out int t) && t == trackIndex;
     }
 
     private static bool IsAceStepFunSaveNode(JObject node)
@@ -156,27 +163,28 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         return prefix.StartsWith(AceStepFunFilenamePrefix, StringComparison.Ordinal);
     }
 
-    private static bool IsAceStepFunDecodeNode(string nodeId)
+    private static bool TryAceStepFunDecodeDiff(string nodeId, out long diffFromBase)
     {
         if (!long.TryParse(nodeId, out long numericId))
         {
+            diffFromBase = 0;
             return false;
         }
-        long diff = numericId - AceStepFunDecodeNodeBase;
-        return diff >= 0 && diff % 100 == 0;
+        diffFromBase = numericId - AceStepFunDecodeNodeBase;
+        return diffFromBase >= 0;
+    }
+
+    private static bool IsAceStepFunDecodeNode(string nodeId)
+    {
+        return TryAceStepFunDecodeDiff(nodeId, out long diff) && diff % 100 == 0;
     }
 
     private static bool IsAceStepFunDecodeNodeForTrack(string nodeId, int trackIndex)
     {
-        if (!long.TryParse(nodeId, out long numericId))
-        {
-            return false;
-        }
-        long diff = numericId - AceStepFunDecodeNodeBase;
-        return diff >= 0 && diff % 1000 == trackIndex * 100L;
+        return TryAceStepFunDecodeDiff(nodeId, out long diff) && diff % 1000 == trackIndex * 100L;
     }
 
-    private static bool ShouldReplace(Detection current, Detection candidate)
+    private static bool ShouldReplace(Detection? current, Detection? candidate)
     {
         if (candidate is null)
         {
