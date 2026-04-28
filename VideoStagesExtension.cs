@@ -9,19 +9,8 @@ namespace VideoStages;
 
 public class VideoStagesExtension : Extension
 {
-    public const int SectionID_VideoStages = 48823;
-    public const int SectionID_VideoClip = 58823;
-    public const double DefaultStageRefStrength = 0.8;
-    public const int RootDimensionMin = 256;
-    public const int RootDimensionMax = 16384;
-    public const string RootDimensionsDescription = "These are the starting dimensions for each clip. The first stage in each clip cannot apply per-stage upscale; use later stages or the main workflow for scaling if needed.";
-    private const string ComfyUIFeatureFlag = "comfyui";
-    public const string AudioSourceNative = "Native";
-    public const string AudioSourceUpload = "Upload";
-    public const string AudioSourceSwarm = "Swarm Audio";
-
-    public static int SectionIdForStage(int stageIndex) => SectionID_VideoStages + 1 + stageIndex;
-    public static int VideoClipSectionIdForClip(int clipIndex) => SectionID_VideoClip + 1 + clipIndex;
+    public static int SectionIdForStage(int stageIndex) => Constants.SectionID_VideoStages + 1 + stageIndex;
+    public static int SectionIdForClip(int clipIndex) => Constants.SectionID_VideoClip + 1 + clipIndex;
     public static T2IRegisteredParam<int> RootWidth;
     public static T2IRegisteredParam<int> RootHeight;
     public static T2IRegisteredParam<int> RootFPS;
@@ -35,11 +24,11 @@ public class VideoStagesExtension : Extension
         {
             if (int.TryParse(context.PreData, out int clipIndex) && clipIndex >= 0)
             {
-                context.SectionID = VideoClipSectionIdForClip(clipIndex);
+                context.SectionID = SectionIdForClip(clipIndex);
             }
             else
             {
-                context.SectionID = SectionID_VideoClip;
+                context.SectionID = Constants.SectionID_VideoClip;
             }
             return $"<videoclip//cid={context.SectionID}>";
         };
@@ -52,10 +41,11 @@ public class VideoStagesExtension : Extension
     public override void OnInit()
     {
         Logs.Info("VideoStages Extension initializing...");
-        CaptureCoreImageToVideoStep();
         RegisterParameters();
         RegisterComfyNodes();
+        CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(step => step.Priority == 11);
         RootVideoStageResizer.EnsureRegistered();
+        WorkflowGenerator.AddStep(VideoStageControlNetApplicator.CaptureCoreVideoControlNetPreprocessors, -5.9);
         WorkflowGenerator.AddStep(RootVideoStageTakeover.EnsureRootVideoStageModel, -4.3);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureBase(), -4.2);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).CaptureRefiner(), 5.9);
@@ -63,32 +53,6 @@ public class VideoStagesExtension : Extension
         WorkflowGenerator.AddStep(RootVideoStageTakeover.RestoreCoreRootVideoStageModel, 11.05);
         WorkflowGenerator.AddStep(LtxAudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo, 11.4);
         WorkflowGenerator.AddStep(g => new VideoStagesCoordinator(g).RunConfiguredStages(), 11.5);
-    }
-
-    private static void CaptureCoreImageToVideoStep()
-    {
-        if (CoreImageToVideoStep is not null)
-        {
-            return;
-        }
-        CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(step => step.Priority == 11);
-    }
-
-    private void RegisterComfyNodes()
-    {
-        string rootPath = string.IsNullOrWhiteSpace(FilePath) ? "src/Extensions/SwarmUI-VideoStages" : FilePath;
-        string nodeFolder = Path.GetFullPath(Path.Join(rootPath, "comfy_node"));
-        if (!Directory.Exists(nodeFolder))
-        {
-            return;
-        }
-        if (ComfyUISelfStartBackend.CustomNodePaths.Contains(nodeFolder))
-        {
-            return;
-        }
-
-        ComfyUISelfStartBackend.CustomNodePaths.Add(nodeFolder);
-        Logs.Init($"VideoStages: added {nodeFolder} to ComfyUI CustomNodePaths");
     }
 
     private static void RegisterParameters()
@@ -105,45 +69,43 @@ public class VideoStagesExtension : Extension
 
         RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Width",
-            Description: RootDimensionsDescription,
+            Description: Constants.RootDimensionsDescription,
             Default: "1024",
-            Min: 256,
-            Max: RootDimensionMax,
-            ViewMin: RootDimensionMin,
+            Min: Constants.RootDimensionMin,
+            Max: Constants.RootDimensionMax,
+            ViewMin: Constants.RootDimensionMin,
             ViewMax: 4096,
             Step: 32,
             ViewType: ParamViewType.POT_SLIDER,
-            HideFromMetadata: false,
             DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: ComfyUIFeatureFlag
+            FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
         RootHeight = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Height",
-            Description: RootDimensionsDescription,
+            Description: Constants.RootDimensionsDescription,
             Default: "1024",
-            Min: 256,
-            Max: RootDimensionMax,
-            ViewMin: RootDimensionMin,
+            Min: Constants.RootDimensionMin,
+            Max: Constants.RootDimensionMax,
+            ViewMin: Constants.RootDimensionMin,
             ViewMax: 4096,
             Step: 32,
             ViewType: ParamViewType.POT_SLIDER,
-            HideFromMetadata: false,
             DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: ComfyUIFeatureFlag
+            FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
         RootFPS = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages FPS",
-            Description: "Frames per second for VideoStages clips. Clip duration controls total frame count.",
+            Description: Constants.RootFPSDescription,
             Default: "24",
             Min: 4,
             Max: 60,
@@ -151,12 +113,11 @@ public class VideoStagesExtension : Extension
             ViewMax: 60,
             Step: 4,
             ViewType: ParamViewType.SLIDER,
-            HideFromMetadata: false,
             DoNotPreview: true,
             Toggleable: true,
             Group: VideoStagesGroup,
             OrderPriority: OrderPriority,
-            FeatureFlag: ComfyUIFeatureFlag
+            FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
         OrderPriority += 1;
 
@@ -165,11 +126,17 @@ public class VideoStagesExtension : Extension
             Description: "",
             Default: "",
             VisibleNormally: false,
-            IsAdvanced: false,
-            HideFromMetadata: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,
-            FeatureFlag: ComfyUIFeatureFlag
+            FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
+    }
+
+    private void RegisterComfyNodes()
+    {
+        string rootPath = string.IsNullOrWhiteSpace(FilePath) ? "src/Extensions/SwarmUI-VideoStages" : FilePath;
+        string nodeFolder = Path.GetFullPath(Path.Join(rootPath, "comfy_node"));
+        ComfyUISelfStartBackend.CustomNodePaths.Add(nodeFolder);
+        Logs.Init($"VideoStages: added {nodeFolder} to ComfyUI CustomNodePaths");
     }
 }
