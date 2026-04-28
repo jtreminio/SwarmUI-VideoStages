@@ -14,6 +14,7 @@ import {
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
 import {
+    type ApplyRefFieldDeps,
     applyRefField,
     applyStageField,
     syncClipAudioUploadFieldVisibility,
@@ -26,6 +27,8 @@ import {
     buildDefaultRef,
     buildDefaultStage,
     getReferenceFrameMax,
+    normalizeControlNetSource,
+    normalizeOptionalModelName,
 } from "./normalization";
 import type { RefUploadCacheApi } from "./refUploadCache";
 import { snapDurationToFps } from "./renderUtils";
@@ -282,39 +285,25 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
     }
 };
 
-export const handleFieldChange = (
-    elem: EventTarget | null,
-    deps: DomEventsDeps,
-    fromInputEvent = false,
-): void => {
-    if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
-        return;
-    }
-    const state = deps.getState();
-    const clips = state.clips;
-    const defaults = getRootDefaults();
+type DatasetFieldChangeContext = {
+    elem: FieldTarget;
+    clip: Clip;
+    clipIdx: number;
+    clipField: string | undefined;
+    stageField: string | undefined;
+    refField: string | undefined;
+    fieldBindingDeps: ApplyRefFieldDeps;
+};
 
-    const clipField = elem.dataset.clipField;
-    const stageField = elem.dataset.stageField;
-    const refField = elem.dataset.refField;
-
-    const clipIdx = parseInt(elem.dataset.clipIdx ?? "-1", 10);
-    if (clipIdx < 0 || clipIdx >= clips.length) {
-        return;
-    }
-    const clip = clips[clipIdx];
-
-    const fieldBindingDeps = {
-        getRootDefaults,
-        refUploadCache: deps.refUploadCache,
-        getClips: deps.getClips,
-        saveClips: deps.saveClips,
-    };
+const applyDatasetFieldChange = (ctx: DatasetFieldChangeContext): boolean => {
+    const { elem, clip, clipIdx, clipField, stageField, refField, fieldBindingDeps } =
+        ctx;
 
     if (clipField === "duration") {
         const value = parseFloat(elem.value);
         if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
-            clip.duration = snapDurationToFps(value, defaults.fps);
+            const rootDefaults = getRootDefaults();
+            clip.duration = snapDurationToFps(value, rootDefaults.fps);
             const frameMax = getReferenceFrameMax(getRootDefaults, clip);
             for (const ref of clip.refs) {
                 ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
@@ -344,6 +333,10 @@ export const handleFieldChange = (
                 clipLengthFromAudio.checked = false;
             }
         }
+    } else if (clipField === "controlNetSource") {
+        clip.controlNetSource = normalizeControlNetSource(elem.value);
+    } else if (clipField === "controlNetLora") {
+        clip.controlNetLora = normalizeOptionalModelName(elem.value);
     } else if (clipField === "saveAudioTrack") {
         clip.saveAudioTrack =
             elem instanceof HTMLInputElement &&
@@ -366,7 +359,7 @@ export const handleFieldChange = (
         }
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
         if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
-            return;
+            return false;
         }
         if (elem.dataset.filedata) {
             clip.uploadedAudio = {
@@ -377,17 +370,17 @@ export const handleFieldChange = (
             };
         } else if (elem.files?.length) {
             cacheClipAudioSelection(clipIdx, elem, {
-                getClips: deps.getClips,
-                saveClips: deps.saveClips,
+                getClips: fieldBindingDeps.getClips,
+                saveClips: fieldBindingDeps.saveClips,
             });
-            return;
+            return false;
         } else {
             clip.uploadedAudio = null;
         }
     } else if (refField) {
         const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
         if (refIdx < 0 || refIdx >= clip.refs.length) {
-            return;
+            return false;
         }
         applyRefField(
             clip,
@@ -397,15 +390,19 @@ export const handleFieldChange = (
             fieldBindingDeps,
         );
         if (refField === "source") {
-            syncRefUploadFieldVisibility(elem, elem.value, deps.refUploadCache);
+            syncRefUploadFieldVisibility(
+                elem,
+                elem.value,
+                fieldBindingDeps.refUploadCache,
+            );
         }
     } else if (stageField) {
         const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
         if (stageIdx < 0 || stageIdx >= clip.stages.length) {
-            return;
+            return false;
         }
         if (!isStageFieldTarget(elem)) {
-            return;
+            return false;
         }
         const stage = clip.stages[stageIdx];
         const stageCard = elem.closest("section[data-stage-idx]");
@@ -427,6 +424,51 @@ export const handleFieldChange = (
             }
         }
     } else {
+        return false;
+    }
+
+    return true;
+};
+
+export const handleFieldChange = (
+    elem: EventTarget | null,
+    deps: DomEventsDeps,
+    fromInputEvent = false,
+): void => {
+    if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
+        return;
+    }
+    const state = deps.getState();
+    const clips = state.clips;
+
+    const clipField = elem.dataset.clipField;
+    const stageField = elem.dataset.stageField;
+    const refField = elem.dataset.refField;
+
+    const clipIdx = parseInt(elem.dataset.clipIdx ?? "-1", 10);
+    if (clipIdx < 0 || clipIdx >= clips.length) {
+        return;
+    }
+    const clip = clips[clipIdx];
+
+    const fieldBindingDeps = {
+        getRootDefaults,
+        refUploadCache: deps.refUploadCache,
+        getClips: deps.getClips,
+        saveClips: deps.saveClips,
+    };
+
+    if (
+        !applyDatasetFieldChange({
+            elem,
+            clip,
+            clipIdx,
+            clipField,
+            stageField,
+            refField,
+            fieldBindingDeps,
+        })
+    ) {
         return;
     }
 

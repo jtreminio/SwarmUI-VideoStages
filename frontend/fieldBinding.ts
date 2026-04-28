@@ -12,6 +12,7 @@ import {
 } from "./constants";
 import {
     getReferenceFrameMax,
+    normalizeStageControlNetStrengthValue,
     normalizeStageRefStrengthValue,
 } from "./normalization";
 import type { RefUploadCacheApi } from "./refUploadCache";
@@ -24,7 +25,7 @@ import {
     type Stage,
 } from "./types";
 
-type ApplyRefFieldDeps = {
+export type ApplyRefFieldDeps = {
     getRootDefaults: () => RootDefaults;
     refUploadCache: RefUploadCacheApi;
     getClips: () => Clip[];
@@ -301,6 +302,15 @@ export const applyStageField = (
                 defaults.controlMin,
                 defaults.controlMax,
             );
+        }
+        return;
+    }
+
+    if (field === "controlNetStrength") {
+        const value = parseFloat(target.value);
+        if (Number.isFinite(value)) {
+            stage.controlNetStrength =
+                normalizeStageControlNetStrengthValue(value);
         }
         return;
     }
