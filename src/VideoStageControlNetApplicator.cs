@@ -154,7 +154,7 @@ internal static class VideoStageControlNetApplicator
         {
             controlImage = sourceMedia.AsRawImage(genInfo.Vae ?? g.CurrentVae);
             string preprocessor = ResolvePreprocessor(g, index, controlModel);
-            if (!preprocessor.Equals("none", StringComparison.OrdinalIgnoreCase))
+            if (!StringUtils.Equals(preprocessor, "none"))
             {
                 WGNodeData priorVae = g.CurrentVae;
                 try

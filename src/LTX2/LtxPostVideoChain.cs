@@ -76,9 +76,8 @@ internal sealed class LtxPostVideoChain
             return null;
         }
 
-        string decodeType = $"{decode.Node["class_type"]}";
-        if (decodeType != NodeTypes.VAEDecode
-            && decodeType != NodeTypes.VAEDecodeTiled)
+        if (!StringUtils.NodeTypeMatches(decode.Node, NodeTypes.VAEDecode)
+            && !StringUtils.NodeTypeMatches(decode.Node, NodeTypes.VAEDecodeTiled))
         {
             return null;
         }
@@ -100,7 +99,7 @@ internal sealed class LtxPostVideoChain
         string separateId = $"{samplesRef[0]}";
         if (!generator.Workflow.TryGetValue(separateId, out JToken separateToken)
             || separateToken is not JObject separateNode
-            || $"{separateNode["class_type"]}" != LtxNodeTypes.LTXVSeparateAVLatent)
+            || !StringUtils.NodeTypeMatches(separateNode, LtxNodeTypes.LTXVSeparateAVLatent))
         {
             return null;
         }
@@ -302,7 +301,7 @@ internal sealed class LtxPostVideoChain
             newImagePath,
             connection =>
             {
-                if (!string.Equals(connection.InputName, "images", StringComparison.Ordinal))
+                if (!StringUtils.Equals(connection.InputName, "images"))
                 {
                     return false;
                 }
@@ -310,7 +309,7 @@ internal sealed class LtxPostVideoChain
                 {
                     return false;
                 }
-                return $"{node["class_type"]}" == NodeTypes.SwarmSaveAnimationWS;
+                return StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveAnimationWS);
             });
     }
 
@@ -320,7 +319,7 @@ internal sealed class LtxPostVideoChain
             || newSamplesPath is null
             || newSamplesPath.Count != 2
             || g.Workflow[AudioDecodeNodeId] is not JObject audioDecode
-            || $"{audioDecode["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode)
+            || !StringUtils.NodeTypeMatches(audioDecode, LtxNodeTypes.LTXVAudioVAEDecode))
         {
             return;
         }
@@ -344,7 +343,7 @@ internal sealed class LtxPostVideoChain
             {
                 continue;
             }
-            if ($"{node["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode)
+            if (!StringUtils.NodeTypeMatches(node, LtxNodeTypes.LTXVAudioVAEDecode))
             {
                 continue;
             }
@@ -465,7 +464,7 @@ internal sealed class LtxPostVideoChain
                 continue;
             }
 
-            if (string.Equals(nodeId, uploadNodeId, StringComparison.Ordinal))
+            if (StringUtils.Equals(nodeId, uploadNodeId))
             {
                 return true;
             }
@@ -548,7 +547,7 @@ internal sealed class LtxPostVideoChain
                 continue;
             }
 
-            if ($"{node["class_type"]}" == classType)
+            if (StringUtils.NodeTypeMatches(node, classType))
             {
                 return true;
             }

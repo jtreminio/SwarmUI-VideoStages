@@ -214,19 +214,19 @@ internal sealed class StageSequenceRunner(
 
     private StageRefStore.StageRef TryResolveGuideReference(JsonParser.StageSpec stage)
     {
-        if (stage.ImageReference.Equals("Base", StringComparison.Ordinal))
+        if (StringUtils.Equals(stage.ImageReference, "Base"))
         {
             return WarnIfMissing(
                 store.Base,
                 "VideoStages: ImageReference 'Base' requested, but no base reference exists.");
         }
-        if (stage.ImageReference.Equals("Refiner", StringComparison.Ordinal))
+        if (StringUtils.Equals(stage.ImageReference, "Refiner"))
         {
             return WarnIfMissing(
                 store.Refiner,
                 "VideoStages: ImageReference 'Refiner' requested, but no refiner reference exists.");
         }
-        if (stage.ImageReference.Equals("Generated", StringComparison.Ordinal))
+        if (StringUtils.Equals(stage.ImageReference, "Generated"))
         {
             if (stage.Id > 0 && store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
             {
@@ -236,7 +236,7 @@ internal sealed class StageSequenceRunner(
                 store.Generated,
                 "VideoStages: ImageReference 'Generated' requested, but no generated reference exists.");
         }
-        if (stage.ImageReference.Equals("PreviousStage", StringComparison.Ordinal))
+        if (StringUtils.Equals(stage.ImageReference, "PreviousStage"))
         {
             if (stage.Id <= 0)
             {

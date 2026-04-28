@@ -209,7 +209,7 @@ internal sealed class LtxStageOrchestrator(
         }
 
         if (g.Workflow[$"{sourcePath[0]}"] is not JObject sourceNode
-            || $"{sourceNode["class_type"]}" != NodeTypes.ImageScale
+            || !StringUtils.NodeTypeMatches(sourceNode, NodeTypes.ImageScale)
             || sourceNode["inputs"] is not JObject sourceInputs
             || sourceInputs["image"] is not JArray scaledSourceInput)
         {
@@ -243,18 +243,18 @@ internal sealed class LtxStageOrchestrator(
         StageRefStore refStore,
         LtxPostVideoChain postVideoChain)
     {
-        if (string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(spec.Source, "Upload"))
         {
             return MaterializeUploadedRefImage(spec);
         }
 
         StageRefStore.StageRef stageRef = null;
         string src = spec.Source?.Trim() ?? "";
-        if (src.Equals("Base", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(src, "Base"))
         {
             stageRef = refStore.Base;
         }
-        else if (src.Equals("Refiner", StringComparison.OrdinalIgnoreCase))
+        else if (StringUtils.Equals(src, "Refiner"))
         {
             stageRef = refStore.Refiner;
         }

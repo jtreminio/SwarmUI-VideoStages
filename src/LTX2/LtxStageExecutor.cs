@@ -511,7 +511,7 @@ internal sealed class LtxStageExecutor(
         {
             return false;
         }
-        if (string.Equals(stage.ClipAudioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(stage.ClipAudioSource, Constants.AudioSourceUpload))
         {
             return true;
         }
@@ -539,7 +539,7 @@ internal sealed class LtxStageExecutor(
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.SwarmEnsureAudio
+                || !StringUtils.NodeTypeMatches(node, NodeTypes.SwarmEnsureAudio)
                 || node["inputs"] is not JObject inputs
                 || inputs["audio"] is not JArray audioInput
                 || audioInput.Count != 2)
@@ -573,7 +573,7 @@ internal sealed class LtxStageExecutor(
             return false;
         }
 
-        return $"{node["class_type"]}" == NodeTypes.SwarmLoadAudioB64;
+        return StringUtils.NodeTypeMatches(node, NodeTypes.SwarmLoadAudioB64);
     }
 
     private static bool ConnectionRefsEqual(JToken left, JToken right)
@@ -662,7 +662,7 @@ internal sealed class LtxStageExecutor(
         {
             if (!g.Workflow.TryGetValue($"{currentPath[0]}", out JToken token)
                 || token is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.ImageScale
+                || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
                 || node["inputs"] is not JObject inputs
                 || inputs["image"] is not JArray sourcePath
                 || sourcePath.Count != 2)
@@ -684,7 +684,7 @@ internal sealed class LtxStageExecutor(
             || imagePath is not { Count: 2 }
             || !workflow.TryGetValue($"{imagePath[0]}", out JToken token)
             || token is not JObject node
-            || $"{node["class_type"]}" != NodeTypes.ImageScale
+            || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
             || node["inputs"] is not JObject inputs)
         {
             return false;
@@ -715,7 +715,7 @@ internal sealed class LtxStageExecutor(
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.ImageScale
+                || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
                 || node["inputs"] is not JObject inputs
                 || inputs["image"] is not JArray imageInput
                 || imageInput.Count != 2
@@ -767,16 +767,15 @@ internal sealed class LtxStageExecutor(
                     continue;
                 }
 
-                string consumerType = $"{consumerNode["class_type"]}";
                 if (consumer.InputName == "image"
-                    && consumerType == LtxNodeTypes.LTXVPreprocess
+                    && StringUtils.NodeTypeMatches(consumerNode, LtxNodeTypes.LTXVPreprocess)
                     && HasMatchingImgCompression(consumerNode))
                 {
                     preprocessOutputPath = new JArray(consumer.NodeId, 0);
                     return true;
                 }
 
-                if (CanTraverseReusableGuideImagePath(consumer, consumerType))
+                if (CanTraverseReusableGuideImagePath(consumer, $"{consumerNode["class_type"]}"))
                 {
                     pending.Enqueue(new JArray(consumer.NodeId, 0));
                 }
@@ -801,7 +800,7 @@ internal sealed class LtxStageExecutor(
         }
 
         return $"{imagePath[1]}" == "0"
-            && $"{node["class_type"]}" == LtxNodeTypes.LTXVPreprocess
+            && StringUtils.NodeTypeMatches(node, LtxNodeTypes.LTXVPreprocess)
             && HasMatchingImgCompression(node);
     }
 
@@ -926,7 +925,7 @@ internal sealed class LtxStageExecutor(
         int outputHeight = g.CurrentMedia?.Height ?? sourceMedia.Height ?? g.UserInput.GetImageHeight();
         bool splicedIntoNativeChain = postVideoChain is not null;
         bool parallelMultiClip = g.NodeHelpers.TryGetValue(MultiClipParallelMerger.NodeHelperKey, out string parallelFlag)
-            && string.Equals(parallelFlag, "1", StringComparison.Ordinal);
+            && StringUtils.Equals(parallelFlag, "1");
         if (splicedIntoNativeChain)
         {
             if (parallelMultiClip)
@@ -994,8 +993,8 @@ internal sealed class LtxStageExecutor(
             return;
         }
 
-        string decodeType = $"{decodeNode["class_type"]}";
-        if (decodeType != NodeTypes.VAEDecode && decodeType != NodeTypes.VAEDecodeTiled)
+        if (!StringUtils.NodeTypeMatches(decodeNode, NodeTypes.VAEDecode)
+            && !StringUtils.NodeTypeMatches(decodeNode, NodeTypes.VAEDecodeTiled))
         {
             return;
         }
@@ -1006,7 +1005,7 @@ internal sealed class LtxStageExecutor(
         if (videoSamples is null
             || videoSamples.Count != 2
             || g.Workflow[$"{videoSamples[0]}"] is not JObject separateNode
-            || $"{separateNode["class_type"]}" != LtxNodeTypes.LTXVSeparateAVLatent
+            || !StringUtils.NodeTypeMatches(separateNode, LtxNodeTypes.LTXVSeparateAVLatent)
             || !TryResolveAudioVaePath(out JArray audioVaePath))
         {
             return;
@@ -1032,7 +1031,7 @@ internal sealed class LtxStageExecutor(
         foreach (JProperty property in g.Workflow.Properties())
         {
             if (property.Value is not JObject node
-                || $"{node["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode
+                || !StringUtils.NodeTypeMatches(node, LtxNodeTypes.LTXVAudioVAEDecode)
                 || node["inputs"]?["audio_vae"] is not JArray foundAudioVaePath
                 || foundAudioVaePath.Count != 2)
             {
