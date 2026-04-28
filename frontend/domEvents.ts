@@ -296,8 +296,15 @@ type DatasetFieldChangeContext = {
 };
 
 const applyDatasetFieldChange = (ctx: DatasetFieldChangeContext): boolean => {
-    const { elem, clip, clipIdx, clipField, stageField, refField, fieldBindingDeps } =
-        ctx;
+    const {
+        elem,
+        clip,
+        clipIdx,
+        clipField,
+        stageField,
+        refField,
+        fieldBindingDeps,
+    } = ctx;
 
     if (clipField === "duration") {
         const value = parseFloat(elem.value);

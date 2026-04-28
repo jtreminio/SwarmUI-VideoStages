@@ -3,21 +3,15 @@ import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { getClipsInput, isImageToVideoWorkflow } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 
-type ParsedConfig = {
-    clips?: unknown[];
-};
+type RootDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
 
-const toParsedConfig = (value: unknown): ParsedConfig | null => {
-    if (!isRecord(value)) {
-        return null;
-    }
-    return {
-        clips: Array.isArray(value.clips) ? value.clips : undefined,
-    };
-};
+const rootConfig = (dims: RootDims, clips: Clip[]): VideoStagesConfig => ({
+    ...dims,
+    clips,
+});
 
 export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
     clips.map(
@@ -26,6 +20,8 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
             skipped: clip.skipped,
             duration: clip.duration,
             audioSource: clip.audioSource,
+            controlNetSource: clip.controlNetSource,
+            controlNetLora: clip.controlNetLora,
             saveAudioTrack: clip.saveAudioTrack,
             clipLengthFromAudio: clip.clipLengthFromAudio,
             reuseAudio: clip.reuseAudio,
@@ -42,6 +38,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
                 expanded: stage.expanded,
                 skipped: stage.skipped,
                 control: stage.control,
+                controlNetStrength: stage.controlNetStrength,
                 refStrengths: stage.refStrengths,
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
@@ -72,43 +69,32 @@ export interface SaveStateOptions {
 
 let lastSerializedState = "";
 
-const getSerializedStateSource = (): string => {
-    const inputValue = getClipsInput()?.value ?? "";
-    return inputValue || lastSerializedState;
-};
-
 export const __resetPersistenceForTests = (): void => {
     lastSerializedState = "";
 };
 
 const parseSerializedState = (
     serialized: string,
-    fallbackDefaults: Pick<VideoStagesConfig, "width" | "height" | "fps">,
+    fallbackDefaults: RootDims,
 ): VideoStagesConfig | null => {
     try {
-        const parsed = JSON.parse(serialized);
-        const parsedConfig = toParsedConfig(parsed);
-        let clipsRaw: unknown[] = [];
+        const parsed: unknown = JSON.parse(serialized);
+        let clipsRaw: unknown[];
         if (Array.isArray(parsed)) {
             clipsRaw = parsed;
-        } else if (Array.isArray(parsedConfig?.clips)) {
-            clipsRaw = parsedConfig.clips;
+        } else if (isRecord(parsed) && Array.isArray(parsed.clips)) {
+            clipsRaw = parsed.clips;
+        } else {
+            clipsRaw = [];
         }
-
-        const clips: Clip[] = [];
-        for (let i = 0; i < clipsRaw.length; i++) {
-            const el = clipsRaw[i];
-            const record: Record<string, unknown> = isRecord(el) ? el : {};
-            clips.push(
-                normalizeClip(record, getRootDefaults, getDefaultStageModel),
-            );
-        }
-        return {
-            width: fallbackDefaults.width,
-            height: fallbackDefaults.height,
-            fps: fallbackDefaults.fps,
-            clips,
-        };
+        const clips = clipsRaw.map((el) =>
+            normalizeClip(
+                isRecord(el) ? el : {},
+                getRootDefaults,
+                getDefaultStageModel,
+            ),
+        );
+        return rootConfig(fallbackDefaults, clips);
     } catch {
         return null;
     }
@@ -116,36 +102,23 @@ const parseSerializedState = (
 
 export const getState = (): VideoStagesConfig => {
     const defaults = getRootDefaults();
-    const serialized = getSerializedStateSource();
+    const serialized = (getClipsInput()?.value ?? "") || lastSerializedState;
     if (!serialized) {
-        return {
-            width: defaults.width,
-            height: defaults.height,
-            fps: defaults.fps,
-            clips: [],
-        };
+        return rootConfig(defaults, []);
     }
 
-    const parsedState = parseSerializedState(serialized, defaults);
+    let parsedState = parseSerializedState(serialized, defaults);
     if (parsedState) {
         lastSerializedState = serialized;
         return parsedState;
     }
     if (serialized !== lastSerializedState && lastSerializedState) {
-        const fallbackState = parseSerializedState(
-            lastSerializedState,
-            defaults,
-        );
-        if (fallbackState) {
-            return fallbackState;
+        parsedState = parseSerializedState(lastSerializedState, defaults);
+        if (parsedState) {
+            return parsedState;
         }
     }
-    return {
-        width: defaults.width,
-        height: defaults.height,
-        fps: defaults.fps,
-        clips: [],
-    };
+    return rootConfig(defaults, []);
 };
 
 export const saveState = (

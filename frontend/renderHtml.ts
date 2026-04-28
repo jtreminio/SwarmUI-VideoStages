@@ -63,17 +63,14 @@ export const decorateAutoInputWrapper = (
     );
 
 const RE_AUTO_INPUT_NAME_TRANSLATE_Q = new RegExp(
-    "(<span class=\"auto-input-name\">)" +
-        "(<span class=\"translate\"[^>]*>[^<]*</span>)" +
-        "(<span class=\"auto-input-qbutton[^>]*>\\?</span>)",
+    '(<span class="auto-input-name">)' +
+        '(<span class="translate"[^>]*>[^<]*</span>)' +
+        '(<span class="auto-input-qbutton[^>]*>\\?</span>)',
 );
 
 const moveQButtonBeforeLabelText = (html: string): string =>
     html
-        .replace(
-            RE_AUTO_INPUT_NAME_TRANSLATE_Q,
-            "$1$3$2",
-        )
+        .replace(RE_AUTO_INPUT_NAME_TRANSLATE_Q, "$1$3$2")
         .replace(
             /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
             "$1$3$2",

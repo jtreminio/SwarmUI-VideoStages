@@ -150,12 +150,21 @@
   var CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
   var CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
   var CLIP_AUDIO_UPLOAD_DESCRIPTION = "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
   var STAGE_REF_STRENGTH_MIN = 0.1;
   var STAGE_REF_STRENGTH_MAX = 1;
   var STAGE_REF_STRENGTH_STEP = 0.1;
   var STAGE_REF_STRENGTH_DEFAULT = 0.8;
   var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
   var STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
   var stageRefStrengthField = (refIdx) => `${STAGE_REF_STRENGTH_FIELD_PREFIX}${refIdx}`;
   var parseStageRefStrengthIndex = (field) => {
     if (!field.startsWith(STAGE_REF_STRENGTH_FIELD_PREFIX)) {
@@ -274,8 +283,14 @@
 
   // frontend/normalization.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : upscaleMethodValues[0] ?? "pixel-lanczos";
-  var resolveFirstStageControl = (defaults) => clamp(defaults.control, defaults.controlMin, defaults.controlMax);
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var normalizeExpanded = (raw) => raw.expanded === void 0 ? true : !!raw.expanded;
+  var snapStrengthToStep = (value, fallback, min, max, step) => {
+    const unitScale = 1 / step;
+    return Math.round(
+      clamp(utils.toNumber(`${value ?? fallback}`, fallback), min, max) * unitScale
+    ) / unitScale;
+  };
   var normalizeUploadedAudio = (value) => {
     if (!isRecord(value)) {
       return null;
@@ -291,23 +306,34 @@
       )
     };
   };
-  var normalizeStageRefStrengthValue = (value) => Math.round(
-    clamp(
-      utils.toNumber(
-        `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
-        STAGE_REF_STRENGTH_DEFAULT
-      ),
-      STAGE_REF_STRENGTH_MIN,
-      STAGE_REF_STRENGTH_MAX
-    ) * 10
-  ) / 10;
-  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => {
-    const strengths = [];
-    for (let i = 0; i < refCount; i++) {
-      strengths.push(defaultStrength);
+  var normalizeControlNetSource = (value) => {
+    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    for (const option of CONTROLNET_SOURCE_OPTIONS) {
+      if (option.replace(/\s+/g, "").toLowerCase() === compact) {
+        return option;
+      }
     }
-    return strengths;
+    return CONTROLNET_SOURCE_OPTIONS[0];
   };
+  var normalizeOptionalModelName = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    return raw || "";
+  };
+  var normalizeStageRefStrengthValue = (value) => snapStrengthToStep(
+    value,
+    STAGE_REF_STRENGTH_DEFAULT,
+    STAGE_REF_STRENGTH_MIN,
+    STAGE_REF_STRENGTH_MAX,
+    STAGE_REF_STRENGTH_STEP
+  );
+  var normalizeStageControlNetStrengthValue = (value) => snapStrengthToStep(
+    value,
+    STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_STEP
+  );
+  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => Array.from({ length: refCount }, () => defaultStrength);
   var normalizeStageRefStrengths = (rawStrengths, refCount) => {
     const strengths = [];
     const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
@@ -339,6 +365,7 @@
       expanded: true,
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
+      controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
       refStrengths: buildDefaultStageRefStrengths(refCount),
       upscale: previousStage ? previousStage.upscale : defaults.upscale,
       upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
@@ -369,6 +396,8 @@
         defaults.fps
       ),
       audioSource: AUDIO_SOURCE_NATIVE,
+      controlNetSource: CONTROLNET_SOURCE_OPTIONS[0],
+      controlNetLora: "",
       saveAudioTrack: false,
       clipLengthFromAudio: false,
       reuseAudio: false,
@@ -408,34 +437,52 @@
       previousStage,
       refCount
     );
-    const firstStageUpscale = stageIndexInClip === 0 ? {
-      upscale: defaults.upscale,
-      upscaleMethod: resolveRootPreferredUpscaleMethod(
-        defaults.upscaleMethodValues
-      )
-    } : {
-      upscale: clamp(
-        utils.toNumber(
-          `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
-          fallback.upscale
+    let firstStageUpscale;
+    let control;
+    if (stageIndexInClip === 0) {
+      firstStageUpscale = {
+        upscale: defaults.upscale,
+        upscaleMethod: resolveRootPreferredUpscaleMethod(
+          defaults.upscaleMethodValues
+        )
+      };
+      control = clamp(
+        defaults.control,
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    } else {
+      firstStageUpscale = {
+        upscale: clamp(
+          utils.toNumber(
+            `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+            fallback.upscale
+          ),
+          defaults.upscaleMin,
+          defaults.upscaleMax
         ),
-        defaults.upscaleMin,
-        defaults.upscaleMax
-      ),
-      upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
-    };
-    const control = stageIndexInClip === 0 ? resolveFirstStageControl(defaults) : clamp(
-      utils.toNumber(
-        `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
-        fallback.control
-      ),
-      defaults.controlMin,
-      defaults.controlMax
-    );
+        upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
+      };
+      control = clamp(
+        utils.toNumber(
+          `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+          fallback.control
+        ),
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    }
     const stage = {
-      expanded: rawStage.expanded === void 0 ? true : !!rawStage.expanded,
+      expanded: normalizeExpanded(rawStage),
       skipped: !!rawStage.skipped,
       control,
+      controlNetStrength: normalizeStageControlNetStrengthValue(
+        readRawStageProp(
+          rawStage,
+          "controlNetStrength",
+          "ControlNetStrength"
+        ) ?? fallback.controlNetStrength
+      ),
       refStrengths: normalizeStageRefStrengths(
         rawStage.refStrengths,
         refCount
@@ -477,7 +524,7 @@
     const fallback = buildDefaultRef();
     const source = `${rawRef.source ?? fallback.source}` || fallback.source;
     const ref = {
-      expanded: rawRef.expanded === void 0 ? true : !!rawRef.expanded,
+      expanded: normalizeExpanded(rawRef),
       source,
       uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
       uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
@@ -536,10 +583,16 @@
       audioSourceOptions
     );
     return {
-      expanded: rawClip.expanded === void 0 ? true : !!rawClip.expanded,
+      expanded: normalizeExpanded(rawClip),
       skipped: !!rawClip.skipped,
       duration,
       audioSource: audioSource2,
+      controlNetSource: normalizeControlNetSource(
+        rawClip.controlNetSource ?? rawClip.ControlNetSource
+      ),
+      controlNetLora: normalizeOptionalModelName(
+        rawClip.controlNetLora ?? rawClip.ControlNetLora
+      ),
       saveAudioTrack: !!rawClip.saveAudioTrack,
       clipLengthFromAudio: canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio,
       reuseAudio: !!rawClip.reuseAudio,
@@ -764,6 +817,13 @@
       }
       return;
     }
+    if (field === "controlNetStrength") {
+      const value = parseFloat(target.value);
+      if (Number.isFinite(value)) {
+        stage.controlNetStrength = normalizeStageControlNetStrengthValue(value);
+      }
+      return;
+    }
     if (field === "upscale") {
       if (stageIdx === 0) {
         stage.upscale = getRootDefaults2().upscale;
@@ -935,14 +995,26 @@
   };
 
   // frontend/rootDefaults.ts
+  var STAGE_UPSCALE_PREFIXES = ["pixel-", "model-", "latent-", "latentmodel-"];
+  var isStageUpscaleMethod = (value) => STAGE_UPSCALE_PREFIXES.some((prefix) => value.startsWith(prefix));
+  var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
+  var firstPresentInput = (...ids) => {
+    for (let i = 0; i < ids.length; i++) {
+      const el = utils.getInputElement(ids[i]);
+      if (el) {
+        return el;
+      }
+    }
+    return null;
+  };
   var getDefaultStageModel = (modelValues) => {
     if (isRootTextToVideoModel()) {
-      const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
+      const modelName = trimDomValue(getRootModelInput());
       if (modelName) {
         return modelName;
       }
     }
-    const videoModel = `${utils.getSelectElement("input_videomodel")?.value ?? ""}`.trim();
+    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
     if (videoModel) {
       return videoModel;
     }
@@ -954,16 +1026,21 @@
       model = utils.getSelectElement("input_model");
     }
     const vae = utils.getSelectElement("input_vae");
+    const loras = getDropdownOptions("loras", "input_loras");
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const isStageMethod = (value) => value.startsWith("pixel-") || value.startsWith("model-") || value.startsWith("latent-") || value.startsWith("latentmodel-");
-    const upscaleMethodValues = allUpscaleMethodValues.filter(isStageMethod);
-    const upscaleMethodLabels = allUpscaleMethodLabels.filter(
-      (_, index) => isStageMethod(allUpscaleMethodValues[index])
-    );
+    const stageUpscaleValues = [];
+    const stageUpscaleLabels = [];
+    for (let i = 0; i < allUpscaleMethodValues.length; i++) {
+      const value = allUpscaleMethodValues[i];
+      if (isStageUpscaleMethod(value)) {
+        stageUpscaleValues.push(value);
+        stageUpscaleLabels.push(allUpscaleMethodLabels[i]);
+      }
+    }
     const fallbackUpscaleMethods = [
       "pixel-lanczos",
       "pixel-bicubic",
@@ -971,12 +1048,24 @@
       "pixel-bilinear",
       "pixel-nearest-exact"
     ];
-    const steps = utils.getInputElement("input_videosteps") ?? utils.getInputElement("input_steps");
-    const cfgScale = utils.getInputElement("input_videocfg") ?? utils.getInputElement("input_cfgscale");
-    const widthInput = utils.getInputElement("input_width") ?? utils.getInputElement("input_aspectratiowidth");
-    const heightInput = utils.getInputElement("input_height") ?? utils.getInputElement("input_aspectratioheight");
-    const fpsInput = utils.getInputElement("input_videofps") ?? utils.getInputElement("input_videoframespersecond");
-    const framesInput = utils.getInputElement("input_videoframes") ?? utils.getInputElement("input_text2videoframes");
+    const steps = firstPresentInput("input_videosteps", "input_steps");
+    const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
+    const widthInput = firstPresentInput(
+      "input_width",
+      "input_aspectratiowidth"
+    );
+    const heightInput = firstPresentInput(
+      "input_height",
+      "input_aspectratioheight"
+    );
+    const fpsInput = firstPresentInput(
+      "input_videofps",
+      "input_videoframespersecond"
+    );
+    const framesInput = firstPresentInput(
+      "input_videoframes",
+      "input_text2videoframes"
+    );
     const fps = Math.max(
       1,
       getRegisteredRootFps() ?? Math.round(utils.toNumber(fpsInput?.value, 24))
@@ -988,14 +1077,16 @@
     return {
       modelValues: utils.getSelectValues(model),
       modelLabels: utils.getSelectLabels(model),
+      loraValues: loras.values,
+      loraLabels: loras.labels,
       vaeValues: utils.getSelectValues(vae),
       vaeLabels: utils.getSelectLabels(vae),
       samplerValues: sampler.values,
       samplerLabels: sampler.labels,
       schedulerValues: scheduler.values,
       schedulerLabels: scheduler.labels,
-      upscaleMethodValues: upscaleMethodValues.length > 0 ? upscaleMethodValues : fallbackUpscaleMethods,
-      upscaleMethodLabels: upscaleMethodLabels.length > 0 ? upscaleMethodLabels : fallbackUpscaleMethods,
+      upscaleMethodValues: stageUpscaleValues.length > 0 ? stageUpscaleValues : fallbackUpscaleMethods,
+      upscaleMethodLabels: stageUpscaleLabels.length > 0 ? stageUpscaleLabels : fallbackUpscaleMethods,
       width: getRegisteredRootDimension("width") ?? Math.max(
         ROOT_DIMENSION_MIN,
         Math.round(utils.toNumber(widthInput?.value, 1024))
@@ -1212,31 +1303,21 @@
       deps.scheduleClipsRefresh();
     }
   };
-  var handleFieldChange = (elem, deps, fromInputEvent = false) => {
-    if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
-      return;
-    }
-    const state = deps.getState();
-    const clips = state.clips;
-    const defaults = getRootDefaults();
-    const clipField = elem.dataset.clipField;
-    const stageField = elem.dataset.stageField;
-    const refField = elem.dataset.refField;
-    const clipIdx = parseInt(elem.dataset.clipIdx ?? "-1", 10);
-    if (clipIdx < 0 || clipIdx >= clips.length) {
-      return;
-    }
-    const clip = clips[clipIdx];
-    const fieldBindingDeps = {
-      getRootDefaults,
-      refUploadCache: deps.refUploadCache,
-      getClips: deps.getClips,
-      saveClips: deps.saveClips
-    };
+  var applyDatasetFieldChange = (ctx) => {
+    const {
+      elem,
+      clip,
+      clipIdx,
+      clipField,
+      stageField,
+      refField,
+      fieldBindingDeps
+    } = ctx;
     if (clipField === "duration") {
       const value = parseFloat(elem.value);
       if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
-        clip.duration = snapDurationToFps(value, defaults.fps);
+        const rootDefaults = getRootDefaults();
+        clip.duration = snapDurationToFps(value, rootDefaults.fps);
         const frameMax = getReferenceFrameMax(getRootDefaults, clip);
         for (const ref of clip.refs) {
           ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
@@ -1262,6 +1343,10 @@
           clipLengthFromAudio.checked = false;
         }
       }
+    } else if (clipField === "controlNetSource") {
+      clip.controlNetSource = normalizeControlNetSource(elem.value);
+    } else if (clipField === "controlNetLora") {
+      clip.controlNetLora = normalizeOptionalModelName(elem.value);
     } else if (clipField === "saveAudioTrack") {
       clip.saveAudioTrack = elem instanceof HTMLInputElement && isAceStepFunAudioSource(clip.audioSource) ? !!elem.checked : false;
       if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
@@ -1276,7 +1361,7 @@
       }
     } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
       if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
-        return;
+        return false;
       }
       if (elem.dataset.filedata) {
         clip.uploadedAudio = {
@@ -1287,17 +1372,17 @@
         };
       } else if (elem.files?.length) {
         cacheClipAudioSelection(clipIdx, elem, {
-          getClips: deps.getClips,
-          saveClips: deps.saveClips
+          getClips: fieldBindingDeps.getClips,
+          saveClips: fieldBindingDeps.saveClips
         });
-        return;
+        return false;
       } else {
         clip.uploadedAudio = null;
       }
     } else if (refField) {
       const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
       if (refIdx < 0 || refIdx >= clip.refs.length) {
-        return;
+        return false;
       }
       applyRefField(
         clip,
@@ -1307,15 +1392,19 @@
         fieldBindingDeps
       );
       if (refField === "source") {
-        syncRefUploadFieldVisibility(elem, elem.value, deps.refUploadCache);
+        syncRefUploadFieldVisibility(
+          elem,
+          elem.value,
+          fieldBindingDeps.refUploadCache
+        );
       }
     } else if (stageField) {
       const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
       if (stageIdx < 0 || stageIdx >= clip.stages.length) {
-        return;
+        return false;
       }
       if (!isStageFieldTarget(elem)) {
-        return;
+        return false;
       }
       const stage = clip.stages[stageIdx];
       const stageCard = elem.closest("section[data-stage-idx]");
@@ -1334,6 +1423,39 @@
         }
       }
     } else {
+      return false;
+    }
+    return true;
+  };
+  var handleFieldChange = (elem, deps, fromInputEvent = false) => {
+    if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
+      return;
+    }
+    const state = deps.getState();
+    const clips = state.clips;
+    const clipField = elem.dataset.clipField;
+    const stageField = elem.dataset.stageField;
+    const refField = elem.dataset.refField;
+    const clipIdx = parseInt(elem.dataset.clipIdx ?? "-1", 10);
+    if (clipIdx < 0 || clipIdx >= clips.length) {
+      return;
+    }
+    const clip = clips[clipIdx];
+    const fieldBindingDeps = {
+      getRootDefaults,
+      refUploadCache: deps.refUploadCache,
+      getClips: deps.getClips,
+      saveClips: deps.saveClips
+    };
+    if (!applyDatasetFieldChange({
+      elem,
+      clip,
+      clipIdx,
+      clipField,
+      stageField,
+      refField,
+      fieldBindingDeps
+    })) {
       return;
     }
     deps.saveState(state);
@@ -1658,20 +1780,18 @@
 
   // frontend/persistence.ts
   var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-  var toParsedConfig = (value) => {
-    if (!isRecord2(value)) {
-      return null;
-    }
-    return {
-      clips: Array.isArray(value.clips) ? value.clips : void 0
-    };
-  };
+  var rootConfig = (dims, clips) => ({
+    ...dims,
+    clips
+  });
   var serializeClipsForStorage = (clips) => clips.map(
     (clip) => ({
       expanded: clip.expanded,
       skipped: clip.skipped,
       duration: clip.duration,
       audioSource: clip.audioSource,
+      controlNetSource: clip.controlNetSource,
+      controlNetLora: clip.controlNetLora,
       saveAudioTrack: clip.saveAudioTrack,
       clipLengthFromAudio: clip.clipLengthFromAudio,
       reuseAudio: clip.reuseAudio,
@@ -1688,6 +1808,7 @@
         expanded: stage.expanded,
         skipped: stage.skipped,
         control: stage.control,
+        controlNetStrength: stage.controlNetStrength,
         refStrengths: stage.refStrengths,
         upscale: stage.upscale,
         upscaleMethod: stage.upscaleMethod,
@@ -1704,69 +1825,47 @@
     clips: serializeClipsForStorage(state.clips)
   });
   var lastSerializedState = "";
-  var getSerializedStateSource = () => {
-    const inputValue = getClipsInput()?.value ?? "";
-    return inputValue || lastSerializedState;
-  };
   var parseSerializedState = (serialized, fallbackDefaults) => {
     try {
       const parsed = JSON.parse(serialized);
-      const parsedConfig = toParsedConfig(parsed);
-      let clipsRaw = [];
+      let clipsRaw;
       if (Array.isArray(parsed)) {
         clipsRaw = parsed;
-      } else if (Array.isArray(parsedConfig?.clips)) {
-        clipsRaw = parsedConfig.clips;
+      } else if (isRecord2(parsed) && Array.isArray(parsed.clips)) {
+        clipsRaw = parsed.clips;
+      } else {
+        clipsRaw = [];
       }
-      const clips = [];
-      for (let i = 0; i < clipsRaw.length; i++) {
-        const el = clipsRaw[i];
-        const record = isRecord2(el) ? el : {};
-        clips.push(
-          normalizeClip(record, getRootDefaults, getDefaultStageModel)
-        );
-      }
-      return {
-        width: fallbackDefaults.width,
-        height: fallbackDefaults.height,
-        fps: fallbackDefaults.fps,
-        clips
-      };
+      const clips = clipsRaw.map(
+        (el) => normalizeClip(
+          isRecord2(el) ? el : {},
+          getRootDefaults,
+          getDefaultStageModel
+        )
+      );
+      return rootConfig(fallbackDefaults, clips);
     } catch {
       return null;
     }
   };
   var getState = () => {
     const defaults = getRootDefaults();
-    const serialized = getSerializedStateSource();
+    const serialized = (getClipsInput()?.value ?? "") || lastSerializedState;
     if (!serialized) {
-      return {
-        width: defaults.width,
-        height: defaults.height,
-        fps: defaults.fps,
-        clips: []
-      };
+      return rootConfig(defaults, []);
     }
-    const parsedState = parseSerializedState(serialized, defaults);
+    let parsedState = parseSerializedState(serialized, defaults);
     if (parsedState) {
       lastSerializedState = serialized;
       return parsedState;
     }
     if (serialized !== lastSerializedState && lastSerializedState) {
-      const fallbackState = parseSerializedState(
-        lastSerializedState,
-        defaults
-      );
-      if (fallbackState) {
-        return fallbackState;
+      parsedState = parseSerializedState(lastSerializedState, defaults);
+      if (parsedState) {
+        return parsedState;
       }
     }
-    return {
-      width: defaults.width,
-      height: defaults.height,
-      fps: defaults.fps,
-      clips: []
-    };
+    return rootConfig(defaults, []);
   };
   var saveState = (state, callbacks, options) => {
     const serialized = serializeStateForStorage(state);
@@ -2066,14 +2165,15 @@
   };
 
   // frontend/renderHtml.ts
+  var CONTROLNET_SOURCE_DROPDOWN_OPTIONS = CONTROLNET_SOURCE_OPTIONS.map((value) => ({ value, label: value }));
   var decorateAutoInputWrapper = (html, className, hidden = false) => html.replace(
     /<div class="([^"]*\bauto-input\b[^"]*)"([^>]*)>/,
     (_match, classes, attrs) => `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`
   );
-  var moveQButtonBeforeLabelText = (html) => html.replace(
-    /(<span class="auto-input-name">)(<span class="translate"[^>]*>[^<]*<\/span>)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
-    "$1$3$2"
-  ).replace(
+  var RE_AUTO_INPUT_NAME_TRANSLATE_Q = new RegExp(
+    '(<span class="auto-input-name">)(<span class="translate"[^>]*>[^<]*</span>)(<span class="auto-input-qbutton[^>]*>\\?</span>)'
+  );
+  var moveQButtonBeforeLabelText = (html) => html.replace(RE_AUTO_INPUT_NAME_TRANSLATE_Q, "$1$3$2").replace(
     /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
     "$1$3$2"
   );
@@ -2102,7 +2202,9 @@
         <label>
             <span class="auto-input-name">${escapedLabel}</span>
         </label>
-        <select class="auto-dropdown" id="${escapeAttr(id)}" data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}" autocomplete="off" onchange="autoSelectWidth(this)">
+        <select class="auto-dropdown" id="${escapeAttr(id)}"
+            data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}"
+            autocomplete="off" onchange="autoSelectWidth(this)">
 ${optionHtml}
         </select>
     </div>`;
@@ -2194,10 +2296,13 @@ ${optionHtml}
     const collapseGlyph = ref.expanded ? "&#x2B9F;" : "&#x2B9E;";
     const head = `
             <div class="vs-card-head">
-                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse" data-ref-action="toggle-collapse" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
+                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse"
+                    data-ref-action="toggle-collapse" data-ref-idx="${refIdx}"
+                    data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
                 <div class="vs-card-title">Ref Image ${refIdx}</div>
                 <div class="vs-card-actions">
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-ref-action="delete" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="Remove reference">&times;</button>
+                    <button type="button" class="interrupt-button vs-btn-tiny" data-ref-action="delete"
+                        data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="Remove reference">&times;</button>
                 </div>
             </div>
         `;
@@ -2307,11 +2412,16 @@ ${optionHtml}
     const skipBtnVariant = stage.skipped ? "vs-btn-skip-active" : "";
     const head = `
             <div class="vs-card-head">
-                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse" data-stage-action="toggle-collapse" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
+                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse"
+                    data-stage-action="toggle-collapse" data-stage-idx="${stageIdx}"
+                    data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
                 <div class="vs-card-title">Stage ${stageIdx}</div>
                 <div class="vs-card-actions">
-                    <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-stage-action="skip" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="${skipTitle}">&#x23ED;&#xFE0E;</button>
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage">&times;</button>
+                    <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}"
+                        data-stage-action="skip" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}"
+                        title="${skipTitle}">&#x23ED;&#xFE0E;</button>
+                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete"
+                        data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage">&times;</button>
                 </div>
             </div>
         `;
@@ -2459,6 +2569,14 @@ ${optionHtml}
       defaults.vaeLabels,
       stage.vae
     );
+    const controlNetStrengthField = stageSliderField(
+      "controlNetStrength",
+      "ControlNet Strength",
+      stage.controlNetStrength,
+      STAGE_CONTROLNET_STRENGTH_MIN,
+      STAGE_CONTROLNET_STRENGTH_MAX,
+      STAGE_CONTROLNET_STRENGTH_STEP
+    );
     const refStrengthFields = clip.refs.map(
       (_, refIdx) => stageSliderField(
         stageRefStrengthField(refIdx),
@@ -2481,11 +2599,13 @@ ${optionHtml}
                 ${samplerField}
                 ${schedulerField}
                 ${vaeField}
+                ${controlNetStrengthField}
                 ${refStrengthFields}
             </div>
         </section>`;
   };
   var renderClipCard = (clip, clipIdx, getRootDefaults2) => {
+    const defaults = getRootDefaults2();
     const stagesCount = clip.stages.length;
     const refsCount = clip.refs.length;
     const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
@@ -2618,8 +2738,48 @@ ${optionHtml}
       clipIdx,
       audioSource2
     );
+    const controlNetSourceField = injectFieldData(
+      buildNativeDropdown(
+        clipFieldId(clipIdx, "controlNetSource"),
+        "controlNetSource",
+        "Source Ref",
+        CONTROLNET_SOURCE_DROPDOWN_OPTIONS,
+        clip.controlNetSource
+      ),
+      {
+        "data-clip-field": "controlNetSource",
+        "data-clip-idx": String(clipIdx)
+      }
+    );
+    const controlNetLoraField = injectFieldData(
+      buildNativeDropdown(
+        clipFieldId(clipIdx, "controlNetLora"),
+        "controlNetLora",
+        "LoRA",
+        [
+          { value: "", label: "None" },
+          ...dropdownOptions(
+            defaults.loraValues,
+            defaults.loraLabels,
+            clip.controlNetLora
+          ).filter((option) => option.value !== "")
+        ],
+        clip.controlNetLora
+      ),
+      {
+        "data-clip-field": "controlNetLora",
+        "data-clip-idx": String(clipIdx)
+      }
+    );
+    const refRowsHtml = clip.refs.map(
+      (ref, refIdx) => renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults2)
+    ).join("");
+    const stageRowsHtml = clip.stages.map(
+      (stage, stageIdx) => renderStageRow(clip, stage, clipIdx, stageIdx, getRootDefaults2)
+    ).join("");
     const body = `
-            <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
+            <div class="input-group-content vs-clip-card-body"
+                id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${decoratedLengthField}
 
                 <div class="vs-section-block">
@@ -2635,18 +2795,28 @@ ${optionHtml}
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
+                        <div class="vs-section-block-title">CONTROLNET</div>
+                    </div>
+                    ${controlNetSourceField}
+                    ${controlNetLoraField}
+                </div>
+
+                <div class="vs-section-block">
+                    <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Reference Images &middot; ${refsCount}</div>
                     </div>
-                    <div class="vs-card-list">${clip.refs.map((ref, refIdx) => renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults2)).join("")}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-ref" data-clip-idx="${clipIdx}">+ Add Reference Image</button>
+                    <div class="vs-card-list">${refRowsHtml}</div>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-ref"
+                        data-clip-idx="${clipIdx}">+ Add Reference Image</button>
                 </div>
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Stages &middot; ${stagesCount}</div>
                     </div>
-                    <div class="vs-card-list">${clip.stages.map((stage, stageIdx) => renderStageRow(clip, stage, clipIdx, stageIdx, getRootDefaults2)).join("")}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-stage" data-clip-idx="${clipIdx}">+ Add Video Stage</button>
+                    <div class="vs-card-list">${stageRowsHtml}</div>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-stage"
+                        data-clip-idx="${clipIdx}">+ Add Video Stage</button>
                 </div>
             </div>
         `;

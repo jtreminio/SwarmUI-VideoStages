@@ -10,12 +10,21 @@ export const CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
 export const CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
 export const CLIP_AUDIO_UPLOAD_DESCRIPTION =
     "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
+export const CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3",
+];
 export const STAGE_REF_STRENGTH_MIN = 0.1;
 export const STAGE_REF_STRENGTH_MAX = 1;
 export const STAGE_REF_STRENGTH_STEP = 0.1;
 export const STAGE_REF_STRENGTH_DEFAULT = 0.8;
 export const IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
 export const STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
+export const STAGE_CONTROLNET_STRENGTH_MIN = 0;
+export const STAGE_CONTROLNET_STRENGTH_MAX = 1;
+export const STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+export const STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
 
 export interface CachedRefUpload {
     src: string;

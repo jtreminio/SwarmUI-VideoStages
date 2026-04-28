@@ -1,6 +1,8 @@
 export interface RootDefaults {
     modelValues: string[];
     modelLabels: string[];
+    loraValues: string[];
+    loraLabels: string[];
     vaeValues: string[];
     vaeLabels: string[];
     samplerValues: string[];
@@ -47,6 +49,7 @@ export interface Stage {
     expanded: boolean;
     skipped: boolean;
     control: number;
+    controlNetStrength: number;
     refStrengths: number[];
     upscale: number;
     upscaleMethod: string;
@@ -72,6 +75,8 @@ export interface Clip {
     skipped: boolean;
     duration: number;
     audioSource: string;
+    controlNetSource: string;
+    controlNetLora: string;
     saveAudioTrack: boolean;
     clipLengthFromAudio: boolean;
     reuseAudio: boolean;
@@ -97,6 +102,7 @@ export type StoredStage = Pick<
     | "expanded"
     | "skipped"
     | "control"
+    | "controlNetStrength"
     | "refStrengths"
     | "upscale"
     | "upscaleMethod"
@@ -114,6 +120,8 @@ export type StoredClip = Pick<
     | "skipped"
     | "duration"
     | "audioSource"
+    | "controlNetSource"
+    | "controlNetLora"
     | "saveAudioTrack"
     | "clipLengthFromAudio"
     | "reuseAudio"

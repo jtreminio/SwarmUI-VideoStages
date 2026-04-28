@@ -52,10 +52,7 @@ const normalizeRootPositiveInt = (
     fallback: number,
     min: number,
 ): number =>
-    Math.max(
-        min,
-        Math.round(utils.toNumber(`${value ?? fallback}`, fallback)),
-    );
+    Math.max(min, Math.round(utils.toNumber(`${value ?? fallback}`, fallback)));
 
 const snapStrengthToStep = (
     value: unknown,
@@ -67,11 +64,8 @@ const snapStrengthToStep = (
     const unitScale = 1 / step;
     return (
         Math.round(
-            clamp(
-                utils.toNumber(`${value ?? fallback}`, fallback),
-                min,
-                max,
-            ) * unitScale,
+            clamp(utils.toNumber(`${value ?? fallback}`, fallback), min, max) *
+                unitScale,
         ) / unitScale
     );
 };
@@ -138,8 +132,7 @@ export const normalizeStageControlNetStrengthValue = (value: unknown): number =>
 export const buildDefaultStageRefStrengths = (
     refCount: number,
     defaultStrength = STAGE_REF_STRENGTH_DEFAULT,
-): number[] =>
-    Array.from({ length: refCount }, () => defaultStrength);
+): number[] => Array.from({ length: refCount }, () => defaultStrength);
 
 export const normalizeStageRefStrengths = (
     rawStrengths: unknown,
@@ -309,8 +302,7 @@ export const normalizeStage = (
             defaults.controlMin,
             defaults.controlMax,
         );
-    }
-    else {
+    } else {
         firstStageUpscale = {
             upscale: clamp(
                 utils.toNumber(
