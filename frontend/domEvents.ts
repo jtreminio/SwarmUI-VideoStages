@@ -13,6 +13,7 @@ import {
     refUploadKey,
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
+import { videoStagesDebugLog } from "./debugLog";
 import {
     type ApplyRefFieldDeps,
     applyRefField,
@@ -30,22 +31,49 @@ import {
     normalizeControlNetSource,
     normalizeOptionalModelName,
 } from "./normalization";
+import type { SaveStateOptions } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
 import { snapDurationToFps } from "./renderUtils";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
-import { isImageToVideoWorkflow } from "./swarmInputs";
+import { isImageToVideoWorkflow, isVideoStagesEnabled } from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
+
+const changeFieldEventsHandled = new WeakMap<Event, void>();
+
+type FieldChangeSourceEvent = Event & {
+    /** Tests only: jsdom cannot set `isTrusted`; opt in to host notify when the group toggle is off. */
+    __videoStagesSimulateUserFieldChange?: boolean;
+};
+
+const resolveHostNotifyForHandleFieldChange = (
+    deps: DomEventsDeps,
+    sourceEvent: Event | null | undefined,
+): boolean => {
+    if (deps.shouldSuppressClipsHostNotify?.() === true) {
+        return false;
+    }
+    if (isVideoStagesEnabled()) {
+        return true;
+    }
+    const ev = sourceEvent as FieldChangeSourceEvent | null | undefined;
+    if (ev?.__videoStagesSimulateUserFieldChange === true) {
+        return true;
+    }
+    return ev?.isTrusted === true;
+};
 
 export type DomEventsDeps = {
     /** Re-resolve `#videostages_stage_editor` after SwarmUI rebuilds the param panel. */
     ensureEditorRoot: (preferredRoot?: HTMLElement | null) => void;
     getEditor: () => HTMLElement | null;
     getClips: () => Clip[];
-    saveClips: (clips: Clip[]) => void;
+    saveClips: (clips: Clip[], options?: SaveStateOptions) => void;
     getState: () => VideoStagesConfig;
-    saveState: (state: VideoStagesConfig) => void;
+    saveState: (state: VideoStagesConfig, options?: SaveStateOptions) => void;
     scheduleClipsRefresh: () => void;
     refUploadCache: RefUploadCacheApi;
+    /** While true, `handleFieldChange` must not call `triggerChangeFor` on the clips input (e.g. during `renderClips`). */
+    shouldSuppressClipsHostNotify?: () => boolean;
 };
 
 type FieldTarget = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -114,7 +142,7 @@ export const toggleClipExpanded = (
         return;
     }
     clips[clipIdx].expanded = !clips[clipIdx].expanded;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
     deps.scheduleClipsRefresh();
 };
 
@@ -145,7 +173,7 @@ export const handleRefUploadRemove = (
     clips[clipIdx].refs[refIdx].uploadFileName = null;
     clips[clipIdx].refs[refIdx].uploadedImage = null;
     deps.refUploadCache.delete(refUploadKey(clipIdx, refIdx));
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
 };
 
 export const handleClipAudioUploadRemove = (
@@ -169,7 +197,7 @@ export const handleClipAudioUploadRemove = (
     }
 
     clips[clipIdx].uploadedAudio = null;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
 };
 
 export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
@@ -188,7 +216,7 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
                 isImageToVideoWorkflow(),
             ),
         );
-        deps.saveClips(clips);
+        deps.saveClips(clips, { notifyDomChange: true });
         deps.scheduleClipsRefresh();
         return;
     }
@@ -203,13 +231,13 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
     if (clipAction === "delete") {
         clips.splice(clipIdx, 1);
         deps.refUploadCache.reindexAfterClipDelete(clipIdx);
-        deps.saveClips(clips);
+        deps.saveClips(clips, { notifyDomChange: true });
         deps.scheduleClipsRefresh();
         return;
     }
     if (clipAction === "skip") {
         clip.skipped = !clip.skipped;
-        deps.saveClips(clips);
+        deps.saveClips(clips, { notifyDomChange: true });
         deps.scheduleClipsRefresh();
         return;
     }
@@ -224,7 +252,7 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
                 clip.refs.length,
             ),
         );
-        deps.saveClips(clips);
+        deps.saveClips(clips, { notifyDomChange: true });
         deps.scheduleClipsRefresh();
         return;
     }
@@ -238,7 +266,7 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
             );
         }
         deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
-        deps.saveClips(clips);
+        deps.saveClips(clips, { notifyDomChange: true });
         deps.scheduleClipsRefresh();
         return;
     }
@@ -261,7 +289,7 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
         } else if (refAction === "toggle-collapse") {
             ref.expanded = !ref.expanded;
         }
-        deps.saveClips(clips);
+        deps.saveClips(clips, { notifyDomChange: true });
         deps.scheduleClipsRefresh();
         return;
     }
@@ -280,7 +308,7 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
         } else if (stageAction === "toggle-collapse") {
             stage.expanded = !stage.expanded;
         }
-        deps.saveClips(clips);
+        deps.saveClips(clips, { notifyDomChange: true });
         deps.scheduleClipsRefresh();
     }
 };
@@ -441,8 +469,16 @@ export const handleFieldChange = (
     elem: EventTarget | null,
     deps: DomEventsDeps,
     fromInputEvent = false,
+    sourceEvent: Event | null | undefined = undefined,
 ): void => {
     if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
+        return;
+    }
+    if (
+        sourceEvent instanceof Event &&
+        sourceEvent.type === "change" &&
+        changeFieldEventsHandled.has(sourceEvent)
+    ) {
         return;
     }
     const state = deps.getState();
@@ -479,7 +515,22 @@ export const handleFieldChange = (
         return;
     }
 
-    deps.saveState(state);
+    videoStagesDebugLog("domEvents", "handleFieldChange → saveState", {
+        clipIdx,
+        clipField: clipField ?? null,
+        stageField: stageField ?? null,
+        refField: refField ?? null,
+        tag: elem instanceof HTMLElement ? elem.tagName : null,
+        fromInputEvent,
+    });
+    const notifyDomChange = resolveHostNotifyForHandleFieldChange(
+        deps,
+        sourceEvent,
+    );
+    deps.saveState(state, { notifyDomChange });
+    if (sourceEvent instanceof Event && sourceEvent.type === "change") {
+        changeFieldEventsHandled.set(sourceEvent);
+    }
     if (clipField === "audioSource") {
         syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
     }
@@ -588,7 +639,7 @@ const observeMediaFileDatasetChanges = (
             if (!editor.contains(mutation.target)) {
                 continue;
             }
-            handleFieldChange(mutation.target, deps);
+            handleFieldChange(mutation.target, deps, false, undefined);
         }
     }).observe(editor, {
         subtree: true,
@@ -620,7 +671,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
     stageEditorsWithFieldListeners.add(editor);
 
     editor.addEventListener("change", (event: Event) => {
-        handleFieldChange(event.target, deps);
+        handleFieldChange(event.target, deps, false, event);
     });
     editor.addEventListener(
         "change",
@@ -632,7 +683,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
             if (event.bubbles) {
                 return;
             }
-            handleFieldChange(inputTarget, deps, true);
+            handleFieldChange(inputTarget, deps, true, event);
         },
         true,
     );
@@ -642,7 +693,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
             return;
         }
         if (isSliderNumericInput(inputTarget)) {
-            handleFieldChange(inputTarget, deps, true);
+            handleFieldChange(inputTarget, deps, true, event);
         }
     });
     editor.addEventListener("focusout", (event: FocusEvent) => {

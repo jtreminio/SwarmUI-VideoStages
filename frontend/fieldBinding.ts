@@ -15,6 +15,7 @@ import {
     normalizeStageControlNetStrengthValue,
     normalizeStageRefStrengthValue,
 } from "./normalization";
+import type { SaveStateOptions } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
 import {
     type Clip,
@@ -29,7 +30,7 @@ export type ApplyRefFieldDeps = {
     getRootDefaults: () => RootDefaults;
     refUploadCache: RefUploadCacheApi;
     getClips: () => Clip[];
-    saveClips: (clips: Clip[]) => void;
+    saveClips: (clips: Clip[], options?: SaveStateOptions) => void;
 };
 
 const handleUploadFileName = (

@@ -248,6 +248,19 @@ const parseStoredConfig = (): ParsedConfig => {
 
 const parseStored = (): ParsedClip[] => parseStoredConfig().clips;
 
+/**
+ * jsdom cannot set `isTrusted` on `Event`. When the VideoStages group toggle is
+ * off, host notify is gated on trusted events; tests that expect the group to
+ * re-enable must mark the event with the same expando `domEvents` recognizes.
+ */
+const dispatchSimulatedUserFieldChange = (target: EventTarget): void => {
+    const ev = new Event("change", { bubbles: true }) as Event & {
+        __videoStagesSimulateUserFieldChange?: boolean;
+    };
+    ev.__videoStagesSimulateUserFieldChange = true;
+    target.dispatchEvent(ev);
+};
+
 describe("videoStageEditor", () => {
     beforeEach(() => {
         jest.useFakeTimers();
@@ -834,10 +847,34 @@ describe("videoStageEditor", () => {
             ) as HTMLSelectElement | null;
             const source = must(audioSource);
             source.value = "Upload";
-            source.dispatchEvent(new Event("change", { bubbles: true }));
+            dispatchSimulatedUserFieldChange(source);
 
             expect(parseStored()[0].audioSource).toBe("Upload");
             expect(groupToggle.checked).toBe(true);
+        });
+
+        it("does not re-enable the VideoStages group on untrusted change when toggle is off", () => {
+            const groupToggle = document.getElementById(
+                "input_group_content_videostages_toggle",
+            ) as HTMLInputElement;
+            groupToggle.checked = false;
+
+            const stagesInput = getStagesInput();
+            stagesInput.addEventListener("change", () => {
+                groupToggle.checked = true;
+            });
+
+            initEditor();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"]',
+            ) as HTMLSelectElement | null;
+            const source = must(audioSource);
+            source.value = "Upload";
+            source.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].audioSource).toBe("Upload");
+            expect(groupToggle.checked).toBe(false);
         });
 
         it("stores clip audio source at the clip level", () => {

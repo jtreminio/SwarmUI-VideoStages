@@ -175,6 +175,8 @@ declare const currentModelHelper:
     | undefined;
 
 interface Window {
+    /** When true, VideoStages frontend logs reaction points to the console (see debugLog.ts). */
+    __VIDEO_STAGES_DEBUG__?: boolean;
     base2editStageRegistry?: Base2EditStageRegistry;
     acestepfunTrackRegistry?: AceStepFunTrackRegistry;
 }

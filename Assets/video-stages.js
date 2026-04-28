@@ -1,5 +1,14 @@
 "use strict";
 (() => {
+  // frontend/debugLog.ts
+  var videoStagesDebugEnabled = () => typeof window !== "undefined" && !!window.__VIDEO_STAGES_DEBUG__;
+  var videoStagesDebugLog = (area, message, ...details) => {
+    if (!videoStagesDebugEnabled()) {
+      return;
+    }
+    console.debug(`[VideoStages debug ${area}]`, message, ...details);
+  };
+
   // frontend/audioSource.ts
   var AUDIO_SOURCE_NATIVE = "Native";
   var AUDIO_SOURCE_UPLOAD = "Upload";
@@ -64,8 +73,12 @@
     return AUDIO_SOURCE_NATIVE;
   };
   var audioSource = () => {
-    const refreshOptions = () => {
+    const refreshOptions = (reason = "manual") => {
       const selects = getSourceSelects();
+      videoStagesDebugLog("audioSource", "refreshOptions", {
+        reason,
+        selectCount: selects.length
+      });
       if (selects.length === 0) {
         return;
       }
@@ -84,6 +97,11 @@
         if (newOptionsJson === currentOptionsJson && select.value === desired) {
           continue;
         }
+        videoStagesDebugLog("audioSource", "refreshOptions DOM rebuild", {
+          reason,
+          previousValue: select.value,
+          desired
+        });
         select.innerHTML = "";
         for (const option of options) {
           const elem = document.createElement("option");
@@ -98,12 +116,15 @@
     };
     const onDocumentDropdownInteraction = (event) => {
       if (isSourceSelect(event.target)) {
-        refreshOptions();
+        refreshOptions("dropdown-interaction");
       }
+    };
+    const onAceStepFunTracksChanged = () => {
+      refreshOptions("acestepfun:tracks-changed");
     };
     const runOnEachBuild = () => {
       try {
-        refreshOptions();
+        refreshOptions("postParamBuildSteps");
       } catch (error) {
         console.warn("audioSource: param build sync failed", error);
       }
@@ -117,7 +138,7 @@
     };
     document.addEventListener("mousedown", onDocumentDropdownInteraction);
     document.addEventListener("focusin", onDocumentDropdownInteraction);
-    document.addEventListener(ACESTEPFUN_EVENT, refreshOptions);
+    document.addEventListener(ACESTEPFUN_EVENT, onAceStepFunTracksChanged);
     scheduleInitialSync();
     return {
       buildOptions: buildAudioSourceOptions,
@@ -133,7 +154,10 @@
           "focusin",
           onDocumentDropdownInteraction
         );
-        document.removeEventListener(ACESTEPFUN_EVENT, refreshOptions);
+        document.removeEventListener(
+          ACESTEPFUN_EVENT,
+          onAceStepFunTracksChanged
+        );
       }
     };
   };
@@ -1120,6 +1144,20 @@
   };
 
   // frontend/domEvents.ts
+  var changeFieldEventsHandled = /* @__PURE__ */ new WeakMap();
+  var resolveHostNotifyForHandleFieldChange = (deps, sourceEvent) => {
+    if (deps.shouldSuppressClipsHostNotify?.() === true) {
+      return false;
+    }
+    if (isVideoStagesEnabled()) {
+      return true;
+    }
+    const ev = sourceEvent;
+    if (ev?.__videoStagesSimulateUserFieldChange === true) {
+      return true;
+    }
+    return ev?.isTrusted === true;
+  };
   var isFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement || value instanceof HTMLTextAreaElement;
   var isStageFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
   var isSliderNumericInput = (value) => value instanceof HTMLInputElement && (value.type === "number" || value.type === "range");
@@ -1153,7 +1191,7 @@
       return;
     }
     clips[clipIdx].expanded = !clips[clipIdx].expanded;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
     deps.scheduleClipsRefresh();
   };
   var handleRefUploadRemove = (elem, deps) => {
@@ -1179,7 +1217,7 @@
     clips[clipIdx].refs[refIdx].uploadFileName = null;
     clips[clipIdx].refs[refIdx].uploadedImage = null;
     deps.refUploadCache.delete(refUploadKey(clipIdx, refIdx));
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
   };
   var handleClipAudioUploadRemove = (elem, deps) => {
     const uploadField = elem.closest(".vs-clip-audio-upload-field");
@@ -1198,7 +1236,7 @@
       return;
     }
     clips[clipIdx].uploadedAudio = null;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
   };
   var handleAction = (elem, deps) => {
     const target = elem;
@@ -1214,7 +1252,7 @@
           isImageToVideoWorkflow()
         )
       );
-      deps.saveClips(clips);
+      deps.saveClips(clips, { notifyDomChange: true });
       deps.scheduleClipsRefresh();
       return;
     }
@@ -1227,13 +1265,13 @@
     if (clipAction === "delete") {
       clips.splice(clipIdx, 1);
       deps.refUploadCache.reindexAfterClipDelete(clipIdx);
-      deps.saveClips(clips);
+      deps.saveClips(clips, { notifyDomChange: true });
       deps.scheduleClipsRefresh();
       return;
     }
     if (clipAction === "skip") {
       clip.skipped = !clip.skipped;
-      deps.saveClips(clips);
+      deps.saveClips(clips, { notifyDomChange: true });
       deps.scheduleClipsRefresh();
       return;
     }
@@ -1247,7 +1285,7 @@
           clip.refs.length
         )
       );
-      deps.saveClips(clips);
+      deps.saveClips(clips, { notifyDomChange: true });
       deps.scheduleClipsRefresh();
       return;
     }
@@ -1259,7 +1297,7 @@
         );
       }
       deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
-      deps.saveClips(clips);
+      deps.saveClips(clips, { notifyDomChange: true });
       deps.scheduleClipsRefresh();
       return;
     }
@@ -1281,7 +1319,7 @@
       } else if (refAction === "toggle-collapse") {
         ref.expanded = !ref.expanded;
       }
-      deps.saveClips(clips);
+      deps.saveClips(clips, { notifyDomChange: true });
       deps.scheduleClipsRefresh();
       return;
     }
@@ -1299,7 +1337,7 @@
       } else if (stageAction === "toggle-collapse") {
         stage.expanded = !stage.expanded;
       }
-      deps.saveClips(clips);
+      deps.saveClips(clips, { notifyDomChange: true });
       deps.scheduleClipsRefresh();
     }
   };
@@ -1427,8 +1465,11 @@
     }
     return true;
   };
-  var handleFieldChange = (elem, deps, fromInputEvent = false) => {
+  var handleFieldChange = (elem, deps, fromInputEvent = false, sourceEvent = void 0) => {
     if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
+      return;
+    }
+    if (sourceEvent instanceof Event && sourceEvent.type === "change" && changeFieldEventsHandled.has(sourceEvent)) {
       return;
     }
     const state = deps.getState();
@@ -1458,7 +1499,22 @@
     })) {
       return;
     }
-    deps.saveState(state);
+    videoStagesDebugLog("domEvents", "handleFieldChange → saveState", {
+      clipIdx,
+      clipField: clipField ?? null,
+      stageField: stageField ?? null,
+      refField: refField ?? null,
+      tag: elem instanceof HTMLElement ? elem.tagName : null,
+      fromInputEvent
+    });
+    const notifyDomChange = resolveHostNotifyForHandleFieldChange(
+      deps,
+      sourceEvent
+    );
+    deps.saveState(state, { notifyDomChange });
+    if (sourceEvent instanceof Event && sourceEvent.type === "change") {
+      changeFieldEventsHandled.set(sourceEvent);
+    }
     if (clipField === "audioSource") {
       syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
     }
@@ -1554,7 +1610,7 @@
         if (!editor.contains(mutation.target)) {
           continue;
         }
-        handleFieldChange(mutation.target, deps);
+        handleFieldChange(mutation.target, deps, false, void 0);
       }
     }).observe(editor, {
       subtree: true,
@@ -1583,7 +1639,7 @@
     }
     stageEditorsWithFieldListeners.add(editor);
     editor.addEventListener("change", (event) => {
-      handleFieldChange(event.target, deps);
+      handleFieldChange(event.target, deps, false, event);
     });
     editor.addEventListener(
       "change",
@@ -1595,7 +1651,7 @@
         if (event.bubbles) {
           return;
         }
-        handleFieldChange(inputTarget, deps, true);
+        handleFieldChange(inputTarget, deps, true, event);
       },
       true
     );
@@ -1605,7 +1661,7 @@
         return;
       }
       if (isSliderNumericInput(inputTarget)) {
-        handleFieldChange(inputTarget, deps, true);
+        handleFieldChange(inputTarget, deps, true, event);
       }
     });
     editor.addEventListener("focusout", (event) => {
@@ -1875,15 +1931,25 @@
       input.value = serialized;
     }
     callbacks?.onAfterSerialize?.(serialized);
-    if (input && options?.notifyDomChange !== false) {
+    const willNotifyDom = !!(input && options?.notifyDomChange !== false);
+    videoStagesDebugLog("persistence", "saveState", {
+      notifyDomChange: options?.notifyDomChange,
+      willNotifyDom,
+      jsonChars: serialized.length
+    });
+    if (willNotifyDom && input) {
       triggerChangeFor(input);
     }
   };
   var getClips = () => getState().clips;
-  var saveClips = (clips, callbacks) => {
+  var saveClips = (clips, callbacks, options) => {
+    videoStagesDebugLog("persistence", "saveClips", {
+      clipCount: clips.length
+    });
     const state = getState();
     state.clips = clips;
-    saveState(state, callbacks);
+    const notifyDomChange = options?.notifyDomChange !== void 0 ? options.notifyDomChange : isVideoStagesEnabled();
+    saveState(state, callbacks, { ...options, notifyDomChange });
   };
   var ensureClipsSeeded = (callbacks, options) => {
     const state = getState();
@@ -1929,6 +1995,14 @@
         if (currentValue === lastKnownClipsJson) {
           return;
         }
+        videoStagesDebugLog(
+          "observers",
+          "clips input JSON drift → scheduleRefresh",
+          {
+            prevChars: lastKnownClipsJson.length,
+            nextChars: currentValue.length
+          }
+        );
         lastKnownClipsJson = currentValue;
         deps.scheduleRefresh();
       }, 150);
@@ -1941,6 +2015,13 @@
         if (!mutations.some((mutation) => mutation.type === "childList")) {
           return;
         }
+        const first = mutations.find((m) => m.type === "childList");
+        const targetId = first?.target instanceof HTMLElement ? first.target.id || "(no id)" : null;
+        videoStagesDebugLog(
+          "observers",
+          "source dropdown childList mutation → scheduleRefresh",
+          { targetId, mutationCount: mutations.length }
+        );
         deps.scheduleRefresh();
       });
       const observableIds = [
@@ -1960,7 +2041,14 @@
         }
         observedDropdownIds.add(sourceId);
         observer.observe(source, { childList: true });
-        source.addEventListener("change", () => deps.scheduleRefresh());
+        source.addEventListener("change", () => {
+          videoStagesDebugLog(
+            "observers",
+            "observed source select change → scheduleRefresh",
+            { sourceId }
+          );
+          deps.scheduleRefresh();
+        });
         hasObservedSource = true;
       }
       if (!hasObservedSource) {
@@ -1969,7 +2057,7 @@
       }
       sourceDropdownObserver = observer;
     };
-    const handleRootVideoTimingCommittedChange = () => {
+    const handleRootVideoTimingCommittedChange = (inputId) => {
       const input = getClipsInput();
       if (!input) {
         return;
@@ -1981,8 +2069,18 @@
       state.fps = rootDefaults.fps;
       const serialized = serializeStateForStorage(state);
       if (serialized !== input.value) {
+        videoStagesDebugLog(
+          "observers",
+          "root video timing change → saveState (notifyDomChange: false)",
+          { inputId }
+        );
         deps.saveState(state, { notifyDomChange: false });
       }
+      videoStagesDebugLog(
+        "observers",
+        "root video timing change → scheduleRefresh",
+        { inputId }
+      );
       deps.scheduleRefresh();
     };
     const installRootVideoTimingChangeListener = () => {
@@ -1998,7 +2096,7 @@
         if (!ROOT_VIDEO_TIMING_INPUT_IDS.has(target.id)) {
           return;
         }
-        handleRootVideoTimingCommittedChange();
+        handleRootVideoTimingCommittedChange(target.id);
       });
     };
     const installBase2EditStageChangeListener = () => {
@@ -2007,6 +2105,10 @@
       }
       base2EditListenerInstalled = true;
       document.addEventListener("base2edit:stages-changed", () => {
+        videoStagesDebugLog(
+          "observers",
+          "base2edit:stages-changed → scheduleRefresh"
+        );
         deps.scheduleRefresh();
       });
     };
@@ -2039,8 +2141,17 @@
           if (!liveEditor.contains(target)) {
             return;
           }
+          videoStagesDebugLog(
+            "observers",
+            "ref-source fallback capture change → createEditor + handleFieldChange",
+            {
+              refField: target.dataset.refField ?? null,
+              clipField: clipField ?? null,
+              selectId: target.id || null
+            }
+          );
           createEditor();
-          handleFieldChange2(target);
+          handleFieldChange2(target, event);
         },
         true
       );
@@ -2836,13 +2947,22 @@ ${optionHtml}
     const getEditorState = () => getState();
     const saveEditorState = (state, options) => saveState(state, persistenceCallbacks, options);
     const getEditorClips = () => getClips();
-    const saveEditorClips = (clips) => saveClips(clips, persistenceCallbacks);
+    const saveEditorClips = (clips, options) => saveClips(clips, persistenceCallbacks, options);
+    let suppressClipsHostNotifyForRender = false;
     const scheduleClipsRefresh = () => {
       if (clipsRefreshTimer) {
         clearTimeout(clipsRefreshTimer);
       }
+      videoStagesDebugLog(
+        "videoStageEditor",
+        "scheduleClipsRefresh (debounced renderClips)"
+      );
       clipsRefreshTimer = setTimeout(() => {
         clipsRefreshTimer = null;
+        videoStagesDebugLog(
+          "videoStageEditor",
+          "renderClips run (from scheduleClipsRefresh)"
+        );
         try {
           renderClips();
         } catch {
@@ -2890,7 +3010,8 @@ ${optionHtml}
       getState: getEditorState,
       saveState: saveEditorState,
       scheduleClipsRefresh,
-      refUploadCache
+      refUploadCache,
+      shouldSuppressClipsHostNotify: () => suppressClipsHostNotifyForRender
     });
     const restoreClipAudioUploadPreviews = (clips) => {
       if (!editor) {
@@ -2924,40 +3045,45 @@ ${optionHtml}
       if (!editor) {
         return [];
       }
-      seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
-      const state = getEditorState();
-      const clips = state.clips;
-      const focusSnapshot = captureFocus();
-      editor.innerHTML = "";
-      const stack = document.createElement("div");
-      stack.className = "vs-clip-stack";
-      stack.setAttribute("data-vs-clip-stack", "true");
-      editor.appendChild(stack);
-      if (clips.length === 0) {
-        stack.insertAdjacentHTML(
-          "beforeend",
-          `<div class="vs-empty-card">No video clips. Click "+ Add Video Clip" below.</div>`
-        );
-      } else {
-        for (let i = 0; i < clips.length; i++) {
+      suppressClipsHostNotifyForRender = true;
+      try {
+        seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
+        const state = getEditorState();
+        const clips = state.clips;
+        const focusSnapshot = captureFocus();
+        editor.innerHTML = "";
+        const stack = document.createElement("div");
+        stack.className = "vs-clip-stack";
+        stack.setAttribute("data-vs-clip-stack", "true");
+        editor.appendChild(stack);
+        if (clips.length === 0) {
           stack.insertAdjacentHTML(
             "beforeend",
-            renderClipCard(clips[i], i, getRootDefaults)
+            `<div class="vs-empty-card">No video clips. Click "+ Add Video Clip" below.</div>`
           );
+        } else {
+          for (let i = 0; i < clips.length; i++) {
+            stack.insertAdjacentHTML(
+              "beforeend",
+              renderClipCard(clips[i], i, getRootDefaults)
+            );
+          }
         }
+        const addClipButton = document.createElement("button");
+        addClipButton.type = "button";
+        addClipButton.className = "vs-add-btn vs-add-btn-clip";
+        addClipButton.dataset.clipAction = "add-clip";
+        addClipButton.innerText = "+ Add Video Clip";
+        editor.appendChild(addClipButton);
+        enableSlidersIn(editor);
+        restoreClipAudioUploadPreviews(clips);
+        refUploadCache.restorePreviews(editor, clips);
+        attachEventListeners(getDomDeps());
+        restoreFocus(focusSnapshot);
+        return validateClips(clips);
+      } finally {
+        suppressClipsHostNotifyForRender = false;
       }
-      const addClipButton = document.createElement("button");
-      addClipButton.type = "button";
-      addClipButton.className = "vs-add-btn vs-add-btn-clip";
-      addClipButton.dataset.clipAction = "add-clip";
-      addClipButton.innerText = "+ Add Video Clip";
-      editor.appendChild(addClipButton);
-      enableSlidersIn(editor);
-      restoreClipAudioUploadPreviews(clips);
-      refUploadCache.restorePreviews(editor, clips);
-      attachEventListeners(getDomDeps());
-      restoreFocus(focusSnapshot);
-      return validateClips(clips);
     };
     const init = () => {
       createEditor();
@@ -2970,9 +3096,12 @@ ${optionHtml}
       observers.installSourceDropdownObserver();
       observers.installBase2EditStageChangeListener();
       observers.installRootVideoTimingChangeListener();
-      observers.installRefSourceFallbackListener(createEditor, (target) => {
-        handleFieldChange(target, getDomDeps());
-      });
+      observers.installRefSourceFallbackListener(
+        createEditor,
+        (target, ev) => {
+          handleFieldChange(target, getDomDeps(), false, ev);
+        }
+      );
     };
     const startGenerateWrapRetry = (intervalMs = 250) => {
       generateWrap.startRetry(intervalMs);

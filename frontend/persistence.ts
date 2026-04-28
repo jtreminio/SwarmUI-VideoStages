@@ -1,6 +1,11 @@
+import { videoStagesDebugLog } from "./debugLog";
 import { buildDefaultClip, normalizeClip } from "./normalization";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
-import { getClipsInput, isImageToVideoWorkflow } from "./swarmInputs";
+import {
+    getClipsInput,
+    isImageToVideoWorkflow,
+    isVideoStagesEnabled,
+} from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 
 type RootDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
@@ -133,7 +138,13 @@ export const saveState = (
         input.value = serialized;
     }
     callbacks?.onAfterSerialize?.(serialized);
-    if (input && options?.notifyDomChange !== false) {
+    const willNotifyDom = !!(input && options?.notifyDomChange !== false);
+    videoStagesDebugLog("persistence", "saveState", {
+        notifyDomChange: options?.notifyDomChange,
+        willNotifyDom,
+        jsonChars: serialized.length,
+    });
+    if (willNotifyDom && input) {
         triggerChangeFor(input);
     }
 };
@@ -143,10 +154,18 @@ export const getClips = (): Clip[] => getState().clips;
 export const saveClips = (
     clips: Clip[],
     callbacks?: PersistenceCallbacks,
+    options?: SaveStateOptions,
 ): void => {
+    videoStagesDebugLog("persistence", "saveClips", {
+        clipCount: clips.length,
+    });
     const state = getState();
     state.clips = clips;
-    saveState(state, callbacks);
+    const notifyDomChange =
+        options?.notifyDomChange !== undefined
+            ? options.notifyDomChange
+            : isVideoStagesEnabled();
+    saveState(state, callbacks, { ...options, notifyDomChange });
 };
 
 export const ensureClipsSeeded = (
