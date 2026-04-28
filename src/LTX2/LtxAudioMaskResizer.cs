@@ -14,7 +14,7 @@ internal sealed class LtxAudioMaskResizer(
             return;
         }
 
-        UpdateAllAudioMaskDimensions(g, width, height);
+        UpdateAllAudioMaskDimensions(width, height);
     }
 
     internal void ApplyCurrentAudioMaskDimensions(WGNodeData media)
@@ -28,21 +28,30 @@ internal sealed class LtxAudioMaskResizer(
             || !StringUtils.NodeTypeMatches(concatNode, LtxNodeTypes.LTXVConcatAVLatent)
             || concatNode["inputs"] is not JObject concatInputs
             || concatInputs["audio_latent"] is not JArray audioLatentPath
-            || !TryGetSolidMaskInputsForAudioLatentPath(generator, audioLatentPath, out JObject solidMaskInputs))
+            || !TryGetSolidMaskInputsForAudioLatentPath(
+                generator,
+                audioLatentPath,
+                out JObject solidMaskInputs))
         {
             return;
         }
 
-        solidMaskInputs["width"] = media.Width.Value;
-        solidMaskInputs["height"] = media.Height.Value;
+        int w = media.Width.Value;
+        int h = media.Height.Value;
+        solidMaskInputs["width"] = w;
+        solidMaskInputs["height"] = h;
     }
 
-    private static void UpdateAllAudioMaskDimensions(WorkflowGenerator g, int width, int height)
+    private void UpdateAllAudioMaskDimensions(int width, int height)
     {
-        foreach (WorkflowNode setMaskNode in WorkflowUtils.NodesOfType(g.Workflow, NodeTypes.SetLatentNoiseMask))
+        foreach (
+            WorkflowNode setMaskNode in WorkflowUtils.NodesOfType(
+                g.Workflow,
+                NodeTypes.SetLatentNoiseMask))
         {
-            if (!IsAudioNoiseMaskNode(g, setMaskNode.Node)
-                || !TryGetSolidMaskInputsForSetMaskNode(g, setMaskNode.Node, out JObject solidMaskInputs))
+            if (setMaskNode.Node["inputs"] is not JObject setMaskInputs
+                || !IsAudioSamplesFromSetMaskInputs(setMaskInputs)
+                || !TryGetSolidMaskInputsFromSetMaskInputs(g, setMaskInputs, out JObject solidMaskInputs))
             {
                 continue;
             }
@@ -52,10 +61,9 @@ internal sealed class LtxAudioMaskResizer(
         }
     }
 
-    private static bool IsAudioNoiseMaskNode(WorkflowGenerator g, JObject setMaskNode)
+    private bool IsAudioSamplesFromSetMaskInputs(JObject setMaskInputs)
     {
-        if (setMaskNode["inputs"] is not JObject inputs
-            || inputs["samples"] is not JArray samplesPath
+        if (setMaskInputs["samples"] is not JArray samplesPath
             || samplesPath.Count != 2
             || !g.Workflow.TryGetValue($"{samplesPath[0]}", out JToken samplesToken)
             || samplesToken is not JObject samplesNode)
@@ -64,10 +72,13 @@ internal sealed class LtxAudioMaskResizer(
         }
 
         return StringUtils.NodeTypeMatches(samplesNode, LtxNodeTypes.LTXVAudioVAEEncode)
-            || StringUtils.NodeTypeMatches(samplesNode, "VAEEncodeAudio");
+            || StringUtils.NodeTypeMatches(samplesNode, NodeTypes.VAEEncodeAudio);
     }
 
-    private static bool TryGetSolidMaskInputsForAudioLatentPath(WorkflowGenerator g, JArray audioLatentPath, out JObject solidMaskInputs)
+    private static bool TryGetSolidMaskInputsForAudioLatentPath(
+        WorkflowGenerator g,
+        JArray audioLatentPath,
+        out JObject solidMaskInputs)
     {
         solidMaskInputs = null;
         if (audioLatentPath is not { Count: 2 }
@@ -81,11 +92,27 @@ internal sealed class LtxAudioMaskResizer(
         return TryGetSolidMaskInputsForSetMaskNode(g, setMaskNode, out solidMaskInputs);
     }
 
-    private static bool TryGetSolidMaskInputsForSetMaskNode(WorkflowGenerator g, JObject setMaskNode, out JObject solidMaskInputs)
+    private static bool TryGetSolidMaskInputsForSetMaskNode(
+        WorkflowGenerator g,
+        JObject setMaskNode,
+        out JObject solidMaskInputs)
     {
         solidMaskInputs = null;
-        if (setMaskNode["inputs"] is not JObject setMaskInputs
-            || setMaskInputs["mask"] is not JArray solidMaskPath
+        if (setMaskNode["inputs"] is not JObject setMaskInputs)
+        {
+            return false;
+        }
+
+        return TryGetSolidMaskInputsFromSetMaskInputs(g, setMaskInputs, out solidMaskInputs);
+    }
+
+    private static bool TryGetSolidMaskInputsFromSetMaskInputs(
+        WorkflowGenerator g,
+        JObject setMaskInputs,
+        out JObject solidMaskInputs)
+    {
+        solidMaskInputs = null;
+        if (setMaskInputs["mask"] is not JArray solidMaskPath
             || solidMaskPath.Count != 2
             || !g.Workflow.TryGetValue($"{solidMaskPath[0]}", out JToken solidMaskToken)
             || solidMaskToken is not JObject solidMaskNode

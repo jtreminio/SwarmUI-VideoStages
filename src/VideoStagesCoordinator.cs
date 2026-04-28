@@ -46,32 +46,23 @@ internal sealed class VideoStagesCoordinator(
                 return;
             }
 
-            AudioStageDetector.Detection detectedAudio = audioStageDetector.Detect();
-            IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios =
-                BuildPerClipAudioDetections(audioStageDetector, clips);
-            IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios =
-                BuildPerClipUploadDetections(clips);
-            AceStepFunAudioSavePruner.Apply(g, clips);
+            ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
             if (!rootStageTakeover)
             {
                 JsonParser.StageSpec first = stages[0];
-                AudioStageDetector.Detection firstClipAudio = ClipAudioWorkflowHelper.ResolveClipAudioDetection(
+                TryInjectResolvedClipAudio(
                     first.ClipId,
                     first.ClipAudioSource,
-                    detectedAudio,
-                    clipAudios,
-                    uploadedAudios,
-                    suppressNativeFallback: false,
-                    ClipAudioWorkflowHelper.ClipAudioSourceNormalization.CoordinatorField);
-                _ = ltxManager.TryInjectAudio(
-                    firstClipAudio,
-                    ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
-                        first.ClipAudioSource,
-                        first.ClipLengthFromAudio,
-                        restrictLengthMatchToUploadOrAce: false));
+                    first.ClipLengthFromAudio,
+                    clipAudioMaps);
             }
 
-            stageSequenceRunner.Run(stages, detectedAudio, clipAudios, uploadedAudios, rootStageTakeover);
+            stageSequenceRunner.Run(
+                stages,
+                clipAudioMaps.DetectedAudio,
+                clipAudioMaps.ClipAudios,
+                clipAudioMaps.UploadedAudios,
+                rootStageTakeover);
             EnsureFinalStageOutputSaved();
         }
         finally
@@ -92,32 +83,52 @@ internal sealed class VideoStagesCoordinator(
 
     private void TryInjectConfiguredAudio(List<JsonParser.ClipSpec> clips)
     {
-        AudioStageDetector.Detection detectedAudio = audioStageDetector.Detect();
         if (clips.Count == 0)
         {
-            ltxManager.TryInjectAudio(detectedAudio);
+            ltxManager.TryInjectAudio(audioStageDetector.Detect());
             return;
         }
 
+        ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
+        JsonParser.ClipSpec first = clips[0];
+        TryInjectResolvedClipAudio(first.Id, first.AudioSource, first.ClipLengthFromAudio, clipAudioMaps);
+    }
+
+    private readonly record struct ClipAudioMaps(
+        AudioStageDetector.Detection DetectedAudio,
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> ClipAudios,
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> UploadedAudios);
+
+    private ClipAudioMaps BuildClipAudioMaps(IReadOnlyList<JsonParser.ClipSpec> clips)
+    {
+        AudioStageDetector.Detection detectedAudio = audioStageDetector.Detect();
         IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios =
             BuildPerClipAudioDetections(audioStageDetector, clips);
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios =
             BuildPerClipUploadDetections(clips);
         AceStepFunAudioSavePruner.Apply(g, clips);
-        JsonParser.ClipSpec first = clips[0];
+        return new ClipAudioMaps(detectedAudio, clipAudios, uploadedAudios);
+    }
+
+    private void TryInjectResolvedClipAudio(
+        int clipId,
+        string audioSource,
+        bool clipLengthFromAudio,
+        ClipAudioMaps maps)
+    {
         AudioStageDetector.Detection detection = ClipAudioWorkflowHelper.ResolveClipAudioDetection(
-            first.Id,
-            first.AudioSource,
-            detectedAudio,
-            clipAudios,
-            uploadedAudios,
+            clipId,
+            audioSource,
+            maps.DetectedAudio,
+            maps.ClipAudios,
+            maps.UploadedAudios,
             suppressNativeFallback: false,
             ClipAudioWorkflowHelper.ClipAudioSourceNormalization.CoordinatorField);
-        ltxManager.TryInjectAudio(
+        _ = ltxManager.TryInjectAudio(
             detection,
             ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
-                first.AudioSource,
-                first.ClipLengthFromAudio,
+                audioSource,
+                clipLengthFromAudio,
                 restrictLengthMatchToUploadOrAce: false));
     }
 

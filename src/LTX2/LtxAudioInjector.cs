@@ -19,7 +19,10 @@ internal sealed class LtxAudioInjector(
             return false;
         }
 
-        (List<JArray> audioLatentsToReplace, HashSet<string> removableSourceIds, int? workflowFps) = FindAudioLatentsToReplace();
+        (
+            List<JArray> audioLatentsToReplace,
+            HashSet<string> removableSourceIds,
+            int? workflowFps) = FindAudioLatentsToReplace();
         if (audioLatentsToReplace.Count == 0)
         {
             return false;
@@ -43,16 +46,16 @@ internal sealed class LtxAudioInjector(
         return true;
     }
 
-    private (List<JArray> AudioLatentsToReplace, HashSet<string> RemovableSourceIds, int? WorkflowFps) FindAudioLatentsToReplace()
+    private (List<JArray> AudioLatentsToReplace, HashSet<string> RemovableSourceIds, int? WorkflowFps)
+        FindAudioLatentsToReplace()
     {
         List<JArray> audioLatentsToReplace = [];
         HashSet<string> removableSourceIds = [];
         int? workflowFps = null;
-        foreach (JProperty property in g.Workflow.Properties())
+        foreach (WorkflowNode concat in WorkflowUtils.NodesOfType(g.Workflow, LtxNodeTypes.LTXVConcatAVLatent))
         {
-            if (property.Value is not JObject node
-                || !StringUtils.NodeTypeMatches(node, LtxNodeTypes.LTXVConcatAVLatent)
-                || node["inputs"] is not JObject inputs
+            JObject node = concat.Node;
+            if (node["inputs"] is not JObject inputs
                 || inputs["audio_latent"] is not JArray audioLatent
                 || audioLatent.Count != 2)
             {
@@ -67,7 +70,10 @@ internal sealed class LtxAudioInjector(
             }
             audioLatentsToReplace.Add(audioLatent);
             removableSourceIds.Add(sourceId);
-            workflowFps ??= ReadFrameRate(sourceNode["inputs"] as JObject);
+            if (sourceNode["inputs"] is JObject rateInputs)
+            {
+                workflowFps ??= ReadFrameRate(rateInputs);
+            }
         }
         return (audioLatentsToReplace, removableSourceIds, workflowFps);
     }
@@ -230,6 +236,12 @@ internal sealed class LtxAudioInjector(
         return new JArray(connection[0], connection[1]);
     }
 
+    private static int? ReadIntOrRoundedDouble(JObject inputs, string key)
+    {
+        return inputs.Value<int?>(key)
+            ?? (inputs.Value<double?>(key) is double d ? (int?)Math.Round(d) : null);
+    }
+
     private static int? ReadFrameRate(JObject inputs)
     {
         if (inputs is null)
@@ -237,25 +249,26 @@ internal sealed class LtxAudioInjector(
             return null;
         }
 
-        return inputs.Value<int?>("frame_rate")
-            ?? (inputs.Value<double?>("frame_rate") is double frameRate ? (int?)Math.Round(frameRate) : null)
-            ?? inputs.Value<int?>("fps")
-            ?? (inputs.Value<double?>("fps") is double fps ? (int?)Math.Round(fps) : null);
+        return ReadIntOrRoundedDouble(inputs, "frame_rate")
+            ?? ReadIntOrRoundedDouble(inputs, "fps");
     }
 
     private static void SetFrameCountInput(JObject inputs, JArray framesConnection)
     {
+        JArray wired = CloneConnection(framesConnection);
+        string key;
         if (inputs.ContainsKey("frames_number"))
         {
-            inputs["frames_number"] = CloneConnection(framesConnection);
-            return;
+            key = "frames_number";
         }
-        if (inputs.ContainsKey("length"))
+        else if (inputs.ContainsKey("length"))
         {
-            inputs["length"] = CloneConnection(framesConnection);
-            return;
+            key = "length";
         }
-
-        inputs["frames_number"] = CloneConnection(framesConnection);
+        else
+        {
+            key = "frames_number";
+        }
+        inputs[key] = wired;
     }
 }

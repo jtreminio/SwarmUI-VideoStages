@@ -41,7 +41,11 @@ public static class WorkflowUtils
 
             foreach (JProperty input in inputs.Properties())
             {
-                if (input.Value is JArray array && array.Count == 2 && $"{array[0]}" == targetNode && $"{array[1]}" == targetIndex)
+                if (input.Value is not JArray array || array.Count != 2)
+                {
+                    continue;
+                }
+                if ($"{array[0]}" == targetNode && $"{array[1]}" == targetIndex)
                 {
                     matches.Add(new WorkflowInputConnection(property.Name, input.Name, array));
                 }
@@ -87,7 +91,7 @@ public static class WorkflowUtils
             return false;
         }
 
-        Dictionary<string, List<string>> forwardEdges = BuildForwardAdjacency(workflow);
+        Dictionary<string, HashSet<string>> forwardEdges = BuildForwardAdjacency(workflow);
         Queue<string> pending = new();
         HashSet<string> visited = [];
         pending.Enqueue(startNodeId);
@@ -105,7 +109,7 @@ public static class WorkflowUtils
                 return true;
             }
 
-            if (!forwardEdges.TryGetValue(nodeId, out List<string> consumers))
+            if (!forwardEdges.TryGetValue(nodeId, out HashSet<string> consumers))
             {
                 continue;
             }
@@ -122,7 +126,10 @@ public static class WorkflowUtils
         return false;
     }
 
-    public static void RemoveUnusedUpstreamNodes(JObject workflow, JArray outputRef, ISet<string> protectedNodeIds = null)
+    public static void RemoveUnusedUpstreamNodes(
+        JObject workflow,
+        JArray outputRef,
+        ISet<string> protectedNodeIds = null)
     {
         ArgumentNullException.ThrowIfNull(workflow);
         RequirePairOutputRef(outputRef, nameof(outputRef));
@@ -198,8 +205,7 @@ public static class WorkflowUtils
                 continue;
             }
 
-            if (StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecode)
-                || StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecodeTiled))
+            if (IsVideoVaeDecode(node))
             {
                 decodeNode = new WorkflowNode(nodeId, node);
                 return true;
@@ -232,14 +238,14 @@ public static class WorkflowUtils
 
         decodeOutputRef = null;
         Queue<JArray> pending = new();
-        HashSet<string> visitedRefs = [];
+        HashSet<(string NodeId, string Slot)> visitedRefs = [];
         pending.Enqueue(new JArray(outputRef[0], outputRef[1]));
 
         while (pending.Count > 0)
         {
             JArray currentRef = pending.Dequeue();
-            string currentKey = $"{currentRef[0]}::{currentRef[1]}";
-            if (!visitedRefs.Add(currentKey))
+            (string NodeId, string Slot) refKey = ($"{currentRef[0]}", $"{currentRef[1]}");
+            if (!visitedRefs.Add(refKey))
             {
                 continue;
             }
@@ -251,8 +257,7 @@ public static class WorkflowUtils
                     continue;
                 }
 
-                if (StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecode)
-                    || StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecodeTiled))
+                if (IsVideoVaeDecode(node))
                 {
                     decodeOutputRef = new JArray(connection.NodeId, 0);
                     return true;
@@ -273,9 +278,15 @@ public static class WorkflowUtils
         }
     }
 
-    private static Dictionary<string, List<string>> BuildForwardAdjacency(JObject workflow)
+    private static bool IsVideoVaeDecode(JObject node)
     {
-        Dictionary<string, List<string>> forwardEdges = [];
+        return StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecode)
+            || StringUtils.NodeTypeMatches(node, NodeTypes.VAEDecodeTiled);
+    }
+
+    private static Dictionary<string, HashSet<string>> BuildForwardAdjacency(JObject workflow)
+    {
+        Dictionary<string, HashSet<string>> forwardEdges = [];
 
         foreach (JProperty nodeProperty in workflow.Properties())
         {
@@ -295,16 +306,13 @@ public static class WorkflowUtils
                         continue;
                     }
 
-                    if (!forwardEdges.TryGetValue(producerId, out List<string> consumers))
+                    if (!forwardEdges.TryGetValue(producerId, out HashSet<string> consumers))
                     {
                         consumers = [];
                         forwardEdges[producerId] = consumers;
                     }
 
-                    if (!consumers.Contains(consumerId))
-                    {
-                        consumers.Add(consumerId);
-                    }
+                    consumers.Add(consumerId);
                 }
             }
         }
