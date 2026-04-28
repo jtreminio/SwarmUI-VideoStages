@@ -7,11 +7,6 @@ public static class AceStepFunAudioSavePruner
 {
     public static void Apply(WorkflowGenerator g, IReadOnlyList<JsonParser.ClipSpec> clips)
     {
-        if (g?.Workflow is null || clips is null || clips.Count == 0)
-        {
-            return;
-        }
-
         HashSet<int> tracksToSave = [];
         HashSet<int> selectedAceStepFunTracks = [];
         foreach (JsonParser.ClipSpec clip in clips)

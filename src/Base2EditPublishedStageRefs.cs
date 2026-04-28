@@ -6,12 +6,11 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
-internal static class Base2EditPublishedStageRefs
+internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
 {
     private const string Prefix = "b2e.published.edit.";
 
-    public static bool TryGetStageRef(
-        WorkflowGenerator g,
+    public bool TryGetStageRef(
         int stageIndex,
         [MaybeNullWhen(false)] out StageRefStore.StageRef stageRef)
     {
@@ -26,8 +25,8 @@ internal static class Base2EditPublishedStageRefs
         try
         {
             JObject payload = JObject.Parse(encoded);
-            WGNodeData vae = payload["vae"] is JObject vaeObj ? DeserializeNodeData(g, vaeObj, null) : null;
-            WGNodeData media = payload["media"] is JObject mediaObj ? DeserializeNodeData(g, mediaObj, vae) : null;
+            WGNodeData vae = payload["vae"] is JObject vaeObj ? DeserializeNodeData(vaeObj, null) : null;
+            WGNodeData media = payload["media"] is JObject mediaObj ? DeserializeNodeData(mediaObj, vae) : null;
             if (media is null)
             {
                 return false;
@@ -60,7 +59,7 @@ internal static class Base2EditPublishedStageRefs
         return VaeDecodePreference.AsRawImage(stageRef.Media.Gen, stageRef.Media, stageRef.Vae);
     }
 
-    private static WGNodeData DeserializeNodeData(WorkflowGenerator g, JObject data, WGNodeData fallbackVae)
+    private WGNodeData DeserializeNodeData(JObject data, WGNodeData fallbackVae)
     {
         if (data["path"] is not JArray path || path.Count != 2)
         {
@@ -68,7 +67,7 @@ internal static class Base2EditPublishedStageRefs
         }
 
         string dataType = data.Value<string>("dataType") ?? WGNodeData.DT_IMAGE;
-        T2IModelCompatClass compat = ResolveCompatFor(g, dataType, fallbackVae, data.Value<string>("compatId"));
+        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.Value<string>("compatId"));
         return new WGNodeData(path, g, dataType, compat)
         {
             Width = data.Value<int?>("width"),
@@ -78,8 +77,7 @@ internal static class Base2EditPublishedStageRefs
         };
     }
 
-    private static T2IModelCompatClass ResolveCompatFor(
-        WorkflowGenerator g,
+    private T2IModelCompatClass ResolveCompatFor(
         string dataType,
         WGNodeData fallbackVae,
         string compatId)

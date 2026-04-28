@@ -45,29 +45,30 @@ public class VideoStagesExtension : Extension
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
             step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
         RootVideoStageResizer.EnsureRegistered();
+
         WorkflowGenerator.AddStep(
-            VideoStageControlNetApplicator.CaptureCoreVideoControlNetPreprocessors,
+            g => new Runner(g).CaptureCoreVideoControlNetPreprocessors(),
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(
-            RootVideoStageTakeover.EnsureRootVideoStageModel,
+            g => new Runner(g).EnsureRootVideoStageModel(),
             Constants.WorkflowStepPriority.EnsureRootVideoStageModel);
         WorkflowGenerator.AddStep(
-            g => new VideoStagesCoordinator(g).CaptureBase(),
+            g => new Runner(g).CaptureBase(),
             Constants.WorkflowStepPriority.CaptureBase);
         WorkflowGenerator.AddStep(
-            g => new VideoStagesCoordinator(g).CaptureRefiner(),
+            g => new Runner(g).CaptureRefiner(),
             Constants.WorkflowStepPriority.CaptureRefiner);
         WorkflowGenerator.AddStep(
-            RootVideoStageTakeover.SuppressCoreRootVideoStage,
+            g => new Runner(g).SuppressCoreRootVideoStage(),
             Constants.WorkflowStepPriority.SuppressCoreRootVideoStage);
         WorkflowGenerator.AddStep(
-            RootVideoStageTakeover.RestoreCoreRootVideoStageModel,
+            g => new Runner(g).RestoreCoreRootVideoStageModel(),
             Constants.WorkflowStepPriority.RestoreCoreRootVideoStageModel);
         WorkflowGenerator.AddStep(
-            LTX2.LtxAudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo,
+            g => new Runner(g).ApplyRootAudioMaskDimensionsAfterNativeVideo(),
             Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
         WorkflowGenerator.AddStep(
-            g => new VideoStagesCoordinator(g).RunConfiguredStages(),
+            g => new Runner(g).RunConfiguredStages(),
             Constants.WorkflowStepPriority.RunConfiguredStages);
     }
 
