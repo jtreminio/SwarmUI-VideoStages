@@ -32,7 +32,10 @@ internal sealed class LtxAudioInjector(
         if (matchVideoLengthToAudio)
         {
             int fps = ResolveFps(workflowFps);
-            JToken lengthFramesAudioSource = ResolveLengthToFramesAudioSource(detection.Audio.Path);
+            JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
+                g,
+                detection.Audio.Path,
+                g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
             string lengthToFramesId = CreateLengthToFramesNode(lengthFramesAudioSource, fps);
             JArray framesConnection = MakeConnection(lengthToFramesId, 1);
             ApplyFramesConnectionToSources(removableSourceIds, framesConnection);
@@ -90,63 +93,6 @@ internal sealed class LtxAudioInjector(
             fps = g.UserInput.Get(T2IParamTypes.VideoFPS, 24);
         }
         return fps > 0 ? fps : 24;
-    }
-
-    private JToken ResolveLengthToFramesAudioSource(JToken rawAudioPath)
-    {
-        if (rawAudioPath is not JArray rawRef || rawRef.Count != 2)
-        {
-            return rawAudioPath;
-        }
-
-        foreach (JProperty property in g.Workflow.Properties())
-        {
-            if (property.Value is not JObject node
-                || !StringUtils.NodeTypeMatches(node, NodeTypes.SwarmEnsureAudio)
-                || node["inputs"] is not JObject inputs
-                || inputs["audio"] is not JArray audioInput
-                || audioInput.Count != 2)
-            {
-                continue;
-            }
-            if (ConnectionRefsEqual(audioInput, rawRef))
-            {
-                return new JArray(property.Name, 0);
-            }
-        }
-
-        if (!IsSwarmLoadAudioB64Output(rawRef))
-        {
-            return rawAudioPath;
-        }
-
-        string ensured = g.CreateNode(NodeTypes.SwarmEnsureAudio, new JObject()
-        {
-            ["audio"] = rawRef,
-            ["target_duration"] = 0.1
-        }, g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
-        return new JArray(ensured, 0);
-    }
-
-    private bool IsSwarmLoadAudioB64Output(JArray rawRef)
-    {
-        string sourceId = $"{rawRef[0]}";
-        if (!g.Workflow.TryGetValue(sourceId, out JToken token) || token is not JObject node)
-        {
-            return false;
-        }
-
-        return StringUtils.NodeTypeMatches(node, NodeTypes.SwarmLoadAudioB64);
-    }
-
-    private static bool ConnectionRefsEqual(JToken left, JToken right)
-    {
-        if (left is not JArray la || right is not JArray ra || la.Count != 2 || ra.Count != 2)
-        {
-            return false;
-        }
-
-        return $"{la[0]}" == $"{ra[0]}" && la[1].Value<int>() == ra[1].Value<int>();
     }
 
     private string CreateLengthToFramesNode(JToken audioPath, int fps)

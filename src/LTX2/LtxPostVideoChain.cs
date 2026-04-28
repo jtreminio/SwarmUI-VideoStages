@@ -6,7 +6,6 @@ namespace VideoStages.LTX2;
 
 internal sealed class LtxPostVideoChain
 {
-    private const string UploadedAudioLoadClassType = "SwarmLoadAudioB64";
     private readonly WorkflowGenerator g;
     private readonly bool useReusedAudioLatent;
     public readonly WGNodeData CurrentOutputMedia;
@@ -82,9 +81,8 @@ internal sealed class LtxPostVideoChain
             return null;
         }
 
-        JArray samplesRef = decode.Node["inputs"]?["samples"] as JArray
-            ?? decode.Node["inputs"]?["latent"] as JArray
-            ?? decode.Node["inputs"]?["latents"] as JArray;
+        JObject decodeInputs = decode.Node["inputs"] as JObject;
+        JArray samplesRef = LtxVaeDecodeInputs.TryGetDecodeSamplesRef(decodeInputs);
         if (samplesRef is null || samplesRef.Count != 2)
         {
             return null;
@@ -242,7 +240,6 @@ internal sealed class LtxPostVideoChain
         AttachSourceAudio(g.CurrentMedia);
     }
 
-    /// <summary>Like <see cref="SpliceCurrentOutput"/>, with a dedicated decode branch for parallel clips (no shared root decode retarget).</summary>
     public void SpliceCurrentOutputToDedicatedBranch(
         WGNodeData vae,
         int outputWidth,
@@ -276,14 +273,22 @@ internal sealed class LtxPostVideoChain
             ["samples"] = new JArray(newSeparate, 1)
         });
 
-        WGNodeData decodedVideo = new(new JArray(dedicatedVideoDecode, 0), g, WGNodeData.DT_VIDEO, ResolveVideoCompat())
+        WGNodeData decodedVideo = new(
+            new JArray(dedicatedVideoDecode, 0),
+            g,
+            WGNodeData.DT_VIDEO,
+            ResolveVideoCompat())
         {
             Width = outputWidth,
             Height = outputHeight,
             Frames = outputFrames ?? CurrentOutputMedia.Frames,
             FPS = outputFps ?? CurrentOutputMedia.FPS
         };
-        WGNodeData decodedAudio = new(new JArray(dedicatedAudioDecode, 0), g, WGNodeData.DT_AUDIO, ResolveAudioCompat());
+        WGNodeData decodedAudio = new(
+            new JArray(dedicatedAudioDecode, 0),
+            g,
+            WGNodeData.DT_AUDIO,
+            ResolveAudioCompat());
         decodedVideo.AttachedAudio = decodedAudio;
         g.CurrentMedia = decodedVideo;
     }
@@ -333,7 +338,11 @@ internal sealed class LtxPostVideoChain
         inputs["samples"] = new JArray(newSamplesPath[0], newSamplesPath[1]);
     }
 
-    private static bool TryFindAudioDecode(JObject workflow, string separateId, out string audioDecodeId, out JArray audioVaeRef)
+    private static bool TryFindAudioDecode(
+        JObject workflow,
+        string separateId,
+        out string audioDecodeId,
+        out JArray audioVaeRef)
     {
         audioDecodeId = null;
         audioVaeRef = null;
@@ -518,7 +527,7 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
-        return AudioPathTracesToNodeType(audioPath, UploadedAudioLoadClassType);
+        return AudioPathTracesToNodeType(audioPath, NodeTypes.SwarmLoadAudioB64);
     }
 
     private bool AudioPathTracesToNodeType(JArray audioPath, string classType)
@@ -629,7 +638,10 @@ internal sealed class LtxPostVideoChain
 
     private T2IModelCompatClass ResolveVideoCompat()
     {
-        return T2IModelClassSorter.CompatLtxv2 ?? g.CurrentVae?.Compat ?? CurrentOutputMedia?.Compat ?? g.CurrentCompat();
+        return T2IModelClassSorter.CompatLtxv2
+            ?? g.CurrentVae?.Compat
+            ?? CurrentOutputMedia?.Compat
+            ?? g.CurrentCompat();
     }
 
     private T2IModelCompatClass ResolveAudioCompat()

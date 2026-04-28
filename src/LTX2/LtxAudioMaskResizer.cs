@@ -89,15 +89,6 @@ internal sealed class LtxAudioMaskResizer(
             return false;
         }
 
-        return TryGetSolidMaskInputsForSetMaskNode(g, setMaskNode, out solidMaskInputs);
-    }
-
-    private static bool TryGetSolidMaskInputsForSetMaskNode(
-        WorkflowGenerator g,
-        JObject setMaskNode,
-        out JObject solidMaskInputs)
-    {
-        solidMaskInputs = null;
         if (setMaskNode["inputs"] is not JObject setMaskInputs)
         {
             return false;

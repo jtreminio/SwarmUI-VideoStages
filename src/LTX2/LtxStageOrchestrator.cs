@@ -43,7 +43,12 @@ internal sealed class LtxStageOrchestrator(
                 || clipRefs is { Count: > 0 }
                 || ShouldSkipGeneratedGuideReinjection(stage, sourceMedia, guideReference, genInfo, postVideoChain));
 
-        WGNodeData guideMedia = ResolveLocalGuideMedia(primaryGuideClipRef, skipGuideReinjection, sourceMedia, priorOutputPath, postVideoChain);
+        WGNodeData guideMedia = ResolveLocalGuideMedia(
+            primaryGuideClipRef,
+            skipGuideReinjection,
+            sourceMedia,
+            priorOutputPath,
+            postVideoChain);
 
         stageExecutor.RunStage(
             stage,
@@ -96,7 +101,9 @@ internal sealed class LtxStageOrchestrator(
             WGNodeData raw = ResolveClipRefSourceMedia(spec, refStore, postVideoChain);
             if (raw is null)
             {
-                Logs.Warning($"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; skipping.");
+                Logs.Warning(
+                    $"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; "
+                    + "skipping.");
                 continue;
             }
 
@@ -151,9 +158,9 @@ internal sealed class LtxStageOrchestrator(
         IReadOnlyList<ResolvedClipRef> clipRefs,
         ResolvedClipRef primaryGuideClipRef)
     {
-        if (clipRefs is null || primaryGuideClipRef is null)
+        if (primaryGuideClipRef is null)
         {
-            return clipRefs is null ? null : [.. clipRefs];
+            return [.. clipRefs];
         }
 
         List<ResolvedClipRef> remaining = [];
@@ -229,7 +236,8 @@ internal sealed class LtxStageOrchestrator(
             return null;
         }
 
-        if (postVideoChain is not null && stageGuideMediaHelper.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
+        if (postVideoChain is not null
+            && stageGuideMediaHelper.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
         {
             WGNodeData detachedGuideVae = postVideoChain.CreateStageInputVae() ?? g.CurrentVae;
             return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
@@ -294,7 +302,9 @@ internal sealed class LtxStageOrchestrator(
         {
             if (g.UserInput?.SourceSession is null)
             {
-                Logs.Warning("VideoStages: reference image uses a server-side path but no session is available; cannot load the file.");
+                Logs.Warning(
+                    "VideoStages: reference image uses a server-side path but no session is available; "
+                    + "cannot load the file.");
                 return null;
             }
 
@@ -307,7 +317,8 @@ internal sealed class LtxStageOrchestrator(
             }
             catch (SwarmReadableErrorException ex)
             {
-                Logs.Warning($"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
+                Logs.Warning(
+                    $"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
                 return null;
             }
         }
@@ -317,9 +328,9 @@ internal sealed class LtxStageOrchestrator(
             ImageFile img = ImageFile.FromDataString(material);
             return g.LoadImage(img, "${videostagesrefimage}", false);
         }
-        catch
+        catch (Exception ex)
         {
-            Logs.Warning("VideoStages: Ignoring invalid clip reference image payload.");
+            Logs.Warning($"VideoStages: Ignoring invalid clip reference image payload: {ex.Message}");
             return null;
         }
     }
