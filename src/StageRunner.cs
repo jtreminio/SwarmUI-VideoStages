@@ -60,7 +60,7 @@ internal class StageRunner(
                 currentGenInfo =>
                 {
                     ApplyControlNetLora(stage, currentGenInfo);
-                    VideoStageControlNetApplicator.Apply(
+                    ControlNetApplicator.Apply(
                         g,
                         currentGenInfo,
                         sourceMedia,

@@ -8,7 +8,7 @@ using VideoStages.LTX2;
 
 namespace VideoStages;
 
-internal static class VideoStageControlNetApplicator
+internal static class ControlNetApplicator
 {
     private const string CapturedControlNetImageKeyPrefix = "videostages.controlnet.fullimage.";
     private const string NeedsLtxIcloraGuideCropKey = "videostages.controlnet.ltx_ic_lora_guide.needs_crop";

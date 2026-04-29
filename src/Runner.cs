@@ -74,7 +74,7 @@ public class Runner
             return;
         }
 
-        VideoStageControlNetApplicator.CaptureCoreVideoControlNetPreprocessors(g);
+        ControlNetApplicator.CaptureCoreVideoControlNetPreprocessors(g);
     }
 
     public void EnsureRootVideoStageModel()

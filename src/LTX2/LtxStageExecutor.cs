@@ -68,7 +68,7 @@ internal sealed class LtxStageExecutor(
             {
                 handler(genInfo);
             }
-            if (VideoStageControlNetApplicator.ConsumeNeedsLtxIcloraGuideCrop(g))
+            if (ControlNetApplicator.ConsumeNeedsLtxIcloraGuideCrop(g))
             {
                 _needsLtxvCropGuidesAfterSampler = true;
             }
