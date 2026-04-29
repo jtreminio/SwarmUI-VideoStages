@@ -343,6 +343,17 @@
     const raw = `${value ?? ""}`.trim();
     return raw || "";
   };
+  var normalizeControlNetLora = (value) => {
+    const raw = normalizeOptionalModelName(value);
+    if (!raw) {
+      return "";
+    }
+    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
+    if (squeezed === "(none)") {
+      return "";
+    }
+    return raw;
+  };
   var normalizeStageRefStrengthValue = (value) => snapStrengthToStep(
     value,
     STAGE_REF_STRENGTH_DEFAULT,
@@ -614,7 +625,7 @@
       controlNetSource: normalizeControlNetSource(
         rawClip.controlNetSource ?? rawClip.ControlNetSource
       ),
-      controlNetLora: normalizeOptionalModelName(
+      controlNetLora: normalizeControlNetLora(
         rawClip.controlNetLora ?? rawClip.ControlNetLora
       ),
       saveAudioTrack: !!rawClip.saveAudioTrack,
@@ -1384,7 +1395,7 @@
     } else if (clipField === "controlNetSource") {
       clip.controlNetSource = normalizeControlNetSource(elem.value);
     } else if (clipField === "controlNetLora") {
-      clip.controlNetLora = normalizeOptionalModelName(elem.value);
+      clip.controlNetLora = normalizeControlNetLora(elem.value);
     } else if (clipField === "saveAudioTrack") {
       clip.saveAudioTrack = elem instanceof HTMLInputElement && isAceStepFunAudioSource(clip.audioSource) ? !!elem.checked : false;
       if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
@@ -1523,6 +1534,9 @@
       if (clipCard instanceof HTMLElement) {
         syncClipDurationDisabled(clipCard, clip.clipLengthFromAudio);
       }
+    }
+    if (clipField === "controlNetLora") {
+      deps.scheduleClipsRefresh();
     }
     if (clipField === "duration" && !fromInputEvent) {
       deps.scheduleClipsRefresh();
@@ -2309,6 +2323,21 @@
       label: finalLabels[idx] ?? value
     }));
   };
+  var dedupeEmptyValueDropdownOptions = (options) => {
+    let sawEmpty = false;
+    const out = [];
+    for (let i = 0; i < options.length; i++) {
+      const opt = options[i];
+      if (opt.value === "") {
+        if (sawEmpty) {
+          continue;
+        }
+        sawEmpty = true;
+      }
+      out.push(opt);
+    }
+    return out;
+  };
   var buildNativeDropdownStrict = (id, paramId, label, options, selected) => {
     const escapedLabel = escapeAttr(label);
     const optionHtml = renderOptionList(options, selected);
@@ -2684,14 +2713,15 @@ ${optionHtml}
       defaults.vaeLabels,
       stage.vae
     );
-    const controlNetStrengthField = stageSliderField(
+    const controlNetLoraActive = normalizeControlNetLora(clip.controlNetLora) !== "";
+    const controlNetStrengthField = controlNetLoraActive ? stageSliderField(
       "controlNetStrength",
       "ControlNet Strength",
       stage.controlNetStrength,
       STAGE_CONTROLNET_STRENGTH_MIN,
       STAGE_CONTROLNET_STRENGTH_MAX,
       STAGE_CONTROLNET_STRENGTH_STEP
-    );
+    ) : "";
     const refStrengthFields = clip.refs.map(
       (_, refIdx) => stageSliderField(
         stageRefStrengthField(refIdx),
@@ -2853,11 +2883,22 @@ ${optionHtml}
       clipIdx,
       audioSource2
     );
-    const controlNetSourceField = injectFieldData(
+    const controlNetLoraActive = normalizeControlNetLora(clip.controlNetLora) !== "";
+    const controlNetLoraOptions = dedupeEmptyValueDropdownOptions(
+      dropdownOptions(
+        defaults.loraValues,
+        defaults.loraLabels,
+        normalizeControlNetLora(clip.controlNetLora)
+      ).map((opt) => ({
+        ...opt,
+        value: normalizeControlNetLora(opt.value)
+      }))
+    );
+    let controlNetSourceFieldHtml = injectFieldData(
       buildNativeDropdown(
         clipFieldId(clipIdx, "controlNetSource"),
         "controlNetSource",
-        "Source Ref",
+        "Source",
         CONTROLNET_SOURCE_DROPDOWN_OPTIONS,
         clip.controlNetSource
       ),
@@ -2866,20 +2907,24 @@ ${optionHtml}
         "data-clip-idx": String(clipIdx)
       }
     );
+    if (!controlNetLoraActive) {
+      controlNetSourceFieldHtml = controlNetSourceFieldHtml.replace(
+        /<select /,
+        "<select disabled "
+      );
+    }
+    const controlNetSourceField = decorateAutoInputWrapper(
+      controlNetSourceFieldHtml,
+      controlNetLoraActive ? "vs-controlnet-source-field" : "vs-controlnet-source-field vs-controlnet-source-disabled",
+      false
+    );
     const controlNetLoraField = injectFieldData(
       buildNativeDropdown(
         clipFieldId(clipIdx, "controlNetLora"),
         "controlNetLora",
         "LoRA",
-        [
-          { value: "", label: "None" },
-          ...dropdownOptions(
-            defaults.loraValues,
-            defaults.loraLabels,
-            clip.controlNetLora
-          ).filter((option) => option.value !== "")
-        ],
-        clip.controlNetLora
+        controlNetLoraOptions,
+        normalizeControlNetLora(clip.controlNetLora)
       ),
       {
         "data-clip-field": "controlNetLora",
@@ -2912,8 +2957,8 @@ ${optionHtml}
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">CONTROLNET</div>
                     </div>
-                    ${controlNetSourceField}
                     ${controlNetLoraField}
+                    ${controlNetSourceField}
                 </div>
 
                 <div class="vs-section-block">

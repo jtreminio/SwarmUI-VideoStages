@@ -301,7 +301,7 @@ public class JsonParser(WorkflowGenerator g)
         bool clipLengthFromAudio = GetOptionalBool(clipObj, "ClipLengthFromAudio", defaultValue: false);
         bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
         string controlNetSource = NormalizeControlNetSource(GetString(clipObj, "ControlNetSource"));
-        string controlNetLora = NormalizeOptionalModelName(GetString(clipObj, "ControlNetLora"));
+        string controlNetLora = NormalizeControlNetLora(GetString(clipObj, "ControlNetLora"));
         int? width = GetOptionalNullableInt(clipObj, "Width");
         int? height = GetOptionalNullableInt(clipObj, "Height");
         UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, "UploadedAudio");
@@ -741,6 +741,21 @@ public class JsonParser(WorkflowGenerator g)
     private static string NormalizeOptionalModelName(string rawModelName)
     {
         return string.IsNullOrWhiteSpace(rawModelName) ? "" : rawModelName.Trim();
+    }
+
+    private static string NormalizeControlNetLora(string raw)
+    {
+        string trimmed = NormalizeOptionalModelName(raw);
+        if (trimmed.Length == 0)
+        {
+            return "";
+        }
+        string squeezed = new([.. trimmed.Where(c => !char.IsWhiteSpace(c))]);
+        if (StringUtils.Equals(squeezed, "(none)"))
+        {
+            return "";
+        }
+        return trimmed;
     }
 
     public static bool IsUsableVaeValue(string rawVae)

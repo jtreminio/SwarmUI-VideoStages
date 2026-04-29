@@ -156,6 +156,15 @@ describe("normalization", () => {
         expect(controlNetClip.controlNetLora).toBe("ltx-ic-lora.safetensors");
     });
 
+    it("normalizeClip maps Swarm (None) ControlNet LoRA token to empty", () => {
+        const clip = normalizeClip(
+            { controlNetLora: " ( None ) " },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.controlNetLora).toBe("");
+    });
+
     it("normalizeClip reads camelCase controlNetSource and controlNetLora from stored JSON", () => {
         const clip = normalizeClip(
             {

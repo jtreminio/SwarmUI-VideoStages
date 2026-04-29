@@ -28,8 +28,8 @@ import {
     buildDefaultRef,
     buildDefaultStage,
     getReferenceFrameMax,
+    normalizeControlNetLora,
     normalizeControlNetSource,
-    normalizeOptionalModelName,
 } from "./normalization";
 import type { SaveStateOptions } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
@@ -371,7 +371,7 @@ const applyDatasetFieldChange = (ctx: DatasetFieldChangeContext): boolean => {
     } else if (clipField === "controlNetSource") {
         clip.controlNetSource = normalizeControlNetSource(elem.value);
     } else if (clipField === "controlNetLora") {
-        clip.controlNetLora = normalizeOptionalModelName(elem.value);
+        clip.controlNetLora = normalizeControlNetLora(elem.value);
     } else if (clipField === "saveAudioTrack") {
         clip.saveAudioTrack =
             elem instanceof HTMLInputElement &&
@@ -539,6 +539,9 @@ export const handleFieldChange = (
         if (clipCard instanceof HTMLElement) {
             syncClipDurationDisabled(clipCard, clip.clipLengthFromAudio);
         }
+    }
+    if (clipField === "controlNetLora") {
+        deps.scheduleClipsRefresh();
     }
     if (clipField === "duration" && !fromInputEvent) {
         deps.scheduleClipsRefresh();

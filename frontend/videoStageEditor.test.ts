@@ -156,6 +156,10 @@ const setupParameterPanel = (): void => {
 
     const loras = document.createElement("select");
     loras.id = "input_loras";
+    const loraNone = document.createElement("option");
+    loraNone.value = "(None)";
+    loraNone.textContent = "(None)";
+    loras.appendChild(loraNone);
     for (const value of [
         "ltx-ic-lora.safetensors",
         "detail-lora.safetensors",
@@ -165,6 +169,7 @@ const setupParameterPanel = (): void => {
         opt.text = value;
         loras.appendChild(opt);
     }
+    loras.value = "(None)";
     document.body.appendChild(loras);
 
     for (const id of ["input_sampler", "input_scheduler"]) {
@@ -313,13 +318,22 @@ describe("videoStageEditor", () => {
             ).toBe("Clip 0");
         });
 
-        it("renders and stores per-clip ControlNet source choice", () => {
+        it("renders and stores per-clip ControlNet source choice", async () => {
             initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
 
             const controlNetSource = document.querySelector(
                 '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
             ) as HTMLSelectElement | null;
             const select = must(controlNetSource);
+            expect(select.disabled).toBe(false);
             expect([...select.options].map((option) => option.value)).toEqual([
                 "ControlNet 1",
                 "ControlNet 2",
@@ -344,6 +358,14 @@ describe("videoStageEditor", () => {
                 "ltx-ic-lora.safetensors",
                 "detail-lora.safetensors",
             ]);
+            expect(
+                [...select.options].filter((option) => option.value === "")
+                    .length,
+            ).toBe(1);
+            expect(
+                [...select.options].find((option) => option.value === "")
+                    ?.textContent,
+            ).toBe("(None)");
 
             select.value = "ltx-ic-lora.safetensors";
             select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -351,6 +373,89 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].controlNetLora).toBe(
                 "ltx-ic-lora.safetensors",
             );
+        });
+
+        it("stores empty ControlNet LoRA and disables Source after clearing LoRA when host uses (None) token", async () => {
+            initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const enabledSource = document.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            expect(must(enabledSource).disabled).toBe(false);
+
+            const loraAfterLtx = must(
+                document.querySelector(
+                    '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+                ) as HTMLSelectElement | null,
+            );
+            for (let i = 0; i < loraAfterLtx.options.length; i++) {
+                loraAfterLtx.options[i].selected =
+                    loraAfterLtx.options[i].value === "";
+            }
+            loraAfterLtx.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            expect(parseStored()[0].controlNetLora).toBe("");
+            const controlNetSource = document.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            expect(must(controlNetSource).disabled).toBe(true);
+        });
+
+        it("lists LoRA above Source in the CONTROLNET block", () => {
+            initEditor();
+
+            const controlSection = Array.from(
+                document.querySelectorAll(".vs-section-block"),
+            ).find(
+                (section) =>
+                    section.querySelector(".vs-section-block-title")
+                        ?.textContent === "CONTROLNET",
+            ) as HTMLElement | undefined;
+            must(controlSection);
+            const lora = controlSection.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            );
+            const source = controlSection.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            );
+            must(lora);
+            const sourceEl = must(source);
+            expect(
+                lora.compareDocumentPosition(sourceEl) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+            ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        });
+
+        it("disables ControlNet Source when no ControlNet LoRA is selected", () => {
+            initEditor();
+
+            const controlNetSource = document.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const select = must(controlNetSource);
+            expect(select.disabled).toBe(true);
+            expect(
+                select.closest(".vs-controlnet-source-disabled"),
+            ).not.toBeNull();
+        });
+
+        it("hides ControlNet strength sliders when no ControlNet LoRA is selected", () => {
+            initEditor();
+
+            expect(
+                document.querySelector(
+                    '[data-stage-field="controlNetStrength"]',
+                ),
+            ).toBeNull();
         });
 
         it("seeds image-to-video defaults with a refiner reference", () => {
@@ -1182,8 +1287,16 @@ describe("videoStageEditor", () => {
             expect(rebuiltUploadField.style.display).toBe("");
         });
 
-        it("still stores ControlNet source when the editor DOM is rebuilt", () => {
+        it("still stores ControlNet source when the editor DOM is rebuilt", async () => {
             initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
 
             const originalEditor = document.getElementById(
                 "videostages_stage_editor",
@@ -2209,6 +2322,14 @@ describe("videoStageEditor", () => {
         it("updates stored ControlNet strength when its stage slider moves", async () => {
             initEditor();
 
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
             const controlNetStrengthSlider = document.querySelector(
                 '[data-stage-field="controlNetStrength"][type="range"]',
             ) as HTMLInputElement | null;
@@ -2221,8 +2342,16 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].stages?.[0].controlNetStrength).toBe(0.3);
         });
 
-        it("renders ControlNet strength slider with expected bounds and step", () => {
+        it("renders ControlNet strength slider with expected bounds and step", async () => {
             initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
 
             const range = document.querySelector(
                 '[data-stage-field="controlNetStrength"][type="range"]',

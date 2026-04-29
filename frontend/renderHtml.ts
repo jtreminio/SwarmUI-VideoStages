@@ -25,7 +25,7 @@ import {
     STAGE_REF_STRENGTH_STEP,
     stageRefStrengthField,
 } from "./constants";
-import { getReferenceFrameMax } from "./normalization";
+import { getReferenceFrameMax, normalizeControlNetLora } from "./normalization";
 import {
     clipFieldId,
     escapeAttr,
@@ -105,6 +105,24 @@ export const dropdownOptions = (
         value,
         label: finalLabels[idx] ?? value,
     }));
+};
+
+const dedupeEmptyValueDropdownOptions = (
+    options: ImageSourceOption[],
+): ImageSourceOption[] => {
+    let sawEmpty = false;
+    const out: ImageSourceOption[] = [];
+    for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        if (opt.value === "") {
+            if (sawEmpty) {
+                continue;
+            }
+            sawEmpty = true;
+        }
+        out.push(opt);
+    }
+    return out;
 };
 
 export const buildNativeDropdownStrict = (
@@ -560,14 +578,18 @@ export const renderStageRow = (
         defaults.vaeLabels,
         stage.vae,
     );
-    const controlNetStrengthField = stageSliderField(
-        "controlNetStrength",
-        "ControlNet Strength",
-        stage.controlNetStrength,
-        STAGE_CONTROLNET_STRENGTH_MIN,
-        STAGE_CONTROLNET_STRENGTH_MAX,
-        STAGE_CONTROLNET_STRENGTH_STEP,
-    );
+    const controlNetLoraActive =
+        normalizeControlNetLora(clip.controlNetLora) !== "";
+    const controlNetStrengthField = controlNetLoraActive
+        ? stageSliderField(
+              "controlNetStrength",
+              "ControlNet Strength",
+              stage.controlNetStrength,
+              STAGE_CONTROLNET_STRENGTH_MIN,
+              STAGE_CONTROLNET_STRENGTH_MAX,
+              STAGE_CONTROLNET_STRENGTH_STEP,
+          )
+        : "";
     const refStrengthFields = clip.refs
         .map((_, refIdx) =>
             stageSliderField(
@@ -753,11 +775,23 @@ export const renderClipCard = (
         clipIdx,
         audioSource,
     );
-    const controlNetSourceField = injectFieldData(
+    const controlNetLoraActive =
+        normalizeControlNetLora(clip.controlNetLora) !== "";
+    const controlNetLoraOptions = dedupeEmptyValueDropdownOptions(
+        dropdownOptions(
+            defaults.loraValues,
+            defaults.loraLabels,
+            normalizeControlNetLora(clip.controlNetLora),
+        ).map((opt) => ({
+            ...opt,
+            value: normalizeControlNetLora(opt.value),
+        })),
+    );
+    let controlNetSourceFieldHtml = injectFieldData(
         buildNativeDropdown(
             clipFieldId(clipIdx, "controlNetSource"),
             "controlNetSource",
-            "Source Ref",
+            "Source",
             CONTROLNET_SOURCE_DROPDOWN_OPTIONS,
             clip.controlNetSource,
         ),
@@ -766,20 +800,26 @@ export const renderClipCard = (
             "data-clip-idx": String(clipIdx),
         },
     );
+    if (!controlNetLoraActive) {
+        controlNetSourceFieldHtml = controlNetSourceFieldHtml.replace(
+            /<select /,
+            "<select disabled ",
+        );
+    }
+    const controlNetSourceField = decorateAutoInputWrapper(
+        controlNetSourceFieldHtml,
+        controlNetLoraActive
+            ? "vs-controlnet-source-field"
+            : "vs-controlnet-source-field vs-controlnet-source-disabled",
+        false,
+    );
     const controlNetLoraField = injectFieldData(
         buildNativeDropdown(
             clipFieldId(clipIdx, "controlNetLora"),
             "controlNetLora",
             "LoRA",
-            [
-                { value: "", label: "None" },
-                ...dropdownOptions(
-                    defaults.loraValues,
-                    defaults.loraLabels,
-                    clip.controlNetLora,
-                ).filter((option) => option.value !== ""),
-            ],
-            clip.controlNetLora,
+            controlNetLoraOptions,
+            normalizeControlNetLora(clip.controlNetLora),
         ),
         {
             "data-clip-field": "controlNetLora",
@@ -818,8 +858,8 @@ export const renderClipCard = (
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">CONTROLNET</div>
                     </div>
-                    ${controlNetSourceField}
                     ${controlNetLoraField}
+                    ${controlNetSourceField}
                 </div>
 
                 <div class="vs-section-block">

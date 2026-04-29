@@ -253,12 +253,12 @@
     max-width: 100%;
 }
 
-#videostages_stage_editor .vs-card-body .auto-dropdown:disabled {
+#videostages_stage_editor .auto-dropdown:disabled {
     opacity: 0.45;
     color: var(--text-soft);
 }
 
-#videostages_stage_editor .vs-card-body .auto-dropdown-box:has(
+#videostages_stage_editor .auto-dropdown-box:has(
     .auto-dropdown:disabled
 ) {
     opacity: 0.7;

@@ -111,6 +111,18 @@ export const normalizeOptionalModelName = (value: unknown): string => {
     return raw || "";
 };
 
+export const normalizeControlNetLora = (value: unknown): string => {
+    const raw = normalizeOptionalModelName(value);
+    if (!raw) {
+        return "";
+    }
+    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
+    if (squeezed === "(none)") {
+        return "";
+    }
+    return raw;
+};
+
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
     snapStrengthToStep(
         value,
@@ -465,7 +477,7 @@ export const normalizeClip = (
         controlNetSource: normalizeControlNetSource(
             rawClip.controlNetSource ?? rawClip.ControlNetSource,
         ),
-        controlNetLora: normalizeOptionalModelName(
+        controlNetLora: normalizeControlNetLora(
             rawClip.controlNetLora ?? rawClip.ControlNetLora,
         ),
         saveAudioTrack: !!rawClip.saveAudioTrack,
