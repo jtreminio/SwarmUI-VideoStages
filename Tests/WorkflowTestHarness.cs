@@ -71,14 +71,18 @@ internal static class WorkflowTestHarness
         return _coreSteps.Single(step => step.Priority == 10);
     }
 
-    public static JObject GenerateWithSteps(T2IParamInput input, IEnumerable<WorkflowGenerator.WorkflowGenStep> steps)
+    public static JObject GenerateWithSteps(
+        T2IParamInput input,
+        IEnumerable<WorkflowGenerator.WorkflowGenStep> steps,
+        IEnumerable<string> features = null)
     {
-        return GenerateWithStepsAndState(input, steps).Workflow;
+        return GenerateWithStepsAndState(input, steps, features).Workflow;
     }
 
     public static (JObject Workflow, WorkflowGenerator Generator) GenerateWithStepsAndState(
         T2IParamInput input,
-        IEnumerable<WorkflowGenerator.WorkflowGenStep> steps)
+        IEnumerable<WorkflowGenerator.WorkflowGenStep> steps,
+        IEnumerable<string> features = null)
     {
         EnsureInitialized();
 
@@ -91,7 +95,7 @@ internal static class WorkflowTestHarness
             WorkflowGenerator generator = new()
             {
                 UserInput = input,
-                Features = [],
+                Features = features is null ? [Constants.LtxVideoFeatureFlag] : [.. features],
                 ModelFolderFormat = "/"
             };
 

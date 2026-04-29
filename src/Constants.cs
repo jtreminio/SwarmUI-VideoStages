@@ -32,6 +32,8 @@ public static class Constants
         Clip duration controls total frame count.
     """;
     internal const string ComfyUIFeatureFlag = "comfyui";
+    internal const string LtxVideoFeatureFlag = "ltxvideo";
+    internal const string LtxVideoNodeUrl = "https://github.com/Lightricks/ComfyUI-LTXVideo";
     public const string AudioSourceNative = "Native";
     public const string AudioSourceUpload = "Upload";
     public const string AudioSourceSwarm = "Swarm Audio";

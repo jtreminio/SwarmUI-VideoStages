@@ -263,6 +263,12 @@ internal class StageRunner(
         {
             return;
         }
+        if (!g.Features.Contains(Constants.LtxVideoFeatureFlag))
+        {
+            throw new SwarmUserErrorException(
+                "VideoStages ControlNet LoRA requires the ComfyUI-LTXVideo custom nodes. "
+                + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
+        }
         g.FinalLoadedModelList.Add(lora);
         if (Program.ServerSettings.Metadata.ImageMetadataIncludeModelHash)
         {

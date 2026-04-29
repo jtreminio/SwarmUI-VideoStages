@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -557,6 +558,46 @@ public partial class StageFlowTests
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(icGuide.Node, "image"),
             new JArray(videoGuideFrames.Id, 0)));
+    }
+
+    [Fact]
+    public void Ltx_ic_lora_controlnet_source_requires_ltxvideo_nodes()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
+        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        {
+            ModelClass = new T2IModelClass()
+            {
+                ID = "unit/control-diffpatch",
+                Name = "Unit ControlNet DiffPatch",
+                CompatClass = models.VideoModel.ModelClass.CompatClass
+            }
+        };
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        loraHandler.Models[loraModel.Name] = loraModel;
+
+        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
+        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
+        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
+        input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
+        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[0], "UnitTestPreprocessor");
+
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel),
+                ComfyUIBackendExtension.FeaturesSupported
+                    .Where(feature => feature != Constants.LtxVideoFeatureFlag)));
+        Assert.Contains("ComfyUI-LTXVideo", ex.Message);
     }
 
     [Fact]

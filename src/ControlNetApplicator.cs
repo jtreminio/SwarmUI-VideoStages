@@ -233,6 +233,12 @@ internal static class ControlNetApplicator
         {
             return true;
         }
+        if (!g.Features.Contains(Constants.LtxVideoFeatureFlag))
+        {
+            throw new SwarmUserErrorException(
+                "VideoStages ControlNet IC-LoRA guides require the ComfyUI-LTXVideo custom nodes. "
+                + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
+        }
 
         JArray guideImagePath = ControlImageForLtxIcloraGuide(g, controlImagePath, genInfo.Frames);
         string guideNode = g.CreateNode(LtxNodeTypes.LTXAddVideoICLoRAGuide, new JObject()

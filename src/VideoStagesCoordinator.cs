@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -45,6 +46,7 @@ internal sealed class VideoStagesCoordinator(
                 TryInjectConfiguredAudio(clips);
                 return;
             }
+            EnsureComfyDependencies(stages);
 
             ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
             if (!rootStageTakeover)
@@ -69,6 +71,19 @@ internal sealed class VideoStagesCoordinator(
         {
             rootVideoStageTakeover.CleanupSynthesizedRootVideoStageModel();
         }
+    }
+
+    private void EnsureComfyDependencies(IReadOnlyList<JsonParser.StageSpec> stages)
+    {
+        if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
+            || !stages.Any(stage => !string.IsNullOrWhiteSpace(stage.ClipControlNetLora)))
+        {
+            return;
+        }
+
+        throw new SwarmUserErrorException(
+            "VideoStages ControlNet LoRA requires the ComfyUI-LTXVideo custom nodes. "
+            + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
     }
 
     private void CaptureIfStagesConfigured(StageRefStore.StageKind kind)

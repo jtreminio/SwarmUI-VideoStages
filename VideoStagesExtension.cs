@@ -3,6 +3,7 @@ using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.LTX2;
 
 namespace VideoStages;
 
@@ -40,6 +41,7 @@ public class VideoStagesExtension : Extension
     public override void OnInit()
     {
         Logs.Info("VideoStages Extension initializing...");
+        RegisterComfyDependencies();
         RegisterParameters();
         RegisterComfyNodes();
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
@@ -70,6 +72,23 @@ public class VideoStagesExtension : Extension
         WorkflowGenerator.AddStep(
             g => new Runner(g).RunConfiguredStages(),
             Constants.WorkflowStepPriority.RunConfiguredStages);
+    }
+
+    private static void RegisterComfyDependencies()
+    {
+        InstallableFeatures.RegisterInstallableFeature(new(
+            "LTXVideo",
+            Constants.LtxVideoFeatureFlag,
+            Constants.LtxVideoNodeUrl,
+            "Lightricks",
+            "This will install LTXVideo ComfyUI nodes developed by Lightricks.\n"
+            + "If you already installed ComfyUI-LTXVideo in your ComfyUI custom_nodes folder, you do not need to install it again.\n"
+            + "Do you wish to install?"));
+
+        ComfyUIBackendExtension.NodeToFeatureMap[LtxNodeTypes.LTXICLoRALoaderModelOnly] =
+            Constants.LtxVideoFeatureFlag;
+        ComfyUIBackendExtension.NodeToFeatureMap[LtxNodeTypes.LTXAddVideoICLoRAGuide] =
+            Constants.LtxVideoFeatureFlag;
     }
 
     private static void RegisterParameters()
