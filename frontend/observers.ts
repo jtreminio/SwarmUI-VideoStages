@@ -1,3 +1,4 @@
+import { videoStagesDebugLog } from "./debugLog";
 import { type SaveStateOptions, serializeStateForStorage } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { getClipsInput } from "./swarmInputs";
@@ -20,7 +21,10 @@ export type ObserversApi = {
     installRootVideoTimingChangeListener: () => void;
     installRefSourceFallbackListener: (
         createEditor: () => void,
-        handleFieldChange: (target: EventTarget | null) => void,
+        handleFieldChange: (
+            target: EventTarget | null,
+            sourceEvent?: Event,
+        ) => void,
     ) => void;
 };
 
@@ -52,6 +56,14 @@ export const createObservers = (deps: {
             if (currentValue === lastKnownClipsJson) {
                 return;
             }
+            videoStagesDebugLog(
+                "observers",
+                "clips input JSON drift → scheduleRefresh",
+                {
+                    prevChars: lastKnownClipsJson.length,
+                    nextChars: currentValue.length,
+                },
+            );
             lastKnownClipsJson = currentValue;
             deps.scheduleRefresh();
         }, 150);
@@ -66,6 +78,16 @@ export const createObservers = (deps: {
             if (!mutations.some((mutation) => mutation.type === "childList")) {
                 return;
             }
+            const first = mutations.find((m) => m.type === "childList");
+            const targetId =
+                first?.target instanceof HTMLElement
+                    ? first.target.id || "(no id)"
+                    : null;
+            videoStagesDebugLog(
+                "observers",
+                "source dropdown childList mutation → scheduleRefresh",
+                { targetId, mutationCount: mutations.length },
+            );
             deps.scheduleRefresh();
         });
 
@@ -76,6 +98,7 @@ export const createObservers = (deps: {
             "input_sampler",
             "input_scheduler",
             "input_refinerupscalemethod",
+            "input_loras",
         ];
 
         let hasObservedSource = false;
@@ -86,7 +109,14 @@ export const createObservers = (deps: {
             }
             observedDropdownIds.add(sourceId);
             observer.observe(source, { childList: true });
-            source.addEventListener("change", () => deps.scheduleRefresh());
+            source.addEventListener("change", () => {
+                videoStagesDebugLog(
+                    "observers",
+                    "observed source select change → scheduleRefresh",
+                    { sourceId },
+                );
+                deps.scheduleRefresh();
+            });
             hasObservedSource = true;
         }
 
@@ -98,7 +128,7 @@ export const createObservers = (deps: {
         sourceDropdownObserver = observer;
     };
 
-    const handleRootVideoTimingCommittedChange = (): void => {
+    const handleRootVideoTimingCommittedChange = (inputId: string): void => {
         const input = getClipsInput();
         if (!input) {
             return;
@@ -111,8 +141,18 @@ export const createObservers = (deps: {
         state.fps = rootDefaults.fps;
         const serialized = serializeStateForStorage(state);
         if (serialized !== input.value) {
+            videoStagesDebugLog(
+                "observers",
+                "root video timing change → saveState (notifyDomChange: false)",
+                { inputId },
+            );
             deps.saveState(state, { notifyDomChange: false });
         }
+        videoStagesDebugLog(
+            "observers",
+            "root video timing change → scheduleRefresh",
+            { inputId },
+        );
         deps.scheduleRefresh();
     };
 
@@ -130,7 +170,7 @@ export const createObservers = (deps: {
                 return;
             }
 
-            handleRootVideoTimingCommittedChange();
+            handleRootVideoTimingCommittedChange(target.id);
         });
     };
 
@@ -140,13 +180,20 @@ export const createObservers = (deps: {
         }
         base2EditListenerInstalled = true;
         document.addEventListener("base2edit:stages-changed", () => {
+            videoStagesDebugLog(
+                "observers",
+                "base2edit:stages-changed → scheduleRefresh",
+            );
             deps.scheduleRefresh();
         });
     };
 
     const installRefSourceFallbackListener = (
         createEditor: () => void,
-        handleFieldChange: (target: EventTarget | null) => void,
+        handleFieldChange: (
+            target: EventTarget | null,
+            sourceEvent?: Event,
+        ) => void,
     ): void => {
         if (refSourceFallbackListenerInstalled) {
             return;
@@ -160,9 +207,17 @@ export const createObservers = (deps: {
                 }
                 const target = event.target;
                 const isRefSourceChange = target.dataset.refField === "source";
-                const isClipAudioSourceChange =
-                    target.dataset.clipField === "audioSource";
-                if (!isRefSourceChange && !isClipAudioSourceChange) {
+                const clipField = target.dataset.clipField;
+                const isClipAudioSourceChange = clipField === "audioSource";
+                const isControlNetSourceChange =
+                    clipField === "controlNetSource";
+                const isControlNetLoraChange = clipField === "controlNetLora";
+                if (
+                    !isRefSourceChange &&
+                    !isClipAudioSourceChange &&
+                    !isControlNetSourceChange &&
+                    !isControlNetLoraChange
+                ) {
                     return;
                 }
                 const liveEditor = document.getElementById(
@@ -175,8 +230,17 @@ export const createObservers = (deps: {
                     return;
                 }
 
+                videoStagesDebugLog(
+                    "observers",
+                    "ref-source fallback capture change → createEditor + handleFieldChange",
+                    {
+                        refField: target.dataset.refField ?? null,
+                        clipField: clipField ?? null,
+                        selectId: target.id || null,
+                    },
+                );
                 createEditor();
-                handleFieldChange(target);
+                handleFieldChange(target, event);
             },
             true,
         );

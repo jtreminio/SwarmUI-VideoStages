@@ -13,12 +13,17 @@ import {
     refUploadKey,
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
+import { videoStagesDebugLog } from "./debugLog";
 import {
+    type ApplyRefFieldDeps,
     applyRefField,
     applyStageField,
+    syncClipAudioLengthDisabled,
     syncClipAudioUploadFieldVisibility,
+    syncClipControlNetLengthDisabled,
     syncClipDurationDisabled,
     syncRefUploadFieldVisibility,
+    syncStageControlNetStrengthDisabled,
     syncStageUpscaleMethodDisabled,
 } from "./fieldBinding";
 import {
@@ -26,23 +31,49 @@ import {
     buildDefaultRef,
     buildDefaultStage,
     getReferenceFrameMax,
+    normalizeControlNetLora,
+    normalizeControlNetSource,
 } from "./normalization";
+import type { SaveStateOptions } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
 import { snapDurationToFps } from "./renderUtils";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
-import { isImageToVideoWorkflow } from "./swarmInputs";
+import { isImageToVideoWorkflow, isVideoStagesEnabled } from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
 
+const changeFieldEventsHandled = new WeakMap<Event, void>();
+
+type FieldChangeSourceEvent = Event & {
+    __videoStagesSimulateUserFieldChange?: boolean;
+};
+
+const resolveHostNotifyForHandleFieldChange = (
+    deps: DomEventsDeps,
+    sourceEvent: Event | null | undefined,
+): boolean => {
+    if (deps.shouldSuppressClipsHostNotify?.() === true) {
+        return false;
+    }
+    if (isVideoStagesEnabled()) {
+        return true;
+    }
+    const ev = sourceEvent as FieldChangeSourceEvent | null | undefined;
+    if (ev?.__videoStagesSimulateUserFieldChange === true) {
+        return true;
+    }
+    return ev?.isTrusted === true;
+};
+
 export type DomEventsDeps = {
-    /** Re-resolve `#videostages_stage_editor` after SwarmUI rebuilds the param panel. */
     ensureEditorRoot: (preferredRoot?: HTMLElement | null) => void;
     getEditor: () => HTMLElement | null;
     getClips: () => Clip[];
-    saveClips: (clips: Clip[]) => void;
+    saveClips: (clips: Clip[], options?: SaveStateOptions) => void;
     getState: () => VideoStagesConfig;
-    saveState: (state: VideoStagesConfig) => void;
+    saveState: (state: VideoStagesConfig, options?: SaveStateOptions) => void;
     scheduleClipsRefresh: () => void;
     refUploadCache: RefUploadCacheApi;
+    shouldSuppressClipsHostNotify?: () => boolean;
 };
 
 type FieldTarget = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -111,7 +142,7 @@ export const toggleClipExpanded = (
         return;
     }
     clips[clipIdx].expanded = !clips[clipIdx].expanded;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
     deps.scheduleClipsRefresh();
 };
 
@@ -142,7 +173,7 @@ export const handleRefUploadRemove = (
     clips[clipIdx].refs[refIdx].uploadFileName = null;
     clips[clipIdx].refs[refIdx].uploadedImage = null;
     deps.refUploadCache.delete(refUploadKey(clipIdx, refIdx));
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
 };
 
 export const handleClipAudioUploadRemove = (
@@ -166,51 +197,47 @@ export const handleClipAudioUploadRemove = (
     }
 
     clips[clipIdx].uploadedAudio = null;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
 };
 
-export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
-    const target = elem;
-    const clips = deps.getClips();
+const saveClipsAndRefresh = (clips: Clip[], deps: DomEventsDeps): void => {
+    deps.saveClips(clips, { notifyDomChange: true });
+    deps.scheduleClipsRefresh();
+};
 
-    const clipAction = target.dataset.clipAction;
-    const stageAction = target.dataset.stageAction;
-    const refAction = target.dataset.refAction;
+const addClip = (clips: Clip[]): void => {
+    clips.push(
+        buildDefaultClip(
+            getRootDefaults,
+            getDefaultStageModel,
+            isImageToVideoWorkflow(),
+        ),
+    );
+};
 
-    if (clipAction === "add-clip") {
-        clips.push(
-            buildDefaultClip(
-                getRootDefaults,
-                getDefaultStageModel,
-                isImageToVideoWorkflow(),
-            ),
-        );
-        deps.saveClips(clips);
-        deps.scheduleClipsRefresh();
-        return;
-    }
+type ClipActionContext = {
+    clips: Clip[];
+    clip: Clip;
+    clipIdx: number;
+    deps: DomEventsDeps;
+};
 
-    const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
-    if (clipIdx < 0 || clipIdx >= clips.length) {
-        deps.scheduleClipsRefresh();
-        return;
-    }
-    const clip = clips[clipIdx];
-
-    if (clipAction === "delete") {
+const applyClipAction = (
+    action: string,
+    { clips, clip, clipIdx, deps }: ClipActionContext,
+): boolean => {
+    if (action === "delete") {
         clips.splice(clipIdx, 1);
         deps.refUploadCache.reindexAfterClipDelete(clipIdx);
-        deps.saveClips(clips);
-        deps.scheduleClipsRefresh();
-        return;
+        return true;
     }
-    if (clipAction === "skip") {
+
+    if (action === "skip") {
         clip.skipped = !clip.skipped;
-        deps.saveClips(clips);
-        deps.scheduleClipsRefresh();
-        return;
+        return true;
     }
-    if (clipAction === "add-stage") {
+
+    if (action === "add-stage") {
         const previousStage =
             clip.stages.length > 0 ? clip.stages[clip.stages.length - 1] : null;
         clip.stages.push(
@@ -221,11 +248,10 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
                 clip.refs.length,
             ),
         );
-        deps.saveClips(clips);
-        deps.scheduleClipsRefresh();
-        return;
+        return true;
     }
-    if (clipAction === "add-ref") {
+
+    if (action === "add-ref") {
         clip.refs.push(buildDefaultRef());
         for (const stage of clip.stages) {
             stage.refStrengths.push(
@@ -235,49 +261,489 @@ export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
             );
         }
         deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
-        deps.saveClips(clips);
+        return true;
+    }
+
+    return false;
+};
+
+const applyRefAction = (
+    action: string,
+    elem: HTMLElement,
+    { clip, clipIdx, deps }: ClipActionContext,
+): boolean => {
+    const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+        return false;
+    }
+
+    if (action === "delete") {
+        clip.refs.splice(refIdx, 1);
+        for (const stage of clip.stages) {
+            if (refIdx < stage.refStrengths.length) {
+                stage.refStrengths.splice(refIdx, 1);
+            }
+        }
+        deps.refUploadCache.reindexAfterRefDelete(clipIdx, refIdx);
+    }
+
+    if (action === "toggle-collapse") {
+        const ref = clip.refs[refIdx];
+        ref.expanded = !ref.expanded;
+    }
+
+    return true;
+};
+
+const applyStageAction = (
+    action: string,
+    elem: HTMLElement,
+    { clip }: ClipActionContext,
+): boolean => {
+    const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
+    if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+        return false;
+    }
+
+    if (action === "delete") {
+        clip.stages.splice(stageIdx, 1);
+    }
+
+    const stage = clip.stages[stageIdx];
+    if (action === "skip") {
+        stage.skipped = !stage.skipped;
+    }
+
+    if (action === "toggle-collapse") {
+        stage.expanded = !stage.expanded;
+    }
+
+    return true;
+};
+
+export const handleAction = (elem: HTMLElement, deps: DomEventsDeps): void => {
+    const clips = deps.getClips();
+
+    const clipAction = elem.dataset.clipAction;
+    const stageAction = elem.dataset.stageAction;
+    const refAction = elem.dataset.refAction;
+
+    if (clipAction === "add-clip") {
+        addClip(clips);
+        saveClipsAndRefresh(clips, deps);
+        return;
+    }
+
+    const clipIdx = parseInt(elem.dataset.clipIdx ?? "-1", 10);
+    if (clipIdx < 0 || clipIdx >= clips.length) {
         deps.scheduleClipsRefresh();
+        return;
+    }
+
+    const clip = clips[clipIdx];
+    const actionContext = { clips, clip, clipIdx, deps };
+    if (clipAction && applyClipAction(clipAction, actionContext)) {
+        saveClipsAndRefresh(clips, deps);
         return;
     }
 
     if (refAction) {
-        const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
-        if (refIdx < 0 || refIdx >= clip.refs.length) {
+        if (!applyRefAction(refAction, elem, actionContext)) {
             deps.scheduleClipsRefresh();
             return;
         }
-        const ref = clip.refs[refIdx];
-        if (refAction === "delete") {
-            clip.refs.splice(refIdx, 1);
-            for (const stage of clip.stages) {
-                if (refIdx < stage.refStrengths.length) {
-                    stage.refStrengths.splice(refIdx, 1);
-                }
-            }
-            deps.refUploadCache.reindexAfterRefDelete(clipIdx, refIdx);
-        } else if (refAction === "toggle-collapse") {
-            ref.expanded = !ref.expanded;
-        }
-        deps.saveClips(clips);
-        deps.scheduleClipsRefresh();
+        saveClipsAndRefresh(clips, deps);
         return;
     }
 
     if (stageAction) {
-        const stageIdx = parseInt(target.dataset.stageIdx ?? "-1", 10);
-        if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+        if (!applyStageAction(stageAction, elem, actionContext)) {
             deps.scheduleClipsRefresh();
             return;
         }
-        const stage = clip.stages[stageIdx];
-        if (stageAction === "delete") {
-            clip.stages.splice(stageIdx, 1);
-        } else if (stageAction === "skip") {
-            stage.skipped = !stage.skipped;
-        } else if (stageAction === "toggle-collapse") {
-            stage.expanded = !stage.expanded;
+        saveClipsAndRefresh(clips, deps);
+    }
+};
+
+type FieldChangeRefresh = "always" | "change-only";
+
+type FieldChangeResult = {
+    handled: boolean;
+    applied: boolean;
+    refreshClips?: FieldChangeRefresh;
+    syncAudioUploadVisibility?: boolean;
+    syncClipLengthControls?: boolean;
+};
+
+const FIELD_CHANGE_NOT_HANDLED: FieldChangeResult = {
+    handled: false,
+    applied: false,
+};
+
+const FIELD_CHANGE_IGNORED: FieldChangeResult = {
+    handled: true,
+    applied: false,
+};
+
+const fieldChangeApplied = (
+    result: Omit<FieldChangeResult, "handled" | "applied"> = {},
+): FieldChangeResult => ({
+    handled: true,
+    applied: true,
+    ...result,
+});
+
+type DatasetFieldChangeContext = {
+    elem: FieldTarget;
+    clip: Clip;
+    clipIdx: number;
+    clipField: string | undefined;
+    stageField: string | undefined;
+    refField: string | undefined;
+    fieldBindingDeps: ApplyRefFieldDeps;
+};
+
+type ClipFieldChangeContext = {
+    elem: FieldTarget;
+    clip: Clip;
+    clipIdx: number;
+    field: string;
+    fieldBindingDeps: ApplyRefFieldDeps;
+};
+
+const setRelatedClipCheckbox = (
+    elem: FieldTarget,
+    field: string,
+    checked: boolean,
+    disabled?: boolean,
+): void => {
+    const checkbox = elem
+        .closest(".vs-clip-card")
+        ?.querySelector<HTMLInputElement>(`[data-clip-field="${field}"]`);
+    if (!checkbox) {
+        return;
+    }
+    checkbox.checked = checked;
+    if (disabled !== undefined) {
+        checkbox.disabled = disabled;
+    }
+};
+
+const syncClipLengthControls = (elem: FieldTarget, clip: Clip): void => {
+    const clipCard = elem.closest(".vs-clip-card");
+    if (!(clipCard instanceof HTMLElement)) {
+        return;
+    }
+    syncClipDurationDisabled(
+        clipCard,
+        clip.clipLengthFromAudio || clip.clipLengthFromControlNet,
+    );
+    syncClipAudioLengthDisabled(
+        clipCard,
+        !canUseClipLengthFromAudio(clip.audioSource) ||
+            clip.clipLengthFromControlNet,
+    );
+    syncClipControlNetLengthDisabled(
+        clipCard,
+        clip.controlNetLora === "" || clip.clipLengthFromAudio,
+    );
+};
+
+const applyClipDurationChange = ({
+    elem,
+    clip,
+}: ClipFieldChangeContext): FieldChangeResult => {
+    const value = parseFloat(elem.value);
+    if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
+        const rootDefaults = getRootDefaults();
+        clip.duration = snapDurationToFps(value, rootDefaults.fps);
+        const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+        for (const ref of clip.refs) {
+            ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
         }
-        deps.saveClips(clips);
+    }
+
+    return fieldChangeApplied({ refreshClips: "change-only" });
+};
+
+const applyClipAudioSourceChange = ({
+    elem,
+    clip,
+}: ClipFieldChangeContext): FieldChangeResult => {
+    clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
+
+    if (!isAceStepFunAudioSource(clip.audioSource)) {
+        clip.saveAudioTrack = false;
+        setRelatedClipCheckbox(elem, "saveAudioTrack", false);
+    }
+    if (!canUseClipLengthFromAudio(clip.audioSource)) {
+        clip.clipLengthFromAudio = false;
+        setRelatedClipCheckbox(elem, "clipLengthFromAudio", false);
+    }
+
+    return fieldChangeApplied({ syncAudioUploadVisibility: true });
+};
+
+const applyClipControlNetLoraChange = ({
+    elem,
+    clip,
+}: ClipFieldChangeContext): FieldChangeResult => {
+    clip.controlNetLora = normalizeControlNetLora(elem.value);
+    if (clip.controlNetLora === "") {
+        clip.clipLengthFromControlNet = false;
+        setRelatedClipCheckbox(elem, "clipLengthFromControlNet", false, true);
+    }
+
+    return fieldChangeApplied({
+        refreshClips: "always",
+        syncClipLengthControls: true,
+    });
+};
+
+const applyClipLengthFromAudioChange = ({
+    elem,
+    clip,
+}: ClipFieldChangeContext): FieldChangeResult => {
+    clip.clipLengthFromAudio =
+        elem instanceof HTMLInputElement &&
+        canUseClipLengthFromAudio(clip.audioSource) &&
+        !clip.clipLengthFromControlNet
+            ? !!elem.checked
+            : false;
+    if (elem instanceof HTMLInputElement && !clip.clipLengthFromAudio) {
+        elem.checked = false;
+    }
+    if (clip.clipLengthFromAudio) {
+        clip.clipLengthFromControlNet = false;
+        setRelatedClipCheckbox(elem, "clipLengthFromControlNet", false, true);
+    }
+
+    return fieldChangeApplied({ syncClipLengthControls: true });
+};
+
+const applyClipLengthFromControlNetChange = ({
+    elem,
+    clip,
+}: ClipFieldChangeContext): FieldChangeResult => {
+    clip.clipLengthFromControlNet =
+        elem instanceof HTMLInputElement &&
+        clip.controlNetLora !== "" &&
+        !clip.clipLengthFromAudio
+            ? !!elem.checked
+            : false;
+    if (elem instanceof HTMLInputElement && !clip.clipLengthFromControlNet) {
+        elem.checked = false;
+    }
+    if (clip.clipLengthFromControlNet) {
+        clip.clipLengthFromAudio = false;
+        setRelatedClipCheckbox(elem, "clipLengthFromAudio", false, true);
+    }
+
+    return fieldChangeApplied({ syncClipLengthControls: true });
+};
+
+const applyClipAudioUploadChange = ({
+    elem,
+    clip,
+    clipIdx,
+    fieldBindingDeps,
+}: ClipFieldChangeContext): FieldChangeResult => {
+    if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
+        return FIELD_CHANGE_IGNORED;
+    }
+    if (elem.dataset.filedata) {
+        clip.uploadedAudio = {
+            data: elem.dataset.filedata,
+            fileName: normalizeUploadFileName(
+                elem.dataset.filename ?? elem.files?.[0]?.name ?? null,
+            ),
+        };
+        return fieldChangeApplied();
+    }
+    if (elem.files?.length) {
+        cacheClipAudioSelection(clipIdx, elem, {
+            getClips: fieldBindingDeps.getClips,
+            saveClips: fieldBindingDeps.saveClips,
+        });
+        return FIELD_CHANGE_IGNORED;
+    }
+
+    clip.uploadedAudio = null;
+    return fieldChangeApplied();
+};
+
+const applyClipFieldChange = (
+    ctx: ClipFieldChangeContext,
+): FieldChangeResult => {
+    const { elem, clip, field } = ctx;
+
+    if (field === "duration") {
+        return applyClipDurationChange(ctx);
+    }
+
+    if (field === "audioSource") {
+        return applyClipAudioSourceChange(ctx);
+    }
+
+    if (field === "controlNetSource") {
+        clip.controlNetSource = normalizeControlNetSource(elem.value);
+        return fieldChangeApplied();
+    }
+
+    if (field === "controlNetLora") {
+        return applyClipControlNetLoraChange(ctx);
+    }
+
+    if (field === "saveAudioTrack") {
+        clip.saveAudioTrack =
+            elem instanceof HTMLInputElement &&
+            isAceStepFunAudioSource(clip.audioSource)
+                ? !!elem.checked
+                : false;
+        if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
+            elem.checked = false;
+        }
+        return fieldChangeApplied();
+    }
+
+    if (field === "reuseAudio") {
+        clip.reuseAudio = elem instanceof HTMLInputElement && !!elem.checked;
+        return fieldChangeApplied();
+    }
+
+    if (field === "clipLengthFromAudio") {
+        return applyClipLengthFromAudioChange(ctx);
+    }
+
+    if (field === "clipLengthFromControlNet") {
+        return applyClipLengthFromControlNetChange(ctx);
+    }
+
+    if (field === CLIP_AUDIO_UPLOAD_FIELD) {
+        return applyClipAudioUploadChange(ctx);
+    }
+
+    return FIELD_CHANGE_NOT_HANDLED;
+};
+
+const applyRefDatasetFieldChange = ({
+    elem,
+    clip,
+    refField,
+    fieldBindingDeps,
+}: DatasetFieldChangeContext): FieldChangeResult => {
+    if (!refField) {
+        return FIELD_CHANGE_NOT_HANDLED;
+    }
+
+    const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+        return FIELD_CHANGE_IGNORED;
+    }
+
+    applyRefField(clip, clip.refs[refIdx], refField, elem, fieldBindingDeps);
+    if (refField === "source") {
+        syncRefUploadFieldVisibility(
+            elem,
+            elem.value,
+            fieldBindingDeps.refUploadCache,
+        );
+    }
+
+    return fieldChangeApplied();
+};
+
+const applyStageDatasetFieldChange = ({
+    elem,
+    clip,
+    stageField,
+}: DatasetFieldChangeContext): FieldChangeResult => {
+    if (!stageField) {
+        return FIELD_CHANGE_NOT_HANDLED;
+    }
+
+    const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
+    if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+        return FIELD_CHANGE_IGNORED;
+    }
+
+    if (!isStageFieldTarget(elem)) {
+        return FIELD_CHANGE_IGNORED;
+    }
+
+    const stage = clip.stages[stageIdx];
+    const stageCard = elem.closest("section[data-stage-idx]");
+    const methodSelect = stageCard?.querySelector<HTMLSelectElement>(
+        '[data-stage-field="upscaleMethod"]',
+    );
+    const preservedUpscaleMethod =
+        stageField === "upscale"
+            ? (methodSelect?.value ?? stage.upscaleMethod)
+            : null;
+    applyStageField(stage, stageField, elem, getRootDefaults);
+
+    if (stageField === "upscale") {
+        if (preservedUpscaleMethod != null) {
+            stage.upscaleMethod = preservedUpscaleMethod;
+        }
+        syncStageUpscaleMethodDisabled(elem, stage.upscale);
+        if (methodSelect && preservedUpscaleMethod != null) {
+            methodSelect.value = preservedUpscaleMethod;
+        }
+    }
+
+    if (stageField === "model") {
+        syncStageControlNetStrengthDisabled(elem, stage, clip);
+    }
+
+    return fieldChangeApplied();
+};
+
+const applyDatasetFieldChange = (
+    ctx: DatasetFieldChangeContext,
+): FieldChangeResult => {
+    const { elem, clip, clipIdx, clipField, fieldBindingDeps } = ctx;
+
+    if (clipField != null) {
+        const clipResult = applyClipFieldChange({
+            elem,
+            clip,
+            clipIdx,
+            field: clipField,
+            fieldBindingDeps,
+        });
+        if (clipResult.handled) {
+            return clipResult;
+        }
+    }
+
+    const refResult = applyRefDatasetFieldChange(ctx);
+    if (refResult.handled) {
+        return refResult;
+    }
+
+    return applyStageDatasetFieldChange(ctx);
+};
+
+const finishFieldChange = (
+    result: FieldChangeResult,
+    elem: FieldTarget,
+    clip: Clip,
+    deps: DomEventsDeps,
+    fromInputEvent: boolean,
+): void => {
+    if (result.syncAudioUploadVisibility) {
+        syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
+    }
+
+    if (result.syncClipLengthControls) {
+        syncClipLengthControls(elem, clip);
+    }
+
+    if (
+        result.refreshClips === "always" ||
+        (result.refreshClips === "change-only" && !fromInputEvent)
+    ) {
         deps.scheduleClipsRefresh();
     }
 };
@@ -286,13 +752,22 @@ export const handleFieldChange = (
     elem: EventTarget | null,
     deps: DomEventsDeps,
     fromInputEvent = false,
+    sourceEvent: Event | null | undefined = undefined,
 ): void => {
     if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
         return;
     }
+
+    if (
+        sourceEvent instanceof Event &&
+        sourceEvent.type === "change" &&
+        changeFieldEventsHandled.has(sourceEvent)
+    ) {
+        return;
+    }
+
     const state = deps.getState();
     const clips = state.clips;
-    const defaults = getRootDefaults();
 
     const clipField = elem.dataset.clipField;
     const stageField = elem.dataset.stageField;
@@ -311,138 +786,36 @@ export const handleFieldChange = (
         saveClips: deps.saveClips,
     };
 
-    if (clipField === "duration") {
-        const value = parseFloat(elem.value);
-        if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
-            clip.duration = snapDurationToFps(value, defaults.fps);
-            const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-            for (const ref of clip.refs) {
-                ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
-            }
-        }
-    } else if (clipField === "audioSource") {
-        clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
-        if (!isAceStepFunAudioSource(clip.audioSource)) {
-            clip.saveAudioTrack = false;
-            const saveAudioTrack = elem
-                .closest(".vs-clip-card")
-                ?.querySelector<HTMLInputElement>(
-                    '[data-clip-field="saveAudioTrack"]',
-                );
-            if (saveAudioTrack) {
-                saveAudioTrack.checked = false;
-            }
-        }
-        if (!canUseClipLengthFromAudio(clip.audioSource)) {
-            clip.clipLengthFromAudio = false;
-            const clipLengthFromAudio = elem
-                .closest(".vs-clip-card")
-                ?.querySelector<HTMLInputElement>(
-                    '[data-clip-field="clipLengthFromAudio"]',
-                );
-            if (clipLengthFromAudio) {
-                clipLengthFromAudio.checked = false;
-            }
-        }
-    } else if (clipField === "saveAudioTrack") {
-        clip.saveAudioTrack =
-            elem instanceof HTMLInputElement &&
-            isAceStepFunAudioSource(clip.audioSource)
-                ? !!elem.checked
-                : false;
-        if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
-            elem.checked = false;
-        }
-    } else if (clipField === "reuseAudio") {
-        clip.reuseAudio = elem instanceof HTMLInputElement && !!elem.checked;
-    } else if (clipField === "clipLengthFromAudio") {
-        clip.clipLengthFromAudio =
-            elem instanceof HTMLInputElement &&
-            canUseClipLengthFromAudio(clip.audioSource)
-                ? !!elem.checked
-                : false;
-        if (elem instanceof HTMLInputElement && !clip.clipLengthFromAudio) {
-            elem.checked = false;
-        }
-    } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
-        if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
-            return;
-        }
-        if (elem.dataset.filedata) {
-            clip.uploadedAudio = {
-                data: elem.dataset.filedata,
-                fileName: normalizeUploadFileName(
-                    elem.dataset.filename ?? elem.files?.[0]?.name ?? null,
-                ),
-            };
-        } else if (elem.files?.length) {
-            cacheClipAudioSelection(clipIdx, elem, {
-                getClips: deps.getClips,
-                saveClips: deps.saveClips,
-            });
-            return;
-        } else {
-            clip.uploadedAudio = null;
-        }
-    } else if (refField) {
-        const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
-        if (refIdx < 0 || refIdx >= clip.refs.length) {
-            return;
-        }
-        applyRefField(
-            clip,
-            clip.refs[refIdx],
-            refField,
-            elem,
-            fieldBindingDeps,
-        );
-        if (refField === "source") {
-            syncRefUploadFieldVisibility(elem, elem.value, deps.refUploadCache);
-        }
-    } else if (stageField) {
-        const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
-        if (stageIdx < 0 || stageIdx >= clip.stages.length) {
-            return;
-        }
-        if (!isStageFieldTarget(elem)) {
-            return;
-        }
-        const stage = clip.stages[stageIdx];
-        const stageCard = elem.closest("section[data-stage-idx]");
-        const methodSelect = stageCard?.querySelector<HTMLSelectElement>(
-            '[data-stage-field="upscaleMethod"]',
-        );
-        const preservedUpscaleMethod =
-            stageField === "upscale"
-                ? (methodSelect?.value ?? stage.upscaleMethod)
-                : null;
-        applyStageField(stage, stageField, elem, getRootDefaults);
-        if (stageField === "upscale") {
-            if (preservedUpscaleMethod != null) {
-                stage.upscaleMethod = preservedUpscaleMethod;
-            }
-            syncStageUpscaleMethodDisabled(elem, stage.upscale);
-            if (methodSelect && preservedUpscaleMethod != null) {
-                methodSelect.value = preservedUpscaleMethod;
-            }
-        }
-    } else {
+    const fieldChangeResult = applyDatasetFieldChange({
+        elem,
+        clip,
+        clipIdx,
+        clipField,
+        stageField,
+        refField,
+        fieldBindingDeps,
+    });
+    if (!fieldChangeResult.applied) {
         return;
     }
 
-    deps.saveState(state);
-    if (clipField === "audioSource") {
-        syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
+    videoStagesDebugLog("domEvents", "handleFieldChange → saveState", {
+        clipIdx,
+        clipField: clipField ?? null,
+        stageField: stageField ?? null,
+        refField: refField ?? null,
+        tag: elem instanceof HTMLElement ? elem.tagName : null,
+        fromInputEvent,
+    });
+    const notifyDomChange = resolveHostNotifyForHandleFieldChange(
+        deps,
+        sourceEvent,
+    );
+    deps.saveState(state, { notifyDomChange });
+    if (sourceEvent instanceof Event && sourceEvent.type === "change") {
+        changeFieldEventsHandled.set(sourceEvent);
     }
-    if (clipField === "clipLengthFromAudio") {
-        const clipCard = elem.closest(".vs-clip-card");
-        if (clipCard instanceof HTMLElement) {
-            syncClipDurationDisabled(clipCard, clip.clipLengthFromAudio);
-        }
-    }
-    if (clipField === "duration" && !fromInputEvent) {
-        deps.scheduleClipsRefresh();
-    }
+    finishFieldChange(fieldChangeResult, elem, clip, deps, fromInputEvent);
 };
 
 let latestDomEventDeps: DomEventsDeps | null = null;
@@ -539,7 +912,7 @@ const observeMediaFileDatasetChanges = (
             if (!editor.contains(mutation.target)) {
                 continue;
             }
-            handleFieldChange(mutation.target, deps);
+            handleFieldChange(mutation.target, deps, false, undefined);
         }
     }).observe(editor, {
         subtree: true,
@@ -571,7 +944,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
     stageEditorsWithFieldListeners.add(editor);
 
     editor.addEventListener("change", (event: Event) => {
-        handleFieldChange(event.target, deps);
+        handleFieldChange(event.target, deps, false, event);
     });
     editor.addEventListener(
         "change",
@@ -583,7 +956,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
             if (event.bubbles) {
                 return;
             }
-            handleFieldChange(inputTarget, deps, true);
+            handleFieldChange(inputTarget, deps, true, event);
         },
         true,
     );
@@ -593,7 +966,7 @@ export const attachEventListeners = (deps: DomEventsDeps): void => {
             return;
         }
         if (isSliderNumericInput(inputTarget)) {
-            handleFieldChange(inputTarget, deps, true);
+            handleFieldChange(inputTarget, deps, true, event);
         }
     });
     editor.addEventListener("focusout", (event: FocusEvent) => {

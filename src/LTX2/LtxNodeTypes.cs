@@ -1,6 +1,5 @@
 namespace VideoStages.LTX2;
 
-/// <summary>Comfy node <c>class_type</c> strings used by the LTX2 / LTXV VideoStages path.</summary>
 internal static class LtxNodeTypes
 {
     public const string LTXVSeparateAVLatent = "LTXVSeparateAVLatent";
@@ -11,6 +10,8 @@ internal static class LtxNodeTypes
     public const string LTXVPreprocess = "LTXVPreprocess";
     public const string LTXVImgToVideoInplace = "LTXVImgToVideoInplace";
     public const string LTXVAddGuide = "LTXVAddGuide";
+    public const string LTXAddVideoICLoRAGuide = "LTXAddVideoICLoRAGuide";
+    public const string LTXICLoRALoaderModelOnly = "LTXICLoRALoaderModelOnly";
     public const string LTXVCropGuides = "LTXVCropGuides";
     public const string LTXVLatentUpsampler = "LTXVLatentUpsampler";
     public const string LTXVConditioning = "LTXVConditioning";

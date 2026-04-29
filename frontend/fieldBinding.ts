@@ -10,10 +10,14 @@ import {
     REF_FRAME_MIN,
     refUploadKey,
 } from "./constants";
+import { isLtxVideoModelValue } from "./ltxModel";
 import {
     getReferenceFrameMax,
+    normalizeControlNetLora,
+    normalizeStageControlNetStrengthValue,
     normalizeStageRefStrengthValue,
 } from "./normalization";
+import type { SaveStateOptions } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
 import {
     type Clip,
@@ -24,11 +28,11 @@ import {
     type Stage,
 } from "./types";
 
-type ApplyRefFieldDeps = {
+export type ApplyRefFieldDeps = {
     getRootDefaults: () => RootDefaults;
     refUploadCache: RefUploadCacheApi;
     getClips: () => Clip[];
-    saveClips: (clips: Clip[]) => void;
+    saveClips: (clips: Clip[], options?: SaveStateOptions) => void;
 };
 
 const handleUploadFileName = (
@@ -81,6 +85,26 @@ const handleUploadFileName = (
         getClips,
         saveClips,
     });
+};
+
+export const syncStageControlNetStrengthDisabled = (
+    target: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+    stage: Stage,
+    clip: Clip,
+): void => {
+    const stageCard = target.closest("section[data-stage-idx]");
+    if (!(stageCard instanceof HTMLElement)) {
+        return;
+    }
+    const disabled =
+        normalizeControlNetLora(clip.controlNetLora) !== "" &&
+        !isLtxVideoModelValue(stage.model);
+    const sliders = stageCard.querySelectorAll<HTMLInputElement>(
+        '[data-stage-field="controlNetStrength"]',
+    );
+    for (let i = 0; i < sliders.length; i++) {
+        sliders[i].disabled = disabled;
+    }
 };
 
 export const syncStageUpscaleMethodDisabled = (
@@ -178,10 +202,63 @@ export const syncClipAudioUploadFieldVisibility = (
     if (lengthFromAudio && !canUseAudioLength) {
         lengthFromAudio.checked = false;
     }
+    const controlNetLora = clipCard.querySelector<
+        HTMLInputElement | HTMLSelectElement
+    >('[data-clip-field="controlNetLora"]');
+    const lengthFromControlNet = clipCard.querySelector<HTMLInputElement>(
+        '[data-clip-field="clipLengthFromControlNet"]',
+    );
+    const controlNetLengthDisabled =
+        normalizeControlNetLora(controlNetLora?.value ?? "") === "" ||
+        !!lengthFromAudio?.checked;
+    syncClipAudioLengthDisabled(
+        clipCard,
+        !canUseAudioLength || !!lengthFromControlNet?.checked,
+    );
+    syncClipControlNetLengthDisabled(clipCard, controlNetLengthDisabled);
     syncClipDurationDisabled(
         clipCard,
-        canUseAudioLength && !!lengthFromAudio?.checked,
+        (canUseAudioLength && !!lengthFromAudio?.checked) ||
+            (!controlNetLengthDisabled && !!lengthFromControlNet?.checked),
     );
+};
+
+export const syncClipAudioLengthDisabled = (
+    clipCard: HTMLElement,
+    disabled: boolean,
+): void => {
+    const lengthFromAudio = clipCard.querySelector<HTMLInputElement>(
+        '[data-clip-field="clipLengthFromAudio"]',
+    );
+    if (lengthFromAudio) {
+        lengthFromAudio.disabled = disabled;
+        if (disabled) {
+            lengthFromAudio.checked = false;
+        }
+    }
+    const lengthField = clipCard.querySelector<HTMLElement>(
+        ".vs-clip-length-from-audio-field",
+    );
+    lengthField?.classList.toggle("vs-audio-length-disabled", disabled);
+};
+
+export const syncClipControlNetLengthDisabled = (
+    clipCard: HTMLElement,
+    disabled: boolean,
+): void => {
+    const lengthFromControlNet = clipCard.querySelector<HTMLInputElement>(
+        '[data-clip-field="clipLengthFromControlNet"]',
+    );
+    if (lengthFromControlNet) {
+        lengthFromControlNet.disabled = disabled;
+        if (disabled) {
+            lengthFromControlNet.checked = false;
+        }
+    }
+    const lengthField = clipCard.querySelector<HTMLElement>(
+        ".vs-clip-length-from-controlnet-field",
+    );
+    lengthField?.classList.toggle("vs-controlnet-length-disabled", disabled);
 };
 
 export const syncClipDurationDisabled = (
@@ -301,6 +378,18 @@ export const applyStageField = (
                 defaults.controlMin,
                 defaults.controlMax,
             );
+        }
+        return;
+    }
+
+    if (field === "controlNetStrength") {
+        if (target.disabled) {
+            return;
+        }
+        const value = parseFloat(target.value);
+        if (Number.isFinite(value)) {
+            stage.controlNetStrength =
+                normalizeStageControlNetStrengthValue(value);
         }
         return;
     }

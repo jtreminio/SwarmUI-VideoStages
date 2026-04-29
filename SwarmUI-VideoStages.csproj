@@ -3,6 +3,7 @@
   <PropertyGroup>
     <AssemblyName>SwarmUI-VideoStages</AssemblyName>
     <TargetFramework>net8.0</TargetFramework>
+    <Nullable>annotations</Nullable>
   </PropertyGroup>
 
   <Import Project="../../SwarmUI.extension.props" />
@@ -14,6 +15,10 @@
       <Properties>_EnableMacOSCodeSign=false;StaticWebAssetsEnabled=false</Properties>
       <GlobalPropertiesToRemove>BaseIntermediateOutputPath;TargetName</GlobalPropertiesToRemove>
     </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SwarmUI-VideoStages.Tests" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+    buildDefaultClip,
     buildDefaultRef,
     normalizeClip,
     normalizeRef,
@@ -13,9 +14,11 @@ import {
     type RootDefaults,
 } from "./types";
 
-const stubDefaults = (): RootDefaults => ({
+const getRootDefaults = (): RootDefaults => ({
     modelValues: ["ltx"],
     modelLabels: ["LTX"],
+    loraValues: ["ltx-ic-lora.safetensors"],
+    loraLabels: ["LTX IC LoRA"],
     vaeValues: ["Automatic"],
     vaeLabels: ["Automatic"],
     samplerValues: ["euler"],
@@ -46,9 +49,14 @@ const stubDefaults = (): RootDefaults => ({
     cfgScaleStep: 0.5,
 });
 
-const getRootDefaults = (): RootDefaults => stubDefaults();
 const getDefaultStageModel = (modelValues: string[]): string =>
     modelValues[0] ?? "";
+
+const minimalStageRaw = {
+    model: "ltx",
+    sampler: "euler",
+    scheduler: "normal",
+} as const;
 
 describe("normalization", () => {
     it("readRawStageProp prefers camelCase then PascalCase", () => {
@@ -99,15 +107,113 @@ describe("normalization", () => {
         expect(clip.stages[0].refStrengths).toEqual([0.3]);
     });
 
+    it("normalizeClip clamps and defaults stage ControlNet strength", () => {
+        const clip = normalizeClip(
+            {
+                stages: [{ model: "ltx", controlNetStrength: 1.5 }, {}],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.stages[0].controlNetStrength).toBe(1);
+        expect(clip.stages[1].controlNetStrength).toBe(1);
+
+        const defaultClip = buildDefaultClip(
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(defaultClip.stages[0].controlNetStrength).toBe(0.8);
+
+        const rawDefaultClip = normalizeClip(
+            {
+                stages: [{}],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(rawDefaultClip.stages[0].controlNetStrength).toBe(0.8);
+    });
+
+    it("normalizeClip defaults and normalizes ControlNet source", () => {
+        const defaultClip = normalizeClip(
+            {},
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(defaultClip.controlNetSource).toBe("ControlNet 1");
+        expect(defaultClip.controlNetLora).toBe("");
+
+        const controlNetRaw = {
+            ControlNetSource: "controlnet3",
+            ControlNetLora: " ltx-ic-lora.safetensors ",
+        };
+        const controlNetClip = normalizeClip(
+            controlNetRaw,
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(controlNetClip.controlNetSource).toBe("ControlNet 3");
+        expect(controlNetClip.controlNetLora).toBe("ltx-ic-lora.safetensors");
+    });
+
+    it("normalizeClip maps Swarm (None) ControlNet LoRA token to empty", () => {
+        const clip = normalizeClip(
+            { controlNetLora: " ( None ) " },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.controlNetLora).toBe("");
+    });
+
+    it("normalizeClip lets audio length override stored ControlNet length", () => {
+        const clip = normalizeClip(
+            {
+                audioSource: "Upload",
+                controlNetLora: "ltx-ic-lora.safetensors",
+                clipLengthFromAudio: true,
+                clipLengthFromControlNet: true,
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.clipLengthFromAudio).toBe(true);
+        expect(clip.clipLengthFromControlNet).toBe(false);
+    });
+
+    it("normalizeClip ignores ControlNet length when ControlNet LoRA is blank", () => {
+        const clip = normalizeClip(
+            {
+                audioSource: "Upload",
+                controlNetLora: "(None)",
+                clipLengthFromAudio: true,
+                clipLengthFromControlNet: true,
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.controlNetLora).toBe("");
+        expect(clip.clipLengthFromAudio).toBe(true);
+        expect(clip.clipLengthFromControlNet).toBe(false);
+    });
+
+    it("normalizeClip reads camelCase controlNetSource and controlNetLora from stored JSON", () => {
+        const clip = normalizeClip(
+            {
+                controlNetSource: "ControlNet 2",
+                controlNetLora: " detail-lora.safetensors ",
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.controlNetSource).toBe("ControlNet 2");
+        expect(clip.controlNetLora).toBe("detail-lora.safetensors");
+    });
+
     it("normalizeStage reads PascalCase upscale fields for non-first stage", () => {
         const stage0 = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
-            {
-                model: "ltx",
-                sampler: "euler",
-                scheduler: "normal",
-            },
+            { ...minimalStageRaw },
             null,
             0,
             0,
@@ -116,11 +222,9 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
             {
+                ...minimalStageRaw,
                 Upscale: 2,
                 UpscaleMethod: "pixel-bicubic",
-                model: "ltx",
-                sampler: "euler",
-                scheduler: "normal",
             },
             stage0,
             0,
@@ -135,10 +239,8 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
             {
+                ...minimalStageRaw,
                 Control: 0.4,
-                model: "ltx",
-                sampler: "euler",
-                scheduler: "normal",
             },
             null,
             0,
@@ -152,11 +254,7 @@ describe("normalization", () => {
         const stage0 = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
-            {
-                model: "ltx",
-                sampler: "euler",
-                scheduler: "normal",
-            },
+            { ...minimalStageRaw },
             null,
             0,
             0,
@@ -165,10 +263,8 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
             {
+                ...minimalStageRaw,
                 Control: 0.4,
-                model: "ltx",
-                sampler: "euler",
-                scheduler: "normal",
             },
             stage0,
             0,

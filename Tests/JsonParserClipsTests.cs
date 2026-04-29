@@ -41,9 +41,11 @@ public class JsonParserClipsTests
         IEnumerable<JObject> refs = null,
         bool skipped = false,
         double duration = 3.0,
-        string audioSource = VideoStagesExtension.AudioSourceNative,
+        string audioSource = Constants.AudioSourceNative,
+        string controlNetSource = Constants.ControlNetSourceOne,
         bool saveAudioTrack = false,
         bool clipLengthFromAudio = false,
+        bool clipLengthFromControlNet = false,
         bool reuseAudio = false,
         int width = 1024,
         int height = 768,
@@ -54,8 +56,10 @@ public class JsonParserClipsTests
             ["Skipped"] = skipped,
             ["Duration"] = duration,
             ["AudioSource"] = audioSource,
+            ["ControlNetSource"] = controlNetSource,
             ["SaveAudioTrack"] = saveAudioTrack,
             ["ClipLengthFromAudio"] = clipLengthFromAudio,
+            ["ClipLengthFromControlNet"] = clipLengthFromControlNet,
             ["ReuseAudio"] = reuseAudio,
             ["Width"] = width,
             ["Height"] = height,
@@ -117,8 +121,10 @@ public class JsonParserClipsTests
                 stages: [MakeStage("model-a")],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 12, fromEnd: true)],
                 duration: 4.0,
+                controlNetSource: Constants.ControlNetSourceTwo,
                 saveAudioTrack: true,
                 clipLengthFromAudio: true,
+                clipLengthFromControlNet: true,
                 reuseAudio: true,
                 width: 800,
                 height: 600),
@@ -133,8 +139,10 @@ public class JsonParserClipsTests
         Assert.Equal(2, clips.Count);
         Assert.Equal(0, clips[0].Id);
         Assert.Equal(4.0, clips[0].DurationSeconds);
+        Assert.Equal(Constants.ControlNetSourceTwo, clips[0].ControlNetSource);
         Assert.True(clips[0].SaveAudioTrack);
-        Assert.True(clips[0].ClipLengthFromAudio);
+        Assert.False(clips[0].ClipLengthFromAudio);
+        Assert.True(clips[0].ClipLengthFromControlNet);
         Assert.True(clips[0].ReuseAudio);
         Assert.Equal(800, clips[0].Width);
         Assert.Equal(600, clips[0].Height);
@@ -163,7 +171,7 @@ public class JsonParserClipsTests
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
-                    audioSource: VideoStagesExtension.AudioSourceUpload)
+                    audioSource: Constants.AudioSourceUpload)
             ]));
         JsonParser parser = BuildParser(json);
 
@@ -172,7 +180,7 @@ public class JsonParserClipsTests
         Assert.Equal(1344, config.Width);
         Assert.Equal(832, config.Height);
         Assert.Single(config.Clips);
-        Assert.Equal(VideoStagesExtension.AudioSourceUpload, config.Clips[0].AudioSource);
+        Assert.Equal(Constants.AudioSourceUpload, config.Clips[0].AudioSource);
     }
 
     [Fact]
@@ -181,11 +189,11 @@ public class JsonParserClipsTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
-                audioSource: VideoStagesExtension.AudioSourceUpload,
+                audioSource: Constants.AudioSourceUpload,
                 uploadedAudio: MakeUploadedAudio(fileName: "first.wav")),
             MakeClip(
                 stages: [MakeStage("model-b")],
-                audioSource: VideoStagesExtension.AudioSourceUpload,
+                audioSource: Constants.AudioSourceUpload,
                 uploadedAudio: MakeUploadedAudio(fileName: "second.wav"))
         ));
         JsonParser parser = BuildParser(json);
@@ -212,7 +220,7 @@ public class JsonParserClipsTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
-                audioSource: VideoStagesExtension.AudioSourceUpload,
+                audioSource: Constants.AudioSourceUpload,
                 uploadedAudio: new JObject
                 {
                     ["Data"] = "inputs/_comfy1/clip_part02.wav",
@@ -316,14 +324,38 @@ public class JsonParserClipsTests
 
         Assert.Single(stages);
         Assert.Equal(0, stages[0].ClipId);
-        Assert.Equal(VideoStagesExtension.AudioSourceNative, stages[0].ClipAudioSource);
+        Assert.Equal(Constants.AudioSourceNative, stages[0].ClipAudioSource);
+        Assert.Equal(Constants.ControlNetSourceOne, stages[0].ClipControlNetSource);
         Assert.False(stages[0].ClipLengthFromAudio);
+        Assert.False(stages[0].ClipLengthFromControlNet);
         Assert.False(stages[0].ClipReuseAudio);
         Assert.Equal(0, stages[0].ClipStageIndex);
         Assert.Equal(1, stages[0].ClipStageCount);
         Assert.Equal(1280, stages[0].ClipWidth);
         Assert.Equal(720, stages[0].ClipHeight);
         Assert.Equal(97, stages[0].ClipFrames);
+    }
+
+    [Fact]
+    public void ParseStages_ControlNetLength_PropagatesToStageAndDisablesAudioLength()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
+            width: 1280,
+            height: 720,
+            clips: [
+                MakeClip(
+                    stages: [MakeStage("model-a")],
+                    audioSource: Constants.AudioSourceUpload,
+                    clipLengthFromAudio: true,
+                    clipLengthFromControlNet: true)
+            ]));
+        JsonParser parser = BuildParser(json);
+
+        List<JsonParser.StageSpec> stages = parser.ParseStages();
+
+        Assert.Single(stages);
+        Assert.False(stages[0].ClipLengthFromAudio);
+        Assert.True(stages[0].ClipLengthFromControlNet);
     }
 
     [Fact]
@@ -583,6 +615,20 @@ public class JsonParserClipsTests
     }
 
     [Fact]
+    public void ParseStages_FlattenedStagesIncludeControlNetStrength()
+    {
+        JObject stage = MakeStage("model-a");
+        stage["ControlNetStrength"] = 0.35;
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [stage])));
+
+        JsonParser parser = BuildParser(json);
+
+        JsonParser.StageSpec flattened = Assert.Single(parser.ParseStages());
+        Assert.Equal(0.35, flattened.ControlNetStrength);
+    }
+
+    [Fact]
     public void ParseStages_PadsMissingRefStrengthsToMatchReferenceCount()
     {
         JObject stage = MakeStage("model-a");
@@ -599,6 +645,6 @@ public class JsonParserClipsTests
         Assert.Equal(2, flattened.RefStrengths.Count);
         Assert.All(
             flattened.RefStrengths,
-            strength => Assert.Equal(VideoStagesExtension.DefaultStageRefStrength, strength));
+            strength => Assert.Equal(Constants.DefaultStageRefStrength, strength));
     }
 }

@@ -5,14 +5,6 @@ import {
 } from "./constants";
 import { utils } from "./utils";
 
-/**
- * SwarmUI may render long-text params as either an `<input>` or a `<textarea>`
- * (decided by string length / param hints). The clips JSON routinely overflows
- * the input threshold, so we must accept both — otherwise `getInputElement`
- * returns null, `saveState` silently skips writing, and the polling loop
- * detects an apparent value loss every 150ms and tears down the editor
- * mid-slider-drag.
- */
 export const getClipsInput = ():
     | HTMLInputElement
     | HTMLTextAreaElement
@@ -76,10 +68,6 @@ export const getCoreDimension = (field: "width" | "height"): number | null => {
     return value >= ROOT_DIMENSION_MIN ? value : null;
 };
 
-/**
- * Seeds registered Root width/height from core inputs while this slider is
- * still below {@link ROOT_DIMENSION_MIN}; above that, manual values stick.
- */
 export const seedRegisteredDimensionsFromCore = (
     notifyDomChange = true,
 ): void => {

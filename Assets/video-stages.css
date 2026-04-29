@@ -1,17 +1,7 @@
-/* VideoStages clip editor.
- *
- * Clip cards reuse SwarmUI's native `.input-group` structure (with the
- * `input-group-shrinkable` header) so they inherit the platform's
- * collapse-on-click behavior, header-label legend look, and themed border /
- * background. Field rows inside are produced by `make*Input` helpers so they
- * also inherit native field styling automatically.
- *
- * Only a handful of bespoke pieces remain here:
- *   - inline action buttons inside the clip header (skip / delete),
- *   - the duration / width / height grid,
- *   - the smaller secondary cards used for reference images and stages,
- *   - the dashed "+ Add ..." pill button (intentionally distinct from native).
- */
+/* VideoStages clip editor: clip cards use SwarmUI `.input-group` + shrinkable
+ * headers; inner rows are native `auto-input` markup. This file only styles
+ * editor-specific layout (section blocks, ref/stage cards, header actions,
+ * add buttons, empty state, inline errors, disabled tint). */
 
 #videostages_stage_editor {
     --vs-transition-surface: border-color 0.15s, background 0.15s,
@@ -36,13 +26,7 @@
     min-width: 0;
 }
 
-/* ------------------------------------------------------------------
- * Clip cards (native `.input-group` adjustments)
- *
- * `.vs-clip-card` is added to a native `.input-group` so we can override the
- * default `max-width: 51rem` (we always want full width inside our editor)
- * and dim skipped clips without touching unrelated parameter groups.
- * ------------------------------------------------------------------ */
+/* Clip cards: full width vs default input-group max-width; skip-state tint. */
 
 #videostages_stage_editor .vs-clip-card.input-group {
     display: block;
@@ -80,22 +64,12 @@
     flex-shrink: 0;
 }
 
-/* ------------------------------------------------------------------
- * Clip body: per-clip duration / width / height + sub-sections
- *
- * Keep SwarmUI's native `.input-group-content` flex-wrap layout so the direct
- * `.auto-input` children receive the platform's own spacing and sizing rules.
- * The custom section blocks opt into a new row via `flex-basis: 100%`.
- * ------------------------------------------------------------------ */
-
 #videostages_stage_editor .vs-clip-card-body.input-group-content {
     max-width: 100%;
     padding: 8px 10px 10px;
 }
 
-/* ------------------------------------------------------------------
- * Sections inside a clip (Reference Images / Stages)
- * ------------------------------------------------------------------ */
+/* Bordered panels (AUDIO / CONTROLNET / refs / stages). */
 
 #videostages_stage_editor .vs-section-block {
     flex-basis: 100%;
@@ -127,9 +101,7 @@
     letter-spacing: 0.06em;
 }
 
-/* ------------------------------------------------------------------
- * Card list (refs and stages share the same row treatment)
- * ------------------------------------------------------------------ */
+/* Ref and stage cards stacked vertically. */
 
 #videostages_stage_editor .vs-card-list {
     display: flex;
@@ -208,12 +180,6 @@
     padding-bottom: 0.5rem;
 }
 
-/* ------------------------------------------------------------------
- * Native helper fields inside clip/ref/stage bodies. The actual spacing and
- * control chrome come from SwarmUI's own `.input-group-content > .auto-input`
- * and `.input-group ...` rules; we only remove the old extension-level caps.
- * ------------------------------------------------------------------ */
-
 #videostages_stage_editor .vs-clip-card-body.input-group-content > .auto-input,
 #videostages_stage_editor .vs-card-body.input-group-content > .auto-input {
     flex: 1 1 17rem;
@@ -221,12 +187,6 @@
     min-width: min(17rem, 100%);
     max-width: 100%;
     overflow: visible;
-}
-
-#videostages_stage_editor .vs-clip-card-body.input-group-content > .input-group,
-#videostages_stage_editor .vs-card-body.input-group-content > .input-group {
-    min-width: min(70%, 100%);
-    max-width: 100%;
 }
 
 #videostages_stage_editor .vs-clip-card-body label,
@@ -253,31 +213,17 @@
     max-width: 100%;
 }
 
-#videostages_stage_editor .vs-card-body .auto-dropdown:disabled {
-    opacity: 0.45;
-    color: var(--text-soft);
-}
-
-#videostages_stage_editor .vs-card-body .auto-dropdown-box:has(
-    .auto-dropdown:disabled
+#videostages_stage_editor :disabled,
+#videostages_stage_editor :is(
+    .auto-dropdown-box:has(.auto-dropdown:disabled),
+    .auto-checkbox-box:has(.auto-checkbox:disabled),
+    .auto-slider-box:has(
+        :is(.auto-slider-number, .auto-slider-range):disabled
+    )
 ) {
-    opacity: 0.7;
-}
-
-#videostages_stage_editor .auto-slider-number:disabled,
-#videostages_stage_editor .auto-slider-range:disabled {
     opacity: 0.45;
     color: var(--text-soft);
 }
-
-#videostages_stage_editor .auto-slider-box:has(.auto-slider-number:disabled),
-#videostages_stage_editor .auto-slider-box:has(.auto-slider-range:disabled) {
-    opacity: 0.7;
-}
-
-/* ------------------------------------------------------------------
- * Small action buttons in headers (collapse / skip / delete)
- * ------------------------------------------------------------------ */
 
 #videostages_stage_editor .vs-btn-tiny {
     height: 22px;
@@ -311,8 +257,7 @@
 
 #videostages_stage_editor .vs-clip-card:has([data-clip-action="delete"]:hover),
 #videostages_stage_editor .vs-ref-card:has([data-ref-action="delete"]:hover),
-#videostages_stage_editor
-    .vs-card[data-stage-idx]:has([data-stage-action="delete"]:hover) {
+#videostages_stage_editor .vs-card[data-stage-idx]:has([data-stage-action="delete"]:hover) {
     border-color: color-mix(in srgb, var(--red) 50%, transparent);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 40%, transparent);
 }
@@ -347,11 +292,6 @@
     );
 }
 
-/* ------------------------------------------------------------------
- * "+ Add ..." dashed pill - intentionally distinct from native styling
- * (per the timeline-ui mockup).
- * ------------------------------------------------------------------ */
-
 #videostages_stage_editor .vs-add-btn {
     display: inline-flex;
     align-items: center;
@@ -382,20 +322,12 @@
     height: 36px;
 }
 
-/* ------------------------------------------------------------------
- * Reference-image inline error
- * ------------------------------------------------------------------ */
-
 #videostages_stage_editor .vs-field-error {
     flex-basis: 100%;
     width: 100%;
     color: var(--bs-danger);
     font-size: 11px;
 }
-
-/* ------------------------------------------------------------------
- * Empty state shown when no clips exist
- * ------------------------------------------------------------------ */
 
 #videostages_stage_editor .vs-empty-card {
     border: 1px dashed var(--light-border);

@@ -26,6 +26,33 @@ function must<T>(value: T | null | undefined): T {
     return value;
 }
 
+function initEditor(): void {
+    const editor = videoStageEditor();
+    editor.init();
+}
+
+function appendCoreDimensionInputs(widthVal: string, heightVal: string): void {
+    const coreWidthInput = document.createElement("input");
+    coreWidthInput.type = "number";
+    coreWidthInput.id = "input_width";
+    coreWidthInput.value = widthVal;
+    document.body.appendChild(coreWidthInput);
+
+    const coreHeightInput = document.createElement("input");
+    coreHeightInput.type = "number";
+    coreHeightInput.id = "input_height";
+    coreHeightInput.value = heightVal;
+    document.body.appendChild(coreHeightInput);
+}
+
+function clickDocumentAddClip(): void {
+    must(
+        document.querySelector(
+            '[data-clip-action="add-clip"]',
+        ) as HTMLButtonElement | null,
+    ).click();
+}
+
 const OPEN_GROUP_GLYPH = "\u2B9F";
 
 interface ParsedRef {
@@ -43,6 +70,7 @@ interface ParsedRef {
 interface ParsedStage {
     model: string;
     control?: number;
+    controlNetStrength?: number;
     steps?: number;
     cfgScale?: number;
     upscale?: number;
@@ -55,8 +83,11 @@ interface ParsedStage {
 interface ParsedClip {
     duration?: number;
     audioSource?: string;
+    controlNetSource?: string;
+    controlNetLora?: string;
     saveAudioTrack?: boolean;
     clipLengthFromAudio?: boolean;
+    clipLengthFromControlNet?: boolean;
     reuseAudio?: boolean;
     uploadedAudio?: {
         data?: string;
@@ -123,6 +154,24 @@ const setupParameterPanel = (): void => {
     videoModel.appendChild(videoModelOption);
     videoModel.value = "";
     document.body.appendChild(videoModel);
+
+    const loras = document.createElement("select");
+    loras.id = "input_loras";
+    const loraNone = document.createElement("option");
+    loraNone.value = "(None)";
+    loraNone.textContent = "(None)";
+    loras.appendChild(loraNone);
+    for (const value of [
+        "ltx-ic-lora.safetensors",
+        "detail-lora.safetensors",
+    ]) {
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.text = value;
+        loras.appendChild(opt);
+    }
+    loras.value = "(None)";
+    document.body.appendChild(loras);
 
     for (const id of ["input_sampler", "input_scheduler"]) {
         const select = document.createElement("select");
@@ -205,6 +254,19 @@ const parseStoredConfig = (): ParsedConfig => {
 
 const parseStored = (): ParsedClip[] => parseStoredConfig().clips;
 
+/**
+ * jsdom cannot set `isTrusted` on `Event`. When the VideoStages group toggle is
+ * off, host notify is gated on trusted events; tests that expect the group to
+ * re-enable must mark the event with the same expando `domEvents` recognizes.
+ */
+const dispatchSimulatedUserFieldChange = (target: EventTarget): void => {
+    const ev = new Event("change", { bubbles: true }) as Event & {
+        __videoStagesSimulateUserFieldChange?: boolean;
+    };
+    ev.__videoStagesSimulateUserFieldChange = true;
+    target.dispatchEvent(ev);
+};
+
 describe("videoStageEditor", () => {
     beforeEach(() => {
         jest.useFakeTimers();
@@ -234,8 +296,7 @@ describe("videoStageEditor", () => {
                 });
             }
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const clips = parseStored();
             expect(clips).toHaveLength(1);
@@ -243,13 +304,14 @@ describe("videoStageEditor", () => {
         });
 
         it("seeds a single default clip when no JSON is present", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const clips = parseStored();
             expect(clips).toHaveLength(1);
             expect(clips[0].stages).toHaveLength(1);
             expect(clips[0].duration).toBe(5);
+            expect(clips[0].controlNetSource).toBe("ControlNet 1");
+            expect(clips[0].controlNetLora).toBe("");
             expect(clips[0].refs).toEqual([]);
             expect(
                 document.querySelector(".vs-clip-card .header-label")
@@ -257,11 +319,183 @@ describe("videoStageEditor", () => {
             ).toBe("Clip 0");
         });
 
+        it("renders and stores per-clip ControlNet source choice", async () => {
+            initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const controlNetSource = document.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const select = must(controlNetSource);
+            expect(select.disabled).toBe(false);
+            expect([...select.options].map((option) => option.value)).toEqual([
+                "ControlNet 1",
+                "ControlNet 2",
+                "ControlNet 3",
+            ]);
+
+            select.value = "ControlNet 3";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].controlNetSource).toBe("ControlNet 3");
+        });
+
+        it("renders and stores per-clip ControlNet LoRA choice", () => {
+            initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const select = must(controlNetLora);
+            expect([...select.options].map((option) => option.value)).toEqual([
+                "",
+                "ltx-ic-lora.safetensors",
+                "detail-lora.safetensors",
+            ]);
+            expect(
+                [...select.options].filter((option) => option.value === "")
+                    .length,
+            ).toBe(1);
+            expect(
+                [...select.options].find((option) => option.value === "")
+                    ?.textContent,
+            ).toBe("(None)");
+
+            select.value = "ltx-ic-lora.safetensors";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].controlNetLora).toBe(
+                "ltx-ic-lora.safetensors",
+            );
+        });
+
+        it("stores empty ControlNet LoRA and disables Source after clearing LoRA when host uses (None) token", async () => {
+            initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const enabledSource = document.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            expect(must(enabledSource).disabled).toBe(false);
+            const enabledLengthFromControlNet = document.querySelector(
+                '[data-clip-field="clipLengthFromControlNet"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"].auto-slider-number',
+            ) as HTMLInputElement | null;
+            const lengthCheckbox = must(enabledLengthFromControlNet);
+            expect(lengthCheckbox.disabled).toBe(false);
+            lengthCheckbox.checked = true;
+            lengthCheckbox.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(true);
+            expect(durationNumber?.disabled).toBe(true);
+
+            const loraAfterLtx = must(
+                document.querySelector(
+                    '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+                ) as HTMLSelectElement | null,
+            );
+            for (let i = 0; i < loraAfterLtx.options.length; i++) {
+                loraAfterLtx.options[i].selected =
+                    loraAfterLtx.options[i].value === "";
+            }
+            loraAfterLtx.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            expect(parseStored()[0].controlNetLora).toBe("");
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(false);
+            const controlNetSource = document.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            expect(must(controlNetSource).disabled).toBe(true);
+            const lengthFromControlNet = document.querySelector(
+                '[data-clip-field="clipLengthFromControlNet"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            const disabledLengthCheckbox = must(lengthFromControlNet);
+            expect(disabledLengthCheckbox.disabled).toBe(true);
+            expect(disabledLengthCheckbox.checked).toBe(false);
+            const finalDurationNumber = document.querySelector(
+                '[data-clip-field="duration"].auto-slider-number',
+            ) as HTMLInputElement | null;
+            expect(finalDurationNumber?.disabled).toBe(false);
+        });
+
+        it("lists LoRA above Source in the CONTROLNET block", () => {
+            initEditor();
+
+            const controlSection = Array.from(
+                document.querySelectorAll(".vs-section-block"),
+            ).find(
+                (section) =>
+                    section.querySelector(".vs-section-block-title")
+                        ?.textContent === "CONTROLNET",
+            ) as HTMLElement | undefined;
+            must(controlSection);
+            const lora = controlSection.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            );
+            const source = controlSection.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            );
+            must(lora);
+            const sourceEl = must(source);
+            expect(
+                lora.compareDocumentPosition(sourceEl) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+            ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        });
+
+        it("disables ControlNet Source when no ControlNet LoRA is selected", () => {
+            initEditor();
+
+            const controlNetSource = document.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const lengthFromControlNet = document.querySelector(
+                '[data-clip-field="clipLengthFromControlNet"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+            const select = must(controlNetSource);
+            const checkbox = must(lengthFromControlNet);
+            expect(select.disabled).toBe(true);
+            expect(
+                select.closest(".vs-controlnet-source-disabled"),
+            ).not.toBeNull();
+            expect(checkbox.disabled).toBe(true);
+            expect(
+                checkbox.closest(".vs-controlnet-length-disabled"),
+            ).not.toBeNull();
+        });
+
+        it("hides ControlNet strength sliders when no ControlNet LoRA is selected", () => {
+            initEditor();
+
+            expect(
+                document.querySelector(
+                    '[data-stage-field="controlNetStrength"]',
+                ),
+            ).toBeNull();
+        });
+
         it("seeds image-to-video defaults with a refiner reference", () => {
             setImageToVideoWorkflow();
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const clips = parseStored();
             expect(clips[0].refs).toHaveLength(1);
@@ -271,20 +505,9 @@ describe("videoStageEditor", () => {
         });
 
         it("does not serialize root dimensions from SwarmUI core width and height fields", () => {
-            const coreWidthInput = document.createElement("input");
-            coreWidthInput.type = "number";
-            coreWidthInput.id = "input_width";
-            coreWidthInput.value = "1344";
-            document.body.appendChild(coreWidthInput);
+            appendCoreDimensionInputs("1344", "832");
 
-            const coreHeightInput = document.createElement("input");
-            coreHeightInput.type = "number";
-            coreHeightInput.id = "input_height";
-            coreHeightInput.value = "832";
-            document.body.appendChild(coreHeightInput);
-
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const config = parseStoredConfig();
             expect(config.width).toBeUndefined();
@@ -302,20 +525,9 @@ describe("videoStageEditor", () => {
             ) as HTMLInputElement;
             registeredHeightInput.value = "864";
 
-            const coreWidthInput = document.createElement("input");
-            coreWidthInput.type = "number";
-            coreWidthInput.id = "input_width";
-            coreWidthInput.value = "1344";
-            document.body.appendChild(coreWidthInput);
+            appendCoreDimensionInputs("1344", "832");
 
-            const coreHeightInput = document.createElement("input");
-            coreHeightInput.type = "number";
-            coreHeightInput.id = "input_height";
-            coreHeightInput.value = "832";
-            document.body.appendChild(coreHeightInput);
-
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const config = parseStoredConfig();
             expect(config.width).toBeUndefined();
@@ -328,16 +540,14 @@ describe("videoStageEditor", () => {
             ) as HTMLInputElement;
             registeredFpsInput.value = "32";
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const config = parseStoredConfig();
             expect(config.fps).toBeUndefined();
         });
 
         it("seeds the first stage with the frontend default values", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const defaultStage = parseStored()[0].stages?.[0];
             expect(defaultStage?.control).toBe(0.5);
@@ -347,13 +557,11 @@ describe("videoStageEditor", () => {
         });
 
         it("renders an editor div with a clip stack and add-clip button", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const editorDiv = document.getElementById(
                 "videostages_stage_editor",
             );
-            expect(editorDiv).not.toBeNull();
             expect(
                 editorDiv?.querySelector("[data-vs-clip-stack]"),
             ).not.toBeNull();
@@ -363,8 +571,7 @@ describe("videoStageEditor", () => {
         });
 
         it("does not render its own root width/height fields (uses registered SwarmUI sliders)", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const widthNumber = document.querySelector(
                 '[data-root-field="width"]',
@@ -377,20 +584,9 @@ describe("videoStageEditor", () => {
         });
 
         it("seeds registered RootWidth/RootHeight sliders from core dimensions when at sentinel", () => {
-            const coreWidthInput = document.createElement("input");
-            coreWidthInput.type = "number";
-            coreWidthInput.id = "input_width";
-            coreWidthInput.value = "1280";
-            document.body.appendChild(coreWidthInput);
+            appendCoreDimensionInputs("1280", "720");
 
-            const coreHeightInput = document.createElement("input");
-            coreHeightInput.type = "number";
-            coreHeightInput.id = "input_height";
-            coreHeightInput.value = "720";
-            document.body.appendChild(coreHeightInput);
-
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const registeredWidth = document.getElementById(
                 "input_vswidth",
@@ -412,20 +608,9 @@ describe("videoStageEditor", () => {
             ) as HTMLInputElement;
             registeredHeight.value = "768";
 
-            const coreWidthInput = document.createElement("input");
-            coreWidthInput.type = "number";
-            coreWidthInput.id = "input_width";
-            coreWidthInput.value = "1280";
-            document.body.appendChild(coreWidthInput);
+            appendCoreDimensionInputs("1280", "720");
 
-            const coreHeightInput = document.createElement("input");
-            coreHeightInput.type = "number";
-            coreHeightInput.id = "input_height";
-            coreHeightInput.value = "720";
-            document.body.appendChild(coreHeightInput);
-
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             expect(registeredWidth.value).toBe("1024");
             expect(registeredHeight.value).toBe("768");
@@ -445,8 +630,7 @@ describe("videoStageEditor", () => {
                 ],
             });
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const config = parseStoredConfig();
             const clips = parseStored();
@@ -477,8 +661,7 @@ describe("videoStageEditor", () => {
                 ],
             });
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"].auto-slider-number',
@@ -503,15 +686,15 @@ describe("videoStageEditor", () => {
                 ],
             });
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const audioSource = document.querySelector(
-                '[data-clip-field="audioSource"][data-clip-idx="0"]',
-            ) as HTMLSelectElement | null;
-            expect(audioSource).not.toBeNull();
-            expect(audioSource?.value).toBe("audio0");
-            expect(audioSource?.selectedOptions[0]?.textContent).toBe(
+            const audioSource = must(
+                document.querySelector(
+                    '[data-clip-field="audioSource"][data-clip-idx="0"]',
+                ) as HTMLSelectElement | null,
+            );
+            expect(audioSource.value).toBe("audio0");
+            expect(audioSource.selectedOptions[0]?.textContent).toBe(
                 "AceStepFun Audio 0",
             );
         });
@@ -519,13 +702,9 @@ describe("videoStageEditor", () => {
 
     describe("clip actions", () => {
         it("adds a new clip when the add-clip button is clicked", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const addBtn = document.querySelector(
-                '[data-clip-action="add-clip"]',
-            ) as HTMLButtonElement;
-            addBtn.click();
+            clickDocumentAddClip();
             await flushReRender();
 
             const clips = parseStored();
@@ -539,13 +718,9 @@ describe("videoStageEditor", () => {
 
         it("adds new image-to-video clips with a refiner reference", async () => {
             setImageToVideoWorkflow();
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const addBtn = document.querySelector(
-                '[data-clip-action="add-clip"]',
-            ) as HTMLButtonElement;
-            addBtn.click();
+            clickDocumentAddClip();
             await flushReRender();
 
             const clips = parseStored();
@@ -555,20 +730,14 @@ describe("videoStageEditor", () => {
         });
 
         it("shows Clip 0 header after deleting the first clip when two existed", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            (
-                document.querySelector(
-                    '[data-clip-action="add-clip"]',
-                ) as HTMLButtonElement
-            ).click();
+            clickDocumentAddClip();
             await flushReRender();
 
             const deleteFirst = document.querySelector(
                 '[data-clip-action="delete"][data-clip-idx="0"]',
             ) as HTMLButtonElement | null;
-            expect(deleteFirst).not.toBeNull();
             must(deleteFirst).click();
             await flushReRender();
 
@@ -581,16 +750,16 @@ describe("videoStageEditor", () => {
         });
 
         it("allows deleting the only clip", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const deleteBtn = document.querySelector(
-                '[data-clip-action="delete"][data-clip-idx="0"]',
-            ) as HTMLButtonElement | null;
-            expect(deleteBtn).not.toBeNull();
-            expect(deleteBtn?.disabled).toBe(false);
+            const deleteBtn = must(
+                document.querySelector(
+                    '[data-clip-action="delete"][data-clip-idx="0"]',
+                ) as HTMLButtonElement | null,
+            );
+            expect(deleteBtn.disabled).toBe(false);
 
-            must(deleteBtn).click();
+            deleteBtn.click();
             await flushReRender();
 
             expect(parseStored()).toHaveLength(0);
@@ -616,8 +785,7 @@ describe("videoStageEditor", () => {
                 ],
             });
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             expect(
                 document.querySelector(".vs-clip-card .header-label")
@@ -626,14 +794,14 @@ describe("videoStageEditor", () => {
         });
 
         it("toggles collapse state for a clip when the native shrinkable header is clicked", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const header = document.querySelector(
-                ".vs-clip-card > .input-group-shrinkable",
-            ) as HTMLElement | null;
-            expect(header).not.toBeNull();
-            header?.click();
+            const header = must(
+                document.querySelector(
+                    ".vs-clip-card > .input-group-shrinkable",
+                ) as HTMLElement | null,
+            );
+            header.click();
             await flushReRender();
 
             const clips = parseStored();
@@ -641,18 +809,15 @@ describe("videoStageEditor", () => {
         });
 
         it("does not collapse the clip when the skip action button inside the header is clicked", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            (
-                document.querySelector(
-                    '[data-clip-action="add-clip"]',
-                ) as HTMLButtonElement
-            ).click();
+            clickDocumentAddClip();
             await flushReRender();
-            const skipBtn = document.querySelector(
-                '[data-clip-action="skip"]',
-            ) as HTMLButtonElement;
+            const skipBtn = must(
+                document.querySelector(
+                    '[data-clip-action="skip"]',
+                ) as HTMLButtonElement | null,
+            );
             skipBtn.click();
             await flushReRender();
 
@@ -666,18 +831,15 @@ describe("videoStageEditor", () => {
         });
 
         it("toggles skip state for a clip when more than one exists", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            (
-                document.querySelector(
-                    '[data-clip-action="add-clip"]',
-                ) as HTMLButtonElement
-            ).click();
+            clickDocumentAddClip();
             await flushReRender();
-            const skipBtn = document.querySelector(
-                '[data-clip-action="skip"]',
-            ) as HTMLButtonElement;
+            const skipBtn = must(
+                document.querySelector(
+                    '[data-clip-action="skip"]',
+                ) as HTMLButtonElement | null,
+            );
             skipBtn.click();
             await flushReRender();
 
@@ -686,13 +848,11 @@ describe("videoStageEditor", () => {
         });
 
         it("updates clip duration when the slider thumb moves", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const durationSlider = document.querySelector(
                 '[data-clip-field="duration"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(durationSlider).not.toBeNull();
             const slider = must(durationSlider);
             slider.value = "6";
             slider.dispatchEvent(new Event("input", { bubbles: true }));
@@ -702,13 +862,11 @@ describe("videoStageEditor", () => {
         });
 
         it("does not rerender the duration slider while dragging", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const durationSlider = document.querySelector(
                 '[data-clip-field="duration"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(durationSlider).not.toBeNull();
             const slider = must(durationSlider);
             const originalSlider = slider;
 
@@ -735,13 +893,11 @@ describe("videoStageEditor", () => {
         });
 
         it("does not restore focus to the duration slider after rerender", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const durationSlider = document.querySelector(
                 '[data-clip-field="duration"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(durationSlider).not.toBeNull();
             const slider = must(durationSlider);
 
             slider.focus();
@@ -749,16 +905,16 @@ describe("videoStageEditor", () => {
             slider.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
-            const refreshedSlider = document.querySelector(
-                '[data-clip-field="duration"][type="range"]',
-            ) as HTMLInputElement | null;
-            expect(refreshedSlider).not.toBeNull();
+            const refreshedSlider = must(
+                document.querySelector(
+                    '[data-clip-field="duration"][type="range"]',
+                ) as HTMLInputElement | null,
+            );
             expect(document.activeElement).not.toBe(refreshedSlider);
         });
 
         it("does not write registered RootWidth/RootHeight slider changes into saved JSON", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const registeredWidth = document.getElementById(
                 "input_vswidth",
@@ -799,8 +955,7 @@ describe("videoStageEditor", () => {
                 groupToggle.checked = true;
             });
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const fpsInput = document.getElementById(
                 "input_vsfps",
@@ -824,29 +979,49 @@ describe("videoStageEditor", () => {
                 groupToggle.checked = true;
             });
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"]',
             ) as HTMLSelectElement | null;
-            expect(audioSource).not.toBeNull();
             const source = must(audioSource);
             source.value = "Upload";
-            source.dispatchEvent(new Event("change", { bubbles: true }));
+            dispatchSimulatedUserFieldChange(source);
 
             expect(parseStored()[0].audioSource).toBe("Upload");
             expect(groupToggle.checked).toBe(true);
         });
 
-        it("stores clip audio source at the clip level", () => {
-            const editor = videoStageEditor();
-            editor.init();
+        it("does not re-enable the VideoStages group on untrusted change when toggle is off", () => {
+            const groupToggle = document.getElementById(
+                "input_group_content_videostages_toggle",
+            ) as HTMLInputElement;
+            groupToggle.checked = false;
+
+            const stagesInput = getStagesInput();
+            stagesInput.addEventListener("change", () => {
+                groupToggle.checked = true;
+            });
+
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"]',
             ) as HTMLSelectElement | null;
-            expect(audioSource).not.toBeNull();
+            const source = must(audioSource);
+            source.value = "Upload";
+            source.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].audioSource).toBe("Upload");
+            expect(groupToggle.checked).toBe(false);
+        });
+
+        it("stores clip audio source at the clip level", () => {
+            initEditor();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"]',
+            ) as HTMLSelectElement | null;
             const source = must(audioSource);
             source.value = "Upload";
             source.dispatchEvent(new Event("change", { bubbles: true }));
@@ -856,8 +1031,7 @@ describe("videoStageEditor", () => {
 
         it("stores the Save Audio Track checkbox at the clip level", () => {
             stubAceStepFunRegistry(["audio0"]);
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
@@ -865,8 +1039,6 @@ describe("videoStageEditor", () => {
             const saveAudioTrack = document.querySelector(
                 '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(audioSource).not.toBeNull();
-            expect(saveAudioTrack).not.toBeNull();
             const source = must(audioSource);
             source.value = "audio0";
             source.dispatchEvent(new Event("change", { bubbles: true }));
@@ -881,13 +1053,11 @@ describe("videoStageEditor", () => {
         });
 
         it("stores the Reuse Audio checkbox at the clip level", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const reuseAudio = document.querySelector(
                 '[data-clip-field="reuseAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(reuseAudio).not.toBeNull();
             const checkbox = must(reuseAudio);
             expect(checkbox.checked).toBe(false);
             expect(parseStored()[0].reuseAudio).toBe(false);
@@ -899,8 +1069,7 @@ describe("videoStageEditor", () => {
         });
 
         it("renders clip audio controls inside an AUDIO section", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSection = Array.from(
                 document.querySelectorAll(".vs-section-block"),
@@ -938,32 +1107,80 @@ describe("videoStageEditor", () => {
             ) as HTMLInputElement | null;
 
             expect(audioSection).toBeDefined();
-            expect(audioSource).not.toBeNull();
-            expect(uploadField).not.toBeNull();
-            expect(saveAudioTrackField).not.toBeNull();
-            expect(clipLengthFromAudioField).not.toBeNull();
-            expect(reuseAudioField).not.toBeNull();
-            expect(uploadInput).not.toBeNull();
-            expect(reuseAudio).not.toBeNull();
-            expect(clipLengthFromAudio).not.toBeNull();
-            expect(saveAudioTrack).not.toBeNull();
-            expect(uploadField?.style.display).toBe("none");
-            expect(saveAudioTrackField?.style.display).toBe("none");
-            expect(clipLengthFromAudioField?.style.display).toBe("none");
+            must(audioSource);
+            const elUploadField = must(uploadField);
+            const elSaveAudioTrackField = must(saveAudioTrackField);
+            const elClipLengthFromAudioField = must(clipLengthFromAudioField);
+            must(reuseAudioField);
+            must(uploadInput);
+            must(reuseAudio);
+            must(clipLengthFromAudio);
+            const elSaveAudioTrack = must(saveAudioTrack);
+            expect(elUploadField.style.display).toBe("none");
+            expect(elSaveAudioTrackField.style.display).toBe("none");
+            expect(elClipLengthFromAudioField.style.display).toBe("none");
 
-            const saveAudioTrackRow = saveAudioTrack?.closest(".auto-input");
+            const saveAudioTrackRow = elSaveAudioTrack.closest(".auto-input");
             const nextAutoInput =
                 saveAudioTrackRow?.parentElement?.querySelector(
                     ".vs-clip-audio-upload-field",
                 );
-            expect(nextAutoInput).toBe(uploadField);
-            expect(saveAudioTrackRow).toBe(saveAudioTrackField);
+            expect(nextAutoInput).toBe(elUploadField);
+            expect(saveAudioTrackRow).toBe(elSaveAudioTrackField);
+        });
+
+        it("renders Clip Length from ControlNet inside the CONTROLNET section", async () => {
+            initEditor();
+
+            const controlNetSection = Array.from(
+                document.querySelectorAll(".vs-section-block"),
+            ).find(
+                (section) =>
+                    section.querySelector(".vs-section-block-title")
+                        ?.textContent === "CONTROLNET",
+            ) as HTMLElement | undefined;
+            const lengthFromControlNetField = controlNetSection?.querySelector(
+                ".vs-clip-length-from-controlnet-field",
+            ) as HTMLElement | null;
+            const lengthFromControlNet = controlNetSection?.querySelector(
+                '[data-clip-field="clipLengthFromControlNet"][data-clip-idx="0"]',
+            ) as HTMLInputElement | null;
+
+            expect(controlNetSection).toBeDefined();
+            const field = must(lengthFromControlNetField);
+            const checkbox = must(lengthFromControlNet);
+            expect(field.style.display).toBe("");
+            expect(checkbox.disabled).toBe(true);
+            expect(
+                checkbox.closest(".vs-controlnet-length-disabled"),
+            ).not.toBeNull();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const enabledCheckbox = must(
+                document.querySelector(
+                    '[data-clip-field="clipLengthFromControlNet"][data-clip-idx="0"]',
+                ) as HTMLInputElement | null,
+            );
+            expect(enabledCheckbox.disabled).toBe(false);
+
+            enabledCheckbox.checked = true;
+            enabledCheckbox.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(true);
         });
 
         it("only shows Save Audio Track for AceStepFun audio sources", () => {
             stubAceStepFunRegistry(["audio0"]);
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
@@ -974,10 +1191,9 @@ describe("videoStageEditor", () => {
             const saveAudioTrack = document.querySelector(
                 '[data-clip-field="saveAudioTrack"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(audioSource).not.toBeNull();
-            expect(saveAudioTrackField).not.toBeNull();
-            expect(saveAudioTrack).not.toBeNull();
-            expect(saveAudioTrackField?.style.display).toBe("none");
+            const saveField = must(saveAudioTrackField);
+            const trackCheckbox = must(saveAudioTrack);
+            expect(saveField.style.display).toBe("none");
 
             const src = must(audioSource);
             src.value = "audio0";
@@ -985,24 +1201,22 @@ describe("videoStageEditor", () => {
             expect(src.selectedOptions[0]?.textContent).toBe(
                 "AceStepFun Audio 0",
             );
-            expect(saveAudioTrackField?.style.display).toBe("");
+            expect(saveField.style.display).toBe("");
 
-            const checkbox = must(saveAudioTrack);
-            checkbox.checked = true;
-            checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+            trackCheckbox.checked = true;
+            trackCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
             expect(parseStored()[0].saveAudioTrack).toBe(true);
 
             src.value = "Upload";
             src.dispatchEvent(new Event("change", { bubbles: true }));
-            expect(saveAudioTrackField?.style.display).toBe("none");
-            expect(checkbox.checked).toBe(false);
+            expect(saveField.style.display).toBe("none");
+            expect(trackCheckbox.checked).toBe(false);
             expect(parseStored()[0].saveAudioTrack).toBe(false);
         });
 
         it("renders checkbox tooltip buttons on the left and leaves Audio Upload as core renders it", () => {
             stubAceStepFunRegistry(["audio0"]);
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const saveAudioTrackField = document.querySelector(
                 ".vs-clip-save-audio-track-field .auto-input-name",
@@ -1016,37 +1230,37 @@ describe("videoStageEditor", () => {
             const audioUploadField = document.querySelector(
                 ".vs-clip-audio-upload-field .auto-input-name",
             );
-            expect(saveAudioTrackField).not.toBeNull();
-            expect(clipLengthFromAudioField).not.toBeNull();
-            expect(reuseAudioField).not.toBeNull();
-            expect(audioUploadField).not.toBeNull();
+            const nameSaveAudioTrack = must(saveAudioTrackField);
+            const nameClipLengthFromAudio = must(clipLengthFromAudioField);
+            const nameReuseAudio = must(reuseAudioField);
+            const nameAudioUpload = must(audioUploadField);
 
             expect(
-                saveAudioTrackField?.firstElementChild?.classList.contains(
+                nameSaveAudioTrack.firstElementChild?.classList.contains(
                     "auto-input-qbutton",
                 ),
             ).toBe(true);
             expect(
-                clipLengthFromAudioField?.firstElementChild?.classList.contains(
+                nameClipLengthFromAudio.firstElementChild?.classList.contains(
                     "auto-input-qbutton",
                 ),
             ).toBe(true);
             expect(
-                reuseAudioField?.firstElementChild?.classList.contains(
+                nameReuseAudio.firstElementChild?.classList.contains(
                     "auto-input-qbutton",
                 ),
             ).toBe(true);
             expect(
-                audioUploadField?.lastElementChild?.classList.contains(
+                nameAudioUpload.lastElementChild?.classList.contains(
                     "auto-input-qbutton",
                 ),
             ).toBe(true);
-            expect(saveAudioTrackField?.textContent).toBe("?Save Audio Track");
-            expect(clipLengthFromAudioField?.textContent).toBe(
+            expect(nameSaveAudioTrack.textContent).toBe("?Save Audio Track");
+            expect(nameClipLengthFromAudio.textContent).toBe(
                 "?Clip Length from Audio",
             );
-            expect(reuseAudioField?.textContent).toBe("?Reuse Audio");
-            expect(audioUploadField?.textContent).toBe("Audio Upload?");
+            expect(nameReuseAudio.textContent).toBe("?Reuse Audio");
+            expect(nameAudioUpload.textContent).toBe("Audio Upload?");
 
             const audioUploadPopover = document.getElementById(
                 "popover_vsclip0_uploadedAudio",
@@ -1056,8 +1270,7 @@ describe("videoStageEditor", () => {
 
         it("shows Clip Length from Audio for upload and AceStepFun sources", () => {
             stubAceStepFunRegistry(["audio0"]);
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
@@ -1074,15 +1287,13 @@ describe("videoStageEditor", () => {
             const durationSlider = document.querySelector(
                 '[data-clip-field="duration"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(audioSource).not.toBeNull();
-            expect(lengthFromAudioField).not.toBeNull();
-            expect(lengthFromAudio).not.toBeNull();
-            expect(lengthFromAudioField?.style.display).toBe("none");
+            const lengthField = must(lengthFromAudioField);
+            expect(lengthField.style.display).toBe("none");
 
             const src = must(audioSource);
             src.value = "Upload";
             src.dispatchEvent(new Event("change", { bubbles: true }));
-            expect(lengthFromAudioField?.style.display).toBe("");
+            expect(lengthField.style.display).toBe("");
 
             const checkbox = must(lengthFromAudio);
             checkbox.checked = true;
@@ -1093,21 +1304,131 @@ describe("videoStageEditor", () => {
 
             src.value = "audio0";
             src.dispatchEvent(new Event("change", { bubbles: true }));
-            expect(lengthFromAudioField?.style.display).toBe("");
+            expect(lengthField.style.display).toBe("");
             expect(parseStored()[0].clipLengthFromAudio).toBe(true);
 
-            src.value = "Native";
-            src.dispatchEvent(new Event("change", { bubbles: true }));
-            expect(lengthFromAudioField?.style.display).toBe("none");
+            const currentAudioSource = must(
+                document.querySelector(
+                    '[data-clip-field="audioSource"][data-clip-idx="0"]',
+                ) as HTMLSelectElement | null,
+            );
+            currentAudioSource.value = "Native";
+            currentAudioSource.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            expect(lengthField.style.display).toBe("none");
             expect(checkbox.checked).toBe(false);
             expect(parseStored()[0].clipLengthFromAudio).toBe(false);
             expect(durationNumber?.disabled).toBe(false);
             expect(durationSlider?.disabled).toBe(false);
         });
 
+        it("keeps audio and ControlNet clip length sources mutually exclusive", async () => {
+            initEditor();
+
+            const audioSource = document.querySelector(
+                '[data-clip-field="audioSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const src = must(audioSource);
+            src.value = "Upload";
+            src.dispatchEvent(new Event("change", { bubbles: true }));
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const controlNetCheckbox = must(
+                document.querySelector(
+                    '[data-clip-field="clipLengthFromControlNet"][data-clip-idx="0"]',
+                ) as HTMLInputElement | null,
+            );
+            const audioCheckbox = must(
+                document.querySelector(
+                    '[data-clip-field="clipLengthFromAudio"][data-clip-idx="0"]',
+                ) as HTMLInputElement | null,
+            );
+            const durationNumber = document.querySelector(
+                '[data-clip-field="duration"].auto-slider-number',
+            ) as HTMLInputElement | null;
+            const durationSlider = document.querySelector(
+                '[data-clip-field="duration"][type="range"]',
+            ) as HTMLInputElement | null;
+            controlNetCheckbox.checked = true;
+            controlNetCheckbox.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(true);
+            expect(durationNumber?.disabled).toBe(true);
+            expect(durationSlider?.disabled).toBe(true);
+            expect(audioCheckbox.disabled).toBe(true);
+            expect(
+                audioCheckbox.closest(".vs-audio-length-disabled"),
+            ).not.toBeNull();
+
+            audioCheckbox.checked = true;
+            audioCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(parseStored()[0].clipLengthFromAudio).toBe(false);
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(true);
+            expect(audioCheckbox.checked).toBe(false);
+
+            controlNetCheckbox.checked = false;
+            controlNetCheckbox.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(false);
+            expect(audioCheckbox.disabled).toBe(false);
+            expect(
+                audioCheckbox.closest(".vs-audio-length-disabled"),
+            ).toBeNull();
+
+            audioCheckbox.checked = true;
+            audioCheckbox.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(parseStored()[0].clipLengthFromAudio).toBe(true);
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(false);
+            expect(controlNetCheckbox.disabled).toBe(true);
+            expect(
+                controlNetCheckbox.closest(".vs-controlnet-length-disabled"),
+            ).not.toBeNull();
+
+            controlNetCheckbox.checked = true;
+            controlNetCheckbox.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            expect(parseStored()[0].clipLengthFromAudio).toBe(true);
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(false);
+            expect(controlNetCheckbox.checked).toBe(false);
+
+            const currentAudioSource = must(
+                document.querySelector(
+                    '[data-clip-field="audioSource"][data-clip-idx="0"]',
+                ) as HTMLSelectElement | null,
+            );
+            currentAudioSource.value = "Native";
+            currentAudioSource.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            expect(parseStored()[0].clipLengthFromAudio).toBe(false);
+            expect(controlNetCheckbox.disabled).toBe(false);
+            expect(
+                controlNetCheckbox.closest(".vs-controlnet-length-disabled"),
+            ).toBeNull();
+            expect(durationNumber?.disabled).toBe(false);
+            expect(durationSlider?.disabled).toBe(false);
+
+            controlNetCheckbox.checked = true;
+            controlNetCheckbox.dispatchEvent(
+                new Event("change", { bubbles: true }),
+            );
+            expect(parseStored()[0].clipLengthFromControlNet).toBe(true);
+            expect(durationNumber?.disabled).toBe(true);
+            expect(durationSlider?.disabled).toBe(true);
+        });
+
         it("reveals the per-clip audio upload field when audioSource changes to Upload", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
@@ -1115,8 +1436,7 @@ describe("videoStageEditor", () => {
             const uploadField = document.querySelector(
                 ".vs-clip-audio-upload-field",
             ) as HTMLElement | null;
-            expect(audioSource).not.toBeNull();
-            expect(uploadField).not.toBeNull();
+            must(audioSource);
             const upload = must(uploadField);
             expect(upload.style.display).toBe("none");
 
@@ -1128,15 +1448,12 @@ describe("videoStageEditor", () => {
         });
 
         it("still reveals clip audio Upload when the editor DOM is rebuilt", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const originalEditor = document.getElementById(
                 "videostages_stage_editor",
             ) as HTMLElement | null;
-            expect(originalEditor).not.toBeNull();
             const root = must(originalEditor);
-            expect(root.parentElement).not.toBeNull();
             const parent = must(root.parentElement);
 
             const rebuiltEditor = root.cloneNode(true) as HTMLElement;
@@ -1151,27 +1468,79 @@ describe("videoStageEditor", () => {
             const uploadInput = rebuiltEditor.querySelector(
                 '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(audioSource).not.toBeNull();
-            expect(uploadField).not.toBeNull();
-            expect(uploadInput?.type).toBe("file");
-            expect(uploadField?.style.display).toBe("none");
+            const rebuiltUploadField = must(uploadField);
+            const rebuiltUploadInput = must(uploadInput);
+            expect(rebuiltUploadInput.type).toBe("file");
+            expect(rebuiltUploadField.style.display).toBe("none");
 
             const clipSource = must(audioSource);
             clipSource.value = "Upload";
             clipSource.dispatchEvent(new Event("change", { bubbles: true }));
 
             expect(parseStored()[0].audioSource).toBe("Upload");
-            expect(uploadField?.style.display).toBe("");
+            expect(rebuiltUploadField.style.display).toBe("");
+        });
+
+        it("still stores ControlNet source when the editor DOM is rebuilt", async () => {
+            initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const originalEditor = document.getElementById(
+                "videostages_stage_editor",
+            ) as HTMLElement | null;
+            const root = must(originalEditor);
+            const parent = must(root.parentElement);
+
+            const rebuiltEditor = root.cloneNode(true) as HTMLElement;
+            parent.replaceChild(rebuiltEditor, root);
+
+            const controlNetSource = rebuiltEditor.querySelector(
+                '[data-clip-field="controlNetSource"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const select = must(controlNetSource);
+            select.value = "ControlNet 3";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].controlNetSource).toBe("ControlNet 3");
+        });
+
+        it("still stores ControlNet LoRA when the editor DOM is rebuilt", () => {
+            initEditor();
+
+            const originalEditor = document.getElementById(
+                "videostages_stage_editor",
+            ) as HTMLElement | null;
+            const root = must(originalEditor);
+            const parent = must(root.parentElement);
+
+            const rebuiltEditor = root.cloneNode(true) as HTMLElement;
+            parent.replaceChild(rebuiltEditor, root);
+
+            const controlNetLora = rebuiltEditor.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const select = must(controlNetLora);
+            select.value = "ltx-ic-lora.safetensors";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(parseStored()[0].controlNetLora).toBe(
+                "ltx-ic-lora.safetensors",
+            );
         });
 
         it("stores uploaded audio payload on the clip", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
             ) as HTMLSelectElement | null;
-            expect(audioSource).not.toBeNull();
             const clipAudioSource = must(audioSource);
             clipAudioSource.value = "Upload";
             clipAudioSource.dispatchEvent(
@@ -1181,7 +1550,6 @@ describe("videoStageEditor", () => {
             const uploadInput = document.querySelector(
                 '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(uploadInput).not.toBeNull();
             const fileInput = must(uploadInput);
 
             fileInput.onchange = null;
@@ -1203,13 +1571,11 @@ describe("videoStageEditor", () => {
         });
 
         it("stores audio selected from the input browser after SwarmUI updates file data", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const audioSource = document.querySelector(
                 '[data-clip-field="audioSource"][data-clip-idx="0"]',
             ) as HTMLSelectElement | null;
-            expect(audioSource).not.toBeNull();
             const clipAudioSource = must(audioSource);
             clipAudioSource.value = "Upload";
             clipAudioSource.dispatchEvent(
@@ -1219,7 +1585,6 @@ describe("videoStageEditor", () => {
             const uploadInput = document.querySelector(
                 '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(uploadInput).not.toBeNull();
             const fileInput = must(uploadInput);
 
             fileInput.dataset.filename = "inputs/clip.wav";
@@ -1261,14 +1626,12 @@ describe("videoStageEditor", () => {
                 value: ImmediateFileReader,
                 configurable: true,
             });
-            const editor = videoStageEditor();
             try {
-                editor.init();
+                initEditor();
 
                 const audioSource = document.querySelector(
                     '[data-clip-field="audioSource"][data-clip-idx="0"]',
                 ) as HTMLSelectElement | null;
-                expect(audioSource).not.toBeNull();
                 const clipAudioSource = must(audioSource);
                 clipAudioSource.value = "Upload";
                 clipAudioSource.dispatchEvent(
@@ -1278,7 +1641,6 @@ describe("videoStageEditor", () => {
                 const uploadInput = document.querySelector(
                     '.auto-file[data-clip-field="uploadedAudio"][data-clip-idx="0"]',
                 ) as HTMLInputElement | null;
-                expect(uploadInput).not.toBeNull();
                 const fileInput = must(uploadInput);
                 const file = new File(["ABC"], "clip.mp3", {
                     type: "audio/mpeg",
@@ -1303,14 +1665,9 @@ describe("videoStageEditor", () => {
         });
 
         it("keeps per-clip uploads independent across multiple Upload clips", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            (
-                document.querySelector(
-                    '[data-clip-action="add-clip"]',
-                ) as HTMLButtonElement
-            ).click();
+            clickDocumentAddClip();
             await flushReRender();
 
             const audioSources = document.querySelectorAll(
@@ -1353,13 +1710,11 @@ describe("videoStageEditor", () => {
         });
 
         it("does not rerender the duration number input while typing", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"].auto-slider-number',
             ) as HTMLInputElement | null;
-            expect(durationNumber).not.toBeNull();
             const durationEl = must(durationNumber);
             const originalDurationNumber = durationEl;
             durationEl.value = "15";
@@ -1385,8 +1740,7 @@ describe("videoStageEditor", () => {
         });
 
         it("uses 0.5 second jumps for the duration slider but leaves manual entry unrestricted", () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"].auto-slider-number',
@@ -1403,14 +1757,13 @@ describe("videoStageEditor", () => {
 
     describe("ref actions", () => {
         it("adds a new ref to a clip", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const addRefBtn = document.querySelector(
-                '[data-clip-action="add-ref"]',
-            ) as HTMLButtonElement;
-            expect(addRefBtn).not.toBeNull();
-            addRefBtn.click();
+            must(
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement | null,
+            ).click();
             await flushReRender();
 
             const clips = parseStored();
@@ -1419,17 +1772,16 @@ describe("videoStageEditor", () => {
         });
 
         it("adds a ref when the click bubbles from button text", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const addRefBtn = document.querySelector(
-                '[data-clip-action="add-ref"]',
-            ) as HTMLButtonElement | null;
-            expect(addRefBtn).not.toBeNull();
+            const addRefBtn = must(
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement | null,
+            );
 
-            const addRefLabel = addRefBtn?.firstChild;
-            expect(addRefLabel).not.toBeNull();
-            expect(addRefLabel?.nodeType).toBe(Node.TEXT_NODE);
+            const addRefLabel = must(addRefBtn.firstChild);
+            expect(addRefLabel.nodeType).toBe(Node.TEXT_NODE);
 
             must(addRefLabel).dispatchEvent(
                 new MouseEvent("click", { bubbles: true, cancelable: true }),
@@ -1440,36 +1792,32 @@ describe("videoStageEditor", () => {
         });
 
         it("adds a ref after the editor root was replaced (clone does not copy listeners)", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const originalEditor = document.getElementById(
                 "videostages_stage_editor",
             ) as HTMLElement | null;
-            expect(originalEditor).not.toBeNull();
             const root = must(originalEditor);
             const parent = must(root.parentElement);
             const rebuiltEditor = root.cloneNode(true) as HTMLElement;
             parent.replaceChild(rebuiltEditor, root);
 
-            const addRefBtn = rebuiltEditor.querySelector(
-                '[data-clip-action="add-ref"]',
-            ) as HTMLButtonElement;
-            expect(addRefBtn).not.toBeNull();
-            addRefBtn.click();
+            must(
+                rebuiltEditor.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement | null,
+            ).click();
             await flushReRender();
 
             expect(parseStored()[0].refs).toHaveLength(1);
         });
 
         it("adds a ref from the clicked editor when duplicate editor ids exist during a rebuild", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const originalEditor = document.getElementById(
                 "videostages_stage_editor",
             ) as HTMLElement | null;
-            expect(originalEditor).not.toBeNull();
 
             const rebuiltEditor = must(originalEditor).cloneNode(
                 true,
@@ -1479,7 +1827,6 @@ describe("videoStageEditor", () => {
             const addRefBtn = rebuiltEditor.querySelector(
                 '[data-clip-action="add-ref"]',
             ) as HTMLButtonElement | null;
-            expect(addRefBtn).not.toBeNull();
 
             must(addRefBtn).click();
             await flushReRender();
@@ -1489,15 +1836,13 @@ describe("videoStageEditor", () => {
         });
 
         it("adds a ref when the persisted input is temporarily empty", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             getStagesInput().value = "";
 
             const addRefBtn = document.querySelector(
                 '[data-clip-action="add-ref"]',
             ) as HTMLButtonElement | null;
-            expect(addRefBtn).not.toBeNull();
 
             must(addRefBtn).click();
             await flushReRender();
@@ -1506,8 +1851,7 @@ describe("videoStageEditor", () => {
         });
 
         it("uses the updated reverse frame count label", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1524,8 +1868,7 @@ describe("videoStageEditor", () => {
         });
 
         it("adds a default ref strength slider for each stage when a ref is added", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1554,8 +1897,7 @@ describe("videoStageEditor", () => {
 
         it("includes Base2Edit refs in the source dropdown when registered", async () => {
             stubBase2EditStageRegistry(["edit0", "edit1"]);
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1574,8 +1916,7 @@ describe("videoStageEditor", () => {
         });
 
         it("renders reference headers as Ref Image n labels", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1601,8 +1942,7 @@ describe("videoStageEditor", () => {
         });
 
         it("reveals the upload field when the reference source changes to Upload", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1620,9 +1960,6 @@ describe("videoStageEditor", () => {
             const uploadInput = document.querySelector(
                 '.vs-ref-upload-field .auto-file[data-ref-field="uploadFileName"]',
             ) as HTMLInputElement | null;
-            expect(sourceSelect).not.toBeNull();
-            expect(uploadField).not.toBeNull();
-            expect(uploadInput).not.toBeNull();
             const refUploadField = must(uploadField);
             expect(refUploadField.style.display).toBe("none");
 
@@ -1632,16 +1969,17 @@ describe("videoStageEditor", () => {
             expect(refUploadField.style.display).toBe("");
             expect(must(uploadInput).type).toBe("file");
 
-            const refreshedUploadField = document.querySelector(
-                ".vs-ref-upload-field",
-            ) as HTMLElement | null;
+            const refreshedUploadField = must(
+                document.querySelector(
+                    ".vs-ref-upload-field",
+                ) as HTMLElement | null,
+            );
             expect(parseStored()[0].refs?.[0].source).toBe("Upload");
-            expect(refreshedUploadField?.style.display).toBe("");
+            expect(refreshedUploadField.style.display).toBe("");
         });
 
         it("stores ref upload image payload when Swarm provides filedata on the file input", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1653,7 +1991,6 @@ describe("videoStageEditor", () => {
             const sourceSelect = document.querySelector(
                 '[data-ref-field="source"]',
             ) as HTMLSelectElement | null;
-            expect(sourceSelect).not.toBeNull();
             const refSrc = must(sourceSelect);
             refSrc.value = "Upload";
             refSrc.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1661,7 +1998,6 @@ describe("videoStageEditor", () => {
             const uploadInput = document.querySelector(
                 '.vs-ref-upload-field .auto-file[data-ref-field="uploadFileName"]',
             ) as HTMLInputElement | null;
-            expect(uploadInput).not.toBeNull();
             const refFileInput = must(uploadInput);
 
             refFileInput.onchange = null;
@@ -1678,8 +2014,7 @@ describe("videoStageEditor", () => {
         });
 
         it("still reveals Upload when the editor DOM is rebuilt", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1691,9 +2026,7 @@ describe("videoStageEditor", () => {
             const originalEditor = document.getElementById(
                 "videostages_stage_editor",
             ) as HTMLElement | null;
-            expect(originalEditor).not.toBeNull();
             const refRoot = must(originalEditor);
-            expect(refRoot.parentElement).not.toBeNull();
             const refParent = must(refRoot.parentElement);
 
             const rebuiltEditor = refRoot.cloneNode(true) as HTMLElement;
@@ -1705,15 +2038,15 @@ describe("videoStageEditor", () => {
             const uploadField = rebuiltEditor.querySelector(
                 ".vs-ref-upload-field",
             ) as HTMLElement | null;
-            expect(sourceSelect).not.toBeNull();
-            expect(uploadField?.style.display).toBe("none");
+            const rebuiltUploadField = must(uploadField);
+            expect(rebuiltUploadField.style.display).toBe("none");
 
             const rebuiltSource = must(sourceSelect);
             rebuiltSource.value = "Upload";
             rebuiltSource.dispatchEvent(new Event("change", { bubbles: true }));
 
             expect(parseStored()[0].refs?.[0].source).toBe("Upload");
-            expect(uploadField?.style.display).toBe("");
+            expect(rebuiltUploadField.style.display).toBe("");
         });
 
         it("removes the matching ref strength from each stage when a ref is deleted", async () => {
@@ -1743,13 +2076,11 @@ describe("videoStageEditor", () => {
                 },
             ]);
 
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const deleteBtn = document.querySelector(
                 '[data-ref-action="delete"][data-ref-idx="0"]',
             ) as HTMLButtonElement | null;
-            expect(deleteBtn).not.toBeNull();
             must(deleteBtn).click();
             await flushReRender();
 
@@ -1764,8 +2095,7 @@ describe("videoStageEditor", () => {
         });
 
         it("uses the aligned clip duration frame count for the reference frame slider max", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1791,7 +2121,6 @@ describe("videoStageEditor", () => {
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"].auto-slider-number',
             ) as HTMLInputElement | null;
-            expect(durationNumber).not.toBeNull();
             const clipDuration = must(durationNumber);
             clipDuration.value = "21.5";
             clipDuration.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1808,8 +2137,7 @@ describe("videoStageEditor", () => {
         });
 
         it("refreshes dependent fields when duration changes commit on focusout", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1821,7 +2149,6 @@ describe("videoStageEditor", () => {
             const durationNumber = document.querySelector(
                 '[data-clip-field="duration"].auto-slider-number',
             ) as HTMLInputElement | null;
-            expect(durationNumber).not.toBeNull();
             const durationEl = must(durationNumber);
 
             durationEl.value = "21.5";
@@ -1844,8 +2171,7 @@ describe("videoStageEditor", () => {
 
     describe("stage actions", () => {
         it("adds a new stage to a clip", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const addStageBtn = document.querySelector(
                 '[data-clip-action="add-stage"]',
@@ -1858,8 +2184,7 @@ describe("videoStageEditor", () => {
         });
 
         it("initializes new stages with default ref strengths for existing refs", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -1895,8 +2220,7 @@ describe("videoStageEditor", () => {
         });
 
         it("renders steps and cfg scale; hides stage 0 control and upscale fields from layout", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const controlSlider = document.querySelector(
                 '[data-stage-field="control"][type="range"][data-stage-idx="0"]',
@@ -1914,33 +2238,34 @@ describe("videoStageEditor", () => {
                 '[data-stage-field="upscale"][type="range"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
 
-            expect(controlSlider).not.toBeNull();
-            expect(stepsSlider).not.toBeNull();
-            expect(cfgScaleSlider).not.toBeNull();
-            expect(upscale0).not.toBeNull();
-            expect(controlSlider?.disabled).toBe(false);
-            expect(controlNumber?.disabled).toBe(false);
-            expect(controlSlider?.value).toBe("0.5");
-            expect(controlNumber?.value).toBe("0.5");
-            expect(upscale0?.disabled).toBe(false);
+            const s0ControlSlider = must(controlSlider);
+            const s0ControlNumber = must(controlNumber);
+            const s0StepsSlider = must(stepsSlider);
+            const s0CfgScaleSlider = must(cfgScaleSlider);
+            const s0Upscale0 = must(upscale0);
+            expect(s0ControlSlider.disabled).toBe(false);
+            expect(s0ControlNumber.disabled).toBe(false);
+            expect(s0ControlSlider.value).toBe("0.5");
+            expect(s0ControlNumber.value).toBe("0.5");
+            expect(s0Upscale0.disabled).toBe(false);
             expect(
-                controlSlider
-                    ?.closest(".vs-first-stage-field-hidden")
+                s0ControlSlider
+                    .closest(".vs-first-stage-field-hidden")
                     ?.getAttribute("style"),
             ).toBe("display: none;");
             expect(
-                upscale0
-                    ?.closest(".vs-first-stage-field-hidden")
+                s0Upscale0
+                    .closest(".vs-first-stage-field-hidden")
                     ?.getAttribute("style"),
             ).toBe("display: none;");
-            expect(controlSlider?.min).toBe("0.05");
-            expect(stepsSlider?.max).toBe("50");
-            expect(cfgScaleSlider?.max).toBe("10");
-            expect(upscale0?.max).toBe("4");
+            expect(s0ControlSlider.min).toBe("0.05");
+            expect(s0StepsSlider.max).toBe("50");
+            expect(s0CfgScaleSlider.max).toBe("10");
+            expect(s0Upscale0.max).toBe("4");
             const upscale0n = document.querySelector(
                 '[data-stage-field="upscale"][type="number"][data-stage-idx="0"]',
             ) as HTMLInputElement | null;
-            expect(upscale0n?.disabled).toBe(false);
+            expect(must(upscale0n).disabled).toBe(false);
 
             (
                 document.querySelector(
@@ -1956,8 +2281,7 @@ describe("videoStageEditor", () => {
         });
 
         it("renders stage headers as Stage n labels with zero-based indexes", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             const firstHead = document.querySelector(
                 '.vs-card[data-stage-idx="0"] .vs-card-head',
@@ -1998,9 +2322,8 @@ describe("videoStageEditor", () => {
             ).toBeNull();
         });
 
-        it("hides first-stage control, upscale, and upscale method; stage 1 follows upscale vs method rules", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+        it("hides first-stage control fields; stage 1 upscale drives method enablement", async () => {
+            initEditor();
 
             const s0Method = document.querySelector(
                 '[data-stage-field="upscaleMethod"][data-stage-idx="0"]',
@@ -2056,12 +2379,10 @@ describe("videoStageEditor", () => {
             const s1Range = document.querySelector(
                 '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
             ) as HTMLInputElement | null;
-            expect(s1Range).not.toBeNull();
-            expect(s1ControlRange?.disabled).toBe(false);
-            expect(s1Range?.disabled).toBe(false);
-            expect(s1Method?.disabled).toBe(true);
-
             const stage1Upscale = must(s1Range);
+            expect(s1ControlRange?.disabled).toBe(false);
+            expect(stage1Upscale.disabled).toBe(false);
+            expect(s1Method?.disabled).toBe(true);
             stage1Upscale.value = "1.25";
             stage1Upscale.dispatchEvent(new Event("input", { bubbles: true }));
             expect(parseStored()[0].stages?.[1].upscale).toBe(1.25);
@@ -2069,8 +2390,7 @@ describe("videoStageEditor", () => {
         });
 
         it("keeps stage upscale method when upscale slider changes", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -2085,8 +2405,6 @@ describe("videoStageEditor", () => {
             const s1Method = document.querySelector(
                 '[data-stage-field="upscaleMethod"][data-stage-idx="1"]',
             ) as HTMLSelectElement | null;
-            expect(s1Range).not.toBeNull();
-            expect(s1Method).not.toBeNull();
             const range1 = must(s1Range);
             const method1 = must(s1Method);
 
@@ -2124,8 +2442,7 @@ describe("videoStageEditor", () => {
         });
 
         it("updates stored stage upscale method from non-bubbling dropdown changes", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -2140,8 +2457,6 @@ describe("videoStageEditor", () => {
             const s1Method = document.querySelector(
                 '[data-stage-field="upscaleMethod"][data-stage-idx="1"]',
             ) as HTMLSelectElement | null;
-            expect(s1Range).not.toBeNull();
-            expect(s1Method).not.toBeNull();
 
             const range1 = must(s1Range);
             range1.value = "1.5";
@@ -2157,9 +2472,8 @@ describe("videoStageEditor", () => {
             );
         });
 
-        it("updates stored stage upscale when the numeric slider half syncs through a non-bubbling range change", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+        it("stores stage 1 upscale on non-bubbling range change from numeric half", async () => {
+            initEditor();
 
             (
                 document.querySelector(
@@ -2171,7 +2485,6 @@ describe("videoStageEditor", () => {
             const range = document.querySelector(
                 '[data-stage-field="upscale"][type="range"][data-stage-idx="1"]',
             ) as HTMLInputElement | null;
-            expect(range).not.toBeNull();
 
             const syncedRange = must(range);
             syncedRange.value = "1.75";
@@ -2181,8 +2494,7 @@ describe("videoStageEditor", () => {
         });
 
         it("updates stored ref strength when a stage ref slider moves", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -2194,7 +2506,6 @@ describe("videoStageEditor", () => {
             const refStrengthSlider = document.querySelector(
                 '[data-stage-field="refStrength_0"][type="range"]',
             ) as HTMLInputElement | null;
-            expect(refStrengthSlider).not.toBeNull();
             const refStrength = must(refStrengthSlider);
             refStrength.value = "0.5";
             refStrength.dispatchEvent(new Event("input", { bubbles: true }));
@@ -2202,9 +2513,63 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].stages?.[0].refStrengths).toEqual([0.5]);
         });
 
+        it("updates stored ControlNet strength when its stage slider moves", async () => {
+            setImageToVideoWorkflow();
+            initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const controlNetStrengthSlider = document.querySelector(
+                '[data-stage-field="controlNetStrength"][type="range"]',
+            ) as HTMLInputElement | null;
+            const controlNetStrength = must(controlNetStrengthSlider);
+            controlNetStrength.value = "0.3";
+            controlNetStrength.dispatchEvent(
+                new Event("input", { bubbles: true }),
+            );
+
+            expect(parseStored()[0].stages?.[0].controlNetStrength).toBe(0.3);
+        });
+
+        it("renders ControlNet strength slider with expected bounds and step", async () => {
+            setImageToVideoWorkflow();
+            initEditor();
+
+            const controlNetLora = document.querySelector(
+                '[data-clip-field="controlNetLora"][data-clip-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const loraSelect = must(controlNetLora);
+            loraSelect.value = "ltx-ic-lora.safetensors";
+            loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushReRender();
+
+            const range = document.querySelector(
+                '[data-stage-field="controlNetStrength"][type="range"]',
+            ) as HTMLInputElement | null;
+            const controlNetRange = must(range);
+            expect(controlNetRange.min).toBe("0");
+            expect(controlNetRange.max).toBe("1");
+            expect(controlNetRange.step).toBe("0.1");
+            expect(controlNetRange.value).toBe("0.8");
+
+            const numberInput = document.querySelector(
+                '[data-stage-field="controlNetStrength"][type="number"]',
+            ) as HTMLInputElement | null;
+            const controlNetNumber = must(numberInput);
+            expect(controlNetNumber.min).toBe("0");
+            expect(controlNetNumber.max).toBe("1");
+            expect(controlNetNumber.step).toBe("0.1");
+            expect(controlNetNumber.value).toBe("0.8");
+        });
+
         it("toggles skip state for a stage", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -2212,10 +2577,11 @@ describe("videoStageEditor", () => {
                 ) as HTMLButtonElement
             ).click();
             await flushReRender();
-            const skipBtn = document.querySelector(
-                '[data-stage-action="skip"]',
-            ) as HTMLButtonElement;
-            expect(skipBtn).not.toBeNull();
+            const skipBtn = must(
+                document.querySelector(
+                    '[data-stage-action="skip"]',
+                ) as HTMLButtonElement | null,
+            );
             skipBtn.click();
             await flushReRender();
 
@@ -2228,8 +2594,7 @@ describe("videoStageEditor", () => {
         });
 
         it("removes a stage when more than one exists", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
             (
                 document.querySelector(
@@ -2248,16 +2613,16 @@ describe("videoStageEditor", () => {
         });
 
         it("allows deleting the only stage in a clip", async () => {
-            const editor = videoStageEditor();
-            editor.init();
+            initEditor();
 
-            const deleteBtn = document.querySelector(
-                '[data-stage-action="delete"][data-stage-idx="0"]',
-            ) as HTMLButtonElement | null;
-            expect(deleteBtn).not.toBeNull();
-            expect(deleteBtn?.disabled).toBe(false);
+            const deleteBtn = must(
+                document.querySelector(
+                    '[data-stage-action="delete"][data-stage-idx="0"]',
+                ) as HTMLButtonElement | null,
+            );
+            expect(deleteBtn.disabled).toBe(false);
 
-            must(deleteBtn).click();
+            deleteBtn.click();
             await flushReRender();
 
             const clips = parseStored();

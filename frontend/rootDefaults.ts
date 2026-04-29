@@ -9,15 +9,32 @@ import {
 import type { RootDefaults } from "./types";
 import { utils } from "./utils";
 
+const STAGE_UPSCALE_PREFIXES = ["pixel-", "model-", "latent-", "latentmodel-"];
+
+const isStageUpscaleMethod = (value: string): boolean =>
+    STAGE_UPSCALE_PREFIXES.some((prefix) => value.startsWith(prefix));
+
+const trimDomValue = (el: { value: string } | null | undefined): string =>
+    `${el?.value ?? ""}`.trim();
+
+const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
+    for (let i = 0; i < ids.length; i++) {
+        const el = utils.getInputElement(ids[i]);
+        if (el) {
+            return el;
+        }
+    }
+    return null;
+};
+
 export const getDefaultStageModel = (modelValues: string[]): string => {
     if (isRootTextToVideoModel()) {
-        const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
+        const modelName = trimDomValue(getRootModelInput());
         if (modelName) {
             return modelName;
         }
     }
-    const videoModel =
-        `${utils.getSelectElement("input_videomodel")?.value ?? ""}`.trim();
+    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
     if (videoModel) {
         return videoModel;
     }
@@ -30,20 +47,21 @@ export const getRootDefaults = (): RootDefaults => {
         model = utils.getSelectElement("input_model");
     }
     const vae = utils.getSelectElement("input_vae");
+    const loras = getDropdownOptions("loras", "input_loras");
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const isStageMethod = (value: string): boolean =>
-        value.startsWith("pixel-") ||
-        value.startsWith("model-") ||
-        value.startsWith("latent-") ||
-        value.startsWith("latentmodel-");
-    const upscaleMethodValues = allUpscaleMethodValues.filter(isStageMethod);
-    const upscaleMethodLabels = allUpscaleMethodLabels.filter((_, index) =>
-        isStageMethod(allUpscaleMethodValues[index]),
-    );
+    const stageUpscaleValues: string[] = [];
+    const stageUpscaleLabels: string[] = [];
+    for (let i = 0; i < allUpscaleMethodValues.length; i++) {
+        const value = allUpscaleMethodValues[i];
+        if (isStageUpscaleMethod(value)) {
+            stageUpscaleValues.push(value);
+            stageUpscaleLabels.push(allUpscaleMethodLabels[i]);
+        }
+    }
 
     const fallbackUpscaleMethods = [
         "pixel-lanczos",
@@ -53,24 +71,24 @@ export const getRootDefaults = (): RootDefaults => {
         "pixel-nearest-exact",
     ];
 
-    const steps =
-        utils.getInputElement("input_videosteps") ??
-        utils.getInputElement("input_steps");
-    const cfgScale =
-        utils.getInputElement("input_videocfg") ??
-        utils.getInputElement("input_cfgscale");
-    const widthInput =
-        utils.getInputElement("input_width") ??
-        utils.getInputElement("input_aspectratiowidth");
-    const heightInput =
-        utils.getInputElement("input_height") ??
-        utils.getInputElement("input_aspectratioheight");
-    const fpsInput =
-        utils.getInputElement("input_videofps") ??
-        utils.getInputElement("input_videoframespersecond");
-    const framesInput =
-        utils.getInputElement("input_videoframes") ??
-        utils.getInputElement("input_text2videoframes");
+    const steps = firstPresentInput("input_videosteps", "input_steps");
+    const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
+    const widthInput = firstPresentInput(
+        "input_width",
+        "input_aspectratiowidth",
+    );
+    const heightInput = firstPresentInput(
+        "input_height",
+        "input_aspectratioheight",
+    );
+    const fpsInput = firstPresentInput(
+        "input_videofps",
+        "input_videoframespersecond",
+    );
+    const framesInput = firstPresentInput(
+        "input_videoframes",
+        "input_text2videoframes",
+    );
 
     const fps = Math.max(
         1,
@@ -85,6 +103,8 @@ export const getRootDefaults = (): RootDefaults => {
     return {
         modelValues: utils.getSelectValues(model),
         modelLabels: utils.getSelectLabels(model),
+        loraValues: loras.values,
+        loraLabels: loras.labels,
         vaeValues: utils.getSelectValues(vae),
         vaeLabels: utils.getSelectLabels(vae),
         samplerValues: sampler.values,
@@ -92,12 +112,12 @@ export const getRootDefaults = (): RootDefaults => {
         schedulerValues: scheduler.values,
         schedulerLabels: scheduler.labels,
         upscaleMethodValues:
-            upscaleMethodValues.length > 0
-                ? upscaleMethodValues
+            stageUpscaleValues.length > 0
+                ? stageUpscaleValues
                 : fallbackUpscaleMethods,
         upscaleMethodLabels:
-            upscaleMethodLabels.length > 0
-                ? upscaleMethodLabels
+            stageUpscaleLabels.length > 0
+                ? stageUpscaleLabels
                 : fallbackUpscaleMethods,
         width:
             getRegisteredRootDimension("width") ??

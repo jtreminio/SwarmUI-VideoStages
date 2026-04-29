@@ -52,7 +52,6 @@ export const stageFieldId = (
     field: string,
 ): string => `vsclip${clipIdx}_stage${stageIdx}_${field}`;
 
-// Route changes via data-* on controls from make*Input; nogrow skips SwarmUI auto-width.
 export const injectFieldData = (
     html: string,
     dataAttrs: Record<string, string>,
@@ -92,7 +91,6 @@ export const overrideSliderSteps = (
     return updated;
 };
 
-// Round up to a frame at fps, then one decimal place (matches working.html).
 export const snapDurationToFps = (seconds: number, fps: number): number => {
     if (
         !Number.isFinite(seconds) ||

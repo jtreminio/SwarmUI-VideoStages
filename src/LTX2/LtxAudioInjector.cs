@@ -4,7 +4,10 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.LTX2;
 
-public sealed class LtxAudioInjector(WorkflowGenerator g)
+internal sealed class LtxAudioInjector(
+    WorkflowGenerator g,
+    JsonParser jsonParser,
+    RootVideoStageResizer rootVideoStageResizer)
 {
     private const int AudioInjectionIdBase = 52300;
     private const int AudioInjectionEnsureFallbackSlot = 50;
@@ -16,7 +19,10 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
             return false;
         }
 
-        (List<JArray> audioLatentsToReplace, HashSet<string> removableSourceIds, int? workflowFps) = FindAudioLatentsToReplace();
+        (
+            List<JArray> audioLatentsToReplace,
+            HashSet<string> removableSourceIds,
+            int? workflowFps) = FindAudioLatentsToReplace();
         if (audioLatentsToReplace.Count == 0)
         {
             return false;
@@ -26,11 +32,14 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
         if (matchVideoLengthToAudio)
         {
             int fps = ResolveFps(workflowFps);
-            JToken lengthFramesAudioSource = ResolveLengthToFramesAudioSource(detection.Audio.Path);
+            JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
+                g,
+                detection.Audio.Path,
+                g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
             string lengthToFramesId = CreateLengthToFramesNode(lengthFramesAudioSource, fps);
             JArray framesConnection = MakeConnection(lengthToFramesId, 1);
-            ApplyFramesConnectionToSources(removableSourceIds, framesConnection);
-            ApplyFramesConnectionToVideoLatents(framesConnection);
+            ApplyFramesConnectionToRemovableAudioSources(removableSourceIds, framesConnection);
+            LtxFrameCountConnector.ApplyToExistingSources(g, framesConnection);
             adjustedAudio = new(new JArray(lengthToFramesId, 0), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
         }
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
@@ -40,16 +49,16 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
         return true;
     }
 
-    private (List<JArray> AudioLatentsToReplace, HashSet<string> RemovableSourceIds, int? WorkflowFps) FindAudioLatentsToReplace()
+    private (List<JArray> AudioLatentsToReplace, HashSet<string> RemovableSourceIds, int? WorkflowFps)
+        FindAudioLatentsToReplace()
     {
         List<JArray> audioLatentsToReplace = [];
         HashSet<string> removableSourceIds = [];
         int? workflowFps = null;
-        foreach (JProperty property in g.Workflow.Properties())
+        foreach (WorkflowNode concat in WorkflowUtils.NodesOfType(g.Workflow, LtxNodeTypes.LTXVConcatAVLatent))
         {
-            if (property.Value is not JObject node
-                || $"{node["class_type"]}" != LtxNodeTypes.LTXVConcatAVLatent
-                || node["inputs"] is not JObject inputs
+            JObject node = concat.Node;
+            if (node["inputs"] is not JObject inputs
                 || inputs["audio_latent"] is not JArray audioLatent
                 || audioLatent.Count != 2)
             {
@@ -58,20 +67,23 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
             string sourceId = $"{audioLatent[0]}";
             if (!g.Workflow.TryGetValue(sourceId, out JToken sourceToken)
                 || sourceToken is not JObject sourceNode
-                || $"{sourceNode["class_type"]}" != LtxNodeTypes.LTXVEmptyLatentAudio)
+                || !StringUtils.NodeTypeMatches(sourceNode, LtxNodeTypes.LTXVEmptyLatentAudio))
             {
                 continue;
             }
             audioLatentsToReplace.Add(audioLatent);
             removableSourceIds.Add(sourceId);
-            workflowFps ??= ReadFrameRate(sourceNode["inputs"] as JObject);
+            if (sourceNode["inputs"] is JObject rateInputs)
+            {
+                workflowFps ??= ReadFrameRate(rateInputs);
+            }
         }
         return (audioLatentsToReplace, removableSourceIds, workflowFps);
     }
 
     private int ResolveFps(int? workflowFps)
     {
-        int fps = new JsonParser(g).ResolveFps();
+        int fps = jsonParser.ResolveFps();
         if (fps <= 0)
         {
             fps = workflowFps ?? g.Text2VideoFPS();
@@ -83,63 +95,6 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
         return fps > 0 ? fps : 24;
     }
 
-    private JToken ResolveLengthToFramesAudioSource(JToken rawAudioPath)
-    {
-        if (rawAudioPath is not JArray rawRef || rawRef.Count != 2)
-        {
-            return rawAudioPath;
-        }
-
-        foreach (JProperty property in g.Workflow.Properties())
-        {
-            if (property.Value is not JObject node
-                || $"{node["class_type"]}" != NodeTypes.SwarmEnsureAudio
-                || node["inputs"] is not JObject inputs
-                || inputs["audio"] is not JArray audioInput
-                || audioInput.Count != 2)
-            {
-                continue;
-            }
-            if (ConnectionRefsEqual(audioInput, rawRef))
-            {
-                return new JArray(property.Name, 0);
-            }
-        }
-
-        if (!IsSwarmLoadAudioB64Output(rawRef))
-        {
-            return rawAudioPath;
-        }
-
-        string ensured = g.CreateNode(NodeTypes.SwarmEnsureAudio, new JObject()
-        {
-            ["audio"] = rawRef,
-            ["target_duration"] = 0.1
-        }, g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
-        return new JArray(ensured, 0);
-    }
-
-    private bool IsSwarmLoadAudioB64Output(JArray rawRef)
-    {
-        string sourceId = $"{rawRef[0]}";
-        if (!g.Workflow.TryGetValue(sourceId, out JToken token) || token is not JObject node)
-        {
-            return false;
-        }
-
-        return $"{node["class_type"]}" == NodeTypes.SwarmLoadAudioB64;
-    }
-
-    private static bool ConnectionRefsEqual(JToken left, JToken right)
-    {
-        if (left is not JArray la || right is not JArray ra || la.Count != 2 || ra.Count != 2)
-        {
-            return false;
-        }
-
-        return $"{la[0]}" == $"{ra[0]}" && la[1].Value<int>() == ra[1].Value<int>();
-    }
-
     private string CreateLengthToFramesNode(JToken audioPath, int fps)
     {
         return g.CreateNode(NodeTypes.AudioLengthToFrames, new JObject()
@@ -149,7 +104,7 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
         }, g.GetStableDynamicID(AudioInjectionIdBase + 100, 0));
     }
 
-    private void ApplyFramesConnectionToSources(HashSet<string> sourceIds, JArray framesConnection)
+    private void ApplyFramesConnectionToRemovableAudioSources(HashSet<string> sourceIds, JArray framesConnection)
     {
         foreach (string sourceId in sourceIds)
         {
@@ -157,27 +112,15 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
             {
                 continue;
             }
-            SetFrameCountInput(emptyInputs, framesConnection);
+            LtxFrameCountConnector.SetFrameCountInput(emptyInputs, framesConnection);
         }
-    }
-
-    private void ApplyFramesConnectionToVideoLatents(JArray framesConnection)
-    {
-        g.RunOnNodesOfClass(LtxNodeTypes.EmptyLTXVLatentVideo, (_, videoData) =>
-        {
-            if (videoData["inputs"] is not JObject videoInputs)
-            {
-                return;
-            }
-            videoInputs["length"] = CloneConnection(framesConnection);
-        });
     }
 
     private string CreateAudioMaskNode(JToken encodedAudioPath)
     {
         int width = g.UserInput.GetImageWidth();
         int height = g.UserInput.GetImageHeight();
-        if (RootVideoStageResizer.TryGetConfiguredRootStageResolution(g, out int rootWidth, out int rootHeight))
+        if (rootVideoStageResizer.TryGetConfiguredRootStageResolution(out int rootWidth, out int rootHeight))
         {
             width = rootWidth;
             height = rootHeight;
@@ -222,9 +165,10 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
         return new JArray(nodeId, outputIndex);
     }
 
-    private static JArray CloneConnection(JArray connection)
+    private static int? ReadIntOrRoundedDouble(JObject inputs, string key)
     {
-        return new JArray(connection[0], connection[1]);
+        return inputs.Value<int?>(key)
+            ?? (inputs.Value<double?>(key) is double d ? (int?)Math.Round(d) : null);
     }
 
     private static int? ReadFrameRate(JObject inputs)
@@ -234,25 +178,8 @@ public sealed class LtxAudioInjector(WorkflowGenerator g)
             return null;
         }
 
-        return inputs.Value<int?>("frame_rate")
-            ?? (inputs.Value<double?>("frame_rate") is double frameRate ? (int?)Math.Round(frameRate) : null)
-            ?? inputs.Value<int?>("fps")
-            ?? (inputs.Value<double?>("fps") is double fps ? (int?)Math.Round(fps) : null);
+        return ReadIntOrRoundedDouble(inputs, "frame_rate")
+            ?? ReadIntOrRoundedDouble(inputs, "fps");
     }
 
-    private static void SetFrameCountInput(JObject inputs, JArray framesConnection)
-    {
-        if (inputs.ContainsKey("frames_number"))
-        {
-            inputs["frames_number"] = CloneConnection(framesConnection);
-            return;
-        }
-        if (inputs.ContainsKey("length"))
-        {
-            inputs["length"] = CloneConnection(framesConnection);
-            return;
-        }
-
-        inputs["frames_number"] = CloneConnection(framesConnection);
-    }
 }

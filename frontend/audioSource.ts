@@ -6,6 +6,8 @@ export interface AudioSourceOption {
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
 
+import { videoStagesDebugLog } from "./debugLog";
+
 const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
 const SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
@@ -93,8 +95,12 @@ export const resolveAudioSourceValue = (
 };
 
 export const audioSource = () => {
-    const refreshOptions = (): void => {
+    const refreshOptions = (reason = "manual"): void => {
         const selects = getSourceSelects();
+        videoStagesDebugLog("audioSource", "refreshOptions", {
+            reason,
+            selectCount: selects.length,
+        });
         if (selects.length === 0) {
             return;
         }
@@ -116,6 +122,11 @@ export const audioSource = () => {
             ) {
                 continue;
             }
+            videoStagesDebugLog("audioSource", "refreshOptions DOM rebuild", {
+                reason,
+                previousValue: select.value,
+                desired,
+            });
             select.innerHTML = "";
             for (const option of options) {
                 const elem = document.createElement("option");
@@ -131,13 +142,17 @@ export const audioSource = () => {
 
     const onDocumentDropdownInteraction = (event: Event): void => {
         if (isSourceSelect(event.target)) {
-            refreshOptions();
+            refreshOptions("dropdown-interaction");
         }
+    };
+
+    const onAceStepFunTracksChanged = (): void => {
+        refreshOptions("acestepfun:tracks-changed");
     };
 
     const runOnEachBuild = (): void => {
         try {
-            refreshOptions();
+            refreshOptions("postParamBuildSteps");
         } catch (error) {
             console.warn("audioSource: param build sync failed", error);
         }
@@ -153,7 +168,7 @@ export const audioSource = () => {
 
     document.addEventListener("mousedown", onDocumentDropdownInteraction);
     document.addEventListener("focusin", onDocumentDropdownInteraction);
-    document.addEventListener(ACESTEPFUN_EVENT, refreshOptions);
+    document.addEventListener(ACESTEPFUN_EVENT, onAceStepFunTracksChanged);
 
     scheduleInitialSync();
 
@@ -171,7 +186,10 @@ export const audioSource = () => {
                 "focusin",
                 onDocumentDropdownInteraction,
             );
-            document.removeEventListener(ACESTEPFUN_EVENT, refreshOptions);
+            document.removeEventListener(
+                ACESTEPFUN_EVENT,
+                onAceStepFunTracksChanged,
+            );
         },
     };
 };

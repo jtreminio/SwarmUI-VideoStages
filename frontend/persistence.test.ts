@@ -1,24 +1,48 @@
 import { describe, expect, it } from "@jest/globals";
+import {
+    minimalClip,
+    minimalRef,
+    minimalStage,
+} from "./__test_helpers__/clipFixtures";
 import { serializeClipsForStorage } from "./persistence";
-import type { Clip } from "./types";
+import { REF_SOURCE_BASE, type StoredClip } from "./types";
 
 describe("persistence", () => {
     describe("serializeClipsForStorage", () => {
-        it("serializes clip tree with stable keys", () => {
-            const clips: Clip[] = [
+        it("serializes only persisted clip, ref, and stage fields for storage", () => {
+            const clips = [
+                minimalClip({
+                    duration: 3,
+                    controlNetSource: "ControlNet 2",
+                    controlNetLora: "ltx-ic-lora.safetensors",
+                    clipLengthFromControlNet: true,
+                    refs: [minimalRef({ frame: 2, fromEnd: true })],
+                    stages: [
+                        minimalStage({
+                            controlNetStrength: 0.7,
+                            refStrengths: [0.8],
+                            vae: "v",
+                        }),
+                    ],
+                }),
+            ];
+            const expected: StoredClip[] = [
                 {
                     expanded: true,
                     skipped: false,
                     duration: 3,
                     audioSource: "Native",
+                    controlNetSource: "ControlNet 2",
+                    controlNetLora: "ltx-ic-lora.safetensors",
                     saveAudioTrack: false,
                     clipLengthFromAudio: false,
+                    clipLengthFromControlNet: true,
                     reuseAudio: false,
                     uploadedAudio: null,
                     refs: [
                         {
                             expanded: true,
-                            source: "Base",
+                            source: REF_SOURCE_BASE,
                             uploadFileName: null,
                             uploadedImage: null,
                             frame: 2,
@@ -30,6 +54,7 @@ describe("persistence", () => {
                             expanded: true,
                             skipped: false,
                             control: 1,
+                            controlNetStrength: 0.7,
                             refStrengths: [0.8],
                             upscale: 1,
                             upscaleMethod: "pixel-lanczos",
@@ -43,14 +68,7 @@ describe("persistence", () => {
                     ],
                 },
             ];
-            expect(serializeClipsForStorage(clips)).toEqual([
-                expect.objectContaining({
-                    refs: expect.any(Array),
-                    stages: expect.arrayContaining([
-                        expect.objectContaining({ refStrengths: [0.8] }),
-                    ]),
-                }),
-            ]);
+            expect(serializeClipsForStorage(clips)).toEqual(expected);
         });
     });
 });

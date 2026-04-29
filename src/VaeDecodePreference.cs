@@ -7,11 +7,6 @@ namespace VideoStages;
 
 internal static class VaeDecodePreference
 {
-    public static bool ShouldUseTiledVaeDecode(WorkflowGenerator g)
-    {
-        return g?.UserInput.TryGet(T2IParamTypes.VAETileSize, out _) == true;
-    }
-
     public static WGNodeData AsRawImage(WorkflowGenerator g, WGNodeData media, WGNodeData vae)
     {
         if (media is null)
@@ -30,7 +25,8 @@ internal static class VaeDecodePreference
         {
             return DecodeImageOrVideoLatents(g, media, vae);
         }
-        if (media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO && media.IsCompat(T2IModelClassSorter.CompatLtxv2))
+        if (media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
+            && media.IsCompat(T2IModelClassSorter.CompatLtxv2))
         {
             return DecodeLtxAudioVideoLatents(g, media, vae);
         }
@@ -75,23 +71,35 @@ internal static class VaeDecodePreference
             && $"{encodeVaePath[0]}" == $"{vaePath[0]}"
             && sourceInputs["pixels"] is JArray pixelsPath)
         {
-            string rawDataType = media.DataType == WGNodeData.DT_LATENT_IMAGE ? WGNodeData.DT_IMAGE : WGNodeData.DT_VIDEO;
+            string rawDataType = media.DataType == WGNodeData.DT_LATENT_IMAGE
+                ? WGNodeData.DT_IMAGE
+                : WGNodeData.DT_VIDEO;
             return media.WithPath(pixelsPath, rawDataType);
         }
 
-        string decoded = g.CreateNode(VideoDecodeNodeType(g), CreateVideoDecodeInputs(g, vae.Path, media.Path));
-        string decodedDataType = media.DataType == WGNodeData.DT_LATENT_VIDEO ? WGNodeData.DT_VIDEO : WGNodeData.DT_IMAGE;
+        bool useTiled = ShouldUseTiledVaeDecode(g);
+        string decodeType = useTiled ? NodeTypes.VAEDecodeTiled : NodeTypes.VAEDecode;
+        string decoded = g.CreateNode(
+            decodeType,
+            CreateVideoDecodeInputs(g, vae.Path, media.Path, useTiled));
+        string decodedDataType = media.DataType == WGNodeData.DT_LATENT_VIDEO
+            ? WGNodeData.DT_VIDEO
+            : WGNodeData.DT_IMAGE;
         return media.WithPath(new JArray(decoded, 0), decodedDataType, vae.Compat);
     }
 
-    public static string VideoDecodeNodeType(WorkflowGenerator g)
+    private static bool ShouldUseTiledVaeDecode(WorkflowGenerator g)
     {
-        return ShouldUseTiledVaeDecode(g) ? NodeTypes.VAEDecodeTiled : NodeTypes.VAEDecode;
+        return g?.UserInput.TryGet(T2IParamTypes.VAETileSize, out _) == true;
     }
 
-    public static JObject CreateVideoDecodeInputs(WorkflowGenerator g, JArray vaeRef, JArray latentRef)
+    private static JObject CreateVideoDecodeInputs(
+        WorkflowGenerator g,
+        JArray vaeRef,
+        JArray latentRef,
+        bool useTiled)
     {
-        if (ShouldUseTiledVaeDecode(g))
+        if (useTiled)
         {
             return new JObject()
             {

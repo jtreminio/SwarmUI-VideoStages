@@ -6,10 +6,13 @@ using SwarmUI.Utils;
 
 namespace VideoStages.LTX2;
 
-internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
+internal sealed class LtxStageOrchestrator(
+    WorkflowGenerator g,
+    LtxStageExecutor stageExecutor,
+    RootVideoStageTakeover rootVideoStageTakeover,
+    StageGuideMediaHelper stageGuideMediaHelper,
+    Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
-    private readonly LtxStageExecutor _stageExecutor = new(g);
-
     internal bool TryRunLocalLtxPath(
         JsonParser.StageSpec stage,
         StageRefStore.StageRef guideReference,
@@ -34,15 +37,20 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             guideMergeStrength = primaryGuideClipRef.Strength;
         }
 
-        bool replacesTextToVideoRoot = RootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(g, stage);
+        bool replacesTextToVideoRoot = rootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(stage);
         bool skipGuideReinjection = primaryGuideClipRef is null
             && (replacesTextToVideoRoot
                 || clipRefs is { Count: > 0 }
                 || ShouldSkipGeneratedGuideReinjection(stage, sourceMedia, guideReference, genInfo, postVideoChain));
 
-        WGNodeData guideMedia = ResolveLocalGuideMedia(primaryGuideClipRef, skipGuideReinjection, sourceMedia, priorOutputPath, postVideoChain);
+        WGNodeData guideMedia = ResolveLocalGuideMedia(
+            primaryGuideClipRef,
+            skipGuideReinjection,
+            sourceMedia,
+            priorOutputPath,
+            postVideoChain);
 
-        _stageExecutor.RunStage(
+        stageExecutor.RunStage(
             stage,
             genInfo,
             sourceMedia,
@@ -57,7 +65,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
 
     private static bool ShouldUseLocalLtxv2Path(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
     {
-        return genInfo.VideoModel?.ModelClass?.CompatClass?.ID == T2IModelClassSorter.CompatLtxv2.ID
+        return VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel)
             && (sourceMedia?.DataType == WGNodeData.DT_VIDEO || sourceMedia?.DataType == WGNodeData.DT_IMAGE);
     }
 
@@ -89,11 +97,13 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             }
             double strength = i < strengths.Count
                 ? strengths[i]
-                : VideoStagesExtension.DefaultStageRefStrength;
+                : Constants.DefaultStageRefStrength;
             WGNodeData raw = ResolveClipRefSourceMedia(spec, refStore, postVideoChain);
             if (raw is null)
             {
-                Logs.Warning($"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; skipping.");
+                Logs.Warning(
+                    $"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; "
+                    + "skipping.");
                 continue;
             }
 
@@ -104,7 +114,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             }
             else
             {
-                prepared = StageGuideMediaHelper.PrepareGuideMedia(g, raw, sourceMedia, scaleToSourceSize: false);
+                prepared = stageGuideMediaHelper.PrepareGuideMedia(raw, sourceMedia, scaleToSourceSize: false);
             }
             resolved.Add(new ResolvedClipRef(prepared, spec, strength));
         }
@@ -148,9 +158,9 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         IReadOnlyList<ResolvedClipRef> clipRefs,
         ResolvedClipRef primaryGuideClipRef)
     {
-        if (clipRefs is null || primaryGuideClipRef is null)
+        if (primaryGuideClipRef is null)
         {
-            return clipRefs is null ? null : [.. clipRefs];
+            return [.. clipRefs];
         }
 
         List<ResolvedClipRef> remaining = [];
@@ -193,7 +203,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             return ResolveDefaultLocalGuideMedia(skipGuideReinjection: false, sourceMedia, postVideoChain);
         }
 
-        return StageGuideMediaHelper.PrepareGuideMedia(g, primaryGuideClipRef.Image, sourceMedia, scaleToSourceSize: true);
+        return stageGuideMediaHelper.PrepareGuideMedia(primaryGuideClipRef.Image, sourceMedia, scaleToSourceSize: true);
     }
 
     private bool PrimaryGuideMatchesScaledSource(WGNodeData primaryGuideMedia, WGNodeData sourceMedia)
@@ -206,7 +216,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         }
 
         if (g.Workflow[$"{sourcePath[0]}"] is not JObject sourceNode
-            || $"{sourceNode["class_type"]}" != NodeTypes.ImageScale
+            || !StringUtils.NodeTypeMatches(sourceNode, NodeTypes.ImageScale)
             || sourceNode["inputs"] is not JObject sourceInputs
             || sourceInputs["image"] is not JArray scaledSourceInput)
         {
@@ -226,9 +236,10 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             return null;
         }
 
-        if (postVideoChain is not null && StageGuideMediaHelper.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
+        if (postVideoChain is not null
+            && stageGuideMediaHelper.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
         {
-            WGNodeData detachedGuideVae = postVideoChain.CreateStageInputVae() ?? g.CurrentVae;
+            WGNodeData detachedGuideVae = postVideoChain.CreateStageInputVae();
             return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
         }
 
@@ -240,24 +251,24 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         StageRefStore refStore,
         LtxPostVideoChain postVideoChain)
     {
-        if (string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(spec.Source, "Upload"))
         {
             return MaterializeUploadedRefImage(spec);
         }
 
         StageRefStore.StageRef stageRef = null;
         string src = spec.Source?.Trim() ?? "";
-        if (src.Equals("Base", StringComparison.OrdinalIgnoreCase))
+        if (StringUtils.Equals(src, "Base"))
         {
             stageRef = refStore.Base;
         }
-        else if (src.Equals("Refiner", StringComparison.OrdinalIgnoreCase))
+        else if (StringUtils.Equals(src, "Refiner"))
         {
             stageRef = refStore.Refiner;
         }
         else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(src, out int editStage))
         {
-            _ = Base2EditPublishedStageRefs.TryGetStageRef(g, editStage, out stageRef);
+            _ = base2EditPublishedStageRefs.TryGetStageRef(editStage, out stageRef);
         }
 
         if (stageRef is null)
@@ -269,7 +280,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             return null;
         }
 
-        return StageGuideMediaHelper.ResolveGuideMedia(g, stageRef, postVideoChain);
+        return stageGuideMediaHelper.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
     private WGNodeData MaterializeUploadedRefImage(JsonParser.RefSpec spec)
@@ -291,7 +302,9 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
         {
             if (g.UserInput?.SourceSession is null)
             {
-                Logs.Warning("VideoStages: reference image uses a server-side path but no session is available; cannot load the file.");
+                Logs.Warning(
+                    "VideoStages: reference image uses a server-side path but no session is available; "
+                    + "cannot load the file.");
                 return null;
             }
 
@@ -304,7 +317,8 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             }
             catch (SwarmReadableErrorException ex)
             {
-                Logs.Warning($"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
+                Logs.Warning(
+                    $"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
                 return null;
             }
         }
@@ -314,14 +328,14 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
             ImageFile img = ImageFile.FromDataString(material);
             return g.LoadImage(img, "${videostagesrefimage}", false);
         }
-        catch
+        catch (Exception ex)
         {
-            Logs.Warning("VideoStages: Ignoring invalid clip reference image payload.");
+            Logs.Warning($"VideoStages: Ignoring invalid clip reference image payload: {ex.Message}");
             return null;
         }
     }
 
-    private static bool ShouldSkipGeneratedGuideReinjection(
+    private bool ShouldSkipGeneratedGuideReinjection(
         JsonParser.StageSpec stage,
         WGNodeData sourceMedia,
         StageRefStore.StageRef guideReference,
@@ -330,7 +344,7 @@ internal sealed class LtxStageOrchestrator(WorkflowGenerator g)
     {
         return stage.ImageReference == "Generated"
             && postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true
-            && StageGuideMediaHelper.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
+            && stageGuideMediaHelper.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
             && !string.IsNullOrWhiteSpace(guideReference?.Vae?.Compat?.ID)
             && guideReference.Vae.Compat.ID == genInfo.VideoModel?.ModelClass?.CompatClass?.ID;
     }

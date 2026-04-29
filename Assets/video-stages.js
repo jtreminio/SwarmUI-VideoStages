@@ -1,5 +1,14 @@
 "use strict";
 (() => {
+  // frontend/debugLog.ts
+  var videoStagesDebugEnabled = () => typeof window !== "undefined" && !!window.__VIDEO_STAGES_DEBUG__;
+  var videoStagesDebugLog = (area, message, ...details) => {
+    if (!videoStagesDebugEnabled()) {
+      return;
+    }
+    console.debug(`[VideoStages debug ${area}]`, message, ...details);
+  };
+
   // frontend/audioSource.ts
   var AUDIO_SOURCE_NATIVE = "Native";
   var AUDIO_SOURCE_UPLOAD = "Upload";
@@ -64,8 +73,12 @@
     return AUDIO_SOURCE_NATIVE;
   };
   var audioSource = () => {
-    const refreshOptions = () => {
+    const refreshOptions = (reason = "manual") => {
       const selects = getSourceSelects();
+      videoStagesDebugLog("audioSource", "refreshOptions", {
+        reason,
+        selectCount: selects.length
+      });
       if (selects.length === 0) {
         return;
       }
@@ -84,6 +97,11 @@
         if (newOptionsJson === currentOptionsJson && select.value === desired) {
           continue;
         }
+        videoStagesDebugLog("audioSource", "refreshOptions DOM rebuild", {
+          reason,
+          previousValue: select.value,
+          desired
+        });
         select.innerHTML = "";
         for (const option of options) {
           const elem = document.createElement("option");
@@ -98,12 +116,15 @@
     };
     const onDocumentDropdownInteraction = (event) => {
       if (isSourceSelect(event.target)) {
-        refreshOptions();
+        refreshOptions("dropdown-interaction");
       }
+    };
+    const onAceStepFunTracksChanged = () => {
+      refreshOptions("acestepfun:tracks-changed");
     };
     const runOnEachBuild = () => {
       try {
-        refreshOptions();
+        refreshOptions("postParamBuildSteps");
       } catch (error) {
         console.warn("audioSource: param build sync failed", error);
       }
@@ -117,7 +138,7 @@
     };
     document.addEventListener("mousedown", onDocumentDropdownInteraction);
     document.addEventListener("focusin", onDocumentDropdownInteraction);
-    document.addEventListener(ACESTEPFUN_EVENT, refreshOptions);
+    document.addEventListener(ACESTEPFUN_EVENT, onAceStepFunTracksChanged);
     scheduleInitialSync();
     return {
       buildOptions: buildAudioSourceOptions,
@@ -133,7 +154,10 @@
           "focusin",
           onDocumentDropdownInteraction
         );
-        document.removeEventListener(ACESTEPFUN_EVENT, refreshOptions);
+        document.removeEventListener(
+          ACESTEPFUN_EVENT,
+          onAceStepFunTracksChanged
+        );
       }
     };
   };
@@ -150,12 +174,21 @@
   var CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
   var CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
   var CLIP_AUDIO_UPLOAD_DESCRIPTION = "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
   var STAGE_REF_STRENGTH_MIN = 0.1;
   var STAGE_REF_STRENGTH_MAX = 1;
   var STAGE_REF_STRENGTH_STEP = 0.1;
   var STAGE_REF_STRENGTH_DEFAULT = 0.8;
   var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
   var STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
   var stageRefStrengthField = (refIdx) => `${STAGE_REF_STRENGTH_FIELD_PREFIX}${refIdx}`;
   var parseStageRefStrengthIndex = (field) => {
     if (!field.startsWith(STAGE_REF_STRENGTH_FIELD_PREFIX)) {
@@ -199,6 +232,27 @@
     return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
   };
   var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+  // frontend/ltxModel.ts
+  var LTXV2_COMPAT_CLASS_ID = "lightricks-ltx-video-2";
+  var getModelCompatClassId = (modelValue) => {
+    if (typeof modelsHelpers === "undefined" || !modelsHelpers || typeof modelsHelpers.getDataFor !== "function") {
+      return null;
+    }
+    return modelsHelpers.getDataFor("Stable-Diffusion", modelValue)?.modelClass?.compatClass?.id ?? null;
+  };
+  var matchesKnownLtxV2Name = (modelValue) => modelValue.startsWith("ltx-") || modelValue.startsWith("ltxv2") || modelValue.includes(LTXV2_COMPAT_CLASS_ID);
+  var isLtxVideoModelValue = (modelValue) => {
+    const trimmed = `${modelValue ?? ""}`.trim();
+    if (!trimmed) {
+      return false;
+    }
+    const compatClassId = getModelCompatClassId(trimmed);
+    if (compatClassId !== null) {
+      return compatClassId === LTXV2_COMPAT_CLASS_ID;
+    }
+    return matchesKnownLtxV2Name(trimmed.toLowerCase());
+  };
 
   // frontend/renderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -274,8 +328,14 @@
 
   // frontend/normalization.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : upscaleMethodValues[0] ?? "pixel-lanczos";
-  var resolveFirstStageControl = (defaults) => clamp(defaults.control, defaults.controlMin, defaults.controlMax);
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var normalizeExpanded = (raw) => raw.expanded === void 0 ? true : !!raw.expanded;
+  var snapStrengthToStep = (value, fallback, min, max, step) => {
+    const unitScale = 1 / step;
+    return Math.round(
+      clamp(utils.toNumber(`${value ?? fallback}`, fallback), min, max) * unitScale
+    ) / unitScale;
+  };
   var normalizeUploadedAudio = (value) => {
     if (!isRecord(value)) {
       return null;
@@ -291,23 +351,45 @@
       )
     };
   };
-  var normalizeStageRefStrengthValue = (value) => Math.round(
-    clamp(
-      utils.toNumber(
-        `${value ?? STAGE_REF_STRENGTH_DEFAULT}`,
-        STAGE_REF_STRENGTH_DEFAULT
-      ),
-      STAGE_REF_STRENGTH_MIN,
-      STAGE_REF_STRENGTH_MAX
-    ) * 10
-  ) / 10;
-  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => {
-    const strengths = [];
-    for (let i = 0; i < refCount; i++) {
-      strengths.push(defaultStrength);
+  var normalizeControlNetSource = (value) => {
+    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    for (const option of CONTROLNET_SOURCE_OPTIONS) {
+      if (option.replace(/\s+/g, "").toLowerCase() === compact) {
+        return option;
+      }
     }
-    return strengths;
+    return CONTROLNET_SOURCE_OPTIONS[0];
   };
+  var normalizeOptionalModelName = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    return raw || "";
+  };
+  var normalizeControlNetLora = (value) => {
+    const raw = normalizeOptionalModelName(value);
+    if (!raw) {
+      return "";
+    }
+    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
+    if (squeezed === "(none)") {
+      return "";
+    }
+    return raw;
+  };
+  var normalizeStageRefStrengthValue = (value) => snapStrengthToStep(
+    value,
+    STAGE_REF_STRENGTH_DEFAULT,
+    STAGE_REF_STRENGTH_MIN,
+    STAGE_REF_STRENGTH_MAX,
+    STAGE_REF_STRENGTH_STEP
+  );
+  var normalizeStageControlNetStrengthValue = (value) => snapStrengthToStep(
+    value,
+    STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_STEP
+  );
+  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => Array.from({ length: refCount }, () => defaultStrength);
   var normalizeStageRefStrengths = (rawStrengths, refCount) => {
     const strengths = [];
     const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
@@ -339,6 +421,7 @@
       expanded: true,
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
+      controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
       refStrengths: buildDefaultStageRefStrengths(refCount),
       upscale: previousStage ? previousStage.upscale : defaults.upscale,
       upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
@@ -369,8 +452,11 @@
         defaults.fps
       ),
       audioSource: AUDIO_SOURCE_NATIVE,
+      controlNetSource: CONTROLNET_SOURCE_OPTIONS[0],
+      controlNetLora: "",
       saveAudioTrack: false,
       clipLengthFromAudio: false,
+      clipLengthFromControlNet: false,
       reuseAudio: false,
       uploadedAudio: null,
       refs,
@@ -408,34 +494,52 @@
       previousStage,
       refCount
     );
-    const firstStageUpscale = stageIndexInClip === 0 ? {
-      upscale: defaults.upscale,
-      upscaleMethod: resolveRootPreferredUpscaleMethod(
-        defaults.upscaleMethodValues
-      )
-    } : {
-      upscale: clamp(
-        utils.toNumber(
-          `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
-          fallback.upscale
+    let firstStageUpscale;
+    let control;
+    if (stageIndexInClip === 0) {
+      firstStageUpscale = {
+        upscale: defaults.upscale,
+        upscaleMethod: resolveRootPreferredUpscaleMethod(
+          defaults.upscaleMethodValues
+        )
+      };
+      control = clamp(
+        defaults.control,
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    } else {
+      firstStageUpscale = {
+        upscale: clamp(
+          utils.toNumber(
+            `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+            fallback.upscale
+          ),
+          defaults.upscaleMin,
+          defaults.upscaleMax
         ),
-        defaults.upscaleMin,
-        defaults.upscaleMax
-      ),
-      upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
-    };
-    const control = stageIndexInClip === 0 ? resolveFirstStageControl(defaults) : clamp(
-      utils.toNumber(
-        `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
-        fallback.control
-      ),
-      defaults.controlMin,
-      defaults.controlMax
-    );
+        upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
+      };
+      control = clamp(
+        utils.toNumber(
+          `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+          fallback.control
+        ),
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    }
     const stage = {
-      expanded: rawStage.expanded === void 0 ? true : !!rawStage.expanded,
+      expanded: normalizeExpanded(rawStage),
       skipped: !!rawStage.skipped,
       control,
+      controlNetStrength: normalizeStageControlNetStrengthValue(
+        readRawStageProp(
+          rawStage,
+          "controlNetStrength",
+          "ControlNetStrength"
+        ) ?? fallback.controlNetStrength
+      ),
       refStrengths: normalizeStageRefStrengths(
         rawStage.refStrengths,
         refCount
@@ -477,7 +581,7 @@
     const fallback = buildDefaultRef();
     const source = `${rawRef.source ?? fallback.source}` || fallback.source;
     const ref = {
-      expanded: rawRef.expanded === void 0 ? true : !!rawRef.expanded,
+      expanded: normalizeExpanded(rawRef),
       source,
       uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
       uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
@@ -535,13 +639,23 @@
       rawAudioSource,
       audioSourceOptions
     );
+    const controlNetLora = normalizeControlNetLora(
+      rawClip.controlNetLora ?? rawClip.ControlNetLora
+    );
+    const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio;
+    const clipLengthFromControlNet = controlNetLora !== "" && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
     return {
-      expanded: rawClip.expanded === void 0 ? true : !!rawClip.expanded,
+      expanded: normalizeExpanded(rawClip),
       skipped: !!rawClip.skipped,
       duration,
       audioSource: audioSource2,
+      controlNetSource: normalizeControlNetSource(
+        rawClip.controlNetSource ?? rawClip.ControlNetSource
+      ),
+      controlNetLora,
       saveAudioTrack: !!rawClip.saveAudioTrack,
-      clipLengthFromAudio: canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio,
+      clipLengthFromAudio,
+      clipLengthFromControlNet,
       reuseAudio: !!rawClip.reuseAudio,
       uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
       refs,
@@ -591,6 +705,19 @@
       getClips: getClips2,
       saveClips: saveClips2
     });
+  };
+  var syncStageControlNetStrengthDisabled = (target, stage, clip) => {
+    const stageCard = target.closest("section[data-stage-idx]");
+    if (!(stageCard instanceof HTMLElement)) {
+      return;
+    }
+    const disabled = normalizeControlNetLora(clip.controlNetLora) !== "" && !isLtxVideoModelValue(stage.model);
+    const sliders = stageCard.querySelectorAll(
+      '[data-stage-field="controlNetStrength"]'
+    );
+    for (let i = 0; i < sliders.length; i++) {
+      sliders[i].disabled = disabled;
+    }
   };
   var syncStageUpscaleMethodDisabled = (target, upscale) => {
     const stageCard = target.closest("section[data-stage-idx]");
@@ -669,10 +796,50 @@
     if (lengthFromAudio && !canUseAudioLength) {
       lengthFromAudio.checked = false;
     }
+    const controlNetLora = clipCard.querySelector('[data-clip-field="controlNetLora"]');
+    const lengthFromControlNet = clipCard.querySelector(
+      '[data-clip-field="clipLengthFromControlNet"]'
+    );
+    const controlNetLengthDisabled = normalizeControlNetLora(controlNetLora?.value ?? "") === "" || !!lengthFromAudio?.checked;
+    syncClipAudioLengthDisabled(
+      clipCard,
+      !canUseAudioLength || !!lengthFromControlNet?.checked
+    );
+    syncClipControlNetLengthDisabled(clipCard, controlNetLengthDisabled);
     syncClipDurationDisabled(
       clipCard,
-      canUseAudioLength && !!lengthFromAudio?.checked
+      canUseAudioLength && !!lengthFromAudio?.checked || !controlNetLengthDisabled && !!lengthFromControlNet?.checked
     );
+  };
+  var syncClipAudioLengthDisabled = (clipCard, disabled) => {
+    const lengthFromAudio = clipCard.querySelector(
+      '[data-clip-field="clipLengthFromAudio"]'
+    );
+    if (lengthFromAudio) {
+      lengthFromAudio.disabled = disabled;
+      if (disabled) {
+        lengthFromAudio.checked = false;
+      }
+    }
+    const lengthField = clipCard.querySelector(
+      ".vs-clip-length-from-audio-field"
+    );
+    lengthField?.classList.toggle("vs-audio-length-disabled", disabled);
+  };
+  var syncClipControlNetLengthDisabled = (clipCard, disabled) => {
+    const lengthFromControlNet = clipCard.querySelector(
+      '[data-clip-field="clipLengthFromControlNet"]'
+    );
+    if (lengthFromControlNet) {
+      lengthFromControlNet.disabled = disabled;
+      if (disabled) {
+        lengthFromControlNet.checked = false;
+      }
+    }
+    const lengthField = clipCard.querySelector(
+      ".vs-clip-length-from-controlnet-field"
+    );
+    lengthField?.classList.toggle("vs-controlnet-length-disabled", disabled);
   };
   var syncClipDurationDisabled = (clipCard, disabled) => {
     const durationInputs = clipCard.querySelectorAll(
@@ -761,6 +928,16 @@
           defaults.controlMin,
           defaults.controlMax
         );
+      }
+      return;
+    }
+    if (field === "controlNetStrength") {
+      if (target.disabled) {
+        return;
+      }
+      const value = parseFloat(target.value);
+      if (Number.isFinite(value)) {
+        stage.controlNetStrength = normalizeStageControlNetStrengthValue(value);
       }
       return;
     }
@@ -935,14 +1112,26 @@
   };
 
   // frontend/rootDefaults.ts
+  var STAGE_UPSCALE_PREFIXES = ["pixel-", "model-", "latent-", "latentmodel-"];
+  var isStageUpscaleMethod = (value) => STAGE_UPSCALE_PREFIXES.some((prefix) => value.startsWith(prefix));
+  var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
+  var firstPresentInput = (...ids) => {
+    for (let i = 0; i < ids.length; i++) {
+      const el = utils.getInputElement(ids[i]);
+      if (el) {
+        return el;
+      }
+    }
+    return null;
+  };
   var getDefaultStageModel = (modelValues) => {
     if (isRootTextToVideoModel()) {
-      const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
+      const modelName = trimDomValue(getRootModelInput());
       if (modelName) {
         return modelName;
       }
     }
-    const videoModel = `${utils.getSelectElement("input_videomodel")?.value ?? ""}`.trim();
+    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
     if (videoModel) {
       return videoModel;
     }
@@ -954,16 +1143,21 @@
       model = utils.getSelectElement("input_model");
     }
     const vae = utils.getSelectElement("input_vae");
+    const loras = getDropdownOptions("loras", "input_loras");
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const isStageMethod = (value) => value.startsWith("pixel-") || value.startsWith("model-") || value.startsWith("latent-") || value.startsWith("latentmodel-");
-    const upscaleMethodValues = allUpscaleMethodValues.filter(isStageMethod);
-    const upscaleMethodLabels = allUpscaleMethodLabels.filter(
-      (_, index) => isStageMethod(allUpscaleMethodValues[index])
-    );
+    const stageUpscaleValues = [];
+    const stageUpscaleLabels = [];
+    for (let i = 0; i < allUpscaleMethodValues.length; i++) {
+      const value = allUpscaleMethodValues[i];
+      if (isStageUpscaleMethod(value)) {
+        stageUpscaleValues.push(value);
+        stageUpscaleLabels.push(allUpscaleMethodLabels[i]);
+      }
+    }
     const fallbackUpscaleMethods = [
       "pixel-lanczos",
       "pixel-bicubic",
@@ -971,12 +1165,24 @@
       "pixel-bilinear",
       "pixel-nearest-exact"
     ];
-    const steps = utils.getInputElement("input_videosteps") ?? utils.getInputElement("input_steps");
-    const cfgScale = utils.getInputElement("input_videocfg") ?? utils.getInputElement("input_cfgscale");
-    const widthInput = utils.getInputElement("input_width") ?? utils.getInputElement("input_aspectratiowidth");
-    const heightInput = utils.getInputElement("input_height") ?? utils.getInputElement("input_aspectratioheight");
-    const fpsInput = utils.getInputElement("input_videofps") ?? utils.getInputElement("input_videoframespersecond");
-    const framesInput = utils.getInputElement("input_videoframes") ?? utils.getInputElement("input_text2videoframes");
+    const steps = firstPresentInput("input_videosteps", "input_steps");
+    const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
+    const widthInput = firstPresentInput(
+      "input_width",
+      "input_aspectratiowidth"
+    );
+    const heightInput = firstPresentInput(
+      "input_height",
+      "input_aspectratioheight"
+    );
+    const fpsInput = firstPresentInput(
+      "input_videofps",
+      "input_videoframespersecond"
+    );
+    const framesInput = firstPresentInput(
+      "input_videoframes",
+      "input_text2videoframes"
+    );
     const fps = Math.max(
       1,
       getRegisteredRootFps() ?? Math.round(utils.toNumber(fpsInput?.value, 24))
@@ -988,14 +1194,16 @@
     return {
       modelValues: utils.getSelectValues(model),
       modelLabels: utils.getSelectLabels(model),
+      loraValues: loras.values,
+      loraLabels: loras.labels,
       vaeValues: utils.getSelectValues(vae),
       vaeLabels: utils.getSelectLabels(vae),
       samplerValues: sampler.values,
       samplerLabels: sampler.labels,
       schedulerValues: scheduler.values,
       schedulerLabels: scheduler.labels,
-      upscaleMethodValues: upscaleMethodValues.length > 0 ? upscaleMethodValues : fallbackUpscaleMethods,
-      upscaleMethodLabels: upscaleMethodLabels.length > 0 ? upscaleMethodLabels : fallbackUpscaleMethods,
+      upscaleMethodValues: stageUpscaleValues.length > 0 ? stageUpscaleValues : fallbackUpscaleMethods,
+      upscaleMethodLabels: stageUpscaleLabels.length > 0 ? stageUpscaleLabels : fallbackUpscaleMethods,
       width: getRegisteredRootDimension("width") ?? Math.max(
         ROOT_DIMENSION_MIN,
         Math.round(utils.toNumber(widthInput?.value, 1024))
@@ -1029,6 +1237,20 @@
   };
 
   // frontend/domEvents.ts
+  var changeFieldEventsHandled = /* @__PURE__ */ new WeakMap();
+  var resolveHostNotifyForHandleFieldChange = (deps, sourceEvent) => {
+    if (deps.shouldSuppressClipsHostNotify?.() === true) {
+      return false;
+    }
+    if (isVideoStagesEnabled()) {
+      return true;
+    }
+    const ev = sourceEvent;
+    if (ev?.__videoStagesSimulateUserFieldChange === true) {
+      return true;
+    }
+    return ev?.isTrusted === true;
+  };
   var isFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement || value instanceof HTMLTextAreaElement;
   var isStageFieldTarget = (value) => value instanceof HTMLInputElement || value instanceof HTMLSelectElement;
   var isSliderNumericInput = (value) => value instanceof HTMLInputElement && (value.type === "number" || value.type === "range");
@@ -1062,7 +1284,7 @@
       return;
     }
     clips[clipIdx].expanded = !clips[clipIdx].expanded;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
     deps.scheduleClipsRefresh();
   };
   var handleRefUploadRemove = (elem, deps) => {
@@ -1088,7 +1310,7 @@
     clips[clipIdx].refs[refIdx].uploadFileName = null;
     clips[clipIdx].refs[refIdx].uploadedImage = null;
     deps.refUploadCache.delete(refUploadKey(clipIdx, refIdx));
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
   };
   var handleClipAudioUploadRemove = (elem, deps) => {
     const uploadField = elem.closest(".vs-clip-audio-upload-field");
@@ -1107,46 +1329,32 @@
       return;
     }
     clips[clipIdx].uploadedAudio = null;
-    deps.saveClips(clips);
+    deps.saveClips(clips, { notifyDomChange: true });
   };
-  var handleAction = (elem, deps) => {
-    const target = elem;
-    const clips = deps.getClips();
-    const clipAction = target.dataset.clipAction;
-    const stageAction = target.dataset.stageAction;
-    const refAction = target.dataset.refAction;
-    if (clipAction === "add-clip") {
-      clips.push(
-        buildDefaultClip(
-          getRootDefaults,
-          getDefaultStageModel,
-          isImageToVideoWorkflow()
-        )
-      );
-      deps.saveClips(clips);
-      deps.scheduleClipsRefresh();
-      return;
-    }
-    const clipIdx = parseInt(target.dataset.clipIdx ?? "-1", 10);
-    if (clipIdx < 0 || clipIdx >= clips.length) {
-      deps.scheduleClipsRefresh();
-      return;
-    }
-    const clip = clips[clipIdx];
-    if (clipAction === "delete") {
+  var saveClipsAndRefresh = (clips, deps) => {
+    deps.saveClips(clips, { notifyDomChange: true });
+    deps.scheduleClipsRefresh();
+  };
+  var addClip = (clips) => {
+    clips.push(
+      buildDefaultClip(
+        getRootDefaults,
+        getDefaultStageModel,
+        isImageToVideoWorkflow()
+      )
+    );
+  };
+  var applyClipAction = (action, { clips, clip, clipIdx, deps }) => {
+    if (action === "delete") {
       clips.splice(clipIdx, 1);
       deps.refUploadCache.reindexAfterClipDelete(clipIdx);
-      deps.saveClips(clips);
-      deps.scheduleClipsRefresh();
-      return;
+      return true;
     }
-    if (clipAction === "skip") {
+    if (action === "skip") {
       clip.skipped = !clip.skipped;
-      deps.saveClips(clips);
-      deps.scheduleClipsRefresh();
-      return;
+      return true;
     }
-    if (clipAction === "add-stage") {
+    if (action === "add-stage") {
       const previousStage = clip.stages.length > 0 ? clip.stages[clip.stages.length - 1] : null;
       clip.stages.push(
         buildDefaultStage(
@@ -1156,11 +1364,9 @@
           clip.refs.length
         )
       );
-      deps.saveClips(clips);
-      deps.scheduleClipsRefresh();
-      return;
+      return true;
     }
-    if (clipAction === "add-ref") {
+    if (action === "add-ref") {
       clip.refs.push(buildDefaultRef());
       for (const stage of clip.stages) {
         stage.refStrengths.push(
@@ -1168,57 +1374,361 @@
         );
       }
       deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
-      deps.saveClips(clips);
+      return true;
+    }
+    return false;
+  };
+  var applyRefAction = (action, elem, { clip, clipIdx, deps }) => {
+    const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+      return false;
+    }
+    if (action === "delete") {
+      clip.refs.splice(refIdx, 1);
+      for (const stage of clip.stages) {
+        if (refIdx < stage.refStrengths.length) {
+          stage.refStrengths.splice(refIdx, 1);
+        }
+      }
+      deps.refUploadCache.reindexAfterRefDelete(clipIdx, refIdx);
+    }
+    if (action === "toggle-collapse") {
+      const ref = clip.refs[refIdx];
+      ref.expanded = !ref.expanded;
+    }
+    return true;
+  };
+  var applyStageAction = (action, elem, { clip }) => {
+    const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
+    if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+      return false;
+    }
+    if (action === "delete") {
+      clip.stages.splice(stageIdx, 1);
+    }
+    const stage = clip.stages[stageIdx];
+    if (action === "skip") {
+      stage.skipped = !stage.skipped;
+    }
+    if (action === "toggle-collapse") {
+      stage.expanded = !stage.expanded;
+    }
+    return true;
+  };
+  var handleAction = (elem, deps) => {
+    const clips = deps.getClips();
+    const clipAction = elem.dataset.clipAction;
+    const stageAction = elem.dataset.stageAction;
+    const refAction = elem.dataset.refAction;
+    if (clipAction === "add-clip") {
+      addClip(clips);
+      saveClipsAndRefresh(clips, deps);
+      return;
+    }
+    const clipIdx = parseInt(elem.dataset.clipIdx ?? "-1", 10);
+    if (clipIdx < 0 || clipIdx >= clips.length) {
       deps.scheduleClipsRefresh();
+      return;
+    }
+    const clip = clips[clipIdx];
+    const actionContext = { clips, clip, clipIdx, deps };
+    if (clipAction && applyClipAction(clipAction, actionContext)) {
+      saveClipsAndRefresh(clips, deps);
       return;
     }
     if (refAction) {
-      const refIdx = parseInt(target.dataset.refIdx ?? "-1", 10);
-      if (refIdx < 0 || refIdx >= clip.refs.length) {
+      if (!applyRefAction(refAction, elem, actionContext)) {
         deps.scheduleClipsRefresh();
         return;
       }
-      const ref = clip.refs[refIdx];
-      if (refAction === "delete") {
-        clip.refs.splice(refIdx, 1);
-        for (const stage of clip.stages) {
-          if (refIdx < stage.refStrengths.length) {
-            stage.refStrengths.splice(refIdx, 1);
-          }
-        }
-        deps.refUploadCache.reindexAfterRefDelete(clipIdx, refIdx);
-      } else if (refAction === "toggle-collapse") {
-        ref.expanded = !ref.expanded;
-      }
-      deps.saveClips(clips);
-      deps.scheduleClipsRefresh();
+      saveClipsAndRefresh(clips, deps);
       return;
     }
     if (stageAction) {
-      const stageIdx = parseInt(target.dataset.stageIdx ?? "-1", 10);
-      if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+      if (!applyStageAction(stageAction, elem, actionContext)) {
         deps.scheduleClipsRefresh();
         return;
       }
-      const stage = clip.stages[stageIdx];
-      if (stageAction === "delete") {
-        clip.stages.splice(stageIdx, 1);
-      } else if (stageAction === "skip") {
-        stage.skipped = !stage.skipped;
-      } else if (stageAction === "toggle-collapse") {
-        stage.expanded = !stage.expanded;
+      saveClipsAndRefresh(clips, deps);
+    }
+  };
+  var FIELD_CHANGE_NOT_HANDLED = {
+    handled: false,
+    applied: false
+  };
+  var FIELD_CHANGE_IGNORED = {
+    handled: true,
+    applied: false
+  };
+  var fieldChangeApplied = (result = {}) => ({
+    handled: true,
+    applied: true,
+    ...result
+  });
+  var setRelatedClipCheckbox = (elem, field, checked, disabled) => {
+    const checkbox = elem.closest(".vs-clip-card")?.querySelector(`[data-clip-field="${field}"]`);
+    if (!checkbox) {
+      return;
+    }
+    checkbox.checked = checked;
+    if (disabled !== void 0) {
+      checkbox.disabled = disabled;
+    }
+  };
+  var syncClipLengthControls = (elem, clip) => {
+    const clipCard = elem.closest(".vs-clip-card");
+    if (!(clipCard instanceof HTMLElement)) {
+      return;
+    }
+    syncClipDurationDisabled(
+      clipCard,
+      clip.clipLengthFromAudio || clip.clipLengthFromControlNet
+    );
+    syncClipAudioLengthDisabled(
+      clipCard,
+      !canUseClipLengthFromAudio(clip.audioSource) || clip.clipLengthFromControlNet
+    );
+    syncClipControlNetLengthDisabled(
+      clipCard,
+      clip.controlNetLora === "" || clip.clipLengthFromAudio
+    );
+  };
+  var applyClipDurationChange = ({
+    elem,
+    clip
+  }) => {
+    const value = parseFloat(elem.value);
+    if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
+      const rootDefaults = getRootDefaults();
+      clip.duration = snapDurationToFps(value, rootDefaults.fps);
+      const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+      for (const ref of clip.refs) {
+        ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
       }
-      deps.saveClips(clips);
+    }
+    return fieldChangeApplied({ refreshClips: "change-only" });
+  };
+  var applyClipAudioSourceChange = ({
+    elem,
+    clip
+  }) => {
+    clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
+    if (!isAceStepFunAudioSource(clip.audioSource)) {
+      clip.saveAudioTrack = false;
+      setRelatedClipCheckbox(elem, "saveAudioTrack", false);
+    }
+    if (!canUseClipLengthFromAudio(clip.audioSource)) {
+      clip.clipLengthFromAudio = false;
+      setRelatedClipCheckbox(elem, "clipLengthFromAudio", false);
+    }
+    return fieldChangeApplied({ syncAudioUploadVisibility: true });
+  };
+  var applyClipControlNetLoraChange = ({
+    elem,
+    clip
+  }) => {
+    clip.controlNetLora = normalizeControlNetLora(elem.value);
+    if (clip.controlNetLora === "") {
+      clip.clipLengthFromControlNet = false;
+      setRelatedClipCheckbox(elem, "clipLengthFromControlNet", false, true);
+    }
+    return fieldChangeApplied({
+      refreshClips: "always",
+      syncClipLengthControls: true
+    });
+  };
+  var applyClipLengthFromAudioChange = ({
+    elem,
+    clip
+  }) => {
+    clip.clipLengthFromAudio = elem instanceof HTMLInputElement && canUseClipLengthFromAudio(clip.audioSource) && !clip.clipLengthFromControlNet ? !!elem.checked : false;
+    if (elem instanceof HTMLInputElement && !clip.clipLengthFromAudio) {
+      elem.checked = false;
+    }
+    if (clip.clipLengthFromAudio) {
+      clip.clipLengthFromControlNet = false;
+      setRelatedClipCheckbox(elem, "clipLengthFromControlNet", false, true);
+    }
+    return fieldChangeApplied({ syncClipLengthControls: true });
+  };
+  var applyClipLengthFromControlNetChange = ({
+    elem,
+    clip
+  }) => {
+    clip.clipLengthFromControlNet = elem instanceof HTMLInputElement && clip.controlNetLora !== "" && !clip.clipLengthFromAudio ? !!elem.checked : false;
+    if (elem instanceof HTMLInputElement && !clip.clipLengthFromControlNet) {
+      elem.checked = false;
+    }
+    if (clip.clipLengthFromControlNet) {
+      clip.clipLengthFromAudio = false;
+      setRelatedClipCheckbox(elem, "clipLengthFromAudio", false, true);
+    }
+    return fieldChangeApplied({ syncClipLengthControls: true });
+  };
+  var applyClipAudioUploadChange = ({
+    elem,
+    clip,
+    clipIdx,
+    fieldBindingDeps
+  }) => {
+    if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
+      return FIELD_CHANGE_IGNORED;
+    }
+    if (elem.dataset.filedata) {
+      clip.uploadedAudio = {
+        data: elem.dataset.filedata,
+        fileName: normalizeUploadFileName(
+          elem.dataset.filename ?? elem.files?.[0]?.name ?? null
+        )
+      };
+      return fieldChangeApplied();
+    }
+    if (elem.files?.length) {
+      cacheClipAudioSelection(clipIdx, elem, {
+        getClips: fieldBindingDeps.getClips,
+        saveClips: fieldBindingDeps.saveClips
+      });
+      return FIELD_CHANGE_IGNORED;
+    }
+    clip.uploadedAudio = null;
+    return fieldChangeApplied();
+  };
+  var applyClipFieldChange = (ctx) => {
+    const { elem, clip, field } = ctx;
+    if (field === "duration") {
+      return applyClipDurationChange(ctx);
+    }
+    if (field === "audioSource") {
+      return applyClipAudioSourceChange(ctx);
+    }
+    if (field === "controlNetSource") {
+      clip.controlNetSource = normalizeControlNetSource(elem.value);
+      return fieldChangeApplied();
+    }
+    if (field === "controlNetLora") {
+      return applyClipControlNetLoraChange(ctx);
+    }
+    if (field === "saveAudioTrack") {
+      clip.saveAudioTrack = elem instanceof HTMLInputElement && isAceStepFunAudioSource(clip.audioSource) ? !!elem.checked : false;
+      if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
+        elem.checked = false;
+      }
+      return fieldChangeApplied();
+    }
+    if (field === "reuseAudio") {
+      clip.reuseAudio = elem instanceof HTMLInputElement && !!elem.checked;
+      return fieldChangeApplied();
+    }
+    if (field === "clipLengthFromAudio") {
+      return applyClipLengthFromAudioChange(ctx);
+    }
+    if (field === "clipLengthFromControlNet") {
+      return applyClipLengthFromControlNetChange(ctx);
+    }
+    if (field === CLIP_AUDIO_UPLOAD_FIELD) {
+      return applyClipAudioUploadChange(ctx);
+    }
+    return FIELD_CHANGE_NOT_HANDLED;
+  };
+  var applyRefDatasetFieldChange = ({
+    elem,
+    clip,
+    refField,
+    fieldBindingDeps
+  }) => {
+    if (!refField) {
+      return FIELD_CHANGE_NOT_HANDLED;
+    }
+    const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+      return FIELD_CHANGE_IGNORED;
+    }
+    applyRefField(clip, clip.refs[refIdx], refField, elem, fieldBindingDeps);
+    if (refField === "source") {
+      syncRefUploadFieldVisibility(
+        elem,
+        elem.value,
+        fieldBindingDeps.refUploadCache
+      );
+    }
+    return fieldChangeApplied();
+  };
+  var applyStageDatasetFieldChange = ({
+    elem,
+    clip,
+    stageField
+  }) => {
+    if (!stageField) {
+      return FIELD_CHANGE_NOT_HANDLED;
+    }
+    const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
+    if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+      return FIELD_CHANGE_IGNORED;
+    }
+    if (!isStageFieldTarget(elem)) {
+      return FIELD_CHANGE_IGNORED;
+    }
+    const stage = clip.stages[stageIdx];
+    const stageCard = elem.closest("section[data-stage-idx]");
+    const methodSelect = stageCard?.querySelector(
+      '[data-stage-field="upscaleMethod"]'
+    );
+    const preservedUpscaleMethod = stageField === "upscale" ? methodSelect?.value ?? stage.upscaleMethod : null;
+    applyStageField(stage, stageField, elem, getRootDefaults);
+    if (stageField === "upscale") {
+      if (preservedUpscaleMethod != null) {
+        stage.upscaleMethod = preservedUpscaleMethod;
+      }
+      syncStageUpscaleMethodDisabled(elem, stage.upscale);
+      if (methodSelect && preservedUpscaleMethod != null) {
+        methodSelect.value = preservedUpscaleMethod;
+      }
+    }
+    if (stageField === "model") {
+      syncStageControlNetStrengthDisabled(elem, stage, clip);
+    }
+    return fieldChangeApplied();
+  };
+  var applyDatasetFieldChange = (ctx) => {
+    const { elem, clip, clipIdx, clipField, fieldBindingDeps } = ctx;
+    if (clipField != null) {
+      const clipResult = applyClipFieldChange({
+        elem,
+        clip,
+        clipIdx,
+        field: clipField,
+        fieldBindingDeps
+      });
+      if (clipResult.handled) {
+        return clipResult;
+      }
+    }
+    const refResult = applyRefDatasetFieldChange(ctx);
+    if (refResult.handled) {
+      return refResult;
+    }
+    return applyStageDatasetFieldChange(ctx);
+  };
+  var finishFieldChange = (result, elem, clip, deps, fromInputEvent) => {
+    if (result.syncAudioUploadVisibility) {
+      syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
+    }
+    if (result.syncClipLengthControls) {
+      syncClipLengthControls(elem, clip);
+    }
+    if (result.refreshClips === "always" || result.refreshClips === "change-only" && !fromInputEvent) {
       deps.scheduleClipsRefresh();
     }
   };
-  var handleFieldChange = (elem, deps, fromInputEvent = false) => {
+  var handleFieldChange = (elem, deps, fromInputEvent = false, sourceEvent = void 0) => {
     if (!isFieldTarget(elem) || !deps.getEditor()?.contains(elem)) {
+      return;
+    }
+    if (sourceEvent instanceof Event && sourceEvent.type === "change" && changeFieldEventsHandled.has(sourceEvent)) {
       return;
     }
     const state = deps.getState();
     const clips = state.clips;
-    const defaults = getRootDefaults();
     const clipField = elem.dataset.clipField;
     const stageField = elem.dataset.stageField;
     const refField = elem.dataset.refField;
@@ -1233,122 +1743,35 @@
       getClips: deps.getClips,
       saveClips: deps.saveClips
     };
-    if (clipField === "duration") {
-      const value = parseFloat(elem.value);
-      if (Number.isFinite(value) && value >= CLIP_DURATION_MIN) {
-        clip.duration = snapDurationToFps(value, defaults.fps);
-        const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-        for (const ref of clip.refs) {
-          ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
-        }
-      }
-    } else if (clipField === "audioSource") {
-      clip.audioSource = elem.value || AUDIO_SOURCE_NATIVE;
-      if (!isAceStepFunAudioSource(clip.audioSource)) {
-        clip.saveAudioTrack = false;
-        const saveAudioTrack = elem.closest(".vs-clip-card")?.querySelector(
-          '[data-clip-field="saveAudioTrack"]'
-        );
-        if (saveAudioTrack) {
-          saveAudioTrack.checked = false;
-        }
-      }
-      if (!canUseClipLengthFromAudio(clip.audioSource)) {
-        clip.clipLengthFromAudio = false;
-        const clipLengthFromAudio = elem.closest(".vs-clip-card")?.querySelector(
-          '[data-clip-field="clipLengthFromAudio"]'
-        );
-        if (clipLengthFromAudio) {
-          clipLengthFromAudio.checked = false;
-        }
-      }
-    } else if (clipField === "saveAudioTrack") {
-      clip.saveAudioTrack = elem instanceof HTMLInputElement && isAceStepFunAudioSource(clip.audioSource) ? !!elem.checked : false;
-      if (elem instanceof HTMLInputElement && !clip.saveAudioTrack) {
-        elem.checked = false;
-      }
-    } else if (clipField === "reuseAudio") {
-      clip.reuseAudio = elem instanceof HTMLInputElement && !!elem.checked;
-    } else if (clipField === "clipLengthFromAudio") {
-      clip.clipLengthFromAudio = elem instanceof HTMLInputElement && canUseClipLengthFromAudio(clip.audioSource) ? !!elem.checked : false;
-      if (elem instanceof HTMLInputElement && !clip.clipLengthFromAudio) {
-        elem.checked = false;
-      }
-    } else if (clipField === CLIP_AUDIO_UPLOAD_FIELD) {
-      if (!(elem instanceof HTMLInputElement) || elem.type !== "file") {
-        return;
-      }
-      if (elem.dataset.filedata) {
-        clip.uploadedAudio = {
-          data: elem.dataset.filedata,
-          fileName: normalizeUploadFileName(
-            elem.dataset.filename ?? elem.files?.[0]?.name ?? null
-          )
-        };
-      } else if (elem.files?.length) {
-        cacheClipAudioSelection(clipIdx, elem, {
-          getClips: deps.getClips,
-          saveClips: deps.saveClips
-        });
-        return;
-      } else {
-        clip.uploadedAudio = null;
-      }
-    } else if (refField) {
-      const refIdx = parseInt(elem.dataset.refIdx ?? "-1", 10);
-      if (refIdx < 0 || refIdx >= clip.refs.length) {
-        return;
-      }
-      applyRefField(
-        clip,
-        clip.refs[refIdx],
-        refField,
-        elem,
-        fieldBindingDeps
-      );
-      if (refField === "source") {
-        syncRefUploadFieldVisibility(elem, elem.value, deps.refUploadCache);
-      }
-    } else if (stageField) {
-      const stageIdx = parseInt(elem.dataset.stageIdx ?? "-1", 10);
-      if (stageIdx < 0 || stageIdx >= clip.stages.length) {
-        return;
-      }
-      if (!isStageFieldTarget(elem)) {
-        return;
-      }
-      const stage = clip.stages[stageIdx];
-      const stageCard = elem.closest("section[data-stage-idx]");
-      const methodSelect = stageCard?.querySelector(
-        '[data-stage-field="upscaleMethod"]'
-      );
-      const preservedUpscaleMethod = stageField === "upscale" ? methodSelect?.value ?? stage.upscaleMethod : null;
-      applyStageField(stage, stageField, elem, getRootDefaults);
-      if (stageField === "upscale") {
-        if (preservedUpscaleMethod != null) {
-          stage.upscaleMethod = preservedUpscaleMethod;
-        }
-        syncStageUpscaleMethodDisabled(elem, stage.upscale);
-        if (methodSelect && preservedUpscaleMethod != null) {
-          methodSelect.value = preservedUpscaleMethod;
-        }
-      }
-    } else {
+    const fieldChangeResult = applyDatasetFieldChange({
+      elem,
+      clip,
+      clipIdx,
+      clipField,
+      stageField,
+      refField,
+      fieldBindingDeps
+    });
+    if (!fieldChangeResult.applied) {
       return;
     }
-    deps.saveState(state);
-    if (clipField === "audioSource") {
-      syncClipAudioUploadFieldVisibility(elem, clip.audioSource);
+    videoStagesDebugLog("domEvents", "handleFieldChange → saveState", {
+      clipIdx,
+      clipField: clipField ?? null,
+      stageField: stageField ?? null,
+      refField: refField ?? null,
+      tag: elem instanceof HTMLElement ? elem.tagName : null,
+      fromInputEvent
+    });
+    const notifyDomChange = resolveHostNotifyForHandleFieldChange(
+      deps,
+      sourceEvent
+    );
+    deps.saveState(state, { notifyDomChange });
+    if (sourceEvent instanceof Event && sourceEvent.type === "change") {
+      changeFieldEventsHandled.set(sourceEvent);
     }
-    if (clipField === "clipLengthFromAudio") {
-      const clipCard = elem.closest(".vs-clip-card");
-      if (clipCard instanceof HTMLElement) {
-        syncClipDurationDisabled(clipCard, clip.clipLengthFromAudio);
-      }
-    }
-    if (clipField === "duration" && !fromInputEvent) {
-      deps.scheduleClipsRefresh();
-    }
+    finishFieldChange(fieldChangeResult, elem, clip, deps, fromInputEvent);
   };
   var latestDomEventDeps = null;
   var stageEditorDocumentClickBound = false;
@@ -1432,7 +1855,7 @@
         if (!editor.contains(mutation.target)) {
           continue;
         }
-        handleFieldChange(mutation.target, deps);
+        handleFieldChange(mutation.target, deps, false, void 0);
       }
     }).observe(editor, {
       subtree: true,
@@ -1461,7 +1884,7 @@
     }
     stageEditorsWithFieldListeners.add(editor);
     editor.addEventListener("change", (event) => {
-      handleFieldChange(event.target, deps);
+      handleFieldChange(event.target, deps, false, event);
     });
     editor.addEventListener(
       "change",
@@ -1473,7 +1896,7 @@
         if (event.bubbles) {
           return;
         }
-        handleFieldChange(inputTarget, deps, true);
+        handleFieldChange(inputTarget, deps, true, event);
       },
       true
     );
@@ -1483,7 +1906,7 @@
         return;
       }
       if (isSliderNumericInput(inputTarget)) {
-        handleFieldChange(inputTarget, deps, true);
+        handleFieldChange(inputTarget, deps, true, event);
       }
     });
     editor.addEventListener("focusout", (event) => {
@@ -1658,22 +2081,21 @@
 
   // frontend/persistence.ts
   var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-  var toParsedConfig = (value) => {
-    if (!isRecord2(value)) {
-      return null;
-    }
-    return {
-      clips: Array.isArray(value.clips) ? value.clips : void 0
-    };
-  };
+  var rootConfig = (dims, clips) => ({
+    ...dims,
+    clips
+  });
   var serializeClipsForStorage = (clips) => clips.map(
     (clip) => ({
       expanded: clip.expanded,
       skipped: clip.skipped,
       duration: clip.duration,
       audioSource: clip.audioSource,
+      controlNetSource: clip.controlNetSource,
+      controlNetLora: clip.controlNetLora,
       saveAudioTrack: clip.saveAudioTrack,
       clipLengthFromAudio: clip.clipLengthFromAudio,
+      clipLengthFromControlNet: clip.clipLengthFromControlNet,
       reuseAudio: clip.reuseAudio,
       uploadedAudio: clip.uploadedAudio,
       refs: clip.refs.map((ref) => ({
@@ -1688,6 +2110,7 @@
         expanded: stage.expanded,
         skipped: stage.skipped,
         control: stage.control,
+        controlNetStrength: stage.controlNetStrength,
         refStrengths: stage.refStrengths,
         upscale: stage.upscale,
         upscaleMethod: stage.upscaleMethod,
@@ -1704,69 +2127,47 @@
     clips: serializeClipsForStorage(state.clips)
   });
   var lastSerializedState = "";
-  var getSerializedStateSource = () => {
-    const inputValue = getClipsInput()?.value ?? "";
-    return inputValue || lastSerializedState;
-  };
   var parseSerializedState = (serialized, fallbackDefaults) => {
     try {
       const parsed = JSON.parse(serialized);
-      const parsedConfig = toParsedConfig(parsed);
-      let clipsRaw = [];
+      let clipsRaw;
       if (Array.isArray(parsed)) {
         clipsRaw = parsed;
-      } else if (Array.isArray(parsedConfig?.clips)) {
-        clipsRaw = parsedConfig.clips;
+      } else if (isRecord2(parsed) && Array.isArray(parsed.clips)) {
+        clipsRaw = parsed.clips;
+      } else {
+        clipsRaw = [];
       }
-      const clips = [];
-      for (let i = 0; i < clipsRaw.length; i++) {
-        const el = clipsRaw[i];
-        const record = isRecord2(el) ? el : {};
-        clips.push(
-          normalizeClip(record, getRootDefaults, getDefaultStageModel)
-        );
-      }
-      return {
-        width: fallbackDefaults.width,
-        height: fallbackDefaults.height,
-        fps: fallbackDefaults.fps,
-        clips
-      };
+      const clips = clipsRaw.map(
+        (el) => normalizeClip(
+          isRecord2(el) ? el : {},
+          getRootDefaults,
+          getDefaultStageModel
+        )
+      );
+      return rootConfig(fallbackDefaults, clips);
     } catch {
       return null;
     }
   };
   var getState = () => {
     const defaults = getRootDefaults();
-    const serialized = getSerializedStateSource();
+    const serialized = (getClipsInput()?.value ?? "") || lastSerializedState;
     if (!serialized) {
-      return {
-        width: defaults.width,
-        height: defaults.height,
-        fps: defaults.fps,
-        clips: []
-      };
+      return rootConfig(defaults, []);
     }
-    const parsedState = parseSerializedState(serialized, defaults);
+    let parsedState = parseSerializedState(serialized, defaults);
     if (parsedState) {
       lastSerializedState = serialized;
       return parsedState;
     }
     if (serialized !== lastSerializedState && lastSerializedState) {
-      const fallbackState = parseSerializedState(
-        lastSerializedState,
-        defaults
-      );
-      if (fallbackState) {
-        return fallbackState;
+      parsedState = parseSerializedState(lastSerializedState, defaults);
+      if (parsedState) {
+        return parsedState;
       }
     }
-    return {
-      width: defaults.width,
-      height: defaults.height,
-      fps: defaults.fps,
-      clips: []
-    };
+    return rootConfig(defaults, []);
   };
   var saveState = (state, callbacks, options) => {
     const serialized = serializeStateForStorage(state);
@@ -1776,15 +2177,25 @@
       input.value = serialized;
     }
     callbacks?.onAfterSerialize?.(serialized);
-    if (input && options?.notifyDomChange !== false) {
+    const willNotifyDom = !!(input && options?.notifyDomChange !== false);
+    videoStagesDebugLog("persistence", "saveState", {
+      notifyDomChange: options?.notifyDomChange,
+      willNotifyDom,
+      jsonChars: serialized.length
+    });
+    if (willNotifyDom && input) {
       triggerChangeFor(input);
     }
   };
   var getClips = () => getState().clips;
-  var saveClips = (clips, callbacks) => {
+  var saveClips = (clips, callbacks, options) => {
+    videoStagesDebugLog("persistence", "saveClips", {
+      clipCount: clips.length
+    });
     const state = getState();
     state.clips = clips;
-    saveState(state, callbacks);
+    const notifyDomChange = options?.notifyDomChange !== void 0 ? options.notifyDomChange : isVideoStagesEnabled();
+    saveState(state, callbacks, { ...options, notifyDomChange });
   };
   var ensureClipsSeeded = (callbacks, options) => {
     const state = getState();
@@ -1830,6 +2241,14 @@
         if (currentValue === lastKnownClipsJson) {
           return;
         }
+        videoStagesDebugLog(
+          "observers",
+          "clips input JSON drift → scheduleRefresh",
+          {
+            prevChars: lastKnownClipsJson.length,
+            nextChars: currentValue.length
+          }
+        );
         lastKnownClipsJson = currentValue;
         deps.scheduleRefresh();
       }, 150);
@@ -1842,6 +2261,13 @@
         if (!mutations.some((mutation) => mutation.type === "childList")) {
           return;
         }
+        const first = mutations.find((m) => m.type === "childList");
+        const targetId = first?.target instanceof HTMLElement ? first.target.id || "(no id)" : null;
+        videoStagesDebugLog(
+          "observers",
+          "source dropdown childList mutation → scheduleRefresh",
+          { targetId, mutationCount: mutations.length }
+        );
         deps.scheduleRefresh();
       });
       const observableIds = [
@@ -1850,7 +2276,8 @@
         "input_vae",
         "input_sampler",
         "input_scheduler",
-        "input_refinerupscalemethod"
+        "input_refinerupscalemethod",
+        "input_loras"
       ];
       let hasObservedSource = false;
       for (const sourceId of observableIds) {
@@ -1860,7 +2287,14 @@
         }
         observedDropdownIds.add(sourceId);
         observer.observe(source, { childList: true });
-        source.addEventListener("change", () => deps.scheduleRefresh());
+        source.addEventListener("change", () => {
+          videoStagesDebugLog(
+            "observers",
+            "observed source select change → scheduleRefresh",
+            { sourceId }
+          );
+          deps.scheduleRefresh();
+        });
         hasObservedSource = true;
       }
       if (!hasObservedSource) {
@@ -1869,7 +2303,7 @@
       }
       sourceDropdownObserver = observer;
     };
-    const handleRootVideoTimingCommittedChange = () => {
+    const handleRootVideoTimingCommittedChange = (inputId) => {
       const input = getClipsInput();
       if (!input) {
         return;
@@ -1881,8 +2315,18 @@
       state.fps = rootDefaults.fps;
       const serialized = serializeStateForStorage(state);
       if (serialized !== input.value) {
+        videoStagesDebugLog(
+          "observers",
+          "root video timing change → saveState (notifyDomChange: false)",
+          { inputId }
+        );
         deps.saveState(state, { notifyDomChange: false });
       }
+      videoStagesDebugLog(
+        "observers",
+        "root video timing change → scheduleRefresh",
+        { inputId }
+      );
       deps.scheduleRefresh();
     };
     const installRootVideoTimingChangeListener = () => {
@@ -1898,7 +2342,7 @@
         if (!ROOT_VIDEO_TIMING_INPUT_IDS.has(target.id)) {
           return;
         }
-        handleRootVideoTimingCommittedChange();
+        handleRootVideoTimingCommittedChange(target.id);
       });
     };
     const installBase2EditStageChangeListener = () => {
@@ -1907,6 +2351,10 @@
       }
       base2EditListenerInstalled = true;
       document.addEventListener("base2edit:stages-changed", () => {
+        videoStagesDebugLog(
+          "observers",
+          "base2edit:stages-changed → scheduleRefresh"
+        );
         deps.scheduleRefresh();
       });
     };
@@ -1923,8 +2371,11 @@
           }
           const target = event.target;
           const isRefSourceChange = target.dataset.refField === "source";
-          const isClipAudioSourceChange = target.dataset.clipField === "audioSource";
-          if (!isRefSourceChange && !isClipAudioSourceChange) {
+          const clipField = target.dataset.clipField;
+          const isClipAudioSourceChange = clipField === "audioSource";
+          const isControlNetSourceChange = clipField === "controlNetSource";
+          const isControlNetLoraChange = clipField === "controlNetLora";
+          if (!isRefSourceChange && !isClipAudioSourceChange && !isControlNetSourceChange && !isControlNetLoraChange) {
             return;
           }
           const liveEditor = document.getElementById(
@@ -1936,8 +2387,17 @@
           if (!liveEditor.contains(target)) {
             return;
           }
+          videoStagesDebugLog(
+            "observers",
+            "ref-source fallback capture change → createEditor + handleFieldChange",
+            {
+              refField: target.dataset.refField ?? null,
+              clipField: clipField ?? null,
+              selectId: target.id || null
+            }
+          );
           createEditor();
-          handleFieldChange2(target);
+          handleFieldChange2(target, event);
         },
         true
       );
@@ -2066,19 +2526,24 @@
   };
 
   // frontend/renderHtml.ts
+  var CONTROLNET_SOURCE_DROPDOWN_OPTIONS = CONTROLNET_SOURCE_OPTIONS.map((value) => ({ value, label: value }));
   var decorateAutoInputWrapper = (html, className, hidden = false) => html.replace(
     /<div class="([^"]*\bauto-input\b[^"]*)"([^>]*)>/,
     (_match, classes, attrs) => `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`
   );
-  var moveQButtonBeforeLabelText = (html) => html.replace(
-    /(<span class="auto-input-name">)(<span class="translate"[^>]*>[^<]*<\/span>)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
-    "$1$3$2"
-  ).replace(
+  var RE_AUTO_INPUT_NAME_TRANSLATE_Q = new RegExp(
+    '(<span class="auto-input-name">)(<span class="translate"[^>]*>[^<]*</span>)(<span class="auto-input-qbutton[^>]*>\\?</span>)'
+  );
+  var moveQButtonBeforeLabelText = (html) => html.replace(RE_AUTO_INPUT_NAME_TRANSLATE_Q, "$1$3$2").replace(
     /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
     "$1$3$2"
   );
   var disableSliderInputs = (html) => html.replace(
     /<input\b([^>]*\sclass="[^"]*\bauto-slider-(?:number|range)\b[^"]*"[^>]*)>/g,
+    (match, attrs) => /\sdisabled(?:[\s=>]|$)/.test(match) ? match : `<input${attrs} disabled>`
+  );
+  var disableCheckboxInput = (html) => html.replace(
+    /<input\b([^>]*\sclass="[^"]*\bauto-checkbox\b[^"]*"[^>]*)>/,
     (match, attrs) => /\sdisabled(?:[\s=>]|$)/.test(match) ? match : `<input${attrs} disabled>`
   );
   var hideFirstStageField = (html, stageIdx) => stageIdx === 0 ? decorateAutoInputWrapper(html, "vs-first-stage-field-hidden", true) : html;
@@ -2094,6 +2559,21 @@
       label: finalLabels[idx] ?? value
     }));
   };
+  var dedupeEmptyValueDropdownOptions = (options) => {
+    let sawEmpty = false;
+    const out = [];
+    for (let i = 0; i < options.length; i++) {
+      const opt = options[i];
+      if (opt.value === "") {
+        if (sawEmpty) {
+          continue;
+        }
+        sawEmpty = true;
+      }
+      out.push(opt);
+    }
+    return out;
+  };
   var buildNativeDropdownStrict = (id, paramId, label, options, selected) => {
     const escapedLabel = escapeAttr(label);
     const optionHtml = renderOptionList(options, selected);
@@ -2102,7 +2582,9 @@
         <label>
             <span class="auto-input-name">${escapedLabel}</span>
         </label>
-        <select class="auto-dropdown" id="${escapeAttr(id)}" data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}" autocomplete="off" onchange="autoSelectWidth(this)">
+        <select class="auto-dropdown" id="${escapeAttr(id)}"
+            data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}"
+            autocomplete="off" onchange="autoSelectWidth(this)">
 ${optionHtml}
         </select>
     </div>`;
@@ -2194,10 +2676,13 @@ ${optionHtml}
     const collapseGlyph = ref.expanded ? "&#x2B9F;" : "&#x2B9E;";
     const head = `
             <div class="vs-card-head">
-                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse" data-ref-action="toggle-collapse" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
+                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse"
+                    data-ref-action="toggle-collapse" data-ref-idx="${refIdx}"
+                    data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
                 <div class="vs-card-title">Ref Image ${refIdx}</div>
                 <div class="vs-card-actions">
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-ref-action="delete" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="Remove reference">&times;</button>
+                    <button type="button" class="interrupt-button vs-btn-tiny" data-ref-action="delete"
+                        data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="Remove reference">&times;</button>
                 </div>
             </div>
         `;
@@ -2307,11 +2792,16 @@ ${optionHtml}
     const skipBtnVariant = stage.skipped ? "vs-btn-skip-active" : "";
     const head = `
             <div class="vs-card-head">
-                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse" data-stage-action="toggle-collapse" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
+                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse"
+                    data-stage-action="toggle-collapse" data-stage-idx="${stageIdx}"
+                    data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
                 <div class="vs-card-title">Stage ${stageIdx}</div>
                 <div class="vs-card-actions">
-                    <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-stage-action="skip" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="${skipTitle}">&#x23ED;&#xFE0E;</button>
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage">&times;</button>
+                    <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}"
+                        data-stage-action="skip" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}"
+                        title="${skipTitle}">&#x23ED;&#xFE0E;</button>
+                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete"
+                        data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage">&times;</button>
                 </div>
             </div>
         `;
@@ -2459,6 +2949,17 @@ ${optionHtml}
       defaults.vaeLabels,
       stage.vae
     );
+    const controlNetLoraActive = normalizeControlNetLora(clip.controlNetLora) !== "";
+    const controlNetStrengthDisabled = controlNetLoraActive && !isLtxVideoModelValue(stage.model);
+    const controlNetStrengthField = controlNetLoraActive ? stageSliderField(
+      "controlNetStrength",
+      "ControlNet Strength",
+      stage.controlNetStrength,
+      STAGE_CONTROLNET_STRENGTH_MIN,
+      STAGE_CONTROLNET_STRENGTH_MAX,
+      STAGE_CONTROLNET_STRENGTH_STEP,
+      controlNetStrengthDisabled
+    ) : "";
     const refStrengthFields = clip.refs.map(
       (_, refIdx) => stageSliderField(
         stageRefStrengthField(refIdx),
@@ -2481,11 +2982,13 @@ ${optionHtml}
                 ${samplerField}
                 ${schedulerField}
                 ${vaeField}
+                ${controlNetStrengthField}
                 ${refStrengthFields}
             </div>
         </section>`;
   };
   var renderClipCard = (clip, clipIdx, getRootDefaults2) => {
+    const defaults = getRootDefaults2();
     const stagesCount = clip.stages.length;
     const refsCount = clip.refs.length;
     const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
@@ -2505,8 +3008,16 @@ ${optionHtml}
       clip.audioSource,
       audioSourceOptions
     );
+    const normalizedControlNetLora = normalizeControlNetLora(
+      clip.controlNetLora
+    );
+    const controlNetLoraActive = normalizedControlNetLora !== "";
     const canUseAudioLength = canUseClipLengthFromAudio(audioSource2);
     const clipLengthFromAudio = canUseAudioLength && !!clip.clipLengthFromAudio;
+    const canUseControlNetLength = controlNetLoraActive && !clipLengthFromAudio;
+    const clipLengthFromControlNet = canUseControlNetLength && !!clip.clipLengthFromControlNet;
+    const dynamicClipLength = clipLengthFromAudio || clipLengthFromControlNet;
+    const audioLengthDisabled = !canUseAudioLength || clipLengthFromControlNet;
     const lengthInputHtml = makeSliderInput(
       "",
       clipFieldId(clipIdx, "duration"),
@@ -2525,7 +3036,7 @@ ${optionHtml}
     );
     const lengthFieldWithSteps = injectFieldData(
       overrideSliderSteps(
-        clipLengthFromAudio ? disableSliderInputs(lengthInputHtml) : lengthInputHtml,
+        dynamicClipLength ? disableSliderInputs(lengthInputHtml) : lengthInputHtml,
         {
           numberStep: "any",
           rangeStep: CLIP_DURATION_SLIDER_STEP
@@ -2571,25 +3082,29 @@ ${optionHtml}
       "vs-clip-reuse-audio-field",
       false
     );
-    const clipLengthFromAudioField = renderLeftTooltipCheckboxField(
-      injectFieldData(
-        makeCheckboxInput(
-          "",
-          clipFieldId(clipIdx, "clipLengthFromAudio"),
-          "clipLengthFromAudio",
-          "Clip Length from Audio",
-          "Sets the video clip length to be the same length as the selected audio track.",
-          clipLengthFromAudio,
-          false,
-          true,
-          true
-        ),
-        {
-          "data-clip-field": "clipLengthFromAudio",
-          "data-clip-idx": String(clipIdx)
-        }
+    let clipLengthFromAudioHtml = injectFieldData(
+      makeCheckboxInput(
+        "",
+        clipFieldId(clipIdx, "clipLengthFromAudio"),
+        "clipLengthFromAudio",
+        "Clip Length from Audio",
+        "Sets the video clip length to be the same length as the selected audio track.",
+        clipLengthFromAudio,
+        false,
+        true,
+        true
       ),
-      "vs-clip-length-from-audio-field",
+      {
+        "data-clip-field": "clipLengthFromAudio",
+        "data-clip-idx": String(clipIdx)
+      }
+    );
+    if (audioLengthDisabled) {
+      clipLengthFromAudioHtml = disableCheckboxInput(clipLengthFromAudioHtml);
+    }
+    const clipLengthFromAudioField = renderLeftTooltipCheckboxField(
+      clipLengthFromAudioHtml,
+      audioLengthDisabled ? "vs-clip-length-from-audio-field vs-audio-length-disabled" : "vs-clip-length-from-audio-field",
       !canUseAudioLength
     );
     const saveAudioTrackField = renderLeftTooltipCheckboxField(
@@ -2618,8 +3133,89 @@ ${optionHtml}
       clipIdx,
       audioSource2
     );
+    const controlNetLoraOptions = dedupeEmptyValueDropdownOptions(
+      dropdownOptions(
+        defaults.loraValues,
+        defaults.loraLabels,
+        normalizedControlNetLora
+      ).map((opt) => ({
+        ...opt,
+        value: normalizeControlNetLora(opt.value)
+      }))
+    );
+    let controlNetSourceFieldHtml = injectFieldData(
+      buildNativeDropdown(
+        clipFieldId(clipIdx, "controlNetSource"),
+        "controlNetSource",
+        "Source",
+        CONTROLNET_SOURCE_DROPDOWN_OPTIONS,
+        clip.controlNetSource
+      ),
+      {
+        "data-clip-field": "controlNetSource",
+        "data-clip-idx": String(clipIdx)
+      }
+    );
+    if (!controlNetLoraActive) {
+      controlNetSourceFieldHtml = controlNetSourceFieldHtml.replace(
+        /<select /,
+        "<select disabled "
+      );
+    }
+    const controlNetSourceField = decorateAutoInputWrapper(
+      controlNetSourceFieldHtml,
+      controlNetLoraActive ? "vs-controlnet-source-field" : "vs-controlnet-source-field vs-controlnet-source-disabled",
+      false
+    );
+    const controlNetLoraField = injectFieldData(
+      buildNativeDropdown(
+        clipFieldId(clipIdx, "controlNetLora"),
+        "controlNetLora",
+        "LoRA",
+        controlNetLoraOptions,
+        normalizedControlNetLora
+      ),
+      {
+        "data-clip-field": "controlNetLora",
+        "data-clip-idx": String(clipIdx)
+      }
+    );
+    let clipLengthFromControlNetHtml = injectFieldData(
+      makeCheckboxInput(
+        "",
+        clipFieldId(clipIdx, "clipLengthFromControlNet"),
+        "clipLengthFromControlNet",
+        "Clip Length from ControlNet",
+        "Sets the video clip length to match the selected ControlNet video's frame count.",
+        clipLengthFromControlNet,
+        false,
+        true,
+        true
+      ),
+      {
+        "data-clip-field": "clipLengthFromControlNet",
+        "data-clip-idx": String(clipIdx)
+      }
+    );
+    if (!canUseControlNetLength) {
+      clipLengthFromControlNetHtml = disableCheckboxInput(
+        clipLengthFromControlNetHtml
+      );
+    }
+    const clipLengthFromControlNetField = renderLeftTooltipCheckboxField(
+      clipLengthFromControlNetHtml,
+      canUseControlNetLength ? "vs-clip-length-from-controlnet-field" : "vs-clip-length-from-controlnet-field vs-controlnet-length-disabled",
+      false
+    );
+    const refRowsHtml = clip.refs.map(
+      (ref, refIdx) => renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults2)
+    ).join("");
+    const stageRowsHtml = clip.stages.map(
+      (stage, stageIdx) => renderStageRow(clip, stage, clipIdx, stageIdx, getRootDefaults2)
+    ).join("");
     const body = `
-            <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
+            <div class="input-group-content vs-clip-card-body"
+                id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${decoratedLengthField}
 
                 <div class="vs-section-block">
@@ -2635,18 +3231,29 @@ ${optionHtml}
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
+                        <div class="vs-section-block-title">CONTROLNET</div>
+                    </div>
+                    ${controlNetLoraField}
+                    ${controlNetSourceField}
+                    ${clipLengthFromControlNetField}
+                </div>
+
+                <div class="vs-section-block">
+                    <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Reference Images &middot; ${refsCount}</div>
                     </div>
-                    <div class="vs-card-list">${clip.refs.map((ref, refIdx) => renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults2)).join("")}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-ref" data-clip-idx="${clipIdx}">+ Add Reference Image</button>
+                    <div class="vs-card-list">${refRowsHtml}</div>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-ref"
+                        data-clip-idx="${clipIdx}">+ Add Reference Image</button>
                 </div>
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Stages &middot; ${stagesCount}</div>
                     </div>
-                    <div class="vs-card-list">${clip.stages.map((stage, stageIdx) => renderStageRow(clip, stage, clipIdx, stageIdx, getRootDefaults2)).join("")}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-stage" data-clip-idx="${clipIdx}">+ Add Video Stage</button>
+                    <div class="vs-card-list">${stageRowsHtml}</div>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-stage"
+                        data-clip-idx="${clipIdx}">+ Add Video Stage</button>
                 </div>
             </div>
         `;
@@ -2662,13 +3269,22 @@ ${optionHtml}
     const getEditorState = () => getState();
     const saveEditorState = (state, options) => saveState(state, persistenceCallbacks, options);
     const getEditorClips = () => getClips();
-    const saveEditorClips = (clips) => saveClips(clips, persistenceCallbacks);
+    const saveEditorClips = (clips, options) => saveClips(clips, persistenceCallbacks, options);
+    let suppressClipsHostNotifyForRender = false;
     const scheduleClipsRefresh = () => {
       if (clipsRefreshTimer) {
         clearTimeout(clipsRefreshTimer);
       }
+      videoStagesDebugLog(
+        "videoStageEditor",
+        "scheduleClipsRefresh (debounced renderClips)"
+      );
       clipsRefreshTimer = setTimeout(() => {
         clipsRefreshTimer = null;
+        videoStagesDebugLog(
+          "videoStageEditor",
+          "renderClips run (from scheduleClipsRefresh)"
+        );
         try {
           renderClips();
         } catch {
@@ -2716,7 +3332,8 @@ ${optionHtml}
       getState: getEditorState,
       saveState: saveEditorState,
       scheduleClipsRefresh,
-      refUploadCache
+      refUploadCache,
+      shouldSuppressClipsHostNotify: () => suppressClipsHostNotifyForRender
     });
     const restoreClipAudioUploadPreviews = (clips) => {
       if (!editor) {
@@ -2750,40 +3367,45 @@ ${optionHtml}
       if (!editor) {
         return [];
       }
-      seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
-      const state = getEditorState();
-      const clips = state.clips;
-      const focusSnapshot = captureFocus();
-      editor.innerHTML = "";
-      const stack = document.createElement("div");
-      stack.className = "vs-clip-stack";
-      stack.setAttribute("data-vs-clip-stack", "true");
-      editor.appendChild(stack);
-      if (clips.length === 0) {
-        stack.insertAdjacentHTML(
-          "beforeend",
-          `<div class="vs-empty-card">No video clips. Click "+ Add Video Clip" below.</div>`
-        );
-      } else {
-        for (let i = 0; i < clips.length; i++) {
+      suppressClipsHostNotifyForRender = true;
+      try {
+        seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
+        const state = getEditorState();
+        const clips = state.clips;
+        const focusSnapshot = captureFocus();
+        editor.innerHTML = "";
+        const stack = document.createElement("div");
+        stack.className = "vs-clip-stack";
+        stack.setAttribute("data-vs-clip-stack", "true");
+        editor.appendChild(stack);
+        if (clips.length === 0) {
           stack.insertAdjacentHTML(
             "beforeend",
-            renderClipCard(clips[i], i, getRootDefaults)
+            `<div class="vs-empty-card">No video clips. Click "+ Add Video Clip" below.</div>`
           );
+        } else {
+          for (let i = 0; i < clips.length; i++) {
+            stack.insertAdjacentHTML(
+              "beforeend",
+              renderClipCard(clips[i], i, getRootDefaults)
+            );
+          }
         }
+        const addClipButton = document.createElement("button");
+        addClipButton.type = "button";
+        addClipButton.className = "vs-add-btn vs-add-btn-clip";
+        addClipButton.dataset.clipAction = "add-clip";
+        addClipButton.innerText = "+ Add Video Clip";
+        editor.appendChild(addClipButton);
+        enableSlidersIn(editor);
+        restoreClipAudioUploadPreviews(clips);
+        refUploadCache.restorePreviews(editor, clips);
+        attachEventListeners(getDomDeps());
+        restoreFocus(focusSnapshot);
+        return validateClips(clips);
+      } finally {
+        suppressClipsHostNotifyForRender = false;
       }
-      const addClipButton = document.createElement("button");
-      addClipButton.type = "button";
-      addClipButton.className = "vs-add-btn vs-add-btn-clip";
-      addClipButton.dataset.clipAction = "add-clip";
-      addClipButton.innerText = "+ Add Video Clip";
-      editor.appendChild(addClipButton);
-      enableSlidersIn(editor);
-      restoreClipAudioUploadPreviews(clips);
-      refUploadCache.restorePreviews(editor, clips);
-      attachEventListeners(getDomDeps());
-      restoreFocus(focusSnapshot);
-      return validateClips(clips);
     };
     const init = () => {
       createEditor();
@@ -2796,9 +3418,12 @@ ${optionHtml}
       observers.installSourceDropdownObserver();
       observers.installBase2EditStageChangeListener();
       observers.installRootVideoTimingChangeListener();
-      observers.installRefSourceFallbackListener(createEditor, (target) => {
-        handleFieldChange(target, getDomDeps());
-      });
+      observers.installRefSourceFallbackListener(
+        createEditor,
+        (target, ev) => {
+          handleFieldChange(target, getDomDeps(), false, ev);
+        }
+      );
     };
     const startGenerateWrapRetry = (intervalMs = 250) => {
       generateWrap.startRetry(intervalMs);

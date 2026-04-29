@@ -29,4 +29,4 @@ If `./run-tests` fails with “No such file or directory”, you are in the wron
 
 # Rules override
 
-If `AGENTS.dev.md` exists beside this file, it takes precedence over this one for overlapping instructions.
+If `AGENTS.dev.md` exists beside this file, it takes precedence over this one for overlapping instructions. The file will be gitignored, check the filesystem manually.

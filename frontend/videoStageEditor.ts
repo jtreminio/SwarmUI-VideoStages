@@ -3,6 +3,7 @@ import {
     CLIP_AUDIO_UPLOAD_LABEL,
     normalizeUploadFileName,
 } from "./constants";
+import { videoStagesDebugLog } from "./debugLog";
 import {
     attachEventListeners,
     type DomEventsDeps,
@@ -48,15 +49,25 @@ export function videoStageEditor(): VideoStageEditor {
         options?: SaveStateOptions,
     ): void => saveState(state, persistenceCallbacks, options);
     const getEditorClips = (): Clip[] => getClips();
-    const saveEditorClips = (clips: Clip[]): void =>
-        saveClips(clips, persistenceCallbacks);
+    const saveEditorClips = (clips: Clip[], options?: SaveStateOptions): void =>
+        saveClips(clips, persistenceCallbacks, options);
+
+    let suppressClipsHostNotifyForRender = false;
 
     const scheduleClipsRefresh = (): void => {
         if (clipsRefreshTimer) {
             clearTimeout(clipsRefreshTimer);
         }
+        videoStagesDebugLog(
+            "videoStageEditor",
+            "scheduleClipsRefresh (debounced renderClips)",
+        );
         clipsRefreshTimer = setTimeout(() => {
             clipsRefreshTimer = null;
+            videoStagesDebugLog(
+                "videoStageEditor",
+                "renderClips run (from scheduleClipsRefresh)",
+            );
             try {
                 renderClips();
             } catch {}
@@ -120,6 +131,7 @@ export function videoStageEditor(): VideoStageEditor {
         saveState: saveEditorState,
         scheduleClipsRefresh,
         refUploadCache,
+        shouldSuppressClipsHostNotify: () => suppressClipsHostNotifyForRender,
     });
 
     const restoreClipAudioUploadPreviews = (clips: Clip[]): void => {
@@ -160,47 +172,52 @@ export function videoStageEditor(): VideoStageEditor {
             return [];
         }
 
-        seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
+        suppressClipsHostNotifyForRender = true;
+        try {
+            seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
 
-        const state = getEditorState();
-        const clips = state.clips;
+            const state = getEditorState();
+            const clips = state.clips;
 
-        const focusSnapshot = captureFocus();
-        editor.innerHTML = "";
+            const focusSnapshot = captureFocus();
+            editor.innerHTML = "";
 
-        const stack = document.createElement("div");
-        stack.className = "vs-clip-stack";
-        stack.setAttribute("data-vs-clip-stack", "true");
-        editor.appendChild(stack);
+            const stack = document.createElement("div");
+            stack.className = "vs-clip-stack";
+            stack.setAttribute("data-vs-clip-stack", "true");
+            editor.appendChild(stack);
 
-        if (clips.length === 0) {
-            stack.insertAdjacentHTML(
-                "beforeend",
-                `<div class="vs-empty-card">No video clips. Click "+ Add Video Clip" below.</div>`,
-            );
-        } else {
-            for (let i = 0; i < clips.length; i++) {
+            if (clips.length === 0) {
                 stack.insertAdjacentHTML(
                     "beforeend",
-                    renderClipCard(clips[i], i, getRootDefaults),
+                    `<div class="vs-empty-card">No video clips. Click "+ Add Video Clip" below.</div>`,
                 );
+            } else {
+                for (let i = 0; i < clips.length; i++) {
+                    stack.insertAdjacentHTML(
+                        "beforeend",
+                        renderClipCard(clips[i], i, getRootDefaults),
+                    );
+                }
             }
+
+            const addClipButton = document.createElement("button");
+            addClipButton.type = "button";
+            addClipButton.className = "vs-add-btn vs-add-btn-clip";
+            addClipButton.dataset.clipAction = "add-clip";
+            addClipButton.innerText = "+ Add Video Clip";
+            editor.appendChild(addClipButton);
+
+            enableSlidersIn(editor);
+            restoreClipAudioUploadPreviews(clips);
+            refUploadCache.restorePreviews(editor, clips);
+            attachEventListeners(getDomDeps());
+            restoreFocus(focusSnapshot);
+
+            return validateClips(clips);
+        } finally {
+            suppressClipsHostNotifyForRender = false;
         }
-
-        const addClipButton = document.createElement("button");
-        addClipButton.type = "button";
-        addClipButton.className = "vs-add-btn vs-add-btn-clip";
-        addClipButton.dataset.clipAction = "add-clip";
-        addClipButton.innerText = "+ Add Video Clip";
-        editor.appendChild(addClipButton);
-
-        enableSlidersIn(editor);
-        restoreClipAudioUploadPreviews(clips);
-        refUploadCache.restorePreviews(editor, clips);
-        attachEventListeners(getDomDeps());
-        restoreFocus(focusSnapshot);
-
-        return validateClips(clips);
     };
 
     const init = (): void => {
@@ -214,9 +231,12 @@ export function videoStageEditor(): VideoStageEditor {
         observers.installSourceDropdownObserver();
         observers.installBase2EditStageChangeListener();
         observers.installRootVideoTimingChangeListener();
-        observers.installRefSourceFallbackListener(createEditor, (target) => {
-            handleFieldChange(target, getDomDeps());
-        });
+        observers.installRefSourceFallbackListener(
+            createEditor,
+            (target, ev) => {
+                handleFieldChange(target, getDomDeps(), false, ev);
+            },
+        );
     };
 
     const startGenerateWrapRetry = (intervalMs = 250): void => {

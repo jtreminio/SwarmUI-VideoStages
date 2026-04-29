@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
@@ -90,6 +91,47 @@ internal static class UnitTestStubs
                 Group: T2IParamTypes.GroupRefiners,
                 Toggleable: true,
                 GetValues: (_) => ["pixel-lanczos", "model-unit-test-upscaler"]
+            ));
+        }
+    }
+
+    public static void EnsureComfyControlNetParamsRegistered()
+    {
+        if (ComfyUIBackendExtension.ControlNetPreprocessorParams[0] is not null
+            && ComfyUIBackendExtension.ControlNetUnionTypeParams[0] is not null)
+        {
+            return;
+        }
+
+        ComfyUIBackendExtension.ControlNetPreprocessors["UnitTestPreprocessor"] = new JObject()
+        {
+            ["input"] = new JObject()
+            {
+                ["required"] = new JObject(),
+                ["optional"] = new JObject()
+            }
+        };
+
+        for (int i = 0; i < 3; i++)
+        {
+            string suffix = T2IParamTypes.Controlnets[i].NameSuffix;
+            ComfyUIBackendExtension.ControlNetPreprocessorParams[i] ??= T2IParamTypes.Register<string>(new T2IParamType(
+                Name: $"ControlNet{suffix} Preprocessor (UnitTest Stub)",
+                Description: "Stub ControlNet preprocessor used by VideoStages unit tests.",
+                Default: "None",
+                FeatureFlag: "controlnet",
+                Group: T2IParamTypes.Controlnets[i].Group,
+                Toggleable: true,
+                GetValues: (_) => ["None", "UnitTestPreprocessor"]
+            ));
+            ComfyUIBackendExtension.ControlNetUnionTypeParams[i] ??= T2IParamTypes.Register<string>(new T2IParamType(
+                Name: $"ControlNet{suffix} Union Type (UnitTest Stub)",
+                Description: "Stub ControlNet union type used by VideoStages unit tests.",
+                Default: "auto",
+                FeatureFlag: "controlnet",
+                Group: T2IParamTypes.Controlnets[i].Group,
+                Toggleable: true,
+                GetValues: (_) => ["auto", "openpose"]
             ));
         }
     }

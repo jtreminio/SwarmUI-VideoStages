@@ -4,18 +4,15 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
-internal static class RootVideoStageTakeover
+internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jsonParser)
 {
-    private const int StashSectionId = VideoStagesExtension.SectionID_VideoStages;
+    private const int StashSectionId = Constants.SectionID_VideoStages;
     private const string SynthesizedRootVideoModelKey = "videostages.synth-root-video-model";
 
     public static bool IsTextToVideoRootWorkflow(WorkflowGenerator g)
     {
-        if (g is null || g.UserInput is null)
-        {
-            return false;
-        }
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel) && imageToVideoModel is not null)
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel existingVideoModel)
+            && existingVideoModel is not null)
         {
             return false;
         }
@@ -23,30 +20,25 @@ internal static class RootVideoStageTakeover
             && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
     }
 
-    public static bool ShouldReplaceTextToVideoRootStage(WorkflowGenerator g, JsonParser.StageSpec stage)
+    public bool ShouldReplaceTextToVideoRootStage(JsonParser.StageSpec stage)
     {
         return stage is not null
             && stage.ClipStageIndex == 0
             && IsTextToVideoRootWorkflow(g);
     }
 
-    public static void EnsureRootVideoStageModel(WorkflowGenerator g)
+    public void EnsureRootVideoStageModel()
     {
-        if (g is null || g.UserInput is null)
+        if (HasNativeVideoModel())
         {
             return;
         }
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
-        {
-            return;
-        }
-        if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
-            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true)
+        if (IsTextToVideoRootWorkflow(g))
         {
             return;
         }
 
-        JsonParser.StageSpec firstStage = new JsonParser(g).ParseStages().FirstOrDefault();
+        JsonParser.StageSpec firstStage = jsonParser.ParseStages().FirstOrDefault();
         if (firstStage is null || string.IsNullOrWhiteSpace(firstStage.Model))
         {
             return;
@@ -63,36 +55,37 @@ internal static class RootVideoStageTakeover
         Logs.Warning($"VideoStages: could not resolve root video model '{firstStage.Model}'.");
     }
 
-    public static void CleanupSynthesizedRootVideoStageModel(WorkflowGenerator g)
+    public void CleanupSynthesizedRootVideoStageModel()
     {
-        if (g?.NodeHelpers?.Remove(SynthesizedRootVideoModelKey) == true)
+        if (g.NodeHelpers.Remove(SynthesizedRootVideoModelKey) == true)
         {
             g.UserInput.Remove(T2IParamTypes.VideoModel);
         }
     }
 
-    public static bool ShouldTakeOverRootStage(WorkflowGenerator g)
+    public bool ShouldTakeOverRootStage()
     {
-        if (g is null || g.UserInput is null || VideoStagesExtension.CoreImageToVideoStep is null)
+        if (VideoStagesExtension.CoreImageToVideoStep is null)
         {
             return false;
         }
-        bool hasNativeImageToVideoModel = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _);
+        bool hasNativeVideoModel = HasNativeVideoModel();
         bool hasTextToVideoRootModel = IsTextToVideoRootWorkflow(g);
-        if (!hasNativeImageToVideoModel && !hasTextToVideoRootModel)
+        if (!hasNativeVideoModel && !hasTextToVideoRootModel)
         {
             return false;
         }
-        if (hasNativeImageToVideoModel && !WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep))
+        if (hasNativeVideoModel
+            && !WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep))
         {
             return false;
         }
-        return new JsonParser(g).ParseStages().Count > 0;
+        return jsonParser.ParseStages().Count > 0;
     }
 
-    public static void SuppressCoreRootVideoStage(WorkflowGenerator g)
+    public void SuppressCoreRootVideoStage()
     {
-        if (!ShouldTakeOverRootStage(g))
+        if (!ShouldTakeOverRootStage())
         {
             return;
         }
@@ -105,34 +98,41 @@ internal static class RootVideoStageTakeover
         g.UserInput.Remove(T2IParamTypes.VideoModel);
     }
 
-    public static void RestoreCoreRootVideoStageModel(WorkflowGenerator g)
+    public void RestoreCoreRootVideoStageModel()
     {
-        if (g is null || g.UserInput is null)
+        if (HasNativeVideoModel())
         {
+            CleanupStashSection();
             return;
         }
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
+        if (!g.UserInput.TryGet(
+                T2IParamTypes.VideoModel,
+                out T2IModel stashedModel,
+                sectionId: StashSectionId,
+                includeBase: false))
         {
-            CleanupStashSection(g);
-            return;
-        }
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel stashedModel, sectionId: StashSectionId, includeBase: false))
-        {
-            CleanupStashSection(g);
+            CleanupStashSection();
             return;
         }
 
         g.UserInput.Set(T2IParamTypes.VideoModel, stashedModel);
         g.UserInput.Remove(T2IParamTypes.VideoModel, StashSectionId);
-        CleanupStashSection(g);
+        CleanupStashSection();
     }
 
-    private static void CleanupStashSection(WorkflowGenerator g)
+    private void CleanupStashSection()
     {
-        if (g.UserInput.SectionParamOverrides.TryGetValue(StashSectionId, out T2IParamSet stash)
+        if (g.UserInput.SectionParamOverrides.TryGetValue(
+                StashSectionId,
+                out T2IParamSet stash)
             && stash.ValuesInput.Count == 0)
         {
             g.UserInput.SectionParamOverrides.Remove(StashSectionId);
         }
+    }
+
+    private bool HasNativeVideoModel()
+    {
+        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _);
     }
 }

@@ -1,6 +1,8 @@
 export interface RootDefaults {
     modelValues: string[];
     modelLabels: string[];
+    loraValues: string[];
+    loraLabels: string[];
     vaeValues: string[];
     vaeLabels: string[];
     samplerValues: string[];
@@ -47,6 +49,7 @@ export interface Stage {
     expanded: boolean;
     skipped: boolean;
     control: number;
+    controlNetStrength: number;
     refStrengths: number[];
     upscale: number;
     upscaleMethod: string;
@@ -72,15 +75,17 @@ export interface Clip {
     skipped: boolean;
     duration: number;
     audioSource: string;
+    controlNetSource: string;
+    controlNetLora: string;
     saveAudioTrack: boolean;
     clipLengthFromAudio: boolean;
+    clipLengthFromControlNet: boolean;
     reuseAudio: boolean;
     uploadedAudio: UploadedAudio | null;
     refs: RefImage[];
     stages: Stage[];
 }
 
-/** Ref fields persisted by `serializeClipsForStorage`. */
 export type StoredRefImage = Pick<
     RefImage,
     | "expanded"
@@ -91,12 +96,12 @@ export type StoredRefImage = Pick<
     | "fromEnd"
 >;
 
-/** Stage fields persisted by `serializeClipsForStorage`. */
 export type StoredStage = Pick<
     Stage,
     | "expanded"
     | "skipped"
     | "control"
+    | "controlNetStrength"
     | "refStrengths"
     | "upscale"
     | "upscaleMethod"
@@ -114,8 +119,11 @@ export type StoredClip = Pick<
     | "skipped"
     | "duration"
     | "audioSource"
+    | "controlNetSource"
+    | "controlNetLora"
     | "saveAudioTrack"
     | "clipLengthFromAudio"
+    | "clipLengthFromControlNet"
     | "reuseAudio"
     | "uploadedAudio"
 > & {

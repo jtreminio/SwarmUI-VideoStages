@@ -13,15 +13,20 @@ import {
     CLIP_DURATION_MIN,
     CLIP_DURATION_SLIDER_MAX,
     CLIP_DURATION_SLIDER_STEP,
+    CONTROLNET_SOURCE_OPTIONS,
     parseBase2EditStageIndex,
     REF_FRAME_MIN,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_STEP,
     STAGE_REF_STRENGTH_DEFAULT,
     STAGE_REF_STRENGTH_MAX,
     STAGE_REF_STRENGTH_MIN,
     STAGE_REF_STRENGTH_STEP,
     stageRefStrengthField,
 } from "./constants";
-import { getReferenceFrameMax } from "./normalization";
+import { isLtxVideoModelValue } from "./ltxModel";
+import { getReferenceFrameMax, normalizeControlNetLora } from "./normalization";
 import {
     clipFieldId,
     escapeAttr,
@@ -44,6 +49,9 @@ import {
 } from "./types";
 import { getRefSourceError } from "./validation";
 
+const CONTROLNET_SOURCE_DROPDOWN_OPTIONS: ImageSourceOption[] =
+    CONTROLNET_SOURCE_OPTIONS.map((value) => ({ value, label: value }));
+
 export const decorateAutoInputWrapper = (
     html: string,
     className: string,
@@ -55,12 +63,15 @@ export const decorateAutoInputWrapper = (
             `<div class="${classes} ${className}"${attrs}${hidden ? ' style="display: none;"' : ""}>`,
     );
 
+const RE_AUTO_INPUT_NAME_TRANSLATE_Q = new RegExp(
+    '(<span class="auto-input-name">)' +
+        '(<span class="translate"[^>]*>[^<]*</span>)' +
+        '(<span class="auto-input-qbutton[^>]*>\\?</span>)',
+);
+
 const moveQButtonBeforeLabelText = (html: string): string =>
     html
-        .replace(
-            /(<span class="auto-input-name">)(<span class="translate"[^>]*>[^<]*<\/span>)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
-            "$1$3$2",
-        )
+        .replace(RE_AUTO_INPUT_NAME_TRANSLATE_Q, "$1$3$2")
         .replace(
             /(<span class="auto-input-name">)([^<]*)(<span class="auto-input-qbutton[^>]*>\?<\/span>)/,
             "$1$3$2",
@@ -69,6 +80,15 @@ const moveQButtonBeforeLabelText = (html: string): string =>
 const disableSliderInputs = (html: string): string =>
     html.replace(
         /<input\b([^>]*\sclass="[^"]*\bauto-slider-(?:number|range)\b[^"]*"[^>]*)>/g,
+        (match, attrs) =>
+            /\sdisabled(?:[\s=>]|$)/.test(match)
+                ? match
+                : `<input${attrs} disabled>`,
+    );
+
+const disableCheckboxInput = (html: string): string =>
+    html.replace(
+        /<input\b([^>]*\sclass="[^"]*\bauto-checkbox\b[^"]*"[^>]*)>/,
         (match, attrs) =>
             /\sdisabled(?:[\s=>]|$)/.test(match)
                 ? match
@@ -97,6 +117,24 @@ export const dropdownOptions = (
     }));
 };
 
+const dedupeEmptyValueDropdownOptions = (
+    options: ImageSourceOption[],
+): ImageSourceOption[] => {
+    let sawEmpty = false;
+    const out: ImageSourceOption[] = [];
+    for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        if (opt.value === "") {
+            if (sawEmpty) {
+                continue;
+            }
+            sawEmpty = true;
+        }
+        out.push(opt);
+    }
+    return out;
+};
+
 export const buildNativeDropdownStrict = (
     id: string,
     paramId: string,
@@ -111,7 +149,9 @@ export const buildNativeDropdownStrict = (
         <label>
             <span class="auto-input-name">${escapedLabel}</span>
         </label>
-        <select class="auto-dropdown" id="${escapeAttr(id)}" data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}" autocomplete="off" onchange="autoSelectWidth(this)">
+        <select class="auto-dropdown" id="${escapeAttr(id)}"
+            data-name="${escapedLabel}" data-param_id="${escapeAttr(paramId)}"
+            autocomplete="off" onchange="autoSelectWidth(this)">
 ${optionHtml}
         </select>
     </div>`;
@@ -239,10 +279,13 @@ export const renderRefRow = (
     const collapseGlyph = ref.expanded ? "&#x2B9F;" : "&#x2B9E;";
     const head = `
             <div class="vs-card-head">
-                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse" data-ref-action="toggle-collapse" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
+                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse"
+                    data-ref-action="toggle-collapse" data-ref-idx="${refIdx}"
+                    data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
                 <div class="vs-card-title">Ref Image ${refIdx}</div>
                 <div class="vs-card-actions">
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-ref-action="delete" data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="Remove reference">&times;</button>
+                    <button type="button" class="interrupt-button vs-btn-tiny" data-ref-action="delete"
+                        data-ref-idx="${refIdx}" data-clip-idx="${clipIdx}" title="Remove reference">&times;</button>
                 </div>
             </div>
         `;
@@ -367,11 +410,16 @@ export const renderStageRow = (
     const skipBtnVariant = stage.skipped ? "vs-btn-skip-active" : "";
     const head = `
             <div class="vs-card-head">
-                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse" data-stage-action="toggle-collapse" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
+                <button type="button" class="basic-button vs-btn-tiny vs-btn-collapse"
+                    data-stage-action="toggle-collapse" data-stage-idx="${stageIdx}"
+                    data-clip-idx="${clipIdx}" title="${collapseTitle}">${collapseGlyph}</button>
                 <div class="vs-card-title">Stage ${stageIdx}</div>
                 <div class="vs-card-actions">
-                    <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-stage-action="skip" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="${skipTitle}">&#x23ED;&#xFE0E;</button>
-                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage">&times;</button>
+                    <button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}"
+                        data-stage-action="skip" data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}"
+                        title="${skipTitle}">&#x23ED;&#xFE0E;</button>
+                    <button type="button" class="interrupt-button vs-btn-tiny" data-stage-action="delete"
+                        data-stage-idx="${stageIdx}" data-clip-idx="${clipIdx}" title="Remove stage">&times;</button>
                 </div>
             </div>
         `;
@@ -540,6 +588,21 @@ export const renderStageRow = (
         defaults.vaeLabels,
         stage.vae,
     );
+    const controlNetLoraActive =
+        normalizeControlNetLora(clip.controlNetLora) !== "";
+    const controlNetStrengthDisabled =
+        controlNetLoraActive && !isLtxVideoModelValue(stage.model);
+    const controlNetStrengthField = controlNetLoraActive
+        ? stageSliderField(
+              "controlNetStrength",
+              "ControlNet Strength",
+              stage.controlNetStrength,
+              STAGE_CONTROLNET_STRENGTH_MIN,
+              STAGE_CONTROLNET_STRENGTH_MAX,
+              STAGE_CONTROLNET_STRENGTH_STEP,
+              controlNetStrengthDisabled,
+          )
+        : "";
     const refStrengthFields = clip.refs
         .map((_, refIdx) =>
             stageSliderField(
@@ -565,6 +628,7 @@ export const renderStageRow = (
                 ${samplerField}
                 ${schedulerField}
                 ${vaeField}
+                ${controlNetStrengthField}
                 ${refStrengthFields}
             </div>
         </section>`;
@@ -575,6 +639,7 @@ export const renderClipCard = (
     clipIdx: number,
     getRootDefaults: () => RootDefaults,
 ): string => {
+    const defaults = getRootDefaults();
     const stagesCount = clip.stages.length;
     const refsCount = clip.refs.length;
     const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
@@ -590,15 +655,35 @@ export const renderClipCard = (
     }
     const contentStyle = clip.expanded ? "" : ' style="display: none;"';
 
-    const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">Clip ${clipIdx}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip">&times;</button></span></span></span>`;
+    const head =
+        `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable">` +
+        `<span class="header-label-wrap">` +
+        `<span class="auto-symbol">${collapseGlyph}</span>` +
+        `<span class="header-label">Clip ${clipIdx}</span>` +
+        `<span class="header-label-spacer"></span>` +
+        `<span class="vs-clip-card-actions">` +
+        `<button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" ` +
+        `data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button>` +
+        `<button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" ` +
+        `data-clip-idx="${clipIdx}" title="Remove clip">&times;</button>` +
+        `</span></span></span>`;
 
     const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
     const audioSource = resolveAudioSourceValue(
         clip.audioSource,
         audioSourceOptions,
     );
+    const normalizedControlNetLora = normalizeControlNetLora(
+        clip.controlNetLora,
+    );
+    const controlNetLoraActive = normalizedControlNetLora !== "";
     const canUseAudioLength = canUseClipLengthFromAudio(audioSource);
     const clipLengthFromAudio = canUseAudioLength && !!clip.clipLengthFromAudio;
+    const canUseControlNetLength = controlNetLoraActive && !clipLengthFromAudio;
+    const clipLengthFromControlNet =
+        canUseControlNetLength && !!clip.clipLengthFromControlNet;
+    const dynamicClipLength = clipLengthFromAudio || clipLengthFromControlNet;
+    const audioLengthDisabled = !canUseAudioLength || clipLengthFromControlNet;
     const lengthInputHtml = makeSliderInput(
         "",
         clipFieldId(clipIdx, "duration"),
@@ -617,7 +702,7 @@ export const renderClipCard = (
     );
     const lengthFieldWithSteps = injectFieldData(
         overrideSliderSteps(
-            clipLengthFromAudio
+            dynamicClipLength
                 ? disableSliderInputs(lengthInputHtml)
                 : lengthInputHtml,
             {
@@ -665,25 +750,31 @@ export const renderClipCard = (
         "vs-clip-reuse-audio-field",
         false,
     );
-    const clipLengthFromAudioField = renderLeftTooltipCheckboxField(
-        injectFieldData(
-            makeCheckboxInput(
-                "",
-                clipFieldId(clipIdx, "clipLengthFromAudio"),
-                "clipLengthFromAudio",
-                "Clip Length from Audio",
-                "Sets the video clip length to be the same length as the selected audio track.",
-                clipLengthFromAudio,
-                false,
-                true,
-                true,
-            ),
-            {
-                "data-clip-field": "clipLengthFromAudio",
-                "data-clip-idx": String(clipIdx),
-            },
+    let clipLengthFromAudioHtml = injectFieldData(
+        makeCheckboxInput(
+            "",
+            clipFieldId(clipIdx, "clipLengthFromAudio"),
+            "clipLengthFromAudio",
+            "Clip Length from Audio",
+            "Sets the video clip length to be the same length as the selected audio track.",
+            clipLengthFromAudio,
+            false,
+            true,
+            true,
         ),
-        "vs-clip-length-from-audio-field",
+        {
+            "data-clip-field": "clipLengthFromAudio",
+            "data-clip-idx": String(clipIdx),
+        },
+    );
+    if (audioLengthDisabled) {
+        clipLengthFromAudioHtml = disableCheckboxInput(clipLengthFromAudioHtml);
+    }
+    const clipLengthFromAudioField = renderLeftTooltipCheckboxField(
+        clipLengthFromAudioHtml,
+        audioLengthDisabled
+            ? "vs-clip-length-from-audio-field vs-audio-length-disabled"
+            : "vs-clip-length-from-audio-field",
         !canUseAudioLength,
     );
     const saveAudioTrackField = renderLeftTooltipCheckboxField(
@@ -712,9 +803,99 @@ export const renderClipCard = (
         clipIdx,
         audioSource,
     );
+    const controlNetLoraOptions = dedupeEmptyValueDropdownOptions(
+        dropdownOptions(
+            defaults.loraValues,
+            defaults.loraLabels,
+            normalizedControlNetLora,
+        ).map((opt) => ({
+            ...opt,
+            value: normalizeControlNetLora(opt.value),
+        })),
+    );
+    let controlNetSourceFieldHtml = injectFieldData(
+        buildNativeDropdown(
+            clipFieldId(clipIdx, "controlNetSource"),
+            "controlNetSource",
+            "Source",
+            CONTROLNET_SOURCE_DROPDOWN_OPTIONS,
+            clip.controlNetSource,
+        ),
+        {
+            "data-clip-field": "controlNetSource",
+            "data-clip-idx": String(clipIdx),
+        },
+    );
+    if (!controlNetLoraActive) {
+        controlNetSourceFieldHtml = controlNetSourceFieldHtml.replace(
+            /<select /,
+            "<select disabled ",
+        );
+    }
+    const controlNetSourceField = decorateAutoInputWrapper(
+        controlNetSourceFieldHtml,
+        controlNetLoraActive
+            ? "vs-controlnet-source-field"
+            : "vs-controlnet-source-field vs-controlnet-source-disabled",
+        false,
+    );
+    const controlNetLoraField = injectFieldData(
+        buildNativeDropdown(
+            clipFieldId(clipIdx, "controlNetLora"),
+            "controlNetLora",
+            "LoRA",
+            controlNetLoraOptions,
+            normalizedControlNetLora,
+        ),
+        {
+            "data-clip-field": "controlNetLora",
+            "data-clip-idx": String(clipIdx),
+        },
+    );
+    let clipLengthFromControlNetHtml = injectFieldData(
+        makeCheckboxInput(
+            "",
+            clipFieldId(clipIdx, "clipLengthFromControlNet"),
+            "clipLengthFromControlNet",
+            "Clip Length from ControlNet",
+            "Sets the video clip length to match the selected ControlNet video's frame count.",
+            clipLengthFromControlNet,
+            false,
+            true,
+            true,
+        ),
+        {
+            "data-clip-field": "clipLengthFromControlNet",
+            "data-clip-idx": String(clipIdx),
+        },
+    );
+    if (!canUseControlNetLength) {
+        clipLengthFromControlNetHtml = disableCheckboxInput(
+            clipLengthFromControlNetHtml,
+        );
+    }
+    const clipLengthFromControlNetField = renderLeftTooltipCheckboxField(
+        clipLengthFromControlNetHtml,
+        canUseControlNetLength
+            ? "vs-clip-length-from-controlnet-field"
+            : "vs-clip-length-from-controlnet-field vs-controlnet-length-disabled",
+        false,
+    );
+
+    const refRowsHtml = clip.refs
+        .map((ref, refIdx) =>
+            renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults),
+        )
+        .join("");
+    const stageRowsHtml = clip.stages
+        .map((stage, stageIdx) =>
+            renderStageRow(clip, stage, clipIdx, stageIdx, getRootDefaults),
+        )
+        .join("");
 
     const body = `
-            <div class="input-group-content vs-clip-card-body" id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
+            <div class="input-group-content vs-clip-card-body"
+                id="input_group_content_vsclip${clipIdx}" data-do_not_save="1"${contentStyle}>
                 ${decoratedLengthField}
 
                 <div class="vs-section-block">
@@ -730,21 +911,35 @@ export const renderClipCard = (
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
+                        <div class="vs-section-block-title">CONTROLNET</div>
+                    </div>
+                    ${controlNetLoraField}
+                    ${controlNetSourceField}
+                    ${clipLengthFromControlNetField}
+                </div>
+
+                <div class="vs-section-block">
+                    <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Reference Images &middot; ${refsCount}</div>
                     </div>
-                    <div class="vs-card-list">${clip.refs.map((ref, refIdx) => renderRefRow(ref, clip, clipIdx, refIdx, getRootDefaults)).join("")}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-ref" data-clip-idx="${clipIdx}">+ Add Reference Image</button>
+                    <div class="vs-card-list">${refRowsHtml}</div>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-ref"
+                        data-clip-idx="${clipIdx}">+ Add Reference Image</button>
                 </div>
 
                 <div class="vs-section-block">
                     <div class="vs-section-block-head">
                         <div class="vs-section-block-title">Stages &middot; ${stagesCount}</div>
                     </div>
-                    <div class="vs-card-list">${clip.stages.map((stage, stageIdx) => renderStageRow(clip, stage, clipIdx, stageIdx, getRootDefaults)).join("")}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-stage" data-clip-idx="${clipIdx}">+ Add Video Stage</button>
+                    <div class="vs-card-list">${stageRowsHtml}</div>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-stage"
+                        data-clip-idx="${clipIdx}">+ Add Video Stage</button>
                 </div>
             </div>
         `;
 
-    return `<div class="${groupClasses.join(" ")}" id="auto-group-vsclip${clipIdx}" data-clip-idx="${clipIdx}">${head}${body}</div>`;
+    return (
+        `<div class="${groupClasses.join(" ")}" id="auto-group-vsclip${clipIdx}" ` +
+        `data-clip-idx="${clipIdx}">${head}${body}</div>`
+    );
 };

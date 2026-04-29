@@ -2,7 +2,6 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -56,7 +55,7 @@ public class AudioInjectionTests
 
     private static JObject MakeClipConfigWithUpload(JObject uploadedAudio, params JObject[] stages)
     {
-        JObject clip = MakeClipConfig(VideoStagesExtension.AudioSourceUpload, stages);
+        JObject clip = MakeClipConfig(Constants.AudioSourceUpload, stages);
         clip["UploadedAudio"] = uploadedAudio;
         return clip;
     }
@@ -283,7 +282,7 @@ public class AudioInjectionTests
         WorkflowGenerator generator = CreateInjectorGenerator(workflow);
         AudioStageDetector.Detection detection = new AudioStageDetector(generator).Detect();
 
-        Assert.True(new LtxAudioInjector(generator).TryInject(detection));
+        Assert.True(new Runner(generator).TryInjectLtxAudio(detection));
 
         WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
         Assert.True(JToken.DeepEquals(
@@ -345,7 +344,7 @@ public class AudioInjectionTests
 
         string stagesJson = MakeRootConfig(
             MakeClipConfig(
-                VideoStagesExtension.AudioSourceUpload,
+                Constants.AudioSourceUpload,
                 MakeStage(models.VideoModel.Name))
         ).ToString();
         T2IParamInput input = BuildNativeInput(
@@ -525,7 +524,7 @@ public class AudioInjectionTests
 
         string stagesJson = MakeMultiClipRootConfig(
             MakeClipConfig(
-                VideoStagesExtension.AudioSourceNative,
+                Constants.AudioSourceNative,
                 MakeStage(models.VideoModel.Name)),
             MakeClipConfigWithUpload(
                 MakeUploadedAudio(data: "data:audio/wav;base64,QkJC", fileName: "second.wav"),

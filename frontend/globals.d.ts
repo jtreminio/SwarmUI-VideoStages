@@ -162,9 +162,14 @@ declare const modelsHelpers:
               category: string,
               modelName: string,
           ) => {
-              modelClass?: { compatClass?: { isText2Video?: boolean } };
+              modelClass?: {
+                  compatClass?: { id?: string; isText2Video?: boolean };
+              };
           } | null;
-          compatClasses?: Record<string, { isText2Video?: boolean }>;
+          compatClasses?: Record<
+              string,
+              { id?: string; isText2Video?: boolean }
+          >;
       }
     | undefined;
 
@@ -175,6 +180,8 @@ declare const currentModelHelper:
     | undefined;
 
 interface Window {
+    /** When true, VideoStages frontend logs reaction points to the console (see debugLog.ts). */
+    __VIDEO_STAGES_DEBUG__?: boolean;
     base2editStageRegistry?: Base2EditStageRegistry;
     acestepfunTrackRegistry?: AceStepFunTrackRegistry;
 }

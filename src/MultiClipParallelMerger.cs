@@ -3,38 +3,50 @@ using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages;
 
-internal static class MultiClipParallelWorkflowFlags
+internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 {
     internal const string NodeHelperKey = "videostages.parallel-multi-clip";
-}
+    private const int BatchImagesNodeMaxInputs = 50;
 
-/// <summary>Merges parallel-clip video (and audio when present) via BatchImages/AudioConcat, then retargets SwarmSaveAnimationWS to the merge.</summary>
-internal static class MultiClipParallelMerger
-{
-    public static void Apply(
-        WorkflowGenerator g,
+    private static string TerminalPathKey(JArray path) => $"{path[0]}::{path[1]}";
+
+    public void Apply(
         IReadOnlyList<WGNodeData> clipOutputsInOrder,
-        JArray parallelRootVideoPath = null)
+        JArray? parallelRootVideoPath = null)
     {
-        if (g is null || clipOutputsInOrder is null || clipOutputsInOrder.Count < 2)
+        if (clipOutputsInOrder is null || clipOutputsInOrder.Count < 2)
         {
             return;
         }
 
         List<JArray> videoPaths = [];
         List<JArray> audioPaths = [];
+        HashSet<string> retargetKeys = [];
+        int sumFrames = 0;
+        bool allFramesKnown = true;
         foreach (WGNodeData clip in clipOutputsInOrder)
         {
-            if (clip?.Path is not JArray vp || vp.Count != 2)
+            if (clip?.Path is JArray vp && vp.Count == 2)
             {
-                continue;
+                videoPaths.Add(new JArray(vp[0], vp[1]));
+                retargetKeys.Add(TerminalPathKey(vp));
+                JArray concatAudioPath = TryGetClipConcatenatableAudioPath(clip);
+                if (concatAudioPath is not null)
+                {
+                    audioPaths.Add(concatAudioPath);
+                }
             }
 
-            videoPaths.Add(new JArray(vp[0], vp[1]));
-            JArray concatAudioPath = TryGetClipConcatenatableAudioPath(g, clip);
-            if (concatAudioPath is not null)
+            if (allFramesKnown)
             {
-                audioPaths.Add(concatAudioPath);
+                if (clip?.Frames is int f)
+                {
+                    sumFrames += f;
+                }
+                else
+                {
+                    allFramesKnown = false;
+                }
             }
         }
 
@@ -43,21 +55,10 @@ internal static class MultiClipParallelMerger
             return;
         }
 
-        JArray mergedVideo = MergeClipVideosWithBatchImagesNode(g, videoPaths);
+        JArray mergedVideo = MergeClipVideosWithBatchImagesNode(videoPaths);
         JArray mergedAudio = audioPaths.Count == videoPaths.Count
-            ? CascadeAudioConcat(g, audioPaths)
+            ? CascadeAudioConcat(audioPaths)
             : null;
-
-        HashSet<string> retargetKeys = [];
-        foreach (WGNodeData clip in clipOutputsInOrder)
-        {
-            if (clip?.Path is not JArray vp || vp.Count != 2)
-            {
-                continue;
-            }
-
-            retargetKeys.Add(TerminalPathKey(vp));
-        }
 
         if (parallelRootVideoPath is { Count: 2 })
         {
@@ -65,24 +66,13 @@ internal static class MultiClipParallelMerger
         }
 
         RetargetSwarmSaveAnimationWsForClipTerminals(g.Workflow, retargetKeys, mergedVideo, mergedAudio);
-
         WGNodeData template = clipOutputsInOrder[0];
-        int? totalFrames = 0;
-        foreach (WGNodeData c in clipOutputsInOrder)
-        {
-            if (c?.Frames is not int f)
-            {
-                totalFrames = null;
-                break;
-            }
 
-            totalFrames = totalFrames.Value + f;
-        }
         g.CurrentMedia = new WGNodeData(mergedVideo, g, WGNodeData.DT_VIDEO, template.Compat)
         {
             Width = template.Width,
             Height = template.Height,
-            Frames = totalFrames ?? template.Frames,
+            Frames = allFramesKnown ? sumFrames : template.Frames,
             FPS = template.FPS
         };
         if (mergedAudio is not null)
@@ -95,8 +85,7 @@ internal static class MultiClipParallelMerger
         }
     }
 
-    /// <summary>Uses decoded audio for AudioConcat; decodes <see cref="WGNodeData.DT_LATENT_AUDIO"/> when a VAE is available.</summary>
-    private static JArray TryGetClipConcatenatableAudioPath(WorkflowGenerator g, WGNodeData clip)
+    private JArray TryGetClipConcatenatableAudioPath(WGNodeData clip)
     {
         WGNodeData attached = clip?.AttachedAudio;
         if (attached?.Path is not JArray path || path.Count != 2)
@@ -123,28 +112,26 @@ internal static class MultiClipParallelMerger
         return null;
     }
 
-    private const int BatchImagesNodeMaxInputs = 50;
-
-    private static JArray MergeClipVideosWithBatchImagesNode(WorkflowGenerator g, IReadOnlyList<JArray> paths)
+    private JArray MergeClipVideosWithBatchImagesNode(IReadOnlyList<JArray> paths)
     {
-        if (paths.Count == 0)
-        {
-            return null;
-        }
-
         List<JArray> layer = [.. paths];
 
         while (layer.Count > BatchImagesNodeMaxInputs)
         {
-            JObject chunkInputs = new();
+            JObject chunkInputs = [];
             for (int i = 0; i < BatchImagesNodeMaxInputs; i++)
             {
                 chunkInputs[$"images.image{i}"] = layer[i];
             }
 
             string chunkNodeId = g.CreateNode(NodeTypes.BatchImagesNode, chunkInputs);
-            layer.RemoveRange(0, BatchImagesNodeMaxInputs);
-            layer.Insert(0, new JArray(chunkNodeId, 0));
+            List<JArray> next = [new JArray(chunkNodeId, 0)];
+            for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
+            {
+                next.Add(layer[i]);
+            }
+
+            layer = next;
         }
 
         if (layer.Count == 1)
@@ -152,17 +139,16 @@ internal static class MultiClipParallelMerger
             return layer[0];
         }
 
-        JObject inputs = new();
+        JObject inputs = [];
         for (int i = 0; i < layer.Count; i++)
         {
             inputs[$"images.image{i}"] = layer[i];
         }
 
-        string nodeId = g.CreateNode(NodeTypes.BatchImagesNode, inputs);
-        return new JArray(nodeId, 0);
+        return new JArray(g.CreateNode(NodeTypes.BatchImagesNode, inputs), 0);
     }
 
-    private static JArray CascadeAudioConcat(WorkflowGenerator g, IReadOnlyList<JArray> paths)
+    private JArray CascadeAudioConcat(IReadOnlyList<JArray> paths)
     {
         JArray acc = paths[0];
         for (int i = 1; i < paths.Count; i++)
@@ -179,15 +165,17 @@ internal static class MultiClipParallelMerger
         return acc;
     }
 
-    private static string TerminalPathKey(JArray path) => $"{path[0]}::{path[1]}";
-
     private static void RetargetSwarmSaveAnimationWsForClipTerminals(
         JObject workflow,
         HashSet<string> terminalPathKeys,
         JArray images,
         JArray audio)
     {
-        if (workflow is null || images is null || images.Count != 2 || terminalPathKeys is null || terminalPathKeys.Count == 0)
+        if (workflow is null
+            || images is null
+            || images.Count != 2
+            || terminalPathKeys is null
+            || terminalPathKeys.Count == 0)
         {
             return;
         }
@@ -199,7 +187,7 @@ internal static class MultiClipParallelMerger
                 continue;
             }
 
-            if ($"{node["class_type"]}" != NodeTypes.SwarmSaveAnimationWS)
+            if (!StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveAnimationWS))
             {
                 continue;
             }

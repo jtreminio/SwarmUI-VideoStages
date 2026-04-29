@@ -89,7 +89,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Missing_base2edit_edit_stage_reference_throws_runtime_error()
+    public void Missing_base2edit_edit_stage_reference_skips_stage_without_throwing()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -100,9 +100,11 @@ public partial class StageFlowTests
             MakeStage(models.VideoModel.Name, "edit0", control: 0.5, steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            WorkflowTestHarness.GenerateWithSteps(input, BuildNativeSteps(attachAudioToCurrentMedia: false)));
-        Assert.Contains("Base2Edit stage 0 does not exist", error.Message);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeSteps(attachAudioToCurrentMedia: false));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
     }
 
     [Fact]

@@ -1,36 +1,8 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
+import { minimalClip, minimalStage } from "./__test_helpers__/clipFixtures";
 import { stubBase2EditStageRegistry } from "./__test_helpers__/registries";
-import { type Clip, REF_SOURCE_BASE, REF_SOURCE_UPLOAD } from "./types";
+import { REF_SOURCE_BASE, REF_SOURCE_UPLOAD } from "./types";
 import { getRefSourceError, validateClips } from "./validation";
-
-const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
-    expanded: true,
-    skipped: false,
-    duration: 2,
-    audioSource: "Native",
-    saveAudioTrack: false,
-    clipLengthFromAudio: false,
-    reuseAudio: false,
-    uploadedAudio: null,
-    refs: [],
-    stages: [
-        {
-            expanded: true,
-            skipped: false,
-            control: 1,
-            refStrengths: [],
-            upscale: 1,
-            upscaleMethod: "pixel-lanczos",
-            model: "m",
-            vae: "",
-            steps: 8,
-            cfgScale: 1,
-            sampler: "euler",
-            scheduler: "normal",
-        },
-    ],
-    ...overrides,
-});
 
 describe("validation", () => {
     afterEach(() => {
@@ -72,7 +44,7 @@ describe("validation", () => {
             const clip = minimalClip({
                 stages: [
                     {
-                        ...minimalClip().stages[0],
+                        ...minimalStage(),
                         model: "",
                         sampler: "",
                         scheduler: "",
@@ -94,13 +66,7 @@ describe("validation", () => {
         it("skips validation for skipped clips and stages", () => {
             const clip = minimalClip({
                 skipped: true,
-                stages: [
-                    {
-                        ...minimalClip().stages[0],
-                        skipped: true,
-                        model: "",
-                    },
-                ],
+                stages: [{ ...minimalStage(), skipped: true, model: "" }],
             });
             expect(validateClips([clip])).toEqual([]);
         });

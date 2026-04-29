@@ -6,7 +6,6 @@ namespace VideoStages.LTX2;
 
 internal sealed class LtxPostVideoChain
 {
-    private const string UploadedAudioLoadClassType = "SwarmLoadAudioB64";
     private readonly WorkflowGenerator g;
     private readonly bool useReusedAudioLatent;
     public readonly WGNodeData CurrentOutputMedia;
@@ -76,16 +75,14 @@ internal sealed class LtxPostVideoChain
             return null;
         }
 
-        string decodeType = $"{decode.Node["class_type"]}";
-        if (decodeType != NodeTypes.VAEDecode
-            && decodeType != NodeTypes.VAEDecodeTiled)
+        if (!StringUtils.NodeTypeMatches(decode.Node, NodeTypes.VAEDecode)
+            && !StringUtils.NodeTypeMatches(decode.Node, NodeTypes.VAEDecodeTiled))
         {
             return null;
         }
 
-        JArray samplesRef = decode.Node["inputs"]?["samples"] as JArray
-            ?? decode.Node["inputs"]?["latent"] as JArray
-            ?? decode.Node["inputs"]?["latents"] as JArray;
+        JObject decodeInputs = decode.Node["inputs"] as JObject;
+        JArray samplesRef = LtxVaeDecodeInputs.TryGetDecodeSamplesRef(decodeInputs);
         if (samplesRef is null || samplesRef.Count != 2)
         {
             return null;
@@ -100,7 +97,7 @@ internal sealed class LtxPostVideoChain
         string separateId = $"{samplesRef[0]}";
         if (!generator.Workflow.TryGetValue(separateId, out JToken separateToken)
             || separateToken is not JObject separateNode
-            || $"{separateNode["class_type"]}" != LtxNodeTypes.LTXVSeparateAVLatent)
+            || !StringUtils.NodeTypeMatches(separateNode, LtxNodeTypes.LTXVSeparateAVLatent))
         {
             return null;
         }
@@ -243,7 +240,6 @@ internal sealed class LtxPostVideoChain
         AttachSourceAudio(g.CurrentMedia);
     }
 
-    /// <summary>Like <see cref="SpliceCurrentOutput"/>, with a dedicated decode branch for parallel clips (no shared root decode retarget).</summary>
     public void SpliceCurrentOutputToDedicatedBranch(
         WGNodeData vae,
         int outputWidth,
@@ -277,14 +273,22 @@ internal sealed class LtxPostVideoChain
             ["samples"] = new JArray(newSeparate, 1)
         });
 
-        WGNodeData decodedVideo = new(new JArray(dedicatedVideoDecode, 0), g, WGNodeData.DT_VIDEO, ResolveVideoCompat())
+        WGNodeData decodedVideo = new(
+            new JArray(dedicatedVideoDecode, 0),
+            g,
+            WGNodeData.DT_VIDEO,
+            ResolveVideoCompat())
         {
             Width = outputWidth,
             Height = outputHeight,
             Frames = outputFrames ?? CurrentOutputMedia.Frames,
             FPS = outputFps ?? CurrentOutputMedia.FPS
         };
-        WGNodeData decodedAudio = new(new JArray(dedicatedAudioDecode, 0), g, WGNodeData.DT_AUDIO, ResolveAudioCompat());
+        WGNodeData decodedAudio = new(
+            new JArray(dedicatedAudioDecode, 0),
+            g,
+            WGNodeData.DT_AUDIO,
+            ResolveAudioCompat());
         decodedVideo.AttachedAudio = decodedAudio;
         g.CurrentMedia = decodedVideo;
     }
@@ -302,7 +306,7 @@ internal sealed class LtxPostVideoChain
             newImagePath,
             connection =>
             {
-                if (!string.Equals(connection.InputName, "images", StringComparison.Ordinal))
+                if (!StringUtils.Equals(connection.InputName, "images"))
                 {
                     return false;
                 }
@@ -310,7 +314,7 @@ internal sealed class LtxPostVideoChain
                 {
                     return false;
                 }
-                return $"{node["class_type"]}" == NodeTypes.SwarmSaveAnimationWS;
+                return StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveAnimationWS);
             });
     }
 
@@ -320,7 +324,7 @@ internal sealed class LtxPostVideoChain
             || newSamplesPath is null
             || newSamplesPath.Count != 2
             || g.Workflow[AudioDecodeNodeId] is not JObject audioDecode
-            || $"{audioDecode["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode)
+            || !StringUtils.NodeTypeMatches(audioDecode, LtxNodeTypes.LTXVAudioVAEDecode))
         {
             return;
         }
@@ -334,7 +338,11 @@ internal sealed class LtxPostVideoChain
         inputs["samples"] = new JArray(newSamplesPath[0], newSamplesPath[1]);
     }
 
-    private static bool TryFindAudioDecode(JObject workflow, string separateId, out string audioDecodeId, out JArray audioVaeRef)
+    internal static bool TryFindAudioDecode(
+        JObject workflow,
+        string separateId,
+        out string audioDecodeId,
+        out JArray audioVaeRef)
     {
         audioDecodeId = null;
         audioVaeRef = null;
@@ -344,7 +352,7 @@ internal sealed class LtxPostVideoChain
             {
                 continue;
             }
-            if ($"{node["class_type"]}" != LtxNodeTypes.LTXVAudioVAEDecode)
+            if (!StringUtils.NodeTypeMatches(node, LtxNodeTypes.LTXVAudioVAEDecode))
             {
                 continue;
             }
@@ -356,7 +364,7 @@ internal sealed class LtxPostVideoChain
             {
                 if (node["inputs"]?["audio_vae"] is not JArray foundAudioVaeRef || foundAudioVaeRef.Count != 2)
                 {
-                    return false;
+                    continue;
                 }
 
                 audioDecodeId = entry.Key;
@@ -454,45 +462,10 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
-        Queue<string> pending = new();
-        HashSet<string> visited = [];
-        pending.Enqueue($"{audioLatentPath[0]}");
-        while (pending.Count > 0)
-        {
-            string nodeId = pending.Dequeue();
-            if (!visited.Add(nodeId))
-            {
-                continue;
-            }
-
-            if (string.Equals(nodeId, uploadNodeId, StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            if (!g.Workflow.TryGetValue(nodeId, out JToken token)
-                || token is not JObject node
-                || node["inputs"] is not JObject inputs)
-            {
-                continue;
-            }
-
-            foreach (JProperty input in inputs.Properties())
-            {
-                if (input.Value is not JArray inputPath || inputPath.Count != 2)
-                {
-                    continue;
-                }
-
-                string upstreamId = $"{inputPath[0]}";
-                if (!string.IsNullOrWhiteSpace(upstreamId))
-                {
-                    pending.Enqueue(upstreamId);
-                }
-            }
-        }
-
-        return false;
+        return WalkUpstreamFromAudioOutputRef(
+            audioLatentPath,
+            tryMatchNodeId: id => StringUtils.Equals(id, uploadNodeId),
+            tryMatchNode: null);
     }
 
     private WGNodeData CloneAudioReference(WGNodeData audio)
@@ -519,7 +492,7 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
-        return AudioPathTracesToNodeType(audioPath, UploadedAudioLoadClassType);
+        return AudioPathTracesToNodeType(audioPath, NodeTypes.SwarmLoadAudioB64);
     }
 
     private bool AudioPathTracesToNodeType(JArray audioPath, string classType)
@@ -527,6 +500,22 @@ internal sealed class LtxPostVideoChain
         if (audioPath is null
             || audioPath.Count != 2
             || string.IsNullOrWhiteSpace(classType))
+        {
+            return false;
+        }
+
+        return WalkUpstreamFromAudioOutputRef(
+            audioPath,
+            tryMatchNodeId: null,
+            tryMatchNode: node => StringUtils.NodeTypeMatches(node, classType));
+    }
+
+    private bool WalkUpstreamFromAudioOutputRef(
+        JArray audioPath,
+        Func<string, bool> tryMatchNodeId,
+        Func<JObject, bool> tryMatchNode)
+    {
+        if (audioPath is null || audioPath.Count != 2)
         {
             return false;
         }
@@ -542,13 +531,18 @@ internal sealed class LtxPostVideoChain
                 continue;
             }
 
+            if (tryMatchNodeId is not null && tryMatchNodeId(nodeId))
+            {
+                return true;
+            }
+
             if (!g.Workflow.TryGetValue(nodeId, out JToken token)
                 || token is not JObject node)
             {
                 continue;
             }
 
-            if ($"{node["class_type"]}" == classType)
+            if (tryMatchNode is not null && tryMatchNode(node))
             {
                 return true;
             }
@@ -630,7 +624,10 @@ internal sealed class LtxPostVideoChain
 
     private T2IModelCompatClass ResolveVideoCompat()
     {
-        return T2IModelClassSorter.CompatLtxv2 ?? g.CurrentVae?.Compat ?? CurrentOutputMedia?.Compat ?? g.CurrentCompat();
+        return T2IModelClassSorter.CompatLtxv2
+            ?? g.CurrentVae?.Compat
+            ?? CurrentOutputMedia?.Compat
+            ?? g.CurrentCompat();
     }
 
     private T2IModelCompatClass ResolveAudioCompat()
