@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
@@ -779,6 +780,34 @@ public partial class StageFlowTests
         WorkflowNode emptyLatentNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
         Assert.Equal(768, emptyLatentNode.Node["inputs"]?.Value<int>("width"));
         Assert.Equal(448, emptyLatentNode.Node["inputs"]?.Value<int>("height"));
+    }
+
+    [Fact]
+    public void Ltx_empty_latent_audio_matches_video_stages_fps_not_global_swarm_video_fps()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JObject
+        {
+            ["FPS"] = 30,
+            ["Width"] = 512,
+            ["Height"] = 512,
+            ["Clips"] = new JArray(
+                MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10)))
+        }.ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(T2IParamTypes.VideoFPS, 24);
+        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+
+        IReadOnlyList<WorkflowNode> emptyAudioNodes = WorkflowUtils.NodesOfType(workflow, "LTXVEmptyLatentAudio");
+        Assert.NotEmpty(emptyAudioNodes);
+        Assert.All(
+            emptyAudioNodes,
+            node => Assert.Equal(30, node.Node["inputs"]?.Value<int>("frame_rate")));
     }
 
     [Fact]
