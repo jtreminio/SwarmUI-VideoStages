@@ -207,7 +207,60 @@ internal static class TestModelFactory
         return CreateBaseAndVideoModels(T2IModelClassSorter.CompatWan22_5b, "unit-video-wan22", "Unit Video Wan 2.2");
     }
 
-    private static TestModelBundle CreateBaseAndVideoModels(T2IModelCompatClass videoCompat, string videoClassId, string videoClassName)
+    public static TestModelBundle CreateBaseAndWan22_14bImage2VideoModels()
+    {
+        CommonModels.Known.TryAdd("wan21-vae", new CommonModels.ModelInfo(
+            "wan21-vae",
+            "Wan 2.1 VAE",
+            "Unit test stub Wan 2.1 VAE entry (WAN 2.2 14B i2v uses wan-21 compat + wan21-vae).",
+            "https://example.com/wan21-vae.safetensors",
+            "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b",
+            "VAE",
+            "Wan/wan_2.1_vae.safetensors"));
+        CommonModels.Known.TryAdd("wan22-vae", new CommonModels.ModelInfo(
+            "wan22-vae",
+            "Wan 2.2 VAE",
+            "Unit test stub Wan 2.2 VAE entry.",
+            "https://example.com/wan22-vae.safetensors",
+            "e40321bd36b9709991dae2530eb4ac303dd168276980d3e9bc4b6e2b75fed156",
+            "VAE",
+            "Wan/wan2.2_vae.safetensors"));
+        if (!T2IModelClassSorter.ModelClasses.TryGetValue("wan-2_2-image2video-14b", out T2IModelClass videoClass))
+        {
+            videoClass = new T2IModelClass
+            {
+                ID = "wan-2_2-image2video-14b",
+                Name = "Unit Wan 2.2 Image2Video 14B",
+                CompatClass = T2IModelClassSorter.CompatWan21_14b,
+                StandardWidth = 960,
+                StandardHeight = 960
+            };
+        }
+
+        TestModelBundle bundle = CreateBaseAndVideoModelsWithClass(videoClass);
+        T2IModelHandler clipHandler = Program.T2IModelSets["Clip"];
+        string umt5FileName = "umt5_xxl_fp8_e4m3fn_scaled.safetensors";
+        if (!clipHandler.Models.ContainsKey(umt5FileName))
+        {
+            T2IModelCompatClass umt5Compat = new() { ID = "unit-umt5-compat", ShortCode = "U5" };
+            T2IModel umt5Model = new(clipHandler, "/tmp", $"/tmp/{umt5FileName}", umt5FileName)
+            {
+                ModelClass = new T2IModelClass
+                {
+                    ID = "unit-umt5",
+                    Name = "Unit UMT5 (WAN stub)",
+                    CompatClass = umt5Compat,
+                    StandardWidth = 512,
+                    StandardHeight = 512
+                }
+            };
+            clipHandler.Models[umt5FileName] = umt5Model;
+        }
+
+        return bundle;
+    }
+
+    private static TestModelBundle CreateBaseAndVideoModelsWithClass(T2IModelClass videoClass)
     {
         T2IModelHandler sdHandler = new() { ModelType = "Stable-Diffusion" };
         T2IModelHandler clipHandler = new() { ModelType = "Clip" };
@@ -225,14 +278,6 @@ internal static class TestModelFactory
             CompatClass = baseCompat,
             StandardWidth = 1024,
             StandardHeight = 1024
-        };
-        T2IModelClass videoClass = new()
-        {
-            ID = videoClassId,
-            Name = videoClassName,
-            CompatClass = videoCompat,
-            StandardWidth = 1024,
-            StandardHeight = 576
         };
 
         T2IModel baseModel = new(sdHandler, "/tmp", "/tmp/UnitTest_Base.safetensors", "UnitTest_Base.safetensors")
@@ -259,5 +304,18 @@ internal static class TestModelFactory
         sdHandler.Models[videoModel.Name] = videoModel;
         clipHandler.Models[gemmaModel.Name] = gemmaModel;
         return new TestModelBundle(baseModel, videoModel, gemmaModel);
+    }
+
+    private static TestModelBundle CreateBaseAndVideoModels(T2IModelCompatClass videoCompat, string videoClassId, string videoClassName)
+    {
+        T2IModelClass videoClass = new()
+        {
+            ID = videoClassId,
+            Name = videoClassName,
+            CompatClass = videoCompat,
+            StandardWidth = 1024,
+            StandardHeight = 576
+        };
+        return CreateBaseAndVideoModelsWithClass(videoClass);
     }
 }

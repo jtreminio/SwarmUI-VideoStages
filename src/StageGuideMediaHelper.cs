@@ -71,7 +71,15 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         int targetHeight = sourceMedia.Height ?? g.UserInput.GetImageHeight();
         int currentWidth = resolvedGuideMedia.Width ?? targetWidth;
         int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
-        if (currentWidth != targetWidth || currentHeight != targetHeight)
+        if (TryNormalizeExistingImageScale(
+                resolvedGuideMedia.Path,
+                targetWidth,
+                targetHeight,
+                out JArray existingScalePath))
+        {
+            resolvedGuideMedia = resolvedGuideMedia.WithPath(existingScalePath);
+        }
+        else if (currentWidth != targetWidth || currentHeight != targetHeight)
         {
             if (TryFindReusableImageScale(
                     resolvedGuideMedia.Path,
@@ -109,6 +117,47 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
             ["upscale_method"] = "lanczos",
             ["crop"] = "center"
         };
+    }
+
+    private bool TryNormalizeExistingImageScale(
+        JArray sourcePath,
+        int targetWidth,
+        int targetHeight,
+        out JArray scaledPath)
+    {
+        scaledPath = null;
+        if (g.Workflow is null
+            || sourcePath is not { Count: 2 }
+            || g.Workflow[$"{sourcePath[0]}"] is not JObject node
+            || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
+            || node["inputs"] is not JObject inputs)
+        {
+            return false;
+        }
+
+        if (inputs["image"] is JArray upstreamPath
+            && upstreamPath.Count == 2
+            && g.Workflow[$"{upstreamPath[0]}"] is JObject upstreamNode
+            && StringUtils.NodeTypeMatches(upstreamNode, NodeTypes.ImageScale)
+            && upstreamNode["inputs"] is JObject upstreamInputs)
+        {
+            if (WorkflowUtils.FindInputConnections(g.Workflow, sourcePath).Count == 0)
+            {
+                g.Workflow.Remove($"{sourcePath[0]}");
+            }
+            sourcePath = upstreamPath;
+            inputs = upstreamInputs;
+        }
+
+        inputs["width"] = targetWidth;
+        inputs["height"] = targetHeight;
+        inputs["crop"] = "center";
+        if (inputs["upscale_method"] is null)
+        {
+            inputs["upscale_method"] = "lanczos";
+        }
+        scaledPath = [sourcePath[0], sourcePath[1]];
+        return true;
     }
 
     private bool TryFindReusableImageScale(

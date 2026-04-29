@@ -163,6 +163,7 @@ declare const modelsHelpers:
               modelName: string,
           ) => {
               modelClass?: {
+                  id?: string;
                   compatClass?: { id?: string; isText2Video?: boolean };
               };
           } | null;

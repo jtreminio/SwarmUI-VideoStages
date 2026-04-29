@@ -2513,6 +2513,60 @@ describe("videoStageEditor", () => {
             expect(parseStored()[0].stages?.[0].refStrengths).toEqual([0.5]);
         });
 
+        it("disables add-ref after two refs on a WAN clip", async () => {
+            initEditor();
+
+            const modelSelect = document.querySelector(
+                '[data-stage-field="model"][data-stage-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const model = must(modelSelect);
+            const opt = document.createElement("option");
+            opt.value = "wan-2_2-image2video-14b";
+            opt.text = "wan22-14b";
+            model.appendChild(opt);
+            model.value = "wan-2_2-image2video-14b";
+            dispatchSimulatedUserFieldChange(model);
+            await flushReRender();
+
+            const addRefBtn = (): HTMLButtonElement | null =>
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement | null;
+
+            must(addRefBtn()).click();
+            await flushReRender();
+            must(addRefBtn()).click();
+            await flushReRender();
+
+            expect(must(addRefBtn()).disabled).toBe(true);
+        });
+
+        it("hides ref strength sliders when the clip has a WAN stage", async () => {
+            initEditor();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            const modelSelect = document.querySelector(
+                '[data-stage-field="model"][data-stage-idx="0"]',
+            ) as HTMLSelectElement | null;
+            const model = must(modelSelect);
+            const opt = document.createElement("option");
+            opt.value = "wan-2_2-image2video-14b";
+            model.appendChild(opt);
+            model.value = "wan-2_2-image2video-14b";
+            dispatchSimulatedUserFieldChange(model);
+            await flushReRender();
+
+            expect(
+                document.querySelector('[data-stage-field="refStrength_0"]'),
+            ).toBeNull();
+        });
+
         it("updates stored ControlNet strength when its stage slider moves", async () => {
             setImageToVideoWorkflow();
             initEditor();

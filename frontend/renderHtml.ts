@@ -48,6 +48,7 @@ import {
     type Stage,
 } from "./types";
 import { getRefSourceError } from "./validation";
+import { clipHasWanStage } from "./wanModel";
 
 const CONTROLNET_SOURCE_DROPDOWN_OPTIONS: ImageSourceOption[] =
     CONTROLNET_SOURCE_OPTIONS.map((value) => ({ value, label: value }));
@@ -275,6 +276,7 @@ export const renderRefRow = (
     refIdx: number,
     getRootDefaults: () => RootDefaults,
 ): string => {
+    const wanClip = clipHasWanStage(clip);
     const collapseTitle = ref.expanded ? "Collapse" : "Expand";
     const collapseGlyph = ref.expanded ? "&#x2B9F;" : "&#x2B9E;";
     const head = `
@@ -381,13 +383,24 @@ export const renderRefRow = (
         },
     );
 
+    const frameFieldRendered = wanClip
+        ? decorateAutoInputWrapper(frameField, "vs-wan-ref-frame-hidden", true)
+        : frameField;
+    const fromEndFieldRendered = wanClip
+        ? decorateAutoInputWrapper(
+              fromEndField,
+              "vs-wan-ref-fromend-hidden",
+              true,
+          )
+        : fromEndField;
+
     return `<section class="vs-card vs-ref-card input-group" data-ref-idx="${refIdx}">
             ${head}
             <div class="vs-card-body input-group-content">
                 ${sourceField}
                 ${uploadField}
-                ${frameField}
-                ${fromEndField}
+                ${frameFieldRendered}
+                ${fromEndFieldRendered}
                 ${errorHtml}
             </div>
         </section>`;
@@ -603,18 +616,21 @@ export const renderStageRow = (
               controlNetStrengthDisabled,
           )
         : "";
-    const refStrengthFields = clip.refs
-        .map((_, refIdx) =>
-            stageSliderField(
-                stageRefStrengthField(refIdx),
-                `Reference Image ${refIdx} Strength`,
-                stage.refStrengths[refIdx] ?? STAGE_REF_STRENGTH_DEFAULT,
-                STAGE_REF_STRENGTH_MIN,
-                STAGE_REF_STRENGTH_MAX,
-                STAGE_REF_STRENGTH_STEP,
-            ),
-        )
-        .join("");
+    const wanClip = clipHasWanStage(clip);
+    const refStrengthFields = wanClip
+        ? ""
+        : clip.refs
+              .map((_, refIdx) =>
+                  stageSliderField(
+                      stageRefStrengthField(refIdx),
+                      `Reference Image ${refIdx} Strength`,
+                      stage.refStrengths[refIdx] ?? STAGE_REF_STRENGTH_DEFAULT,
+                      STAGE_REF_STRENGTH_MIN,
+                      STAGE_REF_STRENGTH_MAX,
+                      STAGE_REF_STRENGTH_STEP,
+                  ),
+              )
+              .join("");
 
     return `<section class="${cardClasses.join(" ")}" data-stage-idx="${stageIdx}">
             ${head}
@@ -642,6 +658,8 @@ export const renderClipCard = (
     const defaults = getRootDefaults();
     const stagesCount = clip.stages.length;
     const refsCount = clip.refs.length;
+    const wanClip = clipHasWanStage(clip);
+    const addRefDisabled = wanClip && refsCount >= 2;
     const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
     const skipBtnVariant = clip.skipped ? "vs-btn-skip-active" : "";
     const collapseGlyph = clip.expanded ? "&#x2B9F;" : "&#x2B9E;";
@@ -923,8 +941,9 @@ export const renderClipCard = (
                         <div class="vs-section-block-title">Reference Images &middot; ${refsCount}</div>
                     </div>
                     <div class="vs-card-list">${refRowsHtml}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-ref"
-                        data-clip-idx="${clipIdx}">+ Add Reference Image</button>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-ref" data-clip-idx="${clipIdx}"${
+                        addRefDisabled ? " disabled" : ""
+                    }>+ Add Reference Image</button>
                 </div>
 
                 <div class="vs-section-block">

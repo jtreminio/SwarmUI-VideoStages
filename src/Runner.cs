@@ -42,7 +42,7 @@ public class Runner
             rootVideoStageResizer,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs);
-        stageRunner = new StageRunner(g, stageGuideMediaHelper, ltxManager);
+        stageRunner = new StageRunner(g, stageGuideMediaHelper, ltxManager, base2EditPublishedStageRefs);
         stageSequenceRunner = new StageSequenceRunner(
             g,
             stageRefStore,

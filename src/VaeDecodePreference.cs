@@ -90,7 +90,7 @@ internal static class VaeDecodePreference
 
     private static bool ShouldUseTiledVaeDecode(WorkflowGenerator g)
     {
-        return g?.UserInput.TryGet(T2IParamTypes.VAETileSize, out _) == true;
+        return g.UserInput.TryGet(T2IParamTypes.VAETileSize, out _) == true;
     }
 
     private static JObject CreateVideoDecodeInputs(

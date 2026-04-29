@@ -326,6 +326,72 @@
     }
   };
 
+  // frontend/wanModel.ts
+  var WAN_COMPAT_CLASS_IDS = /* @__PURE__ */ new Set([
+    "wan-21",
+    "wan-21-14b",
+    "wan-21-1_3b",
+    "wan-22-5b"
+  ]);
+  var WAN_22_I2V_14B_MODEL_CLASS_ID = "wan-2_2-image2video-14b";
+  var getStableDiffusionModelClass = (modelValue) => {
+    if (typeof modelsHelpers === "undefined" || !modelsHelpers || typeof modelsHelpers.getDataFor !== "function") {
+      return void 0;
+    }
+    return modelsHelpers.getDataFor("Stable-Diffusion", modelValue)?.modelClass;
+  };
+  var getModelCompatClassId2 = (modelValue) => {
+    return getStableDiffusionModelClass(modelValue)?.compatClass?.id ?? null;
+  };
+  var getModelClassId = (modelValue) => {
+    return getStableDiffusionModelClass(modelValue)?.id ?? null;
+  };
+  var matchesKnownWanName = (modelValue) => {
+    const lower = modelValue.toLowerCase();
+    return lower.includes("wan-2_2-image2video-14b") || lower.includes("wan22") || lower.startsWith("wan-2_1-image2video") || lower.startsWith("wan-2_1-text2video") || lower.startsWith("wan-2_2-ti2v") || lower.startsWith("wan-2_1-flf2v") || lower.startsWith("wan-2_1-vace") || lower.includes("wan-21-14b") || lower.includes("wan-21-1_3b") || lower.includes("wan-22-5b");
+  };
+  var clipHasWanStage = (clip) => {
+    for (let i = 0; i < clip.stages.length; i++) {
+      const stage = clip.stages[i];
+      if (!stage.skipped && isWanVideoModelValue(stage.model)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  var isWanVideoModelValue = (modelValue) => {
+    const trimmed = `${modelValue ?? ""}`.trim();
+    if (!trimmed) {
+      return false;
+    }
+    const compatClassId = getModelCompatClassId2(trimmed);
+    if (compatClassId !== null && WAN_COMPAT_CLASS_IDS.has(compatClassId)) {
+      return true;
+    }
+    const modelClassId = getModelClassId(trimmed);
+    if (modelClassId === WAN_22_I2V_14B_MODEL_CLASS_ID) {
+      return true;
+    }
+    return matchesKnownWanName(trimmed);
+  };
+  var rawStageListContainsWanModel = (stagesRaw) => {
+    for (let i = 0; i < stagesRaw.length; i++) {
+      const raw = stagesRaw[i];
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        continue;
+      }
+      const rec = raw;
+      if (rec.skipped) {
+        continue;
+      }
+      const m = `${rec.model ?? ""}`.trim();
+      if (m.length > 0 && isWanVideoModelValue(m)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   // frontend/normalization.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : upscaleMethodValues[0] ?? "pixel-lanczos";
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -602,6 +668,35 @@
     };
     return ref;
   };
+  var normalizeWanClipStructuralRefs = (clip) => {
+    if (!clipHasWanStage(clip)) {
+      return;
+    }
+    const wanStructuralRefMax = 2;
+    if (clip.refs.length > wanStructuralRefMax) {
+      clip.refs = clip.refs.slice(0, wanStructuralRefMax);
+      for (let s = 0; s < clip.stages.length; s++) {
+        clip.stages[s].refStrengths = clip.stages[s].refStrengths.slice(
+          0,
+          wanStructuralRefMax
+        );
+      }
+    }
+    if (clip.refs.length > 0) {
+      clip.refs[0] = {
+        ...clip.refs[0],
+        frame: REF_FRAME_MIN,
+        fromEnd: false
+      };
+    }
+    if (clip.refs.length > 1) {
+      clip.refs[1] = {
+        ...clip.refs[1],
+        frame: REF_FRAME_MIN,
+        fromEnd: true
+      };
+    }
+  };
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
@@ -617,11 +712,12 @@
     );
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
     const refFrameMax = getReferenceFrameMax(getRootDefaults2, { duration });
-    const refs = refsRaw.map(
+    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+    const refsSource = rawStageListContainsWanModel(stagesRaw) ? refsRaw.slice(0, 2) : refsRaw;
+    const refs = refsSource.map(
       (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
     );
     const stages = [];
-    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
     for (let i = 0; i < stagesRaw.length; i++) {
       const previousStage = i > 0 ? stages[i - 1] : null;
       stages.push(
@@ -644,7 +740,7 @@
     );
     const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet = controlNetLora !== "" && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
-    return {
+    const clip = {
       expanded: normalizeExpanded(rawClip),
       skipped: !!rawClip.skipped,
       duration,
@@ -661,6 +757,8 @@
       refs,
       stages
     };
+    normalizeWanClipStructuralRefs(clip);
+    return clip;
   };
 
   // frontend/fieldBinding.ts
@@ -880,7 +978,7 @@
       return;
     }
   };
-  var applyStageField = (stage, field, target, getRootDefaults2) => {
+  var applyStageField = (stage, field, target, getRootDefaults2, clip = null) => {
     const stageIdx = parseInt(target.dataset.stageIdx ?? "-1", 10);
     const refStrengthIdx = parseStageRefStrengthIndex(field);
     if (refStrengthIdx != null) {
@@ -892,6 +990,9 @@
     }
     if (field === "model") {
       stage.model = target.value;
+      if (clip != null) {
+        normalizeWanClipStructuralRefs(clip);
+      }
       return;
     }
     if (field === "vae") {
@@ -1367,6 +1468,9 @@
       return true;
     }
     if (action === "add-ref") {
+      if (clipHasWanStage(clip) && clip.refs.length >= 2) {
+        return false;
+      }
       clip.refs.push(buildDefaultRef());
       for (const stage of clip.stages) {
         stage.refStrengths.push(
@@ -1374,6 +1478,7 @@
         );
       }
       deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
+      normalizeWanClipStructuralRefs(clip);
       return true;
     }
     return false;
@@ -1391,6 +1496,7 @@
         }
       }
       deps.refUploadCache.reindexAfterRefDelete(clipIdx, refIdx);
+      normalizeWanClipStructuralRefs(clip);
     }
     if (action === "toggle-collapse") {
       const ref = clip.refs[refIdx];
@@ -1674,7 +1780,7 @@
       '[data-stage-field="upscaleMethod"]'
     );
     const preservedUpscaleMethod = stageField === "upscale" ? methodSelect?.value ?? stage.upscaleMethod : null;
-    applyStageField(stage, stageField, elem, getRootDefaults);
+    applyStageField(stage, stageField, elem, getRootDefaults, clip);
     if (stageField === "upscale") {
       if (preservedUpscaleMethod != null) {
         stage.upscaleMethod = preservedUpscaleMethod;
@@ -1686,6 +1792,7 @@
     }
     if (stageField === "model") {
       syncStageControlNetStrengthDisabled(elem, stage, clip);
+      return fieldChangeApplied({ refreshClips: "always" });
     }
     return fieldChangeApplied();
   };
@@ -2672,6 +2779,7 @@ ${optionHtml}
     decorateAutoInputWrapper(html, className, hidden)
   );
   var renderRefRow = (ref, clip, clipIdx, refIdx, getRootDefaults2) => {
+    const wanClip = clipHasWanStage(clip);
     const collapseTitle = ref.expanded ? "Collapse" : "Expand";
     const collapseGlyph = ref.expanded ? "&#x2B9F;" : "&#x2B9E;";
     const head = `
@@ -2770,13 +2878,19 @@ ${optionHtml}
         "data-clip-idx": String(clipIdx)
       }
     );
+    const frameFieldRendered = wanClip ? decorateAutoInputWrapper(frameField, "vs-wan-ref-frame-hidden", true) : frameField;
+    const fromEndFieldRendered = wanClip ? decorateAutoInputWrapper(
+      fromEndField,
+      "vs-wan-ref-fromend-hidden",
+      true
+    ) : fromEndField;
     return `<section class="vs-card vs-ref-card input-group" data-ref-idx="${refIdx}">
             ${head}
             <div class="vs-card-body input-group-content">
                 ${sourceField}
                 ${uploadField}
-                ${frameField}
-                ${fromEndField}
+                ${frameFieldRendered}
+                ${fromEndFieldRendered}
                 ${errorHtml}
             </div>
         </section>`;
@@ -2960,7 +3074,8 @@ ${optionHtml}
       STAGE_CONTROLNET_STRENGTH_STEP,
       controlNetStrengthDisabled
     ) : "";
-    const refStrengthFields = clip.refs.map(
+    const wanClip = clipHasWanStage(clip);
+    const refStrengthFields = wanClip ? "" : clip.refs.map(
       (_, refIdx) => stageSliderField(
         stageRefStrengthField(refIdx),
         `Reference Image ${refIdx} Strength`,
@@ -2991,6 +3106,8 @@ ${optionHtml}
     const defaults = getRootDefaults2();
     const stagesCount = clip.stages.length;
     const refsCount = clip.refs.length;
+    const wanClip = clipHasWanStage(clip);
+    const addRefDisabled = wanClip && refsCount >= 2;
     const skipBtnTitle = clip.skipped ? "Re-enable clip" : "Skip clip";
     const skipBtnVariant = clip.skipped ? "vs-btn-skip-active" : "";
     const collapseGlyph = clip.expanded ? "&#x2B9F;" : "&#x2B9E;";
@@ -3243,8 +3360,7 @@ ${optionHtml}
                         <div class="vs-section-block-title">Reference Images &middot; ${refsCount}</div>
                     </div>
                     <div class="vs-card-list">${refRowsHtml}</div>
-                    <button type="button" class="vs-add-btn" data-clip-action="add-ref"
-                        data-clip-idx="${clipIdx}">+ Add Reference Image</button>
+                    <button type="button" class="vs-add-btn" data-clip-action="add-ref" data-clip-idx="${clipIdx}"${addRefDisabled ? " disabled" : ""}>+ Add Reference Image</button>
                 </div>
 
                 <div class="vs-section-block">

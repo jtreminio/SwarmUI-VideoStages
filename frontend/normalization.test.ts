@@ -280,4 +280,42 @@ describe("normalization", () => {
         expect(ref.frame).toBe(1);
         expect(ref.uploadedImage).toBeNull();
     });
+
+    it("normalizeClip trims WAN clips to two refs and locks first/last frame semantics", () => {
+        const clip = normalizeClip(
+            {
+                duration: 3,
+                refs: [
+                    {
+                        source: REF_SOURCE_BASE,
+                        frame: 8,
+                        fromEnd: true,
+                    },
+                    {
+                        source: REF_SOURCE_REFINER,
+                        frame: 5,
+                        fromEnd: false,
+                    },
+                    {
+                        source: REF_SOURCE_BASE,
+                        frame: 2,
+                        fromEnd: true,
+                    },
+                ],
+                stages: [
+                    {
+                        ...minimalStageRaw,
+                        model: "wan-2_2-image2video-14b",
+                    },
+                ],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.refs).toHaveLength(2);
+        expect(clip.refs[0].frame).toBe(1);
+        expect(clip.refs[0].fromEnd).toBe(false);
+        expect(clip.refs[1].frame).toBe(1);
+        expect(clip.refs[1].fromEnd).toBe(true);
+    });
 });

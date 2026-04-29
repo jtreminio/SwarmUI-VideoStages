@@ -45,7 +45,8 @@ public class JsonParser(WorkflowGenerator g)
         double? ControlNetStrength = null,
         IReadOnlyList<RefSpec> ClipRefs = null,
         IReadOnlyList<double> RefStrengths = null,
-        bool ImageReferenceWasExplicit = false
+        bool ImageReferenceWasExplicit = false,
+        int? EndStep = null
     );
 
     public sealed record RefSpec(
@@ -313,14 +314,21 @@ public class JsonParser(WorkflowGenerator g)
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
         List<StageSpec> stages = [];
         List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
+        bool clipHasWanModel = ClipRawStagesContainWanModel(rawStages);
+        int refLimit = clipHasWanModel ? Math.Min(2, rawRefs.Count) : rawRefs.Count;
         List<RefSpec> refs = [];
-        for (int i = 0; i < rawRefs.Count; i++)
+        for (int i = 0; i < refLimit; i++)
         {
             RefSpec parsedRef = ParseRef(rawRefs[i], clipIndex, i);
             if (parsedRef is not null)
             {
                 refs.Add(parsedRef);
             }
+        }
+
+        if (clipHasWanModel)
+        {
+            NormalizeWanClipRefSemantics(refs);
         }
 
         for (int i = 0; i < rawStages.Count; i++)
@@ -337,6 +345,7 @@ public class JsonParser(WorkflowGenerator g)
             }
             stages.Add(parsed);
         }
+        ApplyStageContinuationSamplingPlan(stages);
 
         return new ClipSpec(
             Id: clipIndex,
@@ -355,6 +364,84 @@ public class JsonParser(WorkflowGenerator g)
             Refs: refs,
             Stages: stages
         );
+    }
+
+    private static bool ClipRawStagesContainWanModel(List<JObject> rawStages)
+    {
+        for (int i = 0; i < rawStages.Count; i++)
+        {
+            if (GetOptionalBool(rawStages[i], "Skipped", defaultValue: false))
+            {
+                continue;
+            }
+
+            string model = GetOptionalString(rawStages[i], "Model", defaultValue: null, i, allowEmpty: false);
+            if (VideoStageModelCompat.IsWanVideoModel(model))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void ApplyStageContinuationSamplingPlan(List<StageSpec> stages)
+    {
+        for (int i = 0; i < stages.Count; i++)
+        {
+            StageSpec stage = stages[i];
+            if (stage.Skipped || !VideoStageModelCompat.IsWanVideoModel(stage.Model))
+            {
+                continue;
+            }
+
+            for (int nextIndex = i + 1; nextIndex < stages.Count; nextIndex++)
+            {
+                StageSpec nextStage = stages[nextIndex];
+                if (nextStage.Skipped)
+                {
+                    continue;
+                }
+
+                stages[i] = stage with
+                {
+                    EndStep = CalculateContinuationEndStep(stage.Steps, nextStage.Control)
+                };
+                return;
+            }
+
+            return;
+        }
+    }
+
+    private static int CalculateContinuationEndStep(int steps, double nextStageControl)
+    {
+        int clampedSteps = Math.Max(1, steps);
+        int endStep = (int)Math.Floor(clampedSteps * (1 - Math.Clamp(nextStageControl, 0.0, 1.0)));
+        return Math.Clamp(endStep, 0, clampedSteps);
+    }
+
+    private static void NormalizeWanClipRefSemantics(List<RefSpec> refs)
+    {
+        if (refs.Count > 0)
+        {
+            RefSpec first = refs[0];
+            refs[0] = first with
+            {
+                Frame = 1,
+                FromEnd = false
+            };
+        }
+
+        if (refs.Count > 1)
+        {
+            RefSpec second = refs[1];
+            refs[1] = second with
+            {
+                Frame = 1,
+                FromEnd = true
+            };
+        }
     }
 
     private static RefSpec ParseRef(JObject refObj, int clipIndex, int refIndex)

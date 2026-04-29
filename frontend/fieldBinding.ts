@@ -16,6 +16,7 @@ import {
     normalizeControlNetLora,
     normalizeStageControlNetStrengthValue,
     normalizeStageRefStrengthValue,
+    normalizeWanClipStructuralRefs,
 } from "./normalization";
 import type { SaveStateOptions } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
@@ -323,6 +324,7 @@ export const applyStageField = (
     field: string,
     target: HTMLInputElement | HTMLSelectElement,
     getRootDefaults: () => RootDefaults,
+    clip: Clip | null = null,
 ): void => {
     const stageIdx = parseInt(target.dataset.stageIdx ?? "-1", 10);
     const refStrengthIdx = parseStageRefStrengthIndex(field);
@@ -337,6 +339,9 @@ export const applyStageField = (
 
     if (field === "model") {
         stage.model = target.value;
+        if (clip != null) {
+            normalizeWanClipStructuralRefs(clip);
+        }
         return;
     }
 

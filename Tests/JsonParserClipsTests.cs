@@ -647,4 +647,36 @@ public class JsonParserClipsTests
             flattened.RefStrengths,
             strength => Assert.Equal(Constants.DefaultStageRefStrength, strength));
     }
+
+    [Fact]
+    public void ParseClips_WanClip_TrimsRefsToTwoAndNormalizesFrameSemantics()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
+        JObject wanStage = MakeStage(models.VideoModel.Name);
+        wanStage["refStrengths"] = new JArray(0.4, 0.5, 0.6);
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                stages: [wanStage],
+                refs:
+                [
+                    MakeRef("Base", frame: 5, fromEnd: true),
+                    MakeRef("Refiner", frame: 9, fromEnd: false),
+                    MakeRef("Base", frame: 2),
+                ])));
+
+        JsonParser parser = BuildParser(json);
+        JsonParser.ClipSpec clip = parser.ParseClips().Single();
+
+        Assert.Equal(2, clip.Refs.Count);
+        Assert.Equal(1, clip.Refs[0].Frame);
+        Assert.False(clip.Refs[0].FromEnd);
+        Assert.Equal(1, clip.Refs[1].Frame);
+        Assert.True(clip.Refs[1].FromEnd);
+
+        List<JsonParser.StageSpec> flat = parser.ParseStages();
+        JsonParser.StageSpec stageSpec = Assert.Single(flat);
+        Assert.Equal(2, stageSpec.ClipRefs.Count);
+        Assert.Equal(2, stageSpec.RefStrengths.Count);
+    }
 }

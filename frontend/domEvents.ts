@@ -33,6 +33,7 @@ import {
     getReferenceFrameMax,
     normalizeControlNetLora,
     normalizeControlNetSource,
+    normalizeWanClipStructuralRefs,
 } from "./normalization";
 import type { SaveStateOptions } from "./persistence";
 import type { RefUploadCacheApi } from "./refUploadCache";
@@ -40,6 +41,7 @@ import { snapDurationToFps } from "./renderUtils";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { isImageToVideoWorkflow, isVideoStagesEnabled } from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
+import { clipHasWanStage } from "./wanModel";
 
 const changeFieldEventsHandled = new WeakMap<Event, void>();
 
@@ -252,6 +254,9 @@ const applyClipAction = (
     }
 
     if (action === "add-ref") {
+        if (clipHasWanStage(clip) && clip.refs.length >= 2) {
+            return false;
+        }
         clip.refs.push(buildDefaultRef());
         for (const stage of clip.stages) {
             stage.refStrengths.push(
@@ -261,6 +266,7 @@ const applyClipAction = (
             );
         }
         deps.refUploadCache.delete(refUploadKey(clipIdx, clip.refs.length - 1));
+        normalizeWanClipStructuralRefs(clip);
         return true;
     }
 
@@ -285,6 +291,7 @@ const applyRefAction = (
             }
         }
         deps.refUploadCache.reindexAfterRefDelete(clipIdx, refIdx);
+        normalizeWanClipStructuralRefs(clip);
     }
 
     if (action === "toggle-collapse") {
@@ -680,7 +687,7 @@ const applyStageDatasetFieldChange = ({
         stageField === "upscale"
             ? (methodSelect?.value ?? stage.upscaleMethod)
             : null;
-    applyStageField(stage, stageField, elem, getRootDefaults);
+    applyStageField(stage, stageField, elem, getRootDefaults, clip);
 
     if (stageField === "upscale") {
         if (preservedUpscaleMethod != null) {
@@ -694,6 +701,7 @@ const applyStageDatasetFieldChange = ({
 
     if (stageField === "model") {
         syncStageControlNetStrengthDisabled(elem, stage, clip);
+        return fieldChangeApplied({ refreshClips: "always" });
     }
 
     return fieldChangeApplied();
