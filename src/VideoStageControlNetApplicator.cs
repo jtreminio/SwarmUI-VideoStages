@@ -67,6 +67,7 @@ internal static class VideoStageControlNetApplicator
             });
             fullControlImage[0] = firstFrameNode;
             fullControlImage[1] = 0;
+
             processedApplyNodes.Add(applyNode.Id);
         }
     }
@@ -103,22 +104,6 @@ internal static class VideoStageControlNetApplicator
                 inputs["resize_type"] = "scale shorter dimension";
                 inputs["resize_type.shorter_size"] = 512;
                 inputs["scale_method"] = "lanczos";
-
-                JArray firstResizePath = new(current[0], 0);
-                IReadOnlyList<WorkflowInputConnection> downstreamConsumers =
-                    WorkflowUtils.FindInputConnections(workflow, firstResizePath);
-                string multipleResizeNode = g.CreateNode(NodeTypes.ResizeImageMaskNode, new JObject()
-                {
-                    ["input"] = firstResizePath,
-                    ["resize_type"] = "scale to multiple",
-                    ["resize_type.multiple"] = 64,
-                    ["scale_method"] = "lanczos"
-                });
-                foreach (WorkflowInputConnection consumer in downstreamConsumers)
-                {
-                    consumer.Connection[0] = multipleResizeNode;
-                    consumer.Connection[1] = 0;
-                }
                 return;
             }
 
@@ -282,13 +267,65 @@ internal static class VideoStageControlNetApplicator
             return new JArray(controlImagePath[0], controlImagePath[1]);
         }
 
+        JArray guideSource = ResolveLtxIcloraGuideSource(g.Workflow, controlImagePath);
+        string resizedForGuide = g.CreateNode(NodeTypes.ResizeImageMaskNode, new JObject()
+        {
+            ["input"] = guideSource,
+            ["resize_type"] = "scale to multiple",
+            ["resize_type.multiple"] = 64,
+            ["scale_method"] = "lanczos"
+        });
+
         string croppedGuide = g.CreateNode(NodeTypes.ImageFromBatch, new JObject()
         {
-            ["image"] = new JArray(controlImagePath[0], controlImagePath[1]),
+            ["image"] = new JArray(resizedForGuide, 0),
             ["batch_index"] = 0,
             ["length"] = frames.Value
         });
         return new JArray(croppedGuide, 0);
+    }
+
+    private static JArray ResolveLtxIcloraGuideSource(
+        JObject workflow,
+        JArray capturedApplyImageRef)
+    {
+        if (capturedApplyImageRef is null || capturedApplyImageRef.Count != 2)
+        {
+            return capturedApplyImageRef;
+        }
+
+        if (!TryGetSingleImageFromBatchInput(workflow, capturedApplyImageRef, out JArray batchInput))
+        {
+            return new JArray(capturedApplyImageRef[0], capturedApplyImageRef[1]);
+        }
+
+        return batchInput;
+    }
+
+    private static bool TryGetSingleImageFromBatchInput(
+        JObject workflow,
+        JArray imageRef,
+        out JArray inputRef)
+    {
+        inputRef = null;
+        string producerId = $"{imageRef[0]}";
+        if (string.IsNullOrWhiteSpace(producerId)
+            || !workflow.TryGetValue(producerId, out JToken producerTok)
+            || producerTok is not JObject producerNode
+            || !StringUtils.NodeTypeMatches(producerNode, NodeTypes.ImageFromBatch))
+        {
+            return false;
+        }
+
+        if (!int.TryParse($"{producerNode["inputs"]?["length"]}", out int length)
+            || length != 1
+            || !TryGetInputRef(producerNode, "image", out JArray imageIn))
+        {
+            return false;
+        }
+
+        inputRef = new JArray(imageIn[0], imageIn[1]);
+        return true;
     }
 
     private static bool HasConfiguredVideoStages(WorkflowGenerator g)
