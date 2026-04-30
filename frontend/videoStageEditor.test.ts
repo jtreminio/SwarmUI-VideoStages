@@ -582,9 +582,7 @@ describe("videoStageEditor", () => {
         it("renders an editor div with a clip stack and add-clip button", () => {
             initEditor();
 
-            const editorDiv = document.getElementById(
-                "videostages_stage_editor",
-            );
+            const editorDiv = document.querySelector(".vs-clips-container");
             expect(
                 editorDiv?.querySelector("[data-vs-clip-stack]"),
             ).not.toBeNull();
@@ -1473,8 +1471,8 @@ describe("videoStageEditor", () => {
         it("still reveals clip audio Upload when the editor DOM is rebuilt", () => {
             initEditor();
 
-            const originalEditor = document.getElementById(
-                "videostages_stage_editor",
+            const originalEditor = document.querySelector(
+                ".vs-clips-container",
             ) as HTMLElement | null;
             const root = must(originalEditor);
             const parent = must(root.parentElement);
@@ -1515,8 +1513,8 @@ describe("videoStageEditor", () => {
             loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
-            const originalEditor = document.getElementById(
-                "videostages_stage_editor",
+            const originalEditor = document.querySelector(
+                ".vs-clips-container",
             ) as HTMLElement | null;
             const root = must(originalEditor);
             const parent = must(root.parentElement);
@@ -1537,8 +1535,8 @@ describe("videoStageEditor", () => {
         it("still stores ControlNet LoRA when the editor DOM is rebuilt", () => {
             initEditor();
 
-            const originalEditor = document.getElementById(
-                "videostages_stage_editor",
+            const originalEditor = document.querySelector(
+                ".vs-clips-container",
             ) as HTMLElement | null;
             const root = must(originalEditor);
             const parent = must(root.parentElement);
@@ -1817,8 +1815,8 @@ describe("videoStageEditor", () => {
         it("adds a ref after the editor root was replaced (clone does not copy listeners)", async () => {
             initEditor();
 
-            const originalEditor = document.getElementById(
-                "videostages_stage_editor",
+            const originalEditor = document.querySelector(
+                ".vs-clips-container",
             ) as HTMLElement | null;
             const root = must(originalEditor);
             const parent = must(root.parentElement);
@@ -1838,8 +1836,8 @@ describe("videoStageEditor", () => {
         it("adds a ref from the clicked editor when duplicate editor ids exist during a rebuild", async () => {
             initEditor();
 
-            const originalEditor = document.getElementById(
-                "videostages_stage_editor",
+            const originalEditor = document.querySelector(
+                ".vs-clips-container",
             ) as HTMLElement | null;
 
             const rebuiltEditor = must(originalEditor).cloneNode(
@@ -2046,8 +2044,8 @@ describe("videoStageEditor", () => {
             ).click();
             await flushReRender();
 
-            const originalEditor = document.getElementById(
-                "videostages_stage_editor",
+            const originalEditor = document.querySelector(
+                ".vs-clips-container",
             ) as HTMLElement | null;
             const refRoot = must(originalEditor);
             const refParent = must(refRoot.parentElement);

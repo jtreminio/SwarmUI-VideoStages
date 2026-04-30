@@ -466,7 +466,7 @@
       const resolution = `${stop.width}x${stop.height}`;
       const stepCount = stop.steps.length;
       const timesWord = stepCount === 1 ? "time" : "times";
-      let altText = `This resolution can be scaled up to ${stepCount} ${timesWord} for a resolution of ${resolution}`;
+      let altText = `The chosen resolution can be scaled to ${stepCount} ${timesWord} for a resolution of ${resolution}`;
       if (stop.controlNetFriendly) {
         altText += ". It is also ControlNet-friendly";
       }
@@ -2221,7 +2221,7 @@
     if (!target) {
       return;
     }
-    const host = target.closest("#videostages_stage_editor");
+    const host = target.closest(".vs-clips-container");
     if (!(host instanceof HTMLElement) || !host.isConnected) {
       return;
     }
@@ -2796,13 +2796,8 @@
           if (!isRefSourceChange && !isClipAudioSourceChange && !isControlNetSourceChange && !isControlNetLoraChange) {
             return;
           }
-          const liveEditor = document.getElementById(
-            "videostages_stage_editor"
-          );
+          const liveEditor = target.closest(".vs-clips-container");
           if (!(liveEditor instanceof HTMLElement)) {
-            return;
-          }
-          if (!liveEditor.contains(target)) {
             return;
           }
           videoStagesDebugLog(
@@ -3734,14 +3729,13 @@ ${optionHtml}
           "input_group_content_videostages"
         );
         const existingEditors = groupContent?.querySelectorAll(
-          "#videostages_stage_editor"
+          ".vs-clips-container"
         );
         el = existingEditors && existingEditors.length > 0 ? existingEditors[existingEditors.length - 1] : null;
       }
       if (!el) {
         el = document.createElement("div");
-        el.id = "videostages_stage_editor";
-        el.className = "videostages-stage-editor keep_group_visible";
+        el.className = "videostages-stage-editor keep_group_visible vs-clips-container";
         document.getElementById("input_group_content_videostages")?.appendChild(el);
       }
       el.style.width = "100%";

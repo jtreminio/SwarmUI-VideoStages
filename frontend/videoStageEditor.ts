@@ -99,7 +99,7 @@ export function videoStageEditor(): VideoStageEditor {
                 "input_group_content_videostages",
             );
             const existingEditors = groupContent?.querySelectorAll<HTMLElement>(
-                "#videostages_stage_editor",
+                ".vs-clips-container",
             );
             el =
                 existingEditors && existingEditors.length > 0
@@ -108,8 +108,8 @@ export function videoStageEditor(): VideoStageEditor {
         }
         if (!el) {
             el = document.createElement("div");
-            el.id = "videostages_stage_editor";
-            el.className = "videostages-stage-editor keep_group_visible";
+            el.className =
+                "videostages-stage-editor keep_group_visible vs-clips-container";
             document
                 .getElementById("input_group_content_videostages")
                 ?.appendChild(el);

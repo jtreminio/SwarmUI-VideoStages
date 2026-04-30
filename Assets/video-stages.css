@@ -3,7 +3,7 @@
  * editor-specific layout (section blocks, ref/stage cards, header actions,
  * add buttons, empty state, inline errors, disabled tint). */
 
-#videostages_stage_editor {
+#auto-group-videostages .vs-clips-container {
     --vs-transition-surface: border-color 0.15s, background 0.15s,
         box-shadow 0.15s;
     display: flex;
@@ -14,13 +14,13 @@
     color: var(--text);
 }
 
-#videostages_stage_editor *,
-#videostages_stage_editor *::before,
-#videostages_stage_editor *::after {
+#auto-group-videostages .vs-clips-container *,
+#auto-group-videostages .vs-clips-container *::before,
+#auto-group-videostages .vs-clips-container *::after {
     box-sizing: border-box;
 }
 
-#videostages_stage_editor .vs-clip-stack {
+#auto-group-videostages .vs-clips-container .vs-clip-stack {
     display: block;
     width: 100%;
     min-width: 0;
@@ -28,7 +28,7 @@
 
 /* Clip cards: full width vs default input-group max-width; skip-state tint. */
 
-#videostages_stage_editor .vs-clip-card.input-group {
+#auto-group-videostages .vs-clips-container .vs-clip-card.input-group {
     display: block;
     width: 100%;
     min-width: 0;
@@ -37,41 +37,41 @@
     transition: var(--vs-transition-surface);
 }
 
-#videostages_stage_editor .vs-clip-card.input-group.input-group-open {
+#auto-group-videostages .vs-clips-container .vs-clip-card.input-group.input-group-open {
     margin-bottom: 0;
 }
 
-#videostages_stage_editor .vs-clip-card.vs-skipped.input-group {
+#auto-group-videostages .vs-clips-container .vs-clip-card.vs-skipped.input-group {
     border-color: var(--light-border);
     box-shadow: inset 0 0 0 1px
         color-mix(in srgb, var(--bs-warning) 20%, transparent);
 }
-#videostages_stage_editor .vs-clip-card.vs-skipped > .vs-clip-card-body {
+#auto-group-videostages .vs-clips-container .vs-clip-card.vs-skipped > .vs-clip-card-body {
     opacity: 0.45;
     pointer-events: none;
     filter: grayscale(0.6);
 }
-#videostages_stage_editor .vs-clip-card.vs-skipped .header-label {
+#auto-group-videostages .vs-clips-container .vs-clip-card.vs-skipped .header-label {
     text-decoration: line-through;
     color: var(--text-soft);
 }
 
 /* Action buttons (skip / delete) inside the native `.header-label-wrap`. */
-#videostages_stage_editor .vs-clip-card-actions {
+#auto-group-videostages .vs-clips-container .vs-clip-card-actions {
     display: inline-flex;
     align-items: center;
     gap: 0;
     flex-shrink: 0;
 }
 
-#videostages_stage_editor .vs-clip-card-body.input-group-content {
+#auto-group-videostages .vs-clips-container .vs-clip-card-body.input-group-content {
     max-width: 100%;
     padding: 8px 10px 10px;
 }
 
 /* Bordered panels (AUDIO / CONTROLNET / refs / stages). */
 
-#videostages_stage_editor .vs-section-block {
+#auto-group-videostages .vs-clips-container .vs-section-block {
     flex-basis: 100%;
     width: 100%;
     min-width: 0;
@@ -88,12 +88,12 @@
         var(--background-soft) 18%
     );
 }
-#videostages_stage_editor .vs-section-block-head {
+#auto-group-videostages .vs-clips-container .vs-section-block-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
-#videostages_stage_editor .vs-section-block-title {
+#auto-group-videostages .vs-clips-container .vs-section-block-title {
     font-size: 11px;
     font-weight: 600;
     color: var(--text-soft);
@@ -103,7 +103,7 @@
 
 /* Ref and stage cards stacked vertically. */
 
-#videostages_stage_editor .vs-card-list {
+#auto-group-videostages .vs-clips-container .vs-card-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -113,8 +113,8 @@
     align-items: stretch;
 }
 
-#videostages_stage_editor .vs-card-list > .vs-card,
-#videostages_stage_editor .vs-card-list > .vs-card.input-group {
+#auto-group-videostages .vs-clips-container .vs-card-list > .vs-card,
+#auto-group-videostages .vs-clips-container .vs-card-list > .vs-card.input-group {
     flex: 0 0 auto;
     width: 100%;
     min-width: 0;
@@ -122,7 +122,7 @@
     align-self: stretch;
 }
 
-#videostages_stage_editor .vs-card {
+#auto-group-videostages .vs-clips-container .vs-card {
     background: var(--background-panel);
     border: 1px solid var(--light-border);
     border-radius: 6px;
@@ -131,7 +131,7 @@
     transition: var(--vs-transition-surface);
 }
 
-#videostages_stage_editor .vs-card.input-group {
+#auto-group-videostages .vs-clips-container .vs-card.input-group {
     display: block;
     width: 100%;
     min-width: 0;
@@ -140,22 +140,22 @@
     margin-bottom: 0;
 }
 
-#videostages_stage_editor .vs-card.vs-skipped {
+#auto-group-videostages .vs-clips-container .vs-card.vs-skipped {
     opacity: 0.5;
     border-style: dashed;
 }
-#videostages_stage_editor .vs-card.vs-skipped .vs-card-body {
+#auto-group-videostages .vs-clips-container .vs-card.vs-skipped .vs-card-body {
     pointer-events: none;
 }
 
-#videostages_stage_editor .vs-card-head {
+#auto-group-videostages .vs-clips-container .vs-card-head {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
 }
 
-#videostages_stage_editor .vs-card-title {
+#auto-group-videostages .vs-clips-container .vs-card-title {
     flex: 1;
     min-width: 0;
     font-size: 13px;
@@ -163,25 +163,25 @@
     color: var(--text);
 }
 
-#videostages_stage_editor .vs-card-actions {
+#auto-group-videostages .vs-clips-container .vs-card-actions {
     display: flex;
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
 }
 
-#videostages_stage_editor .vs-card-body {
+#auto-group-videostages .vs-clips-container .vs-card-body {
     margin-top: 8px;
     transition: var(--vs-transition-surface);
 }
 
-#videostages_stage_editor .vs-card-body.input-group-content {
+#auto-group-videostages .vs-clips-container .vs-card-body.input-group-content {
     max-width: 100%;
     padding-bottom: 0.5rem;
 }
 
-#videostages_stage_editor .vs-clip-card-body.input-group-content > .auto-input,
-#videostages_stage_editor .vs-card-body.input-group-content > .auto-input {
+#auto-group-videostages .vs-clips-container .vs-clip-card-body.input-group-content > .auto-input,
+#auto-group-videostages .vs-clips-container .vs-card-body.input-group-content > .auto-input {
     flex: 1 1 17rem;
     width: min(100%, 50rem);
     min-width: min(17rem, 100%);
@@ -189,32 +189,32 @@
     overflow: visible;
 }
 
-#videostages_stage_editor .vs-clip-card-body label,
-#videostages_stage_editor .vs-card-body label {
+#auto-group-videostages .vs-clips-container .vs-clip-card-body label,
+#auto-group-videostages .vs-clips-container .vs-card-body label {
     display: block;
     max-width: 100%;
     min-width: 0;
 }
 
-#videostages_stage_editor .vs-clip-card-body .auto-input-name,
-#videostages_stage_editor .vs-card-body .auto-input-name {
+#auto-group-videostages .vs-clips-container .vs-clip-card-body .auto-input-name,
+#auto-group-videostages .vs-clips-container .vs-card-body .auto-input-name {
     display: inline-block;
     max-width: 100%;
     white-space: normal;
     overflow-wrap: anywhere;
 }
 
-#videostages_stage_editor .vs-clip-card-body .auto-dropdown,
-#videostages_stage_editor .vs-card-body .auto-dropdown,
-#videostages_stage_editor .vs-clip-card-body .auto-slider-range-wrapper,
-#videostages_stage_editor .vs-card-body .auto-slider-range-wrapper {
+#auto-group-videostages .vs-clips-container .vs-clip-card-body .auto-dropdown,
+#auto-group-videostages .vs-clips-container .vs-card-body .auto-dropdown,
+#auto-group-videostages .vs-clips-container .vs-clip-card-body .auto-slider-range-wrapper,
+#auto-group-videostages .vs-clips-container .vs-card-body .auto-slider-range-wrapper {
     width: 100% !important;
     min-width: 0;
     max-width: 100%;
 }
 
-#videostages_stage_editor :disabled,
-#videostages_stage_editor :is(
+#auto-group-videostages .vs-clips-container :disabled,
+#auto-group-videostages .vs-clips-container :is(
     .auto-dropdown-box:has(.auto-dropdown:disabled),
     .auto-checkbox-box:has(.auto-checkbox:disabled),
     .auto-slider-box:has(
@@ -225,7 +225,7 @@
     color: var(--text-soft);
 }
 
-#videostages_stage_editor .vs-btn-tiny {
+#auto-group-videostages .vs-clips-container .vs-btn-tiny {
     height: 22px;
     min-width: 24px;
     padding: 0 6px;
@@ -238,34 +238,34 @@
     cursor: pointer;
 }
 
-#videostages_stage_editor [data-clip-action="delete"],
-#videostages_stage_editor [data-ref-action="delete"],
-#videostages_stage_editor [data-stage-action="delete"],
-#videostages_stage_editor [data-clip-action="delete"]:disabled,
-#videostages_stage_editor [data-ref-action="delete"]:disabled,
-#videostages_stage_editor [data-stage-action="delete"]:disabled {
+#auto-group-videostages .vs-clips-container [data-clip-action="delete"],
+#auto-group-videostages .vs-clips-container [data-ref-action="delete"],
+#auto-group-videostages .vs-clips-container [data-stage-action="delete"],
+#auto-group-videostages .vs-clips-container [data-clip-action="delete"]:disabled,
+#auto-group-videostages .vs-clips-container [data-ref-action="delete"]:disabled,
+#auto-group-videostages .vs-clips-container [data-stage-action="delete"]:disabled {
     cursor: pointer !important;
 }
 
-#videostages_stage_editor [data-clip-action="delete"]:hover,
-#videostages_stage_editor [data-ref-action="delete"]:hover,
-#videostages_stage_editor [data-stage-action="delete"]:hover {
+#auto-group-videostages .vs-clips-container [data-clip-action="delete"]:hover,
+#auto-group-videostages .vs-clips-container [data-ref-action="delete"]:hover,
+#auto-group-videostages .vs-clips-container [data-stage-action="delete"]:hover {
     background-color: var(--danger-button-background);
     color: var(--danger-button-foreground);
     border-color: var(--danger-button-border);
 }
 
-#videostages_stage_editor .vs-clip-card:has([data-clip-action="delete"]:hover),
-#videostages_stage_editor .vs-ref-card:has([data-ref-action="delete"]:hover),
-#videostages_stage_editor .vs-card[data-stage-idx]:has([data-stage-action="delete"]:hover) {
+#auto-group-videostages .vs-clips-container .vs-clip-card:has([data-clip-action="delete"]:hover),
+#auto-group-videostages .vs-clips-container .vs-ref-card:has([data-ref-action="delete"]:hover),
+#auto-group-videostages .vs-clips-container .vs-card[data-stage-idx]:has([data-stage-action="delete"]:hover) {
     border-color: color-mix(in srgb, var(--red) 50%, transparent);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 40%, transparent);
 }
-#videostages_stage_editor .vs-btn-collapse {
+#auto-group-videostages .vs-clips-container .vs-btn-collapse {
     font-size: 11px;
 }
 
-#videostages_stage_editor .vs-btn-skip-active {
+#auto-group-videostages .vs-clips-container .vs-btn-skip-active {
     border-color: color-mix(
         in srgb,
         var(--bs-warning) 55%,
@@ -279,7 +279,7 @@
     color: var(--text);
 }
 
-#videostages_stage_editor .vs-btn-skip-active:hover {
+#auto-group-videostages .vs-clips-container .vs-btn-skip-active:hover {
     border-color: color-mix(
         in srgb,
         var(--bs-warning) 70%,
@@ -292,7 +292,7 @@
     );
 }
 
-#videostages_stage_editor .vs-add-btn {
+#auto-group-videostages .vs-clips-container .vs-add-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -313,23 +313,23 @@
         color 0.15s,
         background 0.15s;
 }
-#videostages_stage_editor .vs-add-btn:hover {
+#auto-group-videostages .vs-clips-container .vs-add-btn:hover {
     border-color: var(--emphasis);
     color: var(--emphasis);
     background: color-mix(in srgb, var(--emphasis) 8%, transparent);
 }
-#videostages_stage_editor .vs-add-btn-clip {
+#auto-group-videostages .vs-clips-container .vs-add-btn-clip {
     height: 36px;
 }
 
-#videostages_stage_editor .vs-field-error {
+#auto-group-videostages .vs-clips-container .vs-field-error {
     flex-basis: 100%;
     width: 100%;
     color: var(--bs-danger);
     font-size: 11px;
 }
 
-#videostages_stage_editor .vs-empty-card {
+#auto-group-videostages .vs-clips-container .vs-empty-card {
     border: 1px dashed var(--light-border);
     border-radius: 6px;
     padding: 18px 12px;

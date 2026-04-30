@@ -220,13 +220,8 @@ export const createObservers = (deps: {
                 ) {
                     return;
                 }
-                const liveEditor = document.getElementById(
-                    "videostages_stage_editor",
-                );
+                const liveEditor = target.closest(".vs-clips-container");
                 if (!(liveEditor instanceof HTMLElement)) {
-                    return;
-                }
-                if (!liveEditor.contains(target)) {
                     return;
                 }
 

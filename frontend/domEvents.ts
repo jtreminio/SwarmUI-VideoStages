@@ -859,7 +859,7 @@ const handleStageEditorDocumentClick = (event: MouseEvent): void => {
     if (!target) {
         return;
     }
-    const host = target.closest("#videostages_stage_editor");
+    const host = target.closest(".vs-clips-container");
     if (!(host instanceof HTMLElement) || !host.isConnected) {
         return;
     }
