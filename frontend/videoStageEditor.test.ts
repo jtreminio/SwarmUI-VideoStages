@@ -120,19 +120,42 @@ const setupParameterPanel = (): void => {
 
     const vsWidthInput = document.createElement("input");
     vsWidthInput.type = "number";
-    vsWidthInput.id = "input_vswidth";
+    vsWidthInput.id = "input_videostageswidth";
     vsWidthInput.value = "0";
     document.body.appendChild(vsWidthInput);
 
     const vsHeightInput = document.createElement("input");
     vsHeightInput.type = "number";
-    vsHeightInput.id = "input_vsheight";
+    vsHeightInput.id = "input_videostagesheight";
     vsHeightInput.value = "0";
     document.body.appendChild(vsHeightInput);
 
+    const presetWrap = document.createElement("div");
+    presetWrap.className = "auto-dropdown-box";
+    const presetSelect = document.createElement("select");
+    presetSelect.id = "input_videostagesdimensions";
+    const presetOptCustom = document.createElement("option");
+    presetOptCustom.value = "custom";
+    presetOptCustom.textContent = "Custom";
+    presetSelect.appendChild(presetOptCustom);
+    const presetOpt512 = document.createElement("option");
+    presetOpt512.value = "512x768";
+    presetOpt512.textContent = "512×768";
+    presetSelect.appendChild(presetOpt512);
+    presetSelect.value = "custom";
+    presetWrap.appendChild(presetSelect);
+    document.body.appendChild(presetWrap);
+
+    const presetMetadata = document.createElement("textarea");
+    presetMetadata.id = "input_videostagesdimensionsmetadata";
+    presetMetadata.value = JSON.stringify({
+        "512x768": ["768x1152,1.5"],
+    });
+    document.body.appendChild(presetMetadata);
+
     const vsFpsInput = document.createElement("input");
     vsFpsInput.type = "number";
-    vsFpsInput.id = "input_vsfps";
+    vsFpsInput.id = "input_videostagesfps";
     vsFpsInput.value = "24";
     document.body.appendChild(vsFpsInput);
 
@@ -287,8 +310,8 @@ describe("videoStageEditor", () => {
             groupToggle.checked = false;
             for (const inputId of [
                 "input_videostages",
-                "input_vswidth",
-                "input_vsheight",
+                "input_videostageswidth",
+                "input_videostagesheight",
             ]) {
                 const input = document.getElementById(inputId);
                 input?.addEventListener("change", () => {
@@ -516,12 +539,12 @@ describe("videoStageEditor", () => {
 
         it("does not serialize registered VideoStages root width and height", () => {
             const registeredWidthInput = document.getElementById(
-                "input_vswidth",
+                "input_videostageswidth",
             ) as HTMLInputElement;
             registeredWidthInput.value = "1536";
 
             const registeredHeightInput = document.getElementById(
-                "input_vsheight",
+                "input_videostagesheight",
             ) as HTMLInputElement;
             registeredHeightInput.value = "864";
 
@@ -536,7 +559,7 @@ describe("videoStageEditor", () => {
 
         it("does not serialize registered VideoStages root FPS", () => {
             const registeredFpsInput = document.getElementById(
-                "input_vsfps",
+                "input_videostagesfps",
             ) as HTMLInputElement;
             registeredFpsInput.value = "32";
 
@@ -589,10 +612,10 @@ describe("videoStageEditor", () => {
             initEditor();
 
             const registeredWidth = document.getElementById(
-                "input_vswidth",
+                "input_videostageswidth",
             ) as HTMLInputElement;
             const registeredHeight = document.getElementById(
-                "input_vsheight",
+                "input_videostagesheight",
             ) as HTMLInputElement;
             expect(registeredWidth.value).toBe("1280");
             expect(registeredHeight.value).toBe("720");
@@ -600,11 +623,11 @@ describe("videoStageEditor", () => {
 
         it("does not overwrite registered RootWidth/RootHeight when the user has set them", () => {
             const registeredWidth = document.getElementById(
-                "input_vswidth",
+                "input_videostageswidth",
             ) as HTMLInputElement;
             registeredWidth.value = "1024";
             const registeredHeight = document.getElementById(
-                "input_vsheight",
+                "input_videostagesheight",
             ) as HTMLInputElement;
             registeredHeight.value = "768";
 
@@ -769,7 +792,7 @@ describe("videoStageEditor", () => {
             ).not.toBeNull();
         });
 
-        it("derives Clip 0 header from index even when legacy JSON had a different name field", () => {
+        it("derives Clip 0 header from index even when stored JSON used a different clip name", () => {
             getStagesInput().value = JSON.stringify({
                 width: 1024,
                 height: 768,
@@ -917,10 +940,10 @@ describe("videoStageEditor", () => {
             initEditor();
 
             const registeredWidth = document.getElementById(
-                "input_vswidth",
+                "input_videostageswidth",
             ) as HTMLInputElement;
             const registeredHeight = document.getElementById(
-                "input_vsheight",
+                "input_videostagesheight",
             ) as HTMLInputElement;
 
             registeredWidth.value = "1536";
@@ -958,7 +981,7 @@ describe("videoStageEditor", () => {
             initEditor();
 
             const fpsInput = document.getElementById(
-                "input_vsfps",
+                "input_videostagesfps",
             ) as HTMLInputElement;
             fpsInput.value = "32";
             fpsInput.dispatchEvent(new Event("change", { bubbles: true }));

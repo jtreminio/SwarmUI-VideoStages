@@ -1,3 +1,4 @@
+import { applyVideoStagesPresetDimensionsBeforeGenerate } from "./dimensionsDropdown";
 import { getClipsInput, isVideoStagesEnabled } from "./swarmInputs";
 import { validateClips } from "./validation";
 
@@ -41,6 +42,7 @@ export const createGenerateWrap = (deps: {
                 return;
             }
 
+            applyVideoStagesPresetDimensionsBeforeGenerate();
             return original(...args);
         };
         mainGenHandler.doGenerate.__videoStagesWrapped = true;

@@ -340,3 +340,21 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
+
+#auto-group-videostages .vs-dimensions-info-body {
+    width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+#auto-group-videostages .vs-dimensions-info-body .param_view_block {
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+#auto-group-videostages .vs-dimensions-info-body .controlnet-friendly {
+    color: var(--emphasis-soft);
+}

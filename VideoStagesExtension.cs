@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
@@ -11,6 +12,7 @@ public class VideoStagesExtension : Extension
 {
     public static int SectionIdForStage(int stageIndex) => Constants.SectionID_VideoStages + 1 + stageIndex;
     public static int SectionIdForClip(int clipIndex) => Constants.SectionID_VideoClip + 1 + clipIndex;
+    public static T2IRegisteredParam<string> DimensionsPreset;
     public static T2IRegisteredParam<int> RootWidth;
     public static T2IRegisteredParam<int> RootHeight;
     public static T2IRegisteredParam<int> RootFPS;
@@ -103,6 +105,21 @@ public class VideoStagesExtension : Extension
 
         int orderPriority = 0;
 
+        DimensionsPreset = T2IParamTypes.Register<string>(new T2IParamType(
+            Name: "Video Stages Dimensions",
+            Description: Constants.DimensionsPresetDescription,
+            Default: Constants.DimensionsPresetCustomValue,
+            GetValues: _ => BuildDimensionsPresetDropdownEntries(),
+            VisibleNormally: true,
+            IsAdvanced: false,
+            Toggleable: false,
+            Group: VideoStagesGroup,
+            OrderPriority: orderPriority++,
+            FeatureFlag: Constants.ComfyUIFeatureFlag,
+            DoNotPreview: true,
+            HideFromMetadata: true
+        ));
+
         RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
             Name: "Video Stages Width",
             Description: Constants.RootDimensionsDescription,
@@ -163,6 +180,16 @@ public class VideoStagesExtension : Extension
             Group: VideoStagesGroup,
             FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
+
+        T2IParamTypes.Register<string>(new T2IParamType(
+            Name: "Video Stages Dimensions Metadata",
+            Description: "",
+            Default: DimensionsPresetMetadataJson,
+            VisibleNormally: false,
+            DoNotPreview: true,
+            Group: VideoStagesGroup,
+            FeatureFlag: Constants.ComfyUIFeatureFlag
+        ));
     }
 
     private void RegisterComfyNodes()
@@ -171,5 +198,21 @@ public class VideoStagesExtension : Extension
         string nodeFolder = Path.GetFullPath(Path.Join(rootPath, "comfy_node"));
         ComfyUISelfStartBackend.CustomNodePaths.Add(nodeFolder);
         Logs.Init($"VideoStages: added {nodeFolder} to ComfyUI CustomNodePaths");
+    }
+
+    public static readonly string DimensionsPresetMetadataJson = JsonSerializer.Serialize(
+        Constants.DimensionsPresetMetadataTable,
+        new JsonSerializerOptions { WriteIndented = false });
+
+    public static List<string> BuildDimensionsPresetDropdownEntries()
+    {
+        List<string> list = [];
+        foreach (string key in Constants.DimensionsPresetOrderedKeys)
+        {
+            list.Add($"{key}///{key}");
+        }
+        list.Add($"{Constants.DimensionsPresetCustomValue}///Custom");
+
+        return list;
     }
 }

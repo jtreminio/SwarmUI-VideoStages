@@ -170,6 +170,7 @@
   var CLIP_DURATION_SLIDER_MAX = 60;
   var CLIP_DURATION_SLIDER_STEP = 0.5;
   var ROOT_DIMENSION_MIN = 256;
+  var DIMENSIONS_PRESET_CUSTOM_VALUE = "custom";
   var ROOT_FPS_MIN = 4;
   var CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
   var CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
@@ -232,6 +233,461 @@
     return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
   };
   var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+  // frontend/utils.ts
+  var getElementByType = (id, ctor) => {
+    const element = document.getElementById(id);
+    return element instanceof ctor ? element : null;
+  };
+  var utils = {
+    getInputElement: (id) => getElementByType(id, HTMLInputElement),
+    getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
+    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
+    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
+    toNumber: (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+  };
+
+  // frontend/swarmInputs.ts
+  var getClipsInput = () => {
+    const el = document.getElementById("input_videostages");
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      return el;
+    }
+    return null;
+  };
+  var ROOT_DIMENSION_WIDTH_INPUT_ID = "input_videostageswidth";
+  var ROOT_DIMENSION_HEIGHT_INPUT_ID = "input_videostagesheight";
+  var DIMENSIONS_PRESET_SELECT_ID = "input_videostagesdimensions";
+  var DIMENSIONS_PRESET_METADATA_INPUT_ID = "input_videostagesdimensionsmetadata";
+  var ROOT_FPS_INPUT_ID = "input_videostagesfps";
+  var getRootDimensionParamInput = (field) => utils.getInputElement(
+    field === "width" ? ROOT_DIMENSION_WIDTH_INPUT_ID : ROOT_DIMENSION_HEIGHT_INPUT_ID
+  );
+  var getRootFpsParamInput = () => utils.getInputElement(ROOT_FPS_INPUT_ID);
+  var getCoreDimensionInput = (field) => {
+    const primaryId = field === "width" ? "input_width" : "input_height";
+    const fallbackId = field === "width" ? "input_aspectratiowidth" : "input_aspectratioheight";
+    return utils.getInputElement(primaryId) ?? utils.getInputElement(fallbackId);
+  };
+  var getRegisteredRootDimension = (field) => {
+    const input = getRootDimensionParamInput(field);
+    if (!input) {
+      return null;
+    }
+    const value = Math.round(utils.toNumber(input.value, 0));
+    return value >= ROOT_DIMENSION_MIN ? value : null;
+  };
+  var getRegisteredRootFps = () => {
+    const input = getRootFpsParamInput();
+    if (!input) {
+      return null;
+    }
+    const value = Math.round(utils.toNumber(input.value, 0));
+    return value >= ROOT_FPS_MIN ? value : null;
+  };
+  var getCoreDimension = (field) => {
+    const input = getCoreDimensionInput(field);
+    if (!input) {
+      return null;
+    }
+    const value = Math.round(utils.toNumber(input.value, 0));
+    return value >= ROOT_DIMENSION_MIN ? value : null;
+  };
+  var seedRegisteredDimensionsFromCore = (notifyDomChange = true) => {
+    const fields = ["width", "height"];
+    for (const field of fields) {
+      const ourInput = getRootDimensionParamInput(field);
+      if (!ourInput) {
+        continue;
+      }
+      const ourValue = Math.round(utils.toNumber(ourInput.value, 0));
+      if (ourValue >= ROOT_DIMENSION_MIN) {
+        continue;
+      }
+      const coreValue = getCoreDimension(field);
+      if (coreValue === null) {
+        continue;
+      }
+      ourInput.value = `${coreValue}`;
+      if (notifyDomChange) {
+        triggerChangeFor(ourInput);
+      }
+    }
+  };
+  var getGroupToggle = () => utils.getInputElement("input_group_content_videostages_toggle");
+  var getRootModelInput = () => utils.getInputElement("input_model");
+  var getBase2EditStageRefs = () => {
+    const snapshot = window.base2editStageRegistry?.getSnapshot?.();
+    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+      return [];
+    }
+    const refs = snapshot.refs.map((value) => {
+      const stageIndex = parseBase2EditStageIndex(value);
+      return stageIndex == null ? null : `edit${stageIndex}`;
+    }).filter((value) => !!value);
+    return [...new Set(refs)].sort(
+      (left, right) => (parseBase2EditStageIndex(left) ?? 0) - (parseBase2EditStageIndex(right) ?? 0)
+    );
+  };
+  var isAvailableBase2EditReference = (value) => {
+    const stageIndex = parseBase2EditStageIndex(value);
+    if (stageIndex == null) {
+      return false;
+    }
+    return getBase2EditStageRefs().includes(`edit${stageIndex}`);
+  };
+  var isRootTextToVideoModel = () => {
+    const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
+    if (!modelName) {
+      return false;
+    }
+    if (typeof modelsHelpers !== "undefined" && modelsHelpers && typeof modelsHelpers.getDataFor === "function") {
+      const modelData = modelsHelpers.getDataFor(
+        "Stable-Diffusion",
+        modelName
+      );
+      if (modelData?.modelClass?.compatClass?.isText2Video) {
+        return true;
+      }
+    }
+    if (typeof currentModelHelper !== "undefined" && currentModelHelper && currentModelHelper.curCompatClass && typeof modelsHelpers !== "undefined" && modelsHelpers?.compatClasses) {
+      const compatClass = modelsHelpers.compatClasses[currentModelHelper.curCompatClass];
+      return !!compatClass?.isText2Video;
+    }
+    return false;
+  };
+  var isImageToVideoWorkflow = () => {
+    if (isRootTextToVideoModel()) {
+      return false;
+    }
+    const videoModel = utils.getSelectElement("input_videomodel");
+    return !!`${videoModel?.value ?? ""}`.trim();
+  };
+  var getDropdownOptions = (paramId, fallbackSelectId) => {
+    if (typeof getParamById === "function") {
+      const param = getParamById(paramId);
+      if (param?.values && Array.isArray(param.values) && param.values.length > 0) {
+        const labels = Array.isArray(param.value_names) && param.value_names.length === param.values.length ? [...param.value_names] : [...param.values];
+        return { values: [...param.values], labels };
+      }
+    }
+    const select = utils.getSelectElement(fallbackSelectId);
+    return {
+      values: utils.getSelectValues(select),
+      labels: utils.getSelectLabels(select)
+    };
+  };
+  var isVideoStagesEnabled = () => {
+    const toggler = getGroupToggle();
+    return toggler ? toggler.checked : false;
+  };
+
+  // frontend/dimensionsDropdown.ts
+  var DIMENSIONS_PRESET_INFO_ID = "vs_dimensions_preset_info";
+  var presetStopsMapCache = null;
+  var upscaleBadgeElementsByValueKeyCache = null;
+  var readPresetMetadataFromDom = () => {
+    const el = document.getElementById(DIMENSIONS_PRESET_METADATA_INPUT_ID);
+    let raw = "";
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      raw = el.value.trim();
+    }
+    if (!raw) {
+      return {};
+    }
+    try {
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+        return {};
+      }
+      const out = {};
+      const rec = obj;
+      for (const k of Object.keys(rec)) {
+        const v = rec[k];
+        if (Array.isArray(v)) {
+          out[k] = v.map((x) => `${x}`);
+        }
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  };
+  var getPresetStopsMap = () => {
+    if (!presetStopsMapCache) {
+      presetStopsMapCache = readPresetMetadataFromDom();
+    }
+    return presetStopsMapCache;
+  };
+  var splitDimensionLabel = (label) => {
+    const [w, h] = label.replace("*", "").split("x");
+    return { width: Math.round(Number(w)), height: Math.round(Number(h)) };
+  };
+  var parsePresetDimensions = (value) => {
+    if (!value || value === DIMENSIONS_PRESET_CUSTOM_VALUE) {
+      return null;
+    }
+    return splitDimensionLabel(value);
+  };
+  var parsePresets = (presetKey) => {
+    const presetLines = getPresetStopsMap()[presetKey];
+    if (!presetLines || presetLines.length === 0) {
+      return [];
+    }
+    const out = [];
+    for (let i = 0; i < presetLines.length; i++) {
+      let line = presetLines[i].trim();
+      let controlNetFriendly = false;
+      if (line.startsWith("*")) {
+        controlNetFriendly = true;
+        line = line.slice(1);
+      }
+      const parts = line.split(",");
+      const { width, height } = splitDimensionLabel(parts[0]);
+      out.push({
+        width,
+        height,
+        controlNetFriendly,
+        steps: parts.slice(1)
+      });
+    }
+    return out;
+  };
+  var buildUpscaleBadgeElementsByValueKey = () => {
+    const upscaleBadgeElementsByValueKey = /* @__PURE__ */ new Map();
+    const stopsMap = getPresetStopsMap();
+    const presetKeys = Object.keys(stopsMap);
+    const upscaleBadgeElement = (stop) => {
+      const badge = document.createElement("span");
+      badge.className = "param_view_block tag-text tag-type-8";
+      const resolution = `${stop.width}x${stop.height}`;
+      const stepCount = stop.steps.length;
+      const timesWord = stepCount === 1 ? "time" : "times";
+      let altText = `This resolution can be scaled up to ${stepCount} ${timesWord} for a resolution of ${resolution}`;
+      if (stop.controlNetFriendly) {
+        altText += ". It is also ControlNet-friendly";
+      }
+      badge.title = altText;
+      badge.setAttribute("aria-label", altText);
+      const star = stop.controlNetFriendly ? `<span class="controlnet-friendly">*</span> ` : "";
+      const stops = stop.steps.map((s) => `${s}x`).join(" ⇒ ");
+      badge.innerHTML = `${star}${resolution}, ${stops}`;
+      return badge;
+    };
+    for (let i = 0; i < presetKeys.length; i++) {
+      const presetKey = presetKeys[i];
+      const stops = parsePresets(presetKey);
+      const { width, height } = splitDimensionLabel(presetKey);
+      upscaleBadgeElementsByValueKey.set(
+        `${width}x${height}`,
+        stops.map((s) => upscaleBadgeElement(s))
+      );
+    }
+    return upscaleBadgeElementsByValueKey;
+  };
+  var suppressManualDimensionPresetGuard = 0;
+  var applyDimensionsToInputs = (width, height) => {
+    const wIn = getRootDimensionParamInput("width");
+    const hIn = getRootDimensionParamInput("height");
+    suppressManualDimensionPresetGuard++;
+    try {
+      if (wIn) {
+        wIn.value = `${width}`;
+      }
+      if (hIn) {
+        hIn.value = `${height}`;
+      }
+      if (wIn) {
+        triggerChangeFor(wIn);
+      }
+      if (hIn) {
+        triggerChangeFor(hIn);
+      }
+    } finally {
+      suppressManualDimensionPresetGuard--;
+    }
+  };
+  var applyVideoStagesPresetDimensionsBeforeGenerate = () => {
+    const sel = document.getElementById(DIMENSIONS_PRESET_SELECT_ID);
+    if (!(sel instanceof HTMLSelectElement)) {
+      return;
+    }
+    const parsed = parsePresetDimensions(sel.value);
+    if (!parsed) {
+      return;
+    }
+    applyDimensionsToInputs(parsed.width, parsed.height);
+  };
+  var updateUpscaleInfoPanel = (select) => {
+    const el = document.getElementById(DIMENSIONS_PRESET_INFO_ID);
+    if (!(el instanceof HTMLElement)) {
+      return;
+    }
+    const val = select.value;
+    let badges = null;
+    if (val && val !== DIMENSIONS_PRESET_CUSTOM_VALUE) {
+      if (!upscaleBadgeElementsByValueKeyCache) {
+        upscaleBadgeElementsByValueKeyCache = buildUpscaleBadgeElementsByValueKey();
+      }
+      badges = upscaleBadgeElementsByValueKeyCache.get(val) ?? null;
+    }
+    if (!badges || badges.length === 0) {
+      el.replaceChildren();
+      el.hidden = true;
+      return;
+    }
+    el.replaceChildren(...badges);
+    el.hidden = false;
+  };
+  var updateSliderVisibility = (select) => {
+    const widthIn = getRootDimensionParamInput("width");
+    const heightIn = getRootDimensionParamInput("height");
+    if (!widthIn || !heightIn) {
+      return;
+    }
+    const widthBox = findParentOfClass(widthIn, "auto-slider-box");
+    const heightBox = findParentOfClass(heightIn, "auto-slider-box");
+    if (!widthBox || !heightBox) {
+      return;
+    }
+    if (select.value === DIMENSIONS_PRESET_CUSTOM_VALUE) {
+      widthBox.style.display = "block";
+      heightBox.style.display = "block";
+      delete widthBox.dataset.visible_controlled;
+      delete heightBox.dataset.visible_controlled;
+    } else {
+      widthBox.style.display = "none";
+      heightBox.style.display = "none";
+      widthBox.dataset.visible_controlled = "true";
+      heightBox.dataset.visible_controlled = "true";
+    }
+  };
+  var syncSelectFromInputs = (select) => {
+    const wIn = getRootDimensionParamInput("width");
+    const hIn = getRootDimensionParamInput("height");
+    if (!wIn || !hIn) {
+      return;
+    }
+    const bw = Math.round(Number(wIn.value));
+    const bh = Math.round(Number(hIn.value));
+    const currentVal = select.value;
+    if (currentVal && currentVal !== DIMENSIONS_PRESET_CUSTOM_VALUE) {
+      const parsed = parsePresetDimensions(currentVal);
+      if (parsed && parsed.width === bw && parsed.height === bh && Array.from(select.options).some((o) => o.value === currentVal)) {
+        updateSliderVisibility(select);
+        updateUpscaleInfoPanel(select);
+        return;
+      }
+    }
+    const vk = `${bw}x${bh}`;
+    if (Array.from(select.options).some((o) => o.value === vk)) {
+      select.value = vk;
+    } else {
+      select.value = DIMENSIONS_PRESET_CUSTOM_VALUE;
+    }
+    updateSliderVisibility(select);
+    updateUpscaleInfoPanel(select);
+  };
+  var wireSelectIfNeeded = (select) => {
+    if (select.dataset.vsDimPresetWired === "1") {
+      return;
+    }
+    select.dataset.vsDimPresetWired = "1";
+    select.addEventListener("change", () => {
+      if (select.value !== DIMENSIONS_PRESET_CUSTOM_VALUE) {
+        const parsed = parsePresetDimensions(select.value);
+        if (parsed) {
+          applyDimensionsToInputs(parsed.width, parsed.height);
+        }
+      }
+      updateSliderVisibility(select);
+      updateUpscaleInfoPanel(select);
+    });
+    const onManualDimension = () => {
+      if (suppressManualDimensionPresetGuard > 0) {
+        return;
+      }
+      const sel = document.getElementById(DIMENSIONS_PRESET_SELECT_ID);
+      if (!(sel instanceof HTMLSelectElement)) {
+        return;
+      }
+      if (sel.value === DIMENSIONS_PRESET_CUSTOM_VALUE) {
+        return;
+      }
+      const wIn = getRootDimensionParamInput("width");
+      const hIn = getRootDimensionParamInput("height");
+      if (!wIn || !hIn) {
+        return;
+      }
+      const parsedBase = parsePresetDimensions(sel.value);
+      if (!parsedBase) {
+        return;
+      }
+      if (Math.round(Number(wIn.value)) !== parsedBase.width || Math.round(Number(hIn.value)) !== parsedBase.height) {
+        sel.value = DIMENSIONS_PRESET_CUSTOM_VALUE;
+        updateSliderVisibility(sel);
+        updateUpscaleInfoPanel(sel);
+      }
+    };
+    const attachDimListeners = (el) => {
+      if (!el || !(el instanceof HTMLElement)) {
+        return;
+      }
+      if (el.dataset.vsDimFieldListen === "1") {
+        return;
+      }
+      el.dataset.vsDimFieldListen = "1";
+      el.addEventListener("input", onManualDimension);
+      el.addEventListener("change", onManualDimension);
+    };
+    attachDimListeners(getRootDimensionParamInput("width"));
+    attachDimListeners(getRootDimensionParamInput("height"));
+    attachDimListeners(
+      document.getElementById(`${ROOT_DIMENSION_WIDTH_INPUT_ID}_rangeslider`)
+    );
+    attachDimListeners(
+      document.getElementById(
+        `${ROOT_DIMENSION_HEIGHT_INPUT_ID}_rangeslider`
+      )
+    );
+  };
+  var ensureInfoPanel = (dropdownBox) => {
+    if (!dropdownBox) {
+      return;
+    }
+    let infoEl = document.getElementById(DIMENSIONS_PRESET_INFO_ID);
+    if (!(infoEl instanceof HTMLDivElement)) {
+      if (infoEl) {
+        infoEl.remove();
+      }
+      infoEl = document.createElement("div");
+      infoEl.id = DIMENSIONS_PRESET_INFO_ID;
+      infoEl.className = "vs-dimensions-info-body";
+      infoEl.setAttribute("aria-live", "polite");
+    }
+    dropdownBox.insertAdjacentElement("afterend", infoEl);
+  };
+  var wireDimensionsPreset = () => {
+    const select = document.getElementById(DIMENSIONS_PRESET_SELECT_ID);
+    if (!(select instanceof HTMLSelectElement)) {
+      return;
+    }
+    presetStopsMapCache = null;
+    upscaleBadgeElementsByValueKeyCache = null;
+    const dropdownBox = findParentOfClass(select, "auto-dropdown-box");
+    if (dropdownBox) {
+      dropdownBox.classList.add("vs-dimensions-dropdown");
+    }
+    ensureInfoPanel(dropdownBox);
+    syncSelectFromInputs(select);
+    wireSelectIfNeeded(select);
+    updateSliderVisibility(select);
+    updateUpscaleInfoPanel(select);
+    autoSelectWidth(select);
+  };
 
   // frontend/ltxModel.ts
   var LTXV2_COMPAT_CLASS_ID = "lightricks-ltx-video-2";
@@ -309,22 +765,6 @@
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
-
-  // frontend/utils.ts
-  var getElementByType = (id, ctor) => {
-    const element = document.getElementById(id);
-    return element instanceof ctor ? element : null;
-  };
-  var utils = {
-    getInputElement: (id) => getElementByType(id, HTMLInputElement),
-    getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
-    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
-    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
-    toNumber: (value, fallback) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    }
-  };
 
   // frontend/wanModel.ts
   var WAN_COMPAT_CLASS_IDS = /* @__PURE__ */ new Set([
@@ -1080,136 +1520,6 @@
       }
       return;
     }
-  };
-
-  // frontend/swarmInputs.ts
-  var getClipsInput = () => {
-    const el = document.getElementById("input_videostages");
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-      return el;
-    }
-    return null;
-  };
-  var getRootDimensionParamInput = (field) => utils.getInputElement(
-    field === "width" ? "input_vswidth" : "input_vsheight"
-  );
-  var getRootFpsParamInput = () => utils.getInputElement("input_vsfps");
-  var getCoreDimensionInput = (field) => {
-    const primaryId = field === "width" ? "input_width" : "input_height";
-    const fallbackId = field === "width" ? "input_aspectratiowidth" : "input_aspectratioheight";
-    return utils.getInputElement(primaryId) ?? utils.getInputElement(fallbackId);
-  };
-  var getRegisteredRootDimension = (field) => {
-    const input = getRootDimensionParamInput(field);
-    if (!input) {
-      return null;
-    }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_DIMENSION_MIN ? value : null;
-  };
-  var getRegisteredRootFps = () => {
-    const input = getRootFpsParamInput();
-    if (!input) {
-      return null;
-    }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_FPS_MIN ? value : null;
-  };
-  var getCoreDimension = (field) => {
-    const input = getCoreDimensionInput(field);
-    if (!input) {
-      return null;
-    }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_DIMENSION_MIN ? value : null;
-  };
-  var seedRegisteredDimensionsFromCore = (notifyDomChange = true) => {
-    const fields = ["width", "height"];
-    for (const field of fields) {
-      const ourInput = getRootDimensionParamInput(field);
-      if (!ourInput) {
-        continue;
-      }
-      const ourValue = Math.round(utils.toNumber(ourInput.value, 0));
-      if (ourValue >= ROOT_DIMENSION_MIN) {
-        continue;
-      }
-      const coreValue = getCoreDimension(field);
-      if (coreValue === null) {
-        continue;
-      }
-      ourInput.value = `${coreValue}`;
-      if (notifyDomChange) {
-        triggerChangeFor(ourInput);
-      }
-    }
-  };
-  var getGroupToggle = () => utils.getInputElement("input_group_content_videostages_toggle");
-  var getRootModelInput = () => utils.getInputElement("input_model");
-  var getBase2EditStageRefs = () => {
-    const snapshot = window.base2editStageRegistry?.getSnapshot?.();
-    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
-      return [];
-    }
-    const refs = snapshot.refs.map((value) => {
-      const stageIndex = parseBase2EditStageIndex(value);
-      return stageIndex == null ? null : `edit${stageIndex}`;
-    }).filter((value) => !!value);
-    return [...new Set(refs)].sort(
-      (left, right) => (parseBase2EditStageIndex(left) ?? 0) - (parseBase2EditStageIndex(right) ?? 0)
-    );
-  };
-  var isAvailableBase2EditReference = (value) => {
-    const stageIndex = parseBase2EditStageIndex(value);
-    if (stageIndex == null) {
-      return false;
-    }
-    return getBase2EditStageRefs().includes(`edit${stageIndex}`);
-  };
-  var isRootTextToVideoModel = () => {
-    const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
-    if (!modelName) {
-      return false;
-    }
-    if (typeof modelsHelpers !== "undefined" && modelsHelpers && typeof modelsHelpers.getDataFor === "function") {
-      const modelData = modelsHelpers.getDataFor(
-        "Stable-Diffusion",
-        modelName
-      );
-      if (modelData?.modelClass?.compatClass?.isText2Video) {
-        return true;
-      }
-    }
-    if (typeof currentModelHelper !== "undefined" && currentModelHelper && currentModelHelper.curCompatClass && typeof modelsHelpers !== "undefined" && modelsHelpers?.compatClasses) {
-      const compatClass = modelsHelpers.compatClasses[currentModelHelper.curCompatClass];
-      return !!compatClass?.isText2Video;
-    }
-    return false;
-  };
-  var isImageToVideoWorkflow = () => {
-    if (isRootTextToVideoModel()) {
-      return false;
-    }
-    const videoModel = utils.getSelectElement("input_videomodel");
-    return !!`${videoModel?.value ?? ""}`.trim();
-  };
-  var getDropdownOptions = (paramId, fallbackSelectId) => {
-    if (typeof getParamById === "function") {
-      const param = getParamById(paramId);
-      if (param?.values && Array.isArray(param.values) && param.values.length > 0) {
-        const labels = Array.isArray(param.value_names) && param.value_names.length === param.values.length ? [...param.value_names] : [...param.values];
-        return { values: [...param.values], labels };
-      }
-    }
-    const select = utils.getSelectElement(fallbackSelectId);
-    return {
-      values: utils.getSelectValues(select),
-      labels: utils.getSelectLabels(select)
-    };
-  };
-  var isVideoStagesEnabled = () => {
-    const toggler = getGroupToggle();
-    return toggler ? toggler.checked : false;
   };
 
   // frontend/rootDefaults.ts
@@ -2159,6 +2469,7 @@
           showError(errors[0]);
           return;
         }
+        applyVideoStagesPresetDimensionsBeforeGenerate();
         return original(...args);
       };
       mainGenHandler.doGenerate.__videoStagesWrapped = true;
@@ -2325,7 +2636,7 @@
     "input_text2videoframes",
     "input_videofps",
     "input_videoframespersecond",
-    "input_vsfps"
+    "input_videostagesfps"
   ]);
   var createObservers = (deps) => {
     let clipsInputSyncInterval = null;
@@ -3540,6 +3851,7 @@ ${optionHtml}
           handleFieldChange(target, getDomDeps(), false, ev);
         }
       );
+      wireDimensionsPreset();
     };
     const startGenerateWrapRetry = (intervalMs = 250) => {
       generateWrap.startRetry(intervalMs);

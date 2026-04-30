@@ -16,15 +16,24 @@ export const getClipsInput = ():
     return null;
 };
 
+export const ROOT_DIMENSION_WIDTH_INPUT_ID = "input_videostageswidth";
+export const ROOT_DIMENSION_HEIGHT_INPUT_ID = "input_videostagesheight";
+export const DIMENSIONS_PRESET_SELECT_ID = "input_videostagesdimensions";
+export const DIMENSIONS_PRESET_METADATA_INPUT_ID =
+    "input_videostagesdimensionsmetadata";
+export const ROOT_FPS_INPUT_ID = "input_videostagesfps";
+
 export const getRootDimensionParamInput = (
     field: "width" | "height",
 ): HTMLInputElement | null =>
     utils.getInputElement(
-        field === "width" ? "input_vswidth" : "input_vsheight",
+        field === "width"
+            ? ROOT_DIMENSION_WIDTH_INPUT_ID
+            : ROOT_DIMENSION_HEIGHT_INPUT_ID,
     );
 
 export const getRootFpsParamInput = (): HTMLInputElement | null =>
-    utils.getInputElement("input_vsfps");
+    utils.getInputElement(ROOT_FPS_INPUT_ID);
 
 export const getCoreDimensionInput = (
     field: "width" | "height",

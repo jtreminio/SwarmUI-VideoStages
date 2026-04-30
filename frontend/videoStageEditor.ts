@@ -4,6 +4,7 @@ import {
     normalizeUploadFileName,
 } from "./constants";
 import { videoStagesDebugLog } from "./debugLog";
+import { wireDimensionsPreset } from "./dimensionsDropdown";
 import {
     attachEventListeners,
     type DomEventsDeps,
@@ -237,6 +238,7 @@ export function videoStageEditor(): VideoStageEditor {
                 handleFieldChange(target, getDomDeps(), false, ev);
             },
         );
+        wireDimensionsPreset();
     };
 
     const startGenerateWrapRetry = (intervalMs = 250): void => {

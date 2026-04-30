@@ -5,6 +5,7 @@ export const CLIP_DURATION_MAX = 9999;
 export const CLIP_DURATION_SLIDER_MAX = 60;
 export const CLIP_DURATION_SLIDER_STEP = 0.5;
 export const ROOT_DIMENSION_MIN = 256;
+export const DIMENSIONS_PRESET_CUSTOM_VALUE = "custom";
 export const ROOT_FPS_MIN = 4;
 export const CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
 export const CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";

@@ -10,7 +10,7 @@ const ROOT_VIDEO_TIMING_INPUT_IDS = new Set<string>([
     "input_text2videoframes",
     "input_videofps",
     "input_videoframespersecond",
-    "input_vsfps",
+    "input_videostagesfps",
 ]);
 
 export type ObserversApi = {
