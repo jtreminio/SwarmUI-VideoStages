@@ -88,6 +88,32 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Videoclip_processed_cid_stage_section_extracts_only_for_matching_flat_stage()
+    {
+        int stage0Sid = VideoStagesExtension.SectionIdForStage(0);
+        string prompt =
+            $"global preamble <videoclip//cid={stage0Sid}>exclusive-stage-zero";
+        Assert.Equal(
+            "exclusive-stage-zero",
+            PromptParser.ExtractPromptWithoutReferences(prompt, 0, 0, 0).Trim());
+        Assert.Contains(
+            "global preamble",
+            PromptParser.ExtractPromptWithoutReferences(prompt, 0, 1, 1).Trim());
+        Assert.DoesNotContain(
+            "exclusive-stage-zero",
+            PromptParser.ExtractPromptWithoutReferences(prompt, 0, 1, 1));
+    }
+
+    [Fact]
+    public void Videoclip_raw_clip_stage_predicate_matches_bracket_syntax()
+    {
+        string prompt = @"global <videoclip[0,0]>tiered";
+        Assert.Equal("tiered", PromptParser.ExtractPromptWithoutReferences(prompt, 0, 0, 0).Trim());
+        Assert.DoesNotContain("tiered", PromptParser.ExtractPromptWithoutReferences(prompt, 0, 1, 1));
+        Assert.True(PromptParser.HasAnyVideoClipSectionForClip(prompt, 0));
+    }
+
+    [Fact]
     public void Videoclip_prompt_section_stops_at_registered_custom_prompt_sections()
     {
         HashSet<string> customPartPrefixes = [.. PromptRegion.CustomPartPrefixes];
@@ -150,6 +176,37 @@ public partial class StageFlowTests
         Assert.Equal(2, positiveEncoderClips.Count);
         Assert.Contains(positiveEncoderClips, clip => !OutputTracesBackToSource(workflow, clip, new JArray(loraId, 1)));
         Assert.Contains(positiveEncoderClips, clip => OutputTracesBackToSource(workflow, clip, new JArray(loraId, 1)));
+    }
+
+    [Fact]
+    public void Videoclip_bracket_clip_stage_prompt_lora_is_promoted_for_flat_stage_section()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        WorkflowGenerator.AddModelGenStep(g =>
+        {
+            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
+        }, -10);
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_VideoClipStageLora.safetensors", "UnitTest_VideoClipStageLora.safetensors");
+        loraHandler.Models[loraModel.Name] = loraModel;
+
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        string prompt = "global prompt <videoclip[0,0]><lora:UnitTest_VideoClipStageLora:0.5>";
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+
+        Assert.True(input.TryGet(T2IParamTypes.Loras, out List<string> parsedLoras));
+        Assert.Contains("UnitTest_VideoClipStageLora", parsedLoras);
+        Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
+        Assert.Contains($"{VideoStagesExtension.SectionIdForStage(0)}", parsedConfinements);
+        Assert.NotEmpty(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
     }
 
     [Fact]

@@ -3868,6 +3868,7 @@ ${optionHtml}
       () => [
         '\nUse "<videoclip>..." to apply to ALL VideoStages clips (including LoRAs inside the section).',
         '\nUse "<videoclip[0]>..." to apply to clip 0, "<videoclip[1]>..." for clip 1, etc.',
+        '\nUse "<videoclip[0,0]>..." for clip 0 stage 0 only, e.g. "<videoclip[1,2]>" for clip 1 stage 2.',
         '\nIf no "<videoclip>" / "<videoclip[0]>" section exists for a clip, VideoStages falls back to the global prompt.'
       ],
       true

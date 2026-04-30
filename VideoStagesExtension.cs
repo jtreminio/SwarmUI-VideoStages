@@ -1,9 +1,9 @@
 using System.IO;
 using System.Text.Json;
+using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
-using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -24,13 +24,13 @@ public class VideoStagesExtension : Extension
         PromptRegion.RegisterCustomPrefix("videoclip");
         T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (_, context) =>
         {
-            if (int.TryParse(context.PreData, out int clipIndex) && clipIndex >= 0)
+            if (!PromptParser.TryResolveVideoclipSectionId(context.PreData?.Trim(), context, out int sectionId))
             {
-                context.SectionID = SectionIdForClip(clipIndex);
+                context.SectionID = Constants.SectionID_VideoClip;
             }
             else
             {
-                context.SectionID = Constants.SectionID_VideoClip;
+                context.SectionID = sectionId;
             }
             return $"<videoclip//cid={context.SectionID}>";
         };

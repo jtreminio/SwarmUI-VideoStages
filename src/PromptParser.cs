@@ -1,3 +1,5 @@
+using FreneticUtilities.FreneticExtensions;
+using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
@@ -62,36 +64,154 @@ internal static class PromptParser
         if (prefixName.EndsWith(']') && prefixName.Contains('['))
         {
             int open = prefixName.LastIndexOf('[');
-            if (open != -1)
-            {
-                preData = prefixName[(open + 1)..^1];
-                prefixName = prefixName[..open];
-            }
+            preData = prefixName[(open + 1)..^1];
+            prefixName = prefixName[..open];
         }
 
         return !string.IsNullOrWhiteSpace(prefixName);
     }
 
+    public static bool TryResolveVideoclipSectionId(
+        string preDataTrimmed,
+        T2IPromptHandling.PromptTagContext context,
+        out int sectionId)
+    {
+        sectionId = Constants.SectionID_VideoClip;
+        if (string.IsNullOrEmpty(preDataTrimmed))
+        {
+            return true;
+        }
+
+        string clipToken = preDataTrimmed.BeforeAndAfter(',', out string stageToken);
+        clipToken = clipToken.Trim();
+        stageToken = stageToken.Trim();
+
+        if (string.IsNullOrEmpty(stageToken))
+        {
+            if (int.TryParse(preDataTrimmed, out int clipOnly) && clipOnly >= 0)
+            {
+                sectionId = VideoStagesExtension.SectionIdForClip(clipOnly);
+                return true;
+            }
+
+            return false;
+        }
+
+        if (!int.TryParse(clipToken, out int clipId) || clipId < 0
+            || !int.TryParse(stageToken, out int clipStageIdx) || clipStageIdx < 0)
+        {
+            return false;
+        }
+
+        if (TryFlattenedStageSectionId(context.Input, clipId, clipStageIdx, context, out int stageSection))
+        {
+            sectionId = stageSection;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static bool TryFlattenedStageSectionId(
+        T2IParamInput input,
+        int clipId,
+        int clipStageIndex,
+        T2IPromptHandling.PromptTagContext context,
+        out int sectionId)
+    {
+        sectionId = Constants.SectionID_VideoClip;
+        if (input is null)
+        {
+            context.TrackWarning("VideoStages: videoclip[clip,stage] requires prompt input.");
+            return false;
+        }
+
+        WorkflowGenerator generator = new()
+        {
+            UserInput = input,
+            Features = [],
+            ModelFolderFormat = "/"
+        };
+
+        List<JsonParser.StageSpec> flat;
+        try
+        {
+            flat = new JsonParser(generator).ParseStages();
+        }
+        catch (Exception ex)
+        {
+            context.TrackWarning(
+                $"VideoStages: could not parse Video Stages JSON for videoclip[{clipId},{clipStageIndex}]: "
+                + $"{ex.Message}");
+            return false;
+        }
+
+        foreach (JsonParser.StageSpec stage in flat)
+        {
+            if (stage.ClipId == clipId && stage.ClipStageIndex == clipStageIndex)
+            {
+                sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
+                return true;
+            }
+        }
+
+        context.TrackWarning(
+            "VideoStages: no active stage videoclip["
+            + $"{clipId},{clipStageIndex}] in the current Video Stages configuration.");
+        return false;
+    }
+
     private static bool VideoClipTagAppliesToClip(
         string tag,
         string preData,
-        int clipIndex,
+        int clipId,
+        int? clipStageFlatId,
+        int? clipStageIndexWithinClip,
         int globalCid,
-        int clipCid)
+        int clipSectionCid)
     {
         int cidCut = tag.LastIndexOf(VideoClipCidMarker, StringComparison.OrdinalIgnoreCase);
         if (cidCut != -1)
         {
             if (int.TryParse(tag[(cidCut + VideoClipCidMarker.Length)..], out int cid))
             {
-                return cid == globalCid || cid == clipCid;
+                if (cid == globalCid || cid == clipSectionCid)
+                {
+                    return true;
+                }
+                if (clipStageFlatId.HasValue
+                    && cid == VideoStagesExtension.SectionIdForStage(clipStageFlatId.Value))
+                {
+                    return true;
+                }
+
+                return false;
             }
         }
         if (preData is null)
         {
             return true;
         }
-        return int.TryParse(preData, out int tagClip) && tagClip == clipIndex;
+        string preTrimmed = preData.Trim();
+        if (preTrimmed.Contains(','))
+        {
+            string first = preTrimmed.BeforeAndAfter(',', out string second);
+            if (int.TryParse(first.Trim(), out int tagClipComma)
+                && int.TryParse(second.Trim(), out int tagStageComma))
+            {
+                if (tagClipComma != clipId)
+                {
+                    return false;
+                }
+                if (!clipStageIndexWithinClip.HasValue)
+                {
+                    return true;
+                }
+
+                return tagStageComma == clipStageIndexWithinClip.Value;
+            }
+        }
+        return int.TryParse(preTrimmed, out int tagClipSingle) && tagClipSingle == clipId;
     }
 
     public static bool HasAnyVideoClipSectionForClip(string prompt, int clipIndex)
@@ -125,7 +245,14 @@ internal static class PromptParser
                 continue;
             }
 
-            if (VideoClipTagAppliesToClip(tag, preData, clipIndex, globalCid, clipCid))
+            if (VideoClipTagAppliesToClip(
+                    tag,
+                    preData,
+                    clipIndex,
+                    clipStageFlatId: null,
+                    clipStageIndexWithinClip: null,
+                    globalCid,
+                    clipCid))
             {
                 return true;
             }
@@ -134,9 +261,14 @@ internal static class PromptParser
         return false;
     }
 
-    public static string ExtractPrompt(string prompt, string originalPrompt, int clipIndex)
+    public static string ExtractPrompt(
+        string prompt,
+        string originalPrompt,
+        int clipIndex,
+        int? clipStageFlatId = null,
+        int? clipStageIndexWithinClip = null)
     {
-        string extracted = ExtractPromptWithoutReferences(prompt, clipIndex);
+        string extracted = ExtractPromptWithoutReferences(prompt, clipIndex, clipStageFlatId, clipStageIndexWithinClip);
         if (!string.IsNullOrWhiteSpace(extracted))
         {
             return extracted;
@@ -187,7 +319,7 @@ internal static class PromptParser
             return false;
         }
 
-        string sourceSection = ExtractPromptWithoutReferences(sourcePrompt, clipIndex);
+        string sourceSection = ExtractPromptWithoutReferences(sourcePrompt, clipIndex, null, null);
         if (string.IsNullOrWhiteSpace(sourceSection) || !sourceSection.Contains('<'))
         {
             return false;
@@ -226,7 +358,11 @@ internal static class PromptParser
         return cleaned.ToString();
     }
 
-    public static string ExtractPromptWithoutReferences(string prompt, int clipIndex)
+    public static string ExtractPromptWithoutReferences(
+        string prompt,
+        int clipIndex,
+        int? clipStageFlatId = null,
+        int? clipStageIndexWithinClip = null)
     {
         if (string.IsNullOrWhiteSpace(prompt))
         {
@@ -281,6 +417,8 @@ internal static class PromptParser
                     tag,
                     preData,
                     clipIndex,
+                    clipStageFlatId,
+                    clipStageIndexWithinClip,
                     globalCid,
                     clipCid);
 
@@ -327,7 +465,7 @@ internal static class PromptParser
         return region.GlobalPrompt.Trim();
     }
 
-    public static LoraOverrideScope ApplyLoraScope(T2IParamInput input, int clipIndex)
+    public static LoraOverrideScope ApplyLoraScope(T2IParamInput input, int clipIndex, int stageSectionId)
     {
         if (!input.TryGet(T2IParamTypes.Loras, out List<string> loras)
             || loras is null
@@ -354,7 +492,7 @@ internal static class PromptParser
             {
                 continue;
             }
-            if (confinementId == globalCid || confinementId == clipCid)
+            if (confinementId == globalCid || confinementId == clipCid || confinementId == stageSectionId)
             {
                 selectedIndices.Add(i);
             }

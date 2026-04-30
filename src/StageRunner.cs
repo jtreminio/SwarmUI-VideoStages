@@ -39,7 +39,8 @@ internal class StageRunner(
 
         PromptParser.LoraOverrideScope loraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
-            stage.ClipId);
+            stage.ClipId,
+            sectionId);
 
         try
         {
@@ -447,8 +448,18 @@ internal class StageRunner(
             VideoFPS = fps,
             Width = sourceMedia.Width ?? g.UserInput.GetImageWidth(),
             Height = sourceMedia.Height ?? g.UserInput.GetImageHeight(),
-            Prompt = PromptParser.ExtractPrompt(positivePrompt, originalPositivePrompt, stage.ClipId),
-            NegativePrompt = PromptParser.ExtractPrompt(negativePrompt, originalNegativePrompt, stage.ClipId),
+            Prompt = PromptParser.ExtractPrompt(
+                positivePrompt,
+                originalPositivePrompt,
+                stage.ClipId,
+                stage.Id,
+                stage.ClipStageIndex),
+            NegativePrompt = PromptParser.ExtractPrompt(
+                negativePrompt,
+                originalNegativePrompt,
+                stage.ClipId,
+                stage.Id,
+                stage.ClipStageIndex),
             Steps = stage.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.Id,
             BatchIndex = batchIndex,
