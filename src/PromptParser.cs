@@ -20,6 +20,22 @@ internal static class PromptParser
         "extend"
     ];
 
+    private static bool IsSectionEndingTag(string tagPrefixLower)
+    {
+        if (SectionEndingTags.Contains(tagPrefixLower))
+        {
+            return true;
+        }
+        foreach (string prefix in PromptRegion.CustomPartPrefixes)
+        {
+            if (StringUtils.Equals(prefix, tagPrefixLower))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static bool TryExtractTagPrefix(string tag, out string prefixName, out string preData)
     {
         prefixName = null;
@@ -281,7 +297,7 @@ internal static class PromptParser
             }
             else if (inWantedSection)
             {
-                if (SectionEndingTags.Contains(tagPrefixLower))
+                if (IsSectionEndingTag(tagPrefixLower))
                 {
                     inWantedSection = false;
                 }
@@ -460,7 +476,7 @@ internal static class PromptParser
 
             if (inAnyVideoClipSection)
             {
-                if (SectionEndingTags.Contains(tagPrefixLower))
+                if (IsSectionEndingTag(tagPrefixLower))
                 {
                     inAnyVideoClipSection = false;
                 }

@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -84,6 +85,29 @@ public partial class StageFlowTests
         JArray positiveRef = WorkflowAssertions.RequireConnectionInput(conditioningNode.Node, "positive");
         WorkflowNode positiveEncoder = WorkflowAssertions.RequireNodeById(workflow, $"{positiveRef[0]}");
         Assert.Equal("clip-zero words", $"{positiveEncoder.Node["inputs"]?["prompt"]}");
+    }
+
+    [Fact]
+    public void Videoclip_prompt_section_stops_at_registered_custom_prompt_sections()
+    {
+        HashSet<string> customPartPrefixes = [.. PromptRegion.CustomPartPrefixes];
+        List<string> partPrefixes = [.. PromptRegion.PartPrefixes];
+
+        try
+        {
+            if (!PromptRegion.CustomPartPrefixes.Contains("unitcustom"))
+            {
+                PromptRegion.RegisterCustomPrefix("unitcustom");
+            }
+
+            string prompt = "global <videoclip[0]>clip-zero words <unitcustom>custom words";
+            Assert.Equal("clip-zero words", PromptParser.ExtractPromptWithoutReferences(prompt, 0));
+        }
+        finally
+        {
+            PromptRegion.CustomPartPrefixes = customPartPrefixes;
+            PromptRegion.PartPrefixes = partPrefixes;
+        }
     }
 
     [Fact]
