@@ -178,7 +178,8 @@ public class VideoStagesExtension : Extension
             VisibleNormally: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
+            FeatureFlag: Constants.ComfyUIFeatureFlag,
+            MetadataFormat: VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter
         ));
 
         T2IParamTypes.Register<string>(new T2IParamType(
