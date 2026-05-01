@@ -37,10 +37,7 @@ import { clipHasWanStage, rawStageListContainsWanModel } from "./wanModel";
 
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
-): string =>
-    upscaleMethodValues.includes("pixel-lanczos")
-        ? "pixel-lanczos"
-        : (upscaleMethodValues[0] ?? "pixel-lanczos");
+): string => upscaleMethodValues[0] ?? "";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
@@ -390,7 +387,7 @@ export const normalizeStage = (
     ) {
         stage.upscaleMethod =
             stageIndexInClip === 0
-                ? (defaults.upscaleMethodValues[0] ?? "pixel-lanczos")
+                ? (defaults.upscaleMethodValues[0] ?? "")
                 : stage.upscaleMethod || fallback.upscaleMethod;
     }
     return stage;

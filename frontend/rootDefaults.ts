@@ -9,10 +9,15 @@ import {
 import type { RootDefaults } from "./types";
 import { utils } from "./utils";
 
-const STAGE_UPSCALE_PREFIXES = ["pixel-", "model-", "latent-", "latentmodel-"];
-
-const isStageUpscaleMethod = (value: string): boolean =>
-    STAGE_UPSCALE_PREFIXES.some((prefix) => value.startsWith(prefix));
+const isStageLatentModelUpscaleOption = (
+    value: string,
+    label: string,
+): boolean => {
+    if (value.trim().toLowerCase().startsWith("latentmodel-")) {
+        return true;
+    }
+    return label.trimStart().startsWith("Latent Model:");
+};
 
 const trimDomValue = (el: { value: string } | null | undefined): string =>
     `${el?.value ?? ""}`.trim();
@@ -57,19 +62,14 @@ export const getRootDefaults = (): RootDefaults => {
     const stageUpscaleLabels: string[] = [];
     for (let i = 0; i < allUpscaleMethodValues.length; i++) {
         const value = allUpscaleMethodValues[i];
-        if (isStageUpscaleMethod(value)) {
+        if (isStageLatentModelUpscaleOption(value, allUpscaleMethodLabels[i])) {
             stageUpscaleValues.push(value);
             stageUpscaleLabels.push(allUpscaleMethodLabels[i]);
         }
     }
 
-    const fallbackUpscaleMethods = [
-        "pixel-lanczos",
-        "pixel-bicubic",
-        "pixel-area",
-        "pixel-bilinear",
-        "pixel-nearest-exact",
-    ];
+    const fallbackUpscaleMethodValues: string[] = [];
+    const fallbackUpscaleMethodLabels: string[] = [];
 
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
@@ -114,11 +114,11 @@ export const getRootDefaults = (): RootDefaults => {
         upscaleMethodValues:
             stageUpscaleValues.length > 0
                 ? stageUpscaleValues
-                : fallbackUpscaleMethods,
+                : fallbackUpscaleMethodValues,
         upscaleMethodLabels:
             stageUpscaleLabels.length > 0
                 ? stageUpscaleLabels
-                : fallbackUpscaleMethods,
+                : fallbackUpscaleMethodLabels,
         width:
             getRegisteredRootDimension("width") ??
             Math.max(

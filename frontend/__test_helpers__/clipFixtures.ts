@@ -12,7 +12,7 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     controlNetStrength: 0.8,
     refStrengths: [],
     upscale: 1,
-    upscaleMethod: "pixel-lanczos",
+    upscaleMethod: "latentmodel-test.safetensors",
     model: "m",
     vae: "",
     steps: 8,

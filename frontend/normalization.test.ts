@@ -25,8 +25,14 @@ const getRootDefaults = (): RootDefaults => ({
     samplerLabels: ["Euler"],
     schedulerValues: ["normal"],
     schedulerLabels: ["Normal"],
-    upscaleMethodValues: ["pixel-lanczos", "pixel-bicubic"],
-    upscaleMethodLabels: ["Lanczos", "Bicubic"],
+    upscaleMethodValues: [
+        "latentmodel-a.safetensors",
+        "latentmodel-b.safetensors",
+    ],
+    upscaleMethodLabels: [
+        "Latent Model: a.safetensors",
+        "Latent Model: b.safetensors",
+    ],
     width: 1024,
     height: 1024,
     fps: 24,
@@ -224,14 +230,14 @@ describe("normalization", () => {
             {
                 ...minimalStageRaw,
                 Upscale: 2,
-                UpscaleMethod: "pixel-bicubic",
+                UpscaleMethod: "latentmodel-b.safetensors",
             },
             stage0,
             0,
             1,
         );
         expect(stage1.upscale).toBe(2);
-        expect(stage1.upscaleMethod).toBe("pixel-bicubic");
+        expect(stage1.upscaleMethod).toBe("latentmodel-b.safetensors");
     });
 
     it("normalizeStage forces first-stage control to the root default", () => {

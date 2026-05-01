@@ -57,7 +57,7 @@ describe("persistence", () => {
                             controlNetStrength: 0.7,
                             refStrengths: [0.8],
                             upscale: 1,
-                            upscaleMethod: "pixel-lanczos",
+                            upscaleMethod: "latentmodel-test.safetensors",
                             model: "m",
                             vae: "v",
                             steps: 8,

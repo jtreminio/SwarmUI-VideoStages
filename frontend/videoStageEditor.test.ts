@@ -209,10 +209,21 @@ const setupParameterPanel = (): void => {
 
     const refinerUpscaleMethod = document.createElement("select");
     refinerUpscaleMethod.id = "input_refinerupscalemethod";
-    for (const value of ["pixel-lanczos", "pixel-bicubic"]) {
+    for (const entry of [
+        { value: "pixel-lanczos", text: "Lanczos" },
+        { value: "pixel-bicubic", text: "Bicubic" },
+        {
+            value: "latentmodel-m1.safetensors",
+            text: "Latent Model: m1.safetensors",
+        },
+        {
+            value: "latentmodel-m2.safetensors",
+            text: "Latent Model: m2.safetensors",
+        },
+    ]) {
         const opt = document.createElement("option");
-        opt.value = value;
-        opt.text = value;
+        opt.value = entry.value;
+        opt.text = entry.text;
         refinerUpscaleMethod.appendChild(opt);
     }
     document.body.appendChild(refinerUpscaleMethod);
@@ -2433,12 +2444,12 @@ describe("videoStageEditor", () => {
             range1.dispatchEvent(new Event("input", { bubbles: true }));
             await flushReRender();
 
-            method1.value = "pixel-bicubic";
+            method1.value = "latentmodel-m2.safetensors";
             method1.dispatchEvent(new Event("change", { bubbles: true }));
             await flushReRender();
 
             expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
-                "pixel-bicubic",
+                "latentmodel-m2.safetensors",
             );
 
             range1.value = "1.5";
@@ -2448,7 +2459,7 @@ describe("videoStageEditor", () => {
 
             const stored = parseStored()[0].stages?.[1];
             expect(stored?.upscale).toBe(1.5);
-            expect(stored?.upscaleMethod).toBe("pixel-bicubic");
+            expect(stored?.upscaleMethod).toBe("latentmodel-m2.safetensors");
 
             range1.value = "1";
             range1.dispatchEvent(new Event("input", { bubbles: true }));
@@ -2456,9 +2467,9 @@ describe("videoStageEditor", () => {
             await flushReRender();
 
             expect(method1.disabled).toBe(true);
-            expect(method1.value).toBe("pixel-bicubic");
+            expect(method1.value).toBe("latentmodel-m2.safetensors");
             expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
-                "pixel-bicubic",
+                "latentmodel-m2.safetensors",
             );
         });
 
@@ -2485,11 +2496,11 @@ describe("videoStageEditor", () => {
             await flushReRender();
 
             const method1 = must(s1Method);
-            method1.value = "pixel-bicubic";
+            method1.value = "latentmodel-m2.safetensors";
             method1.dispatchEvent(new Event("change"));
 
             expect(parseStored()[0].stages?.[1].upscaleMethod).toBe(
-                "pixel-bicubic",
+                "latentmodel-m2.safetensors",
             );
         });
 

@@ -833,7 +833,7 @@
   };
 
   // frontend/normalization.ts
-  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.includes("pixel-lanczos") ? "pixel-lanczos" : upscaleMethodValues[0] ?? "pixel-lanczos";
+  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues[0] ?? "";
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var normalizeExpanded = (raw) => raw.expanded === void 0 ? true : !!raw.expanded;
   var snapStrengthToStep = (value, fallback, min, max, step) => {
@@ -1079,7 +1079,7 @@
       scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler
     };
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
-      stage.upscaleMethod = stageIndexInClip === 0 ? defaults.upscaleMethodValues[0] ?? "pixel-lanczos" : stage.upscaleMethod || fallback.upscaleMethod;
+      stage.upscaleMethod = stageIndexInClip === 0 ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
     }
     return stage;
   };
@@ -1523,8 +1523,12 @@
   };
 
   // frontend/rootDefaults.ts
-  var STAGE_UPSCALE_PREFIXES = ["pixel-", "model-", "latent-", "latentmodel-"];
-  var isStageUpscaleMethod = (value) => STAGE_UPSCALE_PREFIXES.some((prefix) => value.startsWith(prefix));
+  var isStageLatentModelUpscaleOption = (value, label) => {
+    if (value.trim().toLowerCase().startsWith("latentmodel-")) {
+      return true;
+    }
+    return label.trimStart().startsWith("Latent Model:");
+  };
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var firstPresentInput = (...ids) => {
     for (let i = 0; i < ids.length; i++) {
@@ -1564,18 +1568,13 @@
     const stageUpscaleLabels = [];
     for (let i = 0; i < allUpscaleMethodValues.length; i++) {
       const value = allUpscaleMethodValues[i];
-      if (isStageUpscaleMethod(value)) {
+      if (isStageLatentModelUpscaleOption(value, allUpscaleMethodLabels[i])) {
         stageUpscaleValues.push(value);
         stageUpscaleLabels.push(allUpscaleMethodLabels[i]);
       }
     }
-    const fallbackUpscaleMethods = [
-      "pixel-lanczos",
-      "pixel-bicubic",
-      "pixel-area",
-      "pixel-bilinear",
-      "pixel-nearest-exact"
-    ];
+    const fallbackUpscaleMethodValues = [];
+    const fallbackUpscaleMethodLabels = [];
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
     const widthInput = firstPresentInput(
@@ -1613,8 +1612,8 @@
       samplerLabels: sampler.labels,
       schedulerValues: scheduler.values,
       schedulerLabels: scheduler.labels,
-      upscaleMethodValues: stageUpscaleValues.length > 0 ? stageUpscaleValues : fallbackUpscaleMethods,
-      upscaleMethodLabels: stageUpscaleLabels.length > 0 ? stageUpscaleLabels : fallbackUpscaleMethods,
+      upscaleMethodValues: stageUpscaleValues.length > 0 ? stageUpscaleValues : fallbackUpscaleMethodValues,
+      upscaleMethodLabels: stageUpscaleLabels.length > 0 ? stageUpscaleLabels : fallbackUpscaleMethodLabels,
       width: getRegisteredRootDimension("width") ?? Math.max(
         ROOT_DIMENSION_MIN,
         Math.round(utils.toNumber(widthInput?.value, 1024))
