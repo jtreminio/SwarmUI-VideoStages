@@ -545,6 +545,63 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Chained_ltx_controlnet_length_latent_model_upscale_reuses_previous_stage_latent()
+    {
+        using SwarmUiTestContext _ = new();
+        WorkflowTestHarness.VideoStagesSteps();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
+        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        {
+            ModelClass = new T2IModelClass()
+            {
+                ID = "unit/control-diffpatch",
+                Name = "Unit ControlNet DiffPatch",
+                CompatClass = models.VideoModel.ModelClass.CompatClass
+            }
+        };
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        loraHandler.Models[loraModel.Name] = loraModel;
+
+        JObject stageA = MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8, cfgScale: 1);
+        JObject stageB = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0.5,
+            upscale: 1.5,
+            upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
+            steps: 8,
+            cfgScale: 1);
+        stageA["ControlNetStrength"] = 1.0;
+        stageA["refStrengths"] = new JArray(1.0);
+        stageB["ControlNetStrength"] = 0.6;
+        stageB["refStrengths"] = new JArray(0.8);
+        JObject clip = MakeClipWithRefs(512, 768, [MakeRef("Base", frame: 1)], stageA, stageB);
+        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
+        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["ClipLengthFromControlNet"] = true;
+        T2IParamInput input = BuildInput(models.BaseModel, new JArray(clip).ToString());
+        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
+        input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
+        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[0], "UnitTestPreprocessor");
+
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
+
+        WorkflowNode upsamplerNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
+        JArray upsamplerSamples = WorkflowAssertions.RequireConnectionInput(upsamplerNode.Node, "samples");
+        WorkflowNode upsamplerSource = WorkflowAssertions.RequireNodeById(workflow, $"{upsamplerSamples[0]}");
+        Assert.Equal("LTXVCropGuides", $"{upsamplerSource.Node["class_type"]}");
+        Assert.Equal("2", $"{upsamplerSamples[1]}");
+    }
+
+    [Fact]
     public void Ltx_ic_lora_controlnet_source_unwraps_core_first_frame_for_video_guide()
     {
         using SwarmUiTestContext _ = new();

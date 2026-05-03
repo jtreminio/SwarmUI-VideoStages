@@ -413,10 +413,19 @@ internal sealed class LtxStageExecutor(
                 controlNetLengthFrames);
         }
 
-        if (controlNetLengthFrames is null && CanReuseDecodedVideoLatent(sourceMedia, genInfo))
+        if (TryGetReusableDecodedVideoLatent(
+                sourceMedia,
+                genInfo,
+                allowDynamicFrameCount: controlNetLengthFrames is not null,
+                out JArray reusableLatentPath))
         {
-            WGNodeData reusedLatent = sourceMedia.AsLatentImage(genInfo.Vae);
-            reusedLatent.Frames = Math.Min(genInfo.Frames.Value, reusedLatent.Frames ?? int.MaxValue);
+            WGNodeData reusedLatent = sourceMedia.WithPath(
+                reusableLatentPath,
+                WGNodeData.DT_LATENT_VIDEO,
+                genInfo.Vae.Compat);
+            reusedLatent.Frames = genInfo.Frames.HasValue
+                ? Math.Min(genInfo.Frames.Value, reusedLatent.Frames ?? int.MaxValue)
+                : null;
             return EnsureHasAudioWithLtxFps(reusedLatent, genInfo, sourceMedia);
         }
 
@@ -586,24 +595,45 @@ internal sealed class LtxStageExecutor(
             ? new JValue(fallbackFrames)
             : LtxFrameCountConnector.CloneConnection(framesConnection);
 
-    private static bool CanReuseDecodedVideoLatent(
+    private static bool TryGetReusableDecodedVideoLatent(
         WGNodeData sourceMedia,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        bool allowDynamicFrameCount,
+        out JArray latentPath)
     {
+        latentPath = null;
         (string sourceType, JObject sourceInputs) = sourceMedia?.SourceNodeData ?? (null, null);
         if (sourceMedia?.DataType != WGNodeData.DT_VIDEO
             || genInfo?.Vae?.Path is not JArray vaePath
             || vaePath.Count != 2
-            || !genInfo.Frames.HasValue
-            || sourceMedia.Frames is int sourceFrames && sourceFrames > genInfo.Frames.Value)
+            || (!genInfo.Frames.HasValue && !allowDynamicFrameCount)
+            || genInfo.Frames.HasValue
+                && sourceMedia.Frames is int sourceFrames
+                && sourceFrames > genInfo.Frames.Value)
         {
             return false;
         }
-        return (sourceType == NodeTypes.VAEDecode || sourceType == NodeTypes.VAEDecodeTiled)
-            && sourceInputs?["samples"] is JArray
-            && sourceInputs["vae"] is JArray decodeVaePath
-            && decodeVaePath.Count == 2
-            && JToken.DeepEquals(decodeVaePath, vaePath);
+        if ((sourceType != NodeTypes.VAEDecode && sourceType != NodeTypes.VAEDecodeTiled)
+            || sourceInputs?["samples"] is not JArray samplesPath
+            || samplesPath.Count != 2
+            || sourceInputs["vae"] is not JArray decodeVaePath
+            || decodeVaePath.Count != 2)
+        {
+            return false;
+        }
+
+        bool sameVaeNode = JToken.DeepEquals(decodeVaePath, vaePath);
+        bool sameDynamicLtxCompat =
+            allowDynamicFrameCount
+            && !string.IsNullOrWhiteSpace(sourceMedia.Compat?.ID)
+            && sourceMedia.Compat.ID == genInfo.Vae.Compat?.ID;
+        if (!sameVaeNode && !sameDynamicLtxCompat)
+        {
+            return false;
+        }
+
+        latentPath = new JArray(samplesPath[0], samplesPath[1]);
+        return true;
     }
 
     private static bool ShouldMatchStageLengthToAudio(JsonParser.StageSpec stage)
