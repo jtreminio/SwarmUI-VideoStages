@@ -29,8 +29,7 @@ public class Runner
         rootVideoStageResizer = new RootVideoStageResizer(
             g,
             rootVideoStageTakeover,
-            jsonParser,
-            stageGuideMediaHelper);
+            jsonParser);
         stageRefStore = new StageRefStore(g);
         audioStageDetector = new AudioStageDetector(g);
         base2EditPublishedStageRefs = new Base2EditPublishedStageRefs(g);
