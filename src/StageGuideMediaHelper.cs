@@ -120,8 +120,8 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         {
             scale.Image.ConnectToUntyped(source);
         }
-        scale.Width.Set((long)width);
-        scale.Height.Set((long)height);
+        scale.Width.Set(width);
+        scale.Height.Set(height);
         scale.UpscaleMethod.Set("lanczos");
         scale.Crop.Set("center");
         bridge.SyncNode(scale);
@@ -156,8 +156,8 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
             collapsed = upstream;
         }
 
-        collapsed.Width.Set((long)targetWidth);
-        collapsed.Height.Set((long)targetHeight);
+        collapsed.Width.Set(targetWidth);
+        collapsed.Height.Set(targetHeight);
         collapsed.Crop.Set("center");
         if (!collapsed.UpscaleMethod.HasValue)
         {

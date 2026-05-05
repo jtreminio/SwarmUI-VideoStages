@@ -118,9 +118,13 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// BatchImagesNode takes a dynamic list of inputs (`images.image0`, `images.image1`, …) that
-    /// the ComfyTyped codegen flattens to a single `Images` field, so it can't round-trip through
-    /// the typed bridge. Build it via <see cref="WorkflowGenerator.CreateNode"/> directly.
+    /// BatchImagesNode takes a dynamic list of sibling input keys (<c>images.image0</c>,
+    /// <c>images.image1</c>, …) that the codegen does not model as typed slots. We use the
+    /// upstream <c>ComfyNode.ExtraInputs</c> escape hatch to write those keys through a typed
+    /// bridge add. Note that connections under <c>ExtraInputs</c> are not graph-aware — they
+    /// pass through verbatim and are not updated by <c>RetargetConnections</c> or node removal.
+    /// That is acceptable here: this node is built terminal in the merge graph, and nothing
+    /// later remaps its inputs.
     /// </summary>
     private JArray MergeClipVideosWithBatchImagesNode(IReadOnlyList<JArray> paths)
     {
@@ -128,13 +132,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 
         while (layer.Count > BatchImagesNodeMaxInputs)
         {
-            JObject chunkInputs = [];
-            for (int i = 0; i < BatchImagesNodeMaxInputs; i++)
-            {
-                chunkInputs[$"images.image{i}"] = layer[i];
-            }
-
-            string chunkNodeId = g.CreateNode(NodeTypes.BatchImagesNode, chunkInputs);
+            string chunkNodeId = AddBatchImagesNode(layer.Take(BatchImagesNodeMaxInputs));
             List<JArray> next = [new JArray(chunkNodeId, 0)];
             for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
             {
@@ -149,13 +147,24 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             return layer[0];
         }
 
-        JObject inputs = [];
-        for (int i = 0; i < layer.Count; i++)
-        {
-            inputs[$"images.image{i}"] = layer[i];
-        }
+        return new JArray(AddBatchImagesNode(layer), 0);
+    }
 
-        return new JArray(g.CreateNode(NodeTypes.BatchImagesNode, inputs), 0);
+    private string AddBatchImagesNode(IEnumerable<JArray> imagePaths)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        BatchImagesNodeNode node = bridge.AddNode(new BatchImagesNodeNode());
+        JObject extra = [];
+        int i = 0;
+        foreach (JArray imagePath in imagePaths)
+        {
+            extra[$"images.image{i}"] = new JArray(imagePath[0], imagePath[1]);
+            i++;
+        }
+        node.ExtraInputs = extra;
+        bridge.SyncNode(node);
+        BridgeSync.SyncLastId(g);
+        return node.Id;
     }
 
     private JArray CascadeAudioConcat(IReadOnlyList<JArray> paths)

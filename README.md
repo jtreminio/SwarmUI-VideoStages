@@ -14,7 +14,7 @@ Think of it as draft, refine, and polish for video, built right into the normal 
 ```
 cd /path/to/ComfyTyped
 dotnet build -c Release ComfyTyped.csproj
-cp src/bin/Release/net8.0/ComfyTyped.dll \
+cp bin/Release/net8.0/ComfyTyped.dll \
     ../SwarmUI-VideoStages/lib/ComfyTyped.dll
 
 dotnet run --project tools/ComfyTyped.CodeGen -- \

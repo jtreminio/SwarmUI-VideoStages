@@ -50,10 +50,10 @@ internal static class WanFirstLastFrameRewriter
             height);
 
         WanFirstLastFrameToVideoNode flf = bridge.AddNode(new WanFirstLastFrameToVideoNode());
-        flf.Width.Set((long)width);
-        flf.Height.Set((long)height);
-        flf.Length.Set((long)length);
-        flf.BatchSize.Set((long)batchSize);
+        flf.Width.Set(width);
+        flf.Height.Set(height);
+        flf.Length.Set(length);
+        flf.BatchSize.Set(batchSize);
         if (wan.PositiveInput.Connection is INodeOutput pos) { flf.PositiveInput.ConnectToUntyped(pos); }
         if (wan.NegativeInput.Connection is INodeOutput neg) { flf.NegativeInput.ConnectToUntyped(neg); }
         if (wan.Vae.Connection is INodeOutput vae) { flf.Vae.ConnectToUntyped(vae); }
@@ -117,8 +117,8 @@ internal static class WanFirstLastFrameRewriter
 
         ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
         scale.Image.ConnectToUntyped(endRawOutput);
-        scale.Width.Set((long)width);
-        scale.Height.Set((long)height);
+        scale.Width.Set(width);
+        scale.Height.Set(height);
         scale.UpscaleMethod.Set("lanczos");
         scale.Crop.Set("disabled");
         bridge.SyncNode(scale);

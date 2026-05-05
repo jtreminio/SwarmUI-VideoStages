@@ -17,9 +17,4 @@ public static class StringUtils
     {
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
-
-    public static string ClassTypeOf(JObject node) => $"{node["class_type"]}";
-
-    public static bool NodeTypeMatches(JObject node, string classType) =>
-        Equals(ClassTypeOf(node), classType);
 }

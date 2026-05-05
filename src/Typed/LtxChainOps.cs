@@ -36,7 +36,6 @@ internal static class LtxChainOps
 
         // Find VAEDecode or VAEDecodeTiled: check the node itself first (media may point
         // directly to decode output), then walk upstream (when there are post-decode wrappers).
-        // Replaces: WorkflowUtils.TryResolveNearestUpstreamDecode + StringUtils.NodeTypeMatches
         ComfyNode decode = mediaNode as VAEDecodeNode
                         ?? mediaNode as VAEDecodeTiledNode
                         ?? bridge.Graph.FindNearestUpstream<VAEDecodeNode>(mediaNode)
@@ -45,7 +44,6 @@ internal static class LtxChainOps
             return null;
 
         // Follow samples connection to LTXVSeparateAVLatent
-        // Replaces: LtxVaeDecodeInputs.TryGetDecodeSamplesRef + manual node lookup + NodeTypeMatches
         INodeInput samplesInput = decode.FindInput("samples");
         if (samplesInput?.Connection?.Node is not LTXVSeparateAVLatentNode separate)
             return null;
@@ -326,10 +324,10 @@ internal static class LtxChainOps
         if (config.UseTiledDecode)
         {
             VAEDecodeTiledNode tiled = new();
-            tiled.TileSize.Set((long)config.TileSize);
-            tiled.Overlap.Set((long)config.Overlap);
-            tiled.TemporalSize.Set((long)config.TemporalSize);
-            tiled.TemporalOverlap.Set((long)config.TemporalOverlap);
+            tiled.TileSize.Set(config.TileSize);
+            tiled.Overlap.Set(config.Overlap);
+            tiled.TemporalSize.Set(config.TemporalSize);
+            tiled.TemporalOverlap.Set(config.TemporalOverlap);
             VAEDecodeTiledNode added = preserveId is not null
                 ? bridge.AddNode(tiled, preserveId)
                 : bridge.AddNode(tiled);

@@ -40,7 +40,7 @@ internal static class LtxAudioPathResolution
         SwarmEnsureAudioNode ensure = swarmEnsureAudioStableNodeId is null
             ? bridge.AddNode(new SwarmEnsureAudioNode())
             : bridge.AddNode(new SwarmEnsureAudioNode(), swarmEnsureAudioStableNodeId);
-        if (bridge.ResolveOrSynthesizePath(rawRef) is INodeOutput rawSource)
+        if (bridge.ResolvePath(rawRef) is INodeOutput rawSource)
         {
             ensure.Audio.ConnectToUntyped(rawSource);
         }

@@ -99,7 +99,7 @@ internal static class ControlNetApplicator
                 continue;
             }
 
-            if (StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
+            if (string.Equals($"{node["class_type"]}", NodeTypes.ImageScale, StringComparison.OrdinalIgnoreCase)
                 && TryGetInputRef(node, "image", out JArray sourceImage)
                 && OutputRefIsNodeType<GetVideoComponentsNode>(workflow, sourceImage))
             {
@@ -260,7 +260,7 @@ internal static class ControlNetApplicator
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         GetImageSizeNode sizeNode = bridge.AddNode(new GetImageSizeNode());
-        if (frameSource is { Count: 2 } && bridge.ResolveOrSynthesizePath(frameSource) is INodeOutput src)
+        if (frameSource is { Count: 2 } && bridge.ResolvePath(frameSource) is INodeOutput src)
         {
             sizeNode.Image.ConnectToUntyped(src);
         }
@@ -323,11 +323,11 @@ internal static class ControlNetApplicator
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode());
-        if (bridge.ResolveOrSynthesizePath(genInfo.PosCond) is INodeOutput pos) { guide.PositiveInput.ConnectToUntyped(pos); }
-        if (bridge.ResolveOrSynthesizePath(genInfo.NegCond) is INodeOutput neg) { guide.NegativeInput.ConnectToUntyped(neg); }
-        if (bridge.ResolveOrSynthesizePath(vaePath) is INodeOutput vae) { guide.Vae.ConnectToUntyped(vae); }
-        if (bridge.ResolveOrSynthesizePath(latentPath) is INodeOutput latent) { guide.LatentInput.ConnectToUntyped(latent); }
-        if (bridge.ResolveOrSynthesizePath(guideImagePath) is INodeOutput img) { guide.Image.ConnectToUntyped(img); }
+        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos) { guide.PositiveInput.ConnectToUntyped(pos); }
+        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg) { guide.NegativeInput.ConnectToUntyped(neg); }
+        if (bridge.ResolvePath(vaePath) is INodeOutput vae) { guide.Vae.ConnectToUntyped(vae); }
+        if (bridge.ResolvePath(latentPath) is INodeOutput latent) { guide.LatentInput.ConnectToUntyped(latent); }
+        if (bridge.ResolvePath(guideImagePath) is INodeOutput img) { guide.Image.ConnectToUntyped(img); }
         guide.FrameIdx.Set(0L);
         guide.Strength.Set(controlStrength);
         guide.LatentDownscaleFactor.Set(2.0);
@@ -357,18 +357,24 @@ internal static class ControlNetApplicator
 
         JArray guideSource = ResolveFullControlImageSource(g.Workflow, controlImagePath);
 
-        // ResizeImageMaskNode has dynamic-shape extra inputs (`resize_type.multiple` etc.) that
-        // the codegen flattens; build via the JObject API to preserve the dynamic keys, then
-        // create the typed ImageFromBatch downstream.
-        string resizedForGuide = g.CreateNode(NodeTypes.ResizeImageMaskNode, new JObject()
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode());
+        if (guideSource is { Count: 2 } && bridge.ResolvePath(guideSource) is INodeOutput src)
         {
-            ["input"] = guideSource,
-            ["resize_type"] = "scale to multiple",
+            ((INodeInput)resize.Input).ConnectToUntyped(src);
+        }
+        resize.ResizeType.Set("scale to multiple");
+        resize.ScaleMethod.Set("lanczos");
+        // `resize_type.multiple` is a variant input keyed off the selected `resize_type`. The
+        // codegen does not model these variant keys, so they go through `ExtraInputs`.
+        resize.ExtraInputs = new JObject
+        {
             ["resize_type.multiple"] = 64,
-            ["scale_method"] = "lanczos"
-        });
+        };
+        bridge.SyncNode(resize);
+        BridgeSync.SyncLastId(g);
 
-        string croppedGuide = AddImageFromBatch(g, new JArray(resizedForGuide, 0), batchIndex: 0, lengthToken: frames.DeepClone());
+        string croppedGuide = AddImageFromBatch(g, new JArray(resize.Id, 0), batchIndex: 0, lengthToken: frames.DeepClone());
         return new JArray(croppedGuide, 0);
     }
 
@@ -376,11 +382,11 @@ internal static class ControlNetApplicator
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
-        if (imagePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput src)
+        if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
             node.Image.ConnectToUntyped(src);
         }
-        node.BatchIndex.Set((long)batchIndex);
+        node.BatchIndex.Set(batchIndex);
         node.Length.Set(lengthLiteral);
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
@@ -391,12 +397,12 @@ internal static class ControlNetApplicator
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
-        if (imagePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput src)
+        if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
             node.Image.ConnectToUntyped(src);
         }
-        node.BatchIndex.Set((long)batchIndex);
-        if (lengthToken is JArray lengthRef && lengthRef.Count == 2 && bridge.ResolveOrSynthesizePath(lengthRef) is INodeOutput lengthSrc)
+        node.BatchIndex.Set(batchIndex);
+        if (lengthToken is JArray lengthRef && lengthRef.Count == 2 && bridge.ResolvePath(lengthRef) is INodeOutput lengthSrc)
         {
             node.Length.ConnectToUntyped(lengthSrc);
         }
@@ -854,16 +860,16 @@ internal static class ControlNetApplicator
         bridge.SyncNode(loader);
 
         QwenImageDiffsynthControlnetNode diff = bridge.AddNode(new QwenImageDiffsynthControlnetNode());
-        if (genInfo.Model?.Path is JArray modelPath && bridge.ResolveOrSynthesizePath(modelPath) is INodeOutput modelOutput)
+        if (genInfo.Model?.Path is JArray modelPath && bridge.ResolvePath(modelPath) is INodeOutput modelOutput)
         {
             diff.Model.ConnectToUntyped(modelOutput);
         }
         diff.ModelPatch.ConnectTo(loader.MODELPATCH);
-        if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolveOrSynthesizePath(vaePath) is INodeOutput vae)
+        if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolvePath(vaePath) is INodeOutput vae)
         {
             diff.Vae.ConnectToUntyped(vae);
         }
-        if (controlImage?.Path is JArray imagePath && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput img)
+        if (controlImage?.Path is JArray imagePath && bridge.ResolvePath(imagePath) is INodeOutput img)
         {
             diff.Image.ConnectToUntyped(img);
         }
@@ -894,12 +900,12 @@ internal static class ControlNetApplicator
                 throw new SwarmUserErrorException("Alimama Inpainting ControlNet requires a mask.");
             }
             ControlNetInpaintingAliMamaApplyNode alimama = bridge.AddNode(new ControlNetInpaintingAliMamaApplyNode());
-            if (bridge.ResolveOrSynthesizePath(genInfo.PosCond) is INodeOutput pos) { alimama.PositiveInput.ConnectToUntyped(pos); }
-            if (bridge.ResolveOrSynthesizePath(genInfo.NegCond) is INodeOutput neg) { alimama.NegativeInput.ConnectToUntyped(neg); }
+            if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos) { alimama.PositiveInput.ConnectToUntyped(pos); }
+            if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg) { alimama.NegativeInput.ConnectToUntyped(neg); }
             alimama.ControlNet.ConnectTo(controlNetOutput);
-            if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolveOrSynthesizePath(vaePath) is INodeOutput vae) { alimama.Vae.ConnectToUntyped(vae); }
-            if (controlImage?.Path is JArray imagePath && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput img) { alimama.Image.ConnectToUntyped(img); }
-            if (g.FinalMask is JArray maskPath && bridge.ResolveOrSynthesizePath(maskPath) is INodeOutput mask) { alimama.Mask.ConnectToUntyped(mask); }
+            if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolvePath(vaePath) is INodeOutput vae) { alimama.Vae.ConnectToUntyped(vae); }
+            if (controlImage?.Path is JArray imagePath && bridge.ResolvePath(imagePath) is INodeOutput img) { alimama.Image.ConnectToUntyped(img); }
+            if (g.FinalMask is JArray maskPath && bridge.ResolvePath(maskPath) is INodeOutput mask) { alimama.Mask.ConnectToUntyped(mask); }
             alimama.Strength.Set(controlStrength);
             alimama.StartPercent.Set(startPercent);
             alimama.EndPercent.Set(endPercent);
@@ -909,16 +915,16 @@ internal static class ControlNetApplicator
         }
 
         ControlNetApplyAdvancedNode apply = bridge.AddNode(new ControlNetApplyAdvancedNode());
-        if (bridge.ResolveOrSynthesizePath(genInfo.PosCond) is INodeOutput posCond) { apply.PositiveInput.ConnectToUntyped(posCond); }
-        if (bridge.ResolveOrSynthesizePath(genInfo.NegCond) is INodeOutput negCond) { apply.NegativeInput.ConnectToUntyped(negCond); }
+        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput posCond) { apply.PositiveInput.ConnectToUntyped(posCond); }
+        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput negCond) { apply.NegativeInput.ConnectToUntyped(negCond); }
         apply.ControlNet.ConnectTo(controlNetOutput);
-        if (controlImage?.Path is JArray applyImagePath && bridge.ResolveOrSynthesizePath(applyImagePath) is INodeOutput applyImg) { apply.Image.ConnectToUntyped(applyImg); }
+        if (controlImage?.Path is JArray applyImagePath && bridge.ResolvePath(applyImagePath) is INodeOutput applyImg) { apply.Image.ConnectToUntyped(applyImg); }
         apply.Strength.Set(controlStrength);
         apply.StartPercent.Set(startPercent);
         apply.EndPercent.Set(endPercent);
         if (g.IsSD3() || g.IsFlux() || g.IsAnyFlux2() || g.IsChroma() || g.IsQwenImage())
         {
-            if (genInfo.Vae?.Path is JArray applyVaePath && bridge.ResolveOrSynthesizePath(applyVaePath) is INodeOutput applyVae) { apply.Vae.ConnectToUntyped(applyVae); }
+            if (genInfo.Vae?.Path is JArray applyVaePath && bridge.ResolvePath(applyVaePath) is INodeOutput applyVae) { apply.Vae.ConnectToUntyped(applyVae); }
         }
         bridge.SyncNode(apply);
         BridgeSync.SyncLastId(g);

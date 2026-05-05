@@ -196,10 +196,10 @@ internal sealed class LtxPostVideoChain
         VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode());
         decode.Vae.ConnectToUntyped(vaeSource);
         decode.Samples.ConnectToUntyped(samplesSource);
-        decode.TileSize.Set((long)g.UserInput.Get(T2IParamTypes.VAETileSize, 768));
-        decode.Overlap.Set((long)g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64));
-        decode.TemporalSize.Set((long)g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096));
-        decode.TemporalOverlap.Set((long)g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
+        decode.TileSize.Set(g.UserInput.Get(T2IParamTypes.VAETileSize, 768));
+        decode.Overlap.Set(g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64));
+        decode.TemporalSize.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096));
+        decode.TemporalOverlap.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
         bridge.SyncNode(decode);
         return decode.Id;
     }

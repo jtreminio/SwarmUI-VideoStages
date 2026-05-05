@@ -239,7 +239,8 @@ internal sealed class RootVideoStageResizer(
             return;
         }
 
-        if (!TryResolveOrSynthesizeOutput(bridge, g.CurrentMedia.Path, out INodeOutput sourceOutput))
+        if (g.CurrentMedia.Path is not JArray currentMediaPath
+            || bridge.ResolvePath(currentMediaPath) is not INodeOutput sourceOutput)
         {
             return;
         }
@@ -278,31 +279,4 @@ internal sealed class RootVideoStageResizer(
         return true;
     }
 
-    private static bool TryResolveOrSynthesizeOutput(
-        WorkflowBridge bridge,
-        JArray path,
-        out INodeOutput output)
-    {
-        output = null;
-        if (path is not { Count: 2 }
-            || path[1] is not JValue slotVal
-            || slotVal.Type != JTokenType.Integer)
-        {
-            return false;
-        }
-
-        ComfyNode node = bridge.Graph.GetNode($"{path[0]}");
-        if (node is null)
-        {
-            return false;
-        }
-
-        int slotIndex = Convert.ToInt32(slotVal.Value!);
-        output = node.FindOutput(slotIndex);
-        if (output is null && node is UnknownNode unknown)
-        {
-            output = unknown.GetOutput(slotIndex);
-        }
-        return output is not null;
-    }
 }

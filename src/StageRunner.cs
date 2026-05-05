@@ -263,7 +263,7 @@ internal class StageRunner(
                 {
                     int steps = Math.Max(1, advanced.Steps.LiteralAsInt() ?? stage.Steps);
                     int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
-                    advanced.EndAtStep.Set((long)endStep);
+                    advanced.EndAtStep.Set(endStep);
                     advanced.ReturnWithLeftoverNoise.Set(endStep < steps ? "enable" : "disable");
                     bridge.SyncNode(advanced);
                     break;
@@ -272,7 +272,7 @@ internal class StageRunner(
                 {
                     int steps = Math.Max(1, swarm.Steps.LiteralAsInt() ?? stage.Steps);
                     int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
-                    swarm.EndAtStep.Set((long)endStep);
+                    swarm.EndAtStep.Set(endStep);
                     swarm.ReturnWithLeftoverNoise.Set(endStep < steps ? "enable" : "disable");
                     bridge.SyncNode(swarm);
                     break;
@@ -475,12 +475,12 @@ internal class StageRunner(
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
-        if (imagePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput src)
+        if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
             node.Image.ConnectToUntyped(src);
         }
-        node.BatchIndex.Set((long)batchIndex);
-        node.Length.Set((long)length);
+        node.BatchIndex.Set(batchIndex);
+        node.Length.Set(length);
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
         return node.Id;
@@ -593,7 +593,7 @@ internal class StageRunner(
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode());
-        if (genInfo.Model?.Path is JArray modelPath && bridge.ResolveOrSynthesizePath(modelPath) is INodeOutput modelOutput)
+        if (genInfo.Model?.Path is JArray modelPath && bridge.ResolvePath(modelPath) is INodeOutput modelOutput)
         {
             loraLoader.ModelInput.ConnectToUntyped(modelOutput);
         }
@@ -703,12 +703,12 @@ internal class StageRunner(
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
-        if (sourcePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(sourcePath) is INodeOutput src)
+        if (sourcePath is { Count: 2 } && bridge.ResolvePath(sourcePath) is INodeOutput src)
         {
             scale.Image.ConnectToUntyped(src);
         }
-        scale.Width.Set((long)width);
-        scale.Height.Set((long)height);
+        scale.Width.Set(width);
+        scale.Height.Set(height);
         scale.UpscaleMethod.Set(upscaleMethod);
         scale.Crop.Set("disabled");
         bridge.SyncNode(scale);
@@ -725,7 +725,7 @@ internal class StageRunner(
 
         ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode());
         upscale.UpscaleModel.ConnectTo(loader.UPSCALEMODEL);
-        if (sourcePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(sourcePath) is INodeOutput src)
+        if (sourcePath is { Count: 2 } && bridge.ResolvePath(sourcePath) is INodeOutput src)
         {
             upscale.Image.ConnectToUntyped(src);
         }
@@ -733,8 +733,8 @@ internal class StageRunner(
 
         ImageScaleNode fit = bridge.AddNode(new ImageScaleNode());
         fit.Image.ConnectTo(upscale.IMAGE);
-        fit.Width.Set((long)targetWidth);
-        fit.Height.Set((long)targetHeight);
+        fit.Width.Set(targetWidth);
+        fit.Height.Set(targetHeight);
         fit.UpscaleMethod.Set("lanczos");
         fit.Crop.Set("disabled");
         bridge.SyncNode(fit);

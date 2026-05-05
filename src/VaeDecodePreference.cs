@@ -1,3 +1,6 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -47,12 +50,16 @@ internal static class VaeDecodePreference
         }
         else
         {
-            string separated = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
+            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            LTXVSeparateAVLatentNode separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
+            if (media.Path is JArray mediaPath && bridge.ResolvePath(mediaPath) is INodeOutput avLatent)
             {
-                ["av_latent"] = media.Path
-            });
-            videoRoute = new JArray(separated, 0);
-            audioRoute = new JArray(separated, 1);
+                separate.AvLatent.ConnectToUntyped(avLatent);
+            }
+            bridge.SyncNode(separate);
+            BridgeSync.SyncLastId(g);
+            videoRoute = new JArray(separate.Id, 0);
+            audioRoute = new JArray(separate.Id, 1);
         }
 
         WGNodeData latentVideo = media.WithPath(videoRoute, WGNodeData.DT_LATENT_VIDEO);
@@ -77,15 +84,13 @@ internal static class VaeDecodePreference
             return media.WithPath(pixelsPath, rawDataType);
         }
 
-        bool useTiled = ShouldUseTiledVaeDecode(g);
-        string decodeType = useTiled ? NodeTypes.VAEDecodeTiled : NodeTypes.VAEDecode;
-        string decoded = g.CreateNode(
-            decodeType,
-            CreateVideoDecodeInputs(g, vae.Path, media.Path, useTiled));
+        string decodedId = ShouldUseTiledVaeDecode(g)
+            ? AddTiledVaeDecode(g, vae.Path as JArray, media.Path as JArray)
+            : AddPlainVaeDecode(g, vae.Path as JArray, media.Path as JArray);
         string decodedDataType = media.DataType == WGNodeData.DT_LATENT_VIDEO
             ? WGNodeData.DT_VIDEO
             : WGNodeData.DT_IMAGE;
-        return media.WithPath(new JArray(decoded, 0), decodedDataType, vae.Compat);
+        return media.WithPath(new JArray(decodedId, 0), decodedDataType, vae.Compat);
     }
 
     private static bool ShouldUseTiledVaeDecode(WorkflowGenerator g)
@@ -93,29 +98,29 @@ internal static class VaeDecodePreference
         return g.UserInput.TryGet(T2IParamTypes.VAETileSize, out _) == true;
     }
 
-    private static JObject CreateVideoDecodeInputs(
-        WorkflowGenerator g,
-        JArray vaeRef,
-        JArray latentRef,
-        bool useTiled)
+    private static string AddPlainVaeDecode(WorkflowGenerator g, JArray vaePath, JArray latentPath)
     {
-        if (useTiled)
-        {
-            return new JObject()
-            {
-                ["vae"] = new JArray(vaeRef[0], vaeRef[1]),
-                ["samples"] = new JArray(latentRef[0], latentRef[1]),
-                ["tile_size"] = g.UserInput.Get(T2IParamTypes.VAETileSize, 256),
-                ["overlap"] = g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
-                ["temporal_size"] = g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 32),
-                ["temporal_overlap"] = g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)
-            };
-        }
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        VAEDecodeNode decode = bridge.AddNode(new VAEDecodeNode());
+        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae) { decode.Vae.ConnectToUntyped(vae); }
+        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples) { decode.Samples.ConnectToUntyped(samples); }
+        bridge.SyncNode(decode);
+        BridgeSync.SyncLastId(g);
+        return decode.Id;
+    }
 
-        return new JObject()
-        {
-            ["vae"] = new JArray(vaeRef[0], vaeRef[1]),
-            ["samples"] = new JArray(latentRef[0], latentRef[1])
-        };
+    private static string AddTiledVaeDecode(WorkflowGenerator g, JArray vaePath, JArray latentPath)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode());
+        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae) { decode.Vae.ConnectToUntyped(vae); }
+        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples) { decode.Samples.ConnectToUntyped(samples); }
+        decode.TileSize.Set(g.UserInput.Get(T2IParamTypes.VAETileSize, 256));
+        decode.Overlap.Set(g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64));
+        decode.TemporalSize.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 32));
+        decode.TemporalOverlap.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
+        bridge.SyncNode(decode);
+        BridgeSync.SyncLastId(g);
+        return decode.Id;
     }
 }

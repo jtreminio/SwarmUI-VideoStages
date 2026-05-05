@@ -1,94 +1,92 @@
-# ComfyTyped upstream migration TODOs
+# ComfyTyped upstream migration — status
 
-Things this extension worked around locally that should ideally be solved in
-the `ComfyTyped` library itself (`src/Extensions/ComfyTyped/`). Move them
-upstream and delete the local workarounds when they're addressed.
-
----
-
-## 1. Literal-value type coercion on `INodeInput`
-
-**Where the workaround lives:** `src/Typed/NodeSlotExtensions.cs`
-(`LiteralAsInt`, `LiteralAsLong`, `LiteralAsString`, `LiteralAsDouble`,
-`LiteralAsBool`).
-
-**The problem:** `INodeInput.LiteralValue` returns `object?`, and the boxed
-type depends on how the input was set:
-
-- `input.Set(42)` in C# → boxed `int`.
-- `input.Set(42L)` in C# → boxed `long`.
-- Loaded from a `JObject` via `ComfyGraph.FromWorkflow` → boxed `long`
-  (Newtonsoft normalizes integer JSON to `long`).
-
-A naive `(long?)input.LiteralValue` cast throws `InvalidCastException` when
-the underlying type is a boxed `int`, even though the conversion would be
-lossless. Consumers that mix `Set(int)` with bridge round-trips will hit
-this.
-
-**Suggested upstream fix:** add extension methods on `INodeInput` (probably in
-`ComfyTyped.Core`) that read literal values with cross-numeric-type tolerance.
-The five methods in `NodeSlotExtensions.cs` are a starting point; they are
-self-contained and can be lifted as-is.
+A record of footguns and ergonomics gaps that were fixed upstream in
+`ComfyTyped` (`src/Extensions/ComfyTyped/`) and how this extension was
+migrated off the local workarounds.
 
 ---
 
-## 2. Dynamic list-style ComfyUI inputs
+## 1. Literal-value type coercion on `INodeInput` — DONE
 
-**Where the workaround lives:**
-- `src/MultiClipParallelMerger.MergeClipVideosWithBatchImagesNode` — falls back
-  to `g.CreateNode("BatchImagesNode", jObject)` with hand-built
-  `images.image0`, `images.image1`, … keys.
-- `src/ControlNetApplicator.ControlImageForLtxIcloraGuide` and
-  `ControlNetApplicator.ReplaceVideoControlNetUpscale` — keep
-  `ResizeImageMaskNode` as JObject because the node has variant inputs like
-  `resize_type.multiple` and `resize_type.shorter_size` that depend on the
-  selected `resize_type`. The codegen exposes `ResizeType` and `ScaleMethod`
-  as typed inputs but not the dotted-key variants.
+**Upstream:** `ComfyTyped.Core.NodeInputExtensions` exposes `LiteralAsInt`,
+`LiteralAsLong`, `LiteralAsString`, `LiteralAsDouble`, `LiteralAsBool` as
+public extension methods on `INodeInput`. They tolerate boxed-int vs boxed-long
+mismatches and Newtonsoft's integer-to-`long` normalization.
 
-**The problem:** Some ComfyUI nodes declare list-typed or variant-shaped
-inputs that are wired in the workflow JSON as multiple sibling keys. Examples:
-
-- `BatchImagesNode`: `images.image0`, `images.image1`, …, `images.imageN`.
-- `ResizeImageMaskNode`: `resize_type.multiple`, `resize_type.shorter_size`,
-  etc., depending on which `resize_type` mode is active.
-
-The ComfyTyped codegen currently flattens these to a single typed input,
-and `node.ToWorkflowNode()` only serializes the named typed inputs — losing
-every dynamic/dotted key. Round-tripping such a node through the bridge
-would silently drop those inputs.
-
-**Suggested upstream fix:** Either
-
-- Detect list-typed inputs in `object_info.json` and emit a typed
-  collection input on the generated node (e.g.
-  `IList<NodeInput<ImageType>> Images { get; }` with serialization that
-  writes the `images.imageN` keys), **or**
-- At minimum, add a documented escape hatch on `ComfyNode` for
-  preserving/round-tripping unknown extra input keys, similar to how
-  `UnknownNode.RawInputs` works for unknown node classes.
-
-Until then, consumers must build these nodes via untyped `g.CreateNode`
-and skip the bridge for those specific class types.
+**VideoStages migration — DONE.**
+`src/Typed/NodeSlotExtensions.cs` deleted. All call sites already wrote
+`input.LiteralAsInt()` / etc., so dropping the local helpers and letting
+`ComfyTyped.Core` win was a no-op rebuild.
 
 ---
 
-## 3. `WorkflowBridge.ResolvePath` doesn't synthesize `UnknownNode` outputs
+## 2. Dynamic list-style ComfyUI inputs — DONE (escape hatch)
 
-**Where the workaround lives:** `src/Typed/NodeSlotExtensions.ResolveOrSynthesizePath`,
-plus a hand-rolled equivalent already in `RootVideoStageResizer.TryResolveOrSynthesizeOutput`.
+**Upstream:** `ComfyNode.ExtraInputs` (`JObject?`) is a public, settable
+property on every node. `ComfyGraph.FromWorkflow` automatically captures any
+input key on a typed node that doesn't match a declared `NodeInput<T>` into
+`ExtraInputs`. `ComfyNode.ToWorkflowNode()` re-emits typed inputs first, then
+merges in `ExtraInputs` keys not already present (typed inputs win on
+collision). Round-trip is now lossless for nodes like `BatchImagesNode` and
+`ResizeImageMaskNode` even when the codegen does not model their dynamic keys.
 
-**The problem:** `ComfyGraph.FromWorkflow` populates an `UnknownNode`'s outputs only
-for slots that *appear* somewhere as another node's input source. A node that nobody
-references yet — common for freshly seeded test stubs and for any new untyped node
-that's about to get its first consumer — has zero outputs registered. As a result,
-`bridge.ResolvePath([unknownNodeId, 0])` returns `null` even though the slot logically
-exists, and any `ConnectToUntyped(...)` consuming that path silently no-ops (the
-input becomes a literal-less, connection-less hole, which round-trips as a missing
-key in the JObject).
+**Caveat:** connection refs (`[nodeId, slotIndex]`) stored under `ExtraInputs`
+are passed through verbatim — they are NOT graph-aware, so
+`RetargetConnections` and node removal do NOT update them. Acceptable for the
+two VideoStages call sites because both build terminal nodes that nothing
+later remaps.
 
-**Suggested upstream fix:** in `WorkflowBridge.ResolvePath`, when the looked-up node
-is an `UnknownNode` and `FindOutput(slotIndex)` returns null, call
-`UnknownNode.GetOutput(slotIndex)` to materialize the slot on demand and return that.
-The slot is typed as `AnyType` and connects to anything, so this is a strict
-improvement over returning null. The existing `TryResolveOrSynthesizeOutput` /
-`ResolveOrSynthesizePath` helpers can be deleted in consumers once this lands.
+**VideoStages migration — DONE.**
+- `MultiClipParallelMerger.MergeClipVideosWithBatchImagesNode` uses typed
+  `BatchImagesNodeNode` with `ExtraInputs` for the dynamic `images.imageN`
+  keys.
+- `ControlNetApplicator.ControlImageForLtxIcloraGuide` uses typed
+  `ResizeImageMaskNodeNode` with `ExtraInputs` for the variant
+  `resize_type.multiple` key. The `Input` connection (typed as
+  `ComfyMatchTypeV3`) is wired via `ConnectToUntyped` from any source —
+  enabled by the wildcard fix in the same upstream pass.
+
+**Still open (typed list-collection codegen):** the codegen could detect
+list-typed inputs in `object_info.json` and emit a real
+`IList<NodeInput<ImageType>> Images { get; }` collection on
+`BatchImagesNodeNode`, with serialization that writes the `images.imageN`
+keys and full graph-awareness. Defer until there's a second consumer that
+needs graph-aware list inputs — the escape hatch is sufficient for everything
+VideoStages does today.
+
+---
+
+## 3. `WorkflowBridge.ResolvePath` synthesizes `UnknownNode` outputs — DONE
+
+**Upstream:** `WorkflowBridge.ResolvePath` calls `UnknownNode.GetOutput(slotIndex)`
+when the path resolves to an `UnknownNode` and the requested slot is not yet
+registered. Synthesized slots are typed `AnyType` and connect to anything via
+`ConnectToUntyped`.
+
+**VideoStages migration — DONE.**
+- Local `ResolveOrSynthesizePath` extension deleted (along with the rest of
+  `src/Typed/NodeSlotExtensions.cs`).
+- `RootVideoStageResizer.TryResolveOrSynthesizeOutput` deleted; its single
+  caller now uses `bridge.ResolvePath(...)` directly.
+- All `bridge.ResolveOrSynthesizePath(path)` call sites swept to
+  `bridge.ResolvePath(path)` (same signature, same return type, same null
+  semantics — synthesis happens transparently).
+
+---
+
+## Bonus — `WorkflowBridge.RemoveAllNodes` available upstream
+
+`WorkflowBridge.RemoveAllNodes()` wipes every node from both the typed graph
+and the JObject workflow while preserving non-node properties like `_meta`.
+Returns the removed count. No current VideoStages call site needs it.
+
+---
+
+## Remaining VideoStages-side oddities (not upstream concerns)
+
+- **`ControlNetApplicator.ReplaceVideoControlNetUpscale`** still mutates a
+  node's `class_type` in place (`ImageScale` → `ResizeImageMaskNode`,
+  preserving the same node id). The wildcard fix would make a typed
+  remove-and-re-add approach feasible, but the in-place class swap is
+  semantically clearer for the use case (replace one preprocessor with
+  another at the same slot, no consumer retargeting needed). Keep as-is.

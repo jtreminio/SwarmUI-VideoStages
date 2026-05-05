@@ -17,7 +17,8 @@ internal static class WorkflowAssertions
         List<WorkflowNode> nodes = [];
         foreach (JProperty property in workflow.Properties())
         {
-            if (property.Value is JObject node && StringUtils.NodeTypeMatches(node, classType))
+            if (property.Value is JObject node
+                && string.Equals($"{node["class_type"]}", classType, StringComparison.OrdinalIgnoreCase))
             {
                 nodes.Add(new WorkflowNode(property.Name, node));
             }

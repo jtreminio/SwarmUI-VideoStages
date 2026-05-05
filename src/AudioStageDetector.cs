@@ -24,7 +24,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
     {
         return ScanWorkflow((nodeId, node) =>
         {
-            string classType = StringUtils.ClassTypeOf(node);
+            string classType = $"{node["class_type"]}";
             return classType switch
             {
                 NodeTypes.SwarmSaveAudioWS => BuildSaveCandidate(nodeId, classType, node, PrioritySwarmSaveWsOrAceStepFunSave),
@@ -45,7 +45,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         }
         return ScanWorkflow((nodeId, node) =>
         {
-            string classType = StringUtils.ClassTypeOf(node);
+            string classType = $"{node["class_type"]}";
             return classType switch
             {
                 AceStepFunSaveNodeType when IsAceStepFunSaveNodeForTrack(node, trackIndex) =>

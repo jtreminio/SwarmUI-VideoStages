@@ -97,7 +97,7 @@ internal sealed class LtxAudioInjector(
     private SwarmAudioLengthToFramesNode CreateLengthToFramesNode(WorkflowBridge bridge, JToken audioPath, int fps)
     {
         SwarmAudioLengthToFramesNode node = new();
-        node.FrameRate.Set((long)fps);
+        node.FrameRate.Set(fps);
         if (audioPath is JArray pathArray && bridge.ResolvePath(pathArray) is INodeOutput typedAudio)
         {
             node.AudioInput.ConnectToUntyped(typedAudio);
