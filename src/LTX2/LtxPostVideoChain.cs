@@ -1,6 +1,10 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Typed;
 
 namespace VideoStages.LTX2;
 
@@ -70,65 +74,47 @@ internal sealed class LtxPostVideoChain
             return null;
         }
 
-        if (!WorkflowUtils.TryResolveNearestUpstreamDecode(generator.Workflow, mediaPath, out WorkflowNode decode))
+        WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        MediaRef currentMedia = MediaRef.FromWGNodeData(generator.CurrentMedia, bridge);
+        MediaRef currentAudioVae = MediaRef.FromWGNodeData(generator.CurrentAudioVae, bridge);
+        LtxChainCapture capture = LtxChainOps.TryCapture(bridge, currentMedia, currentAudioVae, useReusedAudio);
+        if (capture is null)
         {
             return null;
         }
 
-        if (!StringUtils.NodeTypeMatches(decode.Node, NodeTypes.VAEDecode)
-            && !StringUtils.NodeTypeMatches(decode.Node, NodeTypes.VAEDecodeTiled))
-        {
-            return null;
-        }
-
-        JObject decodeInputs = decode.Node["inputs"] as JObject;
-        JArray samplesRef = LtxVaeDecodeInputs.TryGetDecodeSamplesRef(decodeInputs);
-        if (samplesRef is null || samplesRef.Count != 2)
-        {
-            return null;
-        }
-
-        JArray videoVaeRef = decode.Node["inputs"]?["vae"] as JArray;
-        if (videoVaeRef is null || videoVaeRef.Count != 2)
-        {
-            return null;
-        }
-
-        string separateId = $"{samplesRef[0]}";
-        if (!generator.Workflow.TryGetValue(separateId, out JToken separateToken)
-            || separateToken is not JObject separateNode
-            || !StringUtils.NodeTypeMatches(separateNode, LtxNodeTypes.LTXVSeparateAVLatent))
-        {
-            return null;
-        }
-
-        if (separateNode["inputs"]?["av_latent"] is not JArray avLatentRef || avLatentRef.Count != 2)
-        {
-            return null;
-        }
-
-        if (!TryFindAudioDecode(generator.Workflow, separateId, out string audioDecodeId, out JArray audioVaeRef)
-            && !TryResolveCurrentAudioVae(generator, out audioVaeRef))
+        LTXVSeparateAVLatentNode separate = bridge.Graph.GetNode<LTXVSeparateAVLatentNode>(capture.SeparateId);
+        ComfyNode decode = bridge.Graph.GetNode(capture.DecodeId);
+        JArray avLatentPath = separate?.AvLatent.Connection is not null
+            ? WorkflowBridge.ToPath(separate.AvLatent.Connection)
+            : null;
+        JArray videoVaePath = decode?.FindInput("vae")?.Connection is INodeOutput vaeOutput
+            ? WorkflowBridge.ToPath(vaeOutput)
+            : null;
+        JArray audioVaePath = capture.AudioVaeSource is not null
+            ? WorkflowBridge.ToPath(capture.AudioVaeSource)
+            : null;
+        if (avLatentPath is null || videoVaePath is null || audioVaePath is null)
         {
             return null;
         }
 
         if (mutateReuseAudioState && captureReusableAudio)
         {
-            LtxAudioReuseState.Remember(generator, new JArray(separateId, 1));
+            LtxAudioReuseState.Remember(generator, new JArray(capture.SeparateId, 1));
         }
 
         return new LtxPostVideoChain(
             generator,
             CloneMedia(generator, generator.CurrentMedia),
-            new JArray(avLatentRef[0], avLatentRef[1]),
-            new JArray(separateId, 1),
-            new JArray(videoVaeRef[0], videoVaeRef[1]),
-            new JArray(audioVaeRef[0], audioVaeRef[1]),
-            decode.Id,
-            audioDecodeId,
-            new JArray(decode.Id, 0),
-            !JToken.DeepEquals(mediaPath, new JArray(decode.Id, 0)),
+            avLatentPath,
+            new JArray(capture.SeparateId, 1),
+            videoVaePath,
+            audioVaePath,
+            capture.DecodeId,
+            capture.AudioDecodeId,
+            new JArray(capture.DecodeId, 0),
+            capture.HasPostDecodeWrappers,
             useReusedAudio);
     }
 
@@ -166,15 +152,26 @@ internal sealed class LtxPostVideoChain
             return detachedCurrent;
         }
 
-        string detachedSeparate = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput avLatentSource = bridge.ResolvePath(AvLatentPath);
+        INodeOutput vaeSource = bridge.ResolvePath(vaePath);
+        if (avLatentSource is null || vaeSource is null)
         {
-            ["av_latent"] = new JArray(AvLatentPath[0], AvLatentPath[1])
-        });
-        string detachedDecode = g.CreateNode(FinalVideoDecodeNodeType(), (_, n) =>
-        {
-            n["inputs"] = CreateFinalDecodeInputs(vaePath, new JArray(detachedSeparate, 0));
-        });
-        WGNodeData detachedGuide = new(new JArray(detachedDecode, 0), g, WGNodeData.DT_VIDEO, vae.Compat)
+            WGNodeData detachedCurrent = CloneMedia(g, CurrentOutputMedia);
+            AttachSourceAudio(detachedCurrent);
+            return detachedCurrent;
+        }
+
+        LTXVSeparateAVLatentNode detachedSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
+        detachedSeparate.AvLatent.ConnectToUntyped(avLatentSource);
+        bridge.SyncNode(detachedSeparate);
+
+        string decodeNodeId = ShouldUseTiledVaeDecode()
+            ? AddTiledVideoDecode(bridge, vaeSource, detachedSeparate.VideoLatent)
+            : AddPlainVideoDecode(bridge, vaeSource, detachedSeparate.VideoLatent);
+        BridgeSync.SyncLastId(g);
+
+        WGNodeData detachedGuide = new(new JArray(decodeNodeId, 0), g, WGNodeData.DT_VIDEO, vae.Compat)
         {
             Width = CurrentOutputMedia.Width,
             Height = CurrentOutputMedia.Height,
@@ -183,6 +180,28 @@ internal sealed class LtxPostVideoChain
         };
         AttachSourceAudio(detachedGuide);
         return detachedGuide;
+    }
+
+    private string AddPlainVideoDecode(WorkflowBridge bridge, INodeOutput vaeSource, INodeOutput samplesSource)
+    {
+        VAEDecodeNode decode = bridge.AddNode(new VAEDecodeNode());
+        decode.Vae.ConnectToUntyped(vaeSource);
+        decode.Samples.ConnectToUntyped(samplesSource);
+        bridge.SyncNode(decode);
+        return decode.Id;
+    }
+
+    private string AddTiledVideoDecode(WorkflowBridge bridge, INodeOutput vaeSource, INodeOutput samplesSource)
+    {
+        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode());
+        decode.Vae.ConnectToUntyped(vaeSource);
+        decode.Samples.ConnectToUntyped(samplesSource);
+        decode.TileSize.Set((long)g.UserInput.Get(T2IParamTypes.VAETileSize, 768));
+        decode.Overlap.Set((long)g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64));
+        decode.TemporalSize.Set((long)g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096));
+        decode.TemporalOverlap.Set((long)g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
+        bridge.SyncNode(decode);
+        return decode.Id;
     }
 
     public void AttachSourceAudio(WGNodeData media)
@@ -221,22 +240,20 @@ internal sealed class LtxPostVideoChain
             return;
         }
 
-        string newSeparate = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
-        {
-            ["av_latent"] = stageOutputPath
-        });
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        LtxChainCapture capture = BuildCapture(bridge);
+        MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
+        MediaRef vaeRef = MediaRef.FromWGNodeData(vae, bridge)
+                       ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
+        LtxChainOps.DecodeConfig decodeConfig = BuildDecodeConfig();
 
-        RetargetVideoDecode(VideoDecodeNodeId, vae?.Path ?? g.CurrentVae?.Path, new JArray(newSeparate, 0));
-        int retargetedAudioDecodes = WorkflowUtils.RetargetInputConnections(
-            g.Workflow,
-            new JArray($"{AudioLatentPath[0]}", AudioLatentPath[1]),
-            new JArray(newSeparate, 1),
-            connection => connection.NodeId == AudioDecodeNodeId && connection.InputName == "samples");
-        if (retargetedAudioDecodes == 0)
+        MediaRef result = LtxChainOps.SpliceCurrentOutput(bridge, capture, stageOutput, vaeRef, decodeConfig);
+        BridgeSync.SyncLastId(g);
+
+        if (result is not null)
         {
-            RetargetCapturedAudioDecode(new JArray(newSeparate, 1));
+            g.CurrentMedia = result.ToWGNodeData(g);
         }
-        g.CurrentMedia = CloneMedia(g, CurrentOutputMedia);
         AttachSourceAudio(g.CurrentMedia);
     }
 
@@ -252,45 +269,22 @@ internal sealed class LtxPostVideoChain
             return;
         }
 
-        string newSeparate = g.CreateNode(LtxNodeTypes.LTXVSeparateAVLatent, new JObject()
-        {
-            ["av_latent"] = stageOutputPath
-        });
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        LtxChainCapture capture = BuildCapture(bridge);
+        MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
+        MediaRef vaeRef = MediaRef.FromWGNodeData(vae, bridge)
+                       ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
+        LtxChainOps.DecodeConfig decodeConfig = BuildDecodeConfig();
 
-        JArray vaeRef = vae?.Path ?? g.CurrentVae?.Path;
-        if (vaeRef is null || vaeRef.Count != 2)
+        MediaRef result = LtxChainOps.SpliceCurrentOutputToDedicatedBranch(
+            bridge, capture, stageOutput, vaeRef, decodeConfig,
+            outputWidth, outputHeight, outputFrames, outputFps);
+        BridgeSync.SyncLastId(g);
+
+        if (result is not null)
         {
-            return;
+            g.CurrentMedia = result.ToWGNodeData(g);
         }
-
-        string dedicatedVideoDecode = g.CreateNode(FinalVideoDecodeNodeType(), (_, n) =>
-        {
-            n["inputs"] = CreateFinalDecodeInputs(vaeRef, new JArray(newSeparate, 0));
-        });
-        string dedicatedAudioDecode = g.CreateNode(LtxNodeTypes.LTXVAudioVAEDecode, new JObject()
-        {
-            ["audio_vae"] = new JArray(AudioVaePath[0], AudioVaePath[1]),
-            ["samples"] = new JArray(newSeparate, 1)
-        });
-
-        WGNodeData decodedVideo = new(
-            new JArray(dedicatedVideoDecode, 0),
-            g,
-            WGNodeData.DT_VIDEO,
-            ResolveVideoCompat())
-        {
-            Width = outputWidth,
-            Height = outputHeight,
-            Frames = outputFrames ?? CurrentOutputMedia.Frames,
-            FPS = outputFps ?? CurrentOutputMedia.FPS
-        };
-        WGNodeData decodedAudio = new(
-            new JArray(dedicatedAudioDecode, 0),
-            g,
-            WGNodeData.DT_AUDIO,
-            ResolveAudioCompat());
-        decodedVideo.AttachedAudio = decodedAudio;
-        g.CurrentMedia = decodedVideo;
     }
 
     public void RetargetAnimationSaves(JArray newImagePath)
@@ -300,92 +294,16 @@ internal sealed class LtxPostVideoChain
             return;
         }
 
-        _ = WorkflowUtils.RetargetInputConnections(
-            g.Workflow,
-            CurrentOutputMedia.Path,
-            newImagePath,
-            connection =>
-            {
-                if (!StringUtils.Equals(connection.InputName, "images"))
-                {
-                    return false;
-                }
-                if (g.Workflow[connection.NodeId] is not JObject node)
-                {
-                    return false;
-                }
-                return StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveAnimationWS);
-            });
-    }
-
-    private void RetargetCapturedAudioDecode(JArray newSamplesPath)
-    {
-        if (string.IsNullOrWhiteSpace(AudioDecodeNodeId)
-            || newSamplesPath is null
-            || newSamplesPath.Count != 2
-            || g.Workflow[AudioDecodeNodeId] is not JObject audioDecode
-            || !StringUtils.NodeTypeMatches(audioDecode, LtxNodeTypes.LTXVAudioVAEDecode))
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput oldOutput = bridge.ResolvePath(CurrentOutputMedia.Path);
+        INodeOutput newOutput = bridge.ResolvePath(newImagePath);
+        if (oldOutput is null || newOutput is null)
         {
             return;
         }
 
-        JObject inputs = audioDecode["inputs"] as JObject;
-        if (inputs is null)
-        {
-            inputs = [];
-            audioDecode["inputs"] = inputs;
-        }
-        inputs["samples"] = new JArray(newSamplesPath[0], newSamplesPath[1]);
-    }
-
-    internal static bool TryFindAudioDecode(
-        JObject workflow,
-        string separateId,
-        out string audioDecodeId,
-        out JArray audioVaeRef)
-    {
-        audioDecodeId = null;
-        audioVaeRef = null;
-        foreach (KeyValuePair<string, JToken> entry in workflow)
-        {
-            if (entry.Value is not JObject node)
-            {
-                continue;
-            }
-            if (!StringUtils.NodeTypeMatches(node, LtxNodeTypes.LTXVAudioVAEDecode))
-            {
-                continue;
-            }
-            if (node["inputs"]?["samples"] is not JArray samplesRef || samplesRef.Count != 2)
-            {
-                continue;
-            }
-            if ($"{samplesRef[0]}" == separateId && $"{samplesRef[1]}" == "1")
-            {
-                if (node["inputs"]?["audio_vae"] is not JArray foundAudioVaeRef || foundAudioVaeRef.Count != 2)
-                {
-                    continue;
-                }
-
-                audioDecodeId = entry.Key;
-                audioVaeRef = new JArray(foundAudioVaeRef[0], foundAudioVaeRef[1]);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool TryResolveCurrentAudioVae(WorkflowGenerator generator, out JArray audioVaeRef)
-    {
-        audioVaeRef = null;
-        if (generator?.CurrentAudioVae?.Path is not JArray currentAudioVaePath || currentAudioVaePath.Count != 2)
-        {
-            return false;
-        }
-
-        audioVaeRef = new JArray(currentAudioVaePath[0], currentAudioVaePath[1]);
-        return true;
+        LtxChainOps.RetargetAnimationSaves(bridge, oldOutput, newOutput);
+        BridgeSync.SyncLastId(g);
     }
 
     private static WGNodeData CloneMedia(WorkflowGenerator generator, WGNodeData media)
@@ -462,10 +380,14 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
-        return WalkUpstreamFromAudioOutputRef(
-            audioLatentPath,
-            tryMatchNodeId: id => StringUtils.Equals(id, uploadNodeId),
-            tryMatchNode: null);
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput latentOutput = bridge.ResolvePath(audioLatentPath);
+        if (latentOutput?.Node is not ComfyNode latentNode)
+        {
+            return false;
+        }
+
+        return bridge.Graph.IsReachableUpstream(latentNode, uploadNodeId);
     }
 
     private WGNodeData CloneAudioReference(WGNodeData audio)
@@ -492,134 +414,51 @@ internal sealed class LtxPostVideoChain
             return false;
         }
 
-        return AudioPathTracesToNodeType(audioPath, NodeTypes.SwarmLoadAudioB64);
-    }
-
-    private bool AudioPathTracesToNodeType(JArray audioPath, string classType)
-    {
-        if (audioPath is null
-            || audioPath.Count != 2
-            || string.IsNullOrWhiteSpace(classType))
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput audioOutput = bridge.ResolvePath(audioPath);
+        if (audioOutput?.Node is not ComfyNode audioNode)
         {
             return false;
         }
 
-        return WalkUpstreamFromAudioOutputRef(
-            audioPath,
-            tryMatchNodeId: null,
-            tryMatchNode: node => StringUtils.NodeTypeMatches(node, classType));
+        return audioNode is SwarmLoadAudioB64Node
+            || bridge.Graph.FindNearestUpstream<SwarmLoadAudioB64Node>(audioNode) is not null;
     }
 
-    private bool WalkUpstreamFromAudioOutputRef(
-        JArray audioPath,
-        Func<string, bool> tryMatchNodeId,
-        Func<JObject, bool> tryMatchNode)
+    private LtxChainCapture BuildCapture(WorkflowBridge bridge)
     {
-        if (audioPath is null || audioPath.Count != 2)
-        {
-            return false;
-        }
+        INodeOutput audioVaeSource = AudioVaePath is JArray avp && avp.Count == 2
+            ? bridge.ResolvePath(avp)
+            : null;
 
-        Queue<string> pending = new();
-        HashSet<string> visited = [];
-        pending.Enqueue($"{audioPath[0]}");
-        while (pending.Count > 0)
-        {
-            string nodeId = pending.Dequeue();
-            if (!visited.Add(nodeId))
-            {
-                continue;
-            }
-
-            if (tryMatchNodeId is not null && tryMatchNodeId(nodeId))
-            {
-                return true;
-            }
-
-            if (!g.Workflow.TryGetValue(nodeId, out JToken token)
-                || token is not JObject node)
-            {
-                continue;
-            }
-
-            if (tryMatchNode is not null && tryMatchNode(node))
-            {
-                return true;
-            }
-
-            if (node["inputs"] is not JObject inputs)
-            {
-                continue;
-            }
-
-            foreach (JProperty input in inputs.Properties())
-            {
-                if (input.Value is not JArray inputPath || inputPath.Count != 2)
-                {
-                    continue;
-                }
-
-                string upstreamId = $"{inputPath[0]}";
-                if (!string.IsNullOrWhiteSpace(upstreamId))
-                {
-                    pending.Enqueue(upstreamId);
-                }
-            }
-        }
-
-        return false;
+        return new LtxChainCapture(
+            DecodeId: VideoDecodeNodeId,
+            SeparateId: $"{AudioLatentPath[0]}",
+            AudioDecodeId: AudioDecodeNodeId,
+            AudioVaeSource: audioVaeSource,
+            CurrentOutputMedia: MediaRef.FromWGNodeData(CurrentOutputMedia, bridge),
+            HasPostDecodeWrappers: HasPostDecodeWrappers,
+            UseReusedAudio: useReusedAudioLatent);
     }
 
-    private void RetargetVideoDecode(string videoDecodeNodeId, JArray vaeRef, JArray latentRef)
+    private LtxChainOps.DecodeConfig BuildDecodeConfig()
     {
-        if (string.IsNullOrWhiteSpace(videoDecodeNodeId)
-            || vaeRef is null
-            || latentRef is null
-            || !g.Workflow.TryGetValue(videoDecodeNodeId, out JToken decodeToken)
-            || decodeToken is not JObject decodeNode)
+        if (!ShouldUseTiledVaeDecode())
         {
-            return;
+            return new LtxChainOps.DecodeConfig(false);
         }
 
-        decodeNode["class_type"] = FinalVideoDecodeNodeType();
-        decodeNode["inputs"] = CreateFinalDecodeInputs(vaeRef, latentRef);
-    }
-
-    private string FinalVideoDecodeNodeType()
-    {
-        return ShouldUseTiledVaeDecode() ? NodeTypes.VAEDecodeTiled : NodeTypes.VAEDecode;
+        return new LtxChainOps.DecodeConfig(
+            UseTiledDecode: true,
+            TileSize: g.UserInput.Get(T2IParamTypes.VAETileSize, 768),
+            Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
+            TemporalSize: g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
+            TemporalOverlap: g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
     }
 
     private bool ShouldUseTiledVaeDecode()
     {
         return g.UserInput.TryGet(T2IParamTypes.VAETileSize, out _);
-    }
-
-    private JObject CreateFinalDecodeInputs(JArray vaeRef, JArray latentRef)
-    {
-        if (ShouldUseTiledVaeDecode())
-        {
-            return CreateFinalTiledDecodeInputs(vaeRef, latentRef);
-        }
-
-        return new JObject()
-        {
-            ["vae"] = new JArray(vaeRef[0], vaeRef[1]),
-            ["samples"] = new JArray(latentRef[0], latentRef[1])
-        };
-    }
-
-    private JObject CreateFinalTiledDecodeInputs(JArray vaeRef, JArray latentRef)
-    {
-        return new JObject()
-        {
-            ["vae"] = new JArray(vaeRef[0], vaeRef[1]),
-            ["samples"] = new JArray(latentRef[0], latentRef[1]),
-            ["tile_size"] = g.UserInput.Get(T2IParamTypes.VAETileSize, 768),
-            ["overlap"] = g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
-            ["temporal_size"] = g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
-            ["temporal_overlap"] = g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)
-        };
     }
 
     private T2IModelCompatClass ResolveVideoCompat()
