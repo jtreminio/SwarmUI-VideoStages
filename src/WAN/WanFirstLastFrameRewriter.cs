@@ -53,11 +53,27 @@ internal static class WanFirstLastFrameRewriter
         flf.Height.Set(height);
         flf.Length.Set(length);
         flf.BatchSize.Set(batchSize);
-        if (wan.PositiveInput.Connection is INodeOutput pos) { flf.PositiveInput.ConnectToUntyped(pos); }
-        if (wan.NegativeInput.Connection is INodeOutput neg) { flf.NegativeInput.ConnectToUntyped(neg); }
-        if (wan.Vae.Connection is INodeOutput vae) { flf.Vae.ConnectToUntyped(vae); }
-        if (wan.StartImage.Connection is INodeOutput startImg) { flf.StartImage.ConnectToUntyped(startImg); }
-        if (scaledEndOutput is not null) { flf.EndImage.ConnectToUntyped(scaledEndOutput); }
+
+        if (wan.PositiveInput.Connection is INodeOutput pos)
+        {
+            flf.PositiveInput.ConnectToUntyped(pos);
+        }
+        if (wan.NegativeInput.Connection is INodeOutput neg)
+        {
+            flf.NegativeInput.ConnectToUntyped(neg);
+        }
+        if (wan.Vae.Connection is INodeOutput vae)
+        {
+            flf.Vae.ConnectToUntyped(vae);
+        }
+        if (wan.StartImage.Connection is INodeOutput startImg)
+        {
+            flf.StartImage.ConnectToUntyped(startImg);
+        }
+        if (scaledEndOutput is not null)
+        {
+            flf.EndImage.ConnectToUntyped(scaledEndOutput);
+        }
 
         if (wan.ClipVisionOutput.Connection is INodeOutput clipVisionStart)
         {
@@ -103,13 +119,16 @@ internal static class WanFirstLastFrameRewriter
         int width,
         int height)
     {
-        INodeOutput endRawOutput = endImageRawPath is { Count: 2 } ? bridge.ResolvePath(endImageRawPath) : null;
+        INodeOutput endRawOutput = endImageRawPath is { Count: 2 }
+            ? bridge.ResolvePath(endImageRawPath)
+            : null;
         if (endRawOutput is null)
         {
             return null;
         }
 
-        if (startImageOutput is not null && CanReuseStartImageOutput(startImageOutput, endRawOutput, width, height))
+        if (startImageOutput is not null
+            && CanReuseStartImageOutput(startImageOutput, endRawOutput, width, height))
         {
             return startImageOutput;
         }

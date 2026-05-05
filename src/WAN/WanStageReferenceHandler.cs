@@ -78,9 +78,9 @@ internal static class WanStageReferenceHandler
         {
             if (!string.IsNullOrWhiteSpace(src))
             {
-                Logs.Warning($"VideoStages: Unsupported or unresolved WAN clip reference source '{spec.Source}'.");
+                Logs.Warning(
+                    $"VideoStages: Unsupported or unresolved WAN clip reference source '{spec.Source}'.");
             }
-
             return null;
         }
 
@@ -94,7 +94,6 @@ internal static class WanStageReferenceHandler
         {
             material = spec.UploadFileName?.Trim();
         }
-
         if (string.IsNullOrWhiteSpace(material))
         {
             Logs.Warning("VideoStages: Upload WAN clip reference is missing inline data and a file name.");
@@ -105,14 +104,6 @@ internal static class WanStageReferenceHandler
             || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
             || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
         {
-            if (g.UserInput?.SourceSession is null)
-            {
-                Logs.Warning(
-                    "VideoStages: WAN reference image uses a server-side path but no session is available; "
-                    + "cannot load the file.");
-                return null;
-            }
-
             try
             {
                 material = T2IParamTypes.FilePathToDataString(
@@ -123,7 +114,8 @@ internal static class WanStageReferenceHandler
             catch (SwarmReadableErrorException ex)
             {
                 Logs.Warning(
-                    $"VideoStages: Could not resolve uploaded WAN reference image path '{material}': {ex.Message}");
+                    $"VideoStages: Could not resolve uploaded WAN reference image path '{material}': "
+                    + ex.Message);
                 return null;
             }
         }
