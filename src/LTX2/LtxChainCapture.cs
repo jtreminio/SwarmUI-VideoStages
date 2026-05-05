@@ -1,7 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 
-namespace VideoStages.Typed;
+namespace VideoStages.LTX2;
 
 /// <summary>
 /// Typed capture of the LTX post-video decode chain.

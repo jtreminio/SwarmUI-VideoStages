@@ -5,7 +5,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.Typed;
+using VideoStages.LTX2;
 using Xunit;
 
 namespace VideoStages.Tests;

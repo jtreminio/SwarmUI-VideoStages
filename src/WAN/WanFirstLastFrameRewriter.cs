@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Typed;
 
 namespace VideoStages.WAN;
 

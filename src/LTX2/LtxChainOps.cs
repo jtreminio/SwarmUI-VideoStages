@@ -4,7 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
-namespace VideoStages.Typed;
+namespace VideoStages.LTX2;
 
 /// <summary>
 /// Typed implementations of LTX post-video chain operations.

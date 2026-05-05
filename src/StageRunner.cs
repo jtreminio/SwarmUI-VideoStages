@@ -8,7 +8,6 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
 using VideoStages.LTX2;
-using VideoStages.Typed;
 using VideoStages.WAN;
 
 namespace VideoStages;

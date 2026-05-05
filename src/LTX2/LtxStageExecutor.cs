@@ -7,7 +7,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
-using VideoStages.Typed;
 
 namespace VideoStages.LTX2;
 
