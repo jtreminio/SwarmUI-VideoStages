@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ComfyTyped.Core;
 using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -11,6 +12,23 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
 {
     private const string Prefix = "b2e.published.edit.";
 
+    private sealed class NodeDataPayload
+    {
+        [JsonProperty("path")] public JArray Path { get; set; }
+        [JsonProperty("dataType")] public string DataType { get; set; }
+        [JsonProperty("compatId")] public string CompatId { get; set; }
+        [JsonProperty("width")] public int? Width { get; set; }
+        [JsonProperty("height")] public int? Height { get; set; }
+        [JsonProperty("frames")] public int? Frames { get; set; }
+        [JsonProperty("fps")] public int? FPS { get; set; }
+    }
+
+    private sealed class StagePayload
+    {
+        [JsonProperty("media")] public NodeDataPayload Media { get; set; }
+        [JsonProperty("vae")] public NodeDataPayload Vae { get; set; }
+    }
+
     public bool TryGetStageRef(
         int stageIndex,
         [MaybeNullWhen(false)] out StageRefStore.StageRef stageRef)
@@ -22,22 +40,23 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
             return false;
         }
 
-        JObject payload;
+        StagePayload payload;
         try
         {
-            payload = JObject.Parse(encoded);
+            payload = JsonConvert.DeserializeObject<StagePayload>(encoded);
         }
         catch (JsonException)
         {
             return false;
         }
+        if (payload?.Media is null)
+        {
+            return false;
+        }
 
-        WGNodeData vae = payload["vae"] is JObject vaeObj
-            ? DeserializeNodeData(vaeObj, null)
-            : null;
-        WGNodeData media = payload["media"] is JObject mediaObj
-            ? DeserializeNodeData(mediaObj, vae)
-            : null;
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        WGNodeData vae = BuildNodeData(bridge, payload.Vae, fallbackVae: null);
+        WGNodeData media = BuildNodeData(bridge, payload.Media, fallbackVae: vae);
         if (media is null)
         {
             return false;
@@ -65,21 +84,24 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
         return VaeDecodePreference.AsRawImage(stageRef.Media.Gen, stageRef.Media, stageRef.Vae);
     }
 
-    private WGNodeData DeserializeNodeData(JObject data, WGNodeData fallbackVae)
+    private WGNodeData BuildNodeData(
+        WorkflowBridge bridge,
+        NodeDataPayload data,
+        WGNodeData fallbackVae)
     {
-        if (data["path"] is not JArray { Count: 2 } path)
+        if (data is null || bridge.ResolvePath(data.Path) is not INodeOutput output)
         {
             return null;
         }
 
-        string dataType = data.Value<string>("dataType") ?? WGNodeData.DT_IMAGE;
-        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.Value<string>("compatId"));
-        return new WGNodeData(path, g, dataType, compat)
+        string dataType = data.DataType ?? WGNodeData.DT_IMAGE;
+        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.CompatId);
+        return new WGNodeData(WorkflowBridge.ToPath(output), g, dataType, compat)
         {
-            Width = data.Value<int?>("width"),
-            Height = data.Value<int?>("height"),
-            Frames = data.Value<int?>("frames"),
-            FPS = data.Value<int?>("fps")
+            Width = data.Width,
+            Height = data.Height,
+            Frames = data.Frames,
+            FPS = data.FPS
         };
     }
 
