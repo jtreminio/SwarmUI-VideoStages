@@ -55,13 +55,13 @@ internal sealed class LtxAudioInjector(
                 WGNodeData.DT_AUDIO,
                 g.CurrentAudioVae.Compat);
         }
-        // EncodeToLatent (SwarmUI core) creates new nodes via g.CreateNode; our typed bridge
-        // graph becomes stale after this point and must be rebuilt.
+
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
         bridge = WorkflowBridge.Create(g.Workflow);
         SetLatentNoiseMaskNode setMask = CreateAudioMaskNode(bridge, encodedAudio.Path);
         ReplaceAudioLatentConnections(bridge, concatIds, setMask);
         RemoveUnusedSourceNodes(bridge, removableSourceIds);
+
         return true;
     }
 
@@ -81,6 +81,7 @@ internal sealed class LtxAudioInjector(
             removableSourceIds.Add(emptyAudio.Id);
             workflowFps ??= ReadFrameRate(emptyAudio);
         }
+
         return (concatIds, removableSourceIds, workflowFps);
     }
 
@@ -105,10 +106,6 @@ internal sealed class LtxAudioInjector(
         if (audioPath is JArray pathArray && bridge.ResolvePath(pathArray) is INodeOutput typedAudio)
         {
             node.AudioInput.ConnectToUntyped(typedAudio);
-        }
-        else if (audioPath is not null)
-        {
-            node.AudioInput.SetUntyped(audioPath);
         }
         bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 100, 0));
         return node;

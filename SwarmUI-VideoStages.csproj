@@ -4,6 +4,13 @@
     <AssemblyName>SwarmUI-VideoStages</AssemblyName>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>annotations</Nullable>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Required for IDE0005 (unused using directives) to fire at build time. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- ...but we don't actually want to publish XML docs or warn about missing ones. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <Import Project="../../SwarmUI.extension.props" />
