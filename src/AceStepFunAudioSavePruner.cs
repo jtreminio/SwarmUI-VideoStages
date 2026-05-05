@@ -1,6 +1,5 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages;
@@ -32,8 +31,8 @@ public static class AceStepFunAudioSavePruner
         List<SaveAudioMP3Node> toRemove = [];
         foreach (SaveAudioMP3Node node in bridge.Graph.NodesOfType<SaveAudioMP3Node>())
         {
-            if (bridge.Workflow[node.Id] is not JObject jsonNode
-                || !AudioStageDetector.TryParseAceStepFunSaveNodeTrackIndex(jsonNode, out int trackIndex)
+            string? prefix = node.FilenamePrefix.LiteralValue as string;
+            if (!AudioStageDetector.TryParseAceStepFunSaveNodeTrackIndex(prefix, out int trackIndex)
                 || !aceSourceTracks.Contains(trackIndex)
                 || tracksToSave.Contains(trackIndex))
             {

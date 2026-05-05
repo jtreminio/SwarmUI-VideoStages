@@ -1,5 +1,3 @@
-using Newtonsoft.Json.Linq;
-
 namespace VideoStages;
 
 public static class StringUtils
@@ -17,6 +15,4 @@ public static class StringUtils
     {
         return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
     }
-
-    public static string ClassTypeOf(JObject node) => $"{node["class_type"]}";
 }

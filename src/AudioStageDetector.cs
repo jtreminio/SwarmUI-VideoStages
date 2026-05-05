@@ -1,5 +1,5 @@
+using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages;
@@ -20,58 +20,72 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         string SourceNodeId,
         int Priority);
 
-    public Detection? Detect()
+    public Detection Detect()
     {
-        return ScanWorkflow((nodeId, node) =>
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ComfyGraph graph = bridge.Graph;
+        Detection best = null;
+        foreach (SaveAudioNode node in graph.NodesOfType<SaveAudioNode>())
         {
-            string classType = StringUtils.ClassTypeOf(node);
-            return classType switch
+            if (IsAceStepFunSaveNode(node))
             {
-                _ when IsSaveAudioNode(classType) && !IsAceStepFunSaveNode(node) =>
-                    BuildSaveCandidate(nodeId, classType, node, PriorityGenericSaveAudio),
-                VAEDecodeAudioNode.ClassType when !IsAceStepFunDecodeNode(nodeId) =>
-                    BuildDecodeCandidate(nodeId, classType, PriorityDecode),
-                _ => null,
-            };
-        });
+                continue;
+            }
+            TryReplace(ref best, BuildSaveCandidate(node, PriorityGenericSaveAudio));
+        }
+        foreach (SaveAudioMP3Node node in graph.NodesOfType<SaveAudioMP3Node>())
+        {
+            if (IsAceStepFunSaveNode(node))
+            {
+                continue;
+            }
+            TryReplace(ref best, BuildSaveCandidate(node, PriorityGenericSaveAudio));
+        }
+        foreach (VAEDecodeAudioNode node in graph.NodesOfType<VAEDecodeAudioNode>())
+        {
+            if (IsAceStepFunDecodeNode(node.Id))
+            {
+                continue;
+            }
+            TryReplace(ref best, BuildDecodeCandidate(node, PriorityDecode));
+        }
+        return best;
     }
 
-    public Detection? DetectAceStepFunTrack(string source)
+    public Detection DetectAceStepFunTrack(string source)
     {
         if (!TryParseAceStepFunAudioSource(source, out int trackIndex))
         {
             return null;
         }
-        return ScanWorkflow((nodeId, node) =>
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ComfyGraph graph = bridge.Graph;
+        Detection best = null;
+        foreach (SaveAudioMP3Node node in graph.NodesOfType<SaveAudioMP3Node>())
         {
-            string classType = StringUtils.ClassTypeOf(node);
-            return classType switch
-            {
-                SaveAudioMP3Node.ClassType when IsAceStepFunSaveNodeForTrack(node, trackIndex) =>
-                    BuildSaveCandidate(nodeId, classType, node, PriorityAceStepFunSave),
-                VAEDecodeAudioNode.ClassType when IsAceStepFunDecodeNodeForTrack(nodeId, trackIndex) =>
-                    BuildDecodeCandidate(nodeId, classType, PriorityDecode),
-                _ => null,
-            };
-        });
-    }
-
-    private Detection? ScanWorkflow(Func<string, JObject, Detection?> classifyNode)
-    {
-        Detection? best = null;
-        foreach (JProperty property in g.Workflow.Properties())
-        {
-            if (property.Value is not JObject node)
+            if (!IsAceStepFunSaveNodeForTrack(node, trackIndex))
             {
                 continue;
             }
-            Detection? candidate = classifyNode(property.Name, node);
-            if (ShouldReplace(best, candidate))
+            TryReplace(ref best, BuildSaveCandidate(node, PriorityAceStepFunSave));
+        }
+        foreach (VAEDecodeAudioNode node in graph.NodesOfType<VAEDecodeAudioNode>())
+        {
+            if (!IsAceStepFunDecodeNodeForTrack(node.Id, trackIndex))
             {
-                best = candidate;
+                continue;
             }
+            TryReplace(ref best, BuildDecodeCandidate(node, PriorityDecode));
         }
         return best;
+    }
+
+    private static void TryReplace(ref Detection best, Detection candidate)
+    {
+        if (ShouldReplace(best, candidate))
+        {
+            best = candidate;
+        }
     }
 
     public static bool TryParseAceStepFunAudioSource(string source, out int trackIndex)
@@ -86,14 +100,10 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         return int.TryParse(indexText, out trackIndex) && trackIndex >= 0;
     }
 
-    public static bool TryParseAceStepFunSaveNodeTrackIndex(JObject node, out int zeroBasedTrackIndex)
+    public static bool TryParseAceStepFunSaveNodeTrackIndex(string filenamePrefix, out int zeroBasedTrackIndex)
     {
         zeroBasedTrackIndex = -1;
-        if (node["inputs"] is not JObject inputs)
-        {
-            return false;
-        }
-        string prefix = inputs["filename_prefix"]?.Value<string>() ?? "";
+        string prefix = filenamePrefix ?? "";
         if (!prefix.StartsWith(AceStepFunFilenamePrefix, StringComparison.Ordinal))
         {
             return false;
@@ -108,54 +118,45 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         return zeroBasedTrackIndex >= 0;
     }
 
-    private WGNodeData CreateAudioNode(JArray path) =>
-        new(path, g, WGNodeData.DT_AUDIO, g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
+    private WGNodeData CreateAudioNode(INodeOutput output) =>
+        new(WorkflowBridge.ToPath(output), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
 
-    private Detection? BuildSaveCandidate(
-        string nodeId,
-        string classType,
-        JObject node,
-        int priority)
+    private Detection BuildSaveCandidate(SaveAudioNode node, int priority) =>
+        BuildSaveCandidateFromConnection(node, node.Audio.Connection, priority);
+
+    private Detection BuildSaveCandidate(SaveAudioMP3Node node, int priority) =>
+        BuildSaveCandidateFromConnection(node, node.Audio.Connection, priority);
+
+    private Detection BuildSaveCandidateFromConnection(ComfyNode node, INodeOutput audioConn, int priority)
     {
-        if (node["inputs"] is not JObject inputs
-            || inputs["audio"] is not JArray { Count: 2 } audioRef)
+        if (audioConn is null)
         {
             return null;
         }
-
-        WGNodeData audio = CreateAudioNode(new JArray(audioRef[0], audioRef[1]));
-        return new Detection(audio, nodeId, classType, $"{audioRef[0]}", priority);
+        WGNodeData audio = CreateAudioNode(audioConn);
+        return new Detection(audio, node.Id, node.ClassTypeName, audioConn.Node.Id, priority);
     }
 
-    private Detection? BuildDecodeCandidate(
-        string nodeId,
-        string classType,
-        int priority)
+    private Detection BuildDecodeCandidate(VAEDecodeAudioNode node, int priority)
     {
-        WGNodeData audio = CreateAudioNode(new JArray(nodeId, 0));
-        return new Detection(audio, nodeId, classType, nodeId, priority);
+        WGNodeData audio = CreateAudioNode(node.AUDIO);
+        return new Detection(audio, node.Id, node.ClassTypeName, node.Id, priority);
     }
 
-    private static bool IsSaveAudioNode(string classType)
+    private static bool IsAceStepFunSaveNodeForTrack(SaveAudioMP3Node node, int trackIndex)
     {
-        return !string.IsNullOrWhiteSpace(classType)
-            && classType.StartsWith("SaveAudio", StringComparison.Ordinal);
+        return TryParseAceStepFunSaveNodeTrackIndex(node.FilenamePrefix.LiteralValue as string, out int t)
+            && t == trackIndex;
     }
 
-    private static bool IsAceStepFunSaveNodeForTrack(JObject node, int trackIndex)
-    {
-        return TryParseAceStepFunSaveNodeTrackIndex(node, out int t) && t == trackIndex;
-    }
+    private static bool IsAceStepFunSaveNode(SaveAudioNode node) =>
+        StartsWithAceStepFunPrefix(node.FilenamePrefix.LiteralValue as string);
 
-    private static bool IsAceStepFunSaveNode(JObject node)
-    {
-        if (node["inputs"] is not JObject inputs)
-        {
-            return false;
-        }
-        string prefix = $"{inputs["filename_prefix"] ?? ""}";
-        return prefix.StartsWith(AceStepFunFilenamePrefix, StringComparison.Ordinal);
-    }
+    private static bool IsAceStepFunSaveNode(SaveAudioMP3Node node) =>
+        StartsWithAceStepFunPrefix(node.FilenamePrefix.LiteralValue as string);
+
+    private static bool StartsWithAceStepFunPrefix(string filenamePrefix) =>
+        (filenamePrefix ?? "").StartsWith(AceStepFunFilenamePrefix, StringComparison.Ordinal);
 
     private static bool TryAceStepFunDecodeDiff(string nodeId, out long diffFromBase)
     {
@@ -178,7 +179,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         return TryAceStepFunDecodeDiff(nodeId, out long diff) && diff % 1000 == trackIndex * 100L;
     }
 
-    private static bool ShouldReplace(Detection? current, Detection? candidate)
+    private static bool ShouldReplace(Detection current, Detection candidate)
     {
         if (candidate is null)
         {

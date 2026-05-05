@@ -39,7 +39,7 @@ public class AudioStageDetectorTests
             {
                 ["audio"] = new JArray("100", 0)
             }),
-            ["210"] = Node("SaveAudioWAV", new JObject()
+            ["210"] = Node("SaveAudio", new JObject()
             {
                 ["audio"] = new JArray("100", 0)
             })
@@ -49,7 +49,7 @@ public class AudioStageDetectorTests
 
         Assert.NotNull(detection);
         Assert.Equal("210", detection.MatchedNodeId);
-        Assert.Equal("SaveAudioWAV", detection.MatchedClassType);
+        Assert.Equal("SaveAudio", detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("100", 0)));
     }
 
