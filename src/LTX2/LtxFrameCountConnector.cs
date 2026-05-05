@@ -38,18 +38,10 @@ internal static class LtxFrameCountConnector
             return;
         }
 
-        string key;
-        if (inputs.ContainsKey("frames_number"))
-        {
-            key = "frames_number";
-        }
-        else if (inputs.ContainsKey("length"))
+        string key = "frames_number";
+        if (!inputs.ContainsKey("frames_number") && inputs.ContainsKey("length"))
         {
             key = "length";
-        }
-        else
-        {
-            key = "frames_number";
         }
         inputs[key] = CloneConnection(framesConnection);
     }

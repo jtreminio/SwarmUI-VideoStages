@@ -67,7 +67,7 @@ internal sealed class LtxPostVideoChain
         }
 
         if (generator.CurrentMedia?.IsRawMedia != true
-            || generator.CurrentMedia.Path is not JArray { Count: 2 } mediaPath)
+            || generator.CurrentMedia.Path is not JArray { Count: 2 })
         {
             return null;
         }
@@ -145,9 +145,7 @@ internal sealed class LtxPostVideoChain
     {
         if (vae?.Path is not JArray { Count: 2 } vaePath)
         {
-            WGNodeData detachedCurrent = CloneMedia(g, CurrentOutputMedia);
-            AttachSourceAudio(detachedCurrent);
-            return detachedCurrent;
+            return CloneCurrentOutputWithAttachedAudio();
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
@@ -155,9 +153,7 @@ internal sealed class LtxPostVideoChain
         INodeOutput vaeSource = bridge.ResolvePath(vaePath);
         if (avLatentSource is null || vaeSource is null)
         {
-            WGNodeData detachedCurrent = CloneMedia(g, CurrentOutputMedia);
-            AttachSourceAudio(detachedCurrent);
-            return detachedCurrent;
+            return CloneCurrentOutputWithAttachedAudio();
         }
 
         LTXVSeparateAVLatentNode detachedSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
@@ -232,7 +228,7 @@ internal sealed class LtxPostVideoChain
 
     public void SpliceCurrentOutput(WGNodeData vae)
     {
-        if (g.CurrentMedia?.Path is not JArray { Count: 2 } stageOutputPath)
+        if (g.CurrentMedia?.Path is not JArray { Count: 2 })
         {
             return;
         }
@@ -240,11 +236,12 @@ internal sealed class LtxPostVideoChain
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         LtxChainCapture capture = BuildCapture(bridge);
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
-        MediaRef vaeRef = MediaRef.FromWGNodeData(vae, bridge)
-                       ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
+        MediaRef vaeRef =
+            MediaRef.FromWGNodeData(vae, bridge) ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
         LtxChainOps.DecodeConfig decodeConfig = BuildDecodeConfig();
 
-        MediaRef result = LtxChainOps.SpliceCurrentOutput(bridge, capture, stageOutput, vaeRef, decodeConfig);
+        MediaRef result =
+            LtxChainOps.SpliceCurrentOutput(bridge, capture, stageOutput, vaeRef, decodeConfig);
         BridgeSync.SyncLastId(g);
 
         if (result is not null)
@@ -261,7 +258,7 @@ internal sealed class LtxPostVideoChain
         int? outputFrames,
         int? outputFps)
     {
-        if (g.CurrentMedia?.Path is not JArray { Count: 2 } stageOutputPath)
+        if (g.CurrentMedia?.Path is not JArray { Count: 2 })
         {
             return;
         }
@@ -269,13 +266,20 @@ internal sealed class LtxPostVideoChain
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         LtxChainCapture capture = BuildCapture(bridge);
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
-        MediaRef vaeRef = MediaRef.FromWGNodeData(vae, bridge)
-                       ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
+        MediaRef vaeRef =
+            MediaRef.FromWGNodeData(vae, bridge) ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
         LtxChainOps.DecodeConfig decodeConfig = BuildDecodeConfig();
 
         MediaRef result = LtxChainOps.SpliceCurrentOutputToDedicatedBranch(
-            bridge, capture, stageOutput, vaeRef, decodeConfig,
-            outputWidth, outputHeight, outputFrames, outputFps);
+            bridge,
+            capture,
+            stageOutput,
+            vaeRef,
+            decodeConfig,
+            outputWidth,
+            outputHeight,
+            outputFrames,
+            outputFps);
         BridgeSync.SyncLastId(g);
 
         if (result is not null)
@@ -301,6 +305,13 @@ internal sealed class LtxPostVideoChain
 
         LtxChainOps.RetargetAnimationSaves(bridge, oldOutput, newOutput);
         BridgeSync.SyncLastId(g);
+    }
+
+    private WGNodeData CloneCurrentOutputWithAttachedAudio()
+    {
+        WGNodeData copy = CloneMedia(g, CurrentOutputMedia);
+        AttachSourceAudio(copy);
+        return copy;
     }
 
     private static WGNodeData CloneMedia(WorkflowGenerator generator, WGNodeData media)

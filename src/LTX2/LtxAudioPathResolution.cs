@@ -1,19 +1,11 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
-using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages.LTX2;
 
 internal static class LtxAudioPathResolution
 {
-    /// <summary>
-    /// Locate or synthesize a "length-to-frames" audio source for <paramref name="rawAudioPath"/>.
-    /// Mutates <paramref name="bridge"/> when a new <c>SwarmEnsureAudio</c> node has to be added.
-    /// Caller is responsible for <see cref="BridgeSync.SyncLastId"/> after subsequent untyped
-    /// node creation.
-    /// </summary>
     public static JToken ResolveLengthToFramesAudioSource(
         WorkflowBridge bridge,
         JToken rawAudioPath,
@@ -51,25 +43,5 @@ internal static class LtxAudioPathResolution
         ensure.TargetDuration.Set(0.1);
         bridge.SyncNode(ensure);
         return new JArray(ensure.Id, 0);
-    }
-
-    public static bool IsSwarmLoadAudioB64Output(WorkflowGenerator g, JArray rawRef)
-    {
-        if (rawRef is not { Count: 2 })
-        {
-            return false;
-        }
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        return bridge.Graph.GetNode($"{rawRef[0]}") is SwarmLoadAudioB64Node;
-    }
-
-    public static bool WorkflowConnectionRefsEqual(JToken left, JToken right)
-    {
-        if (left is not JArray { Count: 2 } la || right is not JArray { Count: 2 } ra)
-        {
-            return false;
-        }
-
-        return $"{la[0]}" == $"{ra[0]}" && la[1].Value<int>() == ra[1].Value<int>();
     }
 }

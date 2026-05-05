@@ -16,7 +16,7 @@ internal static class LtxAudioReuseState
 
     public static void PrepareReusableAudio(WorkflowGenerator generator, JsonParser.StageSpec stage)
     {
-        if (generator?.CurrentMedia is null || stage is null)
+        if (generator.CurrentMedia is null)
         {
             return;
         }
@@ -53,16 +53,6 @@ internal static class LtxAudioReuseState
         generator.CurrentMedia = currentMedia;
     }
 
-    public static void Remember(WorkflowGenerator generator, JArray audioLatentPath)
-    {
-        if (generator is null || !IsValidAudioLatentPath(audioLatentPath))
-        {
-            return;
-        }
-
-        generator.NodeHelpers[ReusedAudioLatentNodeHelperKey] = audioLatentPath.ToString(Formatting.None);
-    }
-
     public static void Clear(WorkflowGenerator generator)
     {
         generator.NodeHelpers.Remove(ReusedAudioLatentNodeHelperKey);
@@ -71,8 +61,7 @@ internal static class LtxAudioReuseState
     public static bool TryGetPath(WorkflowGenerator generator, out JArray reusedAudioLatentPath)
     {
         reusedAudioLatentPath = null;
-        if (generator is null
-            || !generator.NodeHelpers.TryGetValue(ReusedAudioLatentNodeHelperKey, out string encodedPath)
+        if (!generator.NodeHelpers.TryGetValue(ReusedAudioLatentNodeHelperKey, out string encodedPath)
             || string.IsNullOrWhiteSpace(encodedPath))
         {
             return false;
@@ -92,5 +81,15 @@ internal static class LtxAudioReuseState
         {
             return false;
         }
+    }
+
+    internal static void Remember(WorkflowGenerator generator, JArray audioLatentPath)
+    {
+        if (!IsValidAudioLatentPath(audioLatentPath))
+        {
+            return;
+        }
+
+        generator.NodeHelpers[ReusedAudioLatentNodeHelperKey] = audioLatentPath.ToString(Formatting.None);
     }
 }

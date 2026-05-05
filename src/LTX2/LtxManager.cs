@@ -25,8 +25,7 @@ internal sealed class LtxManager
             g,
             rootVideoStageTakeover,
             rootVideoStageResizer,
-            jsonParser,
-            audioMaskResizer);
+            jsonParser);
         stageOrchestrator = new LtxStageOrchestrator(
             g,
             stageExecutor,
@@ -60,8 +59,8 @@ internal sealed class LtxManager
     public void ApplyRootAudioMaskDimensionsAfterNativeVideo() =>
         audioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo();
 
-    public void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
-        audioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
+    public static void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
+        LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
 
     public void PrepareReusableAudio(JsonParser.StageSpec stage) =>
         LtxAudioReuseState.PrepareReusableAudio(g, stage);
@@ -69,8 +68,13 @@ internal sealed class LtxManager
     public LtxPostVideoChain TryCapturePostVideoChain(JsonParser.StageSpec stage) =>
         LtxPostVideoChain.TryCapture(g, stage);
 
-    public void ApplyPostVideoChainCaptureIfPresent(ref WGNodeData referenceMedia, ref WGNodeData referenceVae) =>
-        LtxStageRefCapture.ApplyPostVideoChainCaptureIfPresent(g, ref referenceMedia, ref referenceVae);
+    public void ApplyPostVideoChainCaptureIfPresent(
+        ref WGNodeData referenceMedia,
+        ref WGNodeData referenceVae) =>
+        LtxStageRefCapture.ApplyPostVideoChainCaptureIfPresent(
+            g,
+            ref referenceMedia,
+            ref referenceVae);
 
     public bool TryRunLocalStage(
         JsonParser.StageSpec stage,

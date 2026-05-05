@@ -61,7 +61,6 @@ internal sealed class LtxAudioInjector(
         SetLatentNoiseMaskNode setMask = CreateAudioMaskNode(bridge, encodedAudio.Path);
         ReplaceAudioLatentConnections(bridge, concatIds, setMask);
         RemoveUnusedSourceNodes(bridge, removableSourceIds);
-
         return true;
     }
 
@@ -81,7 +80,6 @@ internal sealed class LtxAudioInjector(
             removableSourceIds.Add(emptyAudio.Id);
             workflowFps ??= ReadFrameRate(emptyAudio);
         }
-
         return (concatIds, removableSourceIds, workflowFps);
     }
 

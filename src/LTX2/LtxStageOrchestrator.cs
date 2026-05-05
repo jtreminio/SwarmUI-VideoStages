@@ -30,20 +30,25 @@ internal sealed class LtxStageOrchestrator(
             return false;
         }
 
-        List<ResolvedClipRef> clipRefs = ResolveStageClipRefs(stage, refStore, postVideoChain, sourceMedia);
+        List<ResolvedClipRef> clipRefs = ResolveStageClipRefs(
+            stage,
+            refStore,
+            postVideoChain,
+            sourceMedia);
         ResolvedClipRef primaryGuideClipRef = ExtractPrimaryGuideClipRef(clipRefs);
         clipRefs = RemovePrimaryGuideClipRef(clipRefs, primaryGuideClipRef);
-        double guideMergeStrength = 1.0;
-        if (primaryGuideClipRef is not null)
-        {
-            guideMergeStrength = primaryGuideClipRef.Strength;
-        }
+        double guideMergeStrength = primaryGuideClipRef?.Strength ?? 1.0;
 
         bool replacesTextToVideoRoot = rootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(stage);
         bool skipGuideReinjection = primaryGuideClipRef is null
             && (replacesTextToVideoRoot
                 || clipRefs is { Count: > 0 }
-                || ShouldSkipGeneratedGuideReinjection(stage, sourceMedia, guideReference, genInfo, postVideoChain));
+                || ShouldSkipGeneratedGuideReinjection(
+                    stage,
+                    sourceMedia,
+                    guideReference,
+                    genInfo,
+                    postVideoChain));
 
         WGNodeData guideMedia = ResolveLocalGuideMedia(
             primaryGuideClipRef,
@@ -65,10 +70,13 @@ internal sealed class LtxStageOrchestrator(
         return true;
     }
 
-    private static bool ShouldUseLocalLtxv2Path(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
+    private static bool ShouldUseLocalLtxv2Path(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData sourceMedia)
     {
         return VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel)
-            && (sourceMedia?.DataType == WGNodeData.DT_VIDEO || sourceMedia?.DataType == WGNodeData.DT_IMAGE);
+            && (sourceMedia?.DataType == WGNodeData.DT_VIDEO
+                || sourceMedia?.DataType == WGNodeData.DT_IMAGE);
     }
 
     private List<ResolvedClipRef> ResolveStageClipRefs(
@@ -93,7 +101,8 @@ internal sealed class LtxStageOrchestrator(
         for (int i = 0; i < refs.Count; i++)
         {
             JsonParser.RefSpec spec = refs[i];
-            if (textToVideoRootWorkflow && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
+            if (textToVideoRootWorkflow
+                && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -216,8 +225,8 @@ internal sealed class LtxStageOrchestrator(
             return false;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.Graph.GetNode<ImageScaleNode>($"{sourcePath[0]}") is not ImageScaleNode scale
+        if (WorkflowBridge.Create(g.Workflow).Graph.GetNode<ImageScaleNode>($"{sourcePath[0]}")
+            is not ImageScaleNode scale
             || scale.Image.Connection is not INodeOutput scaleSource)
         {
             return false;

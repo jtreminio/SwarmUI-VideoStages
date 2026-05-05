@@ -16,13 +16,14 @@ internal sealed class LtxAudioMaskResizer(
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        foreach (SetLatentNoiseMaskNode setMaskNode in bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>())
+        foreach (SetLatentNoiseMaskNode setMask in bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>())
         {
-            if (setMaskNode.Samples.Connection?.Node is not (LTXVAudioVAEEncodeNode or VAEEncodeAudioNode))
+            if (setMask.Samples.Connection?.Node is not (LTXVAudioVAEEncodeNode or VAEEncodeAudioNode))
             {
                 continue;
             }
-            if (setMaskNode.Mask.Connection?.Node is not SolidMaskNode solidMask)
+
+            if (setMask.Mask.Connection?.Node is not SolidMaskNode solidMask)
             {
                 continue;
             }
@@ -33,21 +34,32 @@ internal sealed class LtxAudioMaskResizer(
         }
     }
 
-    internal void ApplyCurrentAudioMaskDimensions(WGNodeData media)
+    internal static void ApplyCurrentAudioMaskDimensions(WGNodeData media)
     {
-        if (media?.Gen is not WorkflowGenerator generator
-            || !media.Width.HasValue
-            || !media.Height.HasValue
-            || media.Path is not { Count: 2 } mediaPath)
+        if (media?.Gen is not WorkflowGenerator generator)
+        {
+            return;
+        }
+
+        if (!media.Width.HasValue || !media.Height.HasValue)
+        {
+            return;
+        }
+
+        if (media.Path is not { Count: 2 } mediaPath)
         {
             return;
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         INodeOutput output = bridge.ResolvePath(mediaPath);
-        if (output?.Node is not LTXVConcatAVLatentNode concatNode
-            || concatNode.AudioLatent.Connection?.Node is not SetLatentNoiseMaskNode setMaskNode
-            || setMaskNode.Mask.Connection?.Node is not SolidMaskNode solidMask)
+        if (output?.Node is not LTXVConcatAVLatentNode concat)
+        {
+            return;
+        }
+
+        if (concat.AudioLatent.Connection?.Node is not SetLatentNoiseMaskNode setMask
+            || setMask.Mask.Connection?.Node is not SolidMaskNode solidMask)
         {
             return;
         }
