@@ -9,7 +9,7 @@ namespace VideoStages;
 
 internal sealed class RootVideoStageResizer(
     WorkflowGenerator g,
-    RootVideoStageTakeover takeover,
+    RootVideoStageHandoff handoff,
     JsonParser jsonParser)
 {
     public static void RegisterHandlers()
@@ -117,7 +117,7 @@ internal sealed class RootVideoStageResizer(
 
     private bool CurrentMediaFeedsSaveImage()
     {
-        if (!takeover.ShouldTakeOverRootStage()
+        if (!handoff.ShouldHandoffRootStage()
             || g.CurrentMedia?.Path is not { Count: 2 } mediaPath)
         {
             return false;

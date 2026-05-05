@@ -10,7 +10,7 @@ internal sealed class StageSequenceRunner(
     StageRefStore store,
     StageRunner singleStageRunner,
     Base2EditPublishedStageRefs base2EditPublishedStageRefs,
-    RootVideoStageTakeover rootVideoStageTakeover,
+    RootVideoStageHandoff rootVideoStageHandoff,
     RootVideoStageResizer rootVideoStageResizer,
     MultiClipParallelMerger multiClipParallelMerger,
     LtxManager ltxManager)
@@ -22,7 +22,7 @@ internal sealed class StageSequenceRunner(
         public AudioStageDetector.Detection NativeAudioDetection { get; init; }
         public IReadOnlyDictionary<int, AudioStageDetector.Detection> ClipAudios { get; init; }
         public IReadOnlyDictionary<int, AudioStageDetector.Detection> UploadedAudios { get; init; }
-        public bool RootStageTakeover { get; init; }
+        public bool RootStageHandoff { get; init; }
         public int? PreparedClipId { get; set; }
     }
 
@@ -31,21 +31,21 @@ internal sealed class StageSequenceRunner(
         AudioStageDetector.Detection detectedAudio = null,
         IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios = null,
         IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null,
-        bool rootStageTakeover = false)
+        bool rootStageHandoff = false)
     {
         RunContext context = new()
         {
             NativeAudioDetection = detectedAudio ?? BuildCurrentMediaAudioDetection(g),
             ClipAudios = clipAudios,
             UploadedAudios = uploadedAudios,
-            RootStageTakeover = rootStageTakeover
+            RootStageHandoff = rootStageHandoff
         };
         List<int> usedSectionIds = [];
         bool parallelMultiClip = StagesUseMultipleClipIds(stages);
         List<WGNodeData> clipParallelOutputs = [];
         try
         {
-            if (context.RootStageTakeover)
+            if (context.RootStageHandoff)
             {
                 rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
             }
@@ -148,8 +148,8 @@ internal sealed class StageSequenceRunner(
 
         context.PreparedClipId = stage.ClipId;
         WGNodeData currentMedia = g.CurrentMedia.Duplicate();
-        bool suppressNative = context.RootStageTakeover
-            && rootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(stage);
+        bool suppressNative = context.RootStageHandoff
+            && rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);
         AudioStageDetector.Detection clipAudio = ClipAudioWorkflowHelper.ResolveClipAudioDetection(
             stage.ClipId,
             stage.ClipAudioSource,
@@ -164,7 +164,7 @@ internal sealed class StageSequenceRunner(
         {
             _ = ltxManager.TryApplyControlNetFrameCount(stage.ClipControlNetSource);
         }
-        if (context.RootStageTakeover
+        if (context.RootStageHandoff
             && ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
                 stage.ClipAudioSource,
                 stage.ClipLengthFromAudio && !stage.ClipLengthFromControlNet,

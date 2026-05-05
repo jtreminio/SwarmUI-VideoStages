@@ -51,7 +51,7 @@ internal class StageRunner(
             JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
             ltxManager.PrepareReusableAudio(stage);
             bool replaceTextToVideoRootStage = stage.ClipStageIndex == 0
-                && RootVideoStageTakeover.IsTextToVideoRootWorkflow(g);
+                && RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
             LtxPostVideoChain postVideoChain = replaceTextToVideoRootStage
                 ? null
                 : ltxManager.TryCapturePostVideoChain(stage);
@@ -314,10 +314,10 @@ internal class StageRunner(
         HashSet<string> protectedNodes = [];
         AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        RemoveUnusedUpstreamNodes(bridge, $"{stalePositive[0]}", protectedNodes);
+        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{stalePositive[0]}", protectedNodes);
         if (staleNegative is not null && !JToken.DeepEquals(staleNegative, stalePositive))
         {
-            RemoveUnusedUpstreamNodes(bridge, $"{staleNegative[0]}", protectedNodes);
+            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{staleNegative[0]}", protectedNodes);
         }
     }
 
@@ -811,7 +811,7 @@ internal class StageRunner(
         }
         foreach (JArray staleAudioPath in staleAudioPaths.Values)
         {
-            RemoveUnusedUpstreamNodes(bridge, $"{staleAudioPath[0]}", protectedNodes);
+            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{staleAudioPath[0]}", protectedNodes);
         }
         BridgeSync.SyncLastId(g);
     }
@@ -834,69 +834,6 @@ internal class StageRunner(
         protectedNodes.Add($"{currentPath[0]}");
     }
 
-    // todo: maybe delete this
-    private static void RemoveUnusedUpstreamNodes(
-        WorkflowBridge bridge,
-        string startNodeId,
-        ISet<string> protectedNodeIds = null)
-    {
-        if (string.IsNullOrWhiteSpace(startNodeId))
-        {
-            return;
-        }
-
-        Queue<string> pending = new();
-        HashSet<string> seen = [];
-        pending.Enqueue(startNodeId);
-
-        while (pending.Count > 0)
-        {
-            string nodeId = pending.Dequeue();
-            if (string.IsNullOrWhiteSpace(nodeId)
-                || !seen.Add(nodeId)
-                || protectedNodeIds?.Contains(nodeId) == true)
-            {
-                continue;
-            }
-
-            ComfyNode node = bridge.Graph.GetNode(nodeId);
-            if (node is null)
-            {
-                continue;
-            }
-
-            bool hasDownstreamConsumer = false;
-            foreach (INodeOutput output in node.Outputs)
-            {
-                if (bridge.Graph.FindInputsConnectedTo(output).Any())
-                {
-                    hasDownstreamConsumer = true;
-                    break;
-                }
-            }
-            if (hasDownstreamConsumer)
-            {
-                continue;
-            }
-
-            List<string> upstreamIds = [];
-            foreach (INodeInput input in node.Inputs)
-            {
-                string upId = input.Connection?.Node?.Id;
-                if (!string.IsNullOrWhiteSpace(upId))
-                {
-                    upstreamIds.Add(upId);
-                }
-            }
-
-            bridge.RemoveNode(nodeId);
-            foreach (string upId in upstreamIds)
-            {
-                pending.Enqueue(upId);
-            }
-        }
-    }
-
     private void CleanupReplacedTextToVideoRootStage(JArray priorOutputPath, bool replaceTextToVideoRootStage)
     {
         if (!replaceTextToVideoRootStage || priorOutputPath is not { Count: 2 })
@@ -907,7 +844,7 @@ internal class StageRunner(
         HashSet<string> protectedNodes = [];
         AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        RemoveUnusedUpstreamNodes(bridge, $"{priorOutputPath[0]}", protectedNodes);
+        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{priorOutputPath[0]}", protectedNodes);
     }
 
     private static WGNodeData CloneMedia(WGNodeData media)

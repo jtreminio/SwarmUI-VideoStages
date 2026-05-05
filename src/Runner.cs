@@ -8,7 +8,7 @@ public class Runner
 {
     private readonly WorkflowGenerator g;
     private readonly JsonParser jsonParser;
-    private readonly RootVideoStageTakeover rootVideoStageTakeover;
+    private readonly RootVideoStageHandoff rootVideoStageHandoff;
     private readonly VideoStagesCoordinator coordinator;
     private readonly StageGuideMediaHelper stageGuideMediaHelper;
     private readonly RootVideoStageResizer rootVideoStageResizer;
@@ -24,20 +24,17 @@ public class Runner
     {
         this.g = g;
         jsonParser = new JsonParser(g);
-        rootVideoStageTakeover = new RootVideoStageTakeover(g, jsonParser);
-        stageGuideMediaHelper = new StageGuideMediaHelper(g);
-        rootVideoStageResizer = new RootVideoStageResizer(
-            g,
-            rootVideoStageTakeover,
-            jsonParser);
         stageRefStore = new StageRefStore(g);
+        rootVideoStageHandoff = new RootVideoStageHandoff(g, jsonParser, stageRefStore);
+        stageGuideMediaHelper = new StageGuideMediaHelper(g);
+        rootVideoStageResizer = new RootVideoStageResizer(g, rootVideoStageHandoff, jsonParser);
         audioStageDetector = new AudioStageDetector(g);
         base2EditPublishedStageRefs = new Base2EditPublishedStageRefs(g);
         multiClipParallelMerger = new MultiClipParallelMerger(g);
         ltxManager = new LtxManager(
             g,
             jsonParser,
-            rootVideoStageTakeover,
+            rootVideoStageHandoff,
             rootVideoStageResizer,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs);
@@ -47,14 +44,14 @@ public class Runner
             stageRefStore,
             stageRunner,
             base2EditPublishedStageRefs,
-            rootVideoStageTakeover,
+            rootVideoStageHandoff,
             rootVideoStageResizer,
             multiClipParallelMerger,
             ltxManager);
         coordinator = new VideoStagesCoordinator(
             g,
             jsonParser,
-            rootVideoStageTakeover,
+            rootVideoStageHandoff,
             stageRefStore,
             stageSequenceRunner,
             audioStageDetector,
@@ -83,7 +80,7 @@ public class Runner
             return;
         }
 
-        rootVideoStageTakeover.EnsureRootVideoStageModel();
+        rootVideoStageHandoff.EnsureRootVideoStageModel();
     }
 
     public void CaptureBase()
@@ -106,24 +103,24 @@ public class Runner
         coordinator.CaptureRefiner();
     }
 
-    public void SuppressCoreRootVideoStage()
+    public void CapturePreCoreVideoMedia()
     {
         if (!IsExtensionActive())
         {
             return;
         }
 
-        rootVideoStageTakeover.SuppressCoreRootVideoStage();
+        rootVideoStageHandoff.CapturePreCoreVideoMedia();
     }
 
-    public void RestoreCoreRootVideoStageModel()
+    public void DropCoreImageToVideoOutput()
     {
         if (!IsExtensionActive())
         {
             return;
         }
 
-        rootVideoStageTakeover.RestoreCoreRootVideoStageModel();
+        rootVideoStageHandoff.DropCoreImageToVideoOutput();
     }
 
     public void ApplyRootAudioMaskDimensionsAfterNativeVideo()

@@ -14,7 +14,7 @@ internal sealed record ResolvedClipRef(WGNodeData Image, JsonParser.RefSpec Spec
 
 internal sealed class LtxStageExecutor(
     WorkflowGenerator g,
-    RootVideoStageTakeover rootVideoStageTakeover,
+    RootVideoStageHandoff rootVideoStageHandoff,
     RootVideoStageResizer rootVideoStageResizer,
     JsonParser jsonParser)
 {
@@ -457,7 +457,7 @@ internal sealed class LtxStageExecutor(
         genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
         JArray controlNetLengthFrames = TryResolveControlNetLengthFrames(stage);
 
-        if (rootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(stage))
+        if (rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage))
         {
             return CreateEmptyVideoLatent(genInfo, stage, sourceMedia, controlNetLengthFrames);
         }

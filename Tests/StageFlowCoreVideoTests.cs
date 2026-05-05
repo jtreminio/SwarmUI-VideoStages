@@ -1104,7 +1104,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Root_stage_takeover_does_not_leave_orphan_root_resolution_image_scale_after_pre_video_save()
+    public void Root_stage_handoff_does_not_leave_orphan_root_resolution_image_scale_after_pre_video_save()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();

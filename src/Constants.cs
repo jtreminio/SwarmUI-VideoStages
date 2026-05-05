@@ -10,8 +10,8 @@ public static class Constants
         public const double EnsureRootVideoStageModel = -4.3;
         public const double CaptureBase = -4.2;
         public const double CaptureRefiner = 5.9;
-        public const double SuppressCoreRootVideoStage = 10.95;
-        public const double RestoreCoreRootVideoStageModel = 11.05;
+        public const double CapturePreCoreVideoMedia = 10.95;
+        public const double DropCoreImageToVideoOutput = 11.05;
         public const double ApplyRootAudioMaskDimensions = 11.4;
         public const double RunConfiguredStages = 11.5;
     }

@@ -65,11 +65,11 @@ public class VideoStagesExtension : Extension
             g => new Runner(g).CaptureRefiner(),
             Constants.WorkflowStepPriority.CaptureRefiner);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).SuppressCoreRootVideoStage(),
-            Constants.WorkflowStepPriority.SuppressCoreRootVideoStage);
+            g => new Runner(g).CapturePreCoreVideoMedia(),
+            Constants.WorkflowStepPriority.CapturePreCoreVideoMedia);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).RestoreCoreRootVideoStageModel(),
-            Constants.WorkflowStepPriority.RestoreCoreRootVideoStageModel);
+            g => new Runner(g).DropCoreImageToVideoOutput(),
+            Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
         WorkflowGenerator.AddStep(
             g => new Runner(g).ApplyRootAudioMaskDimensionsAfterNativeVideo(),
             Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);

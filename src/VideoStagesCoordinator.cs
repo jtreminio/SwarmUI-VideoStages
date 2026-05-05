@@ -12,7 +12,7 @@ namespace VideoStages;
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
     JsonParser jsonParser,
-    RootVideoStageTakeover rootVideoStageTakeover,
+    RootVideoStageHandoff rootVideoStageHandoff,
     StageRefStore stageRefStore,
     StageSequenceRunner stageSequenceRunner,
     AudioStageDetector audioStageDetector,
@@ -34,7 +34,7 @@ internal sealed class VideoStagesCoordinator(
     {
         if (GetRootVideoModel() is null)
         {
-            rootVideoStageTakeover.CleanupSynthesizedRootVideoStageModel();
+            rootVideoStageHandoff.CleanupSynthesizedRootVideoStageModel();
             return;
         }
 
@@ -42,7 +42,7 @@ internal sealed class VideoStagesCoordinator(
         {
             List<JsonParser.ClipSpec> clips = jsonParser.ParseClips();
             List<JsonParser.StageSpec> stages = jsonParser.ParseStages();
-            bool rootStageTakeover = rootVideoStageTakeover.ShouldTakeOverRootStage();
+            bool rootStageHandoff = rootVideoStageHandoff.ShouldHandoffRootStage();
             if (stages.Count == 0)
             {
                 TryInjectConfiguredAudio(clips);
@@ -51,7 +51,7 @@ internal sealed class VideoStagesCoordinator(
             EnsureComfyDependencies(stages);
 
             ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
-            if (!rootStageTakeover)
+            if (!rootStageHandoff)
             {
                 JsonParser.StageSpec first = stages[0];
                 TryApplyControlNetClipLength(
@@ -70,12 +70,12 @@ internal sealed class VideoStagesCoordinator(
                 clipAudioMaps.DetectedAudio,
                 clipAudioMaps.ClipAudios,
                 clipAudioMaps.UploadedAudios,
-                rootStageTakeover);
+                rootStageHandoff);
             EnsureFinalStageOutputSaved();
         }
         finally
         {
-            rootVideoStageTakeover.CleanupSynthesizedRootVideoStageModel();
+            rootVideoStageHandoff.CleanupSynthesizedRootVideoStageModel();
         }
     }
 

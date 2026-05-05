@@ -11,7 +11,7 @@ namespace VideoStages.LTX2;
 internal sealed class LtxStageOrchestrator(
     WorkflowGenerator g,
     LtxStageExecutor stageExecutor,
-    RootVideoStageTakeover rootVideoStageTakeover,
+    RootVideoStageHandoff rootVideoStageHandoff,
     StageGuideMediaHelper stageGuideMediaHelper,
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
@@ -39,7 +39,7 @@ internal sealed class LtxStageOrchestrator(
         clipRefs = RemovePrimaryGuideClipRef(clipRefs, primaryGuideClipRef);
         double guideMergeStrength = primaryGuideClipRef?.Strength ?? 1.0;
 
-        bool replacesTextToVideoRoot = rootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(stage);
+        bool replacesTextToVideoRoot = rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);
         bool skipGuideReinjection = primaryGuideClipRef is null
             && (replacesTextToVideoRoot
                 || clipRefs is { Count: > 0 }
@@ -97,7 +97,7 @@ internal sealed class LtxStageOrchestrator(
             }
         }
         List<ResolvedClipRef> resolved = [];
-        bool textToVideoRootWorkflow = RootVideoStageTakeover.IsTextToVideoRootWorkflow(g);
+        bool textToVideoRootWorkflow = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         for (int i = 0; i < refs.Count; i++)
         {
             JsonParser.RefSpec spec = refs[i];
@@ -136,7 +136,7 @@ internal sealed class LtxStageOrchestrator(
     private JsonParser.RefSpec ResolveDefaultImageToVideoRef(StageRefStore refStore)
     {
         if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _)
-            || RootVideoStageTakeover.IsTextToVideoRootWorkflow(g))
+            || RootVideoStageHandoff.IsTextToVideoRootWorkflow(g))
         {
             return null;
         }

@@ -13,7 +13,7 @@ internal sealed class LtxManager
     public LtxManager(
         WorkflowGenerator g,
         JsonParser jsonParser,
-        RootVideoStageTakeover rootVideoStageTakeover,
+        RootVideoStageHandoff rootVideoStageHandoff,
         RootVideoStageResizer rootVideoStageResizer,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs)
@@ -23,13 +23,13 @@ internal sealed class LtxManager
         audioInjector = new LtxAudioInjector(g, jsonParser, rootVideoStageResizer);
         LtxStageExecutor stageExecutor = new(
             g,
-            rootVideoStageTakeover,
+            rootVideoStageHandoff,
             rootVideoStageResizer,
             jsonParser);
         stageOrchestrator = new LtxStageOrchestrator(
             g,
             stageExecutor,
-            rootVideoStageTakeover,
+            rootVideoStageHandoff,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs);
     }

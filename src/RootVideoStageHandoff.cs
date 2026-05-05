@@ -1,13 +1,14 @@
+using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
 namespace VideoStages;
 
-internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jsonParser)
+internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser jsonParser, StageRefStore stageRefStore)
 {
-    private const int StashSectionId = Constants.SectionID_VideoStages;
     private const string SynthesizedRootVideoModelKey = "videostages.synth-root-video-model";
+    private const string PreCoreNodeIdsKey = "videostages.pre-core-node-ids";
 
     public static bool IsTextToVideoRootWorkflow(WorkflowGenerator g)
     {
@@ -63,7 +64,7 @@ internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jso
         }
     }
 
-    public bool ShouldTakeOverRootStage()
+    public bool ShouldHandoffRootStage()
     {
         if (VideoStagesExtension.CoreImageToVideoStep is null)
         {
@@ -82,50 +83,64 @@ internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jso
         return jsonParser.ParseStages().Count > 0;
     }
 
-    public void SuppressCoreRootVideoStage()
+    public void CapturePreCoreVideoMedia()
     {
-        if (!ShouldTakeOverRootStage())
+        if (!ShouldHandoffRootStage())
         {
             return;
         }
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel))
-        {
-            return;
-        }
-
-        g.UserInput.Set(T2IParamTypes.VideoModel, videoModel, StashSectionId);
-        g.UserInput.Remove(T2IParamTypes.VideoModel);
+        stageRefStore.Capture(StageRefStore.StageKind.PreRootVideo);
+        g.NodeHelpers[PreCoreNodeIdsKey] = string.Join(",", g.Workflow.Properties().Select(p => p.Name));
     }
 
-    public void RestoreCoreRootVideoStageModel()
+    public void DropCoreImageToVideoOutput()
     {
-        if (HasNativeVideoModel())
+        StageRefStore.StageRef preRoot = stageRefStore.PreRootVideo;
+        if (preRoot is null)
         {
-            CleanupStashSection();
-            return;
-        }
-        if (!g.UserInput.TryGet(
-                T2IParamTypes.VideoModel,
-                out T2IModel stashedModel,
-                sectionId: StashSectionId,
-                includeBase: false))
-        {
-            CleanupStashSection();
             return;
         }
 
-        g.UserInput.Set(T2IParamTypes.VideoModel, stashedModel);
-        g.UserInput.Remove(T2IParamTypes.VideoModel, StashSectionId);
-        CleanupStashSection();
+        try
+        {
+            g.CurrentMedia = preRoot.Media;
+            if (preRoot.Vae is not null)
+            {
+                g.CurrentVae = preRoot.Vae;
+            }
+            PruneCoreImageToVideoNodes();
+        }
+        finally
+        {
+            stageRefStore.DiscardPreRootVideo();
+            g.NodeHelpers.Remove(PreCoreNodeIdsKey);
+        }
     }
 
-    private void CleanupStashSection()
+    private void PruneCoreImageToVideoNodes()
     {
-        if (g.UserInput.SectionParamOverrides.TryGetValue(StashSectionId, out T2IParamSet stash)
-            && stash.ValuesInput.Count == 0)
+        if (!g.NodeHelpers.TryGetValue(PreCoreNodeIdsKey, out string snapshot))
         {
-            g.UserInput.SectionParamOverrides.Remove(StashSectionId);
+            return;
         }
+
+        HashSet<string> preCoreIds = [.. snapshot.Split(',', StringSplitOptions.RemoveEmptyEntries)];
+        List<string> newIds = [.. g.Workflow.Properties().Select(p => p.Name).Where(id => !preCoreIds.Contains(id))];
+        if (newIds.Count == 0)
+        {
+            return;
+        }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        HashSet<string> removed = [];
+        foreach (string newId in newIds)
+        {
+            foreach (string id in WorkflowGraphCleanup.RemoveUnusedUpstreamNodesAndCollect(bridge, newId, preCoreIds))
+            {
+                removed.Add(id);
+            }
+        }
+        WorkflowGraphCleanup.InvalidateNodeHelperCacheForRemovedIds(g.NodeHelpers, removed);
     }
 
     private bool HasNativeVideoModel()

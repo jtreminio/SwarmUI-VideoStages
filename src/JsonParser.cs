@@ -207,7 +207,7 @@ public class JsonParser(WorkflowGenerator g)
         }
 
         StageDefaults defaults = BuildDefaults();
-        bool isTextToVideoRootWorkflow = RootVideoStageTakeover.IsTextToVideoRootWorkflow(g);
+        bool isTextToVideoRootWorkflow = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         List<ClipSpec> parsed = [];
 
         for (int i = 0; i < rawEntries.Count; i++)

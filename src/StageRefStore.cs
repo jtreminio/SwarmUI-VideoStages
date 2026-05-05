@@ -15,7 +15,8 @@ public class StageRefStore(WorkflowGenerator g)
         Base,
         Refiner,
         Generated,
-        Stage
+        Stage,
+        PreRootVideo
     }
 
     public sealed record StageRef(
@@ -29,6 +30,7 @@ public class StageRefStore(WorkflowGenerator g)
         StageKind.Refiner => "refiner",
         StageKind.Generated => "generated",
         StageKind.Stage => $"stage.{index ?? 0}",
+        StageKind.PreRootVideo => "preroot",
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
@@ -42,6 +44,15 @@ public class StageRefStore(WorkflowGenerator g)
     public StageRef Refiner => GetIfCaptured(StageKind.Refiner);
 
     public StageRef Generated => GetIfCaptured(StageKind.Generated);
+
+    public StageRef PreRootVideo => GetIfCaptured(StageKind.PreRootVideo);
+
+    public bool DiscardPreRootVideo()
+    {
+        bool removedMedia = g.NodeHelpers.Remove(NodeKey(StageKind.PreRootVideo, null, "media"));
+        bool removedVae = g.NodeHelpers.Remove(NodeKey(StageKind.PreRootVideo, null, "vae"));
+        return removedMedia || removedVae;
+    }
 
     public void Capture(
         StageKind kind,
