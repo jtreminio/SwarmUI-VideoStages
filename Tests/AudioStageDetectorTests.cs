@@ -9,7 +9,6 @@ namespace VideoStages.Tests;
 public class AudioStageDetectorTests
 {
     private const string VaeDecodeAudio = "VAEDecodeAudio";
-    private const string SwarmSaveAudioWs = "SwarmSaveAudioWS";
 
     private static JObject Node(string classType, JObject inputs = null) => new()
     {
@@ -28,30 +27,6 @@ public class AudioStageDetectorTests
         };
         generator.CurrentAudioVae = new WGNodeData(new JArray("900", 0), generator, WGNodeData.DT_AUDIOVAE, T2IModelClassSorter.CompatLtxv2);
         return generator;
-    }
-
-    [Fact]
-    public void Detector_prefers_swarm_save_audio_ws_over_other_audio_stage_nodes()
-    {
-        JObject workflow = new()
-        {
-            ["100"] = Node(VaeDecodeAudio),
-            ["110"] = Node("SaveAudioMP3", new JObject()
-            {
-                ["audio"] = new JArray("100", 0)
-            }),
-            ["120"] = Node(SwarmSaveAudioWs, new JObject()
-            {
-                ["audio"] = new JArray("100", 0)
-            })
-        };
-
-        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
-
-        Assert.NotNull(detection);
-        Assert.Equal("120", detection.MatchedNodeId);
-        Assert.Equal(SwarmSaveAudioWs, detection.MatchedClassType);
-        Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("100", 0)));
     }
 
     [Fact]

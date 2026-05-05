@@ -8,7 +8,9 @@ namespace VideoStages.Generated;
 /// <remarks>Category: SwarmUI/Audio</remarks>
 public sealed class SwarmAudioLengthToFramesNode : ComfyNode
 {
-    public override string ClassType => "SwarmAudioLengthToFrames";
+    /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
+    public const string ClassType = "SwarmAudioLengthToFrames";
+    public override string ClassTypeName => ClassType;
 
     // ── Outputs ──
     public NodeOutput<AudioType> Audio { get; }

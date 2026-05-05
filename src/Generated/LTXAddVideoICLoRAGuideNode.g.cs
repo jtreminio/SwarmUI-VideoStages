@@ -8,7 +8,9 @@ namespace VideoStages.Generated;
 /// <remarks>Category: Lightricks/IC-LoRA</remarks>
 public sealed class LTXAddVideoICLoRAGuideNode : ComfyNode
 {
-    public override string ClassType => "LTXAddVideoICLoRAGuide";
+    /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
+    public const string ClassType = "LTXAddVideoICLoRAGuide";
+    public override string ClassTypeName => ClassType;
 
     // ── Outputs ──
     public NodeOutput<ConditioningType> Positive { get; }

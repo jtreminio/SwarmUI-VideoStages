@@ -217,7 +217,7 @@ internal sealed class VideoStagesCoordinator(
             detections[clip.Id] = new AudioStageDetector.Detection(
                 audio,
                 loadNodeId,
-                "SwarmLoadAudioB64",
+                SwarmLoadAudioB64Node.ClassType,
                 loadNodeId,
                 int.MaxValue);
         }

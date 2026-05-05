@@ -1,3 +1,4 @@
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
@@ -7,9 +8,8 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
 {
     private const string AceStepFunAudioSourcePrefix = "audio";
     private const long AceStepFunDecodeNodeBase = 64160;
-    public const string AceStepFunSaveNodeType = "SaveAudioMP3";
     public const string AceStepFunFilenamePrefix = "SwarmUI_track_";
-    private const int PrioritySwarmSaveWsOrAceStepFunSave = 3;
+    private const int PriorityAceStepFunSave = 3;
     private const int PriorityGenericSaveAudio = 2;
     private const int PriorityDecode = 1;
 
@@ -27,11 +27,9 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
             string classType = StringUtils.ClassTypeOf(node);
             return classType switch
             {
-                NodeTypes.SwarmSaveAudioWS =>
-                    BuildSaveCandidate(nodeId, classType, node, PrioritySwarmSaveWsOrAceStepFunSave),
                 _ when IsSaveAudioNode(classType) && !IsAceStepFunSaveNode(node) =>
                     BuildSaveCandidate(nodeId, classType, node, PriorityGenericSaveAudio),
-                NodeTypes.VAEDecodeAudio when !IsAceStepFunDecodeNode(nodeId) =>
+                VAEDecodeAudioNode.ClassType when !IsAceStepFunDecodeNode(nodeId) =>
                     BuildDecodeCandidate(nodeId, classType, PriorityDecode),
                 _ => null,
             };
@@ -49,9 +47,9 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
             string classType = StringUtils.ClassTypeOf(node);
             return classType switch
             {
-                AceStepFunSaveNodeType when IsAceStepFunSaveNodeForTrack(node, trackIndex) =>
-                    BuildSaveCandidate(nodeId, classType, node, PrioritySwarmSaveWsOrAceStepFunSave),
-                NodeTypes.VAEDecodeAudio when IsAceStepFunDecodeNodeForTrack(nodeId, trackIndex) =>
+                SaveAudioMP3Node.ClassType when IsAceStepFunSaveNodeForTrack(node, trackIndex) =>
+                    BuildSaveCandidate(nodeId, classType, node, PriorityAceStepFunSave),
+                VAEDecodeAudioNode.ClassType when IsAceStepFunDecodeNodeForTrack(nodeId, trackIndex) =>
                     BuildDecodeCandidate(nodeId, classType, PriorityDecode),
                 _ => null,
             };

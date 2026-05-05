@@ -41,7 +41,7 @@ internal static class VaeDecodePreference
         (string sourceType, JObject sourceInputs) = media.SourceNodeData;
         JArray videoRoute;
         JArray audioRoute;
-        if (sourceType == LtxNodeTypes.LTXVConcatAVLatent
+        if (sourceType == LTXVConcatAVLatentNode.ClassType
             && sourceInputs?["video_latent"] is JArray existingVideoRoute
             && sourceInputs["audio_latent"] is JArray existingAudioRoute)
         {
@@ -70,7 +70,7 @@ internal static class VaeDecodePreference
     private static WGNodeData DecodeImageOrVideoLatents(WorkflowGenerator g, WGNodeData media, WGNodeData vae)
     {
         (string sourceType, JObject sourceInputs) = media.SourceNodeData;
-        if ((sourceType == NodeTypes.VAEEncode || sourceType == NodeTypes.VAEEncodeTiled)
+        if ((sourceType == VAEEncodeNode.ClassType || sourceType == VAEEncodeTiledNode.ClassType)
             && sourceInputs?["vae"] is JArray encodeVaePath
             && vae.Path is JArray vaePath
             && encodeVaePath.Count > 0

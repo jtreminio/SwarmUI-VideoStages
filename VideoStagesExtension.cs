@@ -4,7 +4,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
+using VideoStages.Generated;
 
 namespace VideoStages;
 
@@ -89,9 +89,9 @@ public class VideoStagesExtension : Extension
             + "If you already installed ComfyUI-LTXVideo in your ComfyUI custom_nodes folder, you do not need to install it again.\n"
             + "Do you wish to install?"));
 
-        ComfyUIBackendExtension.NodeToFeatureMap[LtxNodeTypes.LTXICLoRALoaderModelOnly] =
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXICLoRALoaderModelOnlyNode.ClassType] =
             Constants.LtxVideoFeatureFlag;
-        ComfyUIBackendExtension.NodeToFeatureMap[LtxNodeTypes.LTXAddVideoICLoRAGuide] =
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideNode.ClassType] =
             Constants.LtxVideoFeatureFlag;
     }
 

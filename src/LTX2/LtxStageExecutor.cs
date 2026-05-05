@@ -104,7 +104,7 @@ internal sealed class LtxStageExecutor(
         string negativePrompt = ExtractVideoConditioningPrompt(genInfo.NegativePrompt);
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        INodeOutput clipOutput = bridge.ResolvePath(clip.Path as JArray);
+        INodeOutput clipOutput = bridge.ResolvePath(clip.Path);
 
         SwarmClipTextEncodeAdvancedNode posCondNode = AddSwarmClipTextEncodeAdvanced(
             bridge, clipOutput, steps, positivePrompt, width, height, guidance);
@@ -254,10 +254,7 @@ internal sealed class LtxStageExecutor(
         return node.Id;
     }
 
-    private static bool UseLtxvInplaceForRef(JsonParser.RefSpec spec)
-    {
-        return !spec.FromEnd && spec.Frame == 1;
-    }
+    private static bool UseLtxvInplaceForRef(JsonParser.RefSpec spec) => !spec.FromEnd && spec.Frame == 1;
 
     private static int ComputeLtxvAddGuideFrameIndex(JsonParser.RefSpec spec)
     {
