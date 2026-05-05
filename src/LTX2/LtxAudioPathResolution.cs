@@ -1,5 +1,9 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Typed;
 
 namespace VideoStages.LTX2;
 
@@ -15,47 +19,45 @@ internal static class LtxAudioPathResolution
             return rawAudioPath;
         }
 
-        foreach (JProperty property in g.Workflow.Properties())
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        string rawNodeId = $"{rawRef[0]}";
+        int rawSlot = (int)rawRef[1];
+        foreach (SwarmEnsureAudioNode existing in bridge.Graph.NodesOfType<SwarmEnsureAudioNode>())
         {
-            if (property.Value is not JObject node
-                || !StringUtils.NodeTypeMatches(node, NodeTypes.SwarmEnsureAudio)
-                || node["inputs"] is not JObject inputs
-                || inputs["audio"] is not JArray audioInput
-                || audioInput.Count != 2)
+            if (existing.Audio.Connection is INodeOutput audioConn
+                && audioConn.Node.Id == rawNodeId
+                && audioConn.SlotIndex == rawSlot)
             {
-                continue;
-            }
-            if (WorkflowConnectionRefsEqual(audioInput, rawRef))
-            {
-                return new JArray(property.Name, 0);
+                return new JArray(existing.Id, 0);
             }
         }
 
-        if (!IsSwarmLoadAudioB64Output(g, rawRef))
+        if (bridge.Graph.GetNode(rawNodeId) is not SwarmLoadAudioB64Node)
         {
             return rawAudioPath;
         }
 
-        JObject ensureInputs = new()
+        SwarmEnsureAudioNode ensure = swarmEnsureAudioStableNodeId is null
+            ? bridge.AddNode(new SwarmEnsureAudioNode())
+            : bridge.AddNode(new SwarmEnsureAudioNode(), swarmEnsureAudioStableNodeId);
+        if (bridge.ResolveOrSynthesizePath(rawRef) is INodeOutput rawSource)
         {
-            ["audio"] = rawRef,
-            ["target_duration"] = 0.1
-        };
-        string ensured = swarmEnsureAudioStableNodeId is null
-            ? g.CreateNode(NodeTypes.SwarmEnsureAudio, ensureInputs)
-            : g.CreateNode(NodeTypes.SwarmEnsureAudio, ensureInputs, swarmEnsureAudioStableNodeId);
-        return new JArray(ensured, 0);
+            ensure.Audio.ConnectToUntyped(rawSource);
+        }
+        ensure.TargetDuration.Set(0.1);
+        bridge.SyncNode(ensure);
+        BridgeSync.SyncLastId(g);
+        return new JArray(ensure.Id, 0);
     }
 
     public static bool IsSwarmLoadAudioB64Output(WorkflowGenerator g, JArray rawRef)
     {
-        string sourceId = $"{rawRef[0]}";
-        if (!g.Workflow.TryGetValue(sourceId, out JToken token) || token is not JObject node)
+        if (rawRef is not { Count: 2 })
         {
             return false;
         }
-
-        return StringUtils.NodeTypeMatches(node, NodeTypes.SwarmLoadAudioB64);
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        return bridge.Graph.GetNode($"{rawRef[0]}") is SwarmLoadAudioB64Node;
     }
 
     public static bool WorkflowConnectionRefsEqual(JToken left, JToken right)

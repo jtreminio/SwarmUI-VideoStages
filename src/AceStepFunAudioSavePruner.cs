@@ -1,3 +1,5 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
@@ -26,29 +28,23 @@ public static class AceStepFunAudioSavePruner
             return;
         }
 
-        List<string> removeNodeIds = [];
-        foreach (JProperty property in g.Workflow.Properties())
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        List<SaveAudioMP3Node> toRemove = [];
+        foreach (SaveAudioMP3Node node in bridge.Graph.NodesOfType<SaveAudioMP3Node>())
         {
-            if (property.Value is not JObject node)
-            {
-                continue;
-            }
-            if (!StringUtils.NodeTypeMatches(node, AudioStageDetector.AceStepFunSaveNodeType))
-            {
-                continue;
-            }
-            if (!AudioStageDetector.TryParseAceStepFunSaveNodeTrackIndex(node, out int trackIndex)
+            if (bridge.Workflow[node.Id] is not JObject jsonNode
+                || !AudioStageDetector.TryParseAceStepFunSaveNodeTrackIndex(jsonNode, out int trackIndex)
                 || !selectedAceStepFunTracks.Contains(trackIndex)
                 || tracksToSave.Contains(trackIndex))
             {
                 continue;
             }
-            removeNodeIds.Add(property.Name);
+            toRemove.Add(node);
         }
 
-        foreach (string nodeId in removeNodeIds)
+        foreach (SaveAudioMP3Node node in toRemove)
         {
-            g.Workflow.Remove(nodeId);
+            bridge.RemoveNode(node);
         }
     }
 }
