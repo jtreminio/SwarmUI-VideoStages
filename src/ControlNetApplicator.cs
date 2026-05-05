@@ -1,10 +1,16 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
+using ComfyTyped.Types;
 using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Generated;
 using VideoStages.LTX2;
+using VideoStages.Typed;
 
 namespace VideoStages;
 
@@ -43,7 +49,7 @@ internal static class ControlNetApplicator
                     g,
                     controlModel,
                     processedApplyNodes,
-                    out WorkflowNode applyNode,
+                    out (string Id, JObject Node) applyNode,
                     out JArray fullControlImage)
                 || !OutputHasVideoUpstream(g.Workflow, fullControlImage))
             {
@@ -54,18 +60,13 @@ internal static class ControlNetApplicator
             ReplaceVideoControlNetUpscale(g, fullControlImage);
             JArray capturePath = new(fullControlImage[0], fullControlImage[1]);
             g.NodeHelpers[CapturedControlNetImageKey(i)] = capturePath.ToString(Formatting.None);
-            if (OutputRefIsNodeType(g.Workflow, fullControlImage, NodeTypes.ImageFromBatch))
+            if (OutputRefIsNodeType<ImageFromBatchNode>(g.Workflow, fullControlImage))
             {
                 processedApplyNodes.Add(applyNode.Id);
                 continue;
             }
 
-            string firstFrameNode = g.CreateNode(NodeTypes.ImageFromBatch, new JObject()
-            {
-                ["image"] = new JArray(fullControlImage[0], fullControlImage[1]),
-                ["batch_index"] = 0,
-                ["length"] = 1
-            });
+            string firstFrameNode = AddImageFromBatch(g, fullControlImage, batchIndex: 0, lengthLiteral: 1L);
             fullControlImage[0] = firstFrameNode;
             fullControlImage[1] = 0;
 
@@ -73,6 +74,13 @@ internal static class ControlNetApplicator
         }
     }
 
+    /// <summary>
+    /// In-place transforms an upstream <c>ImageScale</c> (whose source is a
+    /// <c>GetVideoComponents</c>) into a <c>ResizeImageMaskNode</c> that scales the shorter
+    /// dimension to 512. Kept as direct JObject mutation because it changes a node's
+    /// <c>class_type</c> while preserving its node id — round-tripping that through the typed
+    /// bridge would require remove + add + retarget consumers.
+    /// </summary>
     private static void ReplaceVideoControlNetUpscale(WorkflowGenerator g, JArray fullControlImage)
     {
         JObject workflow = g.Workflow;
@@ -93,7 +101,7 @@ internal static class ControlNetApplicator
 
             if (StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
                 && TryGetInputRef(node, "image", out JArray sourceImage)
-                && OutputRefIsNodeType(workflow, sourceImage, NodeTypes.GetVideoComponents))
+                && OutputRefIsNodeType<GetVideoComponentsNode>(workflow, sourceImage))
             {
                 node["class_type"] = NodeTypes.ResizeImageMaskNode;
                 inputs.Remove("image");
@@ -185,18 +193,21 @@ internal static class ControlNetApplicator
             return;
         }
 
-        string controlModelNode = g.CreateNode("ControlNetLoader", new JObject()
-        {
-            ["control_net_name"] = controlModel.ToString(g.ModelFolderFormat)
-        });
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ControlNetLoaderNode loader = bridge.AddNode(new ControlNetLoaderNode());
+        loader.ControlNetName.Set(controlModel.ToString(g.ModelFolderFormat));
+        bridge.SyncNode(loader);
+
+        NodeOutput<ControlNetType> controlNetOutput = loader.CONTROLNET;
         if (TryGetUnionType(g, index, out string unionType))
         {
-            controlModelNode = g.CreateNode("SetUnionControlNetType", new JObject()
-            {
-                ["control_net"] = new JArray(controlModelNode, 0),
-                ["type"] = unionType
-            });
+            SetUnionControlNetTypeNode union = bridge.AddNode(new SetUnionControlNetTypeNode());
+            union.ControlNet.ConnectTo(controlNetOutput);
+            union.Type.Set(unionType);
+            bridge.SyncNode(union);
+            controlNetOutput = union.CONTROLNET;
         }
+        BridgeSync.SyncLastId(g);
 
         string applyNode = CreateApplyNode(
             g,
@@ -204,7 +215,7 @@ internal static class ControlNetApplicator
             controlnetParams,
             controlImage,
             controlModel,
-            controlModelNode,
+            controlNetOutput,
             controlStrength);
         genInfo.PosCond = new JArray(applyNode, 0);
         genInfo.NegCond = new JArray(applyNode, 1);
@@ -247,11 +258,16 @@ internal static class ControlNetApplicator
             return false;
         }
 
-        string sizeNode = g.CreateNode(NodeTypes.GetImageSize, new JObject()
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        GetImageSizeNode sizeNode = bridge.AddNode(new GetImageSizeNode());
+        if (frameSource is { Count: 2 } && bridge.ResolveOrSynthesizePath(frameSource) is INodeOutput src)
         {
-            ["image"] = frameSource
-        });
-        framesConnection = new JArray(sizeNode, 2);
+            sizeNode.Image.ConnectToUntyped(src);
+        }
+        bridge.SyncNode(sizeNode);
+        BridgeSync.SyncLastId(g);
+
+        framesConnection = new JArray(sizeNode.Id, 2);
         g.NodeHelpers[helperKey] = framesConnection.ToString(Formatting.None);
         return true;
     }
@@ -287,7 +303,7 @@ internal static class ControlNetApplicator
             || vaePath.Count != 2
             || !VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel)
             || genInfo.Model?.Path is not JArray modelPath
-            || !OutputRefIsNodeType(g.Workflow, modelPath, LtxNodeTypes.LTXICLoRALoaderModelOnly))
+            || !OutputRefIsNodeType<LTXICLoRALoaderModelOnlyNode>(g.Workflow, modelPath))
         {
             return false;
         }
@@ -304,26 +320,29 @@ internal static class ControlNetApplicator
         }
 
         JArray guideImagePath = ControlImageForLtxIcloraGuide(g, controlImagePath, frameCount);
-        string guideNode = g.CreateNode(LtxNodeTypes.LTXAddVideoICLoRAGuide, new JObject()
-        {
-            ["positive"] = genInfo.PosCond,
-            ["negative"] = genInfo.NegCond,
-            ["vae"] = new JArray(vaePath[0], vaePath[1]),
-            ["latent"] = new JArray(latentPath[0], latentPath[1]),
-            ["image"] = guideImagePath,
-            ["frame_idx"] = 0,
-            ["strength"] = controlStrength,
-            ["latent_downscale_factor"] = 2.0,
-            ["crop"] = "disabled",
-            ["use_tiled_encode"] = false,
-            ["tile_size"] = 256,
-            ["tile_overlap"] = 64
-        });
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode());
+        if (bridge.ResolveOrSynthesizePath(genInfo.PosCond) is INodeOutput pos) { guide.PositiveInput.ConnectToUntyped(pos); }
+        if (bridge.ResolveOrSynthesizePath(genInfo.NegCond) is INodeOutput neg) { guide.NegativeInput.ConnectToUntyped(neg); }
+        if (bridge.ResolveOrSynthesizePath(vaePath) is INodeOutput vae) { guide.Vae.ConnectToUntyped(vae); }
+        if (bridge.ResolveOrSynthesizePath(latentPath) is INodeOutput latent) { guide.LatentInput.ConnectToUntyped(latent); }
+        if (bridge.ResolveOrSynthesizePath(guideImagePath) is INodeOutput img) { guide.Image.ConnectToUntyped(img); }
+        guide.FrameIdx.Set(0L);
+        guide.Strength.Set(controlStrength);
+        guide.LatentDownscaleFactor.Set(2.0);
+        guide.Crop.Set("disabled");
+        guide.UseTiledEncode.Set(false);
+        guide.TileSize.Set(256L);
+        guide.TileOverlap.Set(64L);
+        bridge.SyncNode(guide);
+        BridgeSync.SyncLastId(g);
+
         g.NodeHelpers[NeedsLtxIcloraGuideCropKey] = "1";
-        genInfo.PosCond = new JArray(guideNode, 0);
-        genInfo.NegCond = new JArray(guideNode, 1);
+        genInfo.PosCond = new JArray(guide.Id, 0);
+        genInfo.NegCond = new JArray(guide.Id, 1);
         g.CurrentMedia = g.CurrentMedia.WithPath(
-            new JArray(guideNode, 2),
+            new JArray(guide.Id, 2),
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);
         return true;
@@ -337,6 +356,10 @@ internal static class ControlNetApplicator
         }
 
         JArray guideSource = ResolveFullControlImageSource(g.Workflow, controlImagePath);
+
+        // ResizeImageMaskNode has dynamic-shape extra inputs (`resize_type.multiple` etc.) that
+        // the codegen flattens; build via the JObject API to preserve the dynamic keys, then
+        // create the typed ImageFromBatch downstream.
         string resizedForGuide = g.CreateNode(NodeTypes.ResizeImageMaskNode, new JObject()
         {
             ["input"] = guideSource,
@@ -345,13 +368,45 @@ internal static class ControlNetApplicator
             ["scale_method"] = "lanczos"
         });
 
-        string croppedGuide = g.CreateNode(NodeTypes.ImageFromBatch, new JObject()
-        {
-            ["image"] = new JArray(resizedForGuide, 0),
-            ["batch_index"] = 0,
-            ["length"] = frames.DeepClone()
-        });
+        string croppedGuide = AddImageFromBatch(g, new JArray(resizedForGuide, 0), batchIndex: 0, lengthToken: frames.DeepClone());
         return new JArray(croppedGuide, 0);
+    }
+
+    private static string AddImageFromBatch(WorkflowGenerator g, JArray imagePath, int batchIndex, long lengthLiteral)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
+        if (imagePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput src)
+        {
+            node.Image.ConnectToUntyped(src);
+        }
+        node.BatchIndex.Set((long)batchIndex);
+        node.Length.Set(lengthLiteral);
+        bridge.SyncNode(node);
+        BridgeSync.SyncLastId(g);
+        return node.Id;
+    }
+
+    private static string AddImageFromBatch(WorkflowGenerator g, JArray imagePath, int batchIndex, JToken lengthToken)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
+        if (imagePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput src)
+        {
+            node.Image.ConnectToUntyped(src);
+        }
+        node.BatchIndex.Set((long)batchIndex);
+        if (lengthToken is JArray lengthRef && lengthRef.Count == 2 && bridge.ResolveOrSynthesizePath(lengthRef) is INodeOutput lengthSrc)
+        {
+            node.Length.ConnectToUntyped(lengthSrc);
+        }
+        else if (lengthToken is JValue v && v.Value is not null)
+        {
+            node.Length.Set(System.Convert.ToInt64(v.Value));
+        }
+        bridge.SyncNode(node);
+        BridgeSync.SyncLastId(g);
+        return node.Id;
     }
 
     private static JArray ResolveFullControlImageSource(
@@ -377,23 +432,20 @@ internal static class ControlNetApplicator
         out JArray inputRef)
     {
         inputRef = null;
-        string producerId = $"{imageRef[0]}";
-        if (string.IsNullOrWhiteSpace(producerId)
-            || !workflow.TryGetValue(producerId, out JToken producerTok)
-            || producerTok is not JObject producerNode
-            || !StringUtils.NodeTypeMatches(producerNode, NodeTypes.ImageFromBatch))
+        if (imageRef is not { Count: 2 })
         {
             return false;
         }
 
-        if (!int.TryParse($"{producerNode["inputs"]?["length"]}", out int length)
-            || length != 1
-            || !TryGetInputRef(producerNode, "image", out JArray imageIn))
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        if (bridge.Graph.GetNode<ImageFromBatchNode>($"{imageRef[0]}") is not ImageFromBatchNode batch
+            || batch.Length.LiteralAsInt() != 1
+            || batch.Image.Connection is not INodeOutput imageIn)
         {
             return false;
         }
 
-        inputRef = new JArray(imageIn[0], imageIn[1]);
+        inputRef = new JArray(imageIn.Node.Id, imageIn.SlotIndex);
         return true;
     }
 
@@ -411,13 +463,13 @@ internal static class ControlNetApplicator
         WorkflowGenerator g,
         T2IModel controlModel,
         ISet<string> processedApplyNodes,
-        out WorkflowNode applyNode,
+        out (string Id, JObject Node) applyNode,
         out JArray fullControlImage)
     {
         applyNode = default;
         fullControlImage = null;
         string controlModelName = controlModel.ToString(g.ModelFolderFormat);
-        foreach (WorkflowNode candidate in CoreControlNetApplyNodes(g.Workflow))
+        foreach ((string Id, JObject Node) candidate in CoreControlNetApplyNodes(g.Workflow))
         {
             if (processedApplyNodes.Contains(candidate.Id)
                 || !ControlApplyUsesModel(g.Workflow, candidate.Node, controlModelName)
@@ -433,12 +485,14 @@ internal static class ControlNetApplicator
         return false;
     }
 
-    private static IEnumerable<WorkflowNode> CoreControlNetApplyNodes(JObject workflow)
+    private static IEnumerable<(string Id, JObject Node)> CoreControlNetApplyNodes(JObject workflow)
     {
-        return WorkflowUtils.NodesOfType(workflow, NodeTypes.ControlNetApplyAdvanced)
-            .Concat(WorkflowUtils.NodesOfType(workflow, NodeTypes.ControlNetInpaintingAliMamaApply))
-            .Concat(WorkflowUtils.NodesOfType(workflow, NodeTypes.QwenImageDiffsynthControlnet))
-            .OrderBy(node => NodeSortValue(node.Id));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        return bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>().Cast<ComfyNode>()
+            .Concat(bridge.Graph.NodesOfType<ControlNetInpaintingAliMamaApplyNode>())
+            .Concat(bridge.Graph.NodesOfType<QwenImageDiffsynthControlnetNode>())
+            .Select(n => (n.Id, (JObject)workflow[n.Id]))
+            .OrderBy(t => NodeSortValue(t.Id));
     }
 
     private static int NodeSortValue(string nodeId)
@@ -448,9 +502,14 @@ internal static class ControlNetApplicator
 
     private static bool ControlApplyUsesModel(JObject workflow, JObject applyNode, string controlModelName)
     {
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         if (TryGetInputRef(applyNode, "model_patch", out JArray modelPatchRef))
         {
-            return InputChainUsesLoader(workflow, modelPatchRef, NodeTypes.ModelPatchLoader, "name", controlModelName);
+            return InputChainUsesLoader<ModelPatchLoaderNode>(
+                bridge,
+                modelPatchRef,
+                node => node.Name.LiteralAsString(),
+                controlModelName);
         }
 
         if (!TryGetInputRef(applyNode, "control_net", out JArray controlNetRef))
@@ -458,45 +517,49 @@ internal static class ControlNetApplicator
             return false;
         }
 
-        return InputChainUsesLoader(
-            workflow,
+        return InputChainUsesLoader<ControlNetLoaderNode>(
+            bridge,
             controlNetRef,
-            NodeTypes.ControlNetLoader,
-            "control_net_name",
+            node => node.ControlNetName.LiteralAsString(),
             controlModelName);
     }
 
-    private static bool InputChainUsesLoader(
-        JObject workflow,
+    private static bool InputChainUsesLoader<TLoader>(
+        WorkflowBridge bridge,
         JArray inputRef,
-        string loaderClassType,
-        string modelInputName,
-        string modelName)
+        Func<TLoader, string> readModelName,
+        string modelName) where TLoader : ComfyNode
     {
+        if (inputRef is not { Count: 2 })
+        {
+            return false;
+        }
+
         Queue<string> pending = new();
         HashSet<string> visited = [];
         pending.Enqueue($"{inputRef[0]}");
         while (pending.Count > 0)
         {
             string nodeId = pending.Dequeue();
-            if (string.IsNullOrWhiteSpace(nodeId)
-                || !visited.Add(nodeId)
-                || !workflow.TryGetValue(nodeId, out JToken nodeToken)
-                || nodeToken is not JObject node
-                || node["inputs"] is not JObject inputs)
+            if (string.IsNullOrWhiteSpace(nodeId) || !visited.Add(nodeId))
             {
                 continue;
             }
-
-            if (StringUtils.NodeTypeMatches(node, loaderClassType)
-                && $"{inputs[modelInputName]}" == modelName)
+            ComfyNode node = bridge.Graph.GetNode(nodeId);
+            if (node is null)
+            {
+                continue;
+            }
+            if (node is TLoader loader && readModelName(loader) == modelName)
             {
                 return true;
             }
-
-            foreach (JArray upstreamRef in ExtractNodeRefs(inputs))
+            foreach (INodeInput input in node.Inputs)
             {
-                pending.Enqueue($"{upstreamRef[0]}");
+                if (input.Connection?.Node is ComfyNode upstream)
+                {
+                    pending.Enqueue(upstream.Id);
+                }
             }
         }
         return false;
@@ -504,45 +567,48 @@ internal static class ControlNetApplicator
 
     private static bool OutputHasVideoUpstream(JObject workflow, JArray outputRef)
     {
-        Queue<JArray> pending = new();
+        if (outputRef is not { Count: 2 })
+        {
+            return false;
+        }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        ComfyNode startNode = bridge.Graph.GetNode($"{outputRef[0]}");
+        if (startNode is null)
+        {
+            return false;
+        }
+
+        Queue<ComfyNode> pending = new();
         HashSet<string> visited = [];
-        pending.Enqueue(new JArray(outputRef[0], outputRef[1]));
+        pending.Enqueue(startNode);
+        visited.Add(startNode.Id);
         while (pending.Count > 0)
         {
-            JArray current = pending.Dequeue();
-            string key = $"{current[0]}::{current[1]}";
-            if (!visited.Add(key)
-                || !workflow.TryGetValue($"{current[0]}", out JToken nodeToken)
-                || nodeToken is not JObject node)
-            {
-                continue;
-            }
-
-            if (StringUtils.NodeTypeMatches(node, NodeTypes.SwarmLoadVideoB64)
-                || StringUtils.NodeTypeMatches(node, NodeTypes.GetVideoComponents))
+            ComfyNode current = pending.Dequeue();
+            if (current is SwarmLoadVideoB64Node or GetVideoComponentsNode)
             {
                 return true;
             }
-
-            if (node["inputs"] is not JObject inputs)
+            foreach (INodeInput input in current.Inputs)
             {
-                continue;
-            }
-            foreach (JArray upstreamRef in ExtractNodeRefs(inputs))
-            {
-                pending.Enqueue(upstreamRef);
+                if (input.Connection?.Node is ComfyNode upstream && visited.Add(upstream.Id))
+                {
+                    pending.Enqueue(upstream);
+                }
             }
         }
         return false;
     }
 
-    private static bool OutputRefIsNodeType(JObject workflow, JArray outputRef, string classType)
+    private static bool OutputRefIsNodeType<TNode>(JObject workflow, JArray outputRef) where TNode : ComfyNode
     {
-        return outputRef is not null
-            && outputRef.Count == 2
-            && workflow.TryGetValue($"{outputRef[0]}", out JToken nodeToken)
-            && nodeToken is JObject node
-            && StringUtils.NodeTypeMatches(node, classType);
+        if (outputRef is not { Count: 2 })
+        {
+            return false;
+        }
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        return bridge.Graph.GetNode($"{outputRef[0]}") is TNode;
     }
 
     private static bool TryGetCapturedCoreControlImage(WorkflowGenerator g, int index, out WGNodeData controlImage)
@@ -782,19 +848,30 @@ internal static class ControlNetApplicator
         T2IModel controlModel,
         double controlStrength)
     {
-        string modelPatchLoader = g.CreateNode("ModelPatchLoader", new JObject()
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ModelPatchLoaderNode loader = bridge.AddNode(new ModelPatchLoaderNode());
+        loader.Name.Set(controlModel.ToString(g.ModelFolderFormat));
+        bridge.SyncNode(loader);
+
+        QwenImageDiffsynthControlnetNode diff = bridge.AddNode(new QwenImageDiffsynthControlnetNode());
+        if (genInfo.Model?.Path is JArray modelPath && bridge.ResolveOrSynthesizePath(modelPath) is INodeOutput modelOutput)
         {
-            ["name"] = controlModel.ToString(g.ModelFolderFormat)
-        });
-        string diffsynthNode = g.CreateNode("QwenImageDiffsynthControlnet", new JObject()
+            diff.Model.ConnectToUntyped(modelOutput);
+        }
+        diff.ModelPatch.ConnectTo(loader.MODELPATCH);
+        if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolveOrSynthesizePath(vaePath) is INodeOutput vae)
         {
-            ["model"] = genInfo.Model.Path,
-            ["model_patch"] = new JArray(modelPatchLoader, 0),
-            ["vae"] = genInfo.Vae.Path,
-            ["image"] = controlImage.Path,
-            ["strength"] = controlStrength
-        });
-        genInfo.Model = genInfo.Model.WithPath(new JArray(diffsynthNode, 0));
+            diff.Vae.ConnectToUntyped(vae);
+        }
+        if (controlImage?.Path is JArray imagePath && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput img)
+        {
+            diff.Image.ConnectToUntyped(img);
+        }
+        diff.Strength.Set(controlStrength);
+        bridge.SyncNode(diff);
+        BridgeSync.SyncLastId(g);
+
+        genInfo.Model = genInfo.Model.WithPath(new JArray(diff.Id, 0));
     }
 
     private static string CreateApplyNode(
@@ -803,43 +880,48 @@ internal static class ControlNetApplicator
         T2IParamTypes.ControlNetParamHolder controlnetParams,
         WGNodeData controlImage,
         T2IModel controlModel,
-        string controlModelNode,
+        NodeOutput<ControlNetType> controlNetOutput,
         double controlStrength)
     {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        double startPercent = g.UserInput.Get(controlnetParams.Start, 0);
+        double endPercent = g.UserInput.Get(controlnetParams.End, 1);
+
         if (controlModel.Metadata?.ModelClassType == "flux.1-dev/controlnet-alimamainpaint")
         {
             if (g.FinalMask is null)
             {
                 throw new SwarmUserErrorException("Alimama Inpainting ControlNet requires a mask.");
             }
-            return g.CreateNode("ControlNetInpaintingAliMamaApply", new JObject()
-            {
-                ["positive"] = genInfo.PosCond,
-                ["negative"] = genInfo.NegCond,
-                ["control_net"] = new JArray(controlModelNode, 0),
-                ["vae"] = genInfo.Vae.Path,
-                ["image"] = controlImage.Path,
-                ["mask"] = g.FinalMask,
-                ["strength"] = controlStrength,
-                ["start_percent"] = g.UserInput.Get(controlnetParams.Start, 0),
-                ["end_percent"] = g.UserInput.Get(controlnetParams.End, 1)
-            });
+            ControlNetInpaintingAliMamaApplyNode alimama = bridge.AddNode(new ControlNetInpaintingAliMamaApplyNode());
+            if (bridge.ResolveOrSynthesizePath(genInfo.PosCond) is INodeOutput pos) { alimama.PositiveInput.ConnectToUntyped(pos); }
+            if (bridge.ResolveOrSynthesizePath(genInfo.NegCond) is INodeOutput neg) { alimama.NegativeInput.ConnectToUntyped(neg); }
+            alimama.ControlNet.ConnectTo(controlNetOutput);
+            if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolveOrSynthesizePath(vaePath) is INodeOutput vae) { alimama.Vae.ConnectToUntyped(vae); }
+            if (controlImage?.Path is JArray imagePath && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput img) { alimama.Image.ConnectToUntyped(img); }
+            if (g.FinalMask is JArray maskPath && bridge.ResolveOrSynthesizePath(maskPath) is INodeOutput mask) { alimama.Mask.ConnectToUntyped(mask); }
+            alimama.Strength.Set(controlStrength);
+            alimama.StartPercent.Set(startPercent);
+            alimama.EndPercent.Set(endPercent);
+            bridge.SyncNode(alimama);
+            BridgeSync.SyncLastId(g);
+            return alimama.Id;
         }
 
-        JObject inputs = new()
-        {
-            ["positive"] = genInfo.PosCond,
-            ["negative"] = genInfo.NegCond,
-            ["control_net"] = new JArray(controlModelNode, 0),
-            ["image"] = controlImage.Path,
-            ["strength"] = controlStrength,
-            ["start_percent"] = g.UserInput.Get(controlnetParams.Start, 0),
-            ["end_percent"] = g.UserInput.Get(controlnetParams.End, 1)
-        };
+        ControlNetApplyAdvancedNode apply = bridge.AddNode(new ControlNetApplyAdvancedNode());
+        if (bridge.ResolveOrSynthesizePath(genInfo.PosCond) is INodeOutput posCond) { apply.PositiveInput.ConnectToUntyped(posCond); }
+        if (bridge.ResolveOrSynthesizePath(genInfo.NegCond) is INodeOutput negCond) { apply.NegativeInput.ConnectToUntyped(negCond); }
+        apply.ControlNet.ConnectTo(controlNetOutput);
+        if (controlImage?.Path is JArray applyImagePath && bridge.ResolveOrSynthesizePath(applyImagePath) is INodeOutput applyImg) { apply.Image.ConnectToUntyped(applyImg); }
+        apply.Strength.Set(controlStrength);
+        apply.StartPercent.Set(startPercent);
+        apply.EndPercent.Set(endPercent);
         if (g.IsSD3() || g.IsFlux() || g.IsAnyFlux2() || g.IsChroma() || g.IsQwenImage())
         {
-            inputs["vae"] = genInfo.Vae.Path;
+            if (genInfo.Vae?.Path is JArray applyVaePath && bridge.ResolveOrSynthesizePath(applyVaePath) is INodeOutput applyVae) { apply.Vae.ConnectToUntyped(applyVae); }
         }
-        return g.CreateNode("ControlNetApplyAdvanced", inputs);
+        bridge.SyncNode(apply);
+        BridgeSync.SyncLastId(g);
+        return apply.Id;
     }
 }
