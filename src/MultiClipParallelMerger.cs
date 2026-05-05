@@ -129,29 +129,36 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     {
         List<JArray> layer = [.. paths];
 
-        while (layer.Count > BatchImagesNodeMaxInputs)
-        {
-            string chunkNodeId = AddBatchImagesNode(layer.Take(BatchImagesNodeMaxInputs));
-            List<JArray> next = [new JArray(chunkNodeId, 0)];
-            for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
-            {
-                next.Add(layer[i]);
-            }
-
-            layer = next;
-        }
-
         if (layer.Count == 1)
         {
             return layer[0];
         }
 
-        return new JArray(AddBatchImagesNode(layer), 0);
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        try
+        {
+            while (layer.Count > BatchImagesNodeMaxInputs)
+            {
+                string chunkNodeId = AddBatchImagesNode(bridge, layer.Take(BatchImagesNodeMaxInputs));
+                List<JArray> next = [new JArray(chunkNodeId, 0)];
+                for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
+                {
+                    next.Add(layer[i]);
+                }
+
+                layer = next;
+            }
+
+            return new JArray(AddBatchImagesNode(bridge, layer), 0);
+        }
+        finally
+        {
+            BridgeSync.SyncLastId(g);
+        }
     }
 
-    private string AddBatchImagesNode(IEnumerable<JArray> imagePaths)
+    private static string AddBatchImagesNode(WorkflowBridge bridge, IEnumerable<JArray> imagePaths)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         BatchImagesNodeNode node = bridge.AddNode(new BatchImagesNodeNode());
         JObject extra = [];
         int i = 0;
@@ -162,7 +169,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         }
         node.ExtraInputs = extra;
         bridge.SyncNode(node);
-        BridgeSync.SyncLastId(g);
         return node.Id;
     }
 

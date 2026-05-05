@@ -64,7 +64,9 @@ internal static class ControlNetApplicator
                 continue;
             }
 
-            string firstFrameNode = AddImageFromBatch(g, fullControlImage, batchIndex: 0, lengthLiteral: 1L);
+            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            string firstFrameNode = AddImageFromBatch(bridge, fullControlImage, batchIndex: 0, lengthLiteral: 1L);
+            BridgeSync.SyncLastId(g);
             fullControlImage[0] = firstFrameNode;
             fullControlImage[1] = 0;
 
@@ -377,15 +379,14 @@ internal static class ControlNetApplicator
             ["resize_type.multiple"] = 64,
         };
         bridge.SyncNode(resize);
-        BridgeSync.SyncLastId(g);
 
-        string croppedGuide = AddImageFromBatch(g, new JArray(resize.Id, 0), batchIndex: 0, lengthToken: frames.DeepClone());
+        string croppedGuide = AddImageFromBatch(bridge, new JArray(resize.Id, 0), batchIndex: 0, lengthToken: frames.DeepClone());
+        BridgeSync.SyncLastId(g);
         return new JArray(croppedGuide, 0);
     }
 
-    private static string AddImageFromBatch(WorkflowGenerator g, JArray imagePath, int batchIndex, long lengthLiteral)
+    private static string AddImageFromBatch(WorkflowBridge bridge, JArray imagePath, int batchIndex, long lengthLiteral)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
         if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
@@ -394,13 +395,11 @@ internal static class ControlNetApplicator
         node.BatchIndex.Set(batchIndex);
         node.Length.Set(lengthLiteral);
         bridge.SyncNode(node);
-        BridgeSync.SyncLastId(g);
         return node.Id;
     }
 
-    private static string AddImageFromBatch(WorkflowGenerator g, JArray imagePath, int batchIndex, JToken lengthToken)
+    private static string AddImageFromBatch(WorkflowBridge bridge, JArray imagePath, int batchIndex, JToken lengthToken)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
         if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
@@ -416,7 +415,6 @@ internal static class ControlNetApplicator
             node.Length.Set(System.Convert.ToInt64(v.Value));
         }
         bridge.SyncNode(node);
-        BridgeSync.SyncLastId(g);
         return node.Id;
     }
 

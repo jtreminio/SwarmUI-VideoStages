@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using ComfyTyped.Types;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -18,10 +19,8 @@ internal sealed class LtxAudioInjector(
 
     public bool TryInject(AudioStageDetector.Detection detection, bool matchVideoLengthToAudio = true)
     {
-        Console.WriteLine($"[Inj] enter detection.Audio={detection?.Audio} isLTXV2={g.IsLTXV2()} audioVae={g.CurrentAudioVae}");
         if (detection?.Audio is null || !g.IsLTXV2() || g.CurrentAudioVae is null)
         {
-            Console.WriteLine("[Inj] early-out");
             return false;
         }
 
@@ -30,7 +29,6 @@ internal sealed class LtxAudioInjector(
             List<string> concatIds,
             HashSet<string> removableSourceIds,
             int? workflowFps) = FindConcatsToReplace(bridge);
-        Console.WriteLine($"[Inj] concatIds.Count={concatIds.Count}");
         if (concatIds.Count == 0)
         {
             return false;
@@ -41,18 +39,25 @@ internal sealed class LtxAudioInjector(
         {
             int fps = ResolveFps(workflowFps);
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
-                g,
+                bridge,
                 detection.Audio.Path,
                 g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
-            // ResolveLengthToFramesAudioSource may have written to g.Workflow; refresh bridge.
-            bridge = WorkflowBridge.Create(g.Workflow);
-            SwarmAudioLengthToFramesNode lengthToFrames = CreateLengthToFramesNode(bridge, lengthFramesAudioSource, fps);
+            SwarmAudioLengthToFramesNode lengthToFrames = CreateLengthToFramesNode(
+                bridge,
+                lengthFramesAudioSource,
+                fps);
             ApplyFramesConnectionToRemovableAudioSources(bridge, removableSourceIds, lengthToFrames.Frames);
+            BridgeSync.SyncLastId(g);
             LtxFrameCountConnector.ApplyToExistingSources(g, WorkflowBridge.ToPath(lengthToFrames.Frames));
-            adjustedAudio = new(WorkflowBridge.ToPath(lengthToFrames.Audio), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+            adjustedAudio = new(
+                WorkflowBridge.ToPath(lengthToFrames.Audio),
+                g,
+                WGNodeData.DT_AUDIO,
+                g.CurrentAudioVae.Compat);
         }
+        // EncodeToLatent (SwarmUI core) creates new nodes via g.CreateNode; our typed bridge
+        // graph becomes stale after this point and must be rebuilt.
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
-        // EncodeToLatent and the helpers above mutate g.Workflow; refresh bridge.
         bridge = WorkflowBridge.Create(g.Workflow);
         SetLatentNoiseMaskNode setMask = CreateAudioMaskNode(bridge, encodedAudio.Path);
         ReplaceAudioLatentConnections(bridge, concatIds, setMask);
@@ -72,7 +77,6 @@ internal sealed class LtxAudioInjector(
             {
                 continue;
             }
-
             concatIds.Add(concat.Id);
             removableSourceIds.Add(emptyAudio.Id);
             workflowFps ??= ReadFrameRate(emptyAudio);

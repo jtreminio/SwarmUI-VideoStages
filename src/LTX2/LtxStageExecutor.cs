@@ -538,25 +538,26 @@ internal sealed class LtxStageExecutor(
         int fps = ResolveFps(genInfo, sourceMedia);
         JArray audioLengthFrames = null;
         WGNodeData effectiveAttached = attachedAudio;
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+
         if (controlNetLengthFrames is null
             && ShouldMatchStageLengthToAudio(stage)
             && effectiveAttached?.Path is JToken audioPath)
         {
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
-                g,
+                bridge,
                 audioPath,
                 null);
 
-            WorkflowBridge audioBridge = WorkflowBridge.Create(g.Workflow);
-            SwarmAudioLengthToFramesNode lengthToFrames = audioBridge.AddNode(new SwarmAudioLengthToFramesNode());
+            SwarmAudioLengthToFramesNode lengthToFrames = bridge.AddNode(new SwarmAudioLengthToFramesNode());
             if (lengthFramesAudioSource is JArray audioSourceArr
-                && audioBridge.ResolvePath(audioSourceArr) is INodeOutput audioSrc)
+                && bridge.ResolvePath(audioSourceArr) is INodeOutput audioSrc)
             {
                 lengthToFrames.AudioInput.ConnectToUntyped(audioSrc);
             }
             lengthToFrames.FrameRate.Set(fps);
-            audioBridge.SyncNode(lengthToFrames);
-            BridgeSync.SyncLastId(g);
+            bridge.SyncNode(lengthToFrames);
 
             audioLengthFrames = new JArray(lengthToFrames.Id, 1);
             effectiveAttached = new WGNodeData(
@@ -571,7 +572,6 @@ internal sealed class LtxStageExecutor(
             ? new JValue(frames)
             : LtxFrameCountConnector.CloneConnection(dynamicLengthFrames);
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         EmptyLTXVLatentVideoNode emptyNode = bridge.AddNode(new EmptyLTXVLatentVideoNode());
         emptyNode.Width.Set(width);
         emptyNode.Height.Set(height);

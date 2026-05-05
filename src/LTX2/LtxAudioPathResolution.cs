@@ -8,8 +8,14 @@ namespace VideoStages.LTX2;
 
 internal static class LtxAudioPathResolution
 {
+    /// <summary>
+    /// Locate or synthesize a "length-to-frames" audio source for <paramref name="rawAudioPath"/>.
+    /// Mutates <paramref name="bridge"/> when a new <c>SwarmEnsureAudio</c> node has to be added.
+    /// Caller is responsible for <see cref="BridgeSync.SyncLastId"/> after subsequent untyped
+    /// node creation.
+    /// </summary>
     public static JToken ResolveLengthToFramesAudioSource(
-        WorkflowGenerator g,
+        WorkflowBridge bridge,
         JToken rawAudioPath,
         string swarmEnsureAudioStableNodeId)
     {
@@ -18,7 +24,6 @@ internal static class LtxAudioPathResolution
             return rawAudioPath;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         string rawNodeId = $"{rawRef[0]}";
         int rawSlot = (int)rawRef[1];
         foreach (SwarmEnsureAudioNode existing in bridge.Graph.NodesOfType<SwarmEnsureAudioNode>())
@@ -45,7 +50,6 @@ internal static class LtxAudioPathResolution
         }
         ensure.TargetDuration.Set(0.1);
         bridge.SyncNode(ensure);
-        BridgeSync.SyncLastId(g);
         return new JArray(ensure.Id, 0);
     }
 
