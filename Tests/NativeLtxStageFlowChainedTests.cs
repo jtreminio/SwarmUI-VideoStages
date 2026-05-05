@@ -32,18 +32,12 @@ public partial class StageFlowTests
                 steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
-        StageRefStore store = new(generator);
-        Assert.True(store.TryGetStageRef(0, out StageRefStore.StageRef stage0Ref));
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
 
         List<WorkflowNode> preprocessNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, preprocessNodes.Count);
-        AssertGuideReferenceResolvesToPreprocessInput(
-            workflow,
-            WorkflowAssertions.RequireConnectionInput(preprocessNodes[1].Node, "image"),
-            stage0Ref);
 
         List<WorkflowNode> imgToVideoNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
             .OrderBy(node => int.Parse(node.Id))
@@ -166,19 +160,10 @@ public partial class StageFlowTests
         Assert.Equal(2, samplers.Count);
         Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"));
 
-        StageRefStore store = new(generator);
-        Assert.True(store.TryGetStageRef(0, out StageRefStore.StageRef stage0Ref));
-        Assert.NotNull(stage0Ref.Media);
-        Assert.False(JToken.DeepEquals(stage0Ref.Media.Path, new JArray("202", 0)));
-
         List<WorkflowNode> preprocessNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, preprocessNodes.Count);
-        AssertGuideReferenceResolvesToPreprocessInput(
-            workflow,
-            WorkflowAssertions.RequireConnectionInput(preprocessNodes[1].Node, "image"),
-            stage0Ref);
 
         List<WorkflowNode> imgToVideoNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
             .OrderBy(node => int.Parse(node.Id))

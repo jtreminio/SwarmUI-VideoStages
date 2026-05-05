@@ -90,7 +90,8 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
             return;
         }
         stageRefStore.Capture(StageRefStore.StageKind.PreRootVideo);
-        g.NodeHelpers[PreCoreNodeIdsKey] = string.Join(",", g.Workflow.Properties().Select(p => p.Name));
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        g.NodeHelpers[PreCoreNodeIdsKey] = string.Join(",", bridge.Graph.Nodes.Keys);
     }
 
     public void DropCoreImageToVideoOutput()
@@ -125,13 +126,13 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
         }
 
         HashSet<string> preCoreIds = [.. snapshot.Split(',', StringSplitOptions.RemoveEmptyEntries)];
-        List<string> newIds = [.. g.Workflow.Properties().Select(p => p.Name).Where(id => !preCoreIds.Contains(id))];
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        List<string> newIds = [.. bridge.Graph.Nodes.Keys.Where(id => !preCoreIds.Contains(id))];
         if (newIds.Count == 0)
         {
             return;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         HashSet<string> removed = [];
         foreach (string newId in newIds)
         {

@@ -17,6 +17,8 @@ internal sealed class StageSequenceRunner(
 {
     private const int IntermediateStageSaveId = 52100;
 
+    private readonly Dictionary<int, StageRefStore.StageRef> _stageOutputs = [];
+
     private sealed class RunContext
     {
         public AudioStageDetector.Detection NativeAudioDetection { get; init; }
@@ -40,6 +42,7 @@ internal sealed class StageSequenceRunner(
             UploadedAudios = uploadedAudios,
             RootStageHandoff = rootStageHandoff
         };
+        _stageOutputs.Clear();
         List<int> usedSectionIds = [];
         bool parallelMultiClip = StagesUseMultipleClipIds(stages);
         List<WGNodeData> clipParallelOutputs = [];
@@ -49,7 +52,7 @@ internal sealed class StageSequenceRunner(
             {
                 rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
             }
-            CaptureReference(StageRefStore.StageKind.Generated);
+            CaptureGeneratedReference();
             WGNodeData parallelClipSourceMedia = g.CurrentMedia?.Duplicate();
             WGNodeData parallelClipSourceVae = g.CurrentVae?.Duplicate();
             if (parallelMultiClip)
@@ -98,7 +101,7 @@ internal sealed class StageSequenceRunner(
                 usedSectionIds.Add(sectionId);
                 PrepareStageOverrides(stage, sectionId);
                 singleStageRunner.RunStage(stage, sectionId, guideRef, store);
-                CaptureReference(StageRefStore.StageKind.Stage, stage.Id);
+                CaptureStageOutput(stage.Id);
 
                 if (parallelMultiClip
                     && (i == stages.Count - 1 || stages[i + 1].ClipId != stage.ClipId))
@@ -174,12 +177,20 @@ internal sealed class StageSequenceRunner(
         }
     }
 
-    private void CaptureReference(StageRefStore.StageKind kind, int? index = null)
+    private void CaptureGeneratedReference()
     {
         WGNodeData referenceMedia = g.CurrentMedia;
         WGNodeData referenceVae = g.CurrentVae;
         ltxManager.ApplyPostVideoChainCaptureIfPresent(ref referenceMedia, ref referenceVae);
-        store.Capture(kind, index, referenceMedia, referenceVae);
+        store.Capture(StageRefStore.StageKind.Generated, referenceMedia, referenceVae);
+    }
+
+    private void CaptureStageOutput(int index)
+    {
+        WGNodeData referenceMedia = g.CurrentMedia;
+        WGNodeData referenceVae = g.CurrentVae;
+        ltxManager.ApplyPostVideoChainCaptureIfPresent(ref referenceMedia, ref referenceVae);
+        _stageOutputs[index] = new StageRefStore.StageRef(referenceMedia, referenceVae);
     }
 
     private void PrepareStageOverrides(JsonParser.StageSpec stage, int sectionId)
@@ -230,7 +241,7 @@ internal sealed class StageSequenceRunner(
         }
         if (StringUtils.Equals(stage.ImageReference, "Generated"))
         {
-            if (stage.Id > 0 && store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
+            if (stage.Id > 0 && _stageOutputs.TryGetValue(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
             {
                 return previousGenerated;
             }
@@ -246,7 +257,7 @@ internal sealed class StageSequenceRunner(
                     "VideoStages: ImageReference 'PreviousStage' cannot be used for the first stage.");
                 return null;
             }
-            if (!store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousStage))
+            if (!_stageOutputs.TryGetValue(stage.Id - 1, out StageRefStore.StageRef previousStage))
             {
                 Logs.Warning(
                     $"VideoStages: ImageReference 'PreviousStage' requested, but stage {stage.Id - 1} does not exist.");
@@ -256,7 +267,7 @@ internal sealed class StageSequenceRunner(
         }
         if (ImageReferenceSyntax.TryParseExplicitStageIndex(stage.ImageReference, out int explicitStage))
         {
-            if (!store.TryGetStageRef(explicitStage, out StageRefStore.StageRef explicitRef))
+            if (!_stageOutputs.TryGetValue(explicitStage, out StageRefStore.StageRef explicitRef))
             {
                 Logs.Warning(
                     $"VideoStages: ImageReference '{stage.ImageReference}' requested, but stage {explicitStage} "

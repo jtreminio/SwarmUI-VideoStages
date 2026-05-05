@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using ComfyTyped.Core;
 using FreneticUtilities.FreneticExtensions;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -11,23 +10,6 @@ namespace VideoStages;
 internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
 {
     private const string Prefix = "b2e.published.edit.";
-
-    private sealed class NodeDataPayload
-    {
-        [JsonProperty("path")] public JArray Path { get; set; }
-        [JsonProperty("dataType")] public string DataType { get; set; }
-        [JsonProperty("compatId")] public string CompatId { get; set; }
-        [JsonProperty("width")] public int? Width { get; set; }
-        [JsonProperty("height")] public int? Height { get; set; }
-        [JsonProperty("frames")] public int? Frames { get; set; }
-        [JsonProperty("fps")] public int? FPS { get; set; }
-    }
-
-    private sealed class StagePayload
-    {
-        [JsonProperty("media")] public NodeDataPayload Media { get; set; }
-        [JsonProperty("vae")] public NodeDataPayload Vae { get; set; }
-    }
 
     public bool TryGetStageRef(
         int stageIndex,
@@ -40,23 +22,23 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
             return false;
         }
 
-        StagePayload payload;
+        JObject payload;
         try
         {
-            payload = JsonConvert.DeserializeObject<StagePayload>(encoded);
+            payload = JToken.Parse(encoded) as JObject;
         }
-        catch (JsonException)
+        catch
         {
             return false;
         }
-        if (payload?.Media is null)
+        if (payload?["media"] is not JObject mediaObj)
         {
             return false;
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        WGNodeData vae = BuildNodeData(bridge, payload.Vae, fallbackVae: null);
-        WGNodeData media = BuildNodeData(bridge, payload.Media, fallbackVae: vae);
+        WGNodeData vae = BuildNodeData(bridge, payload["vae"] as JObject, fallbackVae: null);
+        WGNodeData media = BuildNodeData(bridge, mediaObj, fallbackVae: vae);
         if (media is null)
         {
             return false;
@@ -84,31 +66,25 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
         return VaeDecodePreference.AsRawImage(stageRef.Media.Gen, stageRef.Media, stageRef.Vae);
     }
 
-    private WGNodeData BuildNodeData(
-        WorkflowBridge bridge,
-        NodeDataPayload data,
-        WGNodeData fallbackVae)
+    private WGNodeData BuildNodeData(WorkflowBridge bridge, JObject data, WGNodeData fallbackVae)
     {
-        if (data is null || bridge.ResolvePath(data.Path) is not INodeOutput output)
+        if (data is null || data["path"] is not JArray rawPath || bridge.ResolvePath(rawPath) is not INodeOutput output)
         {
             return null;
         }
 
-        string dataType = data.DataType ?? WGNodeData.DT_IMAGE;
-        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.CompatId);
+        string dataType = data.Value<string>("dataType") ?? WGNodeData.DT_IMAGE;
+        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.Value<string>("compatId"));
         return new WGNodeData(WorkflowBridge.ToPath(output), g, dataType, compat)
         {
-            Width = data.Width,
-            Height = data.Height,
-            Frames = data.Frames,
-            FPS = data.FPS
+            Width = data.Value<int?>("width"),
+            Height = data.Value<int?>("height"),
+            Frames = data.Value<int?>("frames"),
+            FPS = data.Value<int?>("fps")
         };
     }
 
-    private T2IModelCompatClass ResolveCompatFor(
-        string dataType,
-        WGNodeData fallbackVae,
-        string compatId)
+    private T2IModelCompatClass ResolveCompatFor(string dataType, WGNodeData fallbackVae, string compatId)
     {
         if (!string.IsNullOrWhiteSpace(compatId)
             && T2IModelClassSorter.CompatClasses.TryGetValue(
