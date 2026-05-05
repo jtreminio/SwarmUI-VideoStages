@@ -1,4 +1,3 @@
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
@@ -119,8 +118,7 @@ internal sealed class StageSequenceRunner(
 
             if (parallelMultiClip && clipParallelOutputs.Count > 1)
             {
-                JArray rootVideoPath = StageRunner.CopyPath(parallelClipSourceMedia?.Path as JArray);
-                multiClipParallelMerger.Apply(clipParallelOutputs, rootVideoPath);
+                multiClipParallelMerger.Apply(clipParallelOutputs, parallelClipSourceMedia);
             }
         }
         catch (Exception ex)

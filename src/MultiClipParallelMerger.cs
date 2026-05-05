@@ -13,29 +13,22 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 
     public void Apply(
         IReadOnlyList<WGNodeData> clipOutputsInOrder,
-        JArray? parallelRootVideoPath = null)
+        WGNodeData parallelClipSourceMedia = null)
     {
         if (clipOutputsInOrder is null || clipOutputsInOrder.Count < 2)
         {
             return;
         }
 
-        List<JArray> videoPaths = [];
-        List<JArray> audioPaths = [];
-        HashSet<string> terminalKeys = [];
+        List<WGNodeData> resolvedAudio = [];
         int sumFrames = 0;
         bool allFramesKnown = true;
         foreach (WGNodeData clip in clipOutputsInOrder)
         {
-            if (clip?.Path is JArray { Count: 2 } vp)
+            WGNodeData audio = TryGetClipConcatenatableAudio(clip);
+            if (audio is not null)
             {
-                videoPaths.Add(new JArray(vp[0], vp[1]));
-                terminalKeys.Add(OutputKey(vp));
-                JArray concatAudioPath = TryGetClipConcatenatableAudioPath(clip);
-                if (concatAudioPath is not null)
-                {
-                    audioPaths.Add(concatAudioPath);
-                }
+                resolvedAudio.Add(audio);
             }
 
             if (allFramesKnown)
@@ -51,25 +44,52 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
         }
 
-        if (videoPaths.Count < 2)
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+
+        List<INodeOutput> videoOutputs = [];
+        HashSet<string> terminalKeys = [];
+        foreach (WGNodeData clip in clipOutputsInOrder)
+        {
+            INodeOutput output = bridge.ResolvePath(clip?.Path);
+            if (output is null)
+            {
+                continue;
+            }
+            videoOutputs.Add(output);
+            terminalKeys.Add(OutputKey(output));
+        }
+
+        if (videoOutputs.Count < 2)
         {
             return;
         }
 
-        JArray mergedVideo = MergeClipVideosWithBatchImagesNode(videoPaths);
-        JArray mergedAudio = audioPaths.Count == videoPaths.Count
-            ? CascadeAudioConcat(audioPaths)
-            : null;
-
-        if (parallelRootVideoPath is { Count: 2 })
+        List<INodeOutput> audioOutputs = [];
+        foreach (WGNodeData audio in resolvedAudio)
         {
-            terminalKeys.Add(OutputKey(parallelRootVideoPath));
+            INodeOutput output = bridge.ResolvePath(audio.Path);
+            if (output is not null)
+            {
+                audioOutputs.Add(output);
+            }
         }
 
-        RetargetSwarmSaveAnimationWsForClipTerminals(terminalKeys, mergedVideo, mergedAudio);
+        INodeOutput mergedVideo = MergeClipVideosWithBatchImagesNode(bridge, videoOutputs);
+        INodeOutput mergedAudio = audioOutputs.Count == videoOutputs.Count
+            ? CascadeAudioConcat(bridge, audioOutputs)
+            : null;
+
+        INodeOutput rootVideoOutput = bridge.ResolvePath(parallelClipSourceMedia?.Path);
+        if (rootVideoOutput is not null)
+        {
+            terminalKeys.Add(OutputKey(rootVideoOutput));
+        }
+
+        RetargetSwarmSaveAnimationWsForClipTerminals(bridge, terminalKeys, mergedVideo, mergedAudio);
+        BridgeSync.SyncLastId(g);
 
         WGNodeData template = clipOutputsInOrder[0];
-        g.CurrentMedia = new WGNodeData(mergedVideo, g, WGNodeData.DT_VIDEO, template.Compat)
+        g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, template.Compat)
         {
             Width = template.Width,
             Height = template.Height,
@@ -79,140 +99,107 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         if (mergedAudio is not null)
         {
             g.CurrentMedia.AttachedAudio = new WGNodeData(
-                mergedAudio,
+                WorkflowBridge.ToPath(mergedAudio),
                 g,
                 WGNodeData.DT_AUDIO,
                 template.AttachedAudio?.Compat ?? g.CurrentAudioVae?.Compat);
         }
     }
 
-    private static string OutputKey(JArray path) => $"{path[0]}::{path[1]}";
-
     private static string OutputKey(INodeOutput output) => $"{output.Node.Id}::{output.SlotIndex}";
 
-    private JArray TryGetClipConcatenatableAudioPath(WGNodeData clip)
+    private WGNodeData TryGetClipConcatenatableAudio(WGNodeData clip)
     {
         WGNodeData attached = clip?.AttachedAudio;
-        if (attached?.Path is not JArray { Count: 2 } path)
+        if (attached?.Path is not JArray { Count: 2 })
         {
             return null;
         }
 
         if (attached.DataType == WGNodeData.DT_AUDIO)
         {
-            return new JArray(path[0], path[1]);
+            return attached;
         }
 
         if (attached.DataType == WGNodeData.DT_LATENT_AUDIO && g.CurrentAudioVae is not null)
         {
             WGNodeData decoded = attached.DecodeLatents(g.CurrentAudioVae, true);
-            if (decoded?.Path is JArray { Count: 2 } dp
-                && decoded.DataType == WGNodeData.DT_AUDIO)
+            if (decoded?.Path is JArray { Count: 2 } && decoded.DataType == WGNodeData.DT_AUDIO)
             {
-                return new JArray(dp[0], dp[1]);
+                return decoded;
             }
         }
 
         return null;
     }
 
-    private JArray MergeClipVideosWithBatchImagesNode(IReadOnlyList<JArray> paths)
+    private static INodeOutput MergeClipVideosWithBatchImagesNode(
+        WorkflowBridge bridge,
+        IReadOnlyList<INodeOutput> outputs)
     {
-        List<JArray> layer = [.. paths];
-
-        if (layer.Count == 1)
+        if (outputs.Count == 1)
         {
-            return layer[0];
+            return outputs[0];
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        try
+        List<INodeOutput> layer = [.. outputs];
+        while (layer.Count > BatchImagesNodeMaxInputs)
         {
-            while (layer.Count > BatchImagesNodeMaxInputs)
+            INodeOutput chunk = AddBatchImagesNode(bridge, layer.Take(BatchImagesNodeMaxInputs));
+            List<INodeOutput> next = [chunk];
+            for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
             {
-                string chunkNodeId = AddBatchImagesNode(
-                    bridge,
-                    layer.Take(BatchImagesNodeMaxInputs));
-                List<JArray> next = [new JArray(chunkNodeId, 0)];
-                for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
-                {
-                    next.Add(layer[i]);
-                }
-
-                layer = next;
+                next.Add(layer[i]);
             }
+            layer = next;
+        }
 
-            return new JArray(AddBatchImagesNode(bridge, layer), 0);
-        }
-        finally
-        {
-            BridgeSync.SyncLastId(g);
-        }
+        return AddBatchImagesNode(bridge, layer);
     }
 
-    private static string AddBatchImagesNode(WorkflowBridge bridge, IEnumerable<JArray> imagePaths)
+    private static INodeOutput AddBatchImagesNode(WorkflowBridge bridge, IEnumerable<INodeOutput> imageOutputs)
     {
         BatchImagesNodeNode node = bridge.AddNode(new BatchImagesNodeNode());
         JObject extra = [];
         int i = 0;
-        foreach (JArray imagePath in imagePaths)
+        foreach (INodeOutput imageOutput in imageOutputs)
         {
-            extra[$"images.image{i}"] = new JArray(imagePath[0], imagePath[1]);
+            extra[$"images.image{i}"] = WorkflowBridge.ToPath(imageOutput);
             i++;
         }
         node.ExtraInputs = extra;
         bridge.SyncNode(node);
-        return node.Id;
+
+        return node.IMAGE;
     }
 
-    private JArray CascadeAudioConcat(IReadOnlyList<JArray> paths)
+    private static INodeOutput CascadeAudioConcat(WorkflowBridge bridge, IReadOnlyList<INodeOutput> audioOutputs)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        INodeOutput acc = bridge.ResolvePath(paths[0]);
-        if (acc is null)
+        INodeOutput acc = audioOutputs[0];
+        for (int i = 1; i < audioOutputs.Count; i++)
         {
-            return paths[0];
-        }
-
-        for (int i = 1; i < paths.Count; i++)
-        {
-            INodeOutput next = bridge.ResolvePath(paths[i]);
-            if (next is null)
-            {
-                continue;
-            }
             AudioConcatNode concat = bridge.AddNode(new AudioConcatNode());
             concat.Audio1.ConnectToUntyped(acc);
-            concat.Audio2.ConnectToUntyped(next);
-            concat.Direction.Set("after");
+            concat.Audio2.ConnectToUntyped(audioOutputs[i]);
             bridge.SyncNode(concat);
             acc = concat.AUDIO;
         }
-        BridgeSync.SyncLastId(g);
 
-        return new JArray(acc.Node.Id, acc.SlotIndex);
+        return acc;
     }
 
-    private void RetargetSwarmSaveAnimationWsForClipTerminals(
+    private static void RetargetSwarmSaveAnimationWsForClipTerminals(
+        WorkflowBridge bridge,
         HashSet<string> terminalKeys,
-        JArray images,
-        JArray audio)
+        INodeOutput images,
+        INodeOutput audio)
     {
-        if (images is not { Count: 2 } || terminalKeys.Count == 0)
+        if (images is null || terminalKeys.Count == 0)
         {
             return;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        INodeOutput imagesOutput = bridge.ResolvePath(images);
-        INodeOutput audioOutput = audio is { Count: 2 } ? bridge.ResolvePath(audio) : null;
-        if (imagesOutput is null)
-        {
-            return;
-        }
-
-        foreach (SwarmSaveAnimationWSNode save in
-            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
+        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
         {
             if (save.Images.Connection is not INodeOutput existingImages
                 || !terminalKeys.Contains(OutputKey(existingImages)))
@@ -220,10 +207,10 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 continue;
             }
 
-            save.Images.ConnectToUntyped(imagesOutput);
-            if (audioOutput is not null)
+            save.Images.ConnectToUntyped(images);
+            if (audio is not null)
             {
-                save.Audio.ConnectToUntyped(audioOutput);
+                save.Audio.ConnectToUntyped(audio);
             }
             else
             {

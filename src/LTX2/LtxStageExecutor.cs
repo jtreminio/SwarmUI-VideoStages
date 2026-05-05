@@ -755,11 +755,7 @@ internal sealed class LtxStageExecutor(
         {
             return false;
         }
-        if (StringUtils.Equals(stage.ClipAudioSource, Constants.AudioSourceUpload))
-        {
-            return true;
-        }
-        return AudioStageDetector.TryParseAceStepFunAudioSource(stage.ClipAudioSource, out _);
+        return ClipAudioWorkflowHelper.IsUploadOrAceStepFunAudioSource(stage.ClipAudioSource);
     }
 
     private void ApplyResolvedFpsToWorkflow(WorkflowGenerator.ImageToVideoGenInfo genInfo, int fps)

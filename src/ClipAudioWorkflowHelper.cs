@@ -1,5 +1,3 @@
-using SwarmUI.Utils;
-
 namespace VideoStages;
 
 internal static class ClipAudioWorkflowHelper
@@ -15,22 +13,9 @@ internal static class ClipAudioWorkflowHelper
         bool clipLengthFromAudio,
         bool restrictLengthMatchToUploadOrAce)
     {
-        if (restrictLengthMatchToUploadOrAce)
-        {
-            if (!clipLengthFromAudio)
-            {
-                return false;
-            }
-            return string.Equals(audioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
-                || AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _);
-        }
-
-        if (string.Equals(audioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
-            || AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _))
-        {
-            return clipLengthFromAudio;
-        }
-        return true;
+        return IsUploadOrAceStepFunAudioSource(audioSource)
+            ? clipLengthFromAudio
+            : !restrictLengthMatchToUploadOrAce;
     }
 
     internal static AudioStageDetector.Detection ResolveClipAudioDetection(
@@ -47,36 +32,25 @@ internal static class ClipAudioWorkflowHelper
         {
             case ClipAudioSourceNormalization.CoordinatorField:
                 source = audioSourceRaw?.Trim() ?? "";
-                if (string.IsNullOrWhiteSpace(source))
-                {
-                    return suppressNativeFallback ? null : nativeFallback;
-                }
                 break;
             case ClipAudioSourceNormalization.StageSpec:
                 source = (audioSourceRaw ?? Constants.AudioSourceNative).Trim();
-                if (string.IsNullOrWhiteSpace(source))
+                if (source.Length == 0)
                 {
                     return null;
                 }
                 break;
             default:
-                Logs.Error(nameof(normalization));
-                return null;
+                throw new ArgumentOutOfRangeException(nameof(normalization), normalization, null);
         }
 
-        if (string.Equals(source, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
+        if (!IsUploadOrAceStepFunAudioSource(source))
         {
-            return DetectionForClip(uploadedAudios, clipId);
+            return suppressNativeFallback ? null : nativeFallback;
         }
-        if (AudioStageDetector.TryParseAceStepFunAudioSource(source, out _))
-        {
-            return DetectionForClip(clipAudios, clipId);
-        }
-        if (suppressNativeFallback)
-        {
-            return null;
-        }
-        return nativeFallback;
+        return string.Equals(source, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
+            ? DetectionForClip(uploadedAudios, clipId)
+            : DetectionForClip(clipAudios, clipId);
     }
 
     private static AudioStageDetector.Detection DetectionForClip(
@@ -90,5 +64,11 @@ internal static class ClipAudioWorkflowHelper
         return audiosByClipId.TryGetValue(clipId, out AudioStageDetector.Detection found)
             ? found
             : null;
+    }
+
+    internal static bool IsUploadOrAceStepFunAudioSource(string audioSource)
+    {
+        return string.Equals(audioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
+            || AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _);
     }
 }
