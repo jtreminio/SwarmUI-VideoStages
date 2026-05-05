@@ -21,14 +21,11 @@ internal static class ClipAudioWorkflowHelper
             {
                 return false;
             }
-            if (StringUtils.Equals(audioSource, Constants.AudioSourceUpload))
-            {
-                return true;
-            }
-            return AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _);
+            return string.Equals(audioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
+                || AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _);
         }
 
-        if (StringUtils.Equals(audioSource, Constants.AudioSourceUpload)
+        if (string.Equals(audioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
             || AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _))
         {
             return clipLengthFromAudio;
@@ -67,30 +64,31 @@ internal static class ClipAudioWorkflowHelper
                 return null;
         }
 
-        if (StringUtils.Equals(source, Constants.AudioSourceUpload))
+        if (string.Equals(source, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase))
         {
-            if (uploadedAudios is null)
-            {
-                return null;
-            }
-            return uploadedAudios.TryGetValue(clipId, out AudioStageDetector.Detection uploaded)
-                ? uploaded
-                : null;
+            return DetectionForClip(uploadedAudios, clipId);
         }
         if (AudioStageDetector.TryParseAceStepFunAudioSource(source, out _))
         {
-            if (clipAudios is null)
-            {
-                return null;
-            }
-            return clipAudios.TryGetValue(clipId, out AudioStageDetector.Detection ace)
-                ? ace
-                : null;
+            return DetectionForClip(clipAudios, clipId);
         }
         if (suppressNativeFallback)
         {
             return null;
         }
         return nativeFallback;
+    }
+
+    private static AudioStageDetector.Detection DetectionForClip(
+        IReadOnlyDictionary<int, AudioStageDetector.Detection> audiosByClipId,
+        int clipId)
+    {
+        if (audiosByClipId is null)
+        {
+            return null;
+        }
+        return audiosByClipId.TryGetValue(clipId, out AudioStageDetector.Detection found)
+            ? found
+            : null;
     }
 }

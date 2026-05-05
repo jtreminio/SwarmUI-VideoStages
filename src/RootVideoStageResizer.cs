@@ -23,7 +23,8 @@ internal sealed class RootVideoStageResizer(
     private static void ApplyRootResolutionBeforeImageToVideo(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!TryGetVideoContextResizerWithRootSize(genInfo, out RootVideoStageResizer resizer, out Resolution resolution))
+        if (!TryGetVideoContextResizerWithRootSize(
+            genInfo, out RootVideoStageResizer resizer, out Resolution resolution))
         {
             return;
         }
@@ -34,7 +35,8 @@ internal sealed class RootVideoStageResizer(
     private static void ApplyRootLatentResolutionAfterImageToVideo(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!TryGetVideoContextResizerWithRootSize(genInfo, out RootVideoStageResizer resizer, out Resolution resolution))
+        if (!TryGetVideoContextResizerWithRootSize(
+            genInfo, out RootVideoStageResizer resizer, out Resolution resolution))
         {
             return;
         }
@@ -116,8 +118,6 @@ internal sealed class RootVideoStageResizer(
             return false;
         }
 
-        // todo do this instead?
-        // ComfyNode? saver = graph.FindNearestDownstream(output, n => n is SwarmSaveImageWSNode or SaveImageNode);
         foreach (ComfyNode consumer in bridge.Graph.FindDownstream(output))
         {
             if (consumer is SwarmSaveImageWSNode or SaveImageNode)

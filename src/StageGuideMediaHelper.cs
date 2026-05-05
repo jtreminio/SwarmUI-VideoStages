@@ -82,13 +82,23 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (TryNormalizeExistingImageScale(bridge, resolvedGuideMedia.Path, targetWidth, targetHeight, out string normalizedScaleId))
+        if (TryNormalizeExistingImageScale(
+            bridge,
+            resolvedGuideMedia.Path,
+            targetWidth,
+            targetHeight,
+            out string normalizedScaleId))
         {
             resolvedGuideMedia = resolvedGuideMedia.WithPath([normalizedScaleId, 0]);
         }
         else if (currentWidth != targetWidth || currentHeight != targetHeight)
         {
-            if (TryFindReusableImageScale(bridge, resolvedGuideMedia.Path, targetWidth, targetHeight, out string reusableScaleId))
+            if (TryFindReusableImageScale(
+                bridge,
+                resolvedGuideMedia.Path,
+                targetWidth,
+                targetHeight,
+                out string reusableScaleId))
             {
                 resolvedGuideMedia = resolvedGuideMedia.WithPath([reusableScaleId, 0]);
             }
@@ -145,8 +155,6 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         ImageScaleNode collapsed = scale;
         if (scale.Image.Connection?.Node is ImageScaleNode upstream)
         {
-            // Collapse a chained ImageScale → ImageScale: if the outer one has no other
-            // consumers in the existing workflow, drop it and operate on the upstream node.
             INodeOutput outerOutput = bridge.ResolvePath(sourcePath);
             if (outerOutput is not null && !bridge.Graph.FindDownstream(outerOutput).Any())
             {

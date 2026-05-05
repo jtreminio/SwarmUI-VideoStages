@@ -116,15 +116,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         return null;
     }
 
-    /// <summary>
-    /// BatchImagesNode takes a dynamic list of sibling input keys (<c>images.image0</c>,
-    /// <c>images.image1</c>, …) that the codegen does not model as typed slots. We use the
-    /// upstream <c>ComfyNode.ExtraInputs</c> escape hatch to write those keys through a typed
-    /// bridge add. Note that connections under <c>ExtraInputs</c> are not graph-aware — they
-    /// pass through verbatim and are not updated by <c>RetargetConnections</c> or node removal.
-    /// That is acceptable here: this node is built terminal in the merge graph, and nothing
-    /// later remaps its inputs.
-    /// </summary>
     private JArray MergeClipVideosWithBatchImagesNode(IReadOnlyList<JArray> paths)
     {
         List<JArray> layer = [.. paths];
@@ -139,7 +130,9 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         {
             while (layer.Count > BatchImagesNodeMaxInputs)
             {
-                string chunkNodeId = AddBatchImagesNode(bridge, layer.Take(BatchImagesNodeMaxInputs));
+                string chunkNodeId = AddBatchImagesNode(
+                    bridge,
+                    layer.Take(BatchImagesNodeMaxInputs));
                 List<JArray> next = [new JArray(chunkNodeId, 0)];
                 for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
                 {
@@ -205,7 +198,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         JArray images,
         JArray audio)
     {
-        if (images is not { Count: 2 } || terminalKeys is null || terminalKeys.Count == 0)
+        if (images is not { Count: 2 } || terminalKeys.Count == 0)
         {
             return;
         }
@@ -218,7 +211,8 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             return;
         }
 
-        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
+        foreach (SwarmSaveAnimationWSNode save in
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
         {
             if (save.Images.Connection is not INodeOutput existingImages
                 || !terminalKeys.Contains(OutputKey(existingImages)))

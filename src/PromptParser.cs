@@ -410,10 +410,9 @@ internal static class PromptParser
             }
 
             string tagPrefixLower = prefixName.ToLowerInvariant();
-            bool isVideoClipTag = tagPrefixLower == "videoclip";
-            if (isVideoClipTag)
+            if (tagPrefixLower == "videoclip")
             {
-                bool wantThisSection = VideoClipTagAppliesToClip(
+                inWantedSection = VideoClipTagAppliesToClip(
                     tag,
                     preData,
                     clipIndex,
@@ -421,15 +420,9 @@ internal static class PromptParser
                     clipStageIndexWithinClip,
                     globalCid,
                     clipCid);
-
-                if (wantThisSection)
-                {
-                    sawRelevantVideoClipTag = true;
-                }
-
-                inWantedSection = wantThisSection;
                 if (inWantedSection)
                 {
+                    sawRelevantVideoClipTag = true;
                     AppendWithBoundarySpace(result, content);
                 }
             }
@@ -605,8 +598,7 @@ internal static class PromptParser
             }
 
             string tagPrefixLower = prefixName.ToLowerInvariant();
-            bool isVideoClipTag = tagPrefixLower == "videoclip";
-            if (isVideoClipTag)
+            if (tagPrefixLower == "videoclip")
             {
                 inAnyVideoClipSection = true;
                 continue;

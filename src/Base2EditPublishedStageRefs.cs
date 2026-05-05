@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using FreneticUtilities.FreneticExtensions;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -21,23 +22,29 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
             return false;
         }
 
+        JObject payload;
         try
         {
-            JObject payload = JObject.Parse(encoded);
-            WGNodeData vae = payload["vae"] is JObject vaeObj ? DeserializeNodeData(vaeObj, null) : null;
-            WGNodeData media = payload["media"] is JObject mediaObj ? DeserializeNodeData(mediaObj, vae) : null;
-            if (media is null)
-            {
-                return false;
-            }
-
-            stageRef = new StageRefStore.StageRef(media, vae);
-            return true;
+            payload = JObject.Parse(encoded);
         }
-        catch
+        catch (JsonException)
         {
             return false;
         }
+
+        WGNodeData vae = payload["vae"] is JObject vaeObj
+            ? DeserializeNodeData(vaeObj, null)
+            : null;
+        WGNodeData media = payload["media"] is JObject mediaObj
+            ? DeserializeNodeData(mediaObj, vae)
+            : null;
+        if (media is null)
+        {
+            return false;
+        }
+
+        stageRef = new StageRefStore.StageRef(media, vae);
+        return true;
     }
 
     public static WGNodeData ResolveToRawImage(StageRefStore.StageRef stageRef)

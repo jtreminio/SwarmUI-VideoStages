@@ -74,17 +74,6 @@ internal static class ControlNetApplicator
         }
     }
 
-    /// <summary>
-    /// Walks upstream from <paramref name="fullControlImage"/> looking for an
-    /// <c>ImageScale</c> whose source is a <c>GetVideoComponents</c>; when found, transforms
-    /// it in place into a <c>ResizeImageMaskNode</c>.
-    ///
-    /// <para>Detection (typed graph walk + pattern match) and mutation (JObject rewrite of
-    /// <c>class_type</c> and inputs) live side-by-side because the swap preserves the node's
-    /// id. Round-tripping the class change through <c>bridge.RemoveNode</c> +
-    /// <c>bridge.AddNode</c> would orphan every consumer's typed connection — messier than
-    /// just rewriting the JObject in place.</para>
-    /// </summary>
     private static void ReplaceVideoControlNetUpscale(WorkflowGenerator g, JArray fullControlImage)
     {
         if (fullControlImage is not { Count: 2 })
@@ -165,7 +154,7 @@ internal static class ControlNetApplicator
         {
             controlImage = sourceMedia.AsRawImage(genInfo.Vae ?? g.CurrentVae);
             string preprocessor = ResolvePreprocessor(g, index, controlModel);
-            if (!StringUtils.Equals(preprocessor, "none"))
+            if (!string.Equals(preprocessor, "none", StringComparison.OrdinalIgnoreCase))
             {
                 WGNodeData priorVae = g.CurrentVae;
                 try
@@ -193,7 +182,12 @@ internal static class ControlNetApplicator
             genInfo,
             controlNetSource,
             clipLengthFromControlNet);
-        if (TryApplyLtxIcloraGuide(g, genInfo, controlImage, stageControlNetStrength ?? controlStrength, guideFrameCount))
+        if (TryApplyLtxIcloraGuide(
+                g,
+                genInfo,
+                controlImage,
+                stageControlNetStrength ?? controlStrength,
+                guideFrameCount))
         {
             return;
         }
@@ -234,7 +228,7 @@ internal static class ControlNetApplicator
 
     public static bool ConsumeNeedsLtxIcloraGuideCrop(WorkflowGenerator g)
     {
-        if (g is null || !g.NodeHelpers.TryGetValue(NeedsLtxIcloraGuideCropKey, out string value))
+        if (!g.NodeHelpers.TryGetValue(NeedsLtxIcloraGuideCropKey, out string value))
         {
             return false;
         }
@@ -330,11 +324,26 @@ internal static class ControlNetApplicator
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode());
-        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos) { guide.PositiveInput.ConnectToUntyped(pos); }
-        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg) { guide.NegativeInput.ConnectToUntyped(neg); }
-        if (bridge.ResolvePath(vaePath) is INodeOutput vae) { guide.Vae.ConnectToUntyped(vae); }
-        if (bridge.ResolvePath(latentPath) is INodeOutput latent) { guide.LatentInput.ConnectToUntyped(latent); }
-        if (bridge.ResolvePath(guideImagePath) is INodeOutput img) { guide.Image.ConnectToUntyped(img); }
+        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
+        {
+            guide.PositiveInput.ConnectToUntyped(pos);
+        }
+        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg)
+        {
+            guide.NegativeInput.ConnectToUntyped(neg);
+        }
+        if (bridge.ResolvePath(vaePath) is INodeOutput vae)
+        {
+            guide.Vae.ConnectToUntyped(vae);
+        }
+        if (bridge.ResolvePath(latentPath) is INodeOutput latent)
+        {
+            guide.LatentInput.ConnectToUntyped(latent);
+        }
+        if (bridge.ResolvePath(guideImagePath) is INodeOutput img)
+        {
+            guide.Image.ConnectToUntyped(img);
+        }
         guide.FrameIdx.Set(0L);
         guide.Strength.Set(controlStrength);
         guide.LatentDownscaleFactor.Set(2.0);
@@ -368,24 +377,30 @@ internal static class ControlNetApplicator
         ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode());
         if (guideSource is { Count: 2 } && bridge.ResolvePath(guideSource) is INodeOutput src)
         {
-            ((INodeInput)resize.Input).ConnectToUntyped(src);
+            resize.Input.ConnectToUntyped(src);
         }
         resize.ResizeType.Set("scale to multiple");
         resize.ScaleMethod.Set("lanczos");
-        // `resize_type.multiple` is a variant input keyed off the selected `resize_type`. The
-        // codegen does not model these variant keys, so they go through `ExtraInputs`.
         resize.ExtraInputs = new JObject
         {
             ["resize_type.multiple"] = 64,
         };
         bridge.SyncNode(resize);
 
-        string croppedGuide = AddImageFromBatch(bridge, new JArray(resize.Id, 0), batchIndex: 0, lengthToken: frames.DeepClone());
+        string croppedGuide = AddImageFromBatch(
+            bridge,
+            new JArray(resize.Id, 0),
+            batchIndex: 0,
+            lengthToken: frames.DeepClone());
         BridgeSync.SyncLastId(g);
         return new JArray(croppedGuide, 0);
     }
 
-    private static string AddImageFromBatch(WorkflowBridge bridge, JArray imagePath, int batchIndex, long lengthLiteral)
+    private static string AddImageFromBatch(
+        WorkflowBridge bridge,
+        JArray imagePath,
+        int batchIndex,
+        long lengthLiteral)
     {
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
         if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
@@ -398,7 +413,11 @@ internal static class ControlNetApplicator
         return node.Id;
     }
 
-    private static string AddImageFromBatch(WorkflowBridge bridge, JArray imagePath, int batchIndex, JToken lengthToken)
+    private static string AddImageFromBatch(
+        WorkflowBridge bridge,
+        JArray imagePath,
+        int batchIndex,
+        JToken lengthToken)
     {
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
         if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
@@ -412,7 +431,7 @@ internal static class ControlNetApplicator
         }
         else if (lengthToken is JValue v && v.Value is not null)
         {
-            node.Length.Set(System.Convert.ToInt64(v.Value));
+            node.Length.Set(Convert.ToInt64(v.Value));
         }
         bridge.SyncNode(node);
         return node.Id;
@@ -648,9 +667,11 @@ internal static class ControlNetApplicator
         }
     }
 
-    private static string CapturedControlNetImageKey(int index) => $"{CapturedControlNetImageKeyPrefix}{index}";
+    private static string CapturedControlNetImageKey(int index) =>
+        $"{CapturedControlNetImageKeyPrefix}{index}";
 
-    private static string CapturedControlNetFrameCountKey(int index) => $"{CapturedControlNetFrameCountKeyPrefix}{index}";
+    private static string CapturedControlNetFrameCountKey(int index) =>
+        $"{CapturedControlNetFrameCountKeyPrefix}{index}";
 
     private static bool TryParseConnection(string encoded, out JArray connection)
     {
@@ -707,8 +728,9 @@ internal static class ControlNetApplicator
 
     private static string ResolvePreprocessor(WorkflowGenerator g, int index, T2IModel controlModel)
     {
-        if (ComfyUIBackendExtension.ControlNetPreprocessorParams[index] is not null
-            && g.UserInput.TryGet(ComfyUIBackendExtension.ControlNetPreprocessorParams[index], out string preprocessor))
+        T2IRegisteredParam<string> preprocessorParam = ComfyUIBackendExtension.ControlNetPreprocessorParams[index];
+        if (preprocessorParam is not null
+            && g.UserInput.TryGet(preprocessorParam, out string preprocessor))
         {
             return NormalizePreprocessorName(preprocessor);
         }
@@ -800,7 +822,8 @@ internal static class ControlNetApplicator
 
     private static string NormalizePreprocessorName(string preprocessor)
     {
-        if (string.IsNullOrWhiteSpace(preprocessor) || preprocessor.Equals("None", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(preprocessor)
+            || preprocessor.Equals("None", StringComparison.OrdinalIgnoreCase))
         {
             return "none";
         }
@@ -867,12 +890,27 @@ internal static class ControlNetApplicator
                 throw new SwarmUserErrorException("Alimama Inpainting ControlNet requires a mask.");
             }
             ControlNetInpaintingAliMamaApplyNode alimama = bridge.AddNode(new ControlNetInpaintingAliMamaApplyNode());
-            if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos) { alimama.PositiveInput.ConnectToUntyped(pos); }
-            if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg) { alimama.NegativeInput.ConnectToUntyped(neg); }
+            if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
+            {
+                alimama.PositiveInput.ConnectToUntyped(pos);
+            }
+            if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg)
+            {
+                alimama.NegativeInput.ConnectToUntyped(neg);
+            }
             alimama.ControlNet.ConnectTo(controlNetOutput);
-            if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolvePath(vaePath) is INodeOutput vae) { alimama.Vae.ConnectToUntyped(vae); }
-            if (controlImage?.Path is JArray imagePath && bridge.ResolvePath(imagePath) is INodeOutput img) { alimama.Image.ConnectToUntyped(img); }
-            if (g.FinalMask is JArray maskPath && bridge.ResolvePath(maskPath) is INodeOutput mask) { alimama.Mask.ConnectToUntyped(mask); }
+            if (genInfo.Vae?.Path is JArray vaePath && bridge.ResolvePath(vaePath) is INodeOutput vae)
+            {
+                alimama.Vae.ConnectToUntyped(vae);
+            }
+            if (controlImage?.Path is JArray imagePath && bridge.ResolvePath(imagePath) is INodeOutput img)
+            {
+                alimama.Image.ConnectToUntyped(img);
+            }
+            if (g.FinalMask is JArray maskPath && bridge.ResolvePath(maskPath) is INodeOutput mask)
+            {
+                alimama.Mask.ConnectToUntyped(mask);
+            }
             alimama.Strength.Set(controlStrength);
             alimama.StartPercent.Set(startPercent);
             alimama.EndPercent.Set(endPercent);
@@ -882,16 +920,30 @@ internal static class ControlNetApplicator
         }
 
         ControlNetApplyAdvancedNode apply = bridge.AddNode(new ControlNetApplyAdvancedNode());
-        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput posCond) { apply.PositiveInput.ConnectToUntyped(posCond); }
-        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput negCond) { apply.NegativeInput.ConnectToUntyped(negCond); }
+        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput posCond)
+        {
+            apply.PositiveInput.ConnectToUntyped(posCond);
+        }
+        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput negCond)
+        {
+            apply.NegativeInput.ConnectToUntyped(negCond);
+        }
         apply.ControlNet.ConnectTo(controlNetOutput);
-        if (controlImage?.Path is JArray applyImagePath && bridge.ResolvePath(applyImagePath) is INodeOutput applyImg) { apply.Image.ConnectToUntyped(applyImg); }
+        if (controlImage?.Path is JArray applyImagePath
+            && bridge.ResolvePath(applyImagePath) is INodeOutput applyImg)
+        {
+            apply.Image.ConnectToUntyped(applyImg);
+        }
         apply.Strength.Set(controlStrength);
         apply.StartPercent.Set(startPercent);
         apply.EndPercent.Set(endPercent);
         if (g.IsSD3() || g.IsFlux() || g.IsAnyFlux2() || g.IsChroma() || g.IsQwenImage())
         {
-            if (genInfo.Vae?.Path is JArray applyVaePath && bridge.ResolvePath(applyVaePath) is INodeOutput applyVae) { apply.Vae.ConnectToUntyped(applyVae); }
+            if (genInfo.Vae?.Path is JArray applyVaePath
+                && bridge.ResolvePath(applyVaePath) is INodeOutput applyVae)
+            {
+                apply.Vae.ConnectToUntyped(applyVae);
+            }
         }
         bridge.SyncNode(apply);
         BridgeSync.SyncLastId(g);

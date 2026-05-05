@@ -10,20 +10,20 @@ public static class AceStepFunAudioSavePruner
     public static void Apply(WorkflowGenerator g, IReadOnlyList<JsonParser.ClipSpec> clips)
     {
         HashSet<int> tracksToSave = [];
-        HashSet<int> selectedAceStepFunTracks = [];
+        HashSet<int> aceSourceTracks = [];
         foreach (JsonParser.ClipSpec clip in clips)
         {
             if (!AudioStageDetector.TryParseAceStepFunAudioSource(clip.AudioSource, out int trackIndex))
             {
                 continue;
             }
-            selectedAceStepFunTracks.Add(trackIndex);
+            aceSourceTracks.Add(trackIndex);
             if (clip.SaveAudioTrack)
             {
                 tracksToSave.Add(trackIndex);
             }
         }
-        if (selectedAceStepFunTracks.Count == 0)
+        if (aceSourceTracks.Count == 0)
         {
             return;
         }
@@ -34,7 +34,7 @@ public static class AceStepFunAudioSavePruner
         {
             if (bridge.Workflow[node.Id] is not JObject jsonNode
                 || !AudioStageDetector.TryParseAceStepFunSaveNodeTrackIndex(jsonNode, out int trackIndex)
-                || !selectedAceStepFunTracks.Contains(trackIndex)
+                || !aceSourceTracks.Contains(trackIndex)
                 || tracksToSave.Contains(trackIndex))
             {
                 continue;

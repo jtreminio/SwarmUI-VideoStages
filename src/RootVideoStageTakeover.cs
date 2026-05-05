@@ -57,7 +57,7 @@ internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jso
 
     public void CleanupSynthesizedRootVideoStageModel()
     {
-        if (g.NodeHelpers.Remove(SynthesizedRootVideoModelKey) == true)
+        if (g.NodeHelpers.Remove(SynthesizedRootVideoModelKey))
         {
             g.UserInput.Remove(T2IParamTypes.VideoModel);
         }
@@ -75,8 +75,7 @@ internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jso
         {
             return false;
         }
-        if (hasNativeVideoModel
-            && !WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep))
+        if (hasNativeVideoModel && !WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep))
         {
             return false;
         }
@@ -122,9 +121,7 @@ internal sealed class RootVideoStageTakeover(WorkflowGenerator g, JsonParser jso
 
     private void CleanupStashSection()
     {
-        if (g.UserInput.SectionParamOverrides.TryGetValue(
-                StashSectionId,
-                out T2IParamSet stash)
+        if (g.UserInput.SectionParamOverrides.TryGetValue(StashSectionId, out T2IParamSet stash)
             && stash.ValuesInput.Count == 0)
         {
             g.UserInput.SectionParamOverrides.Remove(StashSectionId);

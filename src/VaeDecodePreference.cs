@@ -20,7 +20,7 @@ internal static class VaeDecodePreference
         {
             return media;
         }
-        if (g is null || vae is null)
+        if (vae is null)
         {
             return media.AsRawImage(vae);
         }
@@ -85,8 +85,8 @@ internal static class VaeDecodePreference
         }
 
         string decodedId = ShouldUseTiledVaeDecode(g)
-            ? AddTiledVaeDecode(g, vae.Path as JArray, media.Path as JArray)
-            : AddPlainVaeDecode(g, vae.Path as JArray, media.Path as JArray);
+            ? AddTiledVaeDecode(g, vae.Path, media.Path)
+            : AddPlainVaeDecode(g, vae.Path, media.Path);
         string decodedDataType = media.DataType == WGNodeData.DT_LATENT_VIDEO
             ? WGNodeData.DT_VIDEO
             : WGNodeData.DT_IMAGE;
@@ -95,15 +95,21 @@ internal static class VaeDecodePreference
 
     private static bool ShouldUseTiledVaeDecode(WorkflowGenerator g)
     {
-        return g.UserInput.TryGet(T2IParamTypes.VAETileSize, out _) == true;
+        return g.UserInput.TryGet(T2IParamTypes.VAETileSize, out _);
     }
 
     private static string AddPlainVaeDecode(WorkflowGenerator g, JArray vaePath, JArray latentPath)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         VAEDecodeNode decode = bridge.AddNode(new VAEDecodeNode());
-        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae) { decode.Vae.ConnectToUntyped(vae); }
-        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples) { decode.Samples.ConnectToUntyped(samples); }
+        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae)
+        {
+            decode.Vae.ConnectToUntyped(vae);
+        }
+        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples)
+        {
+            decode.Samples.ConnectToUntyped(samples);
+        }
         bridge.SyncNode(decode);
         BridgeSync.SyncLastId(g);
         return decode.Id;
@@ -113,8 +119,14 @@ internal static class VaeDecodePreference
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode());
-        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae) { decode.Vae.ConnectToUntyped(vae); }
-        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples) { decode.Samples.ConnectToUntyped(samples); }
+        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae)
+        {
+            decode.Vae.ConnectToUntyped(vae);
+        }
+        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples)
+        {
+            decode.Samples.ConnectToUntyped(samples);
+        }
         decode.TileSize.Set(g.UserInput.Get(T2IParamTypes.VAETileSize, 256));
         decode.Overlap.Set(g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64));
         decode.TemporalSize.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 32));
