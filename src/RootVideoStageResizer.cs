@@ -1,3 +1,6 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -7,8 +10,7 @@ namespace VideoStages;
 internal sealed class RootVideoStageResizer(
     WorkflowGenerator g,
     RootVideoStageTakeover takeover,
-    JsonParser jsonParser,
-    StageGuideMediaHelper stageGuideMediaHelper)
+    JsonParser jsonParser)
 {
     private readonly record struct Resolution(int Width, int Height);
 
@@ -107,15 +109,18 @@ internal sealed class RootVideoStageResizer(
             return false;
         }
 
-        foreach (WorkflowInputConnection connection in WorkflowUtils.FindInputConnections(g.Workflow, mediaPath))
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput output = bridge.ResolvePath(mediaPath);
+        if (output is null)
         {
-            if (!g.Workflow.TryGetValue(connection.NodeId, out JToken nodeToken) || nodeToken is not JObject node)
-            {
-                continue;
-            }
+            return false;
+        }
 
-            if (StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveImageWS)
-                || StringUtils.NodeTypeMatches(node, NodeTypes.SaveImage))
+        // todo do this instead?
+        // ComfyNode? saver = graph.FindNearestDownstream(output, n => n is SwarmSaveImageWSNode or SaveImageNode);
+        foreach (ComfyNode consumer in bridge.Graph.FindDownstream(output))
+        {
+            if (consumer is SwarmSaveImageWSNode or SaveImageNode)
             {
                 return true;
             }
@@ -227,41 +232,77 @@ internal sealed class RootVideoStageResizer(
 
         g.CurrentMedia.Width = resolution.Width;
         g.CurrentMedia.Height = resolution.Height;
-        if (TryUpdateExistingImageScaleNode(resolution))
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (TryUpdateExistingImageScaleNode(bridge, resolution))
         {
             return;
         }
 
-        JObject scaleInputs = stageGuideMediaHelper.BuildCenterLanczosImageScaleInputs(
-            g.CurrentMedia.Path,
-            resolution.Width,
-            resolution.Height);
+        if (!TryResolveOrSynthesizeOutput(bridge, g.CurrentMedia.Path, out INodeOutput sourceOutput))
+        {
+            return;
+        }
 
-        string scaleNode = g.CreateNode(
-            NodeTypes.ImageScale,
-            scaleInputs);
-        g.CurrentMedia = g.CurrentMedia.WithPath([scaleNode, 0]);
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
+        scale.Image.ConnectToUntyped(sourceOutput);
+        scale.UpscaleMethod.Set("lanczos");
+        scale.Width.Set(resolution.Width);
+        scale.Height.Set(resolution.Height);
+        scale.Crop.Set("center");
+        bridge.SyncNode(scale);
+        BridgeSync.SyncLastId(g);
+
+        g.CurrentMedia = g.CurrentMedia.WithPath([scale.Id, 0]);
     }
 
-    private bool TryUpdateExistingImageScaleNode(Resolution resolution)
+    private bool TryUpdateExistingImageScaleNode(WorkflowBridge bridge, Resolution resolution)
     {
-        if (g.CurrentMedia?.Path is not { Count: 2 } currentPath
-            || !g.Workflow.TryGetValue($"{currentPath[0]}", out JToken currentToken)
-            || currentToken is not JObject currentNode
-            || !StringUtils.NodeTypeMatches(currentNode, NodeTypes.ImageScale)
-            || currentNode["inputs"] is not JObject inputs)
+        if (g.CurrentMedia?.Path is not { Count: 2 } currentPath)
+        {
+            return false;
+        }
+        if (bridge.Graph.GetNode($"{currentPath[0]}") is not ImageScaleNode scale)
         {
             return false;
         }
 
-        inputs["width"] = resolution.Width;
-        inputs["height"] = resolution.Height;
-        inputs["crop"] = "center";
-        if (inputs["upscale_method"] is null)
+        scale.Width.Set(resolution.Width);
+        scale.Height.Set(resolution.Height);
+        scale.Crop.Set("center");
+        if (!scale.UpscaleMethod.HasValue)
         {
-            inputs["upscale_method"] = "lanczos";
+            scale.UpscaleMethod.Set("lanczos");
+        }
+        bridge.SyncNode(scale);
+        return true;
+    }
+
+    private static bool TryResolveOrSynthesizeOutput(
+        WorkflowBridge bridge,
+        JArray path,
+        out INodeOutput output)
+    {
+        output = null;
+        if (path is not { Count: 2 }
+            || path[1] is not JValue slotVal
+            || slotVal.Type != JTokenType.Integer)
+        {
+            return false;
         }
 
-        return true;
+        ComfyNode node = bridge.Graph.GetNode($"{path[0]}");
+        if (node is null)
+        {
+            return false;
+        }
+
+        int slotIndex = Convert.ToInt32(slotVal.Value!);
+        output = node.FindOutput(slotIndex);
+        if (output is null && node is UnknownNode unknown)
+        {
+            output = unknown.GetOutput(slotIndex);
+        }
+        return output is not null;
     }
 }

@@ -1,3 +1,4 @@
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
@@ -226,6 +227,8 @@ public class AudioInjectionTests
                 Frames = 16,
                 FPS = 24
             };
+
+            BridgeSync.SyncLastId(g);
         }, 11);
 
     private static WorkflowGenerator.WorkflowGenStep SeedSavedAudioStageStep(string saveNodeType) =>
@@ -236,6 +239,8 @@ public class AudioInjectionTests
             {
                 ["audio"] = new JArray(audioSource, 0)
             }, id: "301", idMandatory: false);
+
+            BridgeSync.SyncLastId(g);
         }, 10.2);
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildSteps(string saveNodeType) =>
@@ -323,7 +328,7 @@ public class AudioInjectionTests
             WorkflowAssertions.RequireConnectionInput(rootConcat.Node, "audio_latent"),
             new JArray(setMask.Id, 0)));
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, LtxvEmptyLatentAudio));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, LtxvEmptyLatentAudio));
 
         WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
         Assert.True(JToken.DeepEquals(
@@ -354,9 +359,9 @@ public class AudioInjectionTests
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, SwarmAudioLengthToFrames));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, SwarmLoadAudioB64));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, SetLatentNoiseMask));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SwarmAudioLengthToFrames));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SwarmLoadAudioB64));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SetLatentNoiseMask));
 
         WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
         Assert.True(JToken.DeepEquals(
@@ -388,17 +393,17 @@ public class AudioInjectionTests
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
         WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmLoadAudioB64);
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, SwarmAudioLengthToFrames));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SwarmAudioLengthToFrames));
 
-        WorkflowNode audioEncode = Assert.Single(WorkflowUtils.NodesOfType(workflow, LtxvAudioVaeEncode));
+        WorkflowNode audioEncode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, LtxvAudioVaeEncode));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(audioEncode.Node, "audio"),
             new JArray(uploadedAudioNode.Id, 0)));
-        WorkflowNode setMask = Assert.Single(WorkflowUtils.NodesOfType(workflow, SetLatentNoiseMask));
+        WorkflowNode setMask = Assert.Single(WorkflowAssertions.NodesOfType(workflow, SetLatentNoiseMask));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(setMask.Node, "samples"),
             new JArray(audioEncode.Id, 0)));
-        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowUtils.FindInputConnections(workflow, new JArray(setMask.Id, 0));
+        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowAssertions.FindInputConnections(workflow, new JArray(setMask.Id, 0));
         Assert.Contains(maskConsumers, connection =>
             connection.InputName == "audio_latent"
             && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == LtxvConcatAvLatent);
@@ -469,7 +474,7 @@ public class AudioInjectionTests
             new JArray(lengthToFrames.Id, 0)));
 
         WorkflowNode setMask = WorkflowAssertions.RequireNodeOfType(workflow, SetLatentNoiseMask);
-        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowUtils.FindInputConnections(workflow, new JArray(setMask.Id, 0));
+        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowAssertions.FindInputConnections(workflow, new JArray(setMask.Id, 0));
         Assert.Contains(maskConsumers, connection =>
             connection.InputName == "audio_latent"
             && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == LtxvConcatAvLatent);
@@ -510,7 +515,7 @@ public class AudioInjectionTests
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
-        IReadOnlyList<WorkflowNode> uploadNodes = WorkflowUtils.NodesOfType(workflow, SwarmLoadAudioB64);
+        IReadOnlyList<WorkflowNode> uploadNodes = WorkflowAssertions.NodesOfType(workflow, SwarmLoadAudioB64);
         Assert.Equal(2, uploadNodes.Count);
     }
 
@@ -537,8 +542,8 @@ public class AudioInjectionTests
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
 
-        WorkflowNode uploadedAudioNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, SwarmLoadAudioB64));
-        IReadOnlyList<WorkflowInputConnection> uploadConsumers = WorkflowUtils.FindInputConnections(
+        WorkflowNode uploadedAudioNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, SwarmLoadAudioB64));
+        IReadOnlyList<WorkflowInputConnection> uploadConsumers = WorkflowAssertions.FindInputConnections(
             workflow,
             new JArray(uploadedAudioNode.Id, 0));
         Assert.Contains(uploadConsumers, connection =>

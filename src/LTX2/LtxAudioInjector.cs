@@ -1,6 +1,10 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.Types;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Generated;
 
 namespace VideoStages.LTX2;
 
@@ -14,16 +18,20 @@ internal sealed class LtxAudioInjector(
 
     public bool TryInject(AudioStageDetector.Detection detection, bool matchVideoLengthToAudio = true)
     {
+        Console.WriteLine($"[Inj] enter detection.Audio={detection?.Audio} isLTXV2={g.IsLTXV2()} audioVae={g.CurrentAudioVae}");
         if (detection?.Audio is null || !g.IsLTXV2() || g.CurrentAudioVae is null)
         {
+            Console.WriteLine("[Inj] early-out");
             return false;
         }
 
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         (
-            List<JArray> audioLatentsToReplace,
+            List<string> concatIds,
             HashSet<string> removableSourceIds,
-            int? workflowFps) = FindAudioLatentsToReplace();
-        if (audioLatentsToReplace.Count == 0)
+            int? workflowFps) = FindConcatsToReplace(bridge);
+        Console.WriteLine($"[Inj] concatIds.Count={concatIds.Count}");
+        if (concatIds.Count == 0)
         {
             return false;
         }
@@ -36,49 +44,40 @@ internal sealed class LtxAudioInjector(
                 g,
                 detection.Audio.Path,
                 g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
-            string lengthToFramesId = CreateLengthToFramesNode(lengthFramesAudioSource, fps);
-            JArray framesConnection = MakeConnection(lengthToFramesId, 1);
-            ApplyFramesConnectionToRemovableAudioSources(removableSourceIds, framesConnection);
-            LtxFrameCountConnector.ApplyToExistingSources(g, framesConnection);
-            adjustedAudio = new(new JArray(lengthToFramesId, 0), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+            // ResolveLengthToFramesAudioSource may have written to g.Workflow; refresh bridge.
+            bridge = WorkflowBridge.Create(g.Workflow);
+            SwarmAudioLengthToFramesNode lengthToFrames = CreateLengthToFramesNode(bridge, lengthFramesAudioSource, fps);
+            ApplyFramesConnectionToRemovableAudioSources(bridge, removableSourceIds, lengthToFrames.Frames);
+            LtxFrameCountConnector.ApplyToExistingSources(g, WorkflowBridge.ToPath(lengthToFrames.Frames));
+            adjustedAudio = new(WorkflowBridge.ToPath(lengthToFrames.Audio), g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
         }
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
-        string setMaskId = CreateAudioMaskNode(encodedAudio.Path);
-        ReplaceAudioLatentConnections(audioLatentsToReplace, setMaskId);
-        RemoveUnusedSourceNodes(removableSourceIds);
+        // EncodeToLatent and the helpers above mutate g.Workflow; refresh bridge.
+        bridge = WorkflowBridge.Create(g.Workflow);
+        SetLatentNoiseMaskNode setMask = CreateAudioMaskNode(bridge, encodedAudio.Path);
+        ReplaceAudioLatentConnections(bridge, concatIds, setMask);
+        RemoveUnusedSourceNodes(bridge, removableSourceIds);
         return true;
     }
 
-    private (List<JArray> AudioLatentsToReplace, HashSet<string> RemovableSourceIds, int? WorkflowFps)
-        FindAudioLatentsToReplace()
+    private static (List<string> ConcatIds, HashSet<string> RemovableSourceIds, int? WorkflowFps)
+        FindConcatsToReplace(WorkflowBridge bridge)
     {
-        List<JArray> audioLatentsToReplace = [];
+        List<string> concatIds = [];
         HashSet<string> removableSourceIds = [];
         int? workflowFps = null;
-        foreach (WorkflowNode concat in WorkflowUtils.NodesOfType(g.Workflow, LtxNodeTypes.LTXVConcatAVLatent))
+        foreach (LTXVConcatAVLatentNode concat in bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>())
         {
-            JObject node = concat.Node;
-            if (node["inputs"] is not JObject inputs
-                || inputs["audio_latent"] is not JArray audioLatent
-                || audioLatent.Count != 2)
+            if (concat.AudioLatent.Connection?.Node is not LTXVEmptyLatentAudioNode emptyAudio)
             {
                 continue;
             }
-            string sourceId = $"{audioLatent[0]}";
-            if (!g.Workflow.TryGetValue(sourceId, out JToken sourceToken)
-                || sourceToken is not JObject sourceNode
-                || !StringUtils.NodeTypeMatches(sourceNode, LtxNodeTypes.LTXVEmptyLatentAudio))
-            {
-                continue;
-            }
-            audioLatentsToReplace.Add(audioLatent);
-            removableSourceIds.Add(sourceId);
-            if (sourceNode["inputs"] is JObject rateInputs)
-            {
-                workflowFps ??= ReadFrameRate(rateInputs);
-            }
+
+            concatIds.Add(concat.Id);
+            removableSourceIds.Add(emptyAudio.Id);
+            workflowFps ??= ReadFrameRate(emptyAudio);
         }
-        return (audioLatentsToReplace, removableSourceIds, workflowFps);
+        return (concatIds, removableSourceIds, workflowFps);
     }
 
     private int ResolveFps(int? workflowFps)
@@ -95,28 +94,40 @@ internal sealed class LtxAudioInjector(
         return fps > 0 ? fps : 24;
     }
 
-    private string CreateLengthToFramesNode(JToken audioPath, int fps)
+    private SwarmAudioLengthToFramesNode CreateLengthToFramesNode(WorkflowBridge bridge, JToken audioPath, int fps)
     {
-        return g.CreateNode(NodeTypes.AudioLengthToFrames, new JObject()
+        SwarmAudioLengthToFramesNode node = new();
+        node.FrameRate.Set((long)fps);
+        if (audioPath is JArray pathArray && bridge.ResolvePath(pathArray) is INodeOutput typedAudio)
         {
-            ["audio"] = audioPath,
-            ["frame_rate"] = fps
-        }, g.GetStableDynamicID(AudioInjectionIdBase + 100, 0));
+            node.AudioInput.ConnectToUntyped(typedAudio);
+        }
+        else if (audioPath is not null)
+        {
+            node.AudioInput.SetUntyped(audioPath);
+        }
+        bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 100, 0));
+        return node;
     }
 
-    private void ApplyFramesConnectionToRemovableAudioSources(HashSet<string> sourceIds, JArray framesConnection)
+    private static void ApplyFramesConnectionToRemovableAudioSources(
+        WorkflowBridge bridge,
+        HashSet<string> sourceIds,
+        NodeOutput<IntType> framesOutput)
     {
         foreach (string sourceId in sourceIds)
         {
-            if (g.Workflow[sourceId] is not JObject emptyNode || emptyNode["inputs"] is not JObject emptyInputs)
+            LTXVEmptyLatentAudioNode emptyAudio = bridge.Graph.GetNode<LTXVEmptyLatentAudioNode>(sourceId);
+            if (emptyAudio is null)
             {
                 continue;
             }
-            LtxFrameCountConnector.SetFrameCountInput(emptyInputs, framesConnection);
+            emptyAudio.FramesNumber.ConnectTo(framesOutput);
+            bridge.SyncNode(emptyAudio);
         }
     }
 
-    private string CreateAudioMaskNode(JToken encodedAudioPath)
+    private SetLatentNoiseMaskNode CreateAudioMaskNode(WorkflowBridge bridge, JArray encodedAudioPath)
     {
         int width = g.UserInput.GetImageWidth();
         int height = g.UserInput.GetImageHeight();
@@ -126,60 +137,62 @@ internal sealed class LtxAudioInjector(
             height = rootHeight;
         }
 
-        string solidMaskId = g.CreateNode(NodeTypes.SolidMask, new JObject()
+        SolidMaskNode solidMask = new();
+        solidMask.Value.Set(0.0);
+        solidMask.Width.Set(width);
+        solidMask.Height.Set(height);
+        bridge.AddNode(solidMask, g.GetStableDynamicID(AudioInjectionIdBase + 200, 0));
+
+        SetLatentNoiseMaskNode setMask = new();
+        if (encodedAudioPath is not null && bridge.ResolvePath(encodedAudioPath) is INodeOutput samples)
         {
-            ["value"] = 0.0,
-            ["width"] = width,
-            ["height"] = height
-        }, g.GetStableDynamicID(AudioInjectionIdBase + 200, 0));
-        return g.CreateNode(NodeTypes.SetLatentNoiseMask, new JObject()
-        {
-            ["samples"] = encodedAudioPath,
-            ["mask"] = MakeConnection(solidMaskId, 0)
-        }, g.GetStableDynamicID(AudioInjectionIdBase + 300, 0));
+            setMask.Samples.ConnectToUntyped(samples);
+        }
+        setMask.Mask.ConnectTo(solidMask.MASK);
+        bridge.AddNode(setMask, g.GetStableDynamicID(AudioInjectionIdBase + 300, 0));
+        return setMask;
     }
 
-    private static void ReplaceAudioLatentConnections(List<JArray> audioLatents, string setMaskId)
+    private static void ReplaceAudioLatentConnections(
+        WorkflowBridge bridge,
+        List<string> concatIds,
+        SetLatentNoiseMaskNode setMask)
     {
-        foreach (JArray audioLatent in audioLatents)
+        foreach (string concatId in concatIds)
         {
-            audioLatent[0] = setMaskId;
-            audioLatent[1] = 0;
+            LTXVConcatAVLatentNode concat = bridge.Graph.GetNode<LTXVConcatAVLatentNode>(concatId);
+            if (concat is null)
+            {
+                continue;
+            }
+            concat.AudioLatent.ConnectTo(setMask.LATENT);
+            bridge.SyncNode(concat);
         }
     }
 
-    private void RemoveUnusedSourceNodes(HashSet<string> removableSourceIds)
+    private void RemoveUnusedSourceNodes(WorkflowBridge bridge, HashSet<string> removableSourceIds)
     {
         g.UsedInputs = null;
         foreach (string sourceId in removableSourceIds)
         {
             if (!g.NodeIsConnectedAnywhere(sourceId))
             {
-                g.Workflow.Remove(sourceId);
+                bridge.RemoveNode(sourceId);
             }
         }
     }
 
-    private static JArray MakeConnection(string nodeId, int outputIndex)
+    private static int? ReadFrameRate(LTXVEmptyLatentAudioNode emptyAudio)
     {
-        return new JArray(nodeId, outputIndex);
-    }
-
-    private static int? ReadIntOrRoundedDouble(JObject inputs, string key)
-    {
-        return inputs.Value<int?>(key)
-            ?? (inputs.Value<double?>(key) is double d ? (int?)Math.Round(d) : null);
-    }
-
-    private static int? ReadFrameRate(JObject inputs)
-    {
-        if (inputs is null)
+        return emptyAudio.FrameRate.LiteralValue switch
         {
-            return null;
-        }
-
-        return ReadIntOrRoundedDouble(inputs, "frame_rate")
-            ?? ReadIntOrRoundedDouble(inputs, "fps");
+            int i => i,
+            long l => (int)l,
+            double d => (int)Math.Round(d),
+            float f => (int)Math.Round(f),
+            string s when int.TryParse(s, out int parsed) => parsed,
+            string s when double.TryParse(s, out double parsed) => (int)Math.Round(parsed),
+            _ => null
+        };
     }
-
 }

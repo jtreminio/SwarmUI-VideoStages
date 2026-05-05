@@ -19,6 +19,13 @@ public sealed class GlobalStateFixture : IDisposable
 
     public GlobalStateFixture()
     {
+        // Register typed node bindings once for the whole collection. The bridge-based code
+        // paths (NodesOfType<T>(), GetNode<T>(id)) need these factories populated, and not all
+        // tests go through WorkflowTestHarness which would otherwise trigger registration via
+        // VideoStagesExtension.OnInit().
+        ComfyTyped.Generated.NodeRegistrations.EnsureRegistered();
+        VideoStages.Generated.NodeRegistrations.EnsureRegistered();
+
         _workflowSteps = [.. WorkflowGenerator.Steps];
         _promptBasic = new(T2IPromptHandling.PromptTagBasicProcessors);
         _promptProcessors = new(T2IPromptHandling.PromptTagProcessors);

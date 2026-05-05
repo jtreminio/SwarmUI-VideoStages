@@ -36,7 +36,7 @@ public partial class StageFlowTests
         StageRefStore store = new(generator);
         Assert.True(store.TryGetStageRef(0, out StageRefStore.StageRef stage0Ref));
 
-        List<WorkflowNode> preprocessNodes = WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess")
+        List<WorkflowNode> preprocessNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, preprocessNodes.Count);
@@ -45,7 +45,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(preprocessNodes[1].Node, "image"),
             stage0Ref);
 
-        List<WorkflowNode> imgToVideoNodes = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        List<WorkflowNode> imgToVideoNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, imgToVideoNodes.Count);
@@ -87,10 +87,10 @@ public partial class StageFlowTests
             .ToList();
         Assert.Equal(3, samplerNodes.Count);
 
-        Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
+        Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVLatentUpsampler"));
 
         Assert.DoesNotContain(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node => node.Node["inputs"]?.Value<int>("width") == 2048
                 && node.Node["inputs"]?.Value<int>("height") == 2048
                 && $"{node.Node["inputs"]?["crop"]}" == "disabled");
@@ -123,8 +123,8 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
 
         List<WorkflowNode> samplerNodes = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler")
             .OrderBy(node => int.Parse(node.Id))
@@ -164,14 +164,14 @@ public partial class StageFlowTests
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, samplers.Count);
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"));
 
         StageRefStore store = new(generator);
         Assert.True(store.TryGetStageRef(0, out StageRefStore.StageRef stage0Ref));
         Assert.NotNull(stage0Ref.Media);
         Assert.False(JToken.DeepEquals(stage0Ref.Media.Path, new JArray("202", 0)));
 
-        List<WorkflowNode> preprocessNodes = WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess")
+        List<WorkflowNode> preprocessNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, preprocessNodes.Count);
@@ -180,7 +180,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(preprocessNodes[1].Node, "image"),
             stage0Ref);
 
-        List<WorkflowNode> imgToVideoNodes = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        List<WorkflowNode> imgToVideoNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, imgToVideoNodes.Count);
@@ -193,14 +193,14 @@ public partial class StageFlowTests
         AssertSamplerUsesConditioningNode(samplers[0], conditioningNodes[0]);
         AssertSamplerUsesConditioningNode(samplers[1], conditioningNodes[1]);
 
-        IReadOnlyList<WorkflowNode> saveNodes = WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS");
+        IReadOnlyList<WorkflowNode> saveNodes = WorkflowAssertions.NodesOfType(workflow, "SwarmSaveAnimationWS");
         WorkflowNode saveNode = Assert.Single(saveNodes);
         Assert.Equal("9", saveNode.Id);
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(saveNode.Node, "images"),
             new JArray("202", 0)));
 
-        IReadOnlyList<WorkflowNode> separateNodes = WorkflowUtils.NodesOfType(workflow, "LTXVSeparateAVLatent");
+        IReadOnlyList<WorkflowNode> separateNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVSeparateAVLatent");
         Assert.True(separateNodes.Count >= 3);
         WorkflowNode originalSeparate = RequireOriginalNativeLtxSeparate(workflow);
         AssertStageLtxConcatsUseProgressiveAudio(workflow, originalSeparate);

@@ -1,3 +1,4 @@
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
@@ -14,6 +15,8 @@ public partial class StageFlowTests
         {
             string rawAudio = g.CreateNode("UnitTest_RawAudio", new JObject(), id: "50", idMandatory: false);
             g.CurrentMedia.AttachedAudio = new WGNodeData([rawAudio, 0], g, WGNodeData.DT_AUDIO, g.CurrentCompat());
+
+            BridgeSync.SyncLastId(g);
         }, 10.8);
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithRawAudio() =>
@@ -77,6 +80,8 @@ public partial class StageFlowTests
             }, id: "307", idMandatory: false);
             g.FinalPrompt = new JArray(controlApply, 0);
             g.FinalNegativePrompt = new JArray(controlApply, 1);
+
+            BridgeSync.SyncLastId(g);
         }, -6.1);
 
     private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoDiffPatchControlNetBranchStep(
@@ -130,6 +135,8 @@ public partial class StageFlowTests
                 ["strength"] = 0.8
             }, id: diffPatchId, idMandatory: false);
             g.CurrentModel = g.CurrentModel.WithPath(new JArray(diffPatch, 0));
+
+            BridgeSync.SyncLastId(g);
         }, -6.1);
 
     private static void AssertCoreVideoControlNetScaleReplaced(JObject workflow)
@@ -187,7 +194,7 @@ public partial class StageFlowTests
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
         Assert.Single(samplers);
-        Assert.Single(WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS"));
+        Assert.Single(WorkflowAssertions.NodesOfType(workflow, "SwarmSaveAnimationWS"));
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.Null(input.Get(T2IParamTypes.VideoModel, null));
     }
@@ -208,7 +215,7 @@ public partial class StageFlowTests
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
         Assert.Single(samplers);
-        IReadOnlyList<WorkflowNode> saveNodes = WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS");
+        IReadOnlyList<WorkflowNode> saveNodes = WorkflowAssertions.NodesOfType(workflow, "SwarmSaveAnimationWS");
         WorkflowNode saveNode = Assert.Single(saveNodes);
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(
@@ -253,9 +260,9 @@ public partial class StageFlowTests
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "UnitTestPreprocessor"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ControlNetApplyAdvanced"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ControlNetLoader"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "ControlNetApplyAdvanced"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "ControlNetLoader"));
     }
 
     [Fact]
@@ -289,16 +296,16 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
 
         AssertCoreVideoControlNetScaleReplaced(workflow);
-        WorkflowNode preprocessor = Assert.Single(WorkflowUtils.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
         WorkflowNode imageFromBatch = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray(preprocessor.Id, 0)));
         Assert.Equal(0, imageFromBatch.Node["inputs"]?.Value<int>("batch_index"));
         Assert.Equal(1, imageFromBatch.Node["inputs"]?.Value<int>("length"));
 
-        List<WorkflowNode> controlApplies = WorkflowUtils.NodesOfType(workflow, "ControlNetApplyAdvanced")
+        List<WorkflowNode> controlApplies = WorkflowAssertions.NodesOfType(workflow, "ControlNetApplyAdvanced")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         WorkflowNode stageControlApply = Assert.Single(controlApplies);
@@ -342,16 +349,16 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
         AssertCoreVideoControlNetScaleReplaced(workflow);
-        WorkflowNode preprocessor = Assert.Single(WorkflowUtils.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
         WorkflowNode imageFromBatch = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray(preprocessor.Id, 0)));
         Assert.Equal(0, imageFromBatch.Node["inputs"]?.Value<int>("batch_index"));
         Assert.Equal(1, imageFromBatch.Node["inputs"]?.Value<int>("length"));
 
-        List<WorkflowNode> diffPatchNodes = WorkflowUtils.NodesOfType(workflow, "QwenImageDiffsynthControlnet")
+        List<WorkflowNode> diffPatchNodes = WorkflowAssertions.NodesOfType(workflow, "QwenImageDiffsynthControlnet")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         WorkflowNode stageDiffPatch = Assert.Single(diffPatchNodes);
@@ -395,9 +402,9 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
         AssertCoreVideoControlNetScaleReplaced(workflow);
-        WorkflowNode preprocessor = Assert.Single(WorkflowUtils.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
         WorkflowNode imageFromBatch = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray(preprocessor.Id, 0)));
@@ -441,26 +448,26 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
         AssertCoreVideoControlNetScaleReplaced(workflow);
-        WorkflowNode icLora = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXICLoRALoaderModelOnly"));
-        WorkflowNode preprocessor = Assert.Single(WorkflowUtils.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode icLora = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXICLoRALoaderModelOnly"));
+        WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
         WorkflowNode scaleToMultipleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ResizeImageMaskNode"),
+            WorkflowAssertions.NodesOfType(workflow, "ResizeImageMaskNode"),
             n => $"{n.Node["inputs"]?["resize_type"]}" == "scale to multiple");
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(scaleToMultipleNode.Node, "input"),
             new JArray(preprocessor.Id, 0)));
         WorkflowNode firstFrame = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(preprocessor.Id, 0))
                 && node.Node["inputs"]?.Value<int>("length") == 1);
         Assert.Equal(0, firstFrame.Node["inputs"]?.Value<int>("batch_index"));
         WorkflowNode videoGuideFrames = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(scaleToMultipleNode.Id, 0))
                 && node.Node["inputs"]?.Value<int>("length") == 16);
         Assert.Equal(0, videoGuideFrames.Node["inputs"]?.Value<int>("batch_index"));
 
-        WorkflowNode coreDiffPatch = Assert.Single(WorkflowUtils.NodesOfType(workflow, "QwenImageDiffsynthControlnet"));
+        WorkflowNode coreDiffPatch = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "QwenImageDiffsynthControlnet"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(coreDiffPatch.Node, "image"),
             new JArray(firstFrame.Id, 0)));
@@ -469,7 +476,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(coreDiffPatch.Node, "model"),
             new JArray(icLora.Id, 0)));
 
-        WorkflowNode icGuide = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
+        WorkflowNode icGuide = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
         Assert.Equal(0, icGuide.Node["inputs"]?.Value<int>("frame_idx"));
         Assert.Equal(0.8, icGuide.Node["inputs"]?.Value<double>("strength"));
         Assert.Equal(2.0, icGuide.Node["inputs"]?.Value<double>("latent_downscale_factor"));
@@ -477,7 +484,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(icGuide.Node, "image"),
             new JArray(videoGuideFrames.Id, 0)));
         Assert.Contains(
-            WorkflowUtils.FindInputConnections(workflow, new JArray(icGuide.Id, 2)),
+            WorkflowAssertions.FindInputConnections(workflow, new JArray(icGuide.Id, 2)),
             connection => connection.InputName == "video_latent"
                 && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == "LTXVConcatAVLatent");
     }
@@ -518,28 +525,28 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
-        WorkflowNode preprocessor = Assert.Single(WorkflowUtils.NodesOfType(workflow, "UnitTestPreprocessor"));
-        WorkflowNode sizeNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "GetImageSize"));
+        WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode sizeNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "GetImageSize"));
         JArray controlNetFrameCount = new(sizeNode.Id, 2);
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(sizeNode.Node, "image"),
             new JArray(preprocessor.Id, 0)));
 
-        WorkflowNode emptyLatent = Assert.Single(WorkflowUtils.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
+        WorkflowNode emptyLatent = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(emptyLatent.Node, "length"),
             controlNetFrameCount));
 
-        WorkflowNode emptyAudio = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVEmptyLatentAudio"));
+        WorkflowNode emptyAudio = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVEmptyLatentAudio"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(emptyAudio.Node, "frames_number"),
             controlNetFrameCount));
 
         WorkflowNode scaleToMultipleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ResizeImageMaskNode"),
+            WorkflowAssertions.NodesOfType(workflow, "ResizeImageMaskNode"),
             n => $"{n.Node["inputs"]?["resize_type"]}" == "scale to multiple");
         WorkflowNode videoGuideFrames = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(scaleToMultipleNode.Id, 0)));
         Assert.True(JToken.DeepEquals(videoGuideFrames.Node["inputs"]?["length"], controlNetFrameCount));
     }
@@ -594,7 +601,7 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
-        WorkflowNode upsamplerNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
+        WorkflowNode upsamplerNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVLatentUpsampler"));
         JArray upsamplerSamples = WorkflowAssertions.RequireConnectionInput(upsamplerNode.Node, "samples");
         WorkflowNode upsamplerSource = WorkflowAssertions.RequireNodeById(workflow, $"{upsamplerSamples[0]}");
         Assert.Equal("LTXVCropGuides", $"{upsamplerSource.Node["class_type"]}");
@@ -637,27 +644,27 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetFirstFrame(controlNetModel));
 
         AssertCoreVideoControlNetScaleReplaced(workflow);
-        WorkflowNode preprocessor = Assert.Single(WorkflowUtils.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
         WorkflowNode firstFrame = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(preprocessor.Id, 0))
                 && node.Node["inputs"]?.Value<int>("length") == 1);
         WorkflowNode scaleToMultipleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ResizeImageMaskNode"),
+            WorkflowAssertions.NodesOfType(workflow, "ResizeImageMaskNode"),
             n => $"{n.Node["inputs"]?["resize_type"]}" == "scale to multiple");
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(scaleToMultipleNode.Node, "input"),
             new JArray(preprocessor.Id, 0)));
         WorkflowNode videoGuideFrames = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(scaleToMultipleNode.Id, 0))
                 && node.Node["inputs"]?.Value<int>("length") == 16);
 
-        WorkflowNode coreDiffPatch = Assert.Single(WorkflowUtils.NodesOfType(workflow, "QwenImageDiffsynthControlnet"));
+        WorkflowNode coreDiffPatch = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "QwenImageDiffsynthControlnet"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(coreDiffPatch.Node, "image"),
             new JArray(firstFrame.Id, 0)));
-        WorkflowNode icGuide = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
+        WorkflowNode icGuide = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(icGuide.Node, "image"),
             new JArray(videoGuideFrames.Id, 0)));
@@ -742,7 +749,7 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
-        List<WorkflowNode> addGuideNodes = WorkflowUtils.NodesOfType(workflow, "LTXAddVideoICLoRAGuide")
+        List<WorkflowNode> addGuideNodes = WorkflowAssertions.NodesOfType(workflow, "LTXAddVideoICLoRAGuide")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, addGuideNodes.Count);
@@ -787,8 +794,8 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVCropGuides"));
     }
 
     [Fact]
@@ -813,11 +820,11 @@ public partial class StageFlowTests
         StageRefStore store = new(generator);
         Assert.NotNull(store.Refiner);
 
-        List<WorkflowNode> imgToVideoNodes = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        List<WorkflowNode> imgToVideoNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, imgToVideoNodes.Count);
-        WorkflowNode preprocessNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        WorkflowNode preprocessNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
         foreach (WorkflowNode imgToVideo in imgToVideoNodes)
         {
             AssertGuideReferenceResolvesToPreprocessInput(
@@ -830,7 +837,7 @@ public partial class StageFlowTests
         }
 
         WorkflowNode guideScale = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node => node.Node["inputs"]?.Value<int>("width") == 1024
                 && node.Node["inputs"]?.Value<int>("height") == 1024);
         Assert.Equal("center", $"{guideScale.Node["inputs"]?["crop"]}");
@@ -839,7 +846,7 @@ public partial class StageFlowTests
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, samplers.Count);
-        WorkflowNode saveNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS"));
+        WorkflowNode saveNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "SwarmSaveAnimationWS"));
         Assert.True(OutputTracesBackToSource(
             workflow,
             WorkflowAssertions.RequireConnectionInput(saveNode.Node, "images"),
@@ -873,11 +880,11 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode scaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray("12", 0)));
-        WorkflowNode imageFromBatch = Assert.Single(WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"));
+        WorkflowNode imageFromBatch = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"));
         Assert.True(OutputTracesBackToSource(
             workflow,
             WorkflowAssertions.RequireConnectionInput(imageFromBatch.Node, "image"),
@@ -908,7 +915,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode scaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray("12", 0)));
@@ -937,12 +944,12 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode rootScaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node =>
                 JToken.DeepEquals(
                     WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                     new JArray("12", 0)));
-        WorkflowNode imageFromBatch = Assert.Single(WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"));
+        WorkflowNode imageFromBatch = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"));
         Assert.Equal(960, rootScaleNode.Node["inputs"]?.Value<int>("width"));
         Assert.Equal(544, rootScaleNode.Node["inputs"]?.Value<int>("height"));
         Assert.Equal("lanczos", $"{rootScaleNode.Node["inputs"]?["upscale_method"]}");
@@ -982,9 +989,9 @@ public partial class StageFlowTests
         Assert.Equal(1280, generator.CurrentMedia.Width);
         Assert.Equal(1024, generator.CurrentMedia.Height);
 
-        foreach (WorkflowNode scale in WorkflowUtils.NodesOfType(workflow, "ImageScale"))
+        foreach (WorkflowNode scale in WorkflowAssertions.NodesOfType(workflow, "ImageScale"))
         {
-            IReadOnlyList<WorkflowInputConnection> downstream = WorkflowUtils.FindInputConnections(
+            IReadOnlyList<WorkflowInputConnection> downstream = WorkflowAssertions.FindInputConnections(
                 workflow,
                 new JArray(scale.Id, 0));
             Assert.NotEmpty(downstream);
@@ -1006,7 +1013,7 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        WorkflowNode emptyLatentNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
+        WorkflowNode emptyLatentNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
         Assert.Equal(768, emptyLatentNode.Node["inputs"]?.Value<int>("width"));
         Assert.Equal(448, emptyLatentNode.Node["inputs"]?.Value<int>("height"));
     }
@@ -1032,7 +1039,7 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.VideoFPS, 24);
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        IReadOnlyList<WorkflowNode> emptyAudioNodes = WorkflowUtils.NodesOfType(workflow, "LTXVEmptyLatentAudio");
+        IReadOnlyList<WorkflowNode> emptyAudioNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVEmptyLatentAudio");
         Assert.NotEmpty(emptyAudioNodes);
         Assert.All(
             emptyAudioNodes,
@@ -1065,10 +1072,10 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.VideoFPS, 24);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        WorkflowNode emptyLatentNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
+        WorkflowNode emptyLatentNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
         Assert.Equal(721, emptyLatentNode.Node["inputs"]?.Value<int>("length"));
         Assert.All(
-            WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => Assert.Equal(721, node.Node["inputs"]?.Value<int>("length")));
     }
 
@@ -1091,9 +1098,9 @@ public partial class StageFlowTests
             .ToList();
         WorkflowNode sampler = Assert.Single(samplers);
         WorkflowNode preprocessNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
+            WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
         WorkflowNode imgToVideoNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace").OrderBy(node => int.Parse(node.Id)));
+            WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace").OrderBy(node => int.Parse(node.Id)));
 
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
@@ -1117,17 +1124,17 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode rootScaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray("12", 0)));
-        WorkflowNode preprocessNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        WorkflowNode preprocessNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
         Assert.True(OutputTracesBackToSource(
             workflow,
             WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
             new JArray(rootScaleNode.Id, 0)));
 
-        WorkflowNode imgToVideoNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        WorkflowNode imgToVideoNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
         Assert.Equal(1.0, imgToVideoNode.Node["inputs"]?.Value<double>("strength"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
@@ -1152,18 +1159,18 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode rootScaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray("12", 0)));
-        WorkflowNode preprocessNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        WorkflowNode preprocessNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
         StageRefStore store = new(generator);
         Assert.NotNull(store.Base);
         JArray preprocessImageIn = WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image");
         AssertGuideReferenceResolvesToPreprocessInput(workflow, preprocessImageIn, store.Base);
         Assert.False(OutputTracesBackToSource(workflow, preprocessImageIn, new JArray(rootScaleNode.Id, 0)));
 
-        WorkflowNode imgToVideoNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        WorkflowNode imgToVideoNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
         Assert.Equal(0.55, imgToVideoNode.Node["inputs"]?.Value<double>("strength"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
@@ -1187,14 +1194,14 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowStepsWithoutRefiner());
 
-        WorkflowNode rootScaleNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "ImageScale"));
-        WorkflowNode preprocessNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        WorkflowNode rootScaleNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "ImageScale"));
+        WorkflowNode preprocessNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
         Assert.True(OutputTracesBackToSource(
             workflow,
             WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
             new JArray(rootScaleNode.Id, 0)));
 
-        WorkflowNode imgToVideoNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        WorkflowNode imgToVideoNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
         Assert.Equal(0.55, imgToVideoNode.Node["inputs"]?.Value<double>("strength"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
@@ -1218,22 +1225,22 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowStepsWithoutRefiner());
 
-        WorkflowNode rootScaleNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "ImageScale"));
-        WorkflowNode preprocessNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
+        WorkflowNode rootScaleNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "ImageScale"));
+        WorkflowNode preprocessNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
             new JArray(rootScaleNode.Id, 0)));
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
 
-        WorkflowNode addGuideNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide"));
+        WorkflowNode addGuideNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVAddGuide"));
         Assert.Equal(2, addGuideNode.Node["inputs"]?.Value<int>("frame_idx"));
         Assert.Equal(0.55, addGuideNode.Node["inputs"]?.Value<double>("strength"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "image"),
             new JArray(preprocessNode.Id, 0)));
 
-        WorkflowNode cropGuidesNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"));
+        WorkflowNode cropGuidesNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVCropGuides"));
         AssertCropGuidesLatentUsesVideoTensor(workflow, cropGuidesNode);
         JArray cropPositiveIn = WorkflowAssertions.RequireConnectionInput(cropGuidesNode.Node, "positive");
         Assert.Equal(addGuideNode.Id, $"{cropPositiveIn[0]}");
@@ -1265,9 +1272,9 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowStepsWithoutRefiner());
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
 
-        List<WorkflowNode> addGuideNodes = WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide")
+        List<WorkflowNode> addGuideNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVAddGuide")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, addGuideNodes.Count);
@@ -1276,7 +1283,7 @@ public partial class StageFlowTests
         Assert.Equal(0.55, addGuideNodes[0].Node["inputs"]?.Value<double>("strength"));
         Assert.Equal(0.65, addGuideNodes[1].Node["inputs"]?.Value<double>("strength"));
 
-        Assert.Equal(2, WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides").Count);
+        Assert.Equal(2, WorkflowAssertions.NodesOfType(workflow, "LTXVCropGuides").Count);
     }
 
     [Fact]
@@ -1303,13 +1310,13 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
 
-        WorkflowNode upsamplerNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler"));
+        WorkflowNode upsamplerNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVLatentUpsampler"));
         JArray upsamplerSamples = WorkflowAssertions.RequireConnectionInput(upsamplerNode.Node, "samples");
         WorkflowNode upsamplerSource = WorkflowAssertions.RequireNodeById(workflow, $"{upsamplerSamples[0]}");
         Assert.Equal("LTXVCropGuides", $"{upsamplerSource.Node["class_type"]}");
         Assert.Equal("2", $"{upsamplerSamples[1]}");
 
-        foreach (WorkflowNode cropGuidesNode in WorkflowUtils.NodesOfType(workflow, "LTXVCropGuides"))
+        foreach (WorkflowNode cropGuidesNode in WorkflowAssertions.NodesOfType(workflow, "LTXVCropGuides"))
         {
             AssertCropGuidesLatentUsesVideoTensor(workflow, cropGuidesNode);
         }
@@ -1346,8 +1353,8 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        Assert.Equal(2, WorkflowUtils.NodesOfType(workflow, "LTXVLatentUpsampler").Count);
-        List<(int Width, int Height)> guideScaleSizes = WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess")
+        Assert.Equal(2, WorkflowAssertions.NodesOfType(workflow, "LTXVLatentUpsampler").Count);
+        List<(int Width, int Height)> guideScaleSizes = WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess")
             .Select(node => WorkflowAssertions.RequireConnectionInput(node.Node, "image"))
             .Select(path => WorkflowAssertions.RequireNodeById(workflow, $"{path[0]}"))
             .Where(node => $"{node.Node["class_type"]}" == "ImageScale")
@@ -1361,7 +1368,7 @@ public partial class StageFlowTests
         Assert.Contains((384, 640), guideScaleSizes);
         Assert.Contains((576, 960), guideScaleSizes);
         Assert.Contains((864, 1440), guideScaleSizes);
-        foreach (WorkflowNode scaleNode in WorkflowUtils.NodesOfType(workflow, "ImageScale"))
+        foreach (WorkflowNode scaleNode in WorkflowAssertions.NodesOfType(workflow, "ImageScale"))
         {
             int? width = scaleNode.Node["inputs"]?.Value<int?>("width");
             int? height = scaleNode.Node["inputs"]?.Value<int?>("height");
@@ -1394,12 +1401,12 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowStepsWithRawAudio());
 
         WorkflowNode setMaskNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "SetLatentNoiseMask"),
-            node => WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 0)).Any(connection =>
+            WorkflowAssertions.NodesOfType(workflow, "SetLatentNoiseMask"),
+            node => WorkflowAssertions.FindInputConnections(workflow, new JArray(node.Id, 0)).Any(connection =>
                 connection.InputName == "audio_latent"
                 && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == "LTXVConcatAVLatent"));
         WorkflowNode concatNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent"),
+            WorkflowAssertions.NodesOfType(workflow, "LTXVConcatAVLatent"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "audio_latent"),
                 new JArray(setMaskNode.Id, 0)));
@@ -1433,17 +1440,17 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode rootScaleNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "ImageScale"),
+            WorkflowAssertions.NodesOfType(workflow, "ImageScale"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
                 new JArray("12", 0)));
-        WorkflowNode rootBatchNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"));
+        WorkflowNode rootBatchNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"));
         Assert.True(OutputTracesBackToSource(
             workflow,
             WorkflowAssertions.RequireConnectionInput(rootBatchNode.Node, "image"),
             new JArray(rootScaleNode.Id, 0)));
         WorkflowNode wanLatentNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "Wan22ImageToVideoLatent"),
+            WorkflowAssertions.NodesOfType(workflow, "Wan22ImageToVideoLatent"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "start_image"),
                 new JArray(rootBatchNode.Id, 0)));
@@ -1468,7 +1475,7 @@ public partial class StageFlowTests
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
         Assert.Single(samplers);
-        IReadOnlyList<WorkflowNode> saveNodes = WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS");
+        IReadOnlyList<WorkflowNode> saveNodes = WorkflowAssertions.NodesOfType(workflow, "SwarmSaveAnimationWS");
         WorkflowNode saveNode = Assert.Single(saveNodes);
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(
@@ -1502,9 +1509,9 @@ public partial class StageFlowTests
         Assert.False(workflow.ContainsKey("200"));
         Assert.False(workflow.ContainsKey("201"));
         Assert.False(workflow.ContainsKey("202"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVAddGuide"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVAddGuide"));
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
 
         StageRefStore store = new(generator);
@@ -1530,12 +1537,12 @@ public partial class StageFlowTests
             BuildTextToVideoSteps(attachAudioToCurrentMedia: true));
 
         Assert.Equal(3, WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler").Count);
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ImageScale"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
-        Assert.Equal(3, WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent").Count);
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "ImageScale"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Equal(3, WorkflowAssertions.NodesOfType(workflow, "LTXVConcatAVLatent").Count);
 
-        foreach (WorkflowNode concatNode in WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent").Skip(1))
+        foreach (WorkflowNode concatNode in WorkflowAssertions.NodesOfType(workflow, "LTXVConcatAVLatent").Skip(1))
         {
             WorkflowNode videoSource = WorkflowAssertions.RequireNodeById(
                 workflow,
@@ -1561,7 +1568,7 @@ public partial class StageFlowTests
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
         Assert.Equal(2, samplers.Count);
-        IReadOnlyList<WorkflowNode> saveNodes = WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS");
+        IReadOnlyList<WorkflowNode> saveNodes = WorkflowAssertions.NodesOfType(workflow, "SwarmSaveAnimationWS");
         WorkflowNode saveNode = Assert.Single(saveNodes);
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(
@@ -1617,7 +1624,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) =
             WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        WorkflowNode wanNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "WanImageToVideo"));
+        WorkflowNode wanNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "WanImageToVideo"));
         JArray startPath = WorkflowAssertions.RequireConnectionInput(wanNode.Node, "start_image");
         WorkflowNode startNode = WorkflowAssertions.RequireNodeById(workflow, $"{startPath[0]}");
         Assert.NotEqual("ImageFromBatch", $"{startNode.Node["class_type"]}");
@@ -1653,8 +1660,8 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(samplers[1].Node, "latent_image"),
             new JArray(samplers[0].Id, 0)));
 
-        WorkflowNode wanNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "WanImageToVideo"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"));
+        WorkflowNode wanNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "WanImageToVideo"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(samplers[1].Node, "positive"),
             new JArray(wanNode.Id, 0)));
@@ -1712,13 +1719,13 @@ public partial class StageFlowTests
         Assert.Equal(expectedFirstEndStep, samplers[0].Node["inputs"]?.Value<int>("end_at_step"));
         Assert.Equal("enable", $"{samplers[0].Node["inputs"]?["return_with_leftover_noise"]}");
 
-        List<WorkflowInputConnection> firstSamplerConsumers = WorkflowUtils
+        List<WorkflowInputConnection> firstSamplerConsumers = WorkflowAssertions
             .FindInputConnections(workflow, new JArray(samplers[0].Id, 0))
             .ToList();
         WorkflowInputConnection firstSamplerConsumer = Assert.Single(firstSamplerConsumers);
         Assert.Equal(samplers[1].Id, firstSamplerConsumer.NodeId);
         Assert.Equal("latent_image", firstSamplerConsumer.InputName);
-        Assert.Single(WorkflowUtils.NodesOfType(workflow, "WanImageToVideo"));
+        Assert.Single(WorkflowAssertions.NodesOfType(workflow, "WanImageToVideo"));
     }
 
     [Fact]
@@ -1759,7 +1766,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(samplers[1].Node, "latent_image"),
             new JArray(samplers[0].Id, 0)));
 
-        foreach (WorkflowNode fromBatchNode in WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"))
+        foreach (WorkflowNode fromBatchNode in WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"))
         {
             JArray batchImage = WorkflowAssertions.RequireConnectionInput(fromBatchNode.Node, "image");
             Assert.False(OutputTracesBackToSource(workflow, batchImage, new JArray(samplers[0].Id, 0)));
@@ -1788,8 +1795,8 @@ public partial class StageFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         WorkflowNode flfNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "WanImageToVideo"));
+            WorkflowAssertions.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "WanImageToVideo"));
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
         WorkflowNode samplerNode = Assert.Single(samplers);
         Assert.True(JToken.DeepEquals(
@@ -1819,7 +1826,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) =
             WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        WorkflowNode flfNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
+        WorkflowNode flfNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(flfNode.Node, "start_image"),
             WorkflowAssertions.RequireConnectionInput(flfNode.Node, "end_image")));
@@ -1846,7 +1853,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) =
             WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        WorkflowNode flfNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
+        WorkflowNode flfNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
         JArray endPath = WorkflowAssertions.RequireConnectionInput(flfNode.Node, "end_image");
         WorkflowNode endScaleNode = WorkflowAssertions.RequireNodeById(workflow, $"{endPath[0]}");
         Assert.Equal("ImageScale", $"{endScaleNode.Node["class_type"]}");
@@ -1877,9 +1884,9 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) =
             WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        WorkflowNode flfNode = Assert.Single(WorkflowUtils.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "WanImageToVideo"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "ImageFromBatch"));
+        WorkflowNode flfNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "WanFirstLastFrameToVideo"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "WanImageToVideo"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"));
 
         List<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler")
             .OrderBy(node => int.Parse(node.Id))

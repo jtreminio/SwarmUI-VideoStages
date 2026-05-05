@@ -1,3 +1,4 @@
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -143,7 +144,7 @@ public partial class StageFlowTests
         WorkflowNode imgToVideoNode,
         WorkflowNode samplerNode)
     {
-        WorkflowInputConnection concatConnection = WorkflowUtils.FindInputConnections(workflow, new JArray(imgToVideoNode.Id, 0))
+        WorkflowInputConnection concatConnection = WorkflowAssertions.FindInputConnections(workflow, new JArray(imgToVideoNode.Id, 0))
             .Single(connection => connection.InputName == "video_latent"
                 && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == "LTXVConcatAVLatent");
         Assert.True(JToken.DeepEquals(
@@ -191,9 +192,9 @@ public partial class StageFlowTests
 
     private static void AssertNoDanglingTiledVaeDecodes(JObject workflow)
     {
-        foreach (WorkflowNode node in WorkflowUtils.NodesOfType(workflow, "VAEDecodeTiled"))
+        foreach (WorkflowNode node in WorkflowAssertions.NodesOfType(workflow, "VAEDecodeTiled"))
         {
-            Assert.NotEmpty(WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 0)));
+            Assert.NotEmpty(WorkflowAssertions.FindInputConnections(workflow, new JArray(node.Id, 0)));
         }
     }
 
@@ -275,8 +276,8 @@ public partial class StageFlowTests
 
     private static List<WorkflowNode> GetSamplerConcatNodes(JObject workflow)
     {
-        return WorkflowUtils.NodesOfType(workflow, "LTXVConcatAVLatent")
-            .Where(node => WorkflowUtils.FindInputConnections(workflow, new JArray(node.Id, 0))
+        return WorkflowAssertions.NodesOfType(workflow, "LTXVConcatAVLatent")
+            .Where(node => WorkflowAssertions.FindInputConnections(workflow, new JArray(node.Id, 0))
                 .Any(connection =>
                 {
                     if (connection.InputName != "latent_image")
@@ -350,7 +351,7 @@ public partial class StageFlowTests
 
     private static IReadOnlyList<WorkflowNode> AssertLtxConditioningUsesAdvancedEncoders(JObject workflow)
     {
-        List<WorkflowNode> conditioningNodes = WorkflowUtils.NodesOfType(workflow, "LTXVConditioning")
+        List<WorkflowNode> conditioningNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVConditioning")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.NotEmpty(conditioningNodes);
@@ -469,6 +470,8 @@ public partial class StageFlowTests
                 Width = 512,
                 Height = 512
             };
+
+            BridgeSync.SyncLastId(g);
         }, 5.0);
 
     private static WorkflowGenerator.WorkflowGenStep SeedPublishedBase2EditImageRefStep(int editStageIndex, double priority) =>
@@ -506,6 +509,8 @@ public partial class StageFlowTests
             }
 
             g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
+
+            BridgeSync.SyncLastId(g);
         }, priority);
 
     private static WorkflowGenerator.WorkflowGenStep SeedNativeLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
@@ -570,6 +575,8 @@ public partial class StageFlowTests
             {
                 g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
+
+            BridgeSync.SyncLastId(g);
         }, 11);
 
     private static WorkflowGenerator.WorkflowGenStep SeedNativeLtxVideoChainWithTrimWrapperStep(bool attachAudioToCurrentMedia) =>
@@ -641,6 +648,8 @@ public partial class StageFlowTests
             {
                 g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
+
+            BridgeSync.SyncLastId(g);
         }, 11);
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeSteps(bool attachAudioToCurrentMedia) =>
@@ -715,6 +724,8 @@ public partial class StageFlowTests
             {
                 g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
+
+            BridgeSync.SyncLastId(g);
         }, 11);
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildTextToVideoSteps(bool attachAudioToCurrentMedia) =>
@@ -765,6 +776,8 @@ public partial class StageFlowTests
             g.CurrentModel = new WGNodeData([baseModelNode, 0], g, WGNodeData.DT_MODEL, baseModel?.ModelClass?.CompatClass);
             g.CurrentTextEnc = new WGNodeData([baseModelNode, 1], g, WGNodeData.DT_TEXTENC, baseModel?.ModelClass?.CompatClass);
             g.CurrentVae = new WGNodeData([baseVaeNode, 0], g, WGNodeData.DT_VAE, baseModel?.ModelClass?.CompatClass);
+
+            BridgeSync.SyncLastId(g);
         }, 11.4);
 
     private static WorkflowGenerator.WorkflowGenStep SeedExistingRefinerPreprocessStep() =>
@@ -783,6 +796,8 @@ public partial class StageFlowTests
                 ["image"] = new JArray(scaleNode, 0),
                 ["img_compression"] = 18
             }, id: "210");
+
+            BridgeSync.SyncLastId(g);
         }, 11.4);
 
     private static WorkflowGenerator.WorkflowGenStep SeedExistingBasePreprocessStep() =>
@@ -816,6 +831,8 @@ public partial class StageFlowTests
                 ["image"] = new JArray(scaleNode, 0),
                 ["img_compression"] = 18
             }, id: "210");
+
+            BridgeSync.SyncLastId(g);
         }, 1);
 
     private static WorkflowGenerator.WorkflowGenStep SeedDownstreamRefinerAndReachableRootVideoGraphStep() =>
@@ -924,6 +941,8 @@ public partial class StageFlowTests
                 Width = 512,
                 Height = 512
             };
+
+            BridgeSync.SyncLastId(g);
         }, 5);
 
     private static WorkflowGenerator.WorkflowGenStep SeedReachableRootVideoCurrentMediaStep(bool attachAudioToCurrentMedia) =>
@@ -947,5 +966,7 @@ public partial class StageFlowTests
             {
                 g.CurrentMedia.AttachedAudio = new WGNodeData(["203", 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
+
+            BridgeSync.SyncLastId(g);
         }, 11);
 }

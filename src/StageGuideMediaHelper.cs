@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Typed;
 
 namespace VideoStages;
 
@@ -187,8 +188,8 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
             INodeOutput candidateImage = candidate.Image.Connection;
             if (candidateImage?.Node.Id != sourceId
                 || candidateImage.SlotIndex != sourceSlot
-                || AsInt(candidate.Width.LiteralValue) != targetWidth
-                || AsInt(candidate.Height.LiteralValue) != targetHeight)
+                || candidate.Width.LiteralAsInt() != targetWidth
+                || candidate.Height.LiteralAsInt() != targetHeight)
             {
                 continue;
             }
@@ -199,11 +200,4 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         }
         return false;
     }
-
-    private static int? AsInt(object value) => value switch
-    {
-        int i => i,
-        long l => (int)l,
-        _ => null,
-    };
 }

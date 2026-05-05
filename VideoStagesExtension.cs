@@ -43,6 +43,8 @@ public class VideoStagesExtension : Extension
     public override void OnInit()
     {
         Logs.Info("VideoStages Extension initializing...");
+        ComfyTyped.Generated.NodeRegistrations.EnsureRegistered();
+        VideoStages.Generated.NodeRegistrations.EnsureRegistered();
         RegisterComfyDependencies();
         RegisterParameters();
         RegisterComfyNodes();

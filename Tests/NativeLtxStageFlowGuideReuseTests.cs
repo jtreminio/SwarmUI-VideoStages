@@ -24,7 +24,7 @@ public partial class StageFlowTests
             BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(attachAudioToCurrentMedia: false));
         StageRefStore store = new(generator);
 
-        WorkflowNode imgToVideoNode = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        WorkflowNode imgToVideoNode = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
             .Single(node => node.Id != "111");
         WorkflowNode stagePreprocess = WorkflowAssertions.RequireNodeById(
             workflow,

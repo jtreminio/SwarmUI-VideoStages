@@ -49,8 +49,8 @@ public partial class StageFlowTests
         Assert.NotNull(store.Generated.Vae);
         Assert.Equal(T2IModelClassSorter.CompatLtxv2.ID, store.Generated.Vae.Compat?.ID);
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public partial class StageFlowTests
             BuildNativeStepsWithPublishedBase2EditImage(0, attachAudioToCurrentMedia: false));
 
         WorkflowNode preprocessNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
+            WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
         JArray preprocessImageIn = WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image");
         WorkflowNode preprocessUpstream = WorkflowAssertions.RequireNodeById(workflow, $"{preprocessImageIn[0]}");
         Assert.Equal("ImageScale", $"{preprocessUpstream.Node["class_type"]}");
@@ -81,7 +81,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(preprocessUpstream.Node, "image"),
             new JArray("60", 0)));
         WorkflowNode imgToVideoNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace").OrderBy(node => int.Parse(node.Id)));
+            WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace").OrderBy(node => int.Parse(node.Id)));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
             new JArray(preprocessNode.Id, 0)));
@@ -103,8 +103,8 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
     }
 
     [Fact]
@@ -121,8 +121,8 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess"));
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
 
         IReadOnlyList<WorkflowNode> samplerNodes = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler")
             .OrderBy(node => int.Parse(node.Id))
@@ -155,7 +155,7 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
 
-        Assert.Empty(WorkflowUtils.NodesOfType(workflow, "SwarmTrimFrames"));
+        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, "SwarmTrimFrames"));
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
     }
@@ -182,7 +182,7 @@ public partial class StageFlowTests
         StageRefStore store = new(generator);
 
         WorkflowNode preprocessNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
+            WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess").OrderBy(node => int.Parse(node.Id)));
         JArray preprocessImageInput = WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image");
 
         AssertGuideReferenceResolvesToPreprocessInput(workflow, preprocessImageInput, store.Generated);
@@ -203,7 +203,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
 
         WorkflowNode imgToVideoNode = Assert.Single(
-            WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace"));
+            WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace"));
         Assert.Equal(1.0, imgToVideoNode.Node["inputs"]?.Value<double>("strength"));
     }
 
@@ -244,20 +244,20 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeStepsWithTrimWrapper(attachAudioToCurrentMedia: false));
         StageRefStore store = new(generator);
-        IReadOnlyList<WorkflowNode> saveNodes = WorkflowUtils.NodesOfType(workflow, "SwarmSaveAnimationWS");
+        IReadOnlyList<WorkflowNode> saveNodes = WorkflowAssertions.NodesOfType(workflow, "SwarmSaveAnimationWS");
         WorkflowNode saveNode = Assert.Single(saveNodes);
         Assert.Equal("9", saveNode.Id);
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(saveNode.Node, "images"),
             new JArray("204", 0)));
 
-        List<WorkflowNode> trimNodes = WorkflowUtils.NodesOfType(workflow, "SwarmTrimFrames")
+        List<WorkflowNode> trimNodes = WorkflowAssertions.NodesOfType(workflow, "SwarmTrimFrames")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Single(trimNodes);
         Assert.Equal("204", trimNodes[0].Id);
 
-        List<WorkflowNode> imageFromBatchNodes = WorkflowUtils.NodesOfType(workflow, "ImageFromBatch")
+        List<WorkflowNode> imageFromBatchNodes = WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Single(imageFromBatchNodes);
@@ -269,7 +269,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(imageFromBatchNodes[0].Node, "image"),
             new JArray("204", 0)));
 
-        List<WorkflowNode> preprocessNodes = WorkflowUtils.NodesOfType(workflow, "LTXVPreprocess")
+        List<WorkflowNode> preprocessNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVPreprocess")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         WorkflowNode preprocessNode = Assert.Single(preprocessNodes);
@@ -278,7 +278,7 @@ public partial class StageFlowTests
             WorkflowAssertions.RequireConnectionInput(preprocessNode.Node, "image"),
             store.Generated);
 
-        List<WorkflowNode> imgToVideoNodes = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        List<WorkflowNode> imgToVideoNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         WorkflowNode imgToVideoNode = Assert.Single(imgToVideoNodes);
@@ -294,7 +294,7 @@ public partial class StageFlowTests
         WorkflowNode conditioningNode = Assert.Single(AssertLtxConditioningUsesAdvancedEncoders(workflow));
         AssertSamplerUsesConditioningNode(sampler, conditioningNode);
 
-        IReadOnlyList<WorkflowNode> separateNodes = WorkflowUtils.NodesOfType(workflow, "LTXVSeparateAVLatent");
+        IReadOnlyList<WorkflowNode> separateNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVSeparateAVLatent");
         Assert.True(separateNodes.Count >= 2);
         WorkflowNode originalSeparate = RequireOriginalNativeLtxSeparate(workflow);
         AssertStageLtxConcatsReuseOriginalAudio(workflow, originalSeparate);

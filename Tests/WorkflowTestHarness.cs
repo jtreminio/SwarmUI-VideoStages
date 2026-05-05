@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -119,6 +120,8 @@ internal static class WorkflowTestHarness
             g.CurrentMedia = new WGNodeData(["10", 0], g, WGNodeData.DT_LATENT_IMAGE, g.CurrentCompat());
             g.FinalLoadedModel = g.UserInput.Get(T2IParamTypes.Model, null);
             g.FinalLoadedModelList = g.FinalLoadedModel is null ? [] : [g.FinalLoadedModel];
+
+            BridgeSync.SyncLastId(g);
         }, -1000);
 
     public static WorkflowGenerator.WorkflowGenStep DecodeSamplesToImageStep() =>

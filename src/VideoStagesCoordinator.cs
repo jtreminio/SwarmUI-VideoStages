@@ -1,3 +1,5 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
@@ -267,13 +269,15 @@ internal sealed class VideoStagesCoordinator(
         }
 
         string saveId = g.GetStableDynamicID(FinalStageSaveId, 0);
-        if (g.CurrentMedia.Path is { Count: 2 }
-            && WorkflowUtils.IsNodeTypeReachableFromOutput(
-                g.Workflow,
-                g.CurrentMedia.Path,
-                NodeTypes.SwarmSaveAnimationWS))
+        if (g.CurrentMedia.Path is JArray currentPath && currentPath.Count == 2)
         {
-            return;
+            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            INodeOutput output = bridge.ResolvePath(currentPath);
+            if (output is not null
+                && bridge.Graph.FindNearestDownstream<SwarmSaveAnimationWSNode>(output) is not null)
+            {
+                return;
+            }
         }
 
         g.CurrentMedia.SaveOutput(g.CurrentVae, g.CurrentAudioVae, saveId);

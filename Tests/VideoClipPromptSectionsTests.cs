@@ -168,7 +168,7 @@ public partial class StageFlowTests
         Assert.Contains($"{VideoStagesExtension.SectionIdForClip(1)}", parsedConfinements);
         WorkflowNode loraLoader = Assert.Single(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
         string loraId = loraLoader.Id;
-        List<JArray> positiveEncoderClips = WorkflowUtils.NodesOfType(workflow, "CLIPTextEncode")
+        List<JArray> positiveEncoderClips = WorkflowAssertions.NodesOfType(workflow, "CLIPTextEncode")
             .Where(node => $"{node.Node["inputs"]?["text"]}" == "global prompt")
             .Select(node => WorkflowAssertions.RequireConnectionInput(node.Node, "clip"))
             .ToList();
@@ -232,12 +232,12 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        WorkflowNode icLora = Assert.Single(WorkflowUtils.NodesOfType(workflow, "LTXICLoRALoaderModelOnly"));
+        WorkflowNode icLora = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXICLoRALoaderModelOnly"));
         Assert.Equal("UnitTest_ControlNetLora.safetensors", $"{icLora.Node["inputs"]?["lora_name"]}");
         Assert.Empty(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
 
         IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
-        List<WorkflowInputConnection> samplerModelConsumers = WorkflowUtils.FindInputConnections(workflow, new JArray(icLora.Id, 0))
+        List<WorkflowInputConnection> samplerModelConsumers = WorkflowAssertions.FindInputConnections(workflow, new JArray(icLora.Id, 0))
             .Where(connection => connection.InputName == "model" && samplers.Any(sampler => sampler.Id == connection.NodeId))
             .ToList();
         Assert.NotEmpty(samplerModelConsumers);
