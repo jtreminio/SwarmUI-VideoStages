@@ -600,7 +600,7 @@ public class AudioInjectionTests
             }
             foreach (JProperty input in inputs.Properties())
             {
-                if (input.Value is JArray inputPath && inputPath.Count == 2)
+                if (input.Value is JArray { Count: 2 } inputPath)
                 {
                     pending.Enqueue(new JArray(inputPath[0], inputPath[1]));
                 }

@@ -269,7 +269,7 @@ internal sealed class VideoStagesCoordinator(
         }
 
         string saveId = g.GetStableDynamicID(FinalStageSaveId, 0);
-        if (g.CurrentMedia.Path is JArray currentPath && currentPath.Count == 2)
+        if (g.CurrentMedia.Path is JArray { Count: 2 } currentPath)
         {
             WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
             INodeOutput output = bridge.ResolvePath(currentPath);

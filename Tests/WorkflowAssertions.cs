@@ -29,7 +29,7 @@ internal static class WorkflowAssertions
     public static IReadOnlyList<WorkflowInputConnection> FindInputConnections(JObject workflow, JArray outputRef)
     {
         ArgumentNullException.ThrowIfNull(workflow);
-        if (outputRef is null || outputRef.Count != 2)
+        if (outputRef is not { Count: 2 })
         {
             throw new ArgumentException("Expected [nodeId, outputIndex].", nameof(outputRef));
         }
@@ -46,7 +46,7 @@ internal static class WorkflowAssertions
 
             foreach (JProperty input in inputs.Properties())
             {
-                if (input.Value is not JArray array || array.Count != 2)
+                if (input.Value is not JArray { Count: 2 } array)
                 {
                     continue;
                 }
@@ -89,7 +89,7 @@ internal static class WorkflowAssertions
 
         foreach (string key in preferredKeys ?? [])
         {
-            if (!string.IsNullOrWhiteSpace(key) && inputs.TryGetValue(key, out JToken token) && token is JArray array && array.Count == 2)
+            if (!string.IsNullOrWhiteSpace(key) && inputs.TryGetValue(key, out JToken token) && token is JArray { Count: 2 } array)
             {
                 return array;
             }
@@ -97,7 +97,7 @@ internal static class WorkflowAssertions
 
         foreach (JProperty property in inputs.Properties())
         {
-            if (property.Value is JArray array && array.Count == 2)
+            if (property.Value is JArray { Count: 2 } array)
             {
                 return array;
             }

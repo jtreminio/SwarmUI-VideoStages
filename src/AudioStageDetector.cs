@@ -119,8 +119,7 @@ public sealed class AudioStageDetector(WorkflowGenerator g)
         int priority)
     {
         if (node["inputs"] is not JObject inputs
-            || inputs["audio"] is not JArray audioRef
-            || audioRef.Count != 2)
+            || inputs["audio"] is not JArray { Count: 2 } audioRef)
         {
             return null;
         }

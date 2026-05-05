@@ -75,50 +75,61 @@ internal static class ControlNetApplicator
     }
 
     /// <summary>
-    /// In-place transforms an upstream <c>ImageScale</c> (whose source is a
-    /// <c>GetVideoComponents</c>) into a <c>ResizeImageMaskNode</c> that scales the shorter
-    /// dimension to 512. Kept as direct JObject mutation because it changes a node's
-    /// <c>class_type</c> while preserving its node id — round-tripping that through the typed
-    /// bridge would require remove + add + retarget consumers.
+    /// Walks upstream from <paramref name="fullControlImage"/> looking for an
+    /// <c>ImageScale</c> whose source is a <c>GetVideoComponents</c>; when found, transforms
+    /// it in place into a <c>ResizeImageMaskNode</c>.
+    ///
+    /// <para>Detection (typed graph walk + pattern match) and mutation (JObject rewrite of
+    /// <c>class_type</c> and inputs) live side-by-side because the swap preserves the node's
+    /// id. Round-tripping the class change through <c>bridge.RemoveNode</c> +
+    /// <c>bridge.AddNode</c> would orphan every consumer's typed connection — messier than
+    /// just rewriting the JObject in place.</para>
     /// </summary>
     private static void ReplaceVideoControlNetUpscale(WorkflowGenerator g, JArray fullControlImage)
     {
-        JObject workflow = g.Workflow;
-        Queue<JArray> pending = new();
+        if (fullControlImage is not { Count: 2 })
+        {
+            return;
+        }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.ResolvePath(fullControlImage) is not INodeOutput startOutput)
+        {
+            return;
+        }
+
+        Queue<ComfyNode> pending = new();
         HashSet<string> visited = [];
-        pending.Enqueue(new JArray(fullControlImage[0], fullControlImage[1]));
+        pending.Enqueue(startOutput.Node);
+        visited.Add(startOutput.Node.Id);
         while (pending.Count > 0)
         {
-            JArray current = pending.Dequeue();
-            string key = $"{current[0]}::{current[1]}";
-            if (!visited.Add(key)
-                || !workflow.TryGetValue($"{current[0]}", out JToken nodeToken)
-                || nodeToken is not JObject node
-                || node["inputs"] is not JObject inputs)
+            ComfyNode current = pending.Dequeue();
+            if (current is ImageScaleNode scale
+                && scale.Image.Connection is INodeOutput sourceImage
+                && sourceImage.Node is GetVideoComponentsNode)
             {
-                continue;
-            }
-
-            if (string.Equals($"{node["class_type"]}", NodeTypes.ImageScale, StringComparison.OrdinalIgnoreCase)
-                && TryGetInputRef(node, "image", out JArray sourceImage)
-                && OutputRefIsNodeType<GetVideoComponentsNode>(workflow, sourceImage))
-            {
+                JObject node = (JObject)bridge.Workflow[scale.Id];
+                JObject inputs = (JObject)node["inputs"];
                 node["class_type"] = NodeTypes.ResizeImageMaskNode;
                 inputs.Remove("image");
                 inputs.Remove("width");
                 inputs.Remove("height");
                 inputs.Remove("upscale_method");
                 inputs.Remove("crop");
-                inputs["input"] = new JArray(sourceImage[0], sourceImage[1]);
+                inputs["input"] = new JArray(sourceImage.Node.Id, sourceImage.SlotIndex);
                 inputs["resize_type"] = "scale shorter dimension";
                 inputs["resize_type.shorter_size"] = 512;
                 inputs["scale_method"] = "lanczos";
                 return;
             }
 
-            foreach (JArray upstreamRef in ExtractNodeRefs(inputs))
+            foreach (INodeInput input in current.Inputs)
             {
-                pending.Enqueue(upstreamRef);
+                if (input.Connection?.Node is ComfyNode upstream && visited.Add(upstream.Id))
+                {
+                    pending.Enqueue(upstream);
+                }
             }
         }
     }
@@ -246,8 +257,7 @@ internal static class ControlNetApplicator
         }
 
         if (!TryGetCapturedCoreControlImage(g, index, out WGNodeData controlImage)
-            || controlImage.Path is not JArray controlImagePath
-            || controlImagePath.Count != 2)
+            || controlImage.Path is not JArray { Count: 2 } controlImagePath)
         {
             return false;
         }
@@ -293,14 +303,11 @@ internal static class ControlNetApplicator
         double controlStrength,
         JToken frameCount)
     {
-        if (g.CurrentMedia?.Path is not JArray latentPath
-            || latentPath.Count != 2
-            || controlImage?.Path is not JArray controlImagePath
-            || controlImagePath.Count != 2
+        if (g.CurrentMedia?.Path is not JArray { Count: 2 } latentPath
+            || controlImage?.Path is not JArray { Count: 2 } controlImagePath
             || genInfo?.PosCond is null
             || genInfo.NegCond is null
-            || genInfo.Vae?.Path is not JArray vaePath
-            || vaePath.Count != 2
+            || genInfo.Vae?.Path is not JArray { Count: 2 } vaePath
             || !VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel)
             || genInfo.Model?.Path is not JArray modelPath
             || !OutputRefIsNodeType<LTXICLoRALoaderModelOnlyNode>(g.Workflow, modelPath))
@@ -402,7 +409,7 @@ internal static class ControlNetApplicator
             node.Image.ConnectToUntyped(src);
         }
         node.BatchIndex.Set(batchIndex);
-        if (lengthToken is JArray lengthRef && lengthRef.Count == 2 && bridge.ResolvePath(lengthRef) is INodeOutput lengthSrc)
+        if (lengthToken is JArray { Count: 2 } lengthRef && bridge.ResolvePath(lengthRef) is INodeOutput lengthSrc)
         {
             node.Length.ConnectToUntyped(lengthSrc);
         }
@@ -419,7 +426,7 @@ internal static class ControlNetApplicator
         JObject workflow,
         JArray capturedApplyImageRef)
     {
-        if (capturedApplyImageRef is null || capturedApplyImageRef.Count != 2)
+        if (capturedApplyImageRef is not { Count: 2 })
         {
             return capturedApplyImageRef;
         }
@@ -628,7 +635,7 @@ internal static class ControlNetApplicator
 
         try
         {
-            if (JToken.Parse(encoded) is not JArray path || path.Count != 2)
+            if (JToken.Parse(encoded) is not JArray { Count: 2 } path)
             {
                 return false;
             }
@@ -658,7 +665,7 @@ internal static class ControlNetApplicator
         }
         try
         {
-            if (JToken.Parse(encoded) is not JArray path || path.Count != 2)
+            if (JToken.Parse(encoded) is not JArray { Count: 2 } path)
             {
                 return false;
             }
@@ -676,48 +683,12 @@ internal static class ControlNetApplicator
         inputRef = null;
         if (node["inputs"] is not JObject inputs
             || !inputs.TryGetValue(inputName, out JToken token)
-            || token is not JArray array
-            || array.Count != 2)
+            || token is not JArray { Count: 2 } array)
         {
             return false;
         }
         inputRef = array;
         return true;
-    }
-
-    private static IEnumerable<JArray> ExtractNodeRefs(JToken token)
-    {
-        if (token is JArray array)
-        {
-            if (array.Count == 2
-                && array[0] is not null
-                && array[1] is JValue value
-                && value.Type == JTokenType.Integer)
-            {
-                yield return array;
-                yield break;
-            }
-
-            foreach (JToken child in array)
-            {
-                foreach (JArray childRef in ExtractNodeRefs(child))
-                {
-                    yield return childRef;
-                }
-            }
-            yield break;
-        }
-
-        if (token is JObject obj)
-        {
-            foreach (JProperty property in obj.Properties())
-            {
-                foreach (JArray childRef in ExtractNodeRefs(property.Value))
-                {
-                    yield return childRef;
-                }
-            }
-        }
     }
 
     public static int ParseControlNetSourceIndex(string controlNetSource)

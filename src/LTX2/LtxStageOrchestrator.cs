@@ -210,10 +210,8 @@ internal sealed class LtxStageOrchestrator(
 
     private bool PrimaryGuideMatchesScaledSource(WGNodeData primaryGuideMedia, WGNodeData sourceMedia)
     {
-        if (primaryGuideMedia?.Path is not JArray primaryGuidePath
-            || primaryGuidePath.Count != 2
-            || sourceMedia?.Path is not JArray sourcePath
-            || sourcePath.Count != 2)
+        if (primaryGuideMedia?.Path is not JArray { Count: 2 } primaryGuidePath
+            || sourceMedia?.Path is not JArray { Count: 2 } sourcePath)
         {
             return false;
         }

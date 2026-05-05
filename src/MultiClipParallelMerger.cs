@@ -27,7 +27,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         bool allFramesKnown = true;
         foreach (WGNodeData clip in clipOutputsInOrder)
         {
-            if (clip?.Path is JArray vp && vp.Count == 2)
+            if (clip?.Path is JArray { Count: 2 } vp)
             {
                 videoPaths.Add(new JArray(vp[0], vp[1]));
                 terminalKeys.Add(OutputKey(vp));
@@ -93,7 +93,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     private JArray TryGetClipConcatenatableAudioPath(WGNodeData clip)
     {
         WGNodeData attached = clip?.AttachedAudio;
-        if (attached?.Path is not JArray path || path.Count != 2)
+        if (attached?.Path is not JArray { Count: 2 } path)
         {
             return null;
         }
@@ -106,8 +106,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         if (attached.DataType == WGNodeData.DT_LATENT_AUDIO && g.CurrentAudioVae is not null)
         {
             WGNodeData decoded = attached.DecodeLatents(g.CurrentAudioVae, true);
-            if (decoded?.Path is JArray dp
-                && dp.Count == 2
+            if (decoded?.Path is JArray { Count: 2 } dp
                 && decoded.DataType == WGNodeData.DT_AUDIO)
             {
                 return new JArray(dp[0], dp[1]);

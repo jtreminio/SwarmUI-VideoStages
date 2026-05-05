@@ -60,7 +60,7 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
 
     private WGNodeData DeserializeNodeData(JObject data, WGNodeData fallbackVae)
     {
-        if (data["path"] is not JArray path || path.Count != 2)
+        if (data["path"] is not JArray { Count: 2 } path)
         {
             return null;
         }

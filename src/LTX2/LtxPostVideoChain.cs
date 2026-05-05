@@ -68,8 +68,7 @@ internal sealed class LtxPostVideoChain
         }
 
         if (generator.CurrentMedia?.IsRawMedia != true
-            || generator.CurrentMedia.Path is not JArray mediaPath
-            || mediaPath.Count != 2)
+            || generator.CurrentMedia.Path is not JArray { Count: 2 } mediaPath)
         {
             return null;
         }
@@ -145,7 +144,7 @@ internal sealed class LtxPostVideoChain
 
     public WGNodeData CreateDetachedGuideMedia(WGNodeData vae)
     {
-        if (vae?.Path is not JArray vaePath || vaePath.Count != 2)
+        if (vae?.Path is not JArray { Count: 2 } vaePath)
         {
             WGNodeData detachedCurrent = CloneMedia(g, CurrentOutputMedia);
             AttachSourceAudio(detachedCurrent);
@@ -222,8 +221,7 @@ internal sealed class LtxPostVideoChain
             return;
         }
 
-        if (media.AttachedAudio?.Path is JArray existingAudioPath
-            && existingAudioPath.Count == 2
+        if (media.AttachedAudio?.Path is JArray { Count: 2 } existingAudioPath
             && media.AttachedAudio.DataType == sourceAudio.DataType
             && JToken.DeepEquals(existingAudioPath, sourceAudio.Path))
         {
@@ -235,7 +233,7 @@ internal sealed class LtxPostVideoChain
 
     public void SpliceCurrentOutput(WGNodeData vae)
     {
-        if (g.CurrentMedia?.Path is not JArray stageOutputPath || stageOutputPath.Count != 2)
+        if (g.CurrentMedia?.Path is not JArray { Count: 2 } stageOutputPath)
         {
             return;
         }
@@ -264,7 +262,7 @@ internal sealed class LtxPostVideoChain
         int? outputFrames,
         int? outputFps)
     {
-        if (g.CurrentMedia?.Path is not JArray stageOutputPath || stageOutputPath.Count != 2)
+        if (g.CurrentMedia?.Path is not JArray { Count: 2 } stageOutputPath)
         {
             return;
         }
@@ -289,7 +287,7 @@ internal sealed class LtxPostVideoChain
 
     public void RetargetAnimationSaves(JArray newImagePath)
     {
-        if (newImagePath is null || newImagePath.Count != 2)
+        if (newImagePath is not { Count: 2 })
         {
             return;
         }
@@ -308,7 +306,7 @@ internal sealed class LtxPostVideoChain
 
     private static WGNodeData CloneMedia(WorkflowGenerator generator, WGNodeData media)
     {
-        if (media?.Path is not JArray path || path.Count != 2)
+        if (media?.Path is not JArray { Count: 2 } path)
         {
             return null;
         }
@@ -320,7 +318,7 @@ internal sealed class LtxPostVideoChain
             Frames = media.Frames,
             FPS = media.FPS
         };
-        if (media.AttachedAudio?.Path is JArray audioPath && audioPath.Count == 2)
+        if (media.AttachedAudio?.Path is JArray { Count: 2 } audioPath)
         {
             cloned.AttachedAudio = new WGNodeData(
                 new JArray(audioPath[0], audioPath[1]),
@@ -351,8 +349,7 @@ internal sealed class LtxPostVideoChain
         if (IsExplicitUploadAudio(CurrentOutputMedia?.AttachedAudio))
         {
             JArray currentAudioLatentPath = new(AudioLatentPath[0], AudioLatentPath[1]);
-            if (CurrentOutputMedia.AttachedAudio?.Path is JArray explicitUploadPath
-                && explicitUploadPath.Count == 2
+            if (CurrentOutputMedia.AttachedAudio?.Path is JArray { Count: 2 } explicitUploadPath
                 && IsAudioLatentDerivedFromUpload(currentAudioLatentPath, $"{explicitUploadPath[0]}"))
             {
                 return new WGNodeData(
@@ -373,8 +370,7 @@ internal sealed class LtxPostVideoChain
 
     private bool IsAudioLatentDerivedFromUpload(JArray audioLatentPath, string uploadNodeId)
     {
-        if (audioLatentPath is null
-            || audioLatentPath.Count != 2
+        if (audioLatentPath is not { Count: 2 }
             || string.IsNullOrWhiteSpace(uploadNodeId))
         {
             return false;
@@ -408,8 +404,7 @@ internal sealed class LtxPostVideoChain
     private bool IsExplicitUploadAudio(WGNodeData audio)
     {
         if (audio?.DataType != WGNodeData.DT_AUDIO
-            || audio.Path is not JArray audioPath
-            || audioPath.Count != 2)
+            || audio.Path is not JArray { Count: 2 } audioPath)
         {
             return false;
         }
@@ -427,7 +422,7 @@ internal sealed class LtxPostVideoChain
 
     private LtxChainCapture BuildCapture(WorkflowBridge bridge)
     {
-        INodeOutput audioVaeSource = AudioVaePath is JArray avp && avp.Count == 2
+        INodeOutput audioVaeSource = AudioVaePath is JArray { Count: 2 } avp
             ? bridge.ResolvePath(avp)
             : null;
 

@@ -32,7 +32,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         }
 
         WGNodeData guideVae = guideReference.Vae ?? g.CurrentVae;
-        if (guideReference.Media.Path is JArray guidePath && guidePath.Count == 2)
+        if (guideReference.Media.Path is JArray { Count: 2 } guidePath)
         {
             WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
             INodeOutput guideOutput = bridge.ResolvePath(guidePath);

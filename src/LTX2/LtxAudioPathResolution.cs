@@ -14,7 +14,7 @@ internal static class LtxAudioPathResolution
         JToken rawAudioPath,
         string swarmEnsureAudioStableNodeId)
     {
-        if (rawAudioPath is not JArray rawRef || rawRef.Count != 2)
+        if (rawAudioPath is not JArray { Count: 2 } rawRef)
         {
             return rawAudioPath;
         }
@@ -62,7 +62,7 @@ internal static class LtxAudioPathResolution
 
     public static bool WorkflowConnectionRefsEqual(JToken left, JToken right)
     {
-        if (left is not JArray la || right is not JArray ra || la.Count != 2 || ra.Count != 2)
+        if (left is not JArray { Count: 2 } la || right is not JArray { Count: 2 } ra)
         {
             return false;
         }

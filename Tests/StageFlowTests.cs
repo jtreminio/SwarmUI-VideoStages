@@ -413,7 +413,7 @@ public partial class StageFlowTests
     {
         if (token is JArray array)
         {
-            if (array.Count == 2 && array[0] is not null && array[1] is not null && array[0].Type != JTokenType.Array && array[1].Type != JTokenType.Array)
+            if (array is [not (null or JArray), not (null or JArray)])
             {
                 yield return new JArray(array[0], array[1]);
                 yield break;
@@ -494,7 +494,7 @@ public partial class StageFlowTests
             {
                 ["media"] = media
             };
-            if (g.CurrentVae?.Path is JArray vaePath && vaePath.Count == 2)
+            if (g.CurrentVae?.Path is JArray { Count: 2 } vaePath)
             {
                 JObject vae = new()
                 {

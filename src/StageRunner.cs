@@ -241,7 +241,7 @@ internal class StageRunner(
 
     private void ApplyContinuationEndStep(JsonParser.StageSpec stage)
     {
-        if (!stage.EndStep.HasValue || g.CurrentMedia?.Path is not JArray currentPath || currentPath.Count != 2)
+        if (!stage.EndStep.HasValue || g.CurrentMedia?.Path is not JArray { Count: 2 } currentPath)
         {
             return;
         }
@@ -440,10 +440,8 @@ internal class StageRunner(
         out WGNodeData reusedLatent)
     {
         reusedLatent = null;
-        if (sourceMedia?.Path is not JArray sourcePath
-            || sourcePath.Count != 2
-            || vae?.Path is not JArray vaePath
-            || vaePath.Count != 2)
+        if (sourceMedia?.Path is not JArray { Count: 2 } sourcePath
+            || vae?.Path is not JArray { Count: 2 } vaePath)
         {
             return false;
         }
@@ -760,10 +758,8 @@ internal class StageRunner(
         JArray newOutputPath,
         bool retargetAudio = false)
     {
-        if (priorOutputPath is null
-            || newOutputPath is null
-            || priorOutputPath.Count != 2
-            || newOutputPath.Count != 2
+        if (priorOutputPath is not { Count: 2 }
+            || newOutputPath is not { Count: 2 }
             || JToken.DeepEquals(priorOutputPath, newOutputPath))
         {
             return;
@@ -823,7 +819,7 @@ internal class StageRunner(
 
     internal static JArray CopyPath(JArray path)
     {
-        if (path is null || path.Count != 2)
+        if (path is not { Count: 2 })
         {
             return null;
         }
@@ -832,7 +828,7 @@ internal class StageRunner(
 
     private static void AddCurrentMediaRootNodeId(HashSet<string> protectedNodes, WGNodeData media)
     {
-        if (media?.Path is not JArray currentPath || currentPath.Count != 2)
+        if (media?.Path is not JArray { Count: 2 } currentPath)
         {
             return;
         }
@@ -904,7 +900,7 @@ internal class StageRunner(
 
     private void CleanupReplacedTextToVideoRootStage(JArray priorOutputPath, bool replaceTextToVideoRootStage)
     {
-        if (!replaceTextToVideoRootStage || priorOutputPath is null || priorOutputPath.Count != 2)
+        if (!replaceTextToVideoRootStage || priorOutputPath is not { Count: 2 })
         {
             return;
         }
@@ -917,7 +913,7 @@ internal class StageRunner(
 
     private static WGNodeData CloneMedia(WGNodeData media)
     {
-        if (media?.Path is not JArray path || path.Count != 2)
+        if (media?.Path is not JArray { Count: 2 } path)
         {
             return null;
         }

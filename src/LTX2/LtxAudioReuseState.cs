@@ -11,7 +11,7 @@ internal static class LtxAudioReuseState
 
     private static bool IsValidAudioLatentPath(JArray? path)
     {
-        return path is not null && path.Count == 2;
+        return path is { Count: 2 };
     }
 
     public static void PrepareReusableAudio(WorkflowGenerator generator, JsonParser.StageSpec stage)

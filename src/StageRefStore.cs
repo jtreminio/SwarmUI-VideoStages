@@ -200,6 +200,6 @@ public class StageRefStore(WorkflowGenerator g)
     private static bool IsTwoElementPath(JToken token, out JArray path)
     {
         path = token as JArray;
-        return path is not null && path.Count == 2;
+        return path is { Count: 2 };
     }
 }

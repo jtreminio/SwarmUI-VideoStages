@@ -494,7 +494,7 @@ internal sealed class LtxStageExecutor(
 
     private static void SetIntInputFromToken(NodeInput<IntType> input, JToken token, WorkflowBridge bridge)
     {
-        if (token is JArray arr && arr.Count == 2 && bridge.ResolvePath(arr) is INodeOutput connection)
+        if (token is JArray { Count: 2 } arr && bridge.ResolvePath(arr) is INodeOutput connection)
         {
             input.ConnectToUntyped(connection);
             return;
@@ -628,8 +628,7 @@ internal sealed class LtxStageExecutor(
         {
             return;
         }
-        if (framesConnection is JArray framesArr
-            && framesArr.Count == 2
+        if (framesConnection is JArray { Count: 2 } framesArr
             && bridge.ResolvePath(framesArr) is INodeOutput framesOutput)
         {
             emptyAudio.FramesNumber.ConnectToUntyped(framesOutput);
@@ -665,10 +664,8 @@ internal sealed class LtxStageExecutor(
     {
         latentPath = null;
         if (sourceMedia?.DataType != WGNodeData.DT_VIDEO
-            || sourceMedia.Path is not JArray sourcePath
-            || sourcePath.Count != 2
-            || genInfo?.Vae?.Path is not JArray vaePath
-            || vaePath.Count != 2
+            || sourceMedia.Path is not JArray { Count: 2 } sourcePath
+            || genInfo?.Vae?.Path is not JArray { Count: 2 } vaePath
             || (!genInfo.Frames.HasValue && !allowDynamicFrameCount)
             || genInfo.Frames.HasValue
                 && sourceMedia.Frames is int sourceFrames
@@ -773,7 +770,7 @@ internal sealed class LtxStageExecutor(
 
     private JArray EnsureClipResolutionBeforeLtxvPreprocess(JArray guideImagePath, WGNodeData targetMedia)
     {
-        if (guideImagePath is null || guideImagePath.Count != 2)
+        if (guideImagePath is not { Count: 2 })
         {
             return guideImagePath;
         }
@@ -891,7 +888,7 @@ internal sealed class LtxStageExecutor(
     private bool TryFindReusablePreprocessOutput(JArray guideImagePath, out JArray preprocessOutputPath)
     {
         preprocessOutputPath = null;
-        if (guideImagePath is null || guideImagePath.Count != 2)
+        if (guideImagePath is not { Count: 2 })
         {
             return false;
         }
@@ -1173,7 +1170,7 @@ internal sealed class LtxStageExecutor(
 
     private void AttachDecodedLtxAudioFromCurrentVideo()
     {
-        if (g.CurrentMedia?.Path is not JArray currentPath || currentPath.Count != 2)
+        if (g.CurrentMedia?.Path is not JArray { Count: 2 } currentPath)
         {
             return;
         }
