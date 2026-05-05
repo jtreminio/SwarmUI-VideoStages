@@ -1,15 +1,15 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Typed;
 
 namespace VideoStages.WAN;
 
 internal static class WanFirstLastFrameRewriter
 {
-    private const string WanImageToVideoType = "WanImageToVideo";
-    private const string WanFirstLastFrameToVideoType = "WanFirstLastFrameToVideo";
-    private const string ClipVisionEncodeType = "CLIPVisionEncode";
-
     internal static void TryRewriteToFirstLast(
         WorkflowGenerator g,
         JsonParser.StageSpec stage,
@@ -31,184 +31,122 @@ internal static class WanFirstLastFrameRewriter
         }
 
         string wanNodeId = $"{genInfo.PosCond[0]}";
-        if (g.Workflow[wanNodeId] is not JObject wanNode
-            || wanNode["inputs"] is not JObject wanInputs)
-        {
-            Logs.Warning("VideoStages: WAN FLF rewrite could not read the emitted WAN node.");
-            return;
-        }
-
-        if (!StringUtils.NodeTypeMatches(wanNode, WanImageToVideoType))
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.Graph.GetNode<WanImageToVideoNode>(wanNodeId) is not WanImageToVideoNode wan)
         {
             return;
         }
 
-        int width = ReadPositiveIntToken(
-            wanInputs["width"],
-            genInfo.Generator.UserInput.GetImageWidth());
-        int height = ReadPositiveIntToken(
-            wanInputs["height"],
-            genInfo.Generator.UserInput.GetImageHeight());
-        int length = genInfo.Frames ?? ReadPositiveIntToken(wanInputs["length"], 49);
-        int batchSize = ReadPositiveBatchSize(wanInputs["batch_size"]);
+        int width = Math.Max(16, wan.Width.LiteralAsInt() ?? g.UserInput.GetImageWidth());
+        int height = Math.Max(16, wan.Height.LiteralAsInt() ?? g.UserInput.GetImageHeight());
+        int length = genInfo.Frames ?? Math.Max(16, wan.Length.LiteralAsInt() ?? 49);
+        int batchSize = Math.Max(1, wan.BatchSize.LiteralAsInt() ?? 1);
 
-        JArray scaledEndPath = ResolveScaledEndPath(
-            g,
-            wanInputs["start_image"] as JArray,
-            wanEndImagePrepared,
+        INodeOutput scaledEndOutput = ResolveScaledEndOutput(
+            bridge,
+            wan.StartImage.Connection,
+            wanEndImagePrepared.Path as JArray,
             width,
             height);
 
-        JToken clipVisionOut = wanInputs["clip_vision_output"];
-        string flfNodeId;
-        if (clipVisionOut is null || clipVisionOut.Type == JTokenType.Null)
+        WanFirstLastFrameToVideoNode flf = bridge.AddNode(new WanFirstLastFrameToVideoNode());
+        flf.Width.Set((long)width);
+        flf.Height.Set((long)height);
+        flf.Length.Set((long)length);
+        flf.BatchSize.Set((long)batchSize);
+        if (wan.PositiveInput.Connection is INodeOutput pos) { flf.PositiveInput.ConnectToUntyped(pos); }
+        if (wan.NegativeInput.Connection is INodeOutput neg) { flf.NegativeInput.ConnectToUntyped(neg); }
+        if (wan.Vae.Connection is INodeOutput vae) { flf.Vae.ConnectToUntyped(vae); }
+        if (wan.StartImage.Connection is INodeOutput startImg) { flf.StartImage.ConnectToUntyped(startImg); }
+        if (scaledEndOutput is not null) { flf.EndImage.ConnectToUntyped(scaledEndOutput); }
+
+        if (wan.ClipVisionOutput.Connection is INodeOutput clipVisionStart)
         {
-            flfNodeId = g.CreateNode(WanFirstLastFrameToVideoType, new JObject()
-            {
-                ["width"] = width,
-                ["height"] = height,
-                ["length"] = length,
-                ["positive"] = wanInputs["positive"],
-                ["negative"] = wanInputs["negative"],
-                ["vae"] = wanInputs["vae"],
-                ["start_image"] = wanInputs["start_image"],
-                ["end_image"] = scaledEndPath,
-                ["clip_vision_start_image"] = null,
-                ["clip_vision_end_image"] = null,
-                ["batch_size"] = batchSize
-            });
-        }
-        else
-        {
-            if (clipVisionOut is not JArray clipVisionPath || clipVisionPath.Count < 2)
+            if (clipVisionStart.Node is not CLIPVisionEncodeNode encodeStart)
             {
                 Logs.Warning("VideoStages: WAN FLF rewrite skipped because CLIP vision output wiring was unexpected.");
+                bridge.RemoveNode(flf);
                 return;
             }
 
-            string encodeStartId = $"{clipVisionPath[0]}";
-            if (g.Workflow[encodeStartId] is not JObject encodeStart
-                || !StringUtils.NodeTypeMatches(encodeStart, ClipVisionEncodeType)
-                || encodeStart["inputs"] is not JObject encodeInputs)
+            CLIPVisionEncodeNode encodeEnd = bridge.AddNode(new CLIPVisionEncodeNode());
+            if (encodeStart.ClipVision.Connection is INodeOutput clipLoader)
             {
-                Logs.Warning("VideoStages: WAN FLF rewrite could not resolve CLIPVisionEncode for start vision.");
-                return;
+                encodeEnd.ClipVision.ConnectToUntyped(clipLoader);
             }
-
-            JToken clipLoader = encodeInputs["clip_vision"];
-            string encodedEndId = g.CreateNode(ClipVisionEncodeType, new JObject()
+            if (scaledEndOutput is not null)
             {
-                ["clip_vision"] = clipLoader,
-                ["image"] = scaledEndPath,
-                ["crop"] = "center"
-            });
+                encodeEnd.Image.ConnectToUntyped(scaledEndOutput);
+            }
+            encodeEnd.Crop.Set("center");
+            bridge.SyncNode(encodeEnd);
 
-            flfNodeId = g.CreateNode(WanFirstLastFrameToVideoType, new JObject()
-            {
-                ["width"] = width,
-                ["height"] = height,
-                ["length"] = length,
-                ["positive"] = wanInputs["positive"],
-                ["negative"] = wanInputs["negative"],
-                ["vae"] = wanInputs["vae"],
-                ["start_image"] = wanInputs["start_image"],
-                ["clip_vision_start_image"] = clipVisionOut,
-                ["end_image"] = scaledEndPath,
-                ["clip_vision_end_image"] = WorkflowGenerator.NodePath(encodedEndId, 0),
-                ["batch_size"] = batchSize
-            });
+            flf.ClipVisionStartImage.ConnectToUntyped(clipVisionStart);
+            flf.ClipVisionEndImage.ConnectTo(encodeEnd.CLIPVISIONOUTPUT);
         }
 
-        genInfo.PosCond = new JArray(flfNodeId, 0);
-        genInfo.NegCond = new JArray(flfNodeId, 1);
-        g.Workflow.Remove(wanNodeId);
+        bridge.SyncNode(flf);
+        bridge.RemoveNode(wan);
+        BridgeSync.SyncLastId(g);
+
+        genInfo.PosCond = new JArray(flf.Id, 0);
+        genInfo.NegCond = new JArray(flf.Id, 1);
         g.CurrentMedia = g.CurrentMedia.WithPath(
-            new JArray(flfNodeId, 2),
+            new JArray(flf.Id, 2),
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);
     }
 
-    private static int ReadPositiveIntToken(JToken token, int fallback)
-    {
-        if (token is null || token.Type == JTokenType.Null || token is JArray)
-        {
-            return Math.Max(16, fallback);
-        }
-
-        if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
-        {
-            return Math.Max(16, (int)Math.Round(token.Value<double>()));
-        }
-
-        return Math.Max(16, fallback);
-    }
-
-    private static int ReadPositiveBatchSize(JToken token)
-    {
-        if (token is null || token.Type == JTokenType.Null || token is JArray)
-        {
-            return 1;
-        }
-
-        if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
-        {
-            return Math.Max(1, (int)Math.Round(token.Value<double>()));
-        }
-
-        return 1;
-    }
-
-    private static JArray ResolveScaledEndPath(
-        WorkflowGenerator g,
-        JArray startImagePath,
-        WGNodeData wanEndImagePrepared,
-        int width,
-        int height)
-    {
-        if (CanReuseStartImagePath(g, startImagePath, wanEndImagePrepared?.Path, width, height))
-        {
-            return new JArray(startImagePath[0], startImagePath[1]);
-        }
-
-        string scaledEndId = g.CreateNode(NodeTypes.ImageScale, new JObject()
-        {
-            ["image"] = wanEndImagePrepared.Path,
-            ["width"] = width,
-            ["height"] = height,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "disabled"
-        });
-        return new JArray(scaledEndId, 0);
-    }
-
-    private static bool CanReuseStartImagePath(
-        WorkflowGenerator g,
-        JArray startImagePath,
+    private static INodeOutput ResolveScaledEndOutput(
+        WorkflowBridge bridge,
+        INodeOutput startImageOutput,
         JArray endImageRawPath,
         int width,
         int height)
     {
-        if (startImagePath is not { Count: 2 } || endImageRawPath is not { Count: 2 })
+        INodeOutput endRawOutput = endImageRawPath is { Count: 2 } ? bridge.ResolvePath(endImageRawPath) : null;
+        if (endRawOutput is null)
         {
-            return false;
+            return null;
         }
 
-        if (JToken.DeepEquals(startImagePath, endImageRawPath))
+        if (startImageOutput is not null && CanReuseStartImageOutput(startImageOutput, endRawOutput, width, height))
+        {
+            return startImageOutput;
+        }
+
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
+        scale.Image.ConnectToUntyped(endRawOutput);
+        scale.Width.Set((long)width);
+        scale.Height.Set((long)height);
+        scale.UpscaleMethod.Set("lanczos");
+        scale.Crop.Set("disabled");
+        bridge.SyncNode(scale);
+        return scale.IMAGE;
+    }
+
+    private static bool CanReuseStartImageOutput(
+        INodeOutput startImageOutput,
+        INodeOutput endRawOutput,
+        int width,
+        int height)
+    {
+        if (startImageOutput.Node.Id == endRawOutput.Node.Id
+            && startImageOutput.SlotIndex == endRawOutput.SlotIndex)
         {
             return true;
         }
 
-        if (g.Workflow[$"{startImagePath[0]}"] is not JObject startNode
-            || !StringUtils.NodeTypeMatches(startNode, NodeTypes.ImageScale)
-            || startNode["inputs"] is not JObject startInputs
-            || startInputs["image"] is not JArray scaledInput
-            || !JToken.DeepEquals(scaledInput, endImageRawPath)
-            || startInputs.Value<int?>("width") != width
-            || startInputs.Value<int?>("height") != height)
+        if (startImageOutput.Node is not ImageScaleNode startScale)
         {
             return false;
         }
 
-        return true;
+        INodeOutput scaleSource = startScale.Image.Connection;
+        return scaleSource is not null
+            && scaleSource.Node.Id == endRawOutput.Node.Id
+            && scaleSource.SlotIndex == endRawOutput.SlotIndex
+            && startScale.Width.LiteralAsInt() == width
+            && startScale.Height.LiteralAsInt() == height;
     }
 }
