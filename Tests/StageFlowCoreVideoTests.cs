@@ -62,22 +62,29 @@ public partial class StageFlowTests
             {
                 ["image"] = new JArray(scaled, 0)
             }, id: "303", idMandatory: false);
+            string resize = g.CreateNode("ResizeImageMaskNode", new JObject()
+            {
+                ["input"] = new JArray(preprocessor, 0),
+                ["resize_type"] = "scale to multiple",
+                ["resize_type.multiple"] = 8,
+                ["scale_method"] = "lanczos"
+            }, id: "304", idMandatory: false);
             string controlNetLoader = g.CreateNode("ControlNetLoader", new JObject()
             {
                 ["control_net_name"] = controlNetModel.ToString(g.ModelFolderFormat)
-            }, id: "304", idMandatory: false);
-            string positive = g.CreateNode("UnitTest_PositiveCond", new JObject(), id: "305", idMandatory: false);
-            string negative = g.CreateNode("UnitTest_NegativeCond", new JObject(), id: "306", idMandatory: false);
+            }, id: "305", idMandatory: false);
+            string positive = g.CreateNode("UnitTest_PositiveCond", new JObject(), id: "306", idMandatory: false);
+            string negative = g.CreateNode("UnitTest_NegativeCond", new JObject(), id: "307", idMandatory: false);
             string controlApply = g.CreateNode("ControlNetApplyAdvanced", new JObject()
             {
                 ["positive"] = new JArray(positive, 0),
                 ["negative"] = new JArray(negative, 0),
                 ["control_net"] = new JArray(controlNetLoader, 0),
-                ["image"] = new JArray(preprocessor, 0),
+                ["image"] = new JArray(resize, 0),
                 ["strength"] = 0.8,
                 ["start_percent"] = 0,
                 ["end_percent"] = 1
-            }, id: "307", idMandatory: false);
+            }, id: "308", idMandatory: false);
             g.FinalPrompt = new JArray(controlApply, 0);
             g.FinalNegativePrompt = new JArray(controlApply, 1);
 
@@ -109,22 +116,29 @@ public partial class StageFlowTests
             {
                 ["image"] = new JArray(scaled, 0)
             }, id: "303", idMandatory: false);
+            string resize = g.CreateNode("ResizeImageMaskNode", new JObject()
+            {
+                ["input"] = new JArray(preprocessor, 0),
+                ["resize_type"] = "scale to multiple",
+                ["resize_type.multiple"] = 8,
+                ["scale_method"] = "lanczos"
+            }, id: "304", idMandatory: false);
             string modelPatchLoader = g.CreateNode("ModelPatchLoader", new JObject()
             {
                 ["name"] = controlNetModel.ToString(g.ModelFolderFormat)
-            }, id: "304", idMandatory: false);
-            JArray controlImage = new(preprocessor, 0);
-            string diffPatchId = "307";
+            }, id: "305", idMandatory: false);
+            JArray controlImage = new(resize, 0);
+            string diffPatchId = "308";
             if (useFirstFrameForCoreApply)
             {
                 string firstFrame = g.CreateNode("ImageFromBatch", new JObject()
                 {
-                    ["image"] = new JArray(preprocessor, 0),
+                    ["image"] = new JArray(resize, 0),
                     ["batch_index"] = 0,
                     ["length"] = 1
-                }, id: "307", idMandatory: false);
+                }, id: "308", idMandatory: false);
                 controlImage = new JArray(firstFrame, 0);
-                diffPatchId = "308";
+                diffPatchId = "309";
             }
             string diffPatch = g.CreateNode("QwenImageDiffsynthControlnet", new JObject()
             {
@@ -139,25 +153,27 @@ public partial class StageFlowTests
             BridgeSync.SyncLastId(g);
         }, -6.1);
 
-    private static void AssertCoreVideoControlNetScaleReplaced(JObject workflow)
+    private static void AssertCoreVideoControlNetResizeBumped(JObject workflow)
     {
-        WorkflowNode resizeNode = WorkflowAssertions.RequireNodeById(workflow, "302");
-        Assert.Equal("ResizeImageMaskNode", $"{resizeNode.Node["class_type"]}");
+        WorkflowNode scaleNode = WorkflowAssertions.RequireNodeById(workflow, "302");
+        Assert.Equal("ImageScale", $"{scaleNode.Node["class_type"]}");
         Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(resizeNode.Node, "input"),
+            WorkflowAssertions.RequireConnectionInput(scaleNode.Node, "image"),
             new JArray("301", 0)));
-        Assert.Equal("scale shorter dimension", $"{resizeNode.Node["inputs"]?["resize_type"]}");
-        Assert.Equal(512, resizeNode.Node["inputs"]?.Value<int>("resize_type.shorter_size"));
-        Assert.Equal("lanczos", $"{resizeNode.Node["inputs"]?["scale_method"]}");
-        Assert.Null(resizeNode.Node["inputs"]?["width"]);
-        Assert.Null(resizeNode.Node["inputs"]?["height"]);
-        Assert.Null(resizeNode.Node["inputs"]?["upscale_method"]);
-        Assert.Null(resizeNode.Node["inputs"]?["crop"]);
 
         WorkflowNode preprocessorNode = WorkflowAssertions.RequireNodeById(workflow, "303");
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(preprocessorNode.Node, "image"),
             new JArray("302", 0)));
+
+        WorkflowNode resizeNode = WorkflowAssertions.RequireNodeById(workflow, "304");
+        Assert.Equal("ResizeImageMaskNode", $"{resizeNode.Node["class_type"]}");
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(resizeNode.Node, "input"),
+            new JArray("303", 0)));
+        Assert.Equal("scale to multiple", $"{resizeNode.Node["inputs"]?["resize_type"]}");
+        Assert.Equal(64, resizeNode.Node["inputs"]?.Value<int>("resize_type.multiple"));
+        Assert.Equal("lanczos", $"{resizeNode.Node["inputs"]?["scale_method"]}");
     }
 
     private static WorkflowNode AssertCropGuidesLatentUsesVideoTensor(JObject workflow, WorkflowNode cropGuidesNode)
@@ -295,13 +311,14 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
 
-        AssertCoreVideoControlNetScaleReplaced(workflow);
+        AssertCoreVideoControlNetResizeBumped(workflow);
         WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode resize = WorkflowAssertions.RequireNodeById(workflow, "304");
         WorkflowNode imageFromBatch = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray(preprocessor.Id, 0)));
+                new JArray(resize.Id, 0)));
         Assert.Equal(0, imageFromBatch.Node["inputs"]?.Value<int>("batch_index"));
         Assert.Equal(1, imageFromBatch.Node["inputs"]?.Value<int>("length"));
 
@@ -348,13 +365,14 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
-        AssertCoreVideoControlNetScaleReplaced(workflow);
+        AssertCoreVideoControlNetResizeBumped(workflow);
         WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode resize = WorkflowAssertions.RequireNodeById(workflow, "304");
         WorkflowNode imageFromBatch = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray(preprocessor.Id, 0)));
+                new JArray(resize.Id, 0)));
         Assert.Equal(0, imageFromBatch.Node["inputs"]?.Value<int>("batch_index"));
         Assert.Equal(1, imageFromBatch.Node["inputs"]?.Value<int>("length"));
 
@@ -401,13 +419,14 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
-        AssertCoreVideoControlNetScaleReplaced(workflow);
+        AssertCoreVideoControlNetResizeBumped(workflow);
         WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode resize = WorkflowAssertions.RequireNodeById(workflow, "304");
         WorkflowNode imageFromBatch = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
             node => JToken.DeepEquals(
                 WorkflowAssertions.RequireConnectionInput(node.Node, "image"),
-                new JArray(preprocessor.Id, 0)));
+                new JArray(resize.Id, 0)));
         Assert.Equal(0, imageFromBatch.Node["inputs"]?.Value<int>("batch_index"));
         Assert.Equal(1, imageFromBatch.Node["inputs"]?.Value<int>("length"));
     }
@@ -447,18 +466,20 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
-        AssertCoreVideoControlNetScaleReplaced(workflow);
+        AssertCoreVideoControlNetResizeBumped(workflow);
         WorkflowNode icLora = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXICLoRALoaderModelOnly"));
         WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
         WorkflowNode scaleToMultipleNode = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ResizeImageMaskNode"),
             n => $"{n.Node["inputs"]?["resize_type"]}" == "scale to multiple");
+        Assert.Equal("304", scaleToMultipleNode.Id);
+        Assert.Equal(64, scaleToMultipleNode.Node["inputs"]?.Value<int>("resize_type.multiple"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(scaleToMultipleNode.Node, "input"),
             new JArray(preprocessor.Id, 0)));
         WorkflowNode firstFrame = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
-            node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(preprocessor.Id, 0))
+            node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(scaleToMultipleNode.Id, 0))
                 && node.Node["inputs"]?.Value<int>("length") == 1);
         Assert.Equal(0, firstFrame.Node["inputs"]?.Value<int>("batch_index"));
         WorkflowNode videoGuideFrames = Assert.Single(
@@ -526,11 +547,12 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
 
         WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode resize = WorkflowAssertions.RequireNodeById(workflow, "304");
         WorkflowNode sizeNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "GetImageSize"));
         JArray controlNetFrameCount = new(sizeNode.Id, 2);
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(sizeNode.Node, "image"),
-            new JArray(preprocessor.Id, 0)));
+            new JArray(resize.Id, 0)));
 
         WorkflowNode emptyLatent = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "EmptyLTXVLatentVideo"));
         Assert.True(JToken.DeepEquals(
@@ -545,9 +567,12 @@ public partial class StageFlowTests
         WorkflowNode scaleToMultipleNode = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ResizeImageMaskNode"),
             n => $"{n.Node["inputs"]?["resize_type"]}" == "scale to multiple");
+        Assert.Equal(resize.Id, scaleToMultipleNode.Id);
+        Assert.Equal(64, scaleToMultipleNode.Node["inputs"]?.Value<int>("resize_type.multiple"));
         WorkflowNode videoGuideFrames = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
-            node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(scaleToMultipleNode.Id, 0)));
+            node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(scaleToMultipleNode.Id, 0))
+                && JToken.DeepEquals(node.Node["inputs"]?["length"], controlNetFrameCount));
         Assert.True(JToken.DeepEquals(videoGuideFrames.Node["inputs"]?["length"], controlNetFrameCount));
     }
 
@@ -643,15 +668,17 @@ public partial class StageFlowTests
             input,
             BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetFirstFrame(controlNetModel));
 
-        AssertCoreVideoControlNetScaleReplaced(workflow);
+        AssertCoreVideoControlNetResizeBumped(workflow);
         WorkflowNode preprocessor = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "UnitTestPreprocessor"));
+        WorkflowNode resize = WorkflowAssertions.RequireNodeById(workflow, "304");
         WorkflowNode firstFrame = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
-            node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(preprocessor.Id, 0))
+            node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(resize.Id, 0))
                 && node.Node["inputs"]?.Value<int>("length") == 1);
         WorkflowNode scaleToMultipleNode = Assert.Single(
             WorkflowAssertions.NodesOfType(workflow, "ResizeImageMaskNode"),
             n => $"{n.Node["inputs"]?["resize_type"]}" == "scale to multiple");
+        Assert.Equal(resize.Id, scaleToMultipleNode.Id);
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(scaleToMultipleNode.Node, "input"),
             new JArray(preprocessor.Id, 0)));
