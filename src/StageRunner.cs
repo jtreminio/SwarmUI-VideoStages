@@ -1,9 +1,14 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Generated;
 using VideoStages.LTX2;
+using VideoStages.Typed;
 using VideoStages.WAN;
 
 namespace VideoStages;
@@ -236,105 +241,68 @@ internal class StageRunner(
 
     private void ApplyContinuationEndStep(JsonParser.StageSpec stage)
     {
-        if (!stage.EndStep.HasValue || FindCurrentStageSamplerNode() is not JObject samplerNode)
-        {
-            return;
-        }
-        if (samplerNode["inputs"] is not JObject inputs)
+        if (!stage.EndStep.HasValue || g.CurrentMedia?.Path is not JArray currentPath || currentPath.Count != 2)
         {
             return;
         }
 
-        int steps = Math.Max(1, inputs.Value<int?>("steps") ?? stage.Steps);
-        int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
-        inputs["end_at_step"] = endStep;
-        inputs["return_with_leftover_noise"] = endStep < steps ? "enable" : "disable";
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.Graph.GetNode($"{currentPath[0]}") is not ComfyNode startNode)
+        {
+            return;
+        }
+        ComfyNode samplerNode = FindUpstreamSampler(bridge, startNode);
+        if (samplerNode is null)
+        {
+            return;
+        }
+
+        switch (samplerNode)
+        {
+            case KSamplerAdvancedNode advanced:
+                {
+                    int steps = Math.Max(1, advanced.Steps.LiteralAsInt() ?? stage.Steps);
+                    int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
+                    advanced.EndAtStep.Set((long)endStep);
+                    advanced.ReturnWithLeftoverNoise.Set(endStep < steps ? "enable" : "disable");
+                    bridge.SyncNode(advanced);
+                    break;
+                }
+            case SwarmKSamplerNode swarm:
+                {
+                    int steps = Math.Max(1, swarm.Steps.LiteralAsInt() ?? stage.Steps);
+                    int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
+                    swarm.EndAtStep.Set((long)endStep);
+                    swarm.ReturnWithLeftoverNoise.Set(endStep < steps ? "enable" : "disable");
+                    bridge.SyncNode(swarm);
+                    break;
+                }
+        }
     }
 
-    private JObject FindCurrentStageSamplerNode()
+    private static ComfyNode FindUpstreamSampler(WorkflowBridge bridge, ComfyNode startNode)
     {
-        if (g.CurrentMedia?.Path is not JArray currentPath || currentPath.Count != 2)
-        {
-            return null;
-        }
-        return FindSamplerNodeFromPath(currentPath, []);
-    }
+        Queue<ComfyNode> pending = new();
+        HashSet<string> visited = [];
+        pending.Enqueue(startNode);
+        visited.Add(startNode.Id);
 
-    private JObject FindSamplerNodeFromPath(JArray path, HashSet<string> visitedNodeIds)
-    {
-        if (path is not { Count: 2 })
+        while (pending.Count > 0)
         {
-            return null;
-        }
-
-        string nodeId = $"{path[0]}";
-        if (!visitedNodeIds.Add(nodeId)
-            || g.Workflow[nodeId] is not JObject node)
-        {
-            return null;
-        }
-
-        if (IsSamplerNode(node))
-        {
-            return node;
-        }
-
-        if (node["inputs"] is not JObject inputs)
-        {
-            return null;
-        }
-
-        foreach (JArray upstreamPath in ExtractNodeRefs(inputs))
-        {
-            JObject samplerNode = FindSamplerNodeFromPath(upstreamPath, visitedNodeIds);
-            if (samplerNode is not null)
+            ComfyNode current = pending.Dequeue();
+            if (current is KSamplerAdvancedNode or SwarmKSamplerNode)
             {
-                return samplerNode;
+                return current;
+            }
+            foreach (INodeInput input in current.Inputs)
+            {
+                if (input.Connection?.Node is ComfyNode upstream && visited.Add(upstream.Id))
+                {
+                    pending.Enqueue(upstream);
+                }
             }
         }
         return null;
-    }
-
-    private static IEnumerable<JArray> ExtractNodeRefs(JToken token)
-    {
-        if (token is JArray array)
-        {
-            if (array.Count == 2
-                && array[0] is not null
-                && array[1] is not null
-                && array[0].Type != JTokenType.Array
-                && array[1].Type != JTokenType.Array)
-            {
-                yield return new JArray(array[0], array[1]);
-                yield break;
-            }
-
-            foreach (JToken child in array)
-            {
-                foreach (JArray childRef in ExtractNodeRefs(child))
-                {
-                    yield return childRef;
-                }
-            }
-            yield break;
-        }
-
-        if (token is JObject obj)
-        {
-            foreach (JProperty property in obj.Properties())
-            {
-                foreach (JArray childRef in ExtractNodeRefs(property.Value))
-                {
-                    yield return childRef;
-                }
-            }
-        }
-    }
-
-    private static bool IsSamplerNode(JObject node)
-    {
-        return StringUtils.NodeTypeMatches(node, "SwarmKSampler")
-            || StringUtils.NodeTypeMatches(node, "KSamplerAdvanced");
     }
 
     private void RemoveUnusedWanRefConditioning(JArray stalePositive, JArray staleNegative)
@@ -346,10 +314,11 @@ internal class StageRunner(
 
         HashSet<string> protectedNodes = [];
         AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
-        WorkflowUtils.RemoveUnusedUpstreamNodes(g.Workflow, stalePositive, protectedNodes);
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        RemoveUnusedUpstreamNodes(bridge, $"{stalePositive[0]}", protectedNodes);
         if (staleNegative is not null && !JToken.DeepEquals(staleNegative, stalePositive))
         {
-            WorkflowUtils.RemoveUnusedUpstreamNodes(g.Workflow, staleNegative, protectedNodes);
+            RemoveUnusedUpstreamNodes(bridge, $"{staleNegative[0]}", protectedNodes);
         }
     }
 
@@ -412,12 +381,7 @@ internal class StageRunner(
                         g.CurrentMedia = reusedLatent;
                         return;
                     }
-                    string fromBatch = g.CreateNode(NodeTypes.ImageFromBatch, new JObject()
-                    {
-                        ["image"] = sourceMedia.Path,
-                        ["batch_index"] = 0,
-                        ["length"] = genInfo.Frames.Value
-                    });
+                    string fromBatch = AddImageFromBatch(sourceMedia.Path, batchIndex: 0, length: genInfo.Frames.Value);
                     genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
                     g.CurrentMedia = sourceMedia.WithPath([fromBatch, 0]);
                     g.CurrentMedia.Frames = Math.Min(genInfo.Frames.Value, g.CurrentMedia.Frames ?? int.MaxValue);
@@ -479,25 +443,47 @@ internal class StageRunner(
         if (sourceMedia?.Path is not JArray sourcePath
             || sourcePath.Count != 2
             || vae?.Path is not JArray vaePath
-            || vaePath.Count != 2
-            || g.Workflow[$"{sourcePath[0]}"] is not JObject sourceNode
-            || (!StringUtils.NodeTypeMatches(sourceNode, NodeTypes.VAEDecode)
-                && !StringUtils.NodeTypeMatches(sourceNode, NodeTypes.VAEDecodeTiled))
-            || sourceNode["inputs"] is not JObject inputs
-            || inputs["samples"] is not JArray samplesPath
-            || samplesPath.Count != 2
-            || inputs["vae"] is not JArray decodeVaePath
-            || decodeVaePath.Count != 2
-            || !JToken.DeepEquals(decodeVaePath, vaePath))
+            || vaePath.Count != 2)
+        {
+            return false;
+        }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ComfyNode sourceNode = bridge.Graph.GetNode($"{sourcePath[0]}");
+        if (sourceNode is not (VAEDecodeNode or VAEDecodeTiledNode))
+        {
+            return false;
+        }
+        INodeOutput samplesConn = sourceNode.FindInput("samples")?.Connection;
+        INodeOutput decodeVaeConn = sourceNode.FindInput("vae")?.Connection;
+        if (samplesConn is null
+            || decodeVaeConn is null
+            || decodeVaeConn.Node.Id != $"{vaePath[0]}"
+            || decodeVaeConn.SlotIndex != (int)vaePath[1])
         {
             return false;
         }
 
         reusedLatent = sourceMedia.WithPath(
-            new JArray(samplesPath[0], samplesPath[1]),
+            new JArray(samplesConn.Node.Id, samplesConn.SlotIndex),
             WGNodeData.DT_LATENT_VIDEO,
             vae.Compat);
         return true;
+    }
+
+    private string AddImageFromBatch(JArray imagePath, int batchIndex, int length)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
+        if (imagePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(imagePath) is INodeOutput src)
+        {
+            node.Image.ConnectToUntyped(src);
+        }
+        node.BatchIndex.Set((long)batchIndex);
+        node.Length.Set((long)length);
+        bridge.SyncNode(node);
+        BridgeSync.SyncLastId(g);
+        return node.Id;
     }
 
     private static Action<WorkflowGenerator.ImageToVideoGenInfo> ScopedImageToVideoPreHandler(
@@ -531,32 +517,30 @@ internal class StageRunner(
     private void CollapseWanStartImageScaleChain(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         if (!VideoStageModelCompat.SupportsWanFirstLastFrame(genInfo.VideoModel)
-            || genInfo.PosCond is not { Count: >= 2 }
-            || g.Workflow[$"{genInfo.PosCond[0]}"] is not JObject wanNode
-            || !StringUtils.NodeTypeMatches(wanNode, "WanImageToVideo")
-            || wanNode["inputs"] is not JObject wanInputs
-            || wanInputs["start_image"] is not JArray startPath
-            || startPath.Count != 2
-            || g.Workflow[$"{startPath[0]}"] is not JObject startNode
-            || !StringUtils.NodeTypeMatches(startNode, NodeTypes.ImageScale)
-            || startNode["inputs"] is not JObject startInputs
-            || startInputs["image"] is not JArray upstreamPath
-            || upstreamPath.Count != 2
-            || g.Workflow[$"{upstreamPath[0]}"] is not JObject upstreamNode
-            || !StringUtils.NodeTypeMatches(upstreamNode, NodeTypes.ImageScale)
-            || upstreamNode["inputs"] is not JObject upstreamInputs)
+            || genInfo.PosCond is not { Count: >= 2 })
         {
             return;
         }
 
-        upstreamInputs["width"] = startInputs["width"];
-        upstreamInputs["height"] = startInputs["height"];
-        upstreamInputs["crop"] = startInputs["crop"] ?? "center";
-        upstreamInputs["upscale_method"] = startInputs["upscale_method"] ?? "lanczos";
-        wanInputs["start_image"] = new JArray(upstreamPath[0], upstreamPath[1]);
-        if (WorkflowUtils.FindInputConnections(g.Workflow, startPath).Count == 0)
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.Graph.GetNode<WanImageToVideoNode>($"{genInfo.PosCond[0]}") is not WanImageToVideoNode wan
+            || wan.StartImage.Connection?.Node is not ImageScaleNode startScale
+            || startScale.Image.Connection?.Node is not ImageScaleNode upstreamScale)
         {
-            g.Workflow.Remove($"{startPath[0]}");
+            return;
+        }
+
+        upstreamScale.Width.Set(startScale.Width.LiteralAsLong() ?? 0L);
+        upstreamScale.Height.Set(startScale.Height.LiteralAsLong() ?? 0L);
+        upstreamScale.Crop.Set(startScale.Crop.LiteralAsString() ?? "center");
+        upstreamScale.UpscaleMethod.Set(startScale.UpscaleMethod.LiteralAsString() ?? "lanczos");
+        wan.StartImage.ConnectTo(upstreamScale.IMAGE);
+        bridge.SyncNode(upstreamScale);
+        bridge.SyncNode(wan);
+
+        if (!bridge.Graph.FindInputsConnectedTo(startScale.IMAGE).Any())
+        {
+            bridge.RemoveNode(startScale);
         }
     }
 
@@ -607,13 +591,17 @@ internal class StageRunner(
             lora.GetOrGenerateTensorHashSha256();
         }
 
-        string loraLoader = g.CreateNode(LtxNodeTypes.LTXICLoRALoaderModelOnly, new JObject()
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode());
+        if (genInfo.Model?.Path is JArray modelPath && bridge.ResolveOrSynthesizePath(modelPath) is INodeOutput modelOutput)
         {
-            ["model"] = genInfo.Model.Path,
-            ["lora_name"] = lora.ToString(g.ModelFolderFormat),
-            ["strength_model"] = 1
-        });
-        genInfo.Model = genInfo.Model.WithPath([loraLoader, 0]);
+            loraLoader.ModelInput.ConnectToUntyped(modelOutput);
+        }
+        loraLoader.LoraName.Set(lora.ToString(g.ModelFolderFormat));
+        loraLoader.StrengthModel.Set(1.0);
+        bridge.SyncNode(loraLoader);
+        BridgeSync.SyncLastId(g);
+        genInfo.Model = genInfo.Model.WithPath([loraLoader.Id, 0]);
     }
 
     private static T2IModel ResolveLoraModel(string loraName)
@@ -676,15 +664,9 @@ internal class StageRunner(
 
         if (stage.UpscaleMethod.StartsWith("pixel-", StringComparison.OrdinalIgnoreCase))
         {
-            string scaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
-            {
-                ["image"] = source.Path,
-                ["width"] = targetWidth,
-                ["height"] = targetHeight,
-                ["upscale_method"] = stage.UpscaleMethod["pixel-".Length..],
-                ["crop"] = "disabled"
-            });
-            g.CurrentMedia = source.WithPath([scaleNode, 0]);
+            string method = stage.UpscaleMethod["pixel-".Length..];
+            ImageScaleNode scaleNode = AddDisabledCropImageScale(source.Path, targetWidth, targetHeight, method);
+            g.CurrentMedia = source.WithPath([scaleNode.Id, 0]);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
             return g.CurrentMedia;
@@ -692,24 +674,9 @@ internal class StageRunner(
 
         if (stage.UpscaleMethod.StartsWith("model-", StringComparison.OrdinalIgnoreCase))
         {
-            string loaderNode = g.CreateNode(NodeTypes.UpscaleModelLoader, new JObject()
-            {
-                ["model_name"] = stage.UpscaleMethod["model-".Length..]
-            });
-            string modelUpscaleNode = g.CreateNode(NodeTypes.ImageUpscaleWithModel, new JObject()
-            {
-                ["upscale_model"] = new JArray(loaderNode, 0),
-                ["image"] = source.Path
-            });
-            string fitScaleNode = g.CreateNode(NodeTypes.ImageScale, new JObject()
-            {
-                ["image"] = new JArray(modelUpscaleNode, 0),
-                ["width"] = targetWidth,
-                ["height"] = targetHeight,
-                ["upscale_method"] = "lanczos",
-                ["crop"] = "disabled"
-            });
-            g.CurrentMedia = source.WithPath([fitScaleNode, 0]);
+            string modelName = stage.UpscaleMethod["model-".Length..];
+            string fitScaleId = AddModelUpscaleChain(source.Path, modelName, targetWidth, targetHeight);
+            g.CurrentMedia = source.WithPath([fitScaleId, 0]);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
             return g.CurrentMedia;
@@ -730,6 +697,49 @@ internal class StageRunner(
     {
         return upscaleMethod.StartsWith("latent-", StringComparison.OrdinalIgnoreCase)
             || upscaleMethod.StartsWith("latentmodel-", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private ImageScaleNode AddDisabledCropImageScale(JArray sourcePath, int width, int height, string upscaleMethod)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
+        if (sourcePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(sourcePath) is INodeOutput src)
+        {
+            scale.Image.ConnectToUntyped(src);
+        }
+        scale.Width.Set((long)width);
+        scale.Height.Set((long)height);
+        scale.UpscaleMethod.Set(upscaleMethod);
+        scale.Crop.Set("disabled");
+        bridge.SyncNode(scale);
+        BridgeSync.SyncLastId(g);
+        return scale;
+    }
+
+    private string AddModelUpscaleChain(JArray sourcePath, string modelName, int targetWidth, int targetHeight)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        UpscaleModelLoaderNode loader = bridge.AddNode(new UpscaleModelLoaderNode());
+        loader.ModelName.Set(modelName);
+        bridge.SyncNode(loader);
+
+        ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode());
+        upscale.UpscaleModel.ConnectTo(loader.UPSCALEMODEL);
+        if (sourcePath is { Count: 2 } && bridge.ResolveOrSynthesizePath(sourcePath) is INodeOutput src)
+        {
+            upscale.Image.ConnectToUntyped(src);
+        }
+        bridge.SyncNode(upscale);
+
+        ImageScaleNode fit = bridge.AddNode(new ImageScaleNode());
+        fit.Image.ConnectTo(upscale.IMAGE);
+        fit.Width.Set((long)targetWidth);
+        fit.Height.Set((long)targetHeight);
+        fit.UpscaleMethod.Set("lanczos");
+        fit.Crop.Set("disabled");
+        bridge.SyncNode(fit);
+        BridgeSync.SyncLastId(g);
+        return fit.Id;
     }
 
     private void StampCurrentMediaMetadata(WGNodeData sourceMedia, WorkflowGenerator.ImageToVideoGenInfo genInfo)
@@ -759,39 +769,43 @@ internal class StageRunner(
             return;
         }
 
-        JArray newAudioPath = retargetAudio ? CopyPath(g.CurrentMedia?.AttachedAudio?.Path) : null;
-        Dictionary<string, JArray> staleAudioPaths = [];
-        foreach (WorkflowInputConnection connection in WorkflowUtils.FindInputConnections(g.Workflow, priorOutputPath))
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput oldOutput = bridge.ResolvePath(priorOutputPath);
+        INodeOutput newOutput = bridge.ResolvePath(newOutputPath);
+        if (oldOutput is null || newOutput is null)
         {
-            if (!StringUtils.Equals(connection.InputName, "images"))
-            {
-                continue;
-            }
-            if (g.Workflow[connection.NodeId] is not JObject node
-                || !StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveAnimationWS)
-                || node["inputs"] is not JObject inputs)
+            return;
+        }
+
+        JArray newAudioPath = retargetAudio ? CopyPath(g.CurrentMedia?.AttachedAudio?.Path) : null;
+        INodeOutput newAudioOutput = newAudioPath is not null ? bridge.ResolvePath(newAudioPath) : null;
+        Dictionary<string, JArray> staleAudioPaths = [];
+
+        foreach (SwarmSaveAnimationWSNode saveNode in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
+        {
+            if (saveNode.Images.Connection != oldOutput)
             {
                 continue;
             }
 
-            connection.Connection[0] = newOutputPath[0];
-            connection.Connection[1] = newOutputPath[1];
-            if (!retargetAudio)
+            saveNode.Images.ConnectToUntyped(newOutput);
+            if (retargetAudio)
             {
-                continue;
+                if (saveNode.Audio.Connection is INodeOutput oldAudioOutput)
+                {
+                    JArray oldAudioPath = WorkflowBridge.ToPath(oldAudioOutput);
+                    staleAudioPaths.TryAdd($"{oldAudioPath[0]}:{oldAudioPath[1]}", oldAudioPath);
+                }
+                if (newAudioOutput is not null)
+                {
+                    saveNode.Audio.ConnectToUntyped(newAudioOutput);
+                }
+                else
+                {
+                    saveNode.Audio.Clear();
+                }
             }
-            if (CopyPath(inputs["audio"] as JArray) is JArray oldAudioPath)
-            {
-                staleAudioPaths.TryAdd($"{oldAudioPath[0]}:{oldAudioPath[1]}", oldAudioPath);
-            }
-            if (newAudioPath is not null)
-            {
-                inputs["audio"] = new JArray(newAudioPath[0], newAudioPath[1]);
-            }
-            else
-            {
-                inputs.Remove("audio");
-            }
+            bridge.SyncNode(saveNode);
         }
 
         HashSet<string> protectedNodes = [];
@@ -802,8 +816,9 @@ internal class StageRunner(
         }
         foreach (JArray staleAudioPath in staleAudioPaths.Values)
         {
-            WorkflowUtils.RemoveUnusedUpstreamNodes(g.Workflow, staleAudioPath, protectedNodes);
+            RemoveUnusedUpstreamNodes(bridge, $"{staleAudioPath[0]}", protectedNodes);
         }
+        BridgeSync.SyncLastId(g);
     }
 
     internal static JArray CopyPath(JArray path)
@@ -824,6 +839,69 @@ internal class StageRunner(
         protectedNodes.Add($"{currentPath[0]}");
     }
 
+    // todo: maybe delete this
+    private static void RemoveUnusedUpstreamNodes(
+        WorkflowBridge bridge,
+        string startNodeId,
+        ISet<string> protectedNodeIds = null)
+    {
+        if (string.IsNullOrWhiteSpace(startNodeId))
+        {
+            return;
+        }
+
+        Queue<string> pending = new();
+        HashSet<string> seen = [];
+        pending.Enqueue(startNodeId);
+
+        while (pending.Count > 0)
+        {
+            string nodeId = pending.Dequeue();
+            if (string.IsNullOrWhiteSpace(nodeId)
+                || !seen.Add(nodeId)
+                || protectedNodeIds?.Contains(nodeId) == true)
+            {
+                continue;
+            }
+
+            ComfyNode node = bridge.Graph.GetNode(nodeId);
+            if (node is null)
+            {
+                continue;
+            }
+
+            bool hasDownstreamConsumer = false;
+            foreach (INodeOutput output in node.Outputs)
+            {
+                if (bridge.Graph.FindInputsConnectedTo(output).Any())
+                {
+                    hasDownstreamConsumer = true;
+                    break;
+                }
+            }
+            if (hasDownstreamConsumer)
+            {
+                continue;
+            }
+
+            List<string> upstreamIds = [];
+            foreach (INodeInput input in node.Inputs)
+            {
+                string upId = input.Connection?.Node?.Id;
+                if (!string.IsNullOrWhiteSpace(upId))
+                {
+                    upstreamIds.Add(upId);
+                }
+            }
+
+            bridge.RemoveNode(nodeId);
+            foreach (string upId in upstreamIds)
+            {
+                pending.Enqueue(upId);
+            }
+        }
+    }
+
     private void CleanupReplacedTextToVideoRootStage(JArray priorOutputPath, bool replaceTextToVideoRootStage)
     {
         if (!replaceTextToVideoRootStage || priorOutputPath is null || priorOutputPath.Count != 2)
@@ -833,7 +911,8 @@ internal class StageRunner(
 
         HashSet<string> protectedNodes = [];
         AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
-        WorkflowUtils.RemoveUnusedUpstreamNodes(g.Workflow, priorOutputPath, protectedNodes);
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        RemoveUnusedUpstreamNodes(bridge, $"{priorOutputPath[0]}", protectedNodes);
     }
 
     private static WGNodeData CloneMedia(WGNodeData media)
