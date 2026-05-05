@@ -1,3 +1,5 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
@@ -209,21 +211,22 @@ internal sealed class LtxStageOrchestrator(
     private bool PrimaryGuideMatchesScaledSource(WGNodeData primaryGuideMedia, WGNodeData sourceMedia)
     {
         if (primaryGuideMedia?.Path is not JArray primaryGuidePath
+            || primaryGuidePath.Count != 2
             || sourceMedia?.Path is not JArray sourcePath
             || sourcePath.Count != 2)
         {
             return false;
         }
 
-        if (g.Workflow[$"{sourcePath[0]}"] is not JObject sourceNode
-            || !StringUtils.NodeTypeMatches(sourceNode, NodeTypes.ImageScale)
-            || sourceNode["inputs"] is not JObject sourceInputs
-            || sourceInputs["image"] is not JArray scaledSourceInput)
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.Graph.GetNode<ImageScaleNode>($"{sourcePath[0]}") is not ImageScaleNode scale
+            || scale.Image.Connection is not INodeOutput scaleSource)
         {
             return false;
         }
 
-        return JToken.DeepEquals(primaryGuidePath, scaledSourceInput);
+        return scaleSource.Node.Id == $"{primaryGuidePath[0]}"
+            && scaleSource.SlotIndex == (int)primaryGuidePath[1];
     }
 
     private WGNodeData ResolveDefaultLocalGuideMedia(
