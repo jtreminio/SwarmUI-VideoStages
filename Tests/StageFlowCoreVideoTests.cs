@@ -39,6 +39,11 @@ public partial class StageFlowTests
             .Concat([SeedCoreVideoDiffPatchControlNetBranchStep(controlNetModel, true), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetNoPreprocessor(T2IModel controlNetModel) =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedCoreVideoDiffPatchControlNetBranchStepNoPreprocessor(controlNetModel), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
     private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoControlNetBranchStep(T2IModel controlNetModel) =>
         new(g =>
         {
@@ -148,6 +153,49 @@ public partial class StageFlowTests
                 ["image"] = controlImage,
                 ["strength"] = 0.8
             }, id: diffPatchId, idMandatory: false);
+            g.CurrentModel = g.CurrentModel.WithPath(new JArray(diffPatch, 0));
+
+            BridgeSync.SyncLastId(g);
+        }, -6.1);
+
+    private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoDiffPatchControlNetBranchStepNoPreprocessor(
+        T2IModel controlNetModel) =>
+        new(g =>
+        {
+            string videoLoad = g.CreateNode("SwarmLoadVideoB64", new JObject()
+            {
+                ["video_base64"] = "unit-test-video"
+            }, id: "300", idMandatory: false);
+            string videoComponents = g.CreateNode("GetVideoComponents", new JObject()
+            {
+                ["video"] = new JArray(videoLoad, 0)
+            }, id: "301", idMandatory: false);
+            string scaled = g.CreateNode("ImageScale", new JObject()
+            {
+                ["image"] = new JArray(videoComponents, 0),
+                ["width"] = 512,
+                ["height"] = 512,
+                ["upscale_method"] = "lanczos",
+                ["crop"] = "disabled"
+            }, id: "302", idMandatory: false);
+            string firstFrame = g.CreateNode("ImageFromBatch", new JObject()
+            {
+                ["image"] = new JArray(scaled, 0),
+                ["batch_index"] = 0,
+                ["length"] = 1
+            }, id: "303", idMandatory: false);
+            string modelPatchLoader = g.CreateNode("ModelPatchLoader", new JObject()
+            {
+                ["name"] = controlNetModel.ToString(g.ModelFolderFormat)
+            }, id: "304", idMandatory: false);
+            string diffPatch = g.CreateNode("QwenImageDiffsynthControlnet", new JObject()
+            {
+                ["model"] = g.CurrentModel.Path,
+                ["model_patch"] = new JArray(modelPatchLoader, 0),
+                ["vae"] = g.CurrentVae.Path,
+                ["image"] = new JArray(firstFrame, 0),
+                ["strength"] = 0.8
+            }, id: "305", idMandatory: false);
             g.CurrentModel = g.CurrentModel.WithPath(new JArray(diffPatch, 0));
 
             BridgeSync.SyncLastId(g);
@@ -691,6 +739,74 @@ public partial class StageFlowTests
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(coreDiffPatch.Node, "image"),
             new JArray(firstFrame.Id, 0)));
+        WorkflowNode icGuide = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(icGuide.Node, "image"),
+            new JArray(videoGuideFrames.Id, 0)));
+    }
+
+    [Fact]
+    public void Ltx_ic_lora_controlnet_source_inserts_resize_when_core_skipped_preprocessor()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
+        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        {
+            ModelClass = new T2IModelClass()
+            {
+                ID = "unit/control-diffpatch",
+                Name = "Unit ControlNet DiffPatch",
+                CompatClass = models.VideoModel.ModelClass.CompatClass
+            }
+        };
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        loraHandler.Models[loraModel.Name] = loraModel;
+
+        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
+        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["ClipLengthFromControlNet"] = true;
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
+        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
+        input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
+
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetNoPreprocessor(controlNetModel));
+
+        WorkflowNode imageScale = WorkflowAssertions.RequireNodeById(workflow, "302");
+        Assert.Equal("ImageScale", $"{imageScale.Node["class_type"]}");
+        WorkflowNode coreFirstFrame = WorkflowAssertions.RequireNodeById(workflow, "303");
+        Assert.Equal("ImageFromBatch", $"{coreFirstFrame.Node["class_type"]}");
+        Assert.Equal(1, coreFirstFrame.Node["inputs"]?.Value<int>("length"));
+
+        WorkflowNode resize = Assert.Single(
+            WorkflowAssertions.NodesOfType(workflow, "ResizeImageMaskNode"),
+            n => $"{n.Node["inputs"]?["resize_type"]}" == "scale to multiple");
+        Assert.Equal(64, resize.Node["inputs"]?.Value<int>("resize_type.multiple"));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(resize.Node, "input"),
+            new JArray(imageScale.Id, 0)));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(coreFirstFrame.Node, "image"),
+            new JArray(resize.Id, 0)));
+
+        WorkflowNode sizeNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "GetImageSize"));
+        Assert.True(JToken.DeepEquals(
+            WorkflowAssertions.RequireConnectionInput(sizeNode.Node, "image"),
+            new JArray(resize.Id, 0)));
+
+        JArray controlNetFrameCount = new(sizeNode.Id, 2);
+        WorkflowNode videoGuideFrames = Assert.Single(
+            WorkflowAssertions.NodesOfType(workflow, "ImageFromBatch"),
+            node => JToken.DeepEquals(WorkflowAssertions.RequireConnectionInput(node.Node, "image"), new JArray(resize.Id, 0))
+                && JToken.DeepEquals(node.Node["inputs"]?["length"], controlNetFrameCount));
         WorkflowNode icGuide = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXAddVideoICLoRAGuide"));
         Assert.True(JToken.DeepEquals(
             WorkflowAssertions.RequireConnectionInput(icGuide.Node, "image"),

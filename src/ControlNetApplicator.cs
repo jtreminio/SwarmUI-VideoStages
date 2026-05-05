@@ -55,7 +55,7 @@ internal static class ControlNetApplicator
                 continue;
             }
 
-            BumpResizeMultipleTo64(g, fullControlImage);
+            EnsureResizeMultipleOf64(g, fullControlImage);
             JArray capturePath = new(fullControlImage[0], fullControlImage[1]);
             g.NodeHelpers[CapturedControlNetImageKey(i)] = capturePath.ToString(Formatting.None);
             if (OutputRefIsNodeType<ImageFromBatchNode>(g.Workflow, fullControlImage))
@@ -78,17 +78,46 @@ internal static class ControlNetApplicator
         }
     }
 
-    private static void BumpResizeMultipleTo64(WorkflowGenerator g, JArray fullControlImage)
+    private static void EnsureResizeMultipleOf64(WorkflowGenerator g, JArray fullControlImage)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         if (FindUpstreamScaleToMultipleResize(bridge, fullControlImage)
-            is not ResizeImageMaskNodeNode resize)
+            is ResizeImageMaskNodeNode existing)
+        {
+            existing.ExtraInputs ??= [];
+            existing.ExtraInputs["resize_type.multiple"] = 64;
+            bridge.SyncNode(existing);
+            return;
+        }
+        if (bridge.ResolvePath(fullControlImage) is not INodeOutput consumerOutput)
         {
             return;
         }
-        resize.ExtraInputs ??= [];
-        resize.ExtraInputs["resize_type.multiple"] = 64;
+        if (consumerOutput.Node is ImageFromBatchNode batch
+            && batch.Length.LiteralAsInt() == 1
+            && batch.Image.Connection is INodeOutput batchSource)
+        {
+            ResizeImageMaskNodeNode rewired = AddScaleToMultiple64Resize(bridge, batchSource);
+            batch.Image.ConnectToUntyped(rewired.Resized);
+            bridge.SyncNode(batch);
+            BridgeSync.SyncLastId(g);
+            return;
+        }
+        ResizeImageMaskNodeNode inserted = AddScaleToMultiple64Resize(bridge, consumerOutput);
+        BridgeSync.SyncLastId(g);
+        fullControlImage[0] = inserted.Id;
+        fullControlImage[1] = 0;
+    }
+
+    private static ResizeImageMaskNodeNode AddScaleToMultiple64Resize(WorkflowBridge bridge, INodeOutput source)
+    {
+        ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode());
+        resize.Input.ConnectToUntyped(source);
+        resize.ResizeType.Set("scale to multiple");
+        resize.ScaleMethod.Set("lanczos");
+        resize.ExtraInputs = new JObject { ["resize_type.multiple"] = 64 };
         bridge.SyncNode(resize);
+        return resize;
     }
 
     private static ResizeImageMaskNodeNode FindUpstreamScaleToMultipleResize(
