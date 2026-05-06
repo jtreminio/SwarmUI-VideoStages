@@ -1,3 +1,5 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -22,20 +24,16 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(attachAudioToCurrentMedia: false));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         StageRefStore store = new(generator);
 
-        WorkflowNode imgToVideoNode = WorkflowAssertions.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        LTXVImgToVideoInplaceNode imgToVideoNode = bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()
             .Single(node => node.Id != "111");
-        WorkflowNode stagePreprocess = WorkflowAssertions.RequireNodeById(
-            workflow,
-            $"{WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image")[0]}");
-        Assert.Equal("LTXVPreprocess", $"{stagePreprocess.Node["class_type"]}");
+        LTXVPreprocessNode stagePreprocess = (LTXVPreprocessNode)imgToVideoNode.Image.Connection!.Node;
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
-            WorkflowAssertions.RequireConnectionInput(stagePreprocess.Node, "image"),
+            WorkflowBridge.ToPath(stagePreprocess.Image.Connection!),
             store.Generated);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
-            new JArray(stagePreprocess.Id, 0)));
+        Assert.Same(stagePreprocess.OutputImage, imgToVideoNode.Image.Connection);
     }
 }

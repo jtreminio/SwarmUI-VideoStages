@@ -1,3 +1,5 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -5,6 +7,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using Xunit;
+using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
@@ -132,11 +135,15 @@ public partial class StageFlowTests
 
     private static WorkflowNode RequireRetargetedSeparateNode(JObject workflow, WorkflowNode videoDecode)
     {
-        JArray videoLatents = WorkflowAssertions.RequireConnectionInput(videoDecode.Node, "samples");
-        Assert.False(JToken.DeepEquals(videoLatents, new JArray("201", 0)));
-        WorkflowNode separateNode = WorkflowAssertions.RequireNodeById(workflow, $"{videoLatents[0]}");
-        Assert.Equal("LTXVSeparateAVLatent", $"{separateNode.Node["class_type"]}");
-        return separateNode;
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        ComfyNode decodeNode = bridge.Graph.GetNode(videoDecode.Id);
+        Assert.NotNull(decodeNode);
+        INodeInput samplesInput = decodeNode.FindInput("samples");
+        Assert.NotNull(samplesInput);
+        Assert.NotNull(samplesInput.Connection);
+        Assert.False(samplesInput.Connection.Node.Id == "201" && samplesInput.Connection.SlotIndex == 0);
+        LTXVSeparateAVLatentNode separateNode = Assert.IsType<LTXVSeparateAVLatentNode>(samplesInput.Connection.Node);
+        return AsWorkflowNode(separateNode, workflow);
     }
 
     private static void AssertSamplerConsumesImgToVideoOutput(
@@ -144,12 +151,20 @@ public partial class StageFlowTests
         WorkflowNode imgToVideoNode,
         WorkflowNode samplerNode)
     {
-        WorkflowInputConnection concatConnection = WorkflowAssertions.FindInputConnections(workflow, new JArray(imgToVideoNode.Id, 0))
-            .Single(connection => connection.InputName == "video_latent"
-                && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == "LTXVConcatAVLatent");
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(samplerNode.Node, "latent_image"),
-            new JArray(concatConnection.NodeId, 0)));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        ComfyNode imgToVideo = bridge.Graph.GetNode(imgToVideoNode.Id);
+        Assert.NotNull(imgToVideo);
+        INodeOutput imgToVideoLatent = imgToVideo.FindOutput(0);
+        Assert.NotNull(imgToVideoLatent);
+        LTXVConcatAVLatentNode concatNode = bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>()
+            .Single(node => node.VideoLatent.Connection?.Node.Id == imgToVideoNode.Id
+                && node.VideoLatent.Connection.SlotIndex == 0);
+
+        ComfyNode sampler = bridge.Graph.GetNode(samplerNode.Id);
+        Assert.NotNull(sampler);
+        INodeInput latentImage = sampler.FindInput("latent_image");
+        Assert.NotNull(latentImage);
+        Assert.Same(concatNode.Latent, latentImage.Connection);
     }
 
     private static void AssertGuideReferenceResolvesToPreprocessInput(
@@ -170,31 +185,32 @@ public partial class StageFlowTests
         }
 
         Assert.False(JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path));
-        JArray tracePath = actualGuidePath;
-        WorkflowNode decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{tracePath[0]}");
-        string decodeType = $"{decodeNode.Node["class_type"]}";
-        if (decodeType == "ImageScale")
+
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        ComfyNode decodeNode = bridge.Graph.GetNode($"{actualGuidePath[0]}");
+        Assert.NotNull(decodeNode);
+        if (decodeNode is ImageScaleNode imageScale)
         {
-            tracePath = WorkflowAssertions.RequireConnectionInput(decodeNode.Node, "image");
-            decodeNode = WorkflowAssertions.RequireNodeById(workflow, $"{tracePath[0]}");
-            decodeType = $"{decodeNode.Node["class_type"]}";
+            Assert.NotNull(imageScale.Image.Connection);
+            decodeNode = imageScale.Image.Connection.Node;
         }
 
-        Assert.Contains(decodeType, new[] { "VAEDecode", "VAEDecodeTiled" });
-
-        JArray latentRef = WorkflowAssertions.RequireConnectionInput(
-            decodeNode.Node,
-            decodeNode.Node["inputs"]?["samples"] is not null ? "samples"
-                : "latent");
+        Assert.True(decodeNode is VAEDecodeNode or VAEDecodeTiledNode,
+            $"Expected decode node to be VAEDecode or VAEDecodeTiled but found {decodeNode.ClassTypeName}.");
+        INodeInput samplesInput = decodeNode.FindInput("samples") ?? decodeNode.FindInput("latent");
+        Assert.NotNull(samplesInput);
+        Assert.NotNull(samplesInput.Connection);
+        JArray latentRef = new(samplesInput.Connection.Node.Id, samplesInput.Connection.SlotIndex);
 
         Assert.True(OutputTracesBackToSource(workflow, latentRef, expectedReference.Media.Path));
     }
 
     private static void AssertNoDanglingTiledVaeDecodes(JObject workflow)
     {
-        foreach (WorkflowNode node in WorkflowAssertions.NodesOfType(workflow, "VAEDecodeTiled"))
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        foreach (VAEDecodeTiledNode node in bridge.Graph.NodesOfType<VAEDecodeTiledNode>())
         {
-            Assert.NotEmpty(WorkflowAssertions.FindInputConnections(workflow, new JArray(node.Id, 0)));
+            Assert.NotEmpty(bridge.Graph.FindInputsConnectedTo(node.IMAGE));
         }
     }
 
@@ -229,150 +245,124 @@ public partial class StageFlowTests
 
     private static void AssertStageLtxConcatsReuseOriginalAudio(JObject workflow, WorkflowNode originalSeparate)
     {
-        JArray originalAudioLatent = new(originalSeparate.Id, 1);
-
-        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
         Assert.NotEmpty(concatNodes);
 
-        foreach (WorkflowNode concatNode in concatNodes)
+        LTXVSeparateAVLatentNode originalSeparateNode = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, originalSeparate.Id);
+        foreach (LTXVConcatAVLatentNode concatNode in concatNodes)
         {
-            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNode.Node, "audio_latent");
-            Assert.True(
-                JToken.DeepEquals(audioLatent, originalAudioLatent),
-                $"Expected concat {concatNode.Id} audio_latent to be [{originalSeparate.Id}, 1] but found [{audioLatent[0]}, {audioLatent[1]}].");
+            INodeOutput audioLatent = concatNode.AudioLatent.Connection;
+            Assert.NotNull(audioLatent);
+            Assert.Same(originalSeparateNode.AudioLatent, audioLatent);
         }
     }
 
     private static void AssertStageLtxConcatsUseProgressiveAudio(JObject workflow, WorkflowNode originalSeparate)
     {
-        JArray originalAudioLatent = new(originalSeparate.Id, 1);
-        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
         Assert.True(concatNodes.Count >= 2);
 
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(concatNodes[0].Node, "audio_latent"),
-            originalAudioLatent));
-        Assert.False(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(concatNodes[1].Node, "audio_latent"),
-            originalAudioLatent));
+        LTXVSeparateAVLatentNode originalSeparateNode = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, originalSeparate.Id);
+        Assert.Same(originalSeparateNode.AudioLatent, concatNodes[0].AudioLatent.Connection);
+        Assert.NotSame(originalSeparateNode.AudioLatent, concatNodes[1].AudioLatent.Connection);
     }
 
     private static void AssertStageLtxConcatsReuseFirstStageAudio(JObject workflow, WorkflowNode originalSeparate)
     {
-        JArray originalAudioLatent = new(originalSeparate.Id, 1);
-        List<WorkflowNode> concatNodes = GetSamplerConcatNodes(workflow);
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
         Assert.True(concatNodes.Count >= 3);
 
-        JArray firstStageAudioLatent = WorkflowAssertions.RequireConnectionInput(concatNodes[1].Node, "audio_latent");
-        Assert.False(JToken.DeepEquals(firstStageAudioLatent, originalAudioLatent));
+        LTXVSeparateAVLatentNode originalSeparateNode = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, originalSeparate.Id);
+        INodeOutput firstStageAudioLatent = concatNodes[1].AudioLatent.Connection;
+        Assert.NotNull(firstStageAudioLatent);
+        Assert.NotSame(originalSeparateNode.AudioLatent, firstStageAudioLatent);
         for (int i = 2; i < concatNodes.Count; i++)
         {
-            JArray audioLatent = WorkflowAssertions.RequireConnectionInput(concatNodes[i].Node, "audio_latent");
-            Assert.True(
-                JToken.DeepEquals(audioLatent, firstStageAudioLatent),
-                $"Expected concat {concatNodes[i].Id} audio_latent to reuse [{firstStageAudioLatent[0]}, {firstStageAudioLatent[1]}] but found [{audioLatent[0]}, {audioLatent[1]}].");
+            Assert.Same(firstStageAudioLatent, concatNodes[i].AudioLatent.Connection);
         }
     }
 
-    private static List<WorkflowNode> GetSamplerConcatNodes(JObject workflow)
+    private static List<LTXVConcatAVLatentNode> GetSamplerConcatNodes(WorkflowBridge bridge)
     {
-        return WorkflowAssertions.NodesOfType(workflow, "LTXVConcatAVLatent")
-            .Where(node => WorkflowAssertions.FindInputConnections(workflow, new JArray(node.Id, 0))
-                .Any(connection =>
-                {
-                    if (connection.InputName != "latent_image")
-                    {
-                        return false;
-                    }
-                    if (workflow[connection.NodeId] is not JObject samplerNode)
-                    {
-                        return false;
-                    }
-                    string samplerType = $"{samplerNode["class_type"]}";
-                    return samplerType == "KSamplerAdvanced" || samplerType == "SwarmKSampler";
-                }))
+        return bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>()
+            .Where(node => bridge.Graph.FindInputsConnectedTo(node.Latent)
+                .Any(consumer => consumer.Input.Name == "latent_image"
+                    && consumer.Node is SwarmKSamplerNode))
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
     }
 
     private static WorkflowNode RequireOriginalNativeLtxSeparate(JObject workflow)
     {
-        return WorkflowAssertions.RequireNodeById(workflow, "201");
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        LTXVSeparateAVLatentNode separate = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, "201");
+        return AsWorkflowNode(separate, workflow);
     }
 
     private static void AssertWorkflowHasNoCycles(JObject workflow)
     {
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         Dictionary<string, int> states = [];
-        Stack<string> stack = new();
 
-        bool visit(string nodeId)
+        bool visit(ComfyNode node)
         {
-            states[nodeId] = 1;
-            stack.Push(nodeId);
+            states[node.Id] = 1;
 
-            WorkflowNode node = WorkflowAssertions.RequireNodeById(workflow, nodeId);
-            if (node.Node["inputs"] is JObject inputs)
+            foreach (ComfyNode upstream in bridge.Graph.FindUpstream(node))
             {
-                foreach (JArray upstreamRef in ExtractNodeRefs(inputs))
+                if (!states.TryGetValue(upstream.Id, out int state))
                 {
-                    string upstreamId = $"{upstreamRef[0]}";
-                    if (!workflow.ContainsKey(upstreamId))
-                    {
-                        continue;
-                    }
-
-                    if (!states.TryGetValue(upstreamId, out int state))
-                    {
-                        if (visit(upstreamId))
-                        {
-                            return true;
-                        }
-                    }
-                    else if (state == 1)
+                    if (visit(upstream))
                     {
                         return true;
                     }
                 }
+                else if (state == 1)
+                {
+                    return true;
+                }
             }
 
-            stack.Pop();
-            states[nodeId] = 2;
+            states[node.Id] = 2;
             return false;
         }
 
-        foreach (JProperty property in workflow.Properties())
+        foreach (ComfyNode node in bridge.Graph.Nodes.Values)
         {
-            if (!states.ContainsKey(property.Name))
+            if (!states.ContainsKey(node.Id))
             {
-                Assert.False(visit(property.Name), $"Workflow contains a cycle involving node {property.Name}.");
+                Assert.False(visit(node), $"Workflow contains a cycle involving node {node.Id}.");
             }
         }
     }
 
     private static IReadOnlyList<WorkflowNode> AssertLtxConditioningUsesAdvancedEncoders(JObject workflow)
     {
-        List<WorkflowNode> conditioningNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVConditioning")
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        List<LTXVConditioningNode> conditioningNodes = bridge.Graph.NodesOfType<LTXVConditioningNode>()
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.NotEmpty(conditioningNodes);
-        foreach (WorkflowNode conditioningNode in conditioningNodes)
+        foreach (LTXVConditioningNode conditioningNode in conditioningNodes)
         {
-            JArray positiveRef = WorkflowAssertions.RequireConnectionInput(conditioningNode.Node, "positive");
-            JArray negativeRef = WorkflowAssertions.RequireConnectionInput(conditioningNode.Node, "negative");
-            Assert.Equal("SwarmClipTextEncodeAdvanced", $"{WorkflowAssertions.RequireNodeById(workflow, $"{positiveRef[0]}").Node["class_type"]}");
-            Assert.Equal("SwarmClipTextEncodeAdvanced", $"{WorkflowAssertions.RequireNodeById(workflow, $"{negativeRef[0]}").Node["class_type"]}");
+            Assert.NotNull(conditioningNode.PositiveInput.Connection);
+            Assert.NotNull(conditioningNode.NegativeInput.Connection);
+            Assert.IsType<SwarmClipTextEncodeAdvancedNode>(conditioningNode.PositiveInput.Connection.Node);
+            Assert.IsType<SwarmClipTextEncodeAdvancedNode>(conditioningNode.NegativeInput.Connection.Node);
         }
-        return conditioningNodes;
+        return [.. conditioningNodes.Select(node => AsWorkflowNode(node, workflow))];
     }
 
     private static void AssertSamplerUsesConditioningNode(WorkflowNode samplerNode, WorkflowNode conditioningNode)
     {
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(samplerNode.Node, "positive"),
-            new JArray(conditioningNode.Id, 0)));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(samplerNode.Node, "negative"),
-            new JArray(conditioningNode.Id, 1)));
+        JObject sampler = samplerNode.Node;
+        Assert.True(sampler["inputs"] is JObject, "Expected sampler node to have inputs.");
+        JObject inputs = (JObject)sampler["inputs"];
+        Assert.True(JToken.DeepEquals(inputs["positive"], new JArray(conditioningNode.Id, 0)));
+        Assert.True(JToken.DeepEquals(inputs["negative"], new JArray(conditioningNode.Id, 1)));
     }
 
     private static bool OutputTracesBackToSource(JObject workflow, JArray outputRef, JArray expectedSourceRef)

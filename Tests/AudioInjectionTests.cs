@@ -1,9 +1,13 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
+using VideoStages.Generated;
 using Xunit;
+using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
@@ -17,11 +21,6 @@ public class AudioInjectionTests
     private const string LtxvSeparateAvLatent = "LTXVSeparateAVLatent";
     private const string LtxvAudioVaeDecode = "LTXVAudioVAEDecode";
     private const string SwarmSaveAnimationWs = "SwarmSaveAnimationWS";
-    private const string SwarmAudioLengthToFrames = "SwarmAudioLengthToFrames";
-    private const string SwarmLoadAudioB64 = "SwarmLoadAudioB64";
-    private const string SwarmEnsureAudio = "SwarmEnsureAudio";
-    private const string LtxvAudioVaeEncode = "LTXVAudioVAEEncode";
-    private const string SetLatentNoiseMask = "SetLatentNoiseMask";
 
     private static JObject MakeStage(string model) => new()
     {
@@ -289,16 +288,16 @@ public class AudioInjectionTests
 
         Assert.True(Runner.TryInjectLtxAudio(generator, detection));
 
-        WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio"),
-            new JArray("300", 0)));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(WorkflowAssertions.RequireNodeById(workflow, "108").Node, "length"),
-            new JArray(lengthToFrames.Id, 1)));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(WorkflowAssertions.RequireNodeById(workflow, "109").Node, "frames_number"),
-            new JArray(lengthToFrames.Id, 1)));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Equal("300", lengthToFrames.AudioInput.Connection!.Node.Id);
+        Assert.Equal(0, lengthToFrames.AudioInput.Connection.SlotIndex);
+
+        EmptyLTXVLatentVideoNode emptyVideo = RequireTypedNode<EmptyLTXVLatentVideoNode>(bridge, "108");
+        Assert.Same(lengthToFrames.Frames, emptyVideo.Length.Connection);
+
+        LTXVEmptyLatentAudioNode emptyAudio = RequireTypedNode<LTXVEmptyLatentAudioNode>(bridge, "109");
+        Assert.Same(lengthToFrames.Frames, emptyAudio.FramesNumber.Connection);
     }
 
     [Fact]
@@ -312,28 +311,24 @@ public class AudioInjectionTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]");
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio"),
-            new JArray("300", 0)));
-        WorkflowNode emptyVideo = WorkflowAssertions.RequireNodeById(workflow, "108");
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(emptyVideo.Node, "length"),
-            new JArray(lengthToFrames.Id, 1)));
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Equal("300", lengthToFrames.AudioInput.Connection!.Node.Id);
+        Assert.Equal(0, lengthToFrames.AudioInput.Connection.SlotIndex);
 
-        WorkflowNode setMask = WorkflowAssertions.RequireNodeOfType(workflow, SetLatentNoiseMask);
-        WorkflowNode rootConcat = WorkflowAssertions.RequireNodeById(workflow, "113");
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(rootConcat.Node, "audio_latent"),
-            new JArray(setMask.Id, 0)));
+        EmptyLTXVLatentVideoNode emptyVideo = RequireTypedNode<EmptyLTXVLatentVideoNode>(bridge, "108");
+        Assert.Same(lengthToFrames.Frames, emptyVideo.Length.Connection);
 
-        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, LtxvEmptyLatentAudio));
+        SetLatentNoiseMaskNode setMask = Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        LTXVConcatAVLatentNode rootConcat = RequireTypedNode<LTXVConcatAVLatentNode>(bridge, "113");
+        Assert.Same(setMask.LATENT, rootConcat.AudioLatent.Connection);
 
-        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio"),
-            new JArray("203", 0)));
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+
+        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Equal("203", saveNode.Audio.Connection!.Node.Id);
+        Assert.Equal(0, saveNode.Audio.Connection.SlotIndex);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
@@ -358,15 +353,15 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SwarmAudioLengthToFrames));
-        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SwarmLoadAudioB64));
-        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SetLatentNoiseMask));
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
 
-        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio"),
-            new JArray("203", 0)));
+        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Equal("203", saveNode.Audio.Connection!.Node.Id);
+        Assert.Equal(0, saveNode.Audio.Connection.SlotIndex);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
@@ -391,24 +386,23 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmLoadAudioB64);
-        Assert.Empty(WorkflowAssertions.NodesOfType(workflow, SwarmAudioLengthToFrames));
+        SwarmLoadAudioB64Node uploadedAudioNode = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
 
-        WorkflowNode audioEncode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, LtxvAudioVaeEncode));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(audioEncode.Node, "audio"),
-            new JArray(uploadedAudioNode.Id, 0)));
-        WorkflowNode setMask = Assert.Single(WorkflowAssertions.NodesOfType(workflow, SetLatentNoiseMask));
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(setMask.Node, "samples"),
-            new JArray(audioEncode.Id, 0)));
-        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowAssertions.FindInputConnections(workflow, new JArray(setMask.Id, 0));
-        Assert.Contains(maskConsumers, connection =>
-            connection.InputName == "audio_latent"
-            && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == LtxvConcatAvLatent);
-        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
-        JArray saveAudio = WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio");
+        LTXVAudioVAEEncodeNode audioEncode = Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Equal(uploadedAudioNode.Id, audioEncode.Audio.Connection!.Node.Id);
+        Assert.Equal(0, audioEncode.Audio.Connection.SlotIndex);
+
+        SetLatentNoiseMaskNode setMask = Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        Assert.Same(audioEncode.AudioLatent, setMask.Samples.Connection);
+
+        IReadOnlyList<(ComfyNode Node, INodeInput Input)> maskConsumers = bridge.Graph.FindInputsConnectedTo(setMask.LATENT);
+        Assert.Contains(maskConsumers, c => c.Input.Name == "audio_latent" && c.Node is LTXVConcatAVLatentNode);
+
+        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        JArray saveAudio = WorkflowBridge.ToPath(saveNode.Audio.Connection!);
         Assert.True(OutputTracesBackToNode(workflow, saveAudio, uploadedAudioNode.Id));
         Assert.False(OutputTracesBackToNode(workflow, saveAudio, "300"));
     }
@@ -432,20 +426,18 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode uploadedAudioNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmLoadAudioB64);
-        WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
-        JArray lengthAudioIn = WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio");
-        WorkflowNode lengthEnsure = WorkflowAssertions.RequireNodeById(workflow, $"{lengthAudioIn[0]}");
-        Assert.Equal(SwarmEnsureAudio, $"{lengthEnsure.Node["class_type"]}");
-        JArray ensureAudioIn = WorkflowAssertions.RequireConnectionInput(lengthEnsure.Node, "audio");
-        Assert.Equal(uploadedAudioNode.Id, $"{ensureAudioIn[0]}");
-        Assert.Equal(0, ensureAudioIn[1].Value<int>());
-        Assert.NotEqual(uploadedAudioNode.Id, $"{lengthAudioIn[0]}");
-        Assert.NotEqual("300", $"{lengthAudioIn[0]}");
+        SwarmLoadAudioB64Node uploadedAudioNode = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
 
-        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
-        JArray saveAudio = WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio");
+        SwarmEnsureAudioNode lengthEnsure = Assert.IsType<SwarmEnsureAudioNode>(lengthToFrames.AudioInput.Connection!.Node);
+        Assert.Same(uploadedAudioNode.AUDIO, lengthEnsure.Audio.Connection);
+        Assert.NotEqual(uploadedAudioNode.Id, lengthToFrames.AudioInput.Connection.Node.Id);
+        Assert.NotEqual("300", lengthToFrames.AudioInput.Connection.Node.Id);
+
+        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        JArray saveAudio = WorkflowBridge.ToPath(saveNode.Audio.Connection!);
         Assert.True(OutputTracesBackToNode(workflow, saveAudio, uploadedAudioNode.Id));
         Assert.False(OutputTracesBackToNode(workflow, saveAudio, "300"));
     }
@@ -462,32 +454,27 @@ public class AudioInjectionTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(lengthToFrames.Node, "audio"),
-            new JArray("300", 0)));
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Equal("300", lengthToFrames.AudioInput.Connection!.Node.Id);
+        Assert.Equal(0, lengthToFrames.AudioInput.Connection.SlotIndex);
 
-        WorkflowNode audioEncode = WorkflowAssertions.RequireNodeOfType(workflow, LtxvAudioVaeEncode);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(audioEncode.Node, "audio"),
-            new JArray(lengthToFrames.Id, 0)));
+        LTXVAudioVAEEncodeNode audioEncode = Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Same(lengthToFrames.Audio, audioEncode.Audio.Connection);
 
-        WorkflowNode setMask = WorkflowAssertions.RequireNodeOfType(workflow, SetLatentNoiseMask);
-        IReadOnlyList<WorkflowInputConnection> maskConsumers = WorkflowAssertions.FindInputConnections(workflow, new JArray(setMask.Id, 0));
-        Assert.Contains(maskConsumers, connection =>
-            connection.InputName == "audio_latent"
-            && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == LtxvConcatAvLatent);
+        SetLatentNoiseMaskNode setMask = Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        IReadOnlyList<(ComfyNode Node, INodeInput Input)> maskConsumers = bridge.Graph.FindInputsConnectedTo(setMask.LATENT);
+        Assert.Contains(maskConsumers, c => c.Input.Name == "audio_latent" && c.Node is LTXVConcatAVLatentNode);
 
-        WorkflowNode saveNode = WorkflowAssertions.RequireNodeOfType(workflow, SwarmSaveAnimationWs);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(saveNode.Node, "audio"),
-            new JArray("203", 0)));
+        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Equal("203", saveNode.Audio.Connection!.Node.Id);
+        Assert.Equal(0, saveNode.Audio.Connection.SlotIndex);
 
-        WorkflowNode finalAudioDecode = WorkflowAssertions.RequireNodeById(workflow, "203");
-        Assert.False(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(finalAudioDecode.Node, "samples"),
-            new JArray("201", 1)));
+        LTXVAudioVAEDecodeNode finalAudioDecode = RequireTypedNode<LTXVAudioVAEDecodeNode>(bridge, "203");
+        Assert.False(
+            finalAudioDecode.Samples.Connection!.Node.Id == "201"
+            && finalAudioDecode.Samples.Connection.SlotIndex == 1);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
     }
@@ -514,8 +501,9 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        IReadOnlyList<WorkflowNode> uploadNodes = WorkflowAssertions.NodesOfType(workflow, SwarmLoadAudioB64);
+        IReadOnlyList<SwarmLoadAudioB64Node> uploadNodes = bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>();
         Assert.Equal(2, uploadNodes.Count);
     }
 
@@ -541,20 +529,18 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode batchImagesNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "BatchImagesNode"));
-        WorkflowNode audioConcatNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "AudioConcat"));
+        BatchImagesNodeNode batchImagesNode = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        AudioConcatNode audioConcatNode = Assert.Single(bridge.Graph.NodesOfType<AudioConcatNode>());
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray(batchImagesNode.Id, 0)));
 
-        IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(
-            workflow,
-            "KSamplerAdvanced",
-            "SwarmKSampler");
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
         Assert.Equal(2, samplers.Count);
 
-        JObject batchInputs = (JObject)batchImagesNode.Node["inputs"];
+        JObject batchInputs = (JObject)AsWorkflowNode(batchImagesNode, workflow).Node["inputs"];
         List<JArray> batchImagePaths = batchInputs.Properties()
             .Where(p => p.Value is JArray { Count: 2 })
             .Select(p => (JArray)p.Value)
@@ -566,8 +552,8 @@ public class AudioInjectionTests
         }
         Assert.NotEqual($"{batchImagePaths[0][0]}", $"{batchImagePaths[1][0]}");
 
-        JArray audio1 = WorkflowAssertions.RequireConnectionInput(audioConcatNode.Node, "audio1");
-        JArray audio2 = WorkflowAssertions.RequireConnectionInput(audioConcatNode.Node, "audio2");
+        JArray audio1 = WorkflowBridge.ToPath(audioConcatNode.Audio1.Connection!);
+        JArray audio2 = WorkflowBridge.ToPath(audioConcatNode.Audio2.Connection!);
         Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, audio1, sampler.Id));
         Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, audio2, sampler.Id));
 
@@ -599,14 +585,11 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode uploadedAudioNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, SwarmLoadAudioB64));
-        IReadOnlyList<WorkflowInputConnection> uploadConsumers = WorkflowAssertions.FindInputConnections(
-            workflow,
-            new JArray(uploadedAudioNode.Id, 0));
-        Assert.Contains(uploadConsumers, connection =>
-            connection.InputName == "audio"
-            && $"{WorkflowAssertions.RequireNodeById(workflow, connection.NodeId).Node["class_type"]}" == SwarmEnsureAudio);
+        SwarmLoadAudioB64Node uploadedAudioNode = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        IReadOnlyList<(ComfyNode Node, INodeInput Input)> uploadConsumers = bridge.Graph.FindInputsConnectedTo(uploadedAudioNode.AUDIO);
+        Assert.Contains(uploadConsumers, c => c.Input.Name == "audio" && c.Node is SwarmEnsureAudioNode);
     }
 
     [Fact]
@@ -623,14 +606,13 @@ public class AudioInjectionTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode setMask = WorkflowAssertions.RequireNodeOfType(workflow, SetLatentNoiseMask);
-        WorkflowNode solidMask = WorkflowAssertions.RequireNodeById(
-            workflow,
-            $"{WorkflowAssertions.RequireConnectionInput(setMask.Node, "mask")[0]}");
+        SetLatentNoiseMaskNode setMask = Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        SolidMaskNode solidMask = Assert.IsType<SolidMaskNode>(setMask.Mask.Connection!.Node);
 
-        Assert.Equal(384, solidMask.Node["inputs"]?.Value<int>("width"));
-        Assert.Equal(640, solidMask.Node["inputs"]?.Value<int>("height"));
+        Assert.Equal(384, solidMask.Width.LiteralAsInt());
+        Assert.Equal(640, solidMask.Height.LiteralAsInt());
     }
 
     private static bool OutputTracesBackToNode(JObject workflow, JArray outputRef, string expectedNodeId)

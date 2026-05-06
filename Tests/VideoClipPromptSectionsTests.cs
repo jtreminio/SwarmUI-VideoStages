@@ -1,9 +1,13 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Generated;
 using Xunit;
+using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
@@ -80,11 +84,12 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false));
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode conditioningNode = Assert.Single(AssertLtxConditioningUsesAdvancedEncoders(workflow));
-        JArray positiveRef = WorkflowAssertions.RequireConnectionInput(conditioningNode.Node, "positive");
-        WorkflowNode positiveEncoder = WorkflowAssertions.RequireNodeById(workflow, $"{positiveRef[0]}");
-        Assert.Equal("clip-zero words", $"{positiveEncoder.Node["inputs"]?["prompt"]}");
+        WorkflowNode conditioningWorkflowNode = Assert.Single(AssertLtxConditioningUsesAdvancedEncoders(workflow));
+        LTXVConditioningNode conditioningNode = RequireTypedNode<LTXVConditioningNode>(bridge, conditioningWorkflowNode.Id);
+        SwarmClipTextEncodeAdvancedNode positiveEncoder = (SwarmClipTextEncodeAdvancedNode)conditioningNode.PositiveInput.Connection!.Node;
+        Assert.Equal("clip-zero words", positiveEncoder.Prompt.LiteralAsString());
     }
 
     [Fact]
@@ -161,16 +166,17 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.True(input.TryGet(T2IParamTypes.Loras, out List<string> parsedLoras));
         Assert.Contains("UnitTest_VideoClipLora", parsedLoras);
         Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
         Assert.Contains($"{VideoStagesExtension.SectionIdForClip(1)}", parsedConfinements);
-        WorkflowNode loraLoader = Assert.Single(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
+        ComfyNode loraLoader = Assert.Single(LoraLoaderNodesOf(bridge));
         string loraId = loraLoader.Id;
-        List<JArray> positiveEncoderClips = WorkflowAssertions.NodesOfType(workflow, "CLIPTextEncode")
-            .Where(node => $"{node.Node["inputs"]?["text"]}" == "global prompt")
-            .Select(node => WorkflowAssertions.RequireConnectionInput(node.Node, "clip"))
+        List<JArray> positiveEncoderClips = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
+            .Where(node => node.Text.LiteralAsString() == "global prompt")
+            .Select(node => WorkflowBridge.ToPath(node.Clip.Connection!))
             .ToList();
 
         Assert.Equal(2, positiveEncoderClips.Count);
@@ -201,12 +207,13 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.True(input.TryGet(T2IParamTypes.Loras, out List<string> parsedLoras));
         Assert.Contains("UnitTest_VideoClipStageLora", parsedLoras);
         Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
         Assert.Contains($"{VideoStagesExtension.SectionIdForStage(0)}", parsedConfinements);
-        Assert.NotEmpty(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
+        Assert.NotEmpty(LoraLoaderNodesOf(bridge));
     }
 
     [Fact]
@@ -231,15 +238,16 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        WorkflowNode icLora = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXICLoRALoaderModelOnly"));
-        Assert.Equal("UnitTest_ControlNetLora.safetensors", $"{icLora.Node["inputs"]?["lora_name"]}");
-        Assert.Empty(WorkflowAssertions.NodesOfAnyType(workflow, "LoraLoader", "LoraLoaderModelOnly"));
+        LTXICLoRALoaderModelOnlyNode icLora = Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Equal("UnitTest_ControlNetLora.safetensors", icLora.LoraName.LiteralAsString());
+        Assert.Empty(LoraLoaderNodesOf(bridge));
 
-        IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(workflow, "KSamplerAdvanced", "SwarmKSampler");
-        List<WorkflowInputConnection> samplerModelConsumers = WorkflowAssertions.FindInputConnections(workflow, new JArray(icLora.Id, 0))
-            .Where(connection => connection.InputName == "model" && samplers.Any(sampler => sampler.Id == connection.NodeId))
-            .ToList();
-        Assert.NotEmpty(samplerModelConsumers);
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        IReadOnlyList<(ComfyNode Node, INodeInput Input)> modelConsumers = bridge.Graph.FindInputsConnectedTo(icLora.Model);
+        Assert.Contains(
+            modelConsumers,
+            connection => connection.Input.Name == "model" && samplers.Any(sampler => sampler.Id == connection.Node.Id));
     }
 }
