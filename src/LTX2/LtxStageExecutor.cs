@@ -18,8 +18,6 @@ internal sealed class LtxStageExecutor(
     RootVideoStageResizer rootVideoStageResizer,
     JsonParser jsonParser)
 {
-    private bool _needsLtxvCropGuidesAfterSampler;
-
     private const int ImgCompression = 18;
     private const double DefaultGuideMergeStrength = 1.0;
     private const int DefaultFps = 24;
@@ -28,9 +26,16 @@ internal sealed class LtxStageExecutor(
     private const string DefaultSampler = "euler";
     private const string DefaultScheduler = "normal";
 
+    internal const int DefaultFpsValue = DefaultFps;
+    internal const int DefaultFrameCountValue = DefaultFrameCount;
+    internal const double DefaultCfgValue = DefaultCfg;
+    internal const string DefaultSamplerValue = DefaultSampler;
+    internal const string DefaultSchedulerValue = DefaultScheduler;
+
     public void RunStage(
         JsonParser.StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         bool skipGuideReinjection,
@@ -41,7 +46,6 @@ internal sealed class LtxStageExecutor(
     {
         postVideoChain?.AttachSourceAudio(sourceMedia);
 
-        _needsLtxvCropGuidesAfterSampler = false;
         g.IsImageToVideo = true;
         try
         {
@@ -57,6 +61,7 @@ internal sealed class LtxStageExecutor(
             PrepareConditioning(
                 genInfo,
                 stage,
+                stageFrame,
                 effectiveSourceMedia,
                 guideMedia,
                 skipGuideReinjection,
@@ -72,13 +77,9 @@ internal sealed class LtxStageExecutor(
             {
                 handler(genInfo);
             }
-            if (ControlNetApplicator.ConsumeNeedsLtxIcloraGuideCrop(g))
-            {
-                _needsLtxvCropGuidesAfterSampler = true;
-            }
 
-            ExecuteSampler(genInfo);
-            FinalizeOutput(genInfo, effectiveSourceMedia, postVideoChain);
+            ExecuteSampler(genInfo, stageFrame);
+            FinalizeOutput(genInfo, stageFrame, effectiveSourceMedia, postVideoChain);
         }
         finally
         {
@@ -154,6 +155,7 @@ internal sealed class LtxStageExecutor(
     private void PrepareConditioning(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         JsonParser.StageSpec stage,
+        StageFrame stageFrame,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         bool skipGuideReinjection,
@@ -170,63 +172,16 @@ internal sealed class LtxStageExecutor(
             return;
         }
 
-        ApplyResolvedFpsToWorkflow(genInfo, ResolveFps(genInfo, sourceMedia));
-        genInfo.VideoFPS ??= DefaultFps;
-        genInfo.Frames ??= DefaultFrameCount;
-        genInfo.DefaultCFG = DefaultCfg;
-        genInfo.HadSpecialCond = true;
-        genInfo.DefaultSampler = DefaultSampler;
-        genInfo.DefaultScheduler = DefaultScheduler;
-        stageLatent = ApplyStageUpscaleIfNeeded(stage, genInfo, stageLatent, sourceMedia);
-        stageLatent = ApplyClipReferenceInplaceMerges(genInfo, stageLatent, clipRefs);
-
-        if (skipGuideReinjection)
-        {
-            g.CurrentMedia = stageLatent;
-        }
-        else
-        {
-            JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path, stageLatent);
-            string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
-                genInfo.Vae.Path,
-                preprocessedGuidePath,
-                stageLatent.Path,
-                guideMergeStrength,
-                bypass: false);
-            g.CurrentMedia = stageLatent.WithPath(
-                [imgToVideoNode, 0],
-                WGNodeData.DT_LATENT_VIDEO,
-                genInfo.Model.Compat);
-        }
-
-        AppendLtxvConditioning(genInfo);
-        ApplyClipReferenceAddGuides(genInfo, clipRefs);
+        new LtxConditioningPipeline(g, genInfo, stageFrame, this)
+            .WithLatent(stageLatent, sourceMedia)
+            .WithUpscaleIfNeeded(stage, sourceMedia)
+            .WithInplaceMerges(clipRefs)
+            .BindToCurrentMedia(skipGuideReinjection, guideMedia, guideMergeStrength)
+            .WithLtxvConditioning()
+            .WithGuideAdditions(clipRefs);
     }
 
-    private void AppendLtxvConditioning(WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        LTXVConditioningNode cond = bridge.AddNode(new LTXVConditioningNode());
-        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
-        {
-            cond.PositiveInput.ConnectToUntyped(pos);
-        }
-        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg)
-        {
-            cond.NegativeInput.ConnectToUntyped(neg);
-        }
-        if (genInfo.VideoFPS.HasValue)
-        {
-            cond.FrameRate.Set((double)genInfo.VideoFPS.Value);
-        }
-        bridge.SyncNode(cond);
-        BridgeSync.SyncLastId(g);
-
-        genInfo.PosCond = [cond.Id, 0];
-        genInfo.NegCond = [cond.Id, 1];
-    }
-
-    private string CreateLtxvImgToVideoInplaceNode(
+    internal string CreateLtxvImgToVideoInplaceNode(
         JToken vaePath,
         JArray preprocessedImagePath,
         JArray latentPath,
@@ -252,200 +207,6 @@ internal sealed class LtxStageExecutor(
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
         return node.Id;
-    }
-
-    private static bool UseLtxvInplaceForRef(JsonParser.RefSpec spec) => !spec.FromEnd && spec.Frame == 1;
-
-    private static int ComputeLtxvAddGuideFrameIndex(JsonParser.RefSpec spec)
-    {
-        if (spec.FromEnd)
-        {
-            return -Math.Max(1, spec.Frame);
-        }
-
-        return Math.Max(1, spec.Frame);
-    }
-
-    private WGNodeData ApplyClipReferenceInplaceMerges(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData stageLatent,
-        IReadOnlyList<ResolvedClipRef> clipRefs)
-    {
-        foreach (ResolvedClipRef clipRef in clipRefs)
-        {
-            if (!UseLtxvInplaceForRef(clipRef.Spec))
-            {
-                continue;
-            }
-
-            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, stageLatent);
-            string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
-                genInfo.Vae.Path,
-                preprocessed,
-                stageLatent.Path,
-                clipRef.Strength,
-                bypass: false);
-            stageLatent = stageLatent.WithPath(
-                [imgToVideoNode, 0],
-                WGNodeData.DT_LATENT_VIDEO,
-                genInfo.Model.Compat);
-        }
-
-        return stageLatent;
-    }
-
-    private void ApplyClipReferenceAddGuides(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        IReadOnlyList<ResolvedClipRef> clipRefs)
-    {
-        foreach (ResolvedClipRef clipRef in clipRefs)
-        {
-            if (UseLtxvInplaceForRef(clipRef.Spec))
-            {
-                continue;
-            }
-
-            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, g.CurrentMedia);
-            int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
-
-            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-            LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode());
-            if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
-            {
-                addGuide.PositiveInput.ConnectToUntyped(pos);
-            }
-            if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg)
-            {
-                addGuide.NegativeInput.ConnectToUntyped(neg);
-            }
-            if (genInfo.Vae?.Path is JArray vaePath
-                && bridge.ResolvePath(vaePath) is INodeOutput vae)
-            {
-                addGuide.Vae.ConnectToUntyped(vae);
-            }
-            if (g.CurrentMedia?.Path is JArray latentPath
-                && bridge.ResolvePath(latentPath) is INodeOutput latent)
-            {
-                addGuide.LatentInput.ConnectToUntyped(latent);
-            }
-            if (bridge.ResolvePath(preprocessed) is INodeOutput img)
-            {
-                addGuide.Image.ConnectToUntyped(img);
-            }
-            addGuide.FrameIdx.Set(frameIdx);
-            addGuide.Strength.Set(clipRef.Strength);
-            bridge.SyncNode(addGuide);
-            BridgeSync.SyncLastId(g);
-
-            _needsLtxvCropGuidesAfterSampler = true;
-            genInfo.PosCond = [addGuide.Id, 0];
-            genInfo.NegCond = [addGuide.Id, 1];
-            g.CurrentMedia = g.CurrentMedia.WithPath(
-                [addGuide.Id, 2],
-                WGNodeData.DT_LATENT_VIDEO,
-                genInfo.Model.Compat);
-        }
-    }
-
-    private WGNodeData ApplyStageUpscaleIfNeeded(
-        JsonParser.StageSpec stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData stageLatent,
-        WGNodeData sourceMedia)
-    {
-        if (stage.Upscale == 1 || string.IsNullOrWhiteSpace(stage.UpscaleMethod))
-        {
-            return stageLatent;
-        }
-
-        int baseWidth = Math.Max(sourceMedia?.Width ?? g.UserInput.GetImageWidth(), 16);
-        int baseHeight = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
-        (int width, int height) = GetUpscaledDimensions(baseWidth, baseHeight, stage.Upscale);
-
-        if (stage.UpscaleMethod.StartsWith("latentmodel-", StringComparison.OrdinalIgnoreCase))
-        {
-            string modelName = stage.UpscaleMethod["latentmodel-".Length..];
-            return ApplyLatentModelUpscale(genInfo, stageLatent, modelName, width, height);
-        }
-
-        if (stage.UpscaleMethod.StartsWith("latent-", StringComparison.OrdinalIgnoreCase))
-        {
-            string latentMethod = stage.UpscaleMethod["latent-".Length..];
-            return ApplyLatentUpscale(stageLatent, latentMethod, stage.Upscale, width, height);
-        }
-
-        Logs.Warning(
-            $"VideoStages: Stage {stage.Id} uses unsupported LTX upscale method '{stage.UpscaleMethod}'. "
-            + "Ignoring upscale.");
-        return stageLatent;
-    }
-
-    private static (int Width, int Height) GetUpscaledDimensions(int baseWidth, int baseHeight, double upscale)
-    {
-        int width = AlignTo16((int)Math.Round(baseWidth * upscale));
-        int height = AlignTo16((int)Math.Round(baseHeight * upscale));
-        return (width, height);
-    }
-
-    private static int AlignTo16(int value)
-    {
-        return Math.Max(16, (Math.Max(value, 16) / 16) * 16);
-    }
-
-    private WGNodeData ApplyLatentModelUpscale(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData stageLatent,
-        string modelName,
-        int width,
-        int height)
-    {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        LatentUpscaleModelLoaderNode loader = bridge.AddNode(new LatentUpscaleModelLoaderNode());
-        loader.ModelName.Set(modelName);
-        bridge.SyncNode(loader);
-
-        LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode());
-        if (genInfo.Vae?.Path is JArray vaePath
-            && bridge.ResolvePath(vaePath) is INodeOutput vae)
-        {
-            upsampler.Vae.ConnectToUntyped(vae);
-        }
-        if (bridge.ResolvePath(stageLatent.Path) is INodeOutput samples)
-        {
-            upsampler.Samples.ConnectToUntyped(samples);
-        }
-        upsampler.UpscaleModel.ConnectTo(loader.LATENTUPSCALEMODEL);
-        bridge.SyncNode(upsampler);
-        BridgeSync.SyncLastId(g);
-
-        WGNodeData upscaled = stageLatent.WithPath([upsampler.Id, 0], WGNodeData.DT_LATENT_VIDEO);
-        upscaled.Width = width;
-        upscaled.Height = height;
-        return upscaled;
-    }
-
-    private WGNodeData ApplyLatentUpscale(
-        WGNodeData stageLatent,
-        string latentMethod,
-        double scaleBy,
-        int width,
-        int height)
-    {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        LatentUpscaleByNode node = bridge.AddNode(new LatentUpscaleByNode());
-        if (bridge.ResolvePath(stageLatent.Path) is INodeOutput samples)
-        {
-            node.Samples.ConnectToUntyped(samples);
-        }
-        node.UpscaleMethod.Set(latentMethod);
-        node.ScaleBy.Set(scaleBy);
-        bridge.SyncNode(node);
-        BridgeSync.SyncLastId(g);
-
-        WGNodeData upscaled = stageLatent.WithPath([node.Id, 0], WGNodeData.DT_LATENT_VIDEO);
-        upscaled.Width = width;
-        upscaled.Height = height;
-        return upscaled;
     }
 
     private WGNodeData BuildStageLatent(
@@ -758,7 +519,7 @@ internal sealed class LtxStageExecutor(
         return ClipAudioWorkflowHelper.IsUploadOrAceStepFunAudioSource(stage.ClipAudioSource);
     }
 
-    private void ApplyResolvedFpsToWorkflow(WorkflowGenerator.ImageToVideoGenInfo genInfo, int fps)
+    internal void ApplyResolvedFpsToWorkflow(WorkflowGenerator.ImageToVideoGenInfo genInfo, int fps)
     {
         if (fps <= 0)
         {
@@ -768,7 +529,7 @@ internal sealed class LtxStageExecutor(
         g.UserInput.Set(T2IParamTypes.VideoFPS, fps, genInfo.ContextID);
     }
 
-    private int ResolveFps(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
+    internal int ResolveFps(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
     {
         int? fps = genInfo.VideoFPS ?? sourceMedia.FPS;
         if (fps.HasValue && fps.Value > 0)
@@ -790,7 +551,7 @@ internal sealed class LtxStageExecutor(
             || JToken.DeepEquals(mediaPath, postVideoChain.DecodeOutputPath);
     }
 
-    private JArray ResolvePreprocessedGuidePath(JArray guideImagePath, WGNodeData targetMedia)
+    internal JArray ResolvePreprocessedGuidePath(JArray guideImagePath, WGNodeData targetMedia)
     {
         JArray scaledGuidePath = EnsureClipResolutionBeforeLtxvPreprocess(guideImagePath, targetMedia);
         if (TryFindReusablePreprocessOutput(scaledGuidePath, out JArray reusedPath))
@@ -1006,7 +767,7 @@ internal sealed class LtxStageExecutor(
     private static bool HasMatchingImgCompression(LTXVPreprocessNode preprocess) =>
         preprocess.ImgCompression.LiteralAsInt() == ImgCompression;
 
-    private void ExecuteSampler(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    private void ExecuteSampler(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageFrame stageFrame)
     {
         string previewType = g.UserInput.Get(ComfyUIBackendExtension.VideoPreviewType, "animate");
         string explicitSampler = g.UserInput.Get(
@@ -1049,10 +810,9 @@ internal sealed class LtxStageExecutor(
         g.CurrentMedia.Frames = genInfo.Frames ?? g.CurrentMedia.Frames;
         g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
 
-        if (_needsLtxvCropGuidesAfterSampler)
+        if (stageFrame.NeedsCropGuidesAfterSampler)
         {
             CropGuidesAfterSampler(genInfo);
-            _needsLtxvCropGuidesAfterSampler = false;
         }
 
         if (genInfo.DoFirstFrameLatentSwap is not null)
@@ -1152,15 +912,14 @@ internal sealed class LtxStageExecutor(
 
     private void FinalizeOutput(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
         WGNodeData sourceMedia,
         LtxPostVideoChainCapture postVideoChain)
     {
         int outputWidth = g.CurrentMedia?.Width ?? sourceMedia.Width ?? g.UserInput.GetImageWidth();
         int outputHeight = g.CurrentMedia?.Height ?? sourceMedia.Height ?? g.UserInput.GetImageHeight();
         bool splicedIntoNativeChain = postVideoChain is not null;
-        bool parallelMultiClip =
-            g.NodeHelpers.TryGetValue(MultiClipParallelMerger.NodeHelperKey, out string parallelFlag)
-            && StringUtils.Equals(parallelFlag, "1");
+        bool parallelMultiClip = stageFrame.ParallelMultiClip;
         if (splicedIntoNativeChain)
         {
             if (parallelMultiClip)

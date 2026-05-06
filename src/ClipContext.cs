@@ -15,13 +15,14 @@ internal sealed class ClipContext
     public JsonParser.ClipWithStages Clip { get; }
     public WGNodeData SourceMedia { get; }
     public WGNodeData SourceVae { get; }
-    public WanConditioningHandoff LastWanConditioningHandoff { get; set; }
+    public ConditioningHandoff LastConditioningHandoff { get; set; }
+    public ClipAudioState AudioReuse { get; } = new();
 
     public bool IsFirstStage(JsonParser.StageSpec stage) =>
         Clip.Stages.Count > 0 && Clip.Stages[0].Id == stage.Id;
 }
 
-internal sealed record WanConditioningHandoff(
+internal sealed record ConditioningHandoff(
     int ClipId,
     JArray Positive,
     JArray Negative);

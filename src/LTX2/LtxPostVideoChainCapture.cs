@@ -10,6 +10,7 @@ namespace VideoStages.LTX2;
 internal sealed class LtxPostVideoChainCapture
 {
     private readonly WorkflowGenerator g;
+    private readonly ClipAudioState audioReuse;
     public LtxPostVideoChainState State { get; }
 
     public WGNodeData CurrentOutputMedia => State.CurrentOutputMedia;
@@ -17,20 +18,28 @@ internal sealed class LtxPostVideoChainCapture
     public JArray DecodeOutputPath => State.DecodeOutputPath;
     public bool HasPostDecodeWrappers => State.HasPostDecodeWrappers;
 
-    private LtxPostVideoChainCapture(WorkflowGenerator generator, LtxPostVideoChainState state)
+    private LtxPostVideoChainCapture(
+        WorkflowGenerator generator,
+        ClipAudioState audioReuse,
+        LtxPostVideoChainState state)
     {
         g = generator;
+        this.audioReuse = audioReuse;
         State = state;
     }
 
     public static LtxPostVideoChainCapture TryCapture(WorkflowGenerator generator) =>
-        TryCapture(generator, null, mutateReuseAudioState: false);
+        TryCaptureCore(generator, audioReuse: null, stage: null, mutateReuseAudioState: false);
 
-    public static LtxPostVideoChainCapture TryCapture(WorkflowGenerator generator, JsonParser.StageSpec stage) =>
-        TryCapture(generator, stage, mutateReuseAudioState: true);
-
-    private static LtxPostVideoChainCapture TryCapture(
+    public static LtxPostVideoChainCapture TryCapture(
         WorkflowGenerator generator,
+        ClipContext clipContext,
+        JsonParser.StageSpec stage) =>
+        TryCaptureCore(generator, clipContext.AudioReuse, stage, mutateReuseAudioState: true);
+
+    private static LtxPostVideoChainCapture TryCaptureCore(
+        WorkflowGenerator generator,
+        ClipAudioState audioReuse,
         JsonParser.StageSpec stage,
         bool mutateReuseAudioState)
     {
@@ -39,7 +48,7 @@ internal sealed class LtxPostVideoChainCapture
         bool captureReusableAudio = clipCanReuseAudio && stage.ClipStageIndex == 1;
         if (mutateReuseAudioState && !useReusedAudio && !captureReusableAudio)
         {
-            LtxAudioReuseState.Clear(generator);
+            audioReuse.Clear();
         }
 
         if (generator.CurrentMedia?.IsRawMedia != true
@@ -75,7 +84,7 @@ internal sealed class LtxPostVideoChainCapture
 
         if (mutateReuseAudioState && captureReusableAudio)
         {
-            LtxAudioReuseState.Remember(generator, new JArray(capture.SeparateId, 1));
+            audioReuse.Remember(new JArray(capture.SeparateId, 1));
         }
 
         LtxPostVideoChainState state = new(
@@ -89,7 +98,7 @@ internal sealed class LtxPostVideoChainCapture
             new JArray(capture.DecodeId, 0),
             capture.HasPostDecodeWrappers,
             useReusedAudio);
-        return new LtxPostVideoChainCapture(generator, state);
+        return new LtxPostVideoChainCapture(generator, audioReuse, state);
     }
 
     public WGNodeData CreateStageInput()
@@ -277,10 +286,12 @@ internal sealed class LtxPostVideoChainCapture
 
     private WGNodeData CreateSourceAudioReference()
     {
-        if (State.UseReusedAudioLatent && LtxAudioReuseState.TryGetPath(g, out JArray reusedAudioLatentPath))
+        if (State.UseReusedAudioLatent
+            && audioReuse is not null
+            && audioReuse.TryGetPath(out JArray reusedAudioLatentPath))
         {
             return new WGNodeData(
-                reusedAudioLatentPath,
+                new JArray(reusedAudioLatentPath[0], reusedAudioLatentPath[1]),
                 g,
                 WGNodeData.DT_LATENT_AUDIO,
                 ResolveAudioCompat());

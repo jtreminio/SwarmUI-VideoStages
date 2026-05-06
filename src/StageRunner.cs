@@ -12,23 +12,16 @@ using VideoStages.WAN;
 
 namespace VideoStages;
 
+internal sealed record StageGenerationPlan(
+    WorkflowGenerator.ImageToVideoGenInfo GenInfo,
+    Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
+
 internal class StageRunner(
     WorkflowGenerator g,
     StageGuideMediaHelper stageGuideMediaHelper,
     LtxManager ltxManager,
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
-    private sealed record StageGenerationPlan(
-        WorkflowGenerator.ImageToVideoGenInfo GenInfo,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
-
-    private sealed record StageContext(
-        JArray PriorOutputPath,
-        bool ReplacesTextToVideoRoot,
-        LtxPostVideoChainCapture PostVideoChain,
-        WGNodeData SourceMedia,
-        StageGenerationPlan Plan);
-
     public void RunStage(
         JsonParser.StageSpec stage,
         int sectionId,
@@ -47,23 +40,27 @@ internal class StageRunner(
             stage.ClipId,
             sectionId);
 
-        StageContext ctx = PrepareStage(stage, sectionId, clipContext);
-        if (ctx is null)
+        StageFrame stageFrame = PrepareStage(stage, sectionId, clipContext);
+        if (stageFrame is null)
         {
             return;
         }
 
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = ctx.Plan.GenInfo;
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.Plan.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
             ApplyControlNetLora(stage, currentGenInfo);
-            ControlNetApplicator.Apply(
+            bool needsCrop = ControlNetApplicator.Apply(
                 g,
                 currentGenInfo,
-                ctx.SourceMedia,
+                stageFrame.SourceMedia,
                 stage.ClipControlNetSource,
                 stage.ControlNetStrength,
                 stage.ClipLengthFromControlNet);
+            if (needsCrop)
+            {
+                stageFrame.NeedsCropGuidesAfterSampler = true;
+            }
         });
 
         if (ltxManager.TryRunLocalStage(
@@ -71,32 +68,33 @@ internal class StageRunner(
                 guideReference,
                 refStore,
                 genInfo,
-                ctx.Plan.ApplySourceVideoLatent,
-                ctx.SourceMedia,
-                ctx.PriorOutputPath,
-                ctx.PostVideoChain))
+                stageFrame,
+                stageFrame.Plan.ApplySourceVideoLatent,
+                stageFrame.SourceMedia,
+                stageFrame.PriorOutputPath,
+                stageFrame.PostVideoChain))
         {
             RetargetExistingAnimationSaves(
-                ctx.PriorOutputPath,
+                stageFrame.PriorOutputPath,
                 g.CurrentMedia?.Path,
                 retargetAudio: g.CurrentMedia?.AttachedAudio is not null);
         }
         else
         {
-            RunNativeStagePath(stage, ctx, guideReference, refStore, clipContext);
+            RunNativeStagePath(stage, stageFrame, guideReference, refStore, clipContext);
         }
-        CleanupReplacedTextToVideoRootStage(ctx.PriorOutputPath, ctx.ReplacesTextToVideoRoot);
+        CleanupReplacedTextToVideoRootStage(stageFrame.PriorOutputPath, stageFrame.ReplacesTextToVideoRoot);
     }
 
-    private StageContext PrepareStage(JsonParser.StageSpec stage, int sectionId, ClipContext clipContext)
+    private StageFrame PrepareStage(JsonParser.StageSpec stage, int sectionId, ClipContext clipContext)
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
-        ltxManager.PrepareReusableAudio(stage);
+        ltxManager.PrepareReusableAudio(clipContext, stage);
         bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage)
             && RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         LtxPostVideoChainCapture postVideoChain = replaceTextToVideoRootStage
             ? null
-            : ltxManager.TryCapturePostVideoChain(stage);
+            : ltxManager.TryCapturePostVideoChain(clipContext, stage);
         WGNodeData sourceMedia = replaceTextToVideoRootStage
             ? CloneMedia(g.CurrentMedia)
             : ApplyStageUpscaleIfNeeded(stage, sectionId);
@@ -110,24 +108,36 @@ internal class StageRunner(
         {
             return null;
         }
-        return new StageContext(priorOutputPath, replaceTextToVideoRootStage, postVideoChain, sourceMedia, plan);
+        bool parallelMultiClip =
+            g.NodeHelpers.TryGetValue(MultiClipParallelMerger.NodeHelperKey, out string parallelFlag)
+            && StringUtils.Equals(parallelFlag, "1");
+        return new StageFrame(
+            stage,
+            sectionId,
+            clipContext,
+            priorOutputPath,
+            replaceTextToVideoRootStage,
+            postVideoChain,
+            sourceMedia,
+            plan,
+            parallelMultiClip);
     }
 
     private void RunNativeStagePath(
         JsonParser.StageSpec stage,
-        StageContext ctx,
+        StageFrame stageFrame,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         ClipContext clipContext)
     {
-        WGNodeData guideRaw = stageGuideMediaHelper.ResolveGuideMedia(guideReference, ctx.PostVideoChain);
+        WGNodeData guideRaw = stageGuideMediaHelper.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
         WanStageReferenceHandler.WanGuideResolution wanRefs = WanStageReferenceHandler.TryResolveClipRefs(
             g,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs,
             stage,
             refStore,
-            ctx.PostVideoChain);
+            stageFrame.PostVideoChain);
         if (wanRefs.StartRaw is not null)
         {
             guideRaw = wanRefs.StartRaw;
@@ -135,13 +145,13 @@ internal class StageRunner(
 
         WGNodeData guideMedia = stageGuideMediaHelper.PrepareGuideMedia(
             guideRaw,
-            ctx.SourceMedia,
+            stageFrame.SourceMedia,
             scaleToSourceSize: true);
         WGNodeData wanEndPrepared = wanRefs.EndRaw is not null
-            ? stageGuideMediaHelper.PrepareGuideMedia(wanRefs.EndRaw, ctx.SourceMedia, scaleToSourceSize: false)
+            ? stageGuideMediaHelper.PrepareGuideMedia(wanRefs.EndRaw, stageFrame.SourceMedia, scaleToSourceSize: false)
             : null;
 
-        RunNativeStage(stage, ctx.Plan, ctx.SourceMedia, guideMedia, ctx.PriorOutputPath, wanEndPrepared, clipContext);
+        RunNativeStage(stage, stageFrame.Plan, stageFrame.SourceMedia, guideMedia, stageFrame.PriorOutputPath, wanEndPrepared, clipContext);
     }
 
     private void RunNativeStage(
@@ -165,7 +175,7 @@ internal class StageRunner(
         {
             CollapseWanStartImageScaleChain(currentGenInfo);
             WanFirstLastFrameRewriter.TryRewriteToFirstLast(g, stage, currentGenInfo, wanEndPrepared);
-            ApplyWanConditioningHandoff(stage, currentGenInfo, clipContext);
+            ApplyConditioningHandoff(stage, currentGenInfo, clipContext);
         });
 
         g.CreateImageToVideo(genInfo);
@@ -176,26 +186,26 @@ internal class StageRunner(
         RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
     }
 
-    private void ApplyWanConditioningHandoff(
+    private void ApplyConditioningHandoff(
         JsonParser.StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         ClipContext clipContext)
     {
-        if (!ShouldReuseWanConditioningHandoff(stage, genInfo))
+        if (!ShouldReuseConditioningHandoff(stage, genInfo))
         {
             return;
         }
 
         if (clipContext.IsFirstStage(stage))
         {
-            clipContext.LastWanConditioningHandoff = new WanConditioningHandoff(
+            clipContext.LastConditioningHandoff = new ConditioningHandoff(
                 stage.ClipId,
                 CopyPath(genInfo.PosCond),
                 CopyPath(genInfo.NegCond));
             return;
         }
 
-        WanConditioningHandoff handoff = clipContext.LastWanConditioningHandoff;
+        ConditioningHandoff handoff = clipContext.LastConditioningHandoff;
         if (handoff is null
             || handoff.ClipId != stage.ClipId
             || handoff.Positive is null
@@ -208,10 +218,10 @@ internal class StageRunner(
         JArray staleNegative = CopyPath(genInfo.NegCond);
         genInfo.PosCond = CopyPath(handoff.Positive);
         genInfo.NegCond = CopyPath(handoff.Negative);
-        RemoveUnusedWanConditioningHandoff(stalePositive, staleNegative);
+        RemoveUnusedConditioningHandoff(stalePositive, staleNegative);
     }
 
-    private static bool ShouldReuseWanConditioningHandoff(
+    private static bool ShouldReuseConditioningHandoff(
         JsonParser.StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
@@ -265,7 +275,7 @@ internal class StageRunner(
         bridge.SyncNode(samplerNode);
     }
 
-    private void RemoveUnusedWanConditioningHandoff(JArray stalePositive, JArray staleNegative)
+    private void RemoveUnusedConditioningHandoff(JArray stalePositive, JArray staleNegative)
     {
         if (stalePositive is null)
         {

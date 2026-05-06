@@ -16,7 +16,6 @@ internal static class ControlNetApplicator
 {
     private const string CapturedControlNetImageKeyPrefix = "videostages.controlnet.fullimage.";
     private const string CapturedControlNetFrameCountKeyPrefix = "videostages.controlnet.framecount.";
-    private const string NeedsLtxIcloraGuideCropKey = "videostages.controlnet.ltx_ic_lora_guide.needs_crop";
 
     public static void CaptureCoreVideoControlNetPreprocessors(WorkflowGenerator g)
     {
@@ -138,7 +137,7 @@ internal static class ControlNetApplicator
         return null;
     }
 
-    public static void Apply(
+    public static bool Apply(
         WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData sourceMedia,
@@ -152,19 +151,19 @@ internal static class ControlNetApplicator
             || genInfo.PosCond is null
             || genInfo.NegCond is null)
         {
-            return;
+            return false;
         }
 
         if (!VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel))
         {
-            return;
+            return false;
         }
 
         T2IParamTypes.ControlNetParamHolder controlnetParams = T2IParamTypes.Controlnets[index];
         if (controlnetParams is null
             || !g.UserInput.TryGet(controlnetParams.Strength, out double controlStrength))
         {
-            return;
+            return false;
         }
 
         T2IModel controlModel = g.UserInput.Get(controlnetParams.Model, null);
@@ -205,15 +204,16 @@ internal static class ControlNetApplicator
                 genInfo,
                 controlImage,
                 stageControlNetStrength ?? controlStrength,
-                guideFrameCount))
+                guideFrameCount,
+                out bool needsCropGuidesAfterSampler))
         {
-            return;
+            return needsCropGuidesAfterSampler;
         }
 
         if (controlModel.ModelClass?.ID?.EndsWith("/control-diffpatch") ?? false)
         {
             ApplyDiffPatchControlNet(g, genInfo, controlImage, controlModel, controlStrength);
-            return;
+            return false;
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
@@ -242,16 +242,7 @@ internal static class ControlNetApplicator
             controlStrength);
         genInfo.PosCond = new JArray(applyNode, 0);
         genInfo.NegCond = new JArray(applyNode, 1);
-    }
-
-    public static bool ConsumeNeedsLtxIcloraGuideCrop(WorkflowGenerator g)
-    {
-        if (!g.NodeHelpers.TryGetValue(NeedsLtxIcloraGuideCropKey, out string value))
-        {
-            return false;
-        }
-        _ = g.NodeHelpers.Remove(NeedsLtxIcloraGuideCropKey);
-        return value == "1";
+        return false;
     }
 
     public static bool TryCreateCapturedControlImageFrameCount(
@@ -314,8 +305,10 @@ internal static class ControlNetApplicator
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData controlImage,
         double controlStrength,
-        JToken frameCount)
+        JToken frameCount,
+        out bool needsCropGuidesAfterSampler)
     {
+        needsCropGuidesAfterSampler = false;
         if (g.CurrentMedia?.Path is not JArray { Count: 2 } latentPath
             || controlImage?.Path is not JArray { Count: 2 } controlImagePath
             || genInfo?.PosCond is null
@@ -373,7 +366,7 @@ internal static class ControlNetApplicator
         bridge.SyncNode(guide);
         BridgeSync.SyncLastId(g);
 
-        g.NodeHelpers[NeedsLtxIcloraGuideCropKey] = "1";
+        needsCropGuidesAfterSampler = true;
         genInfo.PosCond = new JArray(guide.Id, 0);
         genInfo.NegCond = new JArray(guide.Id, 1);
         g.CurrentMedia = g.CurrentMedia.WithPath(

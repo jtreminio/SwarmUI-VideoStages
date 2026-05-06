@@ -66,11 +66,11 @@ internal sealed class LtxManager
     public static void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
         LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
 
-    public void PrepareReusableAudio(JsonParser.StageSpec stage) =>
-        LtxAudioReuseState.PrepareReusableAudio(g, stage);
+    public void PrepareReusableAudio(ClipContext clipContext, JsonParser.StageSpec stage) =>
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
 
-    public LtxPostVideoChainCapture TryCapturePostVideoChain(JsonParser.StageSpec stage) =>
-        LtxPostVideoChainCapture.TryCapture(g, stage);
+    public LtxPostVideoChainCapture TryCapturePostVideoChain(ClipContext clipContext, JsonParser.StageSpec stage) =>
+        LtxPostVideoChainCapture.TryCapture(g, clipContext, stage);
 
     public void ApplyPostVideoChainCaptureIfPresent(
         ref WGNodeData referenceMedia,
@@ -85,6 +85,7 @@ internal sealed class LtxManager
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
@@ -94,6 +95,7 @@ internal sealed class LtxManager
             guideReference,
             refStore,
             genInfo,
+            stageFrame,
             applySourceVideoLatent,
             sourceMedia,
             priorOutputPath,

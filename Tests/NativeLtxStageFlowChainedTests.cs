@@ -206,6 +206,35 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Ltx_add_guide_positive_and_negative_inputs_trace_through_ltxv_conditioning_node()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        stage["refStrengths"] = new JArray(0.55);
+        string stagesJson = new JArray(
+            MakeClipWithRefs(width: 512, height: 512, refs: [MakeRef("Base", frame: 2)], stage)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
+
+        WorkflowNode conditioningNode = Assert.Single(AssertLtxConditioningUsesAdvancedEncoders(workflow));
+        WorkflowNode addGuideNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "LTXVAddGuide"));
+
+        JArray addGuidePositive = WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "positive");
+        Assert.Equal(conditioningNode.Id, $"{addGuidePositive[0]}");
+        Assert.Equal("0", $"{addGuidePositive[1]}");
+
+        JArray addGuideNegative = WorkflowAssertions.RequireConnectionInput(addGuideNode.Node, "negative");
+        Assert.Equal(conditioningNode.Id, $"{addGuideNegative[0]}");
+        Assert.Equal("1", $"{addGuideNegative[1]}");
+    }
+
+    [Fact]
     public void Chained_native_ltx_reuse_audio_uses_first_stage_audio_for_later_stages()
     {
         using SwarmUiTestContext _ = new();

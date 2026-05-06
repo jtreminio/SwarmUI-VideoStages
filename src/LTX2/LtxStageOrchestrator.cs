@@ -15,6 +15,7 @@ internal sealed class LtxStageOrchestrator(
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
@@ -55,6 +56,7 @@ internal sealed class LtxStageOrchestrator(
         stageExecutor.RunStage(
             stage,
             genInfo,
+            stageFrame,
             sourceMedia,
             guideMedia,
             skipGuideReinjection,
