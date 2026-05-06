@@ -32,7 +32,7 @@ internal class StageRunner(
     private sealed record StageContext(
         JArray PriorOutputPath,
         bool ReplacesTextToVideoRoot,
-        LtxPostVideoChain PostVideoChain,
+        LtxPostVideoChainCapture PostVideoChain,
         WGNodeData SourceMedia,
         StageGenerationPlan Plan);
 
@@ -100,7 +100,7 @@ internal class StageRunner(
         ltxManager.PrepareReusableAudio(stage);
         bool replaceTextToVideoRootStage = stage.ClipStageIndex == 0
             && RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
-        LtxPostVideoChain postVideoChain = replaceTextToVideoRootStage
+        LtxPostVideoChainCapture postVideoChain = replaceTextToVideoRootStage
             ? null
             : ltxManager.TryCapturePostVideoChain(stage);
         WGNodeData sourceMedia = replaceTextToVideoRootStage

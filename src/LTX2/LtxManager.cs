@@ -26,12 +26,16 @@ internal sealed class LtxManager
             rootVideoStageHandoff,
             rootVideoStageResizer,
             jsonParser);
+        LtxClipRefResolver clipRefResolver = new(
+            g,
+            stageGuideMediaHelper,
+            base2EditPublishedStageRefs);
         stageOrchestrator = new LtxStageOrchestrator(
             g,
             stageExecutor,
             rootVideoStageHandoff,
             stageGuideMediaHelper,
-            base2EditPublishedStageRefs);
+            clipRefResolver);
     }
 
     public bool TryInjectAudio(
@@ -65,8 +69,8 @@ internal sealed class LtxManager
     public void PrepareReusableAudio(JsonParser.StageSpec stage) =>
         LtxAudioReuseState.PrepareReusableAudio(g, stage);
 
-    public LtxPostVideoChain TryCapturePostVideoChain(JsonParser.StageSpec stage) =>
-        LtxPostVideoChain.TryCapture(g, stage);
+    public LtxPostVideoChainCapture TryCapturePostVideoChain(JsonParser.StageSpec stage) =>
+        LtxPostVideoChainCapture.TryCapture(g, stage);
 
     public void ApplyPostVideoChainCaptureIfPresent(
         ref WGNodeData referenceMedia,
@@ -84,7 +88,7 @@ internal sealed class LtxManager
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
-        LtxPostVideoChain postVideoChain) =>
+        LtxPostVideoChainCapture postVideoChain) =>
         stageOrchestrator.TryRunLocalLtxPath(
             stage,
             guideReference,

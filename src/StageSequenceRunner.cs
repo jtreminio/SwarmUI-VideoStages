@@ -60,6 +60,7 @@ internal sealed class StageSequenceRunner(
                 g.NodeHelpers[MultiClipParallelMerger.NodeHelperKey] = "1";
             }
 
+            int? appliedClipLengthClipId = null;
             for (int i = 0; i < stages.Count; i++)
             {
                 JsonParser.StageSpec stage = stages[i];
@@ -82,6 +83,7 @@ internal sealed class StageSequenceRunner(
                     }
                 }
 
+                ApplyControlNetClipLengthIfApplicable(stage, ref appliedClipLengthClipId);
                 PrepareClipAudio(stage, context);
                 StageRefStore.StageRef guideRef = TryResolveGuideReference(stage);
                 if (guideRef is null)
@@ -163,10 +165,6 @@ internal sealed class StageSequenceRunner(
             ClipAudioWorkflowHelper.ClipAudioSourceNormalization.StageSpec);
         currentMedia.AttachedAudio = clipAudio?.Audio;
         g.CurrentMedia = currentMedia;
-        if (stage.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
-        {
-            _ = ltxManager.TryApplyControlNetFrameCount(stage.ClipControlNetSource);
-        }
         if (context.RootStageHandoff
             && ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
                 stage.ClipAudioSource,
@@ -174,6 +172,21 @@ internal sealed class StageSequenceRunner(
                 restrictLengthMatchToUploadOrAce: true))
         {
             _ = ltxManager.TryInjectAudio(clipAudio);
+        }
+    }
+
+    private void ApplyControlNetClipLengthIfApplicable(
+        JsonParser.StageSpec stage,
+        ref int? appliedClipLengthClipId)
+    {
+        if (appliedClipLengthClipId == stage.ClipId)
+        {
+            return;
+        }
+        appliedClipLengthClipId = stage.ClipId;
+        if (stage.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
+        {
+            _ = ltxManager.TryApplyControlNetFrameCount(stage.ClipControlNetSource);
         }
     }
 

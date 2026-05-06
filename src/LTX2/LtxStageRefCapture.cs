@@ -9,7 +9,7 @@ internal static class LtxStageRefCapture
         ref WGNodeData referenceMedia,
         ref WGNodeData referenceVae)
     {
-        LtxPostVideoChain postVideoChain = LtxPostVideoChain.TryCapture(g);
+        LtxPostVideoChainCapture postVideoChain = LtxPostVideoChainCapture.TryCapture(g);
         if (postVideoChain is null)
         {
             return;

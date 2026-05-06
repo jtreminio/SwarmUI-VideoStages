@@ -35,7 +35,7 @@ internal sealed class LtxStageExecutor(
         WGNodeData guideMedia,
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
-        LtxPostVideoChain postVideoChain,
+        LtxPostVideoChainCapture postVideoChain,
         IReadOnlyList<ResolvedClipRef> clipRefs = null,
         double guideMergeStrength = DefaultGuideMergeStrength)
     {
@@ -158,7 +158,7 @@ internal sealed class LtxStageExecutor(
         WGNodeData guideMedia,
         bool skipGuideReinjection,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
-        LtxPostVideoChain postVideoChain,
+        LtxPostVideoChainCapture postVideoChain,
         IReadOnlyList<ResolvedClipRef> clipRefs,
         double guideMergeStrength)
     {
@@ -452,7 +452,7 @@ internal sealed class LtxStageExecutor(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         JsonParser.StageSpec stage,
         WGNodeData sourceMedia,
-        LtxPostVideoChain postVideoChain)
+        LtxPostVideoChainCapture postVideoChain)
     {
         genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
         JArray controlNetLengthFrames = TryResolveControlNetLengthFrames(stage);
@@ -779,7 +779,7 @@ internal sealed class LtxStageExecutor(
         return fps.HasValue && fps.Value > 0 ? fps.Value : DefaultFps;
     }
 
-    private static bool ReferencesCurrentOutputPath(WGNodeData media, LtxPostVideoChain postVideoChain)
+    private static bool ReferencesCurrentOutputPath(WGNodeData media, LtxPostVideoChainCapture postVideoChain)
     {
         if (media?.Path is not JArray mediaPath || postVideoChain is null)
         {
@@ -1153,7 +1153,7 @@ internal sealed class LtxStageExecutor(
     private void FinalizeOutput(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData sourceMedia,
-        LtxPostVideoChain postVideoChain)
+        LtxPostVideoChainCapture postVideoChain)
     {
         int outputWidth = g.CurrentMedia?.Width ?? sourceMedia.Width ?? g.UserInput.GetImageWidth();
         int outputHeight = g.CurrentMedia?.Height ?? sourceMedia.Height ?? g.UserInput.GetImageHeight();
@@ -1165,7 +1165,9 @@ internal sealed class LtxStageExecutor(
         {
             if (parallelMultiClip)
             {
-                postVideoChain.SpliceCurrentOutputToDedicatedBranch(
+                LtxPostVideoChainSplicer.SpliceCurrentOutputToDedicatedBranch(
+                    postVideoChain,
+                    g,
                     genInfo.Vae,
                     outputWidth,
                     outputHeight,
@@ -1174,7 +1176,7 @@ internal sealed class LtxStageExecutor(
             }
             else
             {
-                postVideoChain.SpliceCurrentOutput(genInfo.Vae);
+                LtxPostVideoChainSplicer.SpliceCurrentOutput(postVideoChain, g, genInfo.Vae);
             }
 
             if (postVideoChain.HasPostDecodeWrappers)
@@ -1209,7 +1211,7 @@ internal sealed class LtxStageExecutor(
             g.CurrentMedia = g.CurrentMedia.WithPath([trimNodeId, 0]);
             if (splicedIntoNativeChain && !postVideoChain.HasPostDecodeWrappers && !parallelMultiClip)
             {
-                postVideoChain.RetargetAnimationSaves(g.CurrentMedia.Path);
+                LtxPostVideoChainSplicer.RetargetAnimationSaves(postVideoChain, g, g.CurrentMedia.Path);
             }
             ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, genInfo.Frames, genInfo.VideoFPS);
         }

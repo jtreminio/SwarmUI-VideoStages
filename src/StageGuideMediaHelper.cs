@@ -10,7 +10,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
 {
     internal WGNodeData ResolveGuideMedia(
         StageRefStore.StageRef guideReference,
-        LTX2.LtxPostVideoChain postVideoChain)
+        LTX2.LtxPostVideoChainCapture postVideoChain)
     {
         if (guideReference?.Media is null)
         {
@@ -53,7 +53,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
 
     internal bool IsLiveCurrentOutputReference(
         WGNodeData guideMedia,
-        LTX2.LtxPostVideoChain postVideoChain)
+        LTX2.LtxPostVideoChainCapture postVideoChain)
     {
         if (guideMedia?.Path is not JArray guidePath || postVideoChain is null)
         {

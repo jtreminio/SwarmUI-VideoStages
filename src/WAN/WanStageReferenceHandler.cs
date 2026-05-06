@@ -16,7 +16,7 @@ internal static class WanStageReferenceHandler
         Base2EditPublishedStageRefs base2EditPublishedStageRefs,
         JsonParser.StageSpec stage,
         StageRefStore refStore,
-        LtxPostVideoChain postVideoChain)
+        LtxPostVideoChainCapture postVideoChain)
     {
         if (!VideoStageModelCompat.IsWanVideoModel(stage.Model)
             || stage.ClipRefs is not { Count: > 0 })
@@ -52,7 +52,7 @@ internal static class WanStageReferenceHandler
         Base2EditPublishedStageRefs base2EditPublishedStageRefs,
         JsonParser.RefSpec spec,
         StageRefStore refStore,
-        LtxPostVideoChain postVideoChain)
+        LtxPostVideoChainCapture postVideoChain)
     {
         if (StringUtils.Equals(spec.Source, "Upload"))
         {

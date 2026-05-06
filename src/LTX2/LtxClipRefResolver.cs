@@ -1,0 +1,237 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
+using SwarmUI.Text2Image;
+using SwarmUI.Utils;
+
+namespace VideoStages.LTX2;
+
+internal sealed class LtxClipRefResolver(
+    WorkflowGenerator g,
+    StageGuideMediaHelper stageGuideMediaHelper,
+    Base2EditPublishedStageRefs base2EditPublishedStageRefs)
+{
+    internal List<ResolvedClipRef> ResolveStageClipRefs(
+        JsonParser.StageSpec stage,
+        StageRefStore refStore,
+        LtxPostVideoChainCapture postVideoChain,
+        WGNodeData sourceMedia)
+    {
+        IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs ?? [];
+        IReadOnlyList<double> strengths = stage.RefStrengths ?? [];
+        if (refs.Count == 0 && !stage.ImageReferenceWasExplicit)
+        {
+            JsonParser.RefSpec defaultRef = ResolveDefaultImageToVideoRef(refStore);
+            if (defaultRef is not null)
+            {
+                refs = [defaultRef];
+                strengths = [1.0];
+            }
+        }
+        List<ResolvedClipRef> resolved = [];
+        bool textToVideoRootWorkflow = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
+        for (int i = 0; i < refs.Count; i++)
+        {
+            JsonParser.RefSpec spec = refs[i];
+            if (textToVideoRootWorkflow
+                && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            double strength = i < strengths.Count
+                ? strengths[i]
+                : Constants.DefaultStageRefStrength;
+            WGNodeData raw = ResolveClipRefSourceMedia(spec, refStore, postVideoChain);
+            if (raw is null)
+            {
+                Logs.Warning(
+                    $"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; "
+                    + "skipping.");
+                continue;
+            }
+
+            WGNodeData prepared;
+            if (PrimaryGuideMatchesScaledSource(g, raw, sourceMedia))
+            {
+                prepared = sourceMedia;
+            }
+            else
+            {
+                prepared = stageGuideMediaHelper.PrepareGuideMedia(raw, sourceMedia, scaleToSourceSize: false);
+            }
+            resolved.Add(new ResolvedClipRef(prepared, spec, strength));
+        }
+
+        return resolved;
+    }
+
+    internal static ResolvedClipRef ExtractPrimaryGuideClipRef(IReadOnlyList<ResolvedClipRef> clipRefs)
+    {
+        foreach (ResolvedClipRef clipRef in clipRefs)
+        {
+            if (!clipRef.Spec.FromEnd && clipRef.Spec.Frame == 1)
+            {
+                return clipRef;
+            }
+        }
+
+        return null;
+    }
+
+    internal static List<ResolvedClipRef> RemovePrimaryGuideClipRef(
+        IReadOnlyList<ResolvedClipRef> clipRefs,
+        ResolvedClipRef primaryGuideClipRef)
+    {
+        if (primaryGuideClipRef is null)
+        {
+            return [.. clipRefs];
+        }
+
+        List<ResolvedClipRef> remaining = [];
+        bool removedPrimary = false;
+        foreach (ResolvedClipRef clipRef in clipRefs)
+        {
+            if (!removedPrimary && ReferenceEquals(clipRef, primaryGuideClipRef))
+            {
+                removedPrimary = true;
+                continue;
+            }
+
+            remaining.Add(clipRef);
+        }
+
+        return remaining;
+    }
+
+    internal static bool PrimaryGuideMatchesScaledSource(
+        WorkflowGenerator g,
+        WGNodeData primaryGuideMedia,
+        WGNodeData sourceMedia)
+    {
+        if (primaryGuideMedia?.Path is not JArray { Count: 2 } primaryGuidePath
+            || sourceMedia?.Path is not JArray { Count: 2 } sourcePath)
+        {
+            return false;
+        }
+
+        if (WorkflowBridge.Create(g.Workflow).Graph.GetNode<ImageScaleNode>($"{sourcePath[0]}")
+            is not ImageScaleNode scale
+            || scale.Image.Connection is not INodeOutput scaleSource)
+        {
+            return false;
+        }
+
+        return scaleSource.Node.Id == $"{primaryGuidePath[0]}"
+            && scaleSource.SlotIndex == (int)primaryGuidePath[1];
+    }
+
+    private JsonParser.RefSpec ResolveDefaultImageToVideoRef(StageRefStore refStore)
+    {
+        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _)
+            || RootVideoStageHandoff.IsTextToVideoRootWorkflow(g))
+        {
+            return null;
+        }
+
+        if (refStore.Refiner is not null)
+        {
+            return new JsonParser.RefSpec("Refiner", 1, false, null);
+        }
+        if (refStore.Base is not null)
+        {
+            return new JsonParser.RefSpec("Base", 1, false, null);
+        }
+        return null;
+    }
+
+    private WGNodeData ResolveClipRefSourceMedia(
+        JsonParser.RefSpec spec,
+        StageRefStore refStore,
+        LtxPostVideoChainCapture postVideoChain)
+    {
+        if (StringUtils.Equals(spec.Source, "Upload"))
+        {
+            return MaterializeUploadedRefImage(spec);
+        }
+
+        StageRefStore.StageRef stageRef = null;
+        string src = spec.Source?.Trim() ?? "";
+        if (StringUtils.Equals(src, "Base"))
+        {
+            stageRef = refStore.Base;
+        }
+        else if (StringUtils.Equals(src, "Refiner"))
+        {
+            stageRef = refStore.Refiner;
+        }
+        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(src, out int editStage))
+        {
+            _ = base2EditPublishedStageRefs.TryGetStageRef(editStage, out stageRef);
+        }
+
+        if (stageRef is null)
+        {
+            if (!string.IsNullOrWhiteSpace(src))
+            {
+                Logs.Warning($"VideoStages: Unsupported or unresolved clip reference source '{spec.Source}'.");
+            }
+            return null;
+        }
+
+        return stageGuideMediaHelper.ResolveGuideMedia(stageRef, postVideoChain);
+    }
+
+    private WGNodeData MaterializeUploadedRefImage(JsonParser.RefSpec spec)
+    {
+        string material = spec.Data?.Trim();
+        if (string.IsNullOrWhiteSpace(material))
+        {
+            material = spec.UploadFileName?.Trim();
+        }
+        if (string.IsNullOrWhiteSpace(material))
+        {
+            Logs.Warning("VideoStages: Upload clip reference is missing inline data and a file name.");
+            return null;
+        }
+
+        if (material.StartsWith("inputs/", StringComparison.OrdinalIgnoreCase)
+            || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
+            || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
+        {
+            if (g.UserInput?.SourceSession is null)
+            {
+                Logs.Warning(
+                    "VideoStages: reference image uses a server-side path but no session is available; "
+                    + "cannot load the file.");
+                return null;
+            }
+
+            try
+            {
+                material = T2IParamTypes.FilePathToDataString(
+                    g.UserInput.SourceSession,
+                    material,
+                    "for VideoStages reference image");
+            }
+            catch (SwarmReadableErrorException ex)
+            {
+                Logs.Warning(
+                    $"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
+                return null;
+            }
+        }
+
+        try
+        {
+            ImageFile img = ImageFile.FromDataString(material);
+            return g.LoadImage(img, "${videostagesrefimage}", false);
+        }
+        catch (Exception ex)
+        {
+            Logs.Warning($"VideoStages: Ignoring invalid clip reference image payload: {ex.Message}");
+            return null;
+        }
+    }
+}
