@@ -242,36 +242,20 @@ internal class StageRunner(
         {
             return;
         }
-        ComfyNode samplerNode = startNode is KSamplerAdvancedNode or SwarmKSamplerNode
-            ? startNode
-            : bridge.Graph.FindNearestUpstream<KSamplerAdvancedNode>(startNode)
-                ?? (ComfyNode)bridge.Graph.FindNearestUpstream<SwarmKSamplerNode>(startNode);
+        SwarmKSamplerNode samplerNode = startNode is SwarmKSamplerNode start
+            ? start
+            : bridge.Graph.FindNearestUpstream<SwarmKSamplerNode>(startNode);
         if (samplerNode is null)
         {
             return;
         }
 
-        int? stepsLiteral = samplerNode switch
-        {
-            KSamplerAdvancedNode a => a.Steps.LiteralAsInt(),
-            SwarmKSamplerNode s => s.Steps.LiteralAsInt(),
-            _ => null
-        };
-        int steps = Math.Max(1, stepsLiteral ?? stage.Steps);
+        int steps = Math.Max(1, samplerNode.Steps.LiteralAsInt() ?? stage.Steps);
         int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
         string leftover = endStep < steps ? "enable" : "disable";
 
-        switch (samplerNode)
-        {
-            case KSamplerAdvancedNode a:
-                a.EndAtStep.Set(endStep);
-                a.ReturnWithLeftoverNoise.Set(leftover);
-                break;
-            case SwarmKSamplerNode s:
-                s.EndAtStep.Set(endStep);
-                s.ReturnWithLeftoverNoise.Set(leftover);
-                break;
-        }
+        samplerNode.EndAtStep.Set(endStep);
+        samplerNode.ReturnWithLeftoverNoise.Set(leftover);
         bridge.SyncNode(samplerNode);
     }
 
