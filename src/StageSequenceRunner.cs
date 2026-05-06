@@ -18,6 +18,7 @@ internal sealed class StageSequenceRunner(
     private const int IntermediateStageSaveId = 52100;
 
     private readonly Dictionary<int, StageRefStore.StageRef> _stageOutputs = [];
+    private StageRefStore.StageRef _previousStageRef;
 
     private sealed class RunContext
     {
@@ -42,6 +43,7 @@ internal sealed class StageSequenceRunner(
             RootStageHandoff = rootStageHandoff
         };
         _stageOutputs.Clear();
+        _previousStageRef = null;
         List<int> usedSectionIds = [];
         bool parallelMultiClip = clips.Count > 1;
         List<WGNodeData> clipParallelOutputs = [];
@@ -96,6 +98,7 @@ internal sealed class StageSequenceRunner(
                             $"VideoStages: Skipping all remaining stages for clip {stage.ClipId} after stage {stage.Id} "
                             + "could not resolve its image reference.");
                         clipCompleted = false;
+                        _previousStageRef = null;
                         break;
                     }
 
@@ -205,7 +208,9 @@ internal sealed class StageSequenceRunner(
         WGNodeData referenceMedia = g.CurrentMedia;
         WGNodeData referenceVae = g.CurrentVae;
         ltxManager.ApplyPostVideoChainCaptureIfPresent(ref referenceMedia, ref referenceVae);
-        _stageOutputs[index] = new StageRefStore.StageRef(referenceMedia, referenceVae);
+        StageRefStore.StageRef captured = new(referenceMedia, referenceVae);
+        _stageOutputs[index] = captured;
+        _previousStageRef = captured;
     }
 
     private void PrepareStageOverrides(JsonParser.StageSpec stage, int sectionId)
@@ -256,9 +261,9 @@ internal sealed class StageSequenceRunner(
         }
         if (StringUtils.Equals(stage.ImageReference, "Generated"))
         {
-            if (stage.Id > 0 && _stageOutputs.TryGetValue(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
+            if (_previousStageRef is not null)
             {
-                return previousGenerated;
+                return _previousStageRef;
             }
             return WarnIfMissing(
                 store.Generated,
@@ -266,19 +271,13 @@ internal sealed class StageSequenceRunner(
         }
         if (StringUtils.Equals(stage.ImageReference, "PreviousStage"))
         {
-            if (stage.Id <= 0)
+            if (_previousStageRef is null)
             {
                 Logs.Warning(
                     "VideoStages: ImageReference 'PreviousStage' cannot be used for the first stage.");
                 return null;
             }
-            if (!_stageOutputs.TryGetValue(stage.Id - 1, out StageRefStore.StageRef previousStage))
-            {
-                Logs.Warning(
-                    $"VideoStages: ImageReference 'PreviousStage' requested, but stage {stage.Id - 1} does not exist.");
-                return null;
-            }
-            return previousStage;
+            return _previousStageRef;
         }
         if (ImageReferenceSyntax.TryParseExplicitStageIndex(stage.ImageReference, out int explicitStage))
         {
