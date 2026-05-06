@@ -87,6 +87,11 @@ public class JsonParser(WorkflowGenerator g)
         IReadOnlyList<ClipSpec> Clips
     );
 
+    public sealed record ClipWithStages(
+        ClipSpec Clip,
+        IReadOnlyList<StageSpec> Stages
+    );
+
     private sealed record StageDefaults(
         double Control,
         double Upscale,
@@ -100,13 +105,23 @@ public class JsonParser(WorkflowGenerator g)
 
     public List<StageSpec> ParseStages()
     {
+        List<StageSpec> flattened = [];
+        foreach (ClipWithStages clip in ParseClipsWithStages())
+        {
+            flattened.AddRange(clip.Stages);
+        }
+        return flattened;
+    }
+
+    public List<ClipWithStages> ParseClipsWithStages()
+    {
         VideoStagesSpec config = ParseConfig();
         int? registeredRootWidth = ResolveRegisteredRootDimension(VideoStagesExtension.RootWidth);
         int? registeredRootHeight = ResolveRegisteredRootDimension(VideoStagesExtension.RootHeight);
         int? effectiveRootWidth = registeredRootWidth ?? config.Width;
         int? effectiveRootHeight = registeredRootHeight ?? config.Height;
         int fps = ResolveFps(config);
-        List<StageSpec> flattened = [];
+        List<ClipWithStages> result = [];
         int globalStageIndex = 0;
         foreach (ClipSpec clip in config.Clips)
         {
@@ -127,6 +142,7 @@ public class JsonParser(WorkflowGenerator g)
                     activeStageCount++;
                 }
             }
+            List<StageSpec> clipStages = [];
             int clipStageIndex = 0;
             for (int s = 0; s < clip.Stages.Count; s++)
             {
@@ -135,7 +151,7 @@ public class JsonParser(WorkflowGenerator g)
                 {
                     continue;
                 }
-                flattened.Add(stage with
+                clipStages.Add(stage with
                 {
                     Id = globalStageIndex,
                     ClipId = clip.Id,
@@ -156,8 +172,12 @@ public class JsonParser(WorkflowGenerator g)
                 clipStageIndex++;
                 globalStageIndex++;
             }
+            if (clipStages.Count > 0)
+            {
+                result.Add(new ClipWithStages(clip, clipStages));
+            }
         }
-        return flattened;
+        return result;
     }
 
     public int ResolveFps(VideoStagesSpec parsedConfig = null)

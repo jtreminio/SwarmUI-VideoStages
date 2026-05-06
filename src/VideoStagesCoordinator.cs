@@ -30,19 +30,19 @@ internal sealed class VideoStagesCoordinator(
         try
         {
             List<JsonParser.ClipSpec> clips = jsonParser.ParseClips();
-            List<JsonParser.StageSpec> stages = jsonParser.ParseStages();
+            List<JsonParser.ClipWithStages> clipsWithStages = jsonParser.ParseClipsWithStages();
             bool rootStageHandoff = rootVideoStageHandoff.ShouldHandoffRootStage();
-            if (stages.Count == 0)
+            if (clipsWithStages.Count == 0)
             {
                 TryInjectConfiguredAudio(clips);
                 return;
             }
-            EnsureComfyDependencies(stages);
+            EnsureComfyDependencies(clipsWithStages);
 
             ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
             if (!rootStageHandoff)
             {
-                JsonParser.StageSpec first = stages[0];
+                JsonParser.StageSpec first = clipsWithStages[0].Stages[0];
                 TryApplyControlNetClipLength(
                     first.ClipLengthFromControlNet,
                     first.ClipControlNetSource,
@@ -55,7 +55,7 @@ internal sealed class VideoStagesCoordinator(
             }
 
             stageSequenceRunner.Run(
-                stages,
+                clipsWithStages,
                 clipAudioMaps.DetectedAudio,
                 clipAudioMaps.ClipAudios,
                 clipAudioMaps.UploadedAudios,
@@ -68,10 +68,10 @@ internal sealed class VideoStagesCoordinator(
         }
     }
 
-    private void EnsureComfyDependencies(IReadOnlyList<JsonParser.StageSpec> stages)
+    private void EnsureComfyDependencies(IReadOnlyList<JsonParser.ClipWithStages> clipsWithStages)
     {
         if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
-            || !stages.Any(stage =>
+            || !clipsWithStages.SelectMany(c => c.Stages).Any(stage =>
                 !string.IsNullOrWhiteSpace(stage.ClipControlNetLora)
                 && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model)))
         {

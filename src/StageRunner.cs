@@ -22,13 +22,6 @@ internal class StageRunner(
         WorkflowGenerator.ImageToVideoGenInfo GenInfo,
         Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
 
-    private sealed record WanConditioningHandoff(
-        int ClipId,
-        JArray Positive,
-        JArray Negative);
-
-    private WanConditioningHandoff lastWanConditioningHandoff;
-
     private sealed record StageContext(
         JArray PriorOutputPath,
         bool ReplacesTextToVideoRoot,
@@ -40,7 +33,8 @@ internal class StageRunner(
         JsonParser.StageSpec stage,
         int sectionId,
         StageRefStore.StageRef guideReference,
-        StageRefStore refStore)
+        StageRefStore refStore,
+        ClipContext clipContext)
     {
         if (g.CurrentMedia is null)
         {
@@ -89,7 +83,7 @@ internal class StageRunner(
         }
         else
         {
-            RunNativeStagePath(stage, ctx, guideReference, refStore);
+            RunNativeStagePath(stage, ctx, guideReference, refStore, clipContext);
         }
         CleanupReplacedTextToVideoRootStage(ctx.PriorOutputPath, ctx.ReplacesTextToVideoRoot);
     }
@@ -123,7 +117,8 @@ internal class StageRunner(
         JsonParser.StageSpec stage,
         StageContext ctx,
         StageRefStore.StageRef guideReference,
-        StageRefStore refStore)
+        StageRefStore refStore,
+        ClipContext clipContext)
     {
         WGNodeData guideRaw = stageGuideMediaHelper.ResolveGuideMedia(guideReference, ctx.PostVideoChain);
         WanStageReferenceHandler.WanGuideResolution wanRefs = WanStageReferenceHandler.TryResolveClipRefs(
@@ -146,7 +141,7 @@ internal class StageRunner(
             ? stageGuideMediaHelper.PrepareGuideMedia(wanRefs.EndRaw, ctx.SourceMedia, scaleToSourceSize: false)
             : null;
 
-        RunNativeStage(stage, ctx.Plan, ctx.SourceMedia, guideMedia, ctx.PriorOutputPath, wanEndPrepared);
+        RunNativeStage(stage, ctx.Plan, ctx.SourceMedia, guideMedia, ctx.PriorOutputPath, wanEndPrepared, clipContext);
     }
 
     private void RunNativeStage(
@@ -155,7 +150,8 @@ internal class StageRunner(
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         JArray priorOutputPath,
-        WGNodeData wanEndPrepared)
+        WGNodeData wanEndPrepared,
+        ClipContext clipContext)
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
         g.CurrentMedia = guideMedia ?? sourceMedia;
@@ -169,7 +165,7 @@ internal class StageRunner(
         {
             CollapseWanStartImageScaleChain(currentGenInfo);
             WanFirstLastFrameRewriter.TryRewriteToFirstLast(g, stage, currentGenInfo, wanEndPrepared);
-            ApplyWanConditioningHandoff(stage, currentGenInfo);
+            ApplyWanConditioningHandoff(stage, currentGenInfo, clipContext);
         });
 
         g.CreateImageToVideo(genInfo);
@@ -182,38 +178,36 @@ internal class StageRunner(
 
     private void ApplyWanConditioningHandoff(
         JsonParser.StageSpec stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        ClipContext clipContext)
     {
         if (!ShouldReuseWanConditioningHandoff(stage, genInfo))
         {
-            if (stage.ClipStageIndex == 0)
-            {
-                lastWanConditioningHandoff = null;
-            }
             return;
         }
 
         if (stage.ClipStageIndex == 0)
         {
-            lastWanConditioningHandoff = new WanConditioningHandoff(
+            clipContext.LastWanConditioningHandoff = new WanConditioningHandoff(
                 stage.ClipId,
                 CopyPath(genInfo.PosCond),
                 CopyPath(genInfo.NegCond));
             return;
         }
 
-        if (lastWanConditioningHandoff is null
-            || lastWanConditioningHandoff.ClipId != stage.ClipId
-            || lastWanConditioningHandoff.Positive is null
-            || lastWanConditioningHandoff.Negative is null)
+        WanConditioningHandoff handoff = clipContext.LastWanConditioningHandoff;
+        if (handoff is null
+            || handoff.ClipId != stage.ClipId
+            || handoff.Positive is null
+            || handoff.Negative is null)
         {
             return;
         }
 
         JArray stalePositive = CopyPath(genInfo.PosCond);
         JArray staleNegative = CopyPath(genInfo.NegCond);
-        genInfo.PosCond = CopyPath(lastWanConditioningHandoff.Positive);
-        genInfo.NegCond = CopyPath(lastWanConditioningHandoff.Negative);
+        genInfo.PosCond = CopyPath(handoff.Positive);
+        genInfo.NegCond = CopyPath(handoff.Negative);
         RemoveUnusedWanConditioningHandoff(stalePositive, staleNegative);
     }
 

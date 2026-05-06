@@ -229,4 +229,41 @@ public partial class StageFlowTests
         AssertStageLtxConcatsReuseFirstStageAudio(workflow, originalSeparate);
         AssertWorkflowHasNoCycles(workflow);
     }
+
+    [Fact]
+    public void Skip_rest_of_clip_after_guide_ref_miss_does_not_cascade_to_next_clip()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = MakeRootConfig(
+            width: 512,
+            height: 512,
+            MakeClip(
+                width: 512,
+                height: 512,
+                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10),
+                MakeStage(models.VideoModel.Name, "edit99", control: 0.5, steps: 10)),
+            MakeClip(
+                width: 512,
+                height: 512,
+                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10))
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        IReadOnlyList<WorkflowNode> samplerNodes = WorkflowAssertions.NodesOfAnyType(
+            workflow,
+            "KSamplerAdvanced",
+            "SwarmKSampler");
+        Assert.Equal(2, samplerNodes.Count);
+
+        IReadOnlyList<WorkflowNode> conditioningNodes = WorkflowAssertions.NodesOfType(workflow, "LTXVConditioning");
+        Assert.Equal(2, conditioningNodes.Count);
+    }
 }

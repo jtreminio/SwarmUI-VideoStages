@@ -520,6 +520,64 @@ public class AudioInjectionTests
     }
 
     [Fact]
+    public void Multi_clip_parallel_merge_produces_batch_image_node_routing_to_g_current_media()
+    {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
+        UnitTestStubs.EnsureComfyVideoParamsRegistered();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = MakeMultiClipRootConfig(
+            MakeClipConfigWithUpload(
+                MakeUploadedAudio(data: "data:audio/wav;base64,QUFB", fileName: "first.wav"),
+                MakeStage(models.VideoModel.Name)),
+            MakeClipConfigWithUpload(
+                MakeUploadedAudio(data: "data:audio/wav;base64,QkJC", fileName: "second.wav"),
+                MakeStage(models.VideoModel.Name))
+        ).ToString();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            stagesJson);
+
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps("SaveAudioMP3"));
+
+        WorkflowNode batchImagesNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "BatchImagesNode"));
+        WorkflowNode audioConcatNode = Assert.Single(WorkflowAssertions.NodesOfType(workflow, "AudioConcat"));
+
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray(batchImagesNode.Id, 0)));
+
+        IReadOnlyList<WorkflowNode> samplers = WorkflowAssertions.NodesOfAnyType(
+            workflow,
+            "KSamplerAdvanced",
+            "SwarmKSampler");
+        Assert.Equal(2, samplers.Count);
+
+        JObject batchInputs = (JObject)batchImagesNode.Node["inputs"];
+        List<JArray> batchImagePaths = batchInputs.Properties()
+            .Where(p => p.Value is JArray { Count: 2 })
+            .Select(p => (JArray)p.Value)
+            .ToList();
+        Assert.Equal(2, batchImagePaths.Count);
+        foreach (JArray path in batchImagePaths)
+        {
+            Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, path, sampler.Id));
+        }
+        Assert.NotEqual($"{batchImagePaths[0][0]}", $"{batchImagePaths[1][0]}");
+
+        JArray audio1 = WorkflowAssertions.RequireConnectionInput(audioConcatNode.Node, "audio1");
+        JArray audio2 = WorkflowAssertions.RequireConnectionInput(audioConcatNode.Node, "audio2");
+        Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, audio1, sampler.Id));
+        Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, audio2, sampler.Id));
+
+        Assert.NotNull(generator.CurrentMedia.AttachedAudio);
+        Assert.True(JToken.DeepEquals(
+            generator.CurrentMedia.AttachedAudio.Path,
+            new JArray(audioConcatNode.Id, 0)));
+    }
+
+    [Fact]
     public void Save_audio_stage_uses_clip_uploaded_audio_when_switching_from_native_to_upload_clip()
     {
         using SwarmUiTestContext _ = new();
