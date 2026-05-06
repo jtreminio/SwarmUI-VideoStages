@@ -16,6 +16,9 @@ internal sealed class ClipContext
     public WGNodeData SourceMedia { get; }
     public WGNodeData SourceVae { get; }
     public WanConditioningHandoff LastWanConditioningHandoff { get; set; }
+
+    public bool IsFirstStage(JsonParser.StageSpec stage) =>
+        Clip.Stages.Count > 0 && Clip.Stages[0].Id == stage.Id;
 }
 
 internal sealed record WanConditioningHandoff(

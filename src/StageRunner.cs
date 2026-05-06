@@ -47,7 +47,7 @@ internal class StageRunner(
             stage.ClipId,
             sectionId);
 
-        StageContext ctx = PrepareStage(stage, sectionId);
+        StageContext ctx = PrepareStage(stage, sectionId, clipContext);
         if (ctx is null)
         {
             return;
@@ -88,11 +88,11 @@ internal class StageRunner(
         CleanupReplacedTextToVideoRootStage(ctx.PriorOutputPath, ctx.ReplacesTextToVideoRoot);
     }
 
-    private StageContext PrepareStage(JsonParser.StageSpec stage, int sectionId)
+    private StageContext PrepareStage(JsonParser.StageSpec stage, int sectionId, ClipContext clipContext)
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(stage);
-        bool replaceTextToVideoRootStage = stage.ClipStageIndex == 0
+        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage)
             && RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         LtxPostVideoChainCapture postVideoChain = replaceTextToVideoRootStage
             ? null
@@ -160,7 +160,7 @@ internal class StageRunner(
             ? AltImageToVideoScope.Post(genInfo, generationPlan.ApplySourceVideoLatent)
             : null;
         using IDisposable wanPreScope = AltImageToVideoScope.Pre(genInfo, currentGenInfo =>
-            ApplyWanStillImageMediaLenBypass(currentGenInfo, stage, sourceMedia));
+            ApplyWanStillImageMediaLenBypass(currentGenInfo, stage, sourceMedia, clipContext));
         using IDisposable wanPostScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
             CollapseWanStartImageScaleChain(currentGenInfo);
@@ -186,7 +186,7 @@ internal class StageRunner(
             return;
         }
 
-        if (stage.ClipStageIndex == 0)
+        if (clipContext.IsFirstStage(stage))
         {
             clipContext.LastWanConditioningHandoff = new WanConditioningHandoff(
                 stage.ClipId,
@@ -478,11 +478,12 @@ internal class StageRunner(
     private static void ApplyWanStillImageMediaLenBypass(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         JsonParser.StageSpec stage,
-        WGNodeData sourceMedia)
+        WGNodeData sourceMedia,
+        ClipContext clipContext)
     {
         WorkflowGenerator workflowGenerator = genInfo.Generator;
         if (!VideoStageModelCompat.SupportsWanFirstLastFrame(genInfo.VideoModel)
-            || stage.ClipStageIndex != 0
+            || !clipContext.IsFirstStage(stage)
             || sourceMedia.DataType == WGNodeData.DT_VIDEO
             || workflowGenerator.CurrentMedia is null
             || workflowGenerator.CurrentMedia.DataType == WGNodeData.DT_VIDEO)
