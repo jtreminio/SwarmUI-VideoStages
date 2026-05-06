@@ -53,28 +53,28 @@ public class VideoStagesExtension : Extension
         RootVideoStageResizer.RegisterHandlers();
 
         WorkflowGenerator.AddStep(
-            g => new Runner(g).CaptureCoreVideoControlNetPreprocessors(),
+            Runner.CaptureCoreVideoControlNetPreprocessors,
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).EnsureRootVideoStageModel(),
+            Runner.EnsureRootVideoStageModel,
             Constants.WorkflowStepPriority.EnsureRootVideoStageModel);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).CaptureBase(),
+            Runner.CaptureBase,
             Constants.WorkflowStepPriority.CaptureBase);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).CaptureRefiner(),
+            Runner.CaptureRefiner,
             Constants.WorkflowStepPriority.CaptureRefiner);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).CapturePreCoreVideoMedia(),
+            Runner.CapturePreCoreVideoMedia,
             Constants.WorkflowStepPriority.CapturePreCoreVideoMedia);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).DropCoreImageToVideoOutput(),
+            Runner.DropCoreImageToVideoOutput,
             Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).ApplyRootAudioMaskDimensionsAfterNativeVideo(),
+            Runner.ApplyRootAudioMaskDimensionsAfterNativeVideo,
             Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).RunConfiguredStages(),
+            Runner.RunConfiguredStages,
             Constants.WorkflowStepPriority.RunConfiguredStages);
     }
 

@@ -59,7 +59,7 @@ internal sealed class RootVideoStageResizer(
             return false;
         }
 
-        resizer = new Runner(genInfo.Generator).RootVideoStageResizer;
+        resizer = Runner.GetRootVideoStageResizer(genInfo.Generator);
         return resizer.TryGetRootStageResolution(out width, out height);
     }
 

@@ -287,7 +287,7 @@ public class AudioInjectionTests
         WorkflowGenerator generator = CreateInjectorGenerator(workflow);
         AudioStageDetector.Detection detection = new AudioStageDetector(generator).Detect();
 
-        Assert.True(new Runner(generator).TryInjectLtxAudio(detection));
+        Assert.True(Runner.TryInjectLtxAudio(generator, detection));
 
         WorkflowNode lengthToFrames = WorkflowAssertions.RequireNodeOfType(workflow, SwarmAudioLengthToFrames);
         Assert.True(JToken.DeepEquals(

@@ -13,22 +13,11 @@ internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
     JsonParser jsonParser,
     RootVideoStageHandoff rootVideoStageHandoff,
-    StageRefStore stageRefStore,
     StageSequenceRunner stageSequenceRunner,
     AudioStageDetector audioStageDetector,
     LtxManager ltxManager)
 {
     private const int FinalStageSaveId = 52200;
-
-    public void CaptureBase()
-    {
-        CaptureIfStagesConfigured(StageRefStore.StageKind.Base);
-    }
-
-    public void CaptureRefiner()
-    {
-        CaptureIfStagesConfigured(StageRefStore.StageKind.Refiner);
-    }
 
     public void RunConfiguredStages()
     {
@@ -92,16 +81,6 @@ internal sealed class VideoStagesCoordinator(
         throw new SwarmUserErrorException(
             "VideoStages ControlNet LoRA requires the ComfyUI-LTXVideo custom nodes. "
             + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
-    }
-
-    private void CaptureIfStagesConfigured(StageRefStore.StageKind kind)
-    {
-        if (!HasConfiguredStages())
-        {
-            return;
-        }
-
-        stageRefStore.Capture(kind);
     }
 
     private void TryInjectConfiguredAudio(List<JsonParser.ClipSpec> clips)
@@ -239,26 +218,6 @@ internal sealed class VideoStagesCoordinator(
         }
 
         return null;
-    }
-
-    private bool HasConfiguredStages()
-    {
-        T2IParamType type = VideoStagesExtension.VideoStagesJson?.Type;
-        if (type is null
-            || !g.UserInput.TryGetRaw(type, out object rawValue)
-            || rawValue is not string json
-            || string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> trimmed = json.AsSpan().Trim();
-        if (trimmed.Length == 2 && trimmed[0] == '[' && trimmed[1] == ']')
-        {
-            return false;
-        }
-
-        return jsonParser.ParseStages().Count > 0;
     }
 
     private void EnsureFinalStageOutputSaved()

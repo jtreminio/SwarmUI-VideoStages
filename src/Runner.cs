@@ -4,42 +4,159 @@ using VideoStages.LTX2;
 
 namespace VideoStages;
 
-public class Runner
+// Orchestration map — phases run in priority order during WorkflowGenerator.Generate.
+// Registrations live in VideoStagesExtension.OnInit; numeric priorities in Constants.WorkflowStepPriority.
+//
+// #  Pri    Phase                                         Reads                                          Writes / clears
+// -  -----  --------------------------------------------  ---------------------------------------------  ----------------------------------------------------
+// 1  -5.9   CaptureCoreVideoControlNetPreprocessors       —                                              writes videostages.controlnet.fullimage.{i}
+// 2  -4.3   EnsureRootVideoStageModel                     —                                              writes videostages.synth-root-video-model
+// 3  -4.2   CaptureBase                                   —                                              writes StageRefStore.Base
+// 4   5.9   CaptureRefiner                                —                                              writes StageRefStore.Refiner
+// 5  10.95  CapturePreCoreVideoMedia                      —                                              writes StageRefStore.PreRootVideo,
+//                                                                                                                videostages.pre-core-node-ids
+// 6  11.05  DropCoreImageToVideoOutput                    StageRefStore.PreRootVideo,                    clears both above
+//                                                         videostages.pre-core-node-ids
+// 7  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
+// 8  11.5   RunConfiguredStages                           StageRefStore.Base/Refiner,                    writes StageRefStore.Generated (intra-phase fallback only),
+//                                                         videostages.controlnet.fullimage.{i},          clears videostages.synth-root-video-model
+//                                                         videostages.synth-root-video-model
+//
+// Non-phase entry points (NOT registered as workflow steps — called from outside the pipeline):
+//   TryInjectLtxAudio         Tests/AudioInjectionTests — unit-level audio injection coverage.
+//   GetRootVideoStageResizer  RootVideoStageResizer.RegisterHandlers — static AltImageToVideo handlers.
+public static class Runner
 {
-    private readonly WorkflowGenerator g;
-    private readonly JsonParser jsonParser;
-    private readonly RootVideoStageHandoff rootVideoStageHandoff;
-    private readonly VideoStagesCoordinator coordinator;
-    private readonly StageGuideMediaHelper stageGuideMediaHelper;
-    private readonly RootVideoStageResizer rootVideoStageResizer;
-    private readonly StageRefStore stageRefStore;
-    private readonly AudioStageDetector audioStageDetector;
-    private readonly Base2EditPublishedStageRefs base2EditPublishedStageRefs;
-    private readonly MultiClipParallelMerger multiClipParallelMerger;
-    private readonly LtxManager ltxManager;
-    private readonly StageRunner stageRunner;
-    private readonly StageSequenceRunner stageSequenceRunner;
-
-    public Runner(WorkflowGenerator g)
+    public static void CaptureCoreVideoControlNetPreprocessors(WorkflowGenerator g)
     {
-        this.g = g;
-        jsonParser = new JsonParser(g);
-        stageRefStore = new StageRefStore(g);
-        rootVideoStageHandoff = new RootVideoStageHandoff(g, jsonParser, stageRefStore);
-        stageGuideMediaHelper = new StageGuideMediaHelper(g);
-        rootVideoStageResizer = new RootVideoStageResizer(g, rootVideoStageHandoff, jsonParser);
-        audioStageDetector = new AudioStageDetector(g);
-        base2EditPublishedStageRefs = new Base2EditPublishedStageRefs(g);
-        multiClipParallelMerger = new MultiClipParallelMerger(g);
-        ltxManager = new LtxManager(
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        ControlNetApplicator.CaptureCoreVideoControlNetPreprocessors(g);
+    }
+
+    public static void EnsureRootVideoStageModel(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        JsonParser jsonParser = new(g);
+        StageRefStore stageRefStore = new(g);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        rootVideoStageHandoff.EnsureRootVideoStageModel();
+    }
+
+    public static void CaptureBase(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        JsonParser jsonParser = new(g);
+        if (!HasConfiguredStages(g, jsonParser))
+        {
+            return;
+        }
+
+        StageRefStore stageRefStore = new(g);
+        stageRefStore.Capture(StageRefStore.StageKind.Base);
+    }
+
+    public static void CaptureRefiner(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        JsonParser jsonParser = new(g);
+        if (!HasConfiguredStages(g, jsonParser))
+        {
+            return;
+        }
+
+        StageRefStore stageRefStore = new(g);
+        stageRefStore.Capture(StageRefStore.StageKind.Refiner);
+    }
+
+    public static void CapturePreCoreVideoMedia(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        JsonParser jsonParser = new(g);
+        StageRefStore stageRefStore = new(g);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        rootVideoStageHandoff.CapturePreCoreVideoMedia();
+    }
+
+    public static void DropCoreImageToVideoOutput(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        JsonParser jsonParser = new(g);
+        StageRefStore stageRefStore = new(g);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        rootVideoStageHandoff.DropCoreImageToVideoOutput();
+    }
+
+    public static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        JsonParser jsonParser = new(g);
+        StageRefStore stageRefStore = new(g);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff, jsonParser);
+        StageGuideMediaHelper stageGuideMediaHelper = new(g);
+        Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
+        LtxManager ltxManager = new(
             g,
             jsonParser,
             rootVideoStageHandoff,
             rootVideoStageResizer,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs);
-        stageRunner = new StageRunner(g, stageGuideMediaHelper, ltxManager, base2EditPublishedStageRefs);
-        stageSequenceRunner = new StageSequenceRunner(
+        ltxManager.ApplyRootAudioMaskDimensionsAfterNativeVideo();
+    }
+
+    public static void RunConfiguredStages(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return;
+        }
+
+        JsonParser jsonParser = new(g);
+        StageRefStore stageRefStore = new(g);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff, jsonParser);
+        StageGuideMediaHelper stageGuideMediaHelper = new(g);
+        AudioStageDetector audioStageDetector = new(g);
+        Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
+        MultiClipParallelMerger multiClipParallelMerger = new(g);
+        LtxManager ltxManager = new(
+            g,
+            jsonParser,
+            rootVideoStageHandoff,
+            rootVideoStageResizer,
+            stageGuideMediaHelper,
+            base2EditPublishedStageRefs);
+        StageRunner stageRunner = new(g, stageGuideMediaHelper, ltxManager, base2EditPublishedStageRefs);
+        StageSequenceRunner stageSequenceRunner = new(
             g,
             stageRefStore,
             stageRunner,
@@ -48,104 +165,70 @@ public class Runner
             rootVideoStageResizer,
             multiClipParallelMerger,
             ltxManager);
-        coordinator = new VideoStagesCoordinator(
+        VideoStagesCoordinator coordinator = new(
             g,
             jsonParser,
             rootVideoStageHandoff,
-            stageRefStore,
             stageSequenceRunner,
             audioStageDetector,
             ltxManager);
-    }
-
-    internal RootVideoStageResizer RootVideoStageResizer => rootVideoStageResizer;
-
-    public bool TryInjectLtxAudio(AudioStageDetector.Detection detection, bool matchVideoLengthToAudio = true) =>
-        ltxManager.TryInjectAudio(detection, matchVideoLengthToAudio);
-
-    public void CaptureCoreVideoControlNetPreprocessors()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
-        ControlNetApplicator.CaptureCoreVideoControlNetPreprocessors(g);
-    }
-
-    public void EnsureRootVideoStageModel()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
-        rootVideoStageHandoff.EnsureRootVideoStageModel();
-    }
-
-    public void CaptureBase()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
-        coordinator.CaptureBase();
-    }
-
-    public void CaptureRefiner()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
-        coordinator.CaptureRefiner();
-    }
-
-    public void CapturePreCoreVideoMedia()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
-        rootVideoStageHandoff.CapturePreCoreVideoMedia();
-    }
-
-    public void DropCoreImageToVideoOutput()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
-        rootVideoStageHandoff.DropCoreImageToVideoOutput();
-    }
-
-    public void ApplyRootAudioMaskDimensionsAfterNativeVideo()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
-        ltxManager.ApplyRootAudioMaskDimensionsAfterNativeVideo();
-    }
-
-    public void RunConfiguredStages()
-    {
-        if (!IsExtensionActive())
-        {
-            return;
-        }
-
         coordinator.RunConfiguredStages();
     }
 
-    private bool IsExtensionActive()
+    // --- Non-phase entry points (not registered as workflow steps; see header map) ---
+
+    public static bool TryInjectLtxAudio(
+        WorkflowGenerator g,
+        AudioStageDetector.Detection detection,
+        bool matchVideoLengthToAudio = true)
+    {
+        JsonParser jsonParser = new(g);
+        StageRefStore stageRefStore = new(g);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff, jsonParser);
+        StageGuideMediaHelper stageGuideMediaHelper = new(g);
+        Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
+        LtxManager ltxManager = new(
+            g,
+            jsonParser,
+            rootVideoStageHandoff,
+            rootVideoStageResizer,
+            stageGuideMediaHelper,
+            base2EditPublishedStageRefs);
+        return ltxManager.TryInjectAudio(detection, matchVideoLengthToAudio);
+    }
+
+    internal static RootVideoStageResizer GetRootVideoStageResizer(WorkflowGenerator g)
+    {
+        JsonParser jsonParser = new(g);
+        StageRefStore stageRefStore = new(g);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        return new RootVideoStageResizer(g, rootVideoStageHandoff, jsonParser);
+    }
+
+    private static bool IsExtensionActive(WorkflowGenerator g)
     {
         T2IParamType type = VideoStagesExtension.VideoStagesJson?.Type;
         return type is not null && g.UserInput.TryGetRaw(type, out _);
+    }
+
+    private static bool HasConfiguredStages(WorkflowGenerator g, JsonParser jsonParser)
+    {
+        T2IParamType type = VideoStagesExtension.VideoStagesJson?.Type;
+        if (type is null
+            || !g.UserInput.TryGetRaw(type, out object rawValue)
+            || rawValue is not string json
+            || string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> trimmed = json.AsSpan().Trim();
+        if (trimmed.Length == 2 && trimmed[0] == '[' && trimmed[1] == ']')
+        {
+            return false;
+        }
+
+        return jsonParser.ParseStages().Count > 0;
     }
 }
