@@ -122,7 +122,6 @@ public partial class StageFlowTests
             new JArray(samplerNodes[0].Id, 0)));
 
         WorkflowNode finalVideoDecode = AsWorkflowNode(RequireTypedNode<VAEDecodeNode>(bridge, "202"), workflow);
-        AssertLtxFinalDecodeUsesPlainVaeDecode(finalVideoDecode);
         RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -162,8 +161,8 @@ public partial class StageFlowTests
         AssertSamplerConsumesImgToVideoOutput(workflow, AsWorkflowNode(imgToVideoNodes[1], workflow), AsWorkflowNode(samplers[1], workflow));
         IReadOnlyList<WorkflowNode> conditioningNodes = AssertLtxConditioningUsesAdvancedEncoders(workflow);
         Assert.Equal(2, conditioningNodes.Count);
-        AssertSamplerUsesConditioningNode(AsWorkflowNode(samplers[0], workflow), conditioningNodes[0]);
-        AssertSamplerUsesConditioningNode(AsWorkflowNode(samplers[1], workflow), conditioningNodes[1]);
+        AssertSamplerUsesConditioningNode(samplers[0], conditioningNodes[0].Id);
+        AssertSamplerUsesConditioningNode(samplers[1], conditioningNodes[1].Id);
 
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.Equal("9", saveNode.Id);
@@ -176,7 +175,6 @@ public partial class StageFlowTests
         AssertStageLtxConcatsUseProgressiveAudio(workflow, originalSeparate);
 
         VAEDecodeNode finalVideoDecode = RequireTypedNode<VAEDecodeNode>(bridge, "202");
-        AssertLtxFinalDecodeUsesPlainVaeDecode(AsWorkflowNode(finalVideoDecode, workflow));
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, AsWorkflowNode(finalVideoDecode, workflow));
 
         LTXVAudioVAEDecodeNode finalAudioDecode = RequireTypedNode<LTXVAudioVAEDecodeNode>(bridge, "203");

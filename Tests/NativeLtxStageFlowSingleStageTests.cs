@@ -115,12 +115,11 @@ public partial class StageFlowTests
         Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
 
-        ComfyNode samplerNode = Assert.Single(SamplerNodesOrdered(bridge));
+        SwarmKSamplerNode samplerNode = Assert.Single(SamplerNodesOrdered(bridge));
         WorkflowNode conditioningNode = Assert.Single(AssertLtxConditioningUsesAdvancedEncoders(workflow));
-        AssertSamplerUsesConditioningNode(AsWorkflowNode(samplerNode, workflow), conditioningNode);
+        AssertSamplerUsesConditioningNode(samplerNode, conditioningNode.Id);
 
         VAEDecodeNode finalVideoDecode = RequireTypedNode<VAEDecodeNode>(bridge, "202");
-        AssertLtxFinalDecodeUsesPlainVaeDecode(AsWorkflowNode(finalVideoDecode, workflow));
         RequireRetargetedSeparateNode(workflow, AsWorkflowNode(finalVideoDecode, workflow));
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -213,7 +212,7 @@ public partial class StageFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         VAEDecodeTiledNode finalVideoDecode = RequireTypedNode<VAEDecodeTiledNode>(bridge, "202");
-        AssertLtxFinalTiledDecodeUsesTiling(AsWorkflowNode(finalVideoDecode, workflow), 960, 96, 512, 12);
+        AssertLtxFinalTiledDecodeUsesTiling(finalVideoDecode, 960, 96, 512, 12);
     }
 
     [Fact]
@@ -258,10 +257,10 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>().OrderBy(node => int.Parse(node.Id)));
         Assert.Same(preprocessNode.OutputImage, imgToVideoNode.Image.Connection);
 
-        ComfyNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
+        SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
         AssertSamplerConsumesImgToVideoOutput(workflow, AsWorkflowNode(imgToVideoNode, workflow), AsWorkflowNode(sampler, workflow));
         WorkflowNode conditioningNode = Assert.Single(AssertLtxConditioningUsesAdvancedEncoders(workflow));
-        AssertSamplerUsesConditioningNode(AsWorkflowNode(sampler, workflow), conditioningNode);
+        AssertSamplerUsesConditioningNode(sampler, conditioningNode.Id);
 
         IReadOnlyList<LTXVSeparateAVLatentNode> separateNodes = bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>();
         Assert.True(separateNodes.Count >= 2);
@@ -269,7 +268,6 @@ public partial class StageFlowTests
         AssertStageLtxConcatsReuseOriginalAudio(workflow, originalSeparate);
 
         VAEDecodeNode finalVideoDecode = RequireTypedNode<VAEDecodeNode>(bridge, "202");
-        AssertLtxFinalDecodeUsesPlainVaeDecode(AsWorkflowNode(finalVideoDecode, workflow));
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, AsWorkflowNode(finalVideoDecode, workflow));
 
         LTXVAudioVAEDecodeNode finalAudioDecode = RequireTypedNode<LTXVAudioVAEDecodeNode>(bridge, "203");

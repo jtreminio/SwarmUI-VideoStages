@@ -213,32 +213,16 @@ public partial class StageFlowTests
     }
 
     private static void AssertLtxFinalTiledDecodeUsesTiling(
-        WorkflowNode decodeNode,
+        VAEDecodeTiledNode decodeNode,
         int tileSize,
         int overlap,
         int temporalSize,
         int temporalOverlap)
     {
-        Assert.Equal("VAEDecodeTiled", $"{decodeNode.Node["class_type"]}");
-        Assert.True(decodeNode.Node["inputs"] is JObject, "Expected tiled decode node to have inputs.");
-        JObject inputs = (JObject)decodeNode.Node["inputs"];
-        Assert.Equal(tileSize, inputs.Value<int>("tile_size"));
-        Assert.Equal(overlap, inputs.Value<int>("overlap"));
-        Assert.Equal(temporalSize, inputs.Value<int>("temporal_size"));
-        Assert.Equal(temporalOverlap, inputs.Value<int>("temporal_overlap"));
-    }
-
-    private static void AssertLtxFinalDecodeUsesPlainVaeDecode(WorkflowNode decodeNode)
-    {
-        Assert.Equal("VAEDecode", $"{decodeNode.Node["class_type"]}");
-        Assert.True(decodeNode.Node["inputs"] is JObject, "Expected decode node to have inputs.");
-        JObject inputs = (JObject)decodeNode.Node["inputs"];
-        Assert.True(inputs["vae"] is JArray, "Expected decode node to have a VAE input.");
-        Assert.True(inputs["samples"] is JArray, "Expected decode node to have a samples input.");
-        Assert.False(inputs.ContainsKey("tile_size"));
-        Assert.False(inputs.ContainsKey("overlap"));
-        Assert.False(inputs.ContainsKey("temporal_size"));
-        Assert.False(inputs.ContainsKey("temporal_overlap"));
+        Assert.Equal(tileSize, decodeNode.TileSize.LiteralAsInt());
+        Assert.Equal(overlap, decodeNode.Overlap.LiteralAsInt());
+        Assert.Equal(temporalSize, decodeNode.TemporalSize.LiteralAsInt());
+        Assert.Equal(temporalOverlap, decodeNode.TemporalOverlap.LiteralAsInt());
     }
 
     private static void AssertStageLtxConcatsReuseOriginalAudio(JObject workflow, WorkflowNode originalSeparate)
@@ -350,13 +334,12 @@ public partial class StageFlowTests
         return [.. conditioningNodes.Select(node => AsWorkflowNode(node, workflow))];
     }
 
-    private static void AssertSamplerUsesConditioningNode(WorkflowNode samplerNode, WorkflowNode conditioningNode)
+    private static void AssertSamplerUsesConditioningNode(SwarmKSamplerNode sampler, string conditioningNodeId)
     {
-        JObject sampler = samplerNode.Node;
-        Assert.True(sampler["inputs"] is JObject, "Expected sampler node to have inputs.");
-        JObject inputs = (JObject)sampler["inputs"];
-        Assert.True(JToken.DeepEquals(inputs["positive"], new JArray(conditioningNode.Id, 0)));
-        Assert.True(JToken.DeepEquals(inputs["negative"], new JArray(conditioningNode.Id, 1)));
+        Assert.Equal(conditioningNodeId, sampler.Positive.Connection!.Node.Id);
+        Assert.Equal(0, sampler.Positive.Connection.SlotIndex);
+        Assert.Equal(conditioningNodeId, sampler.Negative.Connection!.Node.Id);
+        Assert.Equal(1, sampler.Negative.Connection.SlotIndex);
     }
 
     private static bool OutputTracesBackToSource(JObject workflow, JArray outputRef, JArray expectedSourceRef)

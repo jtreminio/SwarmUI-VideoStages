@@ -27,11 +27,10 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        List<string> conditioningTexts = workflow.Properties()
-            .Select(property => property.Value)
-            .OfType<JObject>()
-            .Select(node => $"{node["inputs"]?["text"]}")
-            .Where(text => !string.IsNullOrWhiteSpace(text) && text != "null")
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        List<string> conditioningTexts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
+            .Select(n => n.Text.LiteralAsString())
+            .Where(text => !string.IsNullOrWhiteSpace(text))
             .ToList();
 
         Assert.NotEmpty(conditioningTexts);
@@ -52,11 +51,10 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
-        List<string> conditioningTexts = workflow.Properties()
-            .Select(property => property.Value)
-            .OfType<JObject>()
-            .Select(node => $"{node["inputs"]?["text"]}")
-            .Where(text => !string.IsNullOrWhiteSpace(text) && text != "null")
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        List<string> conditioningTexts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
+            .Select(n => n.Text.LiteralAsString())
+            .Where(text => !string.IsNullOrWhiteSpace(text))
             .ToList();
 
         Assert.NotEmpty(conditioningTexts);

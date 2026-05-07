@@ -38,56 +38,61 @@ public class AceStepFunAudioSavePrunerTests
     public void Apply_RemovesAceStepFunSaveNode_WhenSelectedTrackDoesNotSaveAudio()
     {
         JObject workflow = [];
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
 
-        VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
+            SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
+            save1.Audio.ConnectTo(decode.AUDIO);
+            bridge.AddNode(save1, "64170");
 
-        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-        save1.Audio.ConnectTo(decode.AUDIO);
-        bridge.AddNode(save1, "64170");
-
-        SaveAudioMP3Node save2 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
-        bridge.AddNode(save2, "64270");
+            SaveAudioMP3Node save2 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
+            bridge.AddNode(save2, "64270");
+        }
 
         AceStepFunAudioSavePruner.Apply(
             CreateGenerator(workflow),
             [Clip(id: 0, audioSource: "audio0", saveAudioTrack: false)]);
 
-        Assert.False(workflow.ContainsKey("64170"));
-        Assert.True(workflow.ContainsKey("64270"));
-        Assert.True(workflow.ContainsKey("64160"));
+        using WorkflowBridge after = WorkflowBridge.Create(workflow);
+        Assert.Null(after.Graph.GetNode<SaveAudioMP3Node>("64170"));
+        Assert.NotNull(after.Graph.GetNode<SaveAudioMP3Node>("64270"));
+        Assert.NotNull(after.Graph.GetNode<VAEDecodeAudioNode>("64160"));
     }
 
     [Fact]
     public void Apply_KeepsAceStepFunSaveNode_WhenSelectedTrackSavesAudio()
     {
         JObject workflow = [];
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
 
-        VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
-
-        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-        save1.Audio.ConnectTo(decode.AUDIO);
-        bridge.AddNode(save1, "64170");
+            SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
+            save1.Audio.ConnectTo(decode.AUDIO);
+            bridge.AddNode(save1, "64170");
+        }
 
         AceStepFunAudioSavePruner.Apply(
             CreateGenerator(workflow),
             [Clip(id: 0, audioSource: "audio0", saveAudioTrack: true)]);
 
-        Assert.True(workflow.ContainsKey("64170"));
+        using WorkflowBridge after = WorkflowBridge.Create(workflow);
+        Assert.NotNull(after.Graph.GetNode<SaveAudioMP3Node>("64170"));
     }
 
     [Fact]
     public void Apply_KeepsOnlySelectedAceStepFunTracksMarkedForSaving()
     {
         JObject workflow = [];
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
+            bridge.AddNode(save1, "64170");
 
-        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-        bridge.AddNode(save1, "64170");
-
-        SaveAudioMP3Node save2 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
-        bridge.AddNode(save2, "64270");
+            SaveAudioMP3Node save2 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
+            bridge.AddNode(save2, "64270");
+        }
 
         AceStepFunAudioSavePruner.Apply(
             CreateGenerator(workflow),
@@ -96,23 +101,26 @@ public class AceStepFunAudioSavePrunerTests
                 Clip(id: 1, audioSource: "audio1", saveAudioTrack: true)
             ]);
 
-        Assert.False(workflow.ContainsKey("64170"));
-        Assert.True(workflow.ContainsKey("64270"));
+        using WorkflowBridge after = WorkflowBridge.Create(workflow);
+        Assert.Null(after.Graph.GetNode<SaveAudioMP3Node>("64170"));
+        Assert.NotNull(after.Graph.GetNode<SaveAudioMP3Node>("64270"));
     }
 
     [Fact]
     public void Apply_KeepsAceStepFunSaveNodes_WhenNoAceStepFunTrackIsSelected()
     {
         JObject workflow = [];
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-        bridge.AddNode(save1, "64170");
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
+            bridge.AddNode(save1, "64170");
+        }
 
         AceStepFunAudioSavePruner.Apply(
             CreateGenerator(workflow),
             [Clip(id: 0, audioSource: "Native", saveAudioTrack: false)]);
 
-        Assert.True(workflow.ContainsKey("64170"));
+        using WorkflowBridge after = WorkflowBridge.Create(workflow);
+        Assert.NotNull(after.Graph.GetNode<SaveAudioMP3Node>("64170"));
     }
 }
