@@ -216,8 +216,6 @@ public class ImageReferenceTests
     {
         using SwarmUiTestContext testContext = new();
         _ = WorkflowTestHarness.VideoStagesSteps();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
 
         T2IParamInput input = BuildInput(StageFlowTests.JsonSingleClipStages512(
             new JObject

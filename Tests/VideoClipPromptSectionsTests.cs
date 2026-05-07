@@ -17,8 +17,6 @@ public partial class StageFlowTests
     public void Native_stage_prompting_uses_videoclip_prompt_sections()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -45,8 +43,6 @@ public partial class StageFlowTests
     public void Native_stage_prompting_falls_back_to_global_prompt_without_matching_videoclip_section()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -72,8 +68,6 @@ public partial class StageFlowTests
     public void Native_ltx_stage_prompting_uses_videoclip_prompt_sections()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -145,8 +139,6 @@ public partial class StageFlowTests
     public void Videoclip_scoped_lora_applies_only_to_target_clip()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         WorkflowGenerator.AddModelGenStep(g =>
         {
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
@@ -188,8 +180,6 @@ public partial class StageFlowTests
     public void Videoclip_bracket_clip_stage_prompt_lora_is_promoted_for_flat_stage_section()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         WorkflowGenerator.AddModelGenStep(g =>
         {
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
@@ -220,8 +210,6 @@ public partial class StageFlowTests
     public void Controlnet_lora_dropdown_uses_ltx_ic_model_only_loader()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };

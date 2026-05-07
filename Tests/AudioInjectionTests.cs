@@ -267,8 +267,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_injects_audio_into_native_ltx_video_chain_without_configured_stages()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]");
@@ -303,8 +301,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_does_not_inject_uploaded_audio_when_upload_is_requested_without_payload()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeRootConfig(
@@ -337,8 +333,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_injects_uploaded_audio_when_upload_is_requested()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeRootConfig(
@@ -379,8 +373,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_matches_video_length_to_uploaded_audio_when_enabled()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClipConfigWithUpload(
@@ -417,8 +409,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_injects_audio_into_native_ltx_video_chain_before_stages_run()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(MakeClip(512, 512, MakeStage(models.VideoModel.Name))).ToString();
@@ -457,8 +447,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_creates_one_load_audio_node_per_upload_mode_clip()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeMultiClipRootConfig(
@@ -486,8 +474,6 @@ public class AudioInjectionTests
     public void Multi_clip_parallel_merge_produces_batch_image_node_routing_to_g_current_media()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeMultiClipRootConfig(
@@ -543,8 +529,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_uses_clip_uploaded_audio_when_switching_from_native_to_upload_clip()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeMultiClipRootConfig(
@@ -574,8 +558,6 @@ public class AudioInjectionTests
     public void Save_audio_stage_uses_root_stage_resolution_for_injected_audio_mask()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(

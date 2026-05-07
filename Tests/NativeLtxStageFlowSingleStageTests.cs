@@ -14,8 +14,6 @@ public partial class StageFlowTests
     public void Native_ltx_stage_prompting_uses_video_prompt_sections()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -36,8 +34,6 @@ public partial class StageFlowTests
     public void Native_ltx_generated_reference_reuses_current_video_chain_even_if_current_vae_was_reset()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -62,8 +58,6 @@ public partial class StageFlowTests
     public void Native_ltx_stage_can_use_base2edit_edit_stage_as_clip_ref_image()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10);
@@ -93,8 +87,6 @@ public partial class StageFlowTests
     public void Missing_base2edit_edit_stage_reference_skips_stage_without_throwing()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -113,8 +105,6 @@ public partial class StageFlowTests
     public void Native_ltx_generated_reference_on_live_output_skips_redundant_guide_reinjection()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -143,8 +133,6 @@ public partial class StageFlowTests
     public void Native_ltx_zero_trim_parameters_do_not_insert_noop_trim_wrapper()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -165,8 +153,6 @@ public partial class StageFlowTests
     public void Native_ltx_latent_model_upscale_keeps_core_default_guide_source_when_no_clip_refs_are_defined()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -196,8 +182,6 @@ public partial class StageFlowTests
     public void Native_ltx_stage_uses_core_default_strength_without_stage_ref_override()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -216,8 +200,6 @@ public partial class StageFlowTests
     public void Native_ltx_final_decode_uses_core_vae_tiling_overrides()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -240,8 +222,6 @@ public partial class StageFlowTests
     public void Native_ltx_wrapper_chain_reuses_decode_audio_and_save_without_duplicate_trim()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(

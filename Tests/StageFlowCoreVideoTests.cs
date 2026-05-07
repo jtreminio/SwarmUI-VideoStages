@@ -228,8 +228,6 @@ public partial class StageFlowTests
     public void Configured_video_stages_without_native_image_to_video_toggle_run_from_stage_model()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -249,8 +247,6 @@ public partial class StageFlowTests
     public void Single_stage_on_native_video_workflow_adds_one_sampler_and_reuses_final_save()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -272,8 +268,6 @@ public partial class StageFlowTests
     public void Clip_controlnet_source_ignored_for_non_ltx_video_stage_model()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -315,8 +309,6 @@ public partial class StageFlowTests
     public void Clip_controlnet_video_source_reuses_core_preprocessor_for_stage_conditioning()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -370,8 +362,6 @@ public partial class StageFlowTests
     public void Clip_controlnet_diffpatch_video_source_reuses_core_preprocessor_for_stage_model_patch()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -425,8 +415,6 @@ public partial class StageFlowTests
     public void Clip_controlnet_diffpatch_video_source_works_without_root_video_model_param()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -467,8 +455,6 @@ public partial class StageFlowTests
     public void Ltx_ic_lora_controlnet_source_adds_video_guide_without_stage_diffpatch()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -543,8 +529,6 @@ public partial class StageFlowTests
     public void Clip_length_from_controlnet_uses_captured_video_batch_count_for_ltx_lengths()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -607,8 +591,6 @@ public partial class StageFlowTests
     {
         using SwarmUiTestContext _ = new();
         WorkflowTestHarness.VideoStagesSteps();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -662,8 +644,6 @@ public partial class StageFlowTests
     public void Ltx_ic_lora_controlnet_source_unwraps_core_first_frame_for_video_guide()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -725,8 +705,6 @@ public partial class StageFlowTests
     public void Ltx_ic_lora_controlnet_source_inserts_resize_when_core_skipped_preprocessor()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -787,8 +765,6 @@ public partial class StageFlowTests
     public void Ltx_ic_lora_controlnet_source_requires_ltxvideo_nodes()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -827,8 +803,6 @@ public partial class StageFlowTests
     public void Ltx_ic_lora_controlnet_source_uses_stage_controlnet_strength()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -875,8 +849,6 @@ public partial class StageFlowTests
     public void Ltx_ic_lora_controlnet_source_zero_strength_skips_guide_and_crop()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
@@ -917,8 +889,6 @@ public partial class StageFlowTests
     public void Two_defaulted_ltx_stages_use_root_image_refs_and_save_second_stage_audio()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stage0 = MakeStage(models.VideoModel.Name, "Generated", steps: 8);
@@ -975,8 +945,6 @@ public partial class StageFlowTests
     public void Root_stage_resolution_inserts_center_crop_upscale_before_first_native_video_stage_batch_extract()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
@@ -1005,8 +973,6 @@ public partial class StageFlowTests
     public void Root_stage_resolution_prefers_registered_root_params_over_json_dimensions()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = MakeRootConfig(
@@ -1034,8 +1000,6 @@ public partial class StageFlowTests
     public void Root_stage_resolution_ignores_stage_upscale_json_before_first_native_video_stage_batch_extract()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
@@ -1067,8 +1031,6 @@ public partial class StageFlowTests
     public void Root_stage_handoff_does_not_leave_orphan_root_resolution_image_scale_after_pre_video_save()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeRootConfig(
@@ -1103,8 +1065,6 @@ public partial class StageFlowTests
     public void Root_stage_resolution_updates_native_ltxv2_empty_latent_dimensions()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
@@ -1124,8 +1084,6 @@ public partial class StageFlowTests
     public void Ltx_empty_latent_audio_matches_video_stages_fps_not_global_swarm_video_fps()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JObject
@@ -1153,8 +1111,6 @@ public partial class StageFlowTests
     public void Root_ltx_stage_uses_clip_duration_for_frame_count()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JObject
@@ -1187,8 +1143,6 @@ public partial class StageFlowTests
     public void Core_video_workflow_uses_clip_zero_as_root_ltx_stage()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -1212,8 +1166,6 @@ public partial class StageFlowTests
     public void Root_ltx_stage_without_clip_refs_uses_core_default_img_to_video_strength()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
@@ -1242,8 +1194,6 @@ public partial class StageFlowTests
     public void Root_ltx_stage_frame_one_clip_ref_uses_explicit_ref_source_when_it_differs_from_live_stage_input()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
@@ -1275,8 +1225,6 @@ public partial class StageFlowTests
     public void Root_ltx_stage_frame_one_clip_ref_reuses_root_upscale_when_ref_matches_live_stage_input()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
@@ -1305,8 +1253,6 @@ public partial class StageFlowTests
     public void Root_ltx_stage_frame_two_clip_ref_reuses_root_upscale_and_replaces_inplace_with_add_guide()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
@@ -1348,8 +1294,6 @@ public partial class StageFlowTests
     public void Root_and_chained_ltx_stages_replace_inplace_with_add_guide_for_non_first_ref_frame()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
@@ -1382,8 +1326,6 @@ public partial class StageFlowTests
     public void Chained_ltx_latent_model_upscale_uses_video_latent_directly()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
@@ -1417,8 +1359,6 @@ public partial class StageFlowTests
     public void Chained_ltx_latent_model_upscales_preprocess_guides_at_stage_resolution()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
@@ -1476,8 +1416,6 @@ public partial class StageFlowTests
     public void Root_stage_resolution_updates_native_ltxv2_audio_noise_mask_dimensions()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
@@ -1508,8 +1446,6 @@ public partial class StageFlowTests
     public void Root_stage_resolution_updates_native_wan22_latent_dimensions()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22VideoModels();
 
         string stagesJson = new JArray(
@@ -1541,8 +1477,6 @@ public partial class StageFlowTests
     public void Clip_shaped_json_without_stages_does_not_run_additional_stages()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
@@ -1565,8 +1499,6 @@ public partial class StageFlowTests
     public void Text_to_video_root_model_without_video_model_replaces_core_stage_and_ignores_non_upload_refs()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
@@ -1600,8 +1532,6 @@ public partial class StageFlowTests
     public void Text_to_video_chained_ltx_stages_without_upload_refs_reuse_av_latent_directly()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -1631,8 +1561,6 @@ public partial class StageFlowTests
     public void Two_stages_on_native_video_workflow_add_two_samplers_and_keep_single_final_save()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -1655,8 +1583,6 @@ public partial class StageFlowTests
     public void Native_stage_prompting_uses_video_prompt_sections()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = JsonSingleClipStages512(
@@ -1682,8 +1608,6 @@ public partial class StageFlowTests
     public void Wan_14b_single_ref_does_not_batch_expand_start_image_before_wan_node()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
 
         string stagesJson = new JArray(
@@ -1708,8 +1632,6 @@ public partial class StageFlowTests
     public void Wan_14b_chained_single_ref_reuses_root_scale_and_previous_sampler_latent()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
 
         string stagesJson = new JArray(
@@ -1749,8 +1671,6 @@ public partial class StageFlowTests
         int expectedFirstEndStep)
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
 
         string stagesJson = new JArray(
@@ -1794,8 +1714,6 @@ public partial class StageFlowTests
     public void Wan_14b_chained_image_workflow_pixel_upscale_reuses_previous_sampler_latent()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
         T2IModelHandler sdHandler = Program.T2IModelSets["Stable-Diffusion"];
         T2IModel lowNoiseModel = new(sdHandler, "/tmp", "/tmp/UnitTest_Video_Low.safetensors", "UnitTest_Video_Low.safetensors")
@@ -1837,8 +1755,6 @@ public partial class StageFlowTests
     public void Wan_14b_two_refs_rewrites_to_first_last_frame_node_for_sampler_latent()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
 
         string stagesJson = new JArray(
@@ -1866,8 +1782,6 @@ public partial class StageFlowTests
     public void Wan_14b_two_matching_refs_reuses_start_scale_for_end_frame()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
 
         string stagesJson = new JArray(
@@ -1892,8 +1806,6 @@ public partial class StageFlowTests
     public void Wan_14b_two_different_refs_scales_end_frame_once()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
 
         string stagesJson = new JArray(
@@ -1919,8 +1831,6 @@ public partial class StageFlowTests
     public void Wan_14b_chained_two_refs_reuses_first_stage_conditioning()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
 
         string stagesJson = new JArray(
