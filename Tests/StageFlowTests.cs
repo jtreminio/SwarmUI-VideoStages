@@ -196,7 +196,7 @@ public partial class StageFlowTests
         }
 
         Assert.True(decodeNode is VAEDecodeNode or VAEDecodeTiledNode,
-            $"Expected decode node to be VAEDecode or VAEDecodeTiled but found {decodeNode.ClassTypeName}.");
+            $"Expected decode node to be {VAEDecodeNode.ClassType} or {VAEDecodeTiledNode.ClassType} but found {decodeNode.ClassTypeName}.");
         INodeInput samplesInput = decodeNode.FindInput("samples") ?? decodeNode.FindInput("latent");
         Assert.NotNull(samplesInput.Connection);
 
@@ -366,7 +366,7 @@ public partial class StageFlowTests
         new(g =>
         {
             using var bridge = BridgeSync.For(g);
-            UnknownNode refinerImage = bridge.AddStub("UnitTest_RefinerImage", "12").WithOutputs("IMAGE");
+            UnknownNode refinerImage = bridge.AddStub("UnitTest_RefinerImage", "12").WithOutputs(WGNodeData.DT_IMAGE);
             g.CurrentMedia = refinerImage.GetOutput(0).ToWGMedia(g, WGNodeData.DT_IMAGE,
                 width: 512, height: 512);
         }, 5.0);
@@ -419,14 +419,14 @@ public partial class StageFlowTests
 
             using var bridge = BridgeSync.For(g);
 
-            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs("MODEL", "CLIP");
+            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
             g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
             g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
 
-            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs("VAE");
+            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
             g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
 
-            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
+            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
             g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
 
             UnknownNode avLatent = bridge.AddStub("UnitTest_InitialAvLatent", "200").WithOutputs("LATENT");
@@ -470,14 +470,14 @@ public partial class StageFlowTests
 
             using var bridge = BridgeSync.For(g);
 
-            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs("MODEL", "CLIP");
+            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
             g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
             g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
 
-            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs("VAE");
+            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
             g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
 
-            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
+            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
             g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
 
             UnknownNode avLatent = bridge.AddStub("UnitTest_InitialAvLatent", "200").WithOutputs("LATENT");
@@ -535,14 +535,14 @@ public partial class StageFlowTests
 
             using var bridge = BridgeSync.For(g);
 
-            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs("MODEL", "CLIP");
+            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
             g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
             g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
 
-            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs("VAE");
+            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
             g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
 
-            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
+            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
             g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
 
             SwarmKSamplerNode avLatent = bridge.AddNode(new SwarmKSamplerNode(), "200");
@@ -610,8 +610,8 @@ public partial class StageFlowTests
         new(g =>
         {
             using var bridge = BridgeSync.For(g);
-            UnknownNode baseModelNode = bridge.AddStub("UnitTest_ResetBaseModel", "301").WithOutputs("MODEL", "CLIP");
-            UnknownNode baseVaeNode = bridge.AddStub("UnitTest_ResetBaseVae", "302").WithOutputs("VAE");
+            UnknownNode baseModelNode = bridge.AddStub("UnitTest_ResetBaseModel", "301").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
+            UnknownNode baseVaeNode = bridge.AddStub("UnitTest_ResetBaseVae", "302").WithOutputs(WGNodeData.DT_VAE);
             g.FinalLoadedModel = baseModel;
             g.FinalLoadedModelList = baseModel is null ? [] : [baseModel];
             g.CurrentModel = baseModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL, baseModel?.ModelClass?.CompatClass);
@@ -656,9 +656,9 @@ public partial class StageFlowTests
             preprocess.Image.ConnectTo(rootGuideScale.IMAGE);
             bridge.AddNode(preprocess, "110");
 
-            UnknownNode videoModelStub = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs("MODEL", "CLIP");
-            UnknownNode videoVaeStub = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs("VAE");
-            UnknownNode audioVaeStub = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
+            UnknownNode videoModelStub = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
+            UnknownNode videoVaeStub = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
+            UnknownNode audioVaeStub = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
 
             EmptyLTXVLatentVideoNode emptyVideoLatent = new EmptyLTXVLatentVideoNode()
                 .With(Width: 512, Height: 512, Length: 16, BatchSize: 1);

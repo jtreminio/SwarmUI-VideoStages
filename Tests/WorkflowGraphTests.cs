@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using SwarmUI.Builtin_ComfyUIBackend;
 using Newtonsoft.Json.Linq;
 using Xunit;
 
@@ -17,8 +18,8 @@ public class WorkflowGraphTests
         // typed nodes for. The graph walks under test only traverse 200 → 201 →
         // 202 → 204 → 9, so these stubs only need to exist as endpoints.
         UnknownNode stub100 = bridge.AddStub("StubLatent", "100").WithOutputs("LATENT");
-        UnknownNode stub104 = bridge.AddStub("StubVae", "104").WithOutputs("VAE");
-        UnknownNode stub203 = bridge.AddStub("StubAudio", "203").WithOutputs("AUDIO");
+        UnknownNode stub104 = bridge.AddStub("StubVae", "104").WithOutputs(WGNodeData.DT_VAE);
+        UnknownNode stub203 = bridge.AddStub("StubAudio", "203").WithOutputs(WGNodeData.DT_AUDIO);
 
         KSamplerNode sampler = new();
         sampler.LatentImage.ConnectToUntyped(stub100.GetOutput(0));

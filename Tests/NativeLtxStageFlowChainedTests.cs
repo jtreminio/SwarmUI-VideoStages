@@ -260,12 +260,4 @@ public partial class StageFlowTests
         Assert.Equal(2, SamplerNodesOrdered(bridge).Count);
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConditioningNode>().Count);
     }
-
-    private static JArray SamplerLatentImagePath(ComfyNode samplerNode)
-    {
-        INodeInput latentInput = samplerNode.FindInput("latent_image");
-        Assert.NotNull(latentInput);
-        Assert.NotNull(latentInput.Connection);
-        return new JArray(latentInput.Connection.Node.Id, latentInput.Connection.SlotIndex);
-    }
 }

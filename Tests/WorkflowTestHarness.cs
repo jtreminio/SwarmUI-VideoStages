@@ -112,7 +112,7 @@ internal static class WorkflowTestHarness
         {
             using var bridge = BridgeSync.For(g);
 
-            UnknownNode model = bridge.AddStub("UnitTest_Model", "4").WithOutputs("MODEL", "CLIP", "VAE");
+            UnknownNode model = bridge.AddStub("UnitTest_Model", "4").WithOutputs(WGNodeData.DT_MODEL, "CLIP", WGNodeData.DT_VAE);
             UnknownNode latent = bridge.AddStub("UnitTest_Latent", "10").WithOutputs("LATENT");
 
             g.CurrentModel = model.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);

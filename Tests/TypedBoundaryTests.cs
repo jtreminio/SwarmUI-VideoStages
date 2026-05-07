@@ -36,17 +36,17 @@ public class TypedBoundaryTests
         {
             ["1"] = new JObject
             {
-                ["class_type"] = "CheckpointLoaderSimple",
+                ["class_type"] = CheckpointLoaderSimpleNode.ClassType,
                 ["inputs"] = new JObject { ["ckpt_name"] = "ltxv2.safetensors" }
             },
             ["2"] = new JObject
             {
-                ["class_type"] = "LTXVAudioVAELoader",
+                ["class_type"] = LTXVAudioVAELoaderNode.ClassType,
                 ["inputs"] = new JObject { ["audio_vae_name"] = "audio.safetensors" }
             },
             ["3"] = new JObject
             {
-                ["class_type"] = "KSampler",
+                ["class_type"] = SwarmKSamplerNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["model"] = new JArray("1", 0),
@@ -63,7 +63,7 @@ public class TypedBoundaryTests
             },
             ["4"] = new JObject
             {
-                ["class_type"] = "LTXVSeparateAVLatent",
+                ["class_type"] = LTXVSeparateAVLatentNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["av_latent"] = new JArray("3", 0)
@@ -71,7 +71,7 @@ public class TypedBoundaryTests
             },
             ["5"] = new JObject
             {
-                ["class_type"] = "VAEDecode",
+                ["class_type"] = VAEDecodeNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["samples"] = new JArray("4", 0),
@@ -80,7 +80,7 @@ public class TypedBoundaryTests
             },
             ["6"] = new JObject
             {
-                ["class_type"] = "LTXVAudioVAEDecode",
+                ["class_type"] = LTXVAudioVAEDecodeNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["samples"] = new JArray("4", 1),
@@ -89,7 +89,7 @@ public class TypedBoundaryTests
             },
             ["7"] = new JObject
             {
-                ["class_type"] = "SwarmSaveAnimationWS",
+                ["class_type"] = SwarmSaveAnimationWSNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["images"] = new JArray("5", 0),
@@ -326,7 +326,7 @@ public class TypedBoundaryTests
         {
             ["1"] = new JObject
             {
-                ["class_type"] = "KSampler",
+                ["class_type"] = SwarmKSamplerNode.ClassType,
                 ["inputs"] = new JObject { ["seed"] = 42 }
             }
         };
@@ -348,12 +348,12 @@ public class TypedBoundaryTests
         {
             ["1"] = new JObject
             {
-                ["class_type"] = "KSampler",
+                ["class_type"] = SwarmKSamplerNode.ClassType,
                 ["inputs"] = new JObject { ["seed"] = 42 }
             },
             ["2"] = new JObject
             {
-                ["class_type"] = "VAEDecode",
+                ["class_type"] = VAEDecodeNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["samples"] = new JArray("1", 0),
@@ -379,12 +379,12 @@ public class TypedBoundaryTests
         {
             ["1"] = new JObject
             {
-                ["class_type"] = "CheckpointLoaderSimple",
+                ["class_type"] = CheckpointLoaderSimpleNode.ClassType,
                 ["inputs"] = new JObject { ["ckpt_name"] = "model.safetensors" }
             },
             ["3"] = new JObject
             {
-                ["class_type"] = "KSampler",
+                ["class_type"] = SwarmKSamplerNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["model"] = new JArray("1", 0),
@@ -401,12 +401,12 @@ public class TypedBoundaryTests
             },
             ["4"] = new JObject
             {
-                ["class_type"] = "LTXVSeparateAVLatent",
+                ["class_type"] = LTXVSeparateAVLatentNode.ClassType,
                 ["inputs"] = new JObject { ["av_latent"] = new JArray("3", 0) }
             },
             ["5"] = new JObject
             {
-                ["class_type"] = "VAEDecode",
+                ["class_type"] = VAEDecodeNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["samples"] = new JArray("4", 0),
@@ -416,7 +416,7 @@ public class TypedBoundaryTests
             // Audio VAE loader exists but no audio decode
             ["2"] = new JObject
             {
-                ["class_type"] = "LTXVAudioVAELoader",
+                ["class_type"] = LTXVAudioVAELoaderNode.ClassType,
                 ["inputs"] = new JObject { ["audio_vae_name"] = "audio.safetensors" }
             }
         };
@@ -512,7 +512,7 @@ public class TypedBoundaryTests
         int separateCount = 0;
         foreach (JProperty prop in workflow.Properties())
         {
-            if (prop.Value is JObject obj && $"{obj["class_type"]}" == "LTXVSeparateAVLatent")
+            if (prop.Value is JObject obj && $"{obj["class_type"]}" == LTXVSeparateAVLatentNode.ClassType)
                 separateCount++;
         }
         Assert.Equal(2, separateCount); // original + new
@@ -551,7 +551,7 @@ public class TypedBoundaryTests
         // The new separate node should exist and be LTXVSeparateAVLatent
         JObject newSeparateNode = workflow[newSeparateId] as JObject;
         Assert.NotNull(newSeparateNode);
-        Assert.Equal("LTXVSeparateAVLatent", $"{newSeparateNode["class_type"]}");
+        Assert.Equal(LTXVSeparateAVLatentNode.ClassType, $"{newSeparateNode["class_type"]}");
     }
 
     [Fact]
@@ -648,7 +648,7 @@ public class TypedBoundaryTests
         foreach (JProperty prop in workflow.Properties())
         {
             if (prop.Name != "4" && prop.Value is JObject obj
-                && $"{obj["class_type"]}" == "LTXVSeparateAVLatent")
+                && $"{obj["class_type"]}" == LTXVSeparateAVLatentNode.ClassType)
             {
                 newSeparateId = prop.Name;
                 break;
@@ -687,7 +687,7 @@ public class TypedBoundaryTests
         string audioNodeId = media.AttachedAudio.Output.Node.Id;
         JObject audioNode = workflow[audioNodeId] as JObject;
         Assert.NotNull(audioNode);
-        Assert.Equal("LTXVAudioVAEDecode", $"{audioNode["class_type"]}");
+        Assert.Equal(LTXVAudioVAEDecodeNode.ClassType, $"{audioNode["class_type"]}");
     }
 
     [Fact]
@@ -697,7 +697,7 @@ public class TypedBoundaryTests
         {
             ["1"] = new JObject
             {
-                ["class_type"] = "KSampler",
+                ["class_type"] = SwarmKSamplerNode.ClassType,
                 ["inputs"] = new JObject { ["seed"] = 42 }
             }
         };
@@ -740,7 +740,7 @@ public class TypedBoundaryTests
         // SIMULATE GENERATION: Add new nodes to JObject directly (as g.CreateImageToVideo would)
         workflow["50"] = new JObject
         {
-            ["class_type"] = "KSampler",
+            ["class_type"] = SwarmKSamplerNode.ClassType,
             ["inputs"] = new JObject
             {
                 ["seed"] = 123,
@@ -807,7 +807,7 @@ public class TypedBoundaryTests
         // Add nodes (simulating generation)
         workflow["60"] = new JObject
         {
-            ["class_type"] = "KSampler",
+            ["class_type"] = SwarmKSamplerNode.ClassType,
             ["inputs"] = new JObject { ["seed"] = 99 }
         };
 
@@ -838,12 +838,12 @@ public class TypedBoundaryTests
         {
             ["1"] = new JObject
             {
-                ["class_type"] = "KSampler",
+                ["class_type"] = SwarmKSamplerNode.ClassType,
                 ["inputs"] = new JObject { ["seed"] = 42 }
             },
             ["2"] = new JObject
             {
-                ["class_type"] = "LTXVEmptyLatentAudio",
+                ["class_type"] = LTXVEmptyLatentAudioNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["frames_number"] = 97,
@@ -854,7 +854,7 @@ public class TypedBoundaryTests
             },
             ["3"] = new JObject
             {
-                ["class_type"] = "LTXVConcatAVLatent",
+                ["class_type"] = LTXVConcatAVLatentNode.ClassType,
                 ["inputs"] = new JObject
                 {
                     ["video_latent"] = new JArray("1", 0),
@@ -908,7 +908,7 @@ public class TypedBoundaryTests
         // Add a second concat+empty pair
         workflow["12"] = new JObject
         {
-            ["class_type"] = "LTXVEmptyLatentAudio",
+            ["class_type"] = LTXVEmptyLatentAudioNode.ClassType,
             ["inputs"] = new JObject
             {
                 ["frames_number"] = 49,
@@ -919,7 +919,7 @@ public class TypedBoundaryTests
         };
         workflow["13"] = new JObject
         {
-            ["class_type"] = "LTXVConcatAVLatent",
+            ["class_type"] = LTXVConcatAVLatentNode.ClassType,
             ["inputs"] = new JObject
             {
                 ["video_latent"] = new JArray("1", 0),

@@ -18,7 +18,7 @@ public partial class StageFlowTests
         new(g =>
         {
             using var bridge = BridgeSync.For(g);
-            UnknownNode rawAudio = bridge.AddStub("UnitTest_RawAudio", "50").WithOutputs("AUDIO");
+            UnknownNode rawAudio = bridge.AddStub("UnitTest_RawAudio", "50").WithOutputs(WGNodeData.DT_AUDIO);
             g.CurrentMedia.AttachedAudio = rawAudio.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIO);
         }, 10.8);
 
@@ -64,7 +64,7 @@ public partial class StageFlowTests
             scaled.Image.ConnectTo(videoComponents.Images);
             bridge.AddNode(scaled, "302");
 
-            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs("IMAGE");
+            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs(WGNodeData.DT_IMAGE);
             preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
 
             var resize = new ResizeImageMaskNodeNode
@@ -112,7 +112,7 @@ public partial class StageFlowTests
             scaled.Image.ConnectTo(videoComponents.Images);
             bridge.AddNode(scaled, "302");
 
-            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs("IMAGE");
+            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs(WGNodeData.DT_IMAGE);
             preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
 
             var resize = new ResizeImageMaskNodeNode

@@ -9,8 +9,31 @@ public class VideoStagesMetadataSanitizerTests
     [Fact]
     public void StripUploadData_RemovesEmbeddedPayloads_KeepsFileNames()
     {
-        string raw =
-            "{\"clips\":[{\"uploadedAudio\":{\"data\":\"data:audio/wav;base64,QUJD\",\"fileName\":\"a.wav\"},\"refs\":[{\"uploadedImage\":{\"data\":\"data:image/png;base64,QUJD\",\"fileName\":\"r.png\"}}]}]}";
+        string raw = new JObject
+        {
+            ["clips"] = new JArray
+            {
+                new JObject
+                {
+                    ["uploadedAudio"] = new JObject
+                    {
+                        ["data"] = "data:audio/wav;base64,QUJD",
+                        ["fileName"] = "a.wav"
+                    },
+                    ["refs"] = new JArray
+                    {
+                        new JObject
+                        {
+                            ["uploadedImage"] = new JObject
+                            {
+                                ["data"] = "data:image/png;base64,QUJD",
+                                ["fileName"] = "r.png"
+                            }
+                        }
+                    }
+                }
+            }
+        }.ToString();
         string sanitized = VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter(raw);
         JObject root = JObject.Parse(sanitized);
         JObject clip = (JObject)root["clips"]![0]!;
@@ -24,8 +47,19 @@ public class VideoStagesMetadataSanitizerTests
     [Fact]
     public void StripUploadData_RemovesUploadContainerWhenOnlyPayloadWasPresent()
     {
-        string raw =
-            "{\"clips\":[{\"uploadedAudio\":{\"data\":\"data:audio/wav;base64,QUJD\"}}]}";
+        string raw = new JObject
+        {
+            ["clips"] = new JArray
+            {
+                new JObject
+                {
+                    ["uploadedAudio"] = new JObject
+                    {
+                        ["data"] = "data:audio/wav;base64,QUJD"
+                    }
+                }
+            }
+        }.ToString();
         string sanitized = VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter(raw);
         JObject clip = (JObject)JObject.Parse(sanitized)["clips"]![0]!;
         Assert.Null(clip["uploadedAudio"]);
