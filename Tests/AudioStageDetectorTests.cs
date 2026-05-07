@@ -1,3 +1,5 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -8,14 +10,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class AudioStageDetectorTests
 {
-    private const string VaeDecodeAudio = "VAEDecodeAudio";
-
-    private static JObject Node(string classType, JObject inputs = null) => new()
-    {
-        ["class_type"] = classType,
-        ["inputs"] = inputs ?? new JObject()
-    };
-
     private static WorkflowGenerator CreateGenerator(JObject workflow)
     {
         WorkflowGenerator generator = new()
@@ -32,18 +26,18 @@ public class AudioStageDetectorTests
     [Fact]
     public void Detector_prefers_latest_save_audio_node_when_multiple_are_present()
     {
-        JObject workflow = new()
-        {
-            ["100"] = Node(VaeDecodeAudio),
-            ["110"] = Node("SaveAudioMP3", new JObject()
-            {
-                ["audio"] = new JArray("100", 0)
-            }),
-            ["210"] = Node("SaveAudio", new JObject()
-            {
-                ["audio"] = new JArray("100", 0)
-            })
-        };
+        JObject workflow = [];
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), "100");
+
+        SaveAudioMP3Node saveMp3 = new();
+        saveMp3.Audio.ConnectTo(decode.AUDIO);
+        bridge.AddNode(saveMp3, "110");
+
+        SaveAudioNode save = new();
+        save.Audio.ConnectTo(decode.AUDIO);
+        bridge.AddNode(save, "210");
 
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
 
@@ -56,60 +50,60 @@ public class AudioStageDetectorTests
     [Fact]
     public void Detector_falls_back_to_latest_vae_decode_audio_when_no_save_nodes_exist()
     {
-        JObject workflow = new()
-        {
-            ["100"] = Node(VaeDecodeAudio),
-            ["150"] = Node(VaeDecodeAudio)
-        };
+        JObject workflow = [];
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        bridge.AddNode(new VAEDecodeAudioNode(), "100");
+        bridge.AddNode(new VAEDecodeAudioNode(), "150");
 
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
 
         Assert.NotNull(detection);
         Assert.Equal("150", detection.MatchedNodeId);
-        Assert.Equal(VaeDecodeAudio, detection.MatchedClassType);
+        Assert.Equal("VAEDecodeAudio", detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("150", 0)));
     }
 
     [Fact]
     public void Detector_ignores_acestepfun_nodes_for_native_audio_detection()
     {
-        JObject workflow = new()
-        {
-            ["100"] = Node(VaeDecodeAudio),
-            ["64160"] = Node(VaeDecodeAudio),
-            ["64170"] = Node("SaveAudioMP3", new JObject()
-            {
-                ["audio"] = new JArray("64160", 0),
-                ["filename_prefix"] = "SwarmUI_track_1_"
-            })
-        };
+        JObject workflow = [];
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        bridge.AddNode(new VAEDecodeAudioNode(), "100");
+        VAEDecodeAudioNode aceDecode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
+
+        SaveAudioMP3Node aceSave = new();
+        aceSave.Audio.ConnectTo(aceDecode.AUDIO);
+        aceSave.FilenamePrefix.Set("SwarmUI_track_1_");
+        bridge.AddNode(aceSave, "64170");
 
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
 
         Assert.NotNull(detection);
         Assert.Equal("100", detection.MatchedNodeId);
-        Assert.Equal(VaeDecodeAudio, detection.MatchedClassType);
+        Assert.Equal("VAEDecodeAudio", detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("100", 0)));
     }
 
     [Fact]
     public void DetectAceStepFunTrack_UsesMatchingTrackSaveNode()
     {
-        JObject workflow = new()
-        {
-            ["64160"] = Node(VaeDecodeAudio),
-            ["64260"] = Node(VaeDecodeAudio),
-            ["64170"] = Node("SaveAudioMP3", new JObject()
-            {
-                ["audio"] = new JArray("64160", 0),
-                ["filename_prefix"] = "SwarmUI_track_1_"
-            }),
-            ["64270"] = Node("SaveAudioMP3", new JObject()
-            {
-                ["audio"] = new JArray("64260", 0),
-                ["filename_prefix"] = "SwarmUI_track_2_"
-            })
-        };
+        JObject workflow = [];
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        VAEDecodeAudioNode decode1 = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
+        VAEDecodeAudioNode decode2 = bridge.AddNode(new VAEDecodeAudioNode(), "64260");
+
+        SaveAudioMP3Node save1 = new();
+        save1.Audio.ConnectTo(decode1.AUDIO);
+        save1.FilenamePrefix.Set("SwarmUI_track_1_");
+        bridge.AddNode(save1, "64170");
+
+        SaveAudioMP3Node save2 = new();
+        save2.Audio.ConnectTo(decode2.AUDIO);
+        save2.FilenamePrefix.Set("SwarmUI_track_2_");
+        bridge.AddNode(save2, "64270");
 
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).DetectAceStepFunTrack("audio0");
 
@@ -121,11 +115,11 @@ public class AudioStageDetectorTests
     [Fact]
     public void DetectAceStepFunTrack_FallsBackToStableDecodeNode()
     {
-        JObject workflow = new()
-        {
-            ["64160"] = Node(VaeDecodeAudio),
-            ["64260"] = Node(VaeDecodeAudio)
-        };
+        JObject workflow = [];
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        bridge.AddNode(new VAEDecodeAudioNode(), "64160");
+        bridge.AddNode(new VAEDecodeAudioNode(), "64260");
 
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).DetectAceStepFunTrack("audio1");
 

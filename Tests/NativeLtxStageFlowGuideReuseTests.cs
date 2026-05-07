@@ -24,7 +24,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(attachAudioToCurrentMedia: false));
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         StageRefStore store = new(generator);
 
         LTXVImgToVideoInplaceNode imgToVideoNode = bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()

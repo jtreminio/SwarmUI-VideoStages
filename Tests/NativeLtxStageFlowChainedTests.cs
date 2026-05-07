@@ -36,7 +36,7 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         List<LTXVPreprocessNode> preprocessNodes = bridge.Graph.NodesOfType<LTXVPreprocessNode>()
             .OrderBy(node => int.Parse(node.Id))
@@ -77,7 +77,7 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         List<SwarmKSamplerNode> samplerNodes = SamplerNodesOrdered(bridge);
         Assert.Equal(3, samplerNodes.Count);
@@ -117,7 +117,7 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
@@ -153,7 +153,7 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
         Assert.Equal(2, samplers.Count);
@@ -215,7 +215,7 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WorkflowNode conditioningWorkflowNode = Assert.Single(AssertLtxConditioningUsesAdvancedEncoders(workflow));
         LTXVConditioningNode conditioningNode = RequireTypedNode<LTXVConditioningNode>(bridge, conditioningWorkflowNode.Id);
@@ -276,7 +276,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: true));
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Equal(2, SamplerNodesOrdered(bridge).Count);
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConditioningNode>().Count);

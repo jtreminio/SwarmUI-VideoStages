@@ -135,7 +135,7 @@ public partial class StageFlowTests
 
     private static WorkflowNode RequireRetargetedSeparateNode(JObject workflow, WorkflowNode videoDecode)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         ComfyNode decodeNode = bridge.Graph.GetNode(videoDecode.Id);
         Assert.NotNull(decodeNode);
         INodeInput samplesInput = decodeNode.FindInput("samples");
@@ -151,7 +151,7 @@ public partial class StageFlowTests
         WorkflowNode imgToVideoNode,
         WorkflowNode samplerNode)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         ComfyNode imgToVideo = bridge.Graph.GetNode(imgToVideoNode.Id);
         Assert.NotNull(imgToVideo);
         INodeOutput imgToVideoLatent = imgToVideo.FindOutput(0);
@@ -186,7 +186,7 @@ public partial class StageFlowTests
 
         Assert.False(JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path));
 
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         ComfyNode decodeNode = bridge.Graph.GetNode($"{actualGuidePath[0]}");
         Assert.NotNull(decodeNode);
         if (decodeNode is ImageScaleNode imageScale)
@@ -207,7 +207,7 @@ public partial class StageFlowTests
 
     private static void AssertNoDanglingTiledVaeDecodes(JObject workflow)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         foreach (VAEDecodeTiledNode node in bridge.Graph.NodesOfType<VAEDecodeTiledNode>())
         {
             Assert.NotEmpty(bridge.Graph.FindInputsConnectedTo(node.IMAGE));
@@ -245,7 +245,7 @@ public partial class StageFlowTests
 
     private static void AssertStageLtxConcatsReuseOriginalAudio(JObject workflow, WorkflowNode originalSeparate)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
         Assert.NotEmpty(concatNodes);
 
@@ -260,7 +260,7 @@ public partial class StageFlowTests
 
     private static void AssertStageLtxConcatsUseProgressiveAudio(JObject workflow, WorkflowNode originalSeparate)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
         Assert.True(concatNodes.Count >= 2);
 
@@ -271,7 +271,7 @@ public partial class StageFlowTests
 
     private static void AssertStageLtxConcatsReuseFirstStageAudio(JObject workflow, WorkflowNode originalSeparate)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
         Assert.True(concatNodes.Count >= 3);
 
@@ -297,14 +297,14 @@ public partial class StageFlowTests
 
     private static WorkflowNode RequireOriginalNativeLtxSeparate(JObject workflow)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         LTXVSeparateAVLatentNode separate = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, "201");
         return AsWorkflowNode(separate, workflow);
     }
 
     private static void AssertWorkflowHasNoCycles(JObject workflow)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         Dictionary<string, int> states = [];
 
         bool visit(ComfyNode node)
@@ -341,7 +341,7 @@ public partial class StageFlowTests
 
     private static IReadOnlyList<WorkflowNode> AssertLtxConditioningUsesAdvancedEncoders(JObject workflow)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         List<LTXVConditioningNode> conditioningNodes = bridge.Graph.NodesOfType<LTXVConditioningNode>()
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
@@ -454,8 +454,9 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
         new(g =>
         {
-            string refinerImage = g.CreateNode("UnitTest_RefinerImage", new JObject(), id: "12", idMandatory: false);
-            g.CurrentMedia = new WGNodeData([refinerImage, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat())
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            UnknownNode refinerImage = bridge.AddNode(new UnknownNode("UnitTest_RefinerImage"), "12");
+            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(refinerImage.GetOutput(0)), g, WGNodeData.DT_IMAGE, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512
@@ -467,7 +468,9 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep SeedPublishedBase2EditImageRefStep(int editStageIndex, double priority) =>
         new(g =>
         {
-            string imageNode = g.CreateNode("UnitTest_Base2EditPublishedImage", new JObject(), id: "60", idMandatory: false);
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            UnknownNode imageNodeRef = bridge.AddNode(new UnknownNode("UnitTest_Base2EditPublishedImage"), "60");
+            string imageNode = "60";
             JObject media = new()
             {
                 ["path"] = new JArray(imageNode, 0),
@@ -510,50 +513,49 @@ public partial class StageFlowTests
             g.FinalLoadedModel = videoModel;
             g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
 
-            string videoModelNode = g.CreateNode("UnitTest_VideoModel", new JObject(), id: "103", idMandatory: false);
-            g.CurrentModel = new WGNodeData([videoModelNode, 0], g, WGNodeData.DT_MODEL, g.CurrentCompat());
-            g.CurrentTextEnc = new WGNodeData([videoModelNode, 1], g, WGNodeData.DT_TEXTENC, g.CurrentCompat());
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
 
-            string videoVaeNode = g.CreateNode("UnitTest_VideoVae", new JObject(), id: "104", idMandatory: false);
-            g.CurrentVae = new WGNodeData([videoVaeNode, 0], g, WGNodeData.DT_VAE, g.CurrentCompat());
+            UnknownNode videoModelNode = bridge.AddNode(new UnknownNode("UnitTest_VideoModel"), "103");
+            g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
+            g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
 
-            string audioVaeNode = g.CreateNode("UnitTest_AudioVae", new JObject(), id: "105", idMandatory: false);
-            g.CurrentAudioVae = new WGNodeData([audioVaeNode, 0], g, WGNodeData.DT_AUDIOVAE, g.CurrentCompat());
+            UnknownNode videoVaeNode = bridge.AddNode(new UnknownNode("UnitTest_VideoVae"), "104");
+            g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
 
-            string avLatent = g.CreateNode("UnitTest_InitialAvLatent", new JObject(), id: "200", idMandatory: false);
-            string separate = g.CreateNode("LTXVSeparateAVLatent", new JObject()
-            {
-                ["av_latent"] = new JArray(avLatent, 0)
-            }, id: "201", idMandatory: false);
+            UnknownNode audioVaeNode = bridge.AddNode(new UnknownNode("UnitTest_AudioVae"), "105");
+            g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
 
-            string videoDecode = g.CreateNode("VAEDecodeTiled", new JObject()
-            {
-                ["vae"] = new JArray(videoVaeNode, 0),
-                ["samples"] = new JArray(separate, 0),
-                ["tile_size"] = 2048,
-                ["overlap"] = 256,
-                ["temporal_size"] = 64,
-                ["temporal_overlap"] = 16
-            }, id: "202", idMandatory: false);
+            UnknownNode avLatent = bridge.AddNode(new UnknownNode("UnitTest_InitialAvLatent"), "200");
 
-            string audioDecode = g.CreateNode("LTXVAudioVAEDecode", new JObject()
-            {
-                ["audio_vae"] = new JArray(audioVaeNode, 0),
-                ["samples"] = new JArray(separate, 1)
-            }, id: "203", idMandatory: false);
+            LTXVSeparateAVLatentNode separate = new();
+            separate.AvLatent.ConnectToUntyped(avLatent.GetOutput(0));
+            bridge.AddNode(separate, "201");
 
-            _ = g.CreateNode("SwarmSaveAnimationWS", new JObject()
-            {
-                ["images"] = new JArray(videoDecode, 0),
-                ["audio"] = new JArray(audioDecode, 0),
-                ["fps"] = 24,
-                ["lossless"] = false,
-                ["quality"] = 95,
-                ["method"] = "default",
-                ["format"] = "h264-mp4"
-            }, id: "9", idMandatory: false);
+            VAEDecodeTiledNode videoDecode = new();
+            videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
+            videoDecode.Samples.ConnectTo(separate.VideoLatent);
+            videoDecode.TileSize.Set(2048L);
+            videoDecode.Overlap.Set(256L);
+            videoDecode.TemporalSize.Set(64L);
+            videoDecode.TemporalOverlap.Set(16L);
+            bridge.AddNode(videoDecode, "202");
 
-            g.CurrentMedia = new WGNodeData([videoDecode, 0], g, WGNodeData.DT_VIDEO, g.CurrentCompat())
+            LTXVAudioVAEDecodeNode audioDecode = new();
+            audioDecode.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
+            audioDecode.Samples.ConnectTo(separate.AudioLatent);
+            bridge.AddNode(audioDecode, "203");
+
+            SwarmSaveAnimationWSNode save = new();
+            save.Images.ConnectTo(videoDecode.IMAGE);
+            save.Audio.ConnectTo(audioDecode.Audio);
+            save.Fps.Set(24.0);
+            save.Lossless.Set(false);
+            save.Quality.Set(95L);
+            save.Method.Set("default");
+            save.Format.Set("h264-mp4");
+            bridge.AddNode(save, "9");
+
+            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(videoDecode.IMAGE), g, WGNodeData.DT_VIDEO, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512,
@@ -563,7 +565,7 @@ public partial class StageFlowTests
 
             if (attachAudioToCurrentMedia)
             {
-                g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+                g.CurrentMedia.AttachedAudio = audioDecode.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
 
             BridgeSync.SyncLastId(g);
@@ -576,57 +578,55 @@ public partial class StageFlowTests
             g.FinalLoadedModel = videoModel;
             g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
 
-            string videoModelNode = g.CreateNode("UnitTest_VideoModel", new JObject(), id: "103", idMandatory: false);
-            g.CurrentModel = new WGNodeData([videoModelNode, 0], g, WGNodeData.DT_MODEL, g.CurrentCompat());
-            g.CurrentTextEnc = new WGNodeData([videoModelNode, 1], g, WGNodeData.DT_TEXTENC, g.CurrentCompat());
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
 
-            string videoVaeNode = g.CreateNode("UnitTest_VideoVae", new JObject(), id: "104", idMandatory: false);
-            g.CurrentVae = new WGNodeData([videoVaeNode, 0], g, WGNodeData.DT_VAE, g.CurrentCompat());
+            UnknownNode videoModelNode = bridge.AddNode(new UnknownNode("UnitTest_VideoModel"), "103");
+            g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
+            g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
 
-            string audioVaeNode = g.CreateNode("UnitTest_AudioVae", new JObject(), id: "105", idMandatory: false);
-            g.CurrentAudioVae = new WGNodeData([audioVaeNode, 0], g, WGNodeData.DT_AUDIOVAE, g.CurrentCompat());
+            UnknownNode videoVaeNode = bridge.AddNode(new UnknownNode("UnitTest_VideoVae"), "104");
+            g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
 
-            string avLatent = g.CreateNode("UnitTest_InitialAvLatent", new JObject(), id: "200", idMandatory: false);
-            string separate = g.CreateNode("LTXVSeparateAVLatent", new JObject()
-            {
-                ["av_latent"] = new JArray(avLatent, 0)
-            }, id: "201", idMandatory: false);
+            UnknownNode audioVaeNode = bridge.AddNode(new UnknownNode("UnitTest_AudioVae"), "105");
+            g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
 
-            string videoDecode = g.CreateNode("VAEDecodeTiled", new JObject()
-            {
-                ["vae"] = new JArray(videoVaeNode, 0),
-                ["samples"] = new JArray(separate, 0),
-                ["tile_size"] = 2048,
-                ["overlap"] = 256,
-                ["temporal_size"] = 64,
-                ["temporal_overlap"] = 16
-            }, id: "202", idMandatory: false);
+            UnknownNode avLatent = bridge.AddNode(new UnknownNode("UnitTest_InitialAvLatent"), "200");
 
-            string audioDecode = g.CreateNode("LTXVAudioVAEDecode", new JObject()
-            {
-                ["audio_vae"] = new JArray(audioVaeNode, 0),
-                ["samples"] = new JArray(separate, 1)
-            }, id: "203", idMandatory: false);
+            LTXVSeparateAVLatentNode separate = new();
+            separate.AvLatent.ConnectToUntyped(avLatent.GetOutput(0));
+            bridge.AddNode(separate, "201");
 
-            string trim = g.CreateNode("SwarmTrimFrames", new JObject()
-            {
-                ["image"] = new JArray(videoDecode, 0),
-                ["trim_start"] = 1,
-                ["trim_end"] = 1
-            }, id: "204", idMandatory: false);
+            VAEDecodeTiledNode videoDecode = new();
+            videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
+            videoDecode.Samples.ConnectTo(separate.VideoLatent);
+            videoDecode.TileSize.Set(2048L);
+            videoDecode.Overlap.Set(256L);
+            videoDecode.TemporalSize.Set(64L);
+            videoDecode.TemporalOverlap.Set(16L);
+            bridge.AddNode(videoDecode, "202");
 
-            _ = g.CreateNode("SwarmSaveAnimationWS", new JObject()
-            {
-                ["images"] = new JArray(trim, 0),
-                ["audio"] = new JArray(audioDecode, 0),
-                ["fps"] = 24,
-                ["lossless"] = false,
-                ["quality"] = 95,
-                ["method"] = "default",
-                ["format"] = "h264-mp4"
-            }, id: "9", idMandatory: false);
+            LTXVAudioVAEDecodeNode audioDecode = new();
+            audioDecode.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
+            audioDecode.Samples.ConnectTo(separate.AudioLatent);
+            bridge.AddNode(audioDecode, "203");
 
-            g.CurrentMedia = new WGNodeData([trim, 0], g, WGNodeData.DT_VIDEO, g.CurrentCompat())
+            SwarmTrimFramesNode trim = new();
+            trim.Image.ConnectTo(videoDecode.IMAGE);
+            trim.TrimStart.Set(1L);
+            trim.TrimEnd.Set(1L);
+            bridge.AddNode(trim, "204");
+
+            SwarmSaveAnimationWSNode save = new();
+            save.Images.ConnectTo(trim.IMAGE);
+            save.Audio.ConnectTo(audioDecode.Audio);
+            save.Fps.Set(24.0);
+            save.Lossless.Set(false);
+            save.Quality.Set(95L);
+            save.Method.Set("default");
+            save.Format.Set("h264-mp4");
+            bridge.AddNode(save, "9");
+
+            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(trim.IMAGE), g, WGNodeData.DT_VIDEO, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512,
@@ -636,7 +636,7 @@ public partial class StageFlowTests
 
             if (attachAudioToCurrentMedia)
             {
-                g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+                g.CurrentMedia.AttachedAudio = audioDecode.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
 
             BridgeSync.SyncLastId(g);
@@ -659,50 +659,49 @@ public partial class StageFlowTests
             g.FinalLoadedModel = videoModel;
             g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
 
-            string videoModelNode = g.CreateNode("UnitTest_VideoModel", new JObject(), id: "103", idMandatory: false);
-            g.CurrentModel = new WGNodeData([videoModelNode, 0], g, WGNodeData.DT_MODEL, g.CurrentCompat());
-            g.CurrentTextEnc = new WGNodeData([videoModelNode, 1], g, WGNodeData.DT_TEXTENC, g.CurrentCompat());
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
 
-            string videoVaeNode = g.CreateNode("UnitTest_VideoVae", new JObject(), id: "104", idMandatory: false);
-            g.CurrentVae = new WGNodeData([videoVaeNode, 0], g, WGNodeData.DT_VAE, g.CurrentCompat());
+            UnknownNode videoModelNode = bridge.AddNode(new UnknownNode("UnitTest_VideoModel"), "103");
+            g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
+            g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
 
-            string audioVaeNode = g.CreateNode("UnitTest_AudioVae", new JObject(), id: "105", idMandatory: false);
-            g.CurrentAudioVae = new WGNodeData([audioVaeNode, 0], g, WGNodeData.DT_AUDIOVAE, g.CurrentCompat());
+            UnknownNode videoVaeNode = bridge.AddNode(new UnknownNode("UnitTest_VideoVae"), "104");
+            g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
 
-            string avLatent = g.CreateNode("SwarmKSampler", new JObject(), id: "200", idMandatory: false);
-            string separate = g.CreateNode("LTXVSeparateAVLatent", new JObject()
-            {
-                ["av_latent"] = new JArray(avLatent, 0)
-            }, id: "201", idMandatory: false);
+            UnknownNode audioVaeNode = bridge.AddNode(new UnknownNode("UnitTest_AudioVae"), "105");
+            g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
 
-            string videoDecode = g.CreateNode("VAEDecodeTiled", new JObject()
-            {
-                ["vae"] = new JArray(videoVaeNode, 0),
-                ["samples"] = new JArray(separate, 0),
-                ["tile_size"] = 2048,
-                ["overlap"] = 256,
-                ["temporal_size"] = 64,
-                ["temporal_overlap"] = 16
-            }, id: "202", idMandatory: false);
+            UnknownNode avLatent = bridge.AddNode(new UnknownNode("SwarmKSampler"), "200");
 
-            string audioDecode = g.CreateNode("LTXVAudioVAEDecode", new JObject()
-            {
-                ["audio_vae"] = new JArray(audioVaeNode, 0),
-                ["samples"] = new JArray(separate, 1)
-            }, id: "203", idMandatory: false);
+            LTXVSeparateAVLatentNode separate = new();
+            separate.AvLatent.ConnectToUntyped(avLatent.GetOutput(0));
+            bridge.AddNode(separate, "201");
 
-            _ = g.CreateNode("SwarmSaveAnimationWS", new JObject()
-            {
-                ["images"] = new JArray(videoDecode, 0),
-                ["audio"] = new JArray(audioDecode, 0),
-                ["fps"] = 24,
-                ["lossless"] = false,
-                ["quality"] = 95,
-                ["method"] = "default",
-                ["format"] = "h264-mp4"
-            }, id: "9", idMandatory: false);
+            VAEDecodeTiledNode videoDecode = new();
+            videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
+            videoDecode.Samples.ConnectTo(separate.VideoLatent);
+            videoDecode.TileSize.Set(2048L);
+            videoDecode.Overlap.Set(256L);
+            videoDecode.TemporalSize.Set(64L);
+            videoDecode.TemporalOverlap.Set(16L);
+            bridge.AddNode(videoDecode, "202");
 
-            g.CurrentMedia = new WGNodeData([videoDecode, 0], g, WGNodeData.DT_VIDEO, g.CurrentCompat())
+            LTXVAudioVAEDecodeNode audioDecode = new();
+            audioDecode.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
+            audioDecode.Samples.ConnectTo(separate.AudioLatent);
+            bridge.AddNode(audioDecode, "203");
+
+            SwarmSaveAnimationWSNode save = new();
+            save.Images.ConnectTo(videoDecode.IMAGE);
+            save.Audio.ConnectTo(audioDecode.Audio);
+            save.Fps.Set(24.0);
+            save.Lossless.Set(false);
+            save.Quality.Set(95L);
+            save.Method.Set("default");
+            save.Format.Set("h264-mp4");
+            bridge.AddNode(save, "9");
+
+            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(videoDecode.IMAGE), g, WGNodeData.DT_VIDEO, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512,
@@ -712,7 +711,7 @@ public partial class StageFlowTests
 
             if (attachAudioToCurrentMedia)
             {
-                g.CurrentMedia.AttachedAudio = new WGNodeData([audioDecode, 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+                g.CurrentMedia.AttachedAudio = audioDecode.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
 
             BridgeSync.SyncLastId(g);
@@ -759,13 +758,14 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep ResetCurrentModelAndVaeToBaseCompatStep(T2IModel baseModel) =>
         new(g =>
         {
-            string baseModelNode = g.CreateNode("UnitTest_ResetBaseModel", new JObject(), id: "301", idMandatory: false);
-            string baseVaeNode = g.CreateNode("UnitTest_ResetBaseVae", new JObject(), id: "302", idMandatory: false);
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            UnknownNode baseModelNode = bridge.AddNode(new UnknownNode("UnitTest_ResetBaseModel"), "301");
+            UnknownNode baseVaeNode = bridge.AddNode(new UnknownNode("UnitTest_ResetBaseVae"), "302");
             g.FinalLoadedModel = baseModel;
             g.FinalLoadedModelList = baseModel is null ? [] : [baseModel];
-            g.CurrentModel = new WGNodeData([baseModelNode, 0], g, WGNodeData.DT_MODEL, baseModel?.ModelClass?.CompatClass);
-            g.CurrentTextEnc = new WGNodeData([baseModelNode, 1], g, WGNodeData.DT_TEXTENC, baseModel?.ModelClass?.CompatClass);
-            g.CurrentVae = new WGNodeData([baseVaeNode, 0], g, WGNodeData.DT_VAE, baseModel?.ModelClass?.CompatClass);
+            g.CurrentModel = baseModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL, baseModel?.ModelClass?.CompatClass);
+            g.CurrentTextEnc = baseModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC, baseModel?.ModelClass?.CompatClass);
+            g.CurrentVae = baseVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE, baseModel?.ModelClass?.CompatClass);
 
             BridgeSync.SyncLastId(g);
         }, 11.4);
@@ -773,19 +773,20 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep SeedExistingRefinerPreprocessStep() =>
         new(g =>
         {
-            string scaleNode = g.CreateNode("ImageScale", new JObject()
-            {
-                ["image"] = new JArray("12", 0),
-                ["width"] = 512,
-                ["height"] = 512,
-                ["upscale_method"] = "lanczos",
-                ["crop"] = "disabled"
-            }, id: "209");
-            _ = g.CreateNode("LTXVPreprocess", new JObject()
-            {
-                ["image"] = new JArray(scaleNode, 0),
-                ["img_compression"] = 18
-            }, id: "210");
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+
+            ImageScaleNode scaleNode = new();
+            scaleNode.Image.ConnectToUntyped(bridge.ResolvePath(new JArray("12", 0)));
+            scaleNode.Width.Set(512L);
+            scaleNode.Height.Set(512L);
+            scaleNode.UpscaleMethod.Set("lanczos");
+            scaleNode.Crop.Set("disabled");
+            bridge.AddNode(scaleNode, "209");
+
+            LTXVPreprocessNode preprocess = new();
+            preprocess.Image.ConnectTo(scaleNode.IMAGE);
+            preprocess.ImgCompression.Set(18L);
+            bridge.AddNode(preprocess, "210");
 
             BridgeSync.SyncLastId(g);
         }, 11.4);
@@ -793,34 +794,35 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep SeedExistingBasePreprocessStep() =>
         new(g =>
         {
-            string decodeNode = g.CreateNode("VAEDecodeTiled", new JObject()
-            {
-                ["vae"] = g.CurrentVae.Path,
-                ["samples"] = g.CurrentMedia.Path,
-                ["tile_size"] = 2048,
-                ["overlap"] = 256,
-                ["temporal_size"] = 64,
-                ["temporal_overlap"] = 16
-            }, id: "8", idMandatory: false);
-            g.CurrentMedia = new WGNodeData([decodeNode, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat())
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+
+            VAEDecodeTiledNode decodeNode = new();
+            decodeNode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
+            decodeNode.Samples.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
+            decodeNode.TileSize.Set(2048L);
+            decodeNode.Overlap.Set(256L);
+            decodeNode.TemporalSize.Set(64L);
+            decodeNode.TemporalOverlap.Set(16L);
+            bridge.AddNode(decodeNode, "8");
+
+            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(decodeNode.IMAGE), g, WGNodeData.DT_IMAGE, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512
             };
 
-            string scaleNode = g.CreateNode("ImageScale", new JObject()
-            {
-                ["image"] = new JArray(decodeNode, 0),
-                ["width"] = 512,
-                ["height"] = 512,
-                ["upscale_method"] = "lanczos",
-                ["crop"] = "disabled"
-            }, id: "209");
-            _ = g.CreateNode("LTXVPreprocess", new JObject()
-            {
-                ["image"] = new JArray(scaleNode, 0),
-                ["img_compression"] = 18
-            }, id: "210");
+            ImageScaleNode scaleNode = new();
+            scaleNode.Image.ConnectTo(decodeNode.IMAGE);
+            scaleNode.Width.Set(512L);
+            scaleNode.Height.Set(512L);
+            scaleNode.UpscaleMethod.Set("lanczos");
+            scaleNode.Crop.Set("disabled");
+            bridge.AddNode(scaleNode, "209");
+
+            LTXVPreprocessNode preprocess = new();
+            preprocess.Image.ConnectTo(scaleNode.IMAGE);
+            preprocess.ImgCompression.Set(18L);
+            bridge.AddNode(preprocess, "210");
 
             BridgeSync.SyncLastId(g);
         }, 1);
@@ -828,105 +830,110 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep SeedDownstreamRefinerAndReachableRootVideoGraphStep() =>
         new(g =>
         {
-            string baseDecode = g.CreateNode("VAEDecode", new JObject()
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+
+            VAEDecodeNode baseDecode = new();
+            baseDecode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
+            baseDecode.Samples.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
+            bridge.AddNode(baseDecode, "24");
+
+            ImageScaleNode refinerScale = new();
+            refinerScale.Image.ConnectTo(baseDecode.IMAGE);
+            refinerScale.Width.Set(512L);
+            refinerScale.Height.Set(512L);
+            refinerScale.UpscaleMethod.Set("lanczos");
+            refinerScale.Crop.Set("disabled");
+            bridge.AddNode(refinerScale, "26");
+
+            VAEEncodeNode refinerEncode = new();
+            refinerEncode.Pixels.ConnectTo(refinerScale.IMAGE);
+            refinerEncode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
+            bridge.AddNode(refinerEncode, "25");
+
+            UnknownNode refinerSampler = bridge.AddNode(new UnknownNode("UnitTest_RefinerSampler"), "23");
+            refinerSampler.GetInput("latent_image").ConnectToUntyped(refinerEncode.LATENT);
+
+            VAEDecodeNode refinerDecode = new();
+            refinerDecode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
+            refinerDecode.Samples.ConnectToUntyped(refinerSampler.GetOutput(0));
+            bridge.AddNode(refinerDecode, "8");
+
+            ImageScaleNode rootGuideScale = new();
+            rootGuideScale.Image.ConnectTo(refinerDecode.IMAGE);
+            rootGuideScale.Width.Set(512L);
+            rootGuideScale.Height.Set(512L);
+            rootGuideScale.UpscaleMethod.Set("lanczos");
+            rootGuideScale.Crop.Set("disabled");
+            bridge.AddNode(rootGuideScale, "102");
+
+            LTXVPreprocessNode preprocess = new();
+            preprocess.Image.ConnectTo(rootGuideScale.IMAGE);
+            preprocess.ImgCompression.Set(18L);
+            bridge.AddNode(preprocess, "110");
+
+            UnknownNode videoModelStub = bridge.AddNode(new UnknownNode("UnitTest_VideoModel"), "103");
+            UnknownNode videoVaeStub = bridge.AddNode(new UnknownNode("UnitTest_VideoVae"), "104");
+            UnknownNode audioVaeStub = bridge.AddNode(new UnknownNode("UnitTest_AudioVae"), "105");
+
+            EmptyLTXVLatentVideoNode emptyVideoLatent = new();
+            emptyVideoLatent.Width.Set(512L);
+            emptyVideoLatent.Height.Set(512L);
+            emptyVideoLatent.Length.Set(16L);
+            emptyVideoLatent.BatchSize.Set(1L);
+            bridge.AddNode(emptyVideoLatent, "108");
+
+            // Original used keys "length" and "fps" on LTXVEmptyLatentAudio; the typed node
+            // declares "frames_number" and "frame_rate". Preserve original keys via ExtraInputs.
+            LTXVEmptyLatentAudioNode emptyAudioLatent = new()
             {
-                ["vae"] = g.CurrentVae.Path,
-                ["samples"] = g.CurrentMedia.Path
-            }, id: "24", idMandatory: true);
-            string refinerScale = g.CreateNode("ImageScale", new JObject()
-            {
-                ["image"] = new JArray(baseDecode, 0),
-                ["width"] = 512,
-                ["height"] = 512,
-                ["upscale_method"] = "lanczos",
-                ["crop"] = "disabled"
-            }, id: "26", idMandatory: true);
-            string refinerEncode = g.CreateNode("VAEEncode", new JObject()
-            {
-                ["pixels"] = new JArray(refinerScale, 0),
-                ["vae"] = g.CurrentVae.Path
-            }, id: "25", idMandatory: true);
-            string refinerSampler = g.CreateNode("UnitTest_RefinerSampler", new JObject()
-            {
-                ["latent_image"] = new JArray(refinerEncode, 0)
-            }, id: "23", idMandatory: true);
-            string refinerDecode = g.CreateNode("VAEDecode", new JObject()
-            {
-                ["vae"] = g.CurrentVae.Path,
-                ["samples"] = new JArray(refinerSampler, 0)
-            }, id: "8", idMandatory: true);
-            string rootGuideScale = g.CreateNode("ImageScale", new JObject()
-            {
-                ["image"] = new JArray(refinerDecode, 0),
-                ["width"] = 512,
-                ["height"] = 512,
-                ["upscale_method"] = "lanczos",
-                ["crop"] = "disabled"
-            }, id: "102", idMandatory: true);
-            _ = g.CreateNode("LTXVPreprocess", new JObject()
-            {
-                ["image"] = new JArray(rootGuideScale, 0),
-                ["img_compression"] = 18
-            }, id: "110", idMandatory: true);
-            _ = g.CreateNode("UnitTest_VideoModel", new JObject(), id: "103", idMandatory: true);
-            _ = g.CreateNode("UnitTest_VideoVae", new JObject(), id: "104", idMandatory: true);
-            _ = g.CreateNode("UnitTest_AudioVae", new JObject(), id: "105", idMandatory: true);
-            string emptyVideoLatent = g.CreateNode("EmptyLTXVLatentVideo", new JObject()
-            {
-                ["width"] = 512,
-                ["height"] = 512,
-                ["length"] = 16,
-                ["batch_size"] = 1
-            }, id: "108", idMandatory: true);
-            string emptyAudioLatent = g.CreateNode("LTXVEmptyLatentAudio", new JObject()
-            {
-                ["audio_vae"] = new JArray("105", 0),
-                ["length"] = 16,
-                ["fps"] = 24,
-                ["batch_size"] = 1
-            }, id: "109", idMandatory: true);
-            string imgToVideo = g.CreateNode("LTXVImgToVideoInplace", new JObject()
-            {
-                ["vae"] = new JArray("104", 0),
-                ["image"] = new JArray("110", 0),
-                ["latent"] = new JArray(emptyVideoLatent, 0),
-                ["strength"] = 1.0,
-                ["bypass"] = false
-            }, id: "111", idMandatory: true);
-            string concat = g.CreateNode("LTXVConcatAVLatent", new JObject()
-            {
-                ["video_latent"] = new JArray(imgToVideo, 0),
-                ["audio_latent"] = new JArray(emptyAudioLatent, 0)
-            }, id: "113", idMandatory: true);
-            string separate = g.CreateNode("LTXVSeparateAVLatent", new JObject()
-            {
-                ["av_latent"] = new JArray(concat, 0)
-            }, id: "201", idMandatory: true);
-            _ = g.CreateNode("VAEDecodeTiled", new JObject()
-            {
-                ["vae"] = new JArray("104", 0),
-                ["samples"] = new JArray(separate, 0),
-                ["tile_size"] = 2048,
-                ["overlap"] = 256,
-                ["temporal_size"] = 64,
-                ["temporal_overlap"] = 16
-            }, id: "202", idMandatory: true);
-            _ = g.CreateNode("LTXVAudioVAEDecode", new JObject()
-            {
-                ["audio_vae"] = new JArray("105", 0),
-                ["samples"] = new JArray(separate, 1)
-            }, id: "203", idMandatory: true);
-            _ = g.CreateNode("SwarmSaveAnimationWS", new JObject()
-            {
-                ["images"] = new JArray("202", 0),
-                ["audio"] = new JArray("203", 0),
-                ["fps"] = 24,
-                ["lossless"] = false,
-                ["quality"] = 95,
-                ["method"] = "default",
-                ["format"] = "h264-mp4"
-            }, id: "9", idMandatory: true);
-            g.CurrentMedia = new WGNodeData([refinerDecode, 0], g, WGNodeData.DT_IMAGE, g.CurrentCompat())
+                ExtraInputs = new JObject { ["length"] = 16, ["fps"] = 24 }
+            };
+            emptyAudioLatent.AudioVae.ConnectToUntyped(audioVaeStub.GetOutput(0));
+            emptyAudioLatent.BatchSize.Set(1L);
+            bridge.AddNode(emptyAudioLatent, "109");
+
+            LTXVImgToVideoInplaceNode imgToVideo = new();
+            imgToVideo.Vae.ConnectToUntyped(videoVaeStub.GetOutput(0));
+            imgToVideo.Image.ConnectTo(preprocess.OutputImage);
+            imgToVideo.LatentInput.ConnectTo(emptyVideoLatent.LATENT);
+            imgToVideo.Strength.Set(1.0);
+            imgToVideo.Bypass.Set(false);
+            bridge.AddNode(imgToVideo, "111");
+
+            LTXVConcatAVLatentNode concat = new();
+            concat.VideoLatent.ConnectTo(imgToVideo.Latent);
+            concat.AudioLatent.ConnectTo(emptyAudioLatent.Latent);
+            bridge.AddNode(concat, "113");
+
+            LTXVSeparateAVLatentNode separate = new();
+            separate.AvLatent.ConnectTo(concat.Latent);
+            bridge.AddNode(separate, "201");
+
+            VAEDecodeTiledNode videoDecode = new();
+            videoDecode.Vae.ConnectToUntyped(videoVaeStub.GetOutput(0));
+            videoDecode.Samples.ConnectTo(separate.VideoLatent);
+            videoDecode.TileSize.Set(2048L);
+            videoDecode.Overlap.Set(256L);
+            videoDecode.TemporalSize.Set(64L);
+            videoDecode.TemporalOverlap.Set(16L);
+            bridge.AddNode(videoDecode, "202");
+
+            LTXVAudioVAEDecodeNode audioDecode = new();
+            audioDecode.AudioVae.ConnectToUntyped(audioVaeStub.GetOutput(0));
+            audioDecode.Samples.ConnectTo(separate.AudioLatent);
+            bridge.AddNode(audioDecode, "203");
+
+            SwarmSaveAnimationWSNode save = new();
+            save.Images.ConnectTo(videoDecode.IMAGE);
+            save.Audio.ConnectTo(audioDecode.Audio);
+            save.Fps.Set(24.0);
+            save.Lossless.Set(false);
+            save.Quality.Set(95L);
+            save.Method.Set("default");
+            save.Format.Set("h264-mp4");
+            bridge.AddNode(save, "9");
+
+            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(refinerDecode.IMAGE), g, WGNodeData.DT_IMAGE, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512
@@ -941,11 +948,19 @@ public partial class StageFlowTests
             T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null);
             g.FinalLoadedModel = videoModel;
             g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
-            g.CurrentModel = new WGNodeData(["103", 0], g, WGNodeData.DT_MODEL, g.CurrentCompat());
-            g.CurrentTextEnc = new WGNodeData(["103", 1], g, WGNodeData.DT_TEXTENC, g.CurrentCompat());
-            g.CurrentVae = new WGNodeData(["104", 0], g, WGNodeData.DT_VAE, g.CurrentCompat());
-            g.CurrentAudioVae = new WGNodeData(["105", 0], g, WGNodeData.DT_AUDIOVAE, g.CurrentCompat());
-            g.CurrentMedia = new WGNodeData(["202", 0], g, WGNodeData.DT_VIDEO, g.CurrentCompat())
+
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            ComfyNode videoModelNode = bridge.Graph.GetNode("103");
+            ComfyNode videoVaeNode = bridge.Graph.GetNode("104");
+            ComfyNode audioVaeNode = bridge.Graph.GetNode("105");
+            ComfyNode videoDecodeNode = bridge.Graph.GetNode("202");
+            ComfyNode audioDecodeNode = bridge.Graph.GetNode("203");
+
+            g.CurrentModel = videoModelNode.FindOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
+            g.CurrentTextEnc = videoModelNode.FindOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
+            g.CurrentVae = videoVaeNode.FindOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
+            g.CurrentAudioVae = audioVaeNode.FindOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
+            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(videoDecodeNode.FindOutput(0)), g, WGNodeData.DT_VIDEO, g.CurrentCompat())
             {
                 Width = 512,
                 Height = 512,
@@ -954,7 +969,7 @@ public partial class StageFlowTests
             };
             if (attachAudioToCurrentMedia)
             {
-                g.CurrentMedia.AttachedAudio = new WGNodeData(["203", 0], g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+                g.CurrentMedia.AttachedAudio = audioDecodeNode.FindOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
             }
 
             BridgeSync.SyncLastId(g);

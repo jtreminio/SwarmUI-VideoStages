@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -112,12 +113,15 @@ internal static class WorkflowTestHarness
     public static WorkflowGenerator.WorkflowGenStep MinimalGraphSeedStep() =>
         new(g =>
         {
-            _ = g.CreateNode("UnitTest_Model", new JObject(), id: "4", idMandatory: false);
-            _ = g.CreateNode("UnitTest_Latent", new JObject(), id: "10", idMandatory: false);
-            g.CurrentModel = new WGNodeData(["4", 0], g, WGNodeData.DT_MODEL, g.CurrentCompat());
-            g.CurrentTextEnc = new WGNodeData(["4", 1], g, WGNodeData.DT_TEXTENC, g.CurrentCompat());
-            g.CurrentVae = new WGNodeData(["4", 2], g, WGNodeData.DT_VAE, g.CurrentCompat());
-            g.CurrentMedia = new WGNodeData(["10", 0], g, WGNodeData.DT_LATENT_IMAGE, g.CurrentCompat());
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+
+            UnknownNode model = bridge.AddNode(new UnknownNode("UnitTest_Model"), "4");
+            UnknownNode latent = bridge.AddNode(new UnknownNode("UnitTest_Latent"), "10");
+
+            g.CurrentModel = model.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
+            g.CurrentTextEnc = model.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
+            g.CurrentVae = model.GetOutput(2).ToWGNodeData(g, WGNodeData.DT_VAE);
+            g.CurrentMedia = latent.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_LATENT_IMAGE);
             g.FinalLoadedModel = g.UserInput.Get(T2IParamTypes.Model, null);
             g.FinalLoadedModelList = g.FinalLoadedModel is null ? [] : [g.FinalLoadedModel];
 
