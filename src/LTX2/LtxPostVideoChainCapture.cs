@@ -235,13 +235,13 @@ internal sealed class LtxPostVideoChainCapture
 
     private string AddTiledVideoDecode(WorkflowBridge bridge, INodeOutput vaeSource, INodeOutput samplesSource)
     {
-        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode());
+        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode().With(
+            TileSize: g.UserInput.Get(T2IParamTypes.VAETileSize, 768),
+            Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
+            TemporalSize: g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
+            TemporalOverlap: g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)));
         decode.Vae.ConnectToUntyped(vaeSource);
         decode.Samples.ConnectToUntyped(samplesSource);
-        decode.TileSize.Set(g.UserInput.Get(T2IParamTypes.VAETileSize, 768));
-        decode.Overlap.Set(g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64));
-        decode.TemporalSize.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096));
-        decode.TemporalOverlap.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
         bridge.SyncNode(decode);
         return decode.Id;
     }

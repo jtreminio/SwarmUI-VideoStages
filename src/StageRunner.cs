@@ -455,10 +455,11 @@ internal class StageRunner(
             return;
         }
 
-        upstreamScale.Width.Set(startScale.Width.LiteralAsLong() ?? 0L);
-        upstreamScale.Height.Set(startScale.Height.LiteralAsLong() ?? 0L);
-        upstreamScale.Crop.Set(startScale.Crop.LiteralAsString() ?? "center");
-        upstreamScale.UpscaleMethod.Set(startScale.UpscaleMethod.LiteralAsString() ?? "lanczos");
+        upstreamScale.With(
+            Width: startScale.Width.LiteralAsLong() ?? 0L,
+            Height: startScale.Height.LiteralAsLong() ?? 0L,
+            Crop: startScale.Crop.LiteralAsString() ?? "center",
+            UpscaleMethod: startScale.UpscaleMethod.LiteralAsString() ?? "lanczos");
         wan.StartImage.ConnectTo(upstreamScale.IMAGE);
         bridge.SyncNode(upstreamScale);
         bridge.SyncNode(wan);
@@ -628,15 +629,15 @@ internal class StageRunner(
     private ImageScaleNode AddDisabledCropImageScale(JArray sourcePath, int width, int height, string upscaleMethod)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
+            Width: width,
+            Height: height,
+            UpscaleMethod: upscaleMethod,
+            Crop: "disabled"));
         if (sourcePath is { Count: 2 } && bridge.ResolvePath(sourcePath) is INodeOutput src)
         {
             scale.Image.ConnectToUntyped(src);
         }
-        scale.Width.Set(width);
-        scale.Height.Set(height);
-        scale.UpscaleMethod.Set(upscaleMethod);
-        scale.Crop.Set("disabled");
         bridge.SyncNode(scale);
         BridgeSync.SyncLastId(g);
         return scale;
@@ -657,12 +658,12 @@ internal class StageRunner(
         }
         bridge.SyncNode(upscale);
 
-        ImageScaleNode fit = bridge.AddNode(new ImageScaleNode());
+        ImageScaleNode fit = bridge.AddNode(new ImageScaleNode().With(
+            Width: targetWidth,
+            Height: targetHeight,
+            UpscaleMethod: "lanczos",
+            Crop: "disabled"));
         fit.Image.ConnectTo(upscale.IMAGE);
-        fit.Width.Set(targetWidth);
-        fit.Height.Set(targetHeight);
-        fit.UpscaleMethod.Set("lanczos");
-        fit.Crop.Set("disabled");
         bridge.SyncNode(fit);
         BridgeSync.SyncLastId(g);
         return fit;

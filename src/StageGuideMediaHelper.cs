@@ -124,15 +124,15 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         int width,
         int height)
     {
-        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
+            Width: width,
+            Height: height,
+            UpscaleMethod: "lanczos",
+            Crop: "center"));
         if (sourcePath is { Count: 2 } && bridge.ResolvePath(sourcePath) is INodeOutput source)
         {
             scale.Image.ConnectToUntyped(source);
         }
-        scale.Width.Set(width);
-        scale.Height.Set(height);
-        scale.UpscaleMethod.Set("lanczos");
-        scale.Crop.Set("center");
         bridge.SyncNode(scale);
         BridgeSync.SyncLastId(g);
         return scale;

@@ -56,4 +56,27 @@ public sealed class LTXAddVideoICLoRAGuideNode : ComfyNode
         TileOverlap = AddInput<IntType>("tile_overlap", required: true);
         TileOverlap.Set(64L);
     }
+
+    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
+    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    public LTXAddVideoICLoRAGuideNode With(
+        long? FrameIdx = null,
+        double? Strength = null,
+        double? LatentDownscaleFactor = null,
+        string? Crop = null,
+        bool? UseTiledEncode = null,
+        long? TileSize = null,
+        long? TileOverlap = null
+    )
+    {
+        if (FrameIdx is { } v_FrameIdx) this.FrameIdx.Set(v_FrameIdx);
+        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
+        if (LatentDownscaleFactor is { } v_LatentDownscaleFactor) this.LatentDownscaleFactor.Set(v_LatentDownscaleFactor);
+        if (Crop is { } v_Crop) this.Crop.Set(v_Crop);
+        if (UseTiledEncode is { } v_UseTiledEncode) this.UseTiledEncode.Set(v_UseTiledEncode);
+        if (TileSize is { } v_TileSize) this.TileSize.Set(v_TileSize);
+        if (TileOverlap is { } v_TileOverlap) this.TileOverlap.Set(v_TileOverlap);
+        return this;
+    }
 }

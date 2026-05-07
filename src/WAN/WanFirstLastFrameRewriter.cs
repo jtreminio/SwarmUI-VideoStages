@@ -133,12 +133,12 @@ internal static class WanFirstLastFrameRewriter
             return startImageOutput;
         }
 
-        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
+            Width: width,
+            Height: height,
+            UpscaleMethod: "lanczos",
+            Crop: "disabled"));
         scale.Image.ConnectToUntyped(endRawOutput);
-        scale.Width.Set(width);
-        scale.Height.Set(height);
-        scale.UpscaleMethod.Set("lanczos");
-        scale.Crop.Set("disabled");
         bridge.SyncNode(scale);
         return scale.IMAGE;
     }

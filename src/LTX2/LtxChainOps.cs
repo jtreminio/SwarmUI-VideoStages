@@ -273,11 +273,11 @@ internal static class LtxChainOps
     {
         if (config.UseTiledDecode)
         {
-            VAEDecodeTiledNode tiled = new();
-            tiled.TileSize.Set(config.TileSize);
-            tiled.Overlap.Set(config.Overlap);
-            tiled.TemporalSize.Set(config.TemporalSize);
-            tiled.TemporalOverlap.Set(config.TemporalOverlap);
+            VAEDecodeTiledNode tiled = new VAEDecodeTiledNode().With(
+                TileSize: config.TileSize,
+                Overlap: config.Overlap,
+                TemporalSize: config.TemporalSize,
+                TemporalOverlap: config.TemporalOverlap);
             VAEDecodeTiledNode added = preserveId is not null
                 ? bridge.AddNode(tiled, preserveId)
                 : bridge.AddNode(tiled);

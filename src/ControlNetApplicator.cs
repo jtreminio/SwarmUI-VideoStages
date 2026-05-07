@@ -110,10 +110,10 @@ internal static class ControlNetApplicator
 
     private static ResizeImageMaskNodeNode AddScaleToMultiple64Resize(WorkflowBridge bridge, INodeOutput source)
     {
-        ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode());
+        ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode()).With(
+            ResizeType: "scale to multiple",
+            ScaleMethod: "lanczos");
         resize.Input.ConnectToUntyped(source);
-        resize.ResizeType.Set("scale to multiple");
-        resize.ScaleMethod.Set("lanczos");
         resize.ExtraInputs = new JObject { ["resize_type.multiple"] = 64 };
         bridge.SyncNode(resize);
         return resize;
@@ -335,7 +335,14 @@ internal static class ControlNetApplicator
         JArray guideImagePath = ControlImageForLtxIcloraGuide(g, controlImagePath, frameCount);
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode());
+        LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(
+            FrameIdx: 0L,
+            Strength: controlStrength,
+            LatentDownscaleFactor: 2.0,
+            Crop: "disabled",
+            UseTiledEncode: false,
+            TileSize: 256L,
+            TileOverlap: 64L));
         if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
         {
             guide.PositiveInput.ConnectToUntyped(pos);
@@ -356,13 +363,6 @@ internal static class ControlNetApplicator
         {
             guide.Image.ConnectToUntyped(img);
         }
-        guide.FrameIdx.Set(0L);
-        guide.Strength.Set(controlStrength);
-        guide.LatentDownscaleFactor.Set(2.0);
-        guide.Crop.Set("disabled");
-        guide.UseTiledEncode.Set(false);
-        guide.TileSize.Set(256L);
-        guide.TileOverlap.Set(64L);
         bridge.SyncNode(guide);
         BridgeSync.SyncLastId(g);
 

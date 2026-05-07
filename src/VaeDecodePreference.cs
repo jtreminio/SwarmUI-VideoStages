@@ -118,7 +118,11 @@ internal static class VaeDecodePreference
     private static string AddTiledVaeDecode(WorkflowGenerator g, JArray vaePath, JArray latentPath)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode());
+        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode().With(
+            TileSize: g.UserInput.Get(T2IParamTypes.VAETileSize, 256),
+            Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
+            TemporalSize: g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 32),
+            TemporalOverlap: g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)));
         if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae)
         {
             decode.Vae.ConnectToUntyped(vae);
@@ -127,10 +131,6 @@ internal static class VaeDecodePreference
         {
             decode.Samples.ConnectToUntyped(samples);
         }
-        decode.TileSize.Set(g.UserInput.Get(T2IParamTypes.VAETileSize, 256));
-        decode.Overlap.Set(g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64));
-        decode.TemporalSize.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 32));
-        decode.TemporalOverlap.Set(g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
         bridge.SyncNode(decode);
         BridgeSync.SyncLastId(g);
         return decode.Id;

@@ -126,18 +126,18 @@ internal sealed class LtxStageExecutor(
         int height,
         double guidance)
     {
-        SwarmClipTextEncodeAdvancedNode node = bridge.AddNode(new SwarmClipTextEncodeAdvancedNode());
+        SwarmClipTextEncodeAdvancedNode node = bridge.AddNode(new SwarmClipTextEncodeAdvancedNode().With(
+            Steps: steps,
+            Prompt: prompt ?? "",
+            Width: width,
+            Height: height,
+            TargetWidth: width,
+            TargetHeight: height,
+            Guidance: guidance));
         if (clipOutput is not null)
         {
             node.Clip.ConnectToUntyped(clipOutput);
         }
-        node.Steps.Set(steps);
-        node.Prompt.Set(prompt ?? "");
-        node.Width.Set(width);
-        node.Height.Set(height);
-        node.TargetWidth.Set(width);
-        node.TargetHeight.Set(height);
-        node.Guidance.Set(guidance);
         bridge.SyncNode(node);
         return node;
     }
@@ -612,15 +612,15 @@ internal sealed class LtxStageExecutor(
             return new JArray(reusable.Id, 0);
         }
 
-        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode());
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
+            Width: targetW,
+            Height: targetH,
+            UpscaleMethod: "lanczos",
+            Crop: "center"));
         if (scaleSourcePath is { Count: 2 } && bridge.ResolvePath(scaleSourcePath) is INodeOutput src)
         {
             scale.Image.ConnectToUntyped(src);
         }
-        scale.Width.Set(targetW);
-        scale.Height.Set(targetH);
-        scale.UpscaleMethod.Set("lanczos");
-        scale.Crop.Set("center");
         bridge.SyncNode(scale);
         BridgeSync.SyncLastId(g);
 
