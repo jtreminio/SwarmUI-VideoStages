@@ -62,8 +62,8 @@ public partial class StageFlowTests
 
             ImageScaleNode scaled = new();
             scaled.Image.ConnectTo(videoComponents.Images);
-            scaled.Width.Set(512L);
-            scaled.Height.Set(512L);
+            scaled.Width.Set(512);
+            scaled.Height.Set(512);
             scaled.UpscaleMethod.Set("lanczos");
             scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
@@ -118,8 +118,8 @@ public partial class StageFlowTests
 
             ImageScaleNode scaled = new();
             scaled.Image.ConnectTo(videoComponents.Images);
-            scaled.Width.Set(512L);
-            scaled.Height.Set(512L);
+            scaled.Width.Set(512);
+            scaled.Height.Set(512);
             scaled.UpscaleMethod.Set("lanczos");
             scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
@@ -146,8 +146,8 @@ public partial class StageFlowTests
             {
                 ImageFromBatchNode firstFrame = new();
                 firstFrame.Image.ConnectToUntyped(resize.Resized);
-                firstFrame.BatchIndex.Set(0L);
-                firstFrame.Length.Set(1L);
+                firstFrame.BatchIndex.Set(0);
+                firstFrame.Length.Set(1);
                 bridge.AddNode(firstFrame, "308");
                 controlImageOutput = firstFrame.IMAGE;
                 diffPatchId = "309";
@@ -180,16 +180,16 @@ public partial class StageFlowTests
 
             ImageScaleNode scaled = new();
             scaled.Image.ConnectTo(videoComponents.Images);
-            scaled.Width.Set(512L);
-            scaled.Height.Set(512L);
+            scaled.Width.Set(512);
+            scaled.Height.Set(512);
             scaled.UpscaleMethod.Set("lanczos");
             scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
 
             ImageFromBatchNode firstFrame = new();
             firstFrame.Image.ConnectTo(scaled.IMAGE);
-            firstFrame.BatchIndex.Set(0L);
-            firstFrame.Length.Set(1L);
+            firstFrame.BatchIndex.Set(0);
+            firstFrame.Length.Set(1);
             bridge.AddNode(firstFrame, "303");
 
             ModelPatchLoaderNode modelPatchLoader = new();

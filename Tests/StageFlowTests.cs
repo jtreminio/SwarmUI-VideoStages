@@ -527,10 +527,10 @@ public partial class StageFlowTests
             VAEDecodeTiledNode videoDecode = new();
             videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048L);
-            videoDecode.Overlap.Set(256L);
-            videoDecode.TemporalSize.Set(64L);
-            videoDecode.TemporalOverlap.Set(16L);
+            videoDecode.TileSize.Set(2048);
+            videoDecode.Overlap.Set(256);
+            videoDecode.TemporalSize.Set(64);
+            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -543,7 +543,7 @@ public partial class StageFlowTests
             save.Audio.ConnectTo(audioDecode.Audio);
             save.Fps.Set(24.0);
             save.Lossless.Set(false);
-            save.Quality.Set(95L);
+            save.Quality.Set(95);
             save.Method.Set("default");
             save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
@@ -585,10 +585,10 @@ public partial class StageFlowTests
             VAEDecodeTiledNode videoDecode = new();
             videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048L);
-            videoDecode.Overlap.Set(256L);
-            videoDecode.TemporalSize.Set(64L);
-            videoDecode.TemporalOverlap.Set(16L);
+            videoDecode.TileSize.Set(2048);
+            videoDecode.Overlap.Set(256);
+            videoDecode.TemporalSize.Set(64);
+            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -598,8 +598,8 @@ public partial class StageFlowTests
 
             SwarmTrimFramesNode trim = new();
             trim.Image.ConnectTo(videoDecode.IMAGE);
-            trim.TrimStart.Set(1L);
-            trim.TrimEnd.Set(1L);
+            trim.TrimStart.Set(1);
+            trim.TrimEnd.Set(1);
             bridge.AddNode(trim, "204");
 
             SwarmSaveAnimationWSNode save = new();
@@ -607,7 +607,7 @@ public partial class StageFlowTests
             save.Audio.ConnectTo(audioDecode.Audio);
             save.Fps.Set(24.0);
             save.Lossless.Set(false);
-            save.Quality.Set(95L);
+            save.Quality.Set(95);
             save.Method.Set("default");
             save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
@@ -659,10 +659,10 @@ public partial class StageFlowTests
             VAEDecodeTiledNode videoDecode = new();
             videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048L);
-            videoDecode.Overlap.Set(256L);
-            videoDecode.TemporalSize.Set(64L);
-            videoDecode.TemporalOverlap.Set(16L);
+            videoDecode.TileSize.Set(2048);
+            videoDecode.Overlap.Set(256);
+            videoDecode.TemporalSize.Set(64);
+            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -675,7 +675,7 @@ public partial class StageFlowTests
             save.Audio.ConnectTo(audioDecode.Audio);
             save.Fps.Set(24.0);
             save.Lossless.Set(false);
-            save.Quality.Set(95L);
+            save.Quality.Set(95);
             save.Method.Set("default");
             save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
@@ -747,15 +747,15 @@ public partial class StageFlowTests
 
             ImageScaleNode scaleNode = new();
             scaleNode.Image.ConnectToUntyped(bridge.ResolvePath(new JArray("12", 0)));
-            scaleNode.Width.Set(512L);
-            scaleNode.Height.Set(512L);
+            scaleNode.Width.Set(512);
+            scaleNode.Height.Set(512);
             scaleNode.UpscaleMethod.Set("lanczos");
             scaleNode.Crop.Set("disabled");
             bridge.AddNode(scaleNode, "209");
 
             LTXVPreprocessNode preprocess = new();
             preprocess.Image.ConnectTo(scaleNode.IMAGE);
-            preprocess.ImgCompression.Set(18L);
+            preprocess.ImgCompression.Set(18);
             bridge.AddNode(preprocess, "210");
         }, 11.4);
 
@@ -767,10 +767,10 @@ public partial class StageFlowTests
             VAEDecodeTiledNode decodeNode = new();
             decodeNode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
             decodeNode.Samples.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
-            decodeNode.TileSize.Set(2048L);
-            decodeNode.Overlap.Set(256L);
-            decodeNode.TemporalSize.Set(64L);
-            decodeNode.TemporalOverlap.Set(16L);
+            decodeNode.TileSize.Set(2048);
+            decodeNode.Overlap.Set(256);
+            decodeNode.TemporalSize.Set(64);
+            decodeNode.TemporalOverlap.Set(16);
             bridge.AddNode(decodeNode, "8");
 
             g.CurrentMedia = decodeNode.IMAGE.ToWGMedia(g, WGNodeData.DT_IMAGE,
@@ -778,15 +778,15 @@ public partial class StageFlowTests
 
             ImageScaleNode scaleNode = new();
             scaleNode.Image.ConnectTo(decodeNode.IMAGE);
-            scaleNode.Width.Set(512L);
-            scaleNode.Height.Set(512L);
+            scaleNode.Width.Set(512);
+            scaleNode.Height.Set(512);
             scaleNode.UpscaleMethod.Set("lanczos");
             scaleNode.Crop.Set("disabled");
             bridge.AddNode(scaleNode, "209");
 
             LTXVPreprocessNode preprocess = new();
             preprocess.Image.ConnectTo(scaleNode.IMAGE);
-            preprocess.ImgCompression.Set(18L);
+            preprocess.ImgCompression.Set(18);
             bridge.AddNode(preprocess, "210");
         }, 1);
 
@@ -802,8 +802,8 @@ public partial class StageFlowTests
 
             ImageScaleNode refinerScale = new();
             refinerScale.Image.ConnectTo(baseDecode.IMAGE);
-            refinerScale.Width.Set(512L);
-            refinerScale.Height.Set(512L);
+            refinerScale.Width.Set(512);
+            refinerScale.Height.Set(512);
             refinerScale.UpscaleMethod.Set("lanczos");
             refinerScale.Crop.Set("disabled");
             bridge.AddNode(refinerScale, "26");
@@ -823,15 +823,15 @@ public partial class StageFlowTests
 
             ImageScaleNode rootGuideScale = new();
             rootGuideScale.Image.ConnectTo(refinerDecode.IMAGE);
-            rootGuideScale.Width.Set(512L);
-            rootGuideScale.Height.Set(512L);
+            rootGuideScale.Width.Set(512);
+            rootGuideScale.Height.Set(512);
             rootGuideScale.UpscaleMethod.Set("lanczos");
             rootGuideScale.Crop.Set("disabled");
             bridge.AddNode(rootGuideScale, "102");
 
             LTXVPreprocessNode preprocess = new();
             preprocess.Image.ConnectTo(rootGuideScale.IMAGE);
-            preprocess.ImgCompression.Set(18L);
+            preprocess.ImgCompression.Set(18);
             bridge.AddNode(preprocess, "110");
 
             UnknownNode videoModelStub = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs("MODEL", "CLIP");
@@ -839,10 +839,10 @@ public partial class StageFlowTests
             UnknownNode audioVaeStub = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
 
             EmptyLTXVLatentVideoNode emptyVideoLatent = new();
-            emptyVideoLatent.Width.Set(512L);
-            emptyVideoLatent.Height.Set(512L);
-            emptyVideoLatent.Length.Set(16L);
-            emptyVideoLatent.BatchSize.Set(1L);
+            emptyVideoLatent.Width.Set(512);
+            emptyVideoLatent.Height.Set(512);
+            emptyVideoLatent.Length.Set(16);
+            emptyVideoLatent.BatchSize.Set(1);
             bridge.AddNode(emptyVideoLatent, "108");
 
             // Original used keys "length" and "fps" on LTXVEmptyLatentAudio; the typed node
@@ -852,7 +852,7 @@ public partial class StageFlowTests
                 ExtraInputs = new JObject { ["length"] = 16, ["fps"] = 24 }
             };
             emptyAudioLatent.AudioVae.ConnectToUntyped(audioVaeStub.GetOutput(0));
-            emptyAudioLatent.BatchSize.Set(1L);
+            emptyAudioLatent.BatchSize.Set(1);
             bridge.AddNode(emptyAudioLatent, "109");
 
             LTXVImgToVideoInplaceNode imgToVideo = new();
@@ -875,10 +875,10 @@ public partial class StageFlowTests
             VAEDecodeTiledNode videoDecode = new();
             videoDecode.Vae.ConnectToUntyped(videoVaeStub.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048L);
-            videoDecode.Overlap.Set(256L);
-            videoDecode.TemporalSize.Set(64L);
-            videoDecode.TemporalOverlap.Set(16L);
+            videoDecode.TileSize.Set(2048);
+            videoDecode.Overlap.Set(256);
+            videoDecode.TemporalSize.Set(64);
+            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -891,7 +891,7 @@ public partial class StageFlowTests
             save.Audio.ConnectTo(audioDecode.Audio);
             save.Fps.Set(24.0);
             save.Lossless.Set(false);
-            save.Quality.Set(95L);
+            save.Quality.Set(95);
             save.Method.Set("default");
             save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");

@@ -35,8 +35,8 @@ public class WorkflowGraphTests
 
         SwarmTrimFramesNode trim = new();
         trim.Image.ConnectTo(decode.IMAGE);
-        trim.TrimStart.Set(1L);
-        trim.TrimEnd.Set(1L);
+        trim.TrimStart.Set(1);
+        trim.TrimEnd.Set(1);
         bridge.AddNode(trim, "204");
 
         SwarmSaveAnimationWSNode save = new();
