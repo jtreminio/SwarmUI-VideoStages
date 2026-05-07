@@ -116,10 +116,7 @@ public partial class StageFlowTests
 
         List<SwarmKSamplerNode> samplerNodes = SamplerNodesOrdered(bridge);
         Assert.Equal(2, samplerNodes.Count);
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            SamplerLatentImagePath(samplerNodes[1]),
-            new JArray(samplerNodes[0].Id, 0)));
+        Assert.True(ReachesUpstream(bridge, samplerNodes[1].LatentImage.Connection!.Node, samplerNodes[0].Id));
 
         WorkflowNode finalVideoDecode = AsWorkflowNode(RequireTypedNode<VAEDecodeNode>(bridge, "202"), workflow);
         RequireRetargetedSeparateNode(workflow, finalVideoDecode);

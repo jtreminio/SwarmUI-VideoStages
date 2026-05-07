@@ -350,10 +350,7 @@ public partial class StageFlowTests
         Assert.Equal(0, stageControlApply.Image.Connection.SlotIndex);
         INodeInput preprocessorImage = preprocessor.FindInput("image");
         Assert.NotNull(preprocessorImage);
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(preprocessorImage.Connection!),
-            new JArray("301", 0)));
+        Assert.True(ReachesUpstream(bridge, preprocessorImage.Connection!.Node, "301"));
     }
 
     [Fact]
@@ -402,10 +399,7 @@ public partial class StageFlowTests
         Assert.Equal(0, stageDiffPatch.Image.Connection.SlotIndex);
         INodeInput preprocessorImage = preprocessor.FindInput("image");
         Assert.NotNull(preprocessorImage);
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(preprocessorImage.Connection!),
-            new JArray("301", 0)));
+        Assert.True(ReachesUpstream(bridge, preprocessorImage.Connection!.Node, "301"));
     }
 
     [Fact]
@@ -505,10 +499,7 @@ public partial class StageFlowTests
         QwenImageDiffsynthControlnetNode coreDiffPatch = Assert.Single(bridge.Graph.NodesOfType<QwenImageDiffsynthControlnetNode>());
         Assert.Equal(firstFrame.Id, coreDiffPatch.Image.Connection!.Node.Id);
         Assert.Equal(0, coreDiffPatch.Image.Connection.SlotIndex);
-        Assert.False(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(coreDiffPatch.Model.Connection!),
-            new JArray(icLora.Id, 0)));
+        Assert.False(ReachesUpstream(bridge, coreDiffPatch.Model.Connection!.Node, icLora.Id));
 
         LTXAddVideoICLoRAGuideNode icGuide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.Equal(0, (int?)icGuide.FrameIdx.LiteralAsLong());
@@ -922,17 +913,14 @@ public partial class StageFlowTests
         List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
         Assert.Equal(2, samplers.Count);
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(saveNode.Images.Connection!),
-            new JArray(samplers[1].Id, 0)));
+        Assert.True(ReachesUpstream(bridge, saveNode.Images.Connection!.Node, samplers[1].Id));
 
         LTXVAudioVAEDecodeNode finalAudioDecode = Assert.IsType<LTXVAudioVAEDecodeNode>(saveNode.Audio.Connection!.Node);
         LTXVSeparateAVLatentNode finalSeparate = Assert.IsType<LTXVSeparateAVLatentNode>(finalAudioDecode.Samples.Connection!.Node);
-        JArray finalSeparateAvLatent = WorkflowBridge.ToPath(finalSeparate.AvLatent.Connection!);
+        ComfyNode finalSeparateAvLatentStart = finalSeparate.AvLatent.Connection!.Node;
         Assert.True(
-            OutputTracesBackToSource(workflow, finalSeparateAvLatent, new JArray(samplers[1].Id, 0)),
-            $"Expected save audio to decode stage 1 latent [{samplers[1].Id}, 0], but av_latent came from {finalSeparateAvLatent}.");
+            ReachesUpstream(bridge, finalSeparateAvLatentStart, samplers[1].Id),
+            $"Expected save audio to decode stage 1 latent at {samplers[1].Id}, but av_latent came from {finalSeparateAvLatentStart.Id}.");
     }
 
     [Fact]
@@ -953,10 +941,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             node => node.Image.Connection?.Node.Id == "12" && node.Image.Connection.SlotIndex == 0);
         ImageFromBatchNode imageFromBatch = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(imageFromBatch.Image.Connection!),
-            new JArray(scaleNode.Id, 0)));
+        Assert.True(ReachesUpstream(bridge, imageFromBatch.Image.Connection!.Node, scaleNode.Id));
         Assert.Equal(768, scaleNode.Width.LiteralAsInt());
         Assert.Equal(448, scaleNode.Height.LiteralAsInt());
         Assert.Equal("lanczos", scaleNode.UpscaleMethod.LiteralAsString());
@@ -1015,10 +1000,7 @@ public partial class StageFlowTests
         Assert.Equal(544, rootScaleNode.Height.LiteralAsInt());
         Assert.Equal("lanczos", rootScaleNode.UpscaleMethod.LiteralAsString());
         Assert.Equal("center", rootScaleNode.Crop.LiteralAsString());
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(imageFromBatch.Image.Connection!),
-            new JArray(rootScaleNode.Id, 0)));
+        Assert.True(ReachesUpstream(bridge, imageFromBatch.Image.Connection!.Node, rootScaleNode.Id));
     }
 
     [Fact]
@@ -1174,10 +1156,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             node => node.Image.Connection?.Node.Id == "12" && node.Image.Connection.SlotIndex == 0);
         LTXVPreprocessNode preprocessNode = Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(preprocessNode.Image.Connection!),
-            new JArray(rootScaleNode.Id, 0)));
+        Assert.True(ReachesUpstream(bridge, preprocessNode.Image.Connection!.Node, rootScaleNode.Id));
 
         LTXVImgToVideoInplaceNode imgToVideoNode = Assert.Single(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         Assert.Equal(1.0, imgToVideoNode.Strength.LiteralAsDouble());
@@ -1208,7 +1187,7 @@ public partial class StageFlowTests
         Assert.NotNull(store.Base);
         JArray preprocessImageIn = WorkflowBridge.ToPath(preprocessNode.Image.Connection!);
         AssertGuideReferenceResolvesToPreprocessInput(workflow, preprocessImageIn, store.Base);
-        Assert.False(OutputTracesBackToSource(workflow, preprocessImageIn, new JArray(rootScaleNode.Id, 0)));
+        Assert.False(ReachesUpstream(bridge, preprocessNode.Image.Connection!.Node, rootScaleNode.Id));
 
         LTXVImgToVideoInplaceNode imgToVideoNode = Assert.Single(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         Assert.Equal(0.55, imgToVideoNode.Strength.LiteralAsDouble());
@@ -1233,10 +1212,7 @@ public partial class StageFlowTests
 
         ImageScaleNode rootScaleNode = Assert.Single(bridge.Graph.NodesOfType<ImageScaleNode>());
         LTXVPreprocessNode preprocessNode = Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(preprocessNode.Image.Connection!),
-            new JArray(rootScaleNode.Id, 0)));
+        Assert.True(ReachesUpstream(bridge, preprocessNode.Image.Connection!.Node, rootScaleNode.Id));
 
         LTXVImgToVideoInplaceNode imgToVideoNode = Assert.Single(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         Assert.Equal(0.55, imgToVideoNode.Strength.LiteralAsDouble());
@@ -1456,10 +1432,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             node => node.Image.Connection?.Node.Id == "12" && node.Image.Connection.SlotIndex == 0);
         ImageFromBatchNode rootBatchNode = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
-        Assert.True(OutputTracesBackToSource(
-            workflow,
-            WorkflowBridge.ToPath(rootBatchNode.Image.Connection!),
-            new JArray(rootScaleNode.Id, 0)));
+        Assert.True(ReachesUpstream(bridge, rootBatchNode.Image.Connection!.Node, rootScaleNode.Id));
         Wan22ImageToVideoLatentNode wanLatentNode = Assert.Single(
             bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>(),
             node => node.StartImage.Connection?.Node.Id == rootBatchNode.Id && node.StartImage.Connection.SlotIndex == 0);
@@ -1739,8 +1712,7 @@ public partial class StageFlowTests
 
         foreach (ImageFromBatchNode fromBatchNode in bridge.Graph.NodesOfType<ImageFromBatchNode>())
         {
-            JArray batchImage = WorkflowBridge.ToPath(fromBatchNode.Image.Connection!);
-            Assert.False(OutputTracesBackToSource(workflow, batchImage, new JArray(samplers[0].Id, 0)));
+            Assert.False(ReachesUpstream(bridge, fromBatchNode.Image.Connection!.Node, samplers[0].Id));
         }
     }
 

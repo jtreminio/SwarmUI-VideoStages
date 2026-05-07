@@ -163,15 +163,14 @@ public partial class StageFlowTests
         Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
         Assert.Contains($"{VideoStagesExtension.SectionIdForClip(1)}", parsedConfinements);
         ComfyNode loraLoader = Assert.Single(LoraLoaderNodesOf(bridge));
-        string loraId = loraLoader.Id;
-        List<JArray> positiveEncoderClips = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
+        List<ComfyNode> positiveEncoderClipStarts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
             .Where(node => node.Text.LiteralAsString() == "global prompt")
-            .Select(node => WorkflowBridge.ToPath(node.Clip.Connection!))
+            .Select(node => node.Clip.Connection!.Node)
             .ToList();
 
-        Assert.Equal(2, positiveEncoderClips.Count);
-        Assert.Contains(positiveEncoderClips, clip => !OutputTracesBackToSource(workflow, clip, new JArray(loraId, 1)));
-        Assert.Contains(positiveEncoderClips, clip => OutputTracesBackToSource(workflow, clip, new JArray(loraId, 1)));
+        Assert.Equal(2, positiveEncoderClipStarts.Count);
+        Assert.Contains(positiveEncoderClipStarts, start => !ReachesUpstream(bridge, start, loraLoader.Id));
+        Assert.Contains(positiveEncoderClipStarts, start => ReachesUpstream(bridge, start, loraLoader.Id));
     }
 
     [Fact]

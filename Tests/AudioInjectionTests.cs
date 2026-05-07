@@ -364,9 +364,9 @@ public class AudioInjectionTests
         Assert.Contains(maskConsumers, c => c.Input.Name == "audio_latent" && c.Node is LTXVConcatAVLatentNode);
 
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        JArray saveAudio = WorkflowBridge.ToPath(saveNode.Audio.Connection!);
-        Assert.True(OutputTracesBackToNode(workflow, saveAudio, uploadedAudioNode.Id));
-        Assert.False(OutputTracesBackToNode(workflow, saveAudio, "300"));
+        ComfyNode saveAudioStart = saveNode.Audio.Connection!.Node;
+        Assert.True(ReachesUpstream(bridge, saveAudioStart, uploadedAudioNode.Id));
+        Assert.False(ReachesUpstream(bridge, saveAudioStart, "300"));
     }
 
     [Fact]
@@ -400,9 +400,9 @@ public class AudioInjectionTests
         Assert.NotEqual("300", lengthToFrames.AudioInput.Connection.Node.Id);
 
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        JArray saveAudio = WorkflowBridge.ToPath(saveNode.Audio.Connection!);
-        Assert.True(OutputTracesBackToNode(workflow, saveAudio, uploadedAudioNode.Id));
-        Assert.False(OutputTracesBackToNode(workflow, saveAudio, "300"));
+        ComfyNode saveAudioStart = saveNode.Audio.Connection!.Node;
+        Assert.True(ReachesUpstream(bridge, saveAudioStart, uploadedAudioNode.Id));
+        Assert.False(ReachesUpstream(bridge, saveAudioStart, "300"));
     }
 
     [Fact]
@@ -503,21 +503,22 @@ public class AudioInjectionTests
         Assert.Equal(2, samplers.Count);
 
         JObject batchInputs = (JObject)AsWorkflowNode(batchImagesNode, workflow).Node["inputs"];
-        List<JArray> batchImagePaths = batchInputs.Properties()
+        List<ComfyNode> batchImageStarts = batchInputs.Properties()
             .Where(p => p.Value is JArray { Count: 2 })
-            .Select(p => (JArray)p.Value)
+            .Select(p => bridge.Graph.GetNode($"{((JArray)p.Value)[0]}"))
+            .Where(n => n is not null)
             .ToList();
-        Assert.Equal(2, batchImagePaths.Count);
-        foreach (JArray path in batchImagePaths)
+        Assert.Equal(2, batchImageStarts.Count);
+        foreach (ComfyNode start in batchImageStarts)
         {
-            Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, path, sampler.Id));
+            Assert.Contains(samplers, sampler => ReachesUpstream(bridge, start, sampler.Id));
         }
-        Assert.NotEqual($"{batchImagePaths[0][0]}", $"{batchImagePaths[1][0]}");
+        Assert.NotEqual(batchImageStarts[0].Id, batchImageStarts[1].Id);
 
-        JArray audio1 = WorkflowBridge.ToPath(audioConcatNode.Audio1.Connection!);
-        JArray audio2 = WorkflowBridge.ToPath(audioConcatNode.Audio2.Connection!);
-        Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, audio1, sampler.Id));
-        Assert.Contains(samplers, sampler => OutputTracesBackToNode(workflow, audio2, sampler.Id));
+        ComfyNode audio1Start = audioConcatNode.Audio1.Connection!.Node;
+        ComfyNode audio2Start = audioConcatNode.Audio2.Connection!.Node;
+        Assert.Contains(samplers, sampler => ReachesUpstream(bridge, audio1Start, sampler.Id));
+        Assert.Contains(samplers, sampler => ReachesUpstream(bridge, audio2Start, sampler.Id));
 
         Assert.NotNull(generator.CurrentMedia.AttachedAudio);
         Assert.True(JToken.DeepEquals(
@@ -576,37 +577,4 @@ public class AudioInjectionTests
         Assert.Equal(640, solidMask.Height.LiteralAsInt());
     }
 
-    private static bool OutputTracesBackToNode(JObject workflow, JArray outputRef, string expectedNodeId)
-    {
-        Queue<JArray> pending = new();
-        HashSet<string> visited = [];
-        pending.Enqueue(new JArray(outputRef[0], outputRef[1]));
-        while (pending.Count > 0)
-        {
-            JArray current = pending.Dequeue();
-            string key = $"{current[0]}::{current[1]}";
-            if (!visited.Add(key))
-            {
-                continue;
-            }
-            if ($"{current[0]}" == expectedNodeId)
-            {
-                return true;
-            }
-            if (!workflow.TryGetValue($"{current[0]}", out JToken nodeToken)
-                || nodeToken is not JObject node
-                || node["inputs"] is not JObject inputs)
-            {
-                continue;
-            }
-            foreach (JProperty input in inputs.Properties())
-            {
-                if (input.Value is JArray { Count: 2 } inputPath)
-                {
-                    pending.Enqueue(new JArray(inputPath[0], inputPath[1]));
-                }
-            }
-        }
-        return false;
-    }
 }

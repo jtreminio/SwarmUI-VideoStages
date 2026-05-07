@@ -174,19 +174,21 @@ public partial class StageFlowTests
         Assert.NotNull(expectedReference);
         Assert.NotNull(expectedReference.Media);
 
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        string actualGuideId = $"{actualGuidePath[0]}";
+        string expectedSourceId = $"{expectedReference.Media.Path[0]}";
+        ComfyNode actualGuideNode = bridge.Graph.GetNode(actualGuideId);
+        Assert.NotNull(actualGuideNode);
+
         if (expectedReference.Media.DataType == WGNodeData.DT_IMAGE || expectedReference.Media.DataType == WGNodeData.DT_VIDEO)
         {
-            Assert.True(
-                JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path)
-                || OutputTracesBackToSource(workflow, actualGuidePath, expectedReference.Media.Path));
+            Assert.True(ReachesUpstream(bridge, actualGuideNode, expectedSourceId));
             return;
         }
 
-        Assert.False(JToken.DeepEquals(actualGuidePath, expectedReference.Media.Path));
+        Assert.NotEqual(expectedSourceId, actualGuideId);
 
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        ComfyNode decodeNode = bridge.Graph.GetNode($"{actualGuidePath[0]}");
-        Assert.NotNull(decodeNode);
+        ComfyNode decodeNode = actualGuideNode;
         if (decodeNode is ImageScaleNode imageScale)
         {
             Assert.NotNull(imageScale.Image.Connection);
@@ -196,11 +198,9 @@ public partial class StageFlowTests
         Assert.True(decodeNode is VAEDecodeNode or VAEDecodeTiledNode,
             $"Expected decode node to be VAEDecode or VAEDecodeTiled but found {decodeNode.ClassTypeName}.");
         INodeInput samplesInput = decodeNode.FindInput("samples") ?? decodeNode.FindInput("latent");
-        Assert.NotNull(samplesInput);
         Assert.NotNull(samplesInput.Connection);
-        JArray latentRef = new(samplesInput.Connection.Node.Id, samplesInput.Connection.SlotIndex);
 
-        Assert.True(OutputTracesBackToSource(workflow, latentRef, expectedReference.Media.Path));
+        Assert.True(ReachesUpstream(bridge, samplesInput.Connection.Node, expectedSourceId));
     }
 
     private static void AssertNoDanglingTiledVaeDecodes(JObject workflow)
@@ -340,72 +340,6 @@ public partial class StageFlowTests
         Assert.Equal(0, sampler.Positive.Connection.SlotIndex);
         Assert.Equal(conditioningNodeId, sampler.Negative.Connection!.Node.Id);
         Assert.Equal(1, sampler.Negative.Connection.SlotIndex);
-    }
-
-    private static bool OutputTracesBackToSource(JObject workflow, JArray outputRef, JArray expectedSourceRef)
-    {
-        Queue<JArray> pending = new();
-        HashSet<string> visited = [];
-        pending.Enqueue(new JArray(outputRef[0], outputRef[1]));
-
-        while (pending.Count > 0)
-        {
-            JArray current = pending.Dequeue();
-            string key = $"{current[0]}::{current[1]}";
-            if (!visited.Add(key))
-            {
-                continue;
-            }
-
-            if (JToken.DeepEquals(current, expectedSourceRef))
-            {
-                return true;
-            }
-
-            if (!workflow.TryGetValue($"{current[0]}", out JToken nodeToken) || nodeToken is not JObject node || node["inputs"] is not JObject inputs)
-            {
-                continue;
-            }
-
-            foreach (JArray upstreamRef in ExtractNodeRefs(inputs))
-            {
-                pending.Enqueue(upstreamRef);
-            }
-        }
-
-        return false;
-    }
-
-    private static IEnumerable<JArray> ExtractNodeRefs(JToken token)
-    {
-        if (token is JArray array)
-        {
-            if (array is [not (null or JArray), not (null or JArray)])
-            {
-                yield return new JArray(array[0], array[1]);
-                yield break;
-            }
-
-            foreach (JToken child in array)
-            {
-                foreach (JArray childRef in ExtractNodeRefs(child))
-                {
-                    yield return childRef;
-                }
-            }
-            yield break;
-        }
-
-        if (token is JObject obj)
-        {
-            foreach (JProperty property in obj.Properties())
-            {
-                foreach (JArray childRef in ExtractNodeRefs(property.Value))
-                {
-                    yield return childRef;
-                }
-            }
-        }
     }
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNoopSteps() =>
