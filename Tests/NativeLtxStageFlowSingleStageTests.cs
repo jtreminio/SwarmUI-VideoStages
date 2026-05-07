@@ -46,8 +46,6 @@ public partial class StageFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         StageRefStore store = new(generator);
-        Assert.NotNull(store.Generated);
-        Assert.NotNull(store.Generated.Vae);
         Assert.Equal(T2IModelClassSorter.CompatLtxv2.ID, store.Generated.Vae.Compat?.ID);
 
         Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());

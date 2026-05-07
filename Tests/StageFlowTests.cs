@@ -139,8 +139,6 @@ public partial class StageFlowTests
         ComfyNode decodeNode = bridge.Graph.GetNode(videoDecode.Id);
         Assert.NotNull(decodeNode);
         INodeInput samplesInput = decodeNode.FindInput("samples");
-        Assert.NotNull(samplesInput);
-        Assert.NotNull(samplesInput.Connection);
         Assert.False(samplesInput.Connection.Node.Id == "201" && samplesInput.Connection.SlotIndex == 0);
         LTXVSeparateAVLatentNode separateNode = Assert.IsType<LTXVSeparateAVLatentNode>(samplesInput.Connection.Node);
         return AsWorkflowNode(separateNode, workflow);
@@ -252,9 +250,7 @@ public partial class StageFlowTests
         LTXVSeparateAVLatentNode originalSeparateNode = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, originalSeparate.Id);
         foreach (LTXVConcatAVLatentNode concatNode in concatNodes)
         {
-            INodeOutput audioLatent = concatNode.AudioLatent.Connection;
-            Assert.NotNull(audioLatent);
-            Assert.Same(originalSeparateNode.AudioLatent, audioLatent);
+            Assert.Same(originalSeparateNode.AudioLatent, concatNode.AudioLatent.Connection);
         }
     }
 
@@ -348,8 +344,6 @@ public partial class StageFlowTests
         Assert.NotEmpty(conditioningNodes);
         foreach (LTXVConditioningNode conditioningNode in conditioningNodes)
         {
-            Assert.NotNull(conditioningNode.PositiveInput.Connection);
-            Assert.NotNull(conditioningNode.NegativeInput.Connection);
             Assert.IsType<SwarmClipTextEncodeAdvancedNode>(conditioningNode.PositiveInput.Connection.Node);
             Assert.IsType<SwarmClipTextEncodeAdvancedNode>(conditioningNode.NegativeInput.Connection.Node);
         }

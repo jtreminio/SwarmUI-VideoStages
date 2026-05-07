@@ -201,16 +201,12 @@ public class JsonParserClipsTests
         List<JsonParser.ClipSpec> clips = parser.ParseClips();
 
         Assert.Equal(2, clips.Count);
-        Assert.NotNull(clips[0].UploadedAudio);
         Assert.Equal("first.wav", clips[0].UploadedAudio.FileName);
-        Assert.NotNull(clips[1].UploadedAudio);
         Assert.Equal("second.wav", clips[1].UploadedAudio.FileName);
 
         AudioFile firstAudio = parser.ParseUploadedAudioForClip(clips[0]);
         AudioFile secondAudio = parser.ParseUploadedAudioForClip(clips[1]);
-        Assert.NotNull(firstAudio);
         Assert.Equal("first.wav", firstAudio.SourceFilePath);
-        Assert.NotNull(secondAudio);
         Assert.Equal("second.wav", secondAudio.SourceFilePath);
     }
 
@@ -230,7 +226,6 @@ public class JsonParserClipsTests
 
         JsonParser.ClipSpec clip = parser.ParseClips().Single();
 
-        Assert.NotNull(clip.UploadedAudio);
         Assert.Equal("inputs/_comfy1/clip_part02.wav", clip.UploadedAudio.Data);
 
         AudioFile audio = parser.ParseUploadedAudioForClip(clip);

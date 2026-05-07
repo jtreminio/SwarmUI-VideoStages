@@ -193,7 +193,6 @@ public partial class StageFlowTests
         ComfyNode preprocessorNode = bridge.Graph.GetNode("303");
         Assert.NotNull(preprocessorNode);
         INodeInput preprocessorImage = preprocessorNode.FindInput("image");
-        Assert.NotNull(preprocessorImage);
         Assert.Equal("302", preprocessorImage.Connection!.Node.Id);
         Assert.Equal(0, preprocessorImage.Connection.SlotIndex);
 
@@ -336,8 +335,7 @@ public partial class StageFlowTests
 
         AssertCoreVideoControlNetResizeBumped(workflow);
         ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ComfyNode resize = bridge.Graph.GetNode("304");
-        Assert.NotNull(resize);
+        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
         ImageFromBatchNode imageFromBatch = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
             node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0);
@@ -389,8 +387,7 @@ public partial class StageFlowTests
 
         AssertCoreVideoControlNetResizeBumped(workflow);
         ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ComfyNode resize = bridge.Graph.GetNode("304");
-        Assert.NotNull(resize);
+        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
         ImageFromBatchNode imageFromBatch = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
             node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0);
@@ -442,8 +439,7 @@ public partial class StageFlowTests
 
         AssertCoreVideoControlNetResizeBumped(workflow);
         Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ComfyNode resize = bridge.Graph.GetNode("304");
-        Assert.NotNull(resize);
+        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
         ImageFromBatchNode imageFromBatch = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
             node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0);
@@ -561,8 +557,7 @@ public partial class StageFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ComfyNode resize = bridge.Graph.GetNode("304");
-        Assert.NotNull(resize);
+        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
         GetImageSizeNode sizeNode = Assert.Single(bridge.Graph.NodesOfType<GetImageSizeNode>());
         JArray controlNetFrameCount = new(sizeNode.Id, 2);
         Assert.Equal(resize.Id, sizeNode.Image.Connection!.Node.Id);
@@ -676,8 +671,7 @@ public partial class StageFlowTests
 
         AssertCoreVideoControlNetResizeBumped(workflow);
         ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ComfyNode resize = bridge.Graph.GetNode("304");
-        Assert.NotNull(resize);
+        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
         ImageFromBatchNode firstFrame = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
             node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0
