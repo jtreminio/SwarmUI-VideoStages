@@ -139,16 +139,16 @@ public class AudioInjectionTests
             g.FinalLoadedModel = videoModel;
             g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
 
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using var bridge = BridgeSync.For(g);
 
-            UnknownNode videoModelNode = bridge.AddNode(new UnknownNode("UnitTest_VideoModel"), "103");
+            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs("MODEL", "CLIP");
             g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
             g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
 
-            UnknownNode videoVaeNode = bridge.AddNode(new UnknownNode("UnitTest_VideoVae"), "104");
+            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs("VAE");
             g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
 
-            UnknownNode audioVaeNode = bridge.AddNode(new UnknownNode("UnitTest_AudioVae"), "105");
+            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
             g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
 
             EmptyLTXVLatentVideoNode emptyVideoLatent = new();
@@ -206,28 +206,19 @@ public class AudioInjectionTests
             save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
 
-            g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(videoDecode.IMAGE), g, WGNodeData.DT_VIDEO, g.CurrentCompat())
-            {
-                Width = 512,
-                Height = 512,
-                Frames = 16,
-                FPS = 24
-            };
-
-            BridgeSync.SyncLastId(g);
+            g.CurrentMedia = videoDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_VIDEO,
+                width: 512, height: 512, frames: 16, fps: 24);
         }, 11);
 
     private static WorkflowGenerator.WorkflowGenStep SeedSavedAudioStageStep(string saveNodeType) =>
         new(g =>
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using var bridge = BridgeSync.For(g);
 
-            UnknownNode audioSource = bridge.AddNode(new UnknownNode("UnitTest_AudioSource"), "300");
+            UnknownNode audioSource = bridge.AddStub("UnitTest_AudioSource", "300").WithOutputs("AUDIO");
 
-            UnknownNode save = bridge.AddNode(new UnknownNode(saveNodeType), "301");
+            UnknownNode save = bridge.AddStub(saveNodeType, "301");
             save.GetInput("audio").ConnectToUntyped(audioSource.GetOutput(0));
-
-            BridgeSync.SyncLastId(g);
         }, 10.2);
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildSteps(string saveNodeType) =>
@@ -241,7 +232,7 @@ public class AudioInjectionTests
         JObject workflow = [];
         using (WorkflowBridge buildBridge = WorkflowBridge.Create(workflow))
         {
-            UnknownNode audioVae = buildBridge.AddNode(new UnknownNode("UnitTest_AudioVae"), "105");
+            UnknownNode audioVae = buildBridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
 
             EmptyLTXVLatentVideoNode emptyVideoNode = new();
             emptyVideoNode.Length.Set(16L);
@@ -262,13 +253,13 @@ public class AudioInjectionTests
             concat.AudioLatent.ConnectTo(emptyAudioNode.Latent);
             buildBridge.AddNode(concat, "113");
 
-            UnknownNode audioSource = buildBridge.AddNode(new UnknownNode("UnitTest_AudioSource"), "300");
+            UnknownNode audioSource = buildBridge.AddStub("UnitTest_AudioSource", "300").WithOutputs("AUDIO");
 
             SaveAudioMP3Node save = new();
             save.Audio.ConnectToUntyped(audioSource.GetOutput(0));
             buildBridge.AddNode(save, "301");
 
-            UnknownNode latentAudit = buildBridge.AddNode(new UnknownNode("UnitTest_LatentAudit"), "400");
+            UnknownNode latentAudit = buildBridge.AddStub("UnitTest_LatentAudit", "400");
             latentAudit.GetInput("latent").ConnectToUntyped(emptyAudioNode.Latent);
         }
 

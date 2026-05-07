@@ -16,12 +16,9 @@ public class WorkflowGraphTests
         // Stubs for upstream/crosslink references the test fixtures don't define
         // typed nodes for. The graph walks under test only traverse 200 → 201 →
         // 202 → 204 → 9, so these stubs only need to exist as endpoints.
-        UnknownNode stub100 = bridge.AddNode(new UnknownNode("StubLatent"), "100");
-        stub100.GetOutput(0);
-        UnknownNode stub104 = bridge.AddNode(new UnknownNode("StubVae"), "104");
-        stub104.GetOutput(0);
-        UnknownNode stub203 = bridge.AddNode(new UnknownNode("StubAudio"), "203");
-        stub203.GetOutput(0);
+        UnknownNode stub100 = bridge.AddStub("StubLatent", "100").WithOutputs("LATENT");
+        UnknownNode stub104 = bridge.AddStub("StubVae", "104").WithOutputs("VAE");
+        UnknownNode stub203 = bridge.AddStub("StubAudio", "203").WithOutputs("AUDIO");
 
         KSamplerNode sampler = new();
         sampler.LatentImage.ConnectToUntyped(stub100.GetOutput(0));

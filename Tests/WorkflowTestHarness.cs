@@ -113,10 +113,10 @@ internal static class WorkflowTestHarness
     public static WorkflowGenerator.WorkflowGenStep MinimalGraphSeedStep() =>
         new(g =>
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using var bridge = BridgeSync.For(g);
 
-            UnknownNode model = bridge.AddNode(new UnknownNode("UnitTest_Model"), "4");
-            UnknownNode latent = bridge.AddNode(new UnknownNode("UnitTest_Latent"), "10");
+            UnknownNode model = bridge.AddStub("UnitTest_Model", "4").WithOutputs("MODEL", "CLIP", "VAE");
+            UnknownNode latent = bridge.AddStub("UnitTest_Latent", "10").WithOutputs("LATENT");
 
             g.CurrentModel = model.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
             g.CurrentTextEnc = model.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
@@ -124,8 +124,6 @@ internal static class WorkflowTestHarness
             g.CurrentMedia = latent.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_LATENT_IMAGE);
             g.FinalLoadedModel = g.UserInput.Get(T2IParamTypes.Model, null);
             g.FinalLoadedModelList = g.FinalLoadedModel is null ? [] : [g.FinalLoadedModel];
-
-            BridgeSync.SyncLastId(g);
         }, -1000);
 
     public static WorkflowGenerator.WorkflowGenStep DecodeSamplesToImageStep() =>

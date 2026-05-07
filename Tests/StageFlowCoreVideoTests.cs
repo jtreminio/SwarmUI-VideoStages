@@ -17,11 +17,9 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep SeedRootRawAudioAttachmentStep() =>
         new(g =>
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-            UnknownNode rawAudio = bridge.AddNode(new UnknownNode("UnitTest_RawAudio"), "50");
+            using var bridge = BridgeSync.For(g);
+            UnknownNode rawAudio = bridge.AddStub("UnitTest_RawAudio", "50").WithOutputs("AUDIO");
             g.CurrentMedia.AttachedAudio = rawAudio.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIO);
-
-            BridgeSync.SyncLastId(g);
         }, 10.8);
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithRawAudio() =>
@@ -52,7 +50,7 @@ public partial class StageFlowTests
     private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoControlNetBranchStep(T2IModel controlNetModel) =>
         new(g =>
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using var bridge = BridgeSync.For(g);
 
             SwarmLoadVideoB64Node videoLoad = new();
             videoLoad.VideoBase64.Set("unit-test-video");
@@ -70,7 +68,7 @@ public partial class StageFlowTests
             scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
 
-            UnknownNode preprocessor = bridge.AddNode(new UnknownNode("UnitTestPreprocessor"), "303");
+            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs("IMAGE");
             preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
 
             ResizeImageMaskNodeNode resize = new()
@@ -86,8 +84,8 @@ public partial class StageFlowTests
             controlNetLoader.ControlNetName.Set(controlNetModel.ToString(g.ModelFolderFormat));
             bridge.AddNode(controlNetLoader, "305");
 
-            UnknownNode positive = bridge.AddNode(new UnknownNode("UnitTest_PositiveCond"), "306");
-            UnknownNode negative = bridge.AddNode(new UnknownNode("UnitTest_NegativeCond"), "307");
+            UnknownNode positive = bridge.AddStub("UnitTest_PositiveCond", "306").WithOutputs("CONDITIONING");
+            UnknownNode negative = bridge.AddStub("UnitTest_NegativeCond", "307").WithOutputs("CONDITIONING");
 
             ControlNetApplyAdvancedNode controlApply = new();
             controlApply.PositiveInput.ConnectToUntyped(positive.GetOutput(0));
@@ -101,8 +99,6 @@ public partial class StageFlowTests
 
             g.FinalPrompt = new JArray("308", 0);
             g.FinalNegativePrompt = new JArray("308", 1);
-
-            BridgeSync.SyncLastId(g);
         }, -6.1);
 
     private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoDiffPatchControlNetBranchStep(
@@ -110,7 +106,7 @@ public partial class StageFlowTests
         bool useFirstFrameForCoreApply = false) =>
         new(g =>
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using var bridge = BridgeSync.For(g);
 
             SwarmLoadVideoB64Node videoLoad = new();
             videoLoad.VideoBase64.Set("unit-test-video");
@@ -128,7 +124,7 @@ public partial class StageFlowTests
             scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
 
-            UnknownNode preprocessor = bridge.AddNode(new UnknownNode("UnitTestPreprocessor"), "303");
+            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs("IMAGE");
             preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
 
             ResizeImageMaskNodeNode resize = new()
@@ -166,15 +162,13 @@ public partial class StageFlowTests
             bridge.AddNode(diffPatch, diffPatchId);
 
             g.CurrentModel = g.CurrentModel.WithPath(new JArray(diffPatchId, 0));
-
-            BridgeSync.SyncLastId(g);
         }, -6.1);
 
     private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoDiffPatchControlNetBranchStepNoPreprocessor(
         T2IModel controlNetModel) =>
         new(g =>
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using var bridge = BridgeSync.For(g);
 
             SwarmLoadVideoB64Node videoLoad = new();
             videoLoad.VideoBase64.Set("unit-test-video");
@@ -211,8 +205,6 @@ public partial class StageFlowTests
             bridge.AddNode(diffPatch, "305");
 
             g.CurrentModel = g.CurrentModel.WithPath(new JArray("305", 0));
-
-            BridgeSync.SyncLastId(g);
         }, -6.1);
 
     private static void AssertCoreVideoControlNetResizeBumped(JObject workflow)
