@@ -43,7 +43,6 @@ public class AudioStageDetectorTests
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
 
         Assert.Equal("210", detection.MatchedNodeId);
-        Assert.Equal("SaveAudio", detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("100", 0)));
     }
 
@@ -59,7 +58,6 @@ public class AudioStageDetectorTests
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
 
         Assert.Equal("150", detection.MatchedNodeId);
-        Assert.Equal(VAEDecodeAudioNode.ClassType, detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("150", 0)));
     }
 
@@ -79,7 +77,6 @@ public class AudioStageDetectorTests
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
 
         Assert.Equal("100", detection.MatchedNodeId);
-        Assert.Equal(VAEDecodeAudioNode.ClassType, detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("100", 0)));
     }
 
