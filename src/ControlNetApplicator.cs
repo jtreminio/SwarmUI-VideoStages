@@ -83,7 +83,6 @@ internal static class ControlNetApplicator
         if (FindUpstreamScaleToMultipleResize(bridge, fullControlImage)
             is ResizeImageMaskNodeNode existing)
         {
-            existing.ExtraInputs ??= [];
             existing.ExtraInputs["resize_type.multiple"] = 64;
             bridge.SyncNode(existing);
             return;
@@ -114,7 +113,7 @@ internal static class ControlNetApplicator
             ResizeType: "scale to multiple",
             ScaleMethod: "lanczos");
         resize.Input.ConnectToUntyped(source);
-        resize.ExtraInputs = new JObject { ["resize_type.multiple"] = 64 };
+        resize.ExtraInputs["resize_type.multiple"] = 64;
         bridge.SyncNode(resize);
         return resize;
     }
@@ -393,17 +392,14 @@ internal static class ControlNetApplicator
         if (guideOutput?.Node is not ResizeImageMaskNodeNode existing
             || existing.ResizeType.LiteralAsString() != "scale to multiple")
         {
-            ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode());
+            ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode()).With(
+                ResizeType: "scale to multiple",
+                ScaleMethod: "lanczos");
             if (guideOutput is not null)
             {
                 resize.Input.ConnectToUntyped(guideOutput);
             }
-            resize.ResizeType.Set("scale to multiple");
-            resize.ScaleMethod.Set("lanczos");
-            resize.ExtraInputs = new JObject
-            {
-                ["resize_type.multiple"] = 64,
-            };
+            resize.ExtraInputs["resize_type.multiple"] = 64;
             bridge.SyncNode(resize);
             imageInput = resize.Resized;
         }

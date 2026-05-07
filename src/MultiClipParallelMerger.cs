@@ -160,14 +160,12 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     private static INodeOutput AddBatchImagesNode(WorkflowBridge bridge, IEnumerable<INodeOutput> imageOutputs)
     {
         BatchImagesNodeNode node = bridge.AddNode(new BatchImagesNodeNode());
-        JObject extra = [];
         int i = 0;
         foreach (INodeOutput imageOutput in imageOutputs)
         {
-            extra[$"images.image{i}"] = WorkflowBridge.ToPath(imageOutput);
+            node.ExtraInputs[$"images.image{i}"] = WorkflowBridge.ToPath(imageOutput);
             i++;
         }
-        node.ExtraInputs = extra;
         bridge.SyncNode(node);
 
         return node.IMAGE;
