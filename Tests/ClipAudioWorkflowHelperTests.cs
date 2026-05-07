@@ -1,22 +1,14 @@
+using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
 using Xunit;
 
 namespace VideoStages.Tests;
 
 public class ClipAudioWorkflowHelperTests
 {
-    private static readonly AudioStageDetector.Detection NativeMark = new(
-        null,
-        "native-node",
-        "NativeClass",
-        "native-src",
-        0);
+    private static readonly WGNodeData NativeMark = new(new JArray("native", 0), null, WGNodeData.DT_AUDIO, null);
 
-    private static readonly AudioStageDetector.Detection UploadMark = new(
-        null,
-        "upload-node",
-        "UploadClass",
-        "upload-src",
-        0);
+    private static readonly WGNodeData UploadMark = new(new JArray("upload", 0), null, WGNodeData.DT_AUDIO, null);
 
     [Theory]
     [InlineData(Constants.AudioSourceNative, false, false, true)]
@@ -47,7 +39,7 @@ public class ClipAudioWorkflowHelperTests
     [Fact]
     public void Resolve_coordinator_blank_uses_native_fallback()
     {
-        AudioStageDetector.Detection r = ResolveDetection(
+        WGNodeData r = Resolve(
             1,
             "   ",
             suppressNativeFallback: false,
@@ -58,7 +50,7 @@ public class ClipAudioWorkflowHelperTests
     [Fact]
     public void Resolve_stage_blank_returns_null()
     {
-        AudioStageDetector.Detection r = ResolveDetection(
+        WGNodeData r = Resolve(
             1,
             " \t ",
             suppressNativeFallback: false,
@@ -69,7 +61,7 @@ public class ClipAudioWorkflowHelperTests
     [Fact]
     public void Resolve_stage_null_defaults_to_native_path()
     {
-        AudioStageDetector.Detection r = ResolveDetection(
+        WGNodeData r = Resolve(
             1,
             null,
             suppressNativeFallback: false,
@@ -80,11 +72,11 @@ public class ClipAudioWorkflowHelperTests
     [Fact]
     public void Resolve_upload_from_dictionary()
     {
-        Dictionary<int, AudioStageDetector.Detection> uploaded = new()
+        Dictionary<int, WGNodeData> uploaded = new()
         {
             [7] = UploadMark
         };
-        AudioStageDetector.Detection r = ResolveDetection(
+        WGNodeData r = Resolve(
             7,
             Constants.AudioSourceUpload,
             suppressNativeFallback: false,
@@ -96,7 +88,7 @@ public class ClipAudioWorkflowHelperTests
     [Fact]
     public void Resolve_suppress_native_returns_null_after_non_ace_branch()
     {
-        AudioStageDetector.Detection r = ResolveDetection(
+        WGNodeData r = Resolve(
             1,
             Constants.AudioSourceNative,
             suppressNativeFallback: true,
@@ -104,14 +96,14 @@ public class ClipAudioWorkflowHelperTests
         Assert.Null(r);
     }
 
-    private static AudioStageDetector.Detection ResolveDetection(
+    private static WGNodeData Resolve(
         int clipId,
         string audioSourceRaw,
         bool suppressNativeFallback,
         ClipAudioWorkflowHelper.ClipAudioSourceNormalization normalization,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null)
+        IReadOnlyDictionary<int, WGNodeData> uploadedAudios = null)
     {
-        return ClipAudioWorkflowHelper.ResolveClipAudioDetection(
+        return ClipAudioWorkflowHelper.ResolveClipAudio(
             clipId,
             audioSourceRaw,
             NativeMark,

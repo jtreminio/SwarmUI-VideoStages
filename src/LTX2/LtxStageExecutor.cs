@@ -45,8 +45,8 @@ internal sealed class LtxStageExecutor(
         double guideMergeStrength = DefaultGuideMergeStrength)
     {
         postVideoChain?.AttachSourceAudio(sourceMedia);
-
         g.IsImageToVideo = true;
+
         try
         {
             foreach (
@@ -67,7 +67,7 @@ internal sealed class LtxStageExecutor(
                 skipGuideReinjection,
                 applySourceVideoLatent,
                 postVideoChain,
-                clipRefs ?? Array.Empty<ResolvedClipRef>(),
+                clipRefs ?? [],
                 guideMergeStrength);
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
 
@@ -189,18 +189,12 @@ internal sealed class LtxStageExecutor(
         LTXVImgToVideoInplaceNode node = bridge.AddNode(new LTXVImgToVideoInplaceNode().With(
             Strength: strength,
             Bypass: bypass));
-        if (vaePath is JArray vaeArr && bridge.ResolvePath(vaeArr) is INodeOutput vae)
+        if (vaePath is JArray vaeArr)
         {
-            node.Vae.ConnectToUntyped(vae);
+            node.Vae.ConnectToUntyped(bridge.ResolvePath(vaeArr));
         }
-        if (bridge.ResolvePath(preprocessedImagePath) is INodeOutput img)
-        {
-            node.Image.ConnectToUntyped(img);
-        }
-        if (bridge.ResolvePath(latentPath) is INodeOutput latent)
-        {
-            node.LatentInput.ConnectToUntyped(latent);
-        }
+        node.Image.ConnectToUntyped(bridge.ResolvePath(preprocessedImagePath));
+        node.LatentInput.ConnectToUntyped(bridge.ResolvePath(latentPath));
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
         return node.Id;
@@ -286,10 +280,7 @@ internal sealed class LtxStageExecutor(
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode().With(
             BatchIndex: batchIndex));
-        if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
-        {
-            node.Image.ConnectToUntyped(src);
-        }
+        node.Image.TryConnectToUntyped(bridge.ResolvePath(imagePath));
         SetIntInputFromToken(node.Length, length, bridge);
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
@@ -298,9 +289,8 @@ internal sealed class LtxStageExecutor(
 
     private static void SetIntInputFromToken(NodeInput<IntType> input, JToken token, WorkflowBridge bridge)
     {
-        if (token is JArray { Count: 2 } arr && bridge.ResolvePath(arr) is INodeOutput connection)
+        if (token is JArray arr && input.TryConnectToUntyped(bridge.ResolvePath(arr)))
         {
-            input.ConnectToUntyped(connection);
             return;
         }
         if (token is JValue v && v.Value is not null)
@@ -357,10 +347,9 @@ internal sealed class LtxStageExecutor(
 
             SwarmAudioLengthToFramesNode lengthToFrames = bridge.AddNode(new SwarmAudioLengthToFramesNode()).With(
                 FrameRate: fps);
-            if (lengthFramesAudioSource is JArray audioSourceArr
-                && bridge.ResolvePath(audioSourceArr) is INodeOutput audioSrc)
+            if (lengthFramesAudioSource is JArray audioSourceArr)
             {
-                lengthToFrames.AudioInput.ConnectToUntyped(audioSrc);
+                lengthToFrames.AudioInput.TryConnectToUntyped(bridge.ResolvePath(audioSourceArr));
             }
             bridge.SyncNode(lengthToFrames);
 
@@ -434,10 +423,9 @@ internal sealed class LtxStageExecutor(
         {
             return;
         }
-        if (framesConnection is JArray { Count: 2 } framesArr
-            && bridge.ResolvePath(framesArr) is INodeOutput framesOutput)
+        if (framesConnection is JArray framesArr)
         {
-            emptyAudio.FramesNumber.ConnectToUntyped(framesOutput);
+            emptyAudio.FramesNumber.TryConnectToUntyped(bridge.ResolvePath(framesArr));
         }
         emptyAudio.FrameRate.Set(frameRate);
         bridge.SyncNode(emptyAudio);
@@ -560,10 +548,7 @@ internal sealed class LtxStageExecutor(
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         LTXVPreprocessNode preprocess = bridge.AddNode(new LTXVPreprocessNode().With(
             ImgCompression: ImgCompression));
-        if (scaledGuidePath is { Count: 2 } && bridge.ResolvePath(scaledGuidePath) is INodeOutput src)
-        {
-            preprocess.Image.ConnectToUntyped(src);
-        }
+        preprocess.Image.TryConnectToUntyped(bridge.ResolvePath(scaledGuidePath));
         bridge.SyncNode(preprocess);
         BridgeSync.SyncLastId(g);
 
@@ -615,10 +600,7 @@ internal sealed class LtxStageExecutor(
             Height: targetH,
             UpscaleMethod: "lanczos",
             Crop: "center"));
-        if (scaleSourcePath is { Count: 2 } && bridge.ResolvePath(scaleSourcePath) is INodeOutput src)
-        {
-            scale.Image.ConnectToUntyped(src);
-        }
+        scale.Image.TryConnectToUntyped(bridge.ResolvePath(scaleSourcePath));
         bridge.SyncNode(scale);
         BridgeSync.SyncLastId(g);
 
@@ -824,14 +806,13 @@ internal sealed class LtxStageExecutor(
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ReplaceVideoLatentFramesNode replace = bridge.AddNode(new ReplaceVideoLatentFramesNode().With(
             Index: 0));
-        if (g.CurrentMedia?.Path is JArray destPath && bridge.ResolvePath(destPath) is INodeOutput dst)
+        if (g.CurrentMedia?.Path is JArray destPath)
         {
-            replace.Destination.ConnectToUntyped(dst);
+            replace.Destination.ConnectToUntyped(bridge.ResolvePath(destPath));
         }
-        if (genInfo.DoFirstFrameLatentSwap is JArray sourcePath
-            && bridge.ResolvePath(sourcePath) is INodeOutput src)
+        if (genInfo.DoFirstFrameLatentSwap is JArray sourcePath)
         {
-            replace.Source.ConnectToUntyped(src);
+            replace.Source.TryConnectToUntyped(bridge.ResolvePath(sourcePath));
         }
         bridge.SyncNode(replace);
 
@@ -850,14 +831,14 @@ internal sealed class LtxStageExecutor(
         bool shouldRestoreAudioVideoLatent = g.CurrentMedia.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO;
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        INodeOutput cropLatentSource = null;
+        INodeOutput cropLatentSource;
         INodeOutput audioLatentSource = null;
         if (shouldRestoreAudioVideoLatent)
         {
             LTXVSeparateAVLatentNode separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
-            if (g.CurrentMedia?.Path is JArray avPath && bridge.ResolvePath(avPath) is INodeOutput avSrc)
+            if (g.CurrentMedia?.Path is JArray avPath)
             {
-                separate.AvLatent.ConnectToUntyped(avSrc);
+                separate.AvLatent.ConnectToUntyped(bridge.ResolvePath(avPath));
             }
             bridge.SyncNode(separate);
             cropLatentSource = separate.VideoLatent;
@@ -869,18 +850,9 @@ internal sealed class LtxStageExecutor(
         }
 
         LTXVCropGuidesNode crop = bridge.AddNode(new LTXVCropGuidesNode());
-        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
-        {
-            crop.PositiveInput.ConnectToUntyped(pos);
-        }
-        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg)
-        {
-            crop.NegativeInput.ConnectToUntyped(neg);
-        }
-        if (cropLatentSource is not null)
-        {
-            crop.LatentInput.ConnectToUntyped(cropLatentSource);
-        }
+        crop.PositiveInput.ConnectToUntyped(bridge.ResolvePath(genInfo.PosCond));
+        crop.NegativeInput.ConnectToUntyped(bridge.ResolvePath(genInfo.NegCond));
+        crop.LatentInput.ConnectToUntyped(cropLatentSource);
         bridge.SyncNode(crop);
 
         genInfo.PosCond = [crop.Id, 0];
@@ -890,10 +862,7 @@ internal sealed class LtxStageExecutor(
         {
             LTXVConcatAVLatentNode concat = bridge.AddNode(new LTXVConcatAVLatentNode());
             concat.VideoLatent.ConnectTo(crop.Latent);
-            if (audioLatentSource is not null)
-            {
-                concat.AudioLatent.ConnectToUntyped(audioLatentSource);
-            }
+            concat.AudioLatent.TryConnectToUntyped(audioLatentSource);
             bridge.SyncNode(concat);
             BridgeSync.SyncLastId(g);
 
@@ -982,10 +951,7 @@ internal sealed class LtxStageExecutor(
         SwarmTrimFramesNode node = bridge.AddNode(new SwarmTrimFramesNode().With(
             TrimStart: trimStart,
             TrimEnd: trimEnd));
-        if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
-        {
-            node.Image.ConnectToUntyped(src);
-        }
+        node.Image.TryConnectToUntyped(bridge.ResolvePath(imagePath));
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
         return node.Id;

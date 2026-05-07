@@ -17,9 +17,9 @@ internal sealed class LtxAudioInjector(
     private const int AudioInjectionIdBase = 52300;
     private const int AudioInjectionEnsureFallbackSlot = 50;
 
-    public bool TryInject(AudioStageDetector.Detection detection, bool matchVideoLengthToAudio = true)
+    public bool TryInject(WGNodeData audio, bool matchVideoLengthToAudio = true)
     {
-        if (detection?.Audio is null || !g.IsLTXV2() || g.CurrentAudioVae is null)
+        if (audio is null || !g.IsLTXV2() || g.CurrentAudioVae is null)
         {
             return false;
         }
@@ -34,13 +34,13 @@ internal sealed class LtxAudioInjector(
             return false;
         }
 
-        WGNodeData adjustedAudio = detection.Audio;
+        WGNodeData adjustedAudio = audio;
         if (matchVideoLengthToAudio)
         {
             int fps = ResolveFps(workflowFps);
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
                 bridge,
-                detection.Audio.Path,
+                audio.Path,
                 g.GetStableDynamicID(AudioInjectionIdBase + AudioInjectionEnsureFallbackSlot, 0));
             SwarmAudioLengthToFramesNode lengthToFrames = CreateLengthToFramesNode(
                 bridge,
@@ -101,10 +101,7 @@ internal sealed class LtxAudioInjector(
     {
         SwarmAudioLengthToFramesNode node = new SwarmAudioLengthToFramesNode().With(
             FrameRate: fps);
-        if (audioPath is JArray pathArray && bridge.ResolvePath(pathArray) is INodeOutput typedAudio)
-        {
-            node.AudioInput.ConnectToUntyped(typedAudio);
-        }
+        node.AudioInput.TryConnectToUntyped(bridge.ResolvePath(audioPath as JArray));
         bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 100, 0));
         return node;
     }
@@ -143,10 +140,7 @@ internal sealed class LtxAudioInjector(
         bridge.AddNode(solidMask, g.GetStableDynamicID(AudioInjectionIdBase + 200, 0));
 
         SetLatentNoiseMaskNode setMask = new();
-        if (encodedAudioPath is not null && bridge.ResolvePath(encodedAudioPath) is INodeOutput samples)
-        {
-            setMask.Samples.ConnectToUntyped(samples);
-        }
+        setMask.Samples.TryConnectToUntyped(bridge.ResolvePath(encodedAudioPath));
         setMask.Mask.ConnectTo(solidMask.MASK);
         bridge.AddNode(setMask, g.GetStableDynamicID(AudioInjectionIdBase + 300, 0));
         return setMask;

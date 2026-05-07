@@ -145,7 +145,7 @@ public static class Runner
         RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
         RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff, jsonParser);
         StageGuideMediaHelper stageGuideMediaHelper = new(g);
-        AudioStageDetector audioStageDetector = new(g);
+        AudioHandler audioHandler = new(g);
         Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
         MultiClipParallelMerger multiClipParallelMerger = new(g);
         LtxManager ltxManager = new(
@@ -170,7 +170,7 @@ public static class Runner
             jsonParser,
             rootVideoStageHandoff,
             stageSequenceRunner,
-            audioStageDetector,
+            audioHandler,
             ltxManager);
         coordinator.RunConfiguredStages();
     }
@@ -179,7 +179,7 @@ public static class Runner
 
     public static bool TryInjectLtxAudio(
         WorkflowGenerator g,
-        AudioStageDetector.Detection detection,
+        WGNodeData audio,
         bool matchVideoLengthToAudio = true)
     {
         JsonParser jsonParser = new(g);
@@ -195,7 +195,7 @@ public static class Runner
             rootVideoStageResizer,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs);
-        return ltxManager.TryInjectAudio(detection, matchVideoLengthToAudio);
+        return ltxManager.TryInjectAudio(audio, matchVideoLengthToAudio);
     }
 
     internal static RootVideoStageResizer GetRootVideoStageResizer(WorkflowGenerator g)

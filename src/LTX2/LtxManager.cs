@@ -39,9 +39,9 @@ internal sealed class LtxManager
     }
 
     public bool TryInjectAudio(
-        AudioStageDetector.Detection detection,
+        WGNodeData audio,
         bool matchVideoLengthToAudio = true) =>
-        audioInjector.TryInject(detection, matchVideoLengthToAudio);
+        audioInjector.TryInject(audio, matchVideoLengthToAudio);
 
     public bool TryApplyControlNetFrameCount(string controlNetSource)
     {

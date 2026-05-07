@@ -429,10 +429,7 @@ internal class StageRunner(
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
             BatchIndex: batchIndex,
             Length: length);
-        if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
-        {
-            node.Image.ConnectToUntyped(src);
-        }
+        node.Image.ConnectToUntyped(bridge.ResolvePath(imagePath));
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
         return node;
@@ -521,9 +518,9 @@ internal class StageRunner(
         LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode()).With(
             LoraName: lora.ToString(g.ModelFolderFormat),
             StrengthModel: 1.0);
-        if (genInfo.Model?.Path is JArray modelPath && bridge.ResolvePath(modelPath) is INodeOutput modelOutput)
+        if (genInfo.Model?.Path is JArray modelPath)
         {
-            loraLoader.ModelInput.ConnectToUntyped(modelOutput);
+            loraLoader.ModelInput.ConnectToUntyped(bridge.ResolvePath(modelPath));
         }
         bridge.SyncNode(loraLoader);
         BridgeSync.SyncLastId(g);
@@ -633,10 +630,7 @@ internal class StageRunner(
             Height: height,
             UpscaleMethod: upscaleMethod,
             Crop: "disabled"));
-        if (sourcePath is { Count: 2 } && bridge.ResolvePath(sourcePath) is INodeOutput src)
-        {
-            scale.Image.ConnectToUntyped(src);
-        }
+        scale.Image.ConnectToUntyped(bridge.ResolvePath(sourcePath));
         bridge.SyncNode(scale);
         BridgeSync.SyncLastId(g);
         return scale;
@@ -651,10 +645,7 @@ internal class StageRunner(
 
         ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode());
         upscale.UpscaleModel.ConnectTo(loader.UPSCALEMODEL);
-        if (sourcePath is { Count: 2 } && bridge.ResolvePath(sourcePath) is INodeOutput src)
-        {
-            upscale.Image.ConnectToUntyped(src);
-        }
+        upscale.Image.ConnectToUntyped(bridge.ResolvePath(sourcePath));
         bridge.SyncNode(upscale);
 
         ImageScaleNode fit = bridge.AddNode(new ImageScaleNode().With(

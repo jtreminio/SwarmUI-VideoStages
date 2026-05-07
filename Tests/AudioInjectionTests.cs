@@ -82,7 +82,7 @@ public class AudioInjectionTests
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
         input.Set(T2IParamTypes.Prompt, "unit test prompt");
-        input.Set(T2IParamTypes.Seed, 1L);
+        input.Set(T2IParamTypes.Seed, 1);
         input.Set(T2IParamTypes.Width, 512);
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, baseModel);
@@ -197,20 +197,22 @@ public class AudioInjectionTests
                 width: 512, height: 512, frames: 16, fps: 24);
         }, 11);
 
-    private static WorkflowGenerator.WorkflowGenStep SeedSavedAudioStageStep(string saveNodeType) =>
+    private static WorkflowGenerator.WorkflowGenStep SeedNativeAudioStep() =>
         new(g =>
         {
             using SyncingWorkflowBridge bridge = BridgeSync.For(g);
 
             UnknownNode audioSource = bridge.AddStub("UnitTest_AudioSource", "300").WithOutputs(WGNodeData.DT_AUDIO);
 
-            UnknownNode save = bridge.AddStub(saveNodeType, "301");
-            save.GetInput("audio").ConnectToUntyped(audioSource.GetOutput(0));
-        }, 10.2);
+            if (g.CurrentMedia is not null)
+            {
+                g.CurrentMedia.AttachedAudio = audioSource.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIO);
+            }
+        }, 11.3);
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildSteps(string saveNodeType) =>
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildSteps() =>
         WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRootLtxVideoChainStep(), SeedSavedAudioStageStep(saveNodeType)])
+            .Concat([SeedRootLtxVideoChainStep(), SeedNativeAudioStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     [Fact]
@@ -246,9 +248,13 @@ public class AudioInjectionTests
         }
 
         WorkflowGenerator generator = CreateInjectorGenerator(workflow);
-        AudioStageDetector.Detection detection = new AudioStageDetector(generator).Detect();
+        WGNodeData audio = new(
+            new JArray("300", 0),
+            generator,
+            WGNodeData.DT_AUDIO,
+            generator.CurrentAudioVae?.Compat ?? generator.CurrentCompat());
 
-        Assert.True(Runner.TryInjectLtxAudio(generator, detection));
+        Assert.True(Runner.TryInjectLtxAudio(generator, audio));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
@@ -272,7 +278,7 @@ public class AudioInjectionTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]");
 
         (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
@@ -314,7 +320,7 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
@@ -346,7 +352,7 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadAudioB64Node uploadedAudioNode = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
@@ -386,7 +392,7 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadAudioB64Node uploadedAudioNode = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
@@ -415,7 +421,7 @@ public class AudioInjectionTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
@@ -463,7 +469,7 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         IReadOnlyList<SwarmLoadAudioB64Node> uploadNodes = bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>();
@@ -490,7 +496,7 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         BatchImagesNodeNode batchImagesNode = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
@@ -546,7 +552,7 @@ public class AudioInjectionTests
             stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadAudioB64Node uploadedAudioNode = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
@@ -567,7 +573,7 @@ public class AudioInjectionTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps(SaveAudioMP3Node.ClassType));
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SetLatentNoiseMaskNode setMask = Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());

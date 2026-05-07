@@ -4,30 +4,16 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Generated;
 
 namespace VideoStages.LTX2;
 
-internal sealed class LtxConditioningPipeline
-{
-    private readonly WorkflowGenerator g;
-    private readonly WorkflowGenerator.ImageToVideoGenInfo genInfo;
-    private readonly StageFrame stageFrame;
-    private readonly LtxStageExecutor executor;
-
-    private WGNodeData stageLatent;
-
-    public LtxConditioningPipeline(
+internal sealed class LtxConditioningPipeline(
         WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
         LtxStageExecutor executor)
-    {
-        this.g = g;
-        this.genInfo = genInfo;
-        this.stageFrame = stageFrame;
-        this.executor = executor;
-    }
+{
+    private WGNodeData stageLatent;
 
     public LtxConditioningPipeline WithLatent(WGNodeData stageLatent, WGNodeData sourceMedia)
     {
@@ -44,7 +30,7 @@ internal sealed class LtxConditioningPipeline
 
     public LtxConditioningPipeline WithUpscaleIfNeeded(JsonParser.StageSpec stage, WGNodeData sourceMedia)
     {
-        if (stage.Upscale == 1 || string.IsNullOrWhiteSpace(stage.UpscaleMethod))
+        if (stage.Upscale <= 1 || string.IsNullOrWhiteSpace(stage.UpscaleMethod))
         {
             return this;
         }
@@ -57,13 +43,6 @@ internal sealed class LtxConditioningPipeline
         {
             string modelName = stage.UpscaleMethod["latentmodel-".Length..];
             stageLatent = ApplyLatentModelUpscale(modelName, width, height);
-            return this;
-        }
-
-        if (stage.UpscaleMethod.StartsWith("latent-", StringComparison.OrdinalIgnoreCase))
-        {
-            string latentMethod = stage.UpscaleMethod["latent-".Length..];
-            stageLatent = ApplyLatentUpscale(latentMethod, stage.Upscale, width, height);
             return this;
         }
 
@@ -127,18 +106,12 @@ internal sealed class LtxConditioningPipeline
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         LTXVConditioningNode cond = bridge.AddNode(new LTXVConditioningNode());
-        if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
-        {
-            cond.PositiveInput.ConnectToUntyped(pos);
-        }
-        if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg)
-        {
-            cond.NegativeInput.ConnectToUntyped(neg);
-        }
         if (genInfo.VideoFPS.HasValue)
         {
-            cond.FrameRate.Set((double)genInfo.VideoFPS.Value);
+            cond.FrameRate.Set(genInfo.VideoFPS.Value);
         }
+        cond.PositiveInput.ConnectToUntyped(bridge.ResolvePath(genInfo.PosCond));
+        cond.NegativeInput.ConnectToUntyped(bridge.ResolvePath(genInfo.NegCond));
         bridge.SyncNode(cond);
         BridgeSync.SyncLastId(g);
 
@@ -160,31 +133,14 @@ internal sealed class LtxConditioningPipeline
             int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
 
             WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-            LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode());
-            if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
-            {
-                addGuide.PositiveInput.ConnectToUntyped(pos);
-            }
-            if (bridge.ResolvePath(genInfo.NegCond) is INodeOutput neg)
-            {
-                addGuide.NegativeInput.ConnectToUntyped(neg);
-            }
-            if (genInfo.Vae?.Path is JArray vaePath
-                && bridge.ResolvePath(vaePath) is INodeOutput vae)
-            {
-                addGuide.Vae.ConnectToUntyped(vae);
-            }
-            if (g.CurrentMedia?.Path is JArray latentPath
-                && bridge.ResolvePath(latentPath) is INodeOutput latent)
-            {
-                addGuide.LatentInput.ConnectToUntyped(latent);
-            }
-            if (bridge.ResolvePath(preprocessed) is INodeOutput img)
-            {
-                addGuide.Image.ConnectToUntyped(img);
-            }
-            addGuide.FrameIdx.Set(frameIdx);
-            addGuide.Strength.Set(clipRef.Strength);
+            LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode()).With(
+                FrameIdx: frameIdx,
+                Strength: clipRef.Strength);
+            addGuide.PositiveInput.ConnectToUntyped(bridge.ResolvePath(genInfo.PosCond));
+            addGuide.NegativeInput.ConnectToUntyped(bridge.ResolvePath(genInfo.NegCond));
+            addGuide.Vae.ConnectToUntyped(bridge.ResolvePath(genInfo.Vae.Path));
+            addGuide.LatentInput.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
+            addGuide.Image.ConnectToUntyped(bridge.ResolvePath(preprocessed));
             bridge.SyncNode(addGuide);
             BridgeSync.SyncLastId(g);
 
@@ -207,28 +163,18 @@ internal sealed class LtxConditioningPipeline
         return (width, height);
     }
 
-    private static int AlignTo16(int value)
-    {
-        return Math.Max(16, (Math.Max(value, 16) / 16) * 16);
-    }
+    private static int AlignTo16(int value) => Math.Max(16, Math.Max(value, 16) / 16 * 16);
 
     private WGNodeData ApplyLatentModelUpscale(string modelName, int width, int height)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        LatentUpscaleModelLoaderNode loader = bridge.AddNode(new LatentUpscaleModelLoaderNode());
-        loader.ModelName.Set(modelName);
+        LatentUpscaleModelLoaderNode loader = bridge.AddNode(new LatentUpscaleModelLoaderNode()).With(
+            ModelName: modelName);
         bridge.SyncNode(loader);
 
         LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode());
-        if (genInfo.Vae?.Path is JArray vaePath
-            && bridge.ResolvePath(vaePath) is INodeOutput vae)
-        {
-            upsampler.Vae.ConnectToUntyped(vae);
-        }
-        if (bridge.ResolvePath(stageLatent.Path) is INodeOutput samples)
-        {
-            upsampler.Samples.ConnectToUntyped(samples);
-        }
+        upsampler.Vae.ConnectToUntyped(bridge.ResolvePath(genInfo.Vae.Path));
+        upsampler.Samples.ConnectToUntyped(bridge.ResolvePath(stageLatent.Path));
         upsampler.UpscaleModel.ConnectTo(loader.LATENTUPSCALEMODEL);
         bridge.SyncNode(upsampler);
         BridgeSync.SyncLastId(g);
@@ -239,34 +185,8 @@ internal sealed class LtxConditioningPipeline
         return upscaled;
     }
 
-    private WGNodeData ApplyLatentUpscale(string latentMethod, double scaleBy, int width, int height)
-    {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        LatentUpscaleByNode node = bridge.AddNode(new LatentUpscaleByNode());
-        if (bridge.ResolvePath(stageLatent.Path) is INodeOutput samples)
-        {
-            node.Samples.ConnectToUntyped(samples);
-        }
-        node.UpscaleMethod.Set(latentMethod);
-        node.ScaleBy.Set(scaleBy);
-        bridge.SyncNode(node);
-        BridgeSync.SyncLastId(g);
-
-        WGNodeData upscaled = stageLatent.WithPath([node.Id, 0], WGNodeData.DT_LATENT_VIDEO);
-        upscaled.Width = width;
-        upscaled.Height = height;
-        return upscaled;
-    }
-
     private static bool UseLtxvInplaceForRef(JsonParser.RefSpec spec) => !spec.FromEnd && spec.Frame == 1;
 
     private static int ComputeLtxvAddGuideFrameIndex(JsonParser.RefSpec spec)
-    {
-        if (spec.FromEnd)
-        {
-            return -Math.Max(1, spec.Frame);
-        }
-
-        return Math.Max(1, spec.Frame);
-    }
+        => spec.FromEnd ? -Math.Max(1, spec.Frame) : Math.Max(1, spec.Frame);
 }

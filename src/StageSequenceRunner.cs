@@ -22,22 +22,22 @@ internal sealed class StageSequenceRunner(
 
     private sealed class RunContext
     {
-        public AudioStageDetector.Detection NativeAudioDetection { get; init; }
-        public IReadOnlyDictionary<int, AudioStageDetector.Detection> ClipAudios { get; init; }
-        public IReadOnlyDictionary<int, AudioStageDetector.Detection> UploadedAudios { get; init; }
+        public WGNodeData NativeAudio { get; init; }
+        public IReadOnlyDictionary<int, WGNodeData> ClipAudios { get; init; }
+        public IReadOnlyDictionary<int, WGNodeData> UploadedAudios { get; init; }
         public bool RootStageHandoff { get; init; }
     }
 
     public void Run(
         IReadOnlyList<JsonParser.ClipWithStages> clips,
-        AudioStageDetector.Detection detectedAudio = null,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios = null,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null,
+        WGNodeData nativeAudio = null,
+        IReadOnlyDictionary<int, WGNodeData> clipAudios = null,
+        IReadOnlyDictionary<int, WGNodeData> uploadedAudios = null,
         bool rootStageHandoff = false)
     {
         RunContext context = new()
         {
-            NativeAudioDetection = detectedAudio ?? BuildCurrentMediaAudioDetection(g),
+            NativeAudio = nativeAudio ?? g.CurrentMedia?.AttachedAudio,
             ClipAudios = clipAudios,
             UploadedAudios = uploadedAudios,
             RootStageHandoff = rootStageHandoff
@@ -167,15 +167,15 @@ internal sealed class StageSequenceRunner(
         WGNodeData currentMedia = g.CurrentMedia.Duplicate();
         bool suppressNative = context.RootStageHandoff
             && rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);
-        AudioStageDetector.Detection clipAudio = ClipAudioWorkflowHelper.ResolveClipAudioDetection(
+        WGNodeData clipAudio = ClipAudioWorkflowHelper.ResolveClipAudio(
             stage.ClipId,
             stage.ClipAudioSource,
-            context.NativeAudioDetection,
+            context.NativeAudio,
             context.ClipAudios,
             context.UploadedAudios,
             suppressNative,
             ClipAudioWorkflowHelper.ClipAudioSourceNormalization.StageSpec);
-        currentMedia.AttachedAudio = clipAudio?.Audio;
+        currentMedia.AttachedAudio = clipAudio;
         g.CurrentMedia = currentMedia;
         if (context.RootStageHandoff
             && ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
@@ -314,17 +314,4 @@ internal sealed class StageSequenceRunner(
         return r;
     }
 
-    private static AudioStageDetector.Detection BuildCurrentMediaAudioDetection(WorkflowGenerator g)
-    {
-        if (g.CurrentMedia?.AttachedAudio is null)
-        {
-            return null;
-        }
-        return new AudioStageDetector.Detection(
-            g.CurrentMedia.AttachedAudio,
-            "videostages.current-media-audio",
-            "CurrentMediaAttachedAudio",
-            "videostages.current-media-audio",
-            0);
-    }
 }

@@ -14,7 +14,7 @@ internal sealed class VideoStagesCoordinator(
     JsonParser jsonParser,
     RootVideoStageHandoff rootVideoStageHandoff,
     StageSequenceRunner stageSequenceRunner,
-    AudioStageDetector audioStageDetector,
+    AudioHandler audioHandler,
     LtxManager ltxManager)
 {
     private const int FinalStageSaveId = 52200;
@@ -56,7 +56,7 @@ internal sealed class VideoStagesCoordinator(
 
             stageSequenceRunner.Run(
                 clipsWithStages,
-                clipAudioMaps.DetectedAudio,
+                clipAudioMaps.NativeAudio,
                 clipAudioMaps.ClipAudios,
                 clipAudioMaps.UploadedAudios,
                 rootStageHandoff);
@@ -87,7 +87,7 @@ internal sealed class VideoStagesCoordinator(
     {
         if (clips.Count == 0)
         {
-            ltxManager.TryInjectAudio(audioStageDetector.Detect());
+            ltxManager.TryInjectAudio(g.CurrentMedia?.AttachedAudio);
             return;
         }
 
@@ -119,19 +119,19 @@ internal sealed class VideoStagesCoordinator(
     }
 
     private readonly record struct ClipAudioMaps(
-        AudioStageDetector.Detection DetectedAudio,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> ClipAudios,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> UploadedAudios);
+        WGNodeData NativeAudio,
+        IReadOnlyDictionary<int, WGNodeData> ClipAudios,
+        IReadOnlyDictionary<int, WGNodeData> UploadedAudios);
 
     private ClipAudioMaps BuildClipAudioMaps(IReadOnlyList<JsonParser.ClipSpec> clips)
     {
-        AudioStageDetector.Detection detectedAudio = audioStageDetector.Detect();
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios =
-            BuildPerClipAudioDetections(audioStageDetector, clips);
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios =
+        WGNodeData nativeAudio = g.CurrentMedia?.AttachedAudio;
+        IReadOnlyDictionary<int, WGNodeData> clipAudios =
+            BuildPerClipAudioDetections(audioHandler, clips);
+        IReadOnlyDictionary<int, WGNodeData> uploadedAudios =
             BuildPerClipUploadDetections(clips);
-        AceStepFunAudioSavePruner.Apply(g, clips);
-        return new ClipAudioMaps(detectedAudio, clipAudios, uploadedAudios);
+        audioHandler.PruneAceStepFunUnsavedTracks(clips);
+        return new ClipAudioMaps(nativeAudio, clipAudios, uploadedAudios);
     }
 
     private void TryInjectResolvedClipAudio(
@@ -140,42 +140,42 @@ internal sealed class VideoStagesCoordinator(
         bool clipLengthFromAudio,
         ClipAudioMaps maps)
     {
-        AudioStageDetector.Detection detection = ClipAudioWorkflowHelper.ResolveClipAudioDetection(
+        WGNodeData audio = ClipAudioWorkflowHelper.ResolveClipAudio(
             clipId,
             audioSource,
-            maps.DetectedAudio,
+            maps.NativeAudio,
             maps.ClipAudios,
             maps.UploadedAudios,
             suppressNativeFallback: false,
             ClipAudioWorkflowHelper.ClipAudioSourceNormalization.CoordinatorField);
         _ = ltxManager.TryInjectAudio(
-            detection,
+            audio,
             ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
                 audioSource,
                 clipLengthFromAudio,
                 restrictLengthMatchToUploadOrAce: false));
     }
 
-    private static IReadOnlyDictionary<int, AudioStageDetector.Detection> BuildPerClipAudioDetections(
-        AudioStageDetector detector,
+    private static IReadOnlyDictionary<int, WGNodeData> BuildPerClipAudioDetections(
+        AudioHandler handler,
         IReadOnlyList<JsonParser.ClipSpec> clips)
     {
-        Dictionary<int, AudioStageDetector.Detection> detections = [];
+        Dictionary<int, WGNodeData> audios = [];
         foreach (JsonParser.ClipSpec clip in clips)
         {
-            AudioStageDetector.Detection detection = detector.DetectAceStepFunTrack(clip.AudioSource);
-            if (detection is not null)
+            WGNodeData audio = handler.DetectAceStepFunAudio(clip.AudioSource);
+            if (audio is not null)
             {
-                detections[clip.Id] = detection;
+                audios[clip.Id] = audio;
             }
         }
-        return detections;
+        return audios;
     }
 
-    private IReadOnlyDictionary<int, AudioStageDetector.Detection> BuildPerClipUploadDetections(
+    private IReadOnlyDictionary<int, WGNodeData> BuildPerClipUploadDetections(
         IReadOnlyList<JsonParser.ClipSpec> clips)
     {
-        Dictionary<int, AudioStageDetector.Detection> detections = [];
+        Dictionary<int, WGNodeData> audios = [];
         foreach (JsonParser.ClipSpec clip in clips)
         {
             if (!StringUtils.Equals(clip.AudioSource, Constants.AudioSourceUpload))
@@ -188,19 +188,13 @@ internal sealed class VideoStagesCoordinator(
                 continue;
             }
             string loadNodeId = g.CreateAudioLoadNode(uploaded, "${vsaudioupload}");
-            WGNodeData audio = new(
+            audios[clip.Id] = new WGNodeData(
                 new JArray(loadNodeId, 0),
                 g,
                 WGNodeData.DT_AUDIO,
                 g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
-            detections[clip.Id] = new AudioStageDetector.Detection(
-                audio,
-                loadNodeId,
-                SwarmLoadAudioB64Node.ClassType,
-                loadNodeId,
-                int.MaxValue);
         }
-        return detections;
+        return audios;
     }
 
     private T2IModel GetRootVideoModel()

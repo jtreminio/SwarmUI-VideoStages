@@ -1,3 +1,5 @@
+using SwarmUI.Builtin_ComfyUIBackend;
+
 namespace VideoStages;
 
 internal static class ClipAudioWorkflowHelper
@@ -18,12 +20,12 @@ internal static class ClipAudioWorkflowHelper
             : !restrictLengthMatchToUploadOrAce;
     }
 
-    internal static AudioStageDetector.Detection ResolveClipAudioDetection(
+    internal static WGNodeData ResolveClipAudio(
         int clipId,
         string audioSourceRaw,
-        AudioStageDetector.Detection nativeFallback,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios,
+        WGNodeData nativeFallback,
+        IReadOnlyDictionary<int, WGNodeData> clipAudios,
+        IReadOnlyDictionary<int, WGNodeData> uploadedAudios,
         bool suppressNativeFallback,
         ClipAudioSourceNormalization normalization)
     {
@@ -49,26 +51,22 @@ internal static class ClipAudioWorkflowHelper
             return suppressNativeFallback ? null : nativeFallback;
         }
         return string.Equals(source, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
-            ? DetectionForClip(uploadedAudios, clipId)
-            : DetectionForClip(clipAudios, clipId);
+            ? AudioForClip(uploadedAudios, clipId)
+            : AudioForClip(clipAudios, clipId);
     }
 
-    private static AudioStageDetector.Detection DetectionForClip(
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> audiosByClipId,
-        int clipId)
+    private static WGNodeData AudioForClip(IReadOnlyDictionary<int, WGNodeData> audiosByClipId, int clipId)
     {
         if (audiosByClipId is null)
         {
             return null;
         }
-        return audiosByClipId.TryGetValue(clipId, out AudioStageDetector.Detection found)
-            ? found
-            : null;
+        return audiosByClipId.TryGetValue(clipId, out WGNodeData found) ? found : null;
     }
 
     internal static bool IsUploadOrAceStepFunAudioSource(string audioSource)
     {
         return string.Equals(audioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
-            || AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _);
+            || AudioHandler.TryParseAceStepFunAudioSource(audioSource, out _);
     }
 }

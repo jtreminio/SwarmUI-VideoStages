@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
 
 namespace VideoStages;
 
@@ -52,9 +51,9 @@ internal static class VaeDecodePreference
         {
             WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
             LTXVSeparateAVLatentNode separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
-            if (media.Path is JArray mediaPath && bridge.ResolvePath(mediaPath) is INodeOutput avLatent)
+            if (media.Path is JArray mediaPath)
             {
-                separate.AvLatent.ConnectToUntyped(avLatent);
+                separate.AvLatent.ConnectToUntyped(bridge.ResolvePath(mediaPath));
             }
             bridge.SyncNode(separate);
             BridgeSync.SyncLastId(g);
@@ -102,14 +101,8 @@ internal static class VaeDecodePreference
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         VAEDecodeNode decode = bridge.AddNode(new VAEDecodeNode());
-        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae)
-        {
-            decode.Vae.ConnectToUntyped(vae);
-        }
-        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples)
-        {
-            decode.Samples.ConnectToUntyped(samples);
-        }
+        decode.Vae.ConnectToUntyped(bridge.ResolvePath(vaePath));
+        decode.Samples.ConnectToUntyped(bridge.ResolvePath(latentPath));
         bridge.SyncNode(decode);
         BridgeSync.SyncLastId(g);
         return decode.Id;
@@ -123,14 +116,8 @@ internal static class VaeDecodePreference
             Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
             TemporalSize: g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 32),
             TemporalOverlap: g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)));
-        if (vaePath is { Count: 2 } && bridge.ResolvePath(vaePath) is INodeOutput vae)
-        {
-            decode.Vae.ConnectToUntyped(vae);
-        }
-        if (latentPath is { Count: 2 } && bridge.ResolvePath(latentPath) is INodeOutput samples)
-        {
-            decode.Samples.ConnectToUntyped(samples);
-        }
+        decode.Vae.ConnectToUntyped(bridge.ResolvePath(vaePath));
+        decode.Samples.ConnectToUntyped(bridge.ResolvePath(latentPath));
         bridge.SyncNode(decode);
         BridgeSync.SyncLastId(g);
         return decode.Id;
