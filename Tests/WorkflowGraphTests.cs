@@ -33,10 +33,8 @@ public class WorkflowGraphTests
         decode.Vae.ConnectToUntyped(stub104.GetOutput(0));
         bridge.AddNode(decode, "202");
 
-        SwarmTrimFramesNode trim = new();
+        var trim = new SwarmTrimFramesNode().With(TrimStart: 1, TrimEnd: 1);
         trim.Image.ConnectTo(decode.IMAGE);
-        trim.TrimStart.Set(1);
-        trim.TrimEnd.Set(1);
         bridge.AddNode(trim, "204");
 
         SwarmSaveAnimationWSNode save = new();

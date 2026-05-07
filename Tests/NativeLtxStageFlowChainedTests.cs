@@ -38,9 +38,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        List<LTXVPreprocessNode> preprocessNodes = bridge.Graph.NodesOfType<LTXVPreprocessNode>()
-            .OrderBy(node => int.Parse(node.Id))
-            .ToList();
+        List<LTXVPreprocessNode> preprocessNodes = [.. bridge.Graph.NodesOfType<LTXVPreprocessNode>().OrderBy(node => int.Parse(node.Id))];
         Assert.Equal(2, preprocessNodes.Count);
 
         List<LTXVImgToVideoInplaceNode> imgToVideoNodes = bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()

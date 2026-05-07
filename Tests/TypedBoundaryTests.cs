@@ -1,4 +1,3 @@
-using ComfyTyped;
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;

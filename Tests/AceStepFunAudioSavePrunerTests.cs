@@ -42,13 +42,11 @@ public class AceStepFunAudioSavePrunerTests
 
         VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
 
-        SaveAudioMP3Node save1 = new();
+        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
         save1.Audio.ConnectTo(decode.AUDIO);
-        save1.FilenamePrefix.Set("SwarmUI_track_1_");
         bridge.AddNode(save1, "64170");
 
-        SaveAudioMP3Node save2 = new();
-        save2.FilenamePrefix.Set("SwarmUI_track_2_");
+        SaveAudioMP3Node save2 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
         bridge.AddNode(save2, "64270");
 
         AceStepFunAudioSavePruner.Apply(
@@ -68,9 +66,8 @@ public class AceStepFunAudioSavePrunerTests
 
         VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
 
-        SaveAudioMP3Node save1 = new();
+        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
         save1.Audio.ConnectTo(decode.AUDIO);
-        save1.FilenamePrefix.Set("SwarmUI_track_1_");
         bridge.AddNode(save1, "64170");
 
         AceStepFunAudioSavePruner.Apply(
@@ -86,12 +83,10 @@ public class AceStepFunAudioSavePrunerTests
         JObject workflow = [];
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SaveAudioMP3Node save1 = new();
-        save1.FilenamePrefix.Set("SwarmUI_track_1_");
+        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
         bridge.AddNode(save1, "64170");
 
-        SaveAudioMP3Node save2 = new();
-        save2.FilenamePrefix.Set("SwarmUI_track_2_");
+        SaveAudioMP3Node save2 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
         bridge.AddNode(save2, "64270");
 
         AceStepFunAudioSavePruner.Apply(
@@ -111,8 +106,7 @@ public class AceStepFunAudioSavePrunerTests
         JObject workflow = [];
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SaveAudioMP3Node save1 = new();
-        save1.FilenamePrefix.Set("SwarmUI_track_1_");
+        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
         bridge.AddNode(save1, "64170");
 
         AceStepFunAudioSavePruner.Apply(

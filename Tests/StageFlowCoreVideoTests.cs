@@ -52,49 +52,41 @@ public partial class StageFlowTests
         {
             using var bridge = BridgeSync.For(g);
 
-            SwarmLoadVideoB64Node videoLoad = new();
-            videoLoad.VideoBase64.Set("unit-test-video");
+            var videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
             bridge.AddNode(videoLoad, "300");
 
             GetVideoComponentsNode videoComponents = new();
             videoComponents.Video.ConnectTo(videoLoad.VIDEO);
             bridge.AddNode(videoComponents, "301");
 
-            ImageScaleNode scaled = new();
+            var scaled = new ImageScaleNode()
+                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
             scaled.Image.ConnectTo(videoComponents.Images);
-            scaled.Width.Set(512);
-            scaled.Height.Set(512);
-            scaled.UpscaleMethod.Set("lanczos");
-            scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
 
             UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs("IMAGE");
             preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
 
-            ResizeImageMaskNodeNode resize = new()
+            var resize = new ResizeImageMaskNodeNode
             {
                 ExtraInputs = new JObject { ["resize_type.multiple"] = 8 }
-            };
+            }.With(ResizeType: "scale to multiple", ScaleMethod: "lanczos");
             resize.Input.ConnectToUntyped(preprocessor.GetOutput(0));
-            resize.ResizeType.Set("scale to multiple");
-            resize.ScaleMethod.Set("lanczos");
             bridge.AddNode(resize, "304");
 
-            ControlNetLoaderNode controlNetLoader = new();
-            controlNetLoader.ControlNetName.Set(controlNetModel.ToString(g.ModelFolderFormat));
+            var controlNetLoader = new ControlNetLoaderNode()
+                .With(ControlNetName: controlNetModel.ToString(g.ModelFolderFormat));
             bridge.AddNode(controlNetLoader, "305");
 
             UnknownNode positive = bridge.AddStub("UnitTest_PositiveCond", "306").WithOutputs("CONDITIONING");
             UnknownNode negative = bridge.AddStub("UnitTest_NegativeCond", "307").WithOutputs("CONDITIONING");
 
-            ControlNetApplyAdvancedNode controlApply = new();
+            var controlApply = new ControlNetApplyAdvancedNode()
+                .With(Strength: 0.8, StartPercent: 0.0, EndPercent: 1.0);
             controlApply.PositiveInput.ConnectToUntyped(positive.GetOutput(0));
             controlApply.NegativeInput.ConnectToUntyped(negative.GetOutput(0));
             controlApply.ControlNet.ConnectTo(controlNetLoader.CONTROLNET);
             controlApply.Image.ConnectToUntyped(resize.Resized);
-            controlApply.Strength.Set(0.8);
-            controlApply.StartPercent.Set(0.0);
-            controlApply.EndPercent.Set(1.0);
             bridge.AddNode(controlApply, "308");
 
             g.FinalPrompt = new JArray("308", 0);
@@ -108,57 +100,48 @@ public partial class StageFlowTests
         {
             using var bridge = BridgeSync.For(g);
 
-            SwarmLoadVideoB64Node videoLoad = new();
-            videoLoad.VideoBase64.Set("unit-test-video");
+            var videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
             bridge.AddNode(videoLoad, "300");
 
             GetVideoComponentsNode videoComponents = new();
             videoComponents.Video.ConnectTo(videoLoad.VIDEO);
             bridge.AddNode(videoComponents, "301");
 
-            ImageScaleNode scaled = new();
+            var scaled = new ImageScaleNode()
+                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
             scaled.Image.ConnectTo(videoComponents.Images);
-            scaled.Width.Set(512);
-            scaled.Height.Set(512);
-            scaled.UpscaleMethod.Set("lanczos");
-            scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
 
             UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs("IMAGE");
             preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
 
-            ResizeImageMaskNodeNode resize = new()
+            var resize = new ResizeImageMaskNodeNode
             {
                 ExtraInputs = new JObject { ["resize_type.multiple"] = 8 }
-            };
+            }.With(ResizeType: "scale to multiple", ScaleMethod: "lanczos");
             resize.Input.ConnectToUntyped(preprocessor.GetOutput(0));
-            resize.ResizeType.Set("scale to multiple");
-            resize.ScaleMethod.Set("lanczos");
             bridge.AddNode(resize, "304");
 
-            ModelPatchLoaderNode modelPatchLoader = new();
-            modelPatchLoader.Name.Set(controlNetModel.ToString(g.ModelFolderFormat));
+            var modelPatchLoader = new ModelPatchLoaderNode()
+                .With(Name: controlNetModel.ToString(g.ModelFolderFormat));
             bridge.AddNode(modelPatchLoader, "305");
 
             INodeOutput controlImageOutput = resize.Resized;
             string diffPatchId = "308";
             if (useFirstFrameForCoreApply)
             {
-                ImageFromBatchNode firstFrame = new();
+                var firstFrame = new ImageFromBatchNode().With(BatchIndex: 0, Length: 1);
                 firstFrame.Image.ConnectToUntyped(resize.Resized);
-                firstFrame.BatchIndex.Set(0);
-                firstFrame.Length.Set(1);
                 bridge.AddNode(firstFrame, "308");
                 controlImageOutput = firstFrame.IMAGE;
                 diffPatchId = "309";
             }
 
-            QwenImageDiffsynthControlnetNode diffPatch = new();
+            var diffPatch = new QwenImageDiffsynthControlnetNode().With(Strength: 0.8);
             diffPatch.Model.ConnectToUntyped(bridge.ResolvePath(g.CurrentModel.Path));
             diffPatch.ModelPatch.ConnectTo(modelPatchLoader.MODELPATCH);
             diffPatch.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
             diffPatch.Image.ConnectToUntyped(controlImageOutput);
-            diffPatch.Strength.Set(0.8);
             bridge.AddNode(diffPatch, diffPatchId);
 
             g.CurrentModel = g.CurrentModel.WithPath(new JArray(diffPatchId, 0));
@@ -170,38 +153,31 @@ public partial class StageFlowTests
         {
             using var bridge = BridgeSync.For(g);
 
-            SwarmLoadVideoB64Node videoLoad = new();
-            videoLoad.VideoBase64.Set("unit-test-video");
+            var videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
             bridge.AddNode(videoLoad, "300");
 
             GetVideoComponentsNode videoComponents = new();
             videoComponents.Video.ConnectTo(videoLoad.VIDEO);
             bridge.AddNode(videoComponents, "301");
 
-            ImageScaleNode scaled = new();
+            var scaled = new ImageScaleNode()
+                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
             scaled.Image.ConnectTo(videoComponents.Images);
-            scaled.Width.Set(512);
-            scaled.Height.Set(512);
-            scaled.UpscaleMethod.Set("lanczos");
-            scaled.Crop.Set("disabled");
             bridge.AddNode(scaled, "302");
 
-            ImageFromBatchNode firstFrame = new();
+            var firstFrame = new ImageFromBatchNode().With(BatchIndex: 0, Length: 1);
             firstFrame.Image.ConnectTo(scaled.IMAGE);
-            firstFrame.BatchIndex.Set(0);
-            firstFrame.Length.Set(1);
             bridge.AddNode(firstFrame, "303");
 
-            ModelPatchLoaderNode modelPatchLoader = new();
-            modelPatchLoader.Name.Set(controlNetModel.ToString(g.ModelFolderFormat));
+            var modelPatchLoader = new ModelPatchLoaderNode()
+                .With(Name: controlNetModel.ToString(g.ModelFolderFormat));
             bridge.AddNode(modelPatchLoader, "304");
 
-            QwenImageDiffsynthControlnetNode diffPatch = new();
+            var diffPatch = new QwenImageDiffsynthControlnetNode().With(Strength: 0.8);
             diffPatch.Model.ConnectToUntyped(bridge.ResolvePath(g.CurrentModel.Path));
             diffPatch.ModelPatch.ConnectTo(modelPatchLoader.MODELPATCH);
             diffPatch.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
             diffPatch.Image.ConnectTo(firstFrame.IMAGE);
-            diffPatch.Strength.Set(0.8);
             bridge.AddNode(diffPatch, "305");
 
             g.CurrentModel = g.CurrentModel.WithPath(new JArray("305", 0));

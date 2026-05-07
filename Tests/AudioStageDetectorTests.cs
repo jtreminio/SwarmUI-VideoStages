@@ -19,7 +19,8 @@ public class AudioStageDetectorTests
             ModelFolderFormat = "/",
             Workflow = workflow
         };
-        generator.CurrentAudioVae = new WGNodeData(new JArray("900", 0), generator, WGNodeData.DT_AUDIOVAE, T2IModelClassSorter.CompatLtxv2);
+        generator.CurrentAudioVae = new WGNodeData(
+            new JArray("900", 0), generator, WGNodeData.DT_AUDIOVAE, T2IModelClassSorter.CompatLtxv2);
         return generator;
     }
 
@@ -60,7 +61,7 @@ public class AudioStageDetectorTests
 
         Assert.NotNull(detection);
         Assert.Equal("150", detection.MatchedNodeId);
-        Assert.Equal("VAEDecodeAudio", detection.MatchedClassType);
+        Assert.Equal(VAEDecodeAudioNode.ClassType, detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("150", 0)));
     }
 
@@ -73,16 +74,15 @@ public class AudioStageDetectorTests
         bridge.AddNode(new VAEDecodeAudioNode(), "100");
         VAEDecodeAudioNode aceDecode = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
 
-        SaveAudioMP3Node aceSave = new();
+        SaveAudioMP3Node aceSave = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
         aceSave.Audio.ConnectTo(aceDecode.AUDIO);
-        aceSave.FilenamePrefix.Set("SwarmUI_track_1_");
         bridge.AddNode(aceSave, "64170");
 
         AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).Detect();
 
         Assert.NotNull(detection);
         Assert.Equal("100", detection.MatchedNodeId);
-        Assert.Equal("VAEDecodeAudio", detection.MatchedClassType);
+        Assert.Equal(VAEDecodeAudioNode.ClassType, detection.MatchedClassType);
         Assert.True(JToken.DeepEquals(detection.Audio.Path, new JArray("100", 0)));
     }
 
@@ -95,17 +95,16 @@ public class AudioStageDetectorTests
         VAEDecodeAudioNode decode1 = bridge.AddNode(new VAEDecodeAudioNode(), "64160");
         VAEDecodeAudioNode decode2 = bridge.AddNode(new VAEDecodeAudioNode(), "64260");
 
-        SaveAudioMP3Node save1 = new();
+        SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
         save1.Audio.ConnectTo(decode1.AUDIO);
-        save1.FilenamePrefix.Set("SwarmUI_track_1_");
         bridge.AddNode(save1, "64170");
 
-        SaveAudioMP3Node save2 = new();
+        SaveAudioMP3Node save2 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
         save2.Audio.ConnectTo(decode2.AUDIO);
-        save2.FilenamePrefix.Set("SwarmUI_track_2_");
         bridge.AddNode(save2, "64270");
 
-        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).DetectAceStepFunTrack("audio0");
+        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow))
+            .DetectAceStepFunTrack("audio0");
 
         Assert.NotNull(detection);
         Assert.Equal("64170", detection.MatchedNodeId);
@@ -121,7 +120,8 @@ public class AudioStageDetectorTests
         bridge.AddNode(new VAEDecodeAudioNode(), "64160");
         bridge.AddNode(new VAEDecodeAudioNode(), "64260");
 
-        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow)).DetectAceStepFunTrack("audio1");
+        AudioStageDetector.Detection detection = new AudioStageDetector(CreateGenerator(workflow))
+            .DetectAceStepFunTrack("audio1");
 
         Assert.NotNull(detection);
         Assert.Equal("64260", detection.MatchedNodeId);

@@ -524,13 +524,10 @@ public partial class StageFlowTests
             separate.AvLatent.ConnectToUntyped(avLatent.GetOutput(0));
             bridge.AddNode(separate, "201");
 
-            VAEDecodeTiledNode videoDecode = new();
+            var videoDecode = new VAEDecodeTiledNode()
+                .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
             videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048);
-            videoDecode.Overlap.Set(256);
-            videoDecode.TemporalSize.Set(64);
-            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -538,14 +535,10 @@ public partial class StageFlowTests
             audioDecode.Samples.ConnectTo(separate.AudioLatent);
             bridge.AddNode(audioDecode, "203");
 
-            SwarmSaveAnimationWSNode save = new();
+            var save = new SwarmSaveAnimationWSNode()
+                .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
             save.Images.ConnectTo(videoDecode.IMAGE);
             save.Audio.ConnectTo(audioDecode.Audio);
-            save.Fps.Set(24.0);
-            save.Lossless.Set(false);
-            save.Quality.Set(95);
-            save.Method.Set("default");
-            save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
 
             g.CurrentMedia = videoDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_VIDEO,
@@ -582,13 +575,10 @@ public partial class StageFlowTests
             separate.AvLatent.ConnectToUntyped(avLatent.GetOutput(0));
             bridge.AddNode(separate, "201");
 
-            VAEDecodeTiledNode videoDecode = new();
+            var videoDecode = new VAEDecodeTiledNode()
+                .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
             videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048);
-            videoDecode.Overlap.Set(256);
-            videoDecode.TemporalSize.Set(64);
-            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -596,20 +586,14 @@ public partial class StageFlowTests
             audioDecode.Samples.ConnectTo(separate.AudioLatent);
             bridge.AddNode(audioDecode, "203");
 
-            SwarmTrimFramesNode trim = new();
+            var trim = new SwarmTrimFramesNode().With(TrimStart: 1, TrimEnd: 1);
             trim.Image.ConnectTo(videoDecode.IMAGE);
-            trim.TrimStart.Set(1);
-            trim.TrimEnd.Set(1);
             bridge.AddNode(trim, "204");
 
-            SwarmSaveAnimationWSNode save = new();
+            var save = new SwarmSaveAnimationWSNode()
+                .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
             save.Images.ConnectTo(trim.IMAGE);
             save.Audio.ConnectTo(audioDecode.Audio);
-            save.Fps.Set(24.0);
-            save.Lossless.Set(false);
-            save.Quality.Set(95);
-            save.Method.Set("default");
-            save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
 
             g.CurrentMedia = trim.IMAGE.ToWGMedia(g, WGNodeData.DT_VIDEO,
@@ -656,13 +640,10 @@ public partial class StageFlowTests
             separate.AvLatent.ConnectTo(avLatent.LATENT);
             bridge.AddNode(separate, "201");
 
-            VAEDecodeTiledNode videoDecode = new();
+            var videoDecode = new VAEDecodeTiledNode()
+                .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
             videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048);
-            videoDecode.Overlap.Set(256);
-            videoDecode.TemporalSize.Set(64);
-            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -670,14 +651,10 @@ public partial class StageFlowTests
             audioDecode.Samples.ConnectTo(separate.AudioLatent);
             bridge.AddNode(audioDecode, "203");
 
-            SwarmSaveAnimationWSNode save = new();
+            var save = new SwarmSaveAnimationWSNode()
+                .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
             save.Images.ConnectTo(videoDecode.IMAGE);
             save.Audio.ConnectTo(audioDecode.Audio);
-            save.Fps.Set(24.0);
-            save.Lossless.Set(false);
-            save.Quality.Set(95);
-            save.Method.Set("default");
-            save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
 
             g.CurrentMedia = videoDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_VIDEO,
@@ -709,15 +686,6 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainWithTrimWrapperStep(attachAudioToCurrentMedia)])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithLatentBaseCaptureAndExistingPreprocess(bool attachAudioToCurrentMedia) =>
-        new[]
-        {
-            WorkflowTestHarness.MinimalGraphSeedStep(),
-            SeedExistingBasePreprocessStep(),
-            SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia)
-        }
-        .Concat(WorkflowTestHarness.VideoStagesSteps());
-
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(bool attachAudioToCurrentMedia) =>
         new[]
         {
@@ -740,56 +708,6 @@ public partial class StageFlowTests
             g.CurrentVae = baseVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE, baseModel?.ModelClass?.CompatClass);
         }, 11.4);
 
-    private static WorkflowGenerator.WorkflowGenStep SeedExistingRefinerPreprocessStep() =>
-        new(g =>
-        {
-            using var bridge = BridgeSync.For(g);
-
-            ImageScaleNode scaleNode = new();
-            scaleNode.Image.ConnectToUntyped(bridge.ResolvePath(new JArray("12", 0)));
-            scaleNode.Width.Set(512);
-            scaleNode.Height.Set(512);
-            scaleNode.UpscaleMethod.Set("lanczos");
-            scaleNode.Crop.Set("disabled");
-            bridge.AddNode(scaleNode, "209");
-
-            LTXVPreprocessNode preprocess = new();
-            preprocess.Image.ConnectTo(scaleNode.IMAGE);
-            preprocess.ImgCompression.Set(18);
-            bridge.AddNode(preprocess, "210");
-        }, 11.4);
-
-    private static WorkflowGenerator.WorkflowGenStep SeedExistingBasePreprocessStep() =>
-        new(g =>
-        {
-            using var bridge = BridgeSync.For(g);
-
-            VAEDecodeTiledNode decodeNode = new();
-            decodeNode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
-            decodeNode.Samples.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
-            decodeNode.TileSize.Set(2048);
-            decodeNode.Overlap.Set(256);
-            decodeNode.TemporalSize.Set(64);
-            decodeNode.TemporalOverlap.Set(16);
-            bridge.AddNode(decodeNode, "8");
-
-            g.CurrentMedia = decodeNode.IMAGE.ToWGMedia(g, WGNodeData.DT_IMAGE,
-                width: 512, height: 512);
-
-            ImageScaleNode scaleNode = new();
-            scaleNode.Image.ConnectTo(decodeNode.IMAGE);
-            scaleNode.Width.Set(512);
-            scaleNode.Height.Set(512);
-            scaleNode.UpscaleMethod.Set("lanczos");
-            scaleNode.Crop.Set("disabled");
-            bridge.AddNode(scaleNode, "209");
-
-            LTXVPreprocessNode preprocess = new();
-            preprocess.Image.ConnectTo(scaleNode.IMAGE);
-            preprocess.ImgCompression.Set(18);
-            bridge.AddNode(preprocess, "210");
-        }, 1);
-
     private static WorkflowGenerator.WorkflowGenStep SeedDownstreamRefinerAndReachableRootVideoGraphStep() =>
         new(g =>
         {
@@ -800,12 +718,9 @@ public partial class StageFlowTests
             baseDecode.Samples.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
             bridge.AddNode(baseDecode, "24");
 
-            ImageScaleNode refinerScale = new();
+            var refinerScale = new ImageScaleNode()
+                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
             refinerScale.Image.ConnectTo(baseDecode.IMAGE);
-            refinerScale.Width.Set(512);
-            refinerScale.Height.Set(512);
-            refinerScale.UpscaleMethod.Set("lanczos");
-            refinerScale.Crop.Set("disabled");
             bridge.AddNode(refinerScale, "26");
 
             VAEEncodeNode refinerEncode = new();
@@ -821,46 +736,36 @@ public partial class StageFlowTests
             refinerDecode.Samples.ConnectToUntyped(refinerSampler.GetOutput(0));
             bridge.AddNode(refinerDecode, "8");
 
-            ImageScaleNode rootGuideScale = new();
+            var rootGuideScale = new ImageScaleNode()
+                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
             rootGuideScale.Image.ConnectTo(refinerDecode.IMAGE);
-            rootGuideScale.Width.Set(512);
-            rootGuideScale.Height.Set(512);
-            rootGuideScale.UpscaleMethod.Set("lanczos");
-            rootGuideScale.Crop.Set("disabled");
             bridge.AddNode(rootGuideScale, "102");
 
-            LTXVPreprocessNode preprocess = new();
+            var preprocess = new LTXVPreprocessNode().With(ImgCompression: 18);
             preprocess.Image.ConnectTo(rootGuideScale.IMAGE);
-            preprocess.ImgCompression.Set(18);
             bridge.AddNode(preprocess, "110");
 
             UnknownNode videoModelStub = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs("MODEL", "CLIP");
             UnknownNode videoVaeStub = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs("VAE");
             UnknownNode audioVaeStub = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs("VAE");
 
-            EmptyLTXVLatentVideoNode emptyVideoLatent = new();
-            emptyVideoLatent.Width.Set(512);
-            emptyVideoLatent.Height.Set(512);
-            emptyVideoLatent.Length.Set(16);
-            emptyVideoLatent.BatchSize.Set(1);
+            EmptyLTXVLatentVideoNode emptyVideoLatent = new EmptyLTXVLatentVideoNode()
+                .With(Width: 512, Height: 512, Length: 16, BatchSize: 1);
             bridge.AddNode(emptyVideoLatent, "108");
 
             // Original used keys "length" and "fps" on LTXVEmptyLatentAudio; the typed node
             // declares "frames_number" and "frame_rate". Preserve original keys via ExtraInputs.
-            LTXVEmptyLatentAudioNode emptyAudioLatent = new()
+            var emptyAudioLatent = new LTXVEmptyLatentAudioNode
             {
                 ExtraInputs = new JObject { ["length"] = 16, ["fps"] = 24 }
-            };
+            }.With(BatchSize: 1);
             emptyAudioLatent.AudioVae.ConnectToUntyped(audioVaeStub.GetOutput(0));
-            emptyAudioLatent.BatchSize.Set(1);
             bridge.AddNode(emptyAudioLatent, "109");
 
-            LTXVImgToVideoInplaceNode imgToVideo = new();
+            var imgToVideo = new LTXVImgToVideoInplaceNode().With(Strength: 1.0, Bypass: false);
             imgToVideo.Vae.ConnectToUntyped(videoVaeStub.GetOutput(0));
             imgToVideo.Image.ConnectTo(preprocess.OutputImage);
             imgToVideo.LatentInput.ConnectTo(emptyVideoLatent.LATENT);
-            imgToVideo.Strength.Set(1.0);
-            imgToVideo.Bypass.Set(false);
             bridge.AddNode(imgToVideo, "111");
 
             LTXVConcatAVLatentNode concat = new();
@@ -872,13 +777,10 @@ public partial class StageFlowTests
             separate.AvLatent.ConnectTo(concat.Latent);
             bridge.AddNode(separate, "201");
 
-            VAEDecodeTiledNode videoDecode = new();
+            var videoDecode = new VAEDecodeTiledNode()
+                .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
             videoDecode.Vae.ConnectToUntyped(videoVaeStub.GetOutput(0));
             videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            videoDecode.TileSize.Set(2048);
-            videoDecode.Overlap.Set(256);
-            videoDecode.TemporalSize.Set(64);
-            videoDecode.TemporalOverlap.Set(16);
             bridge.AddNode(videoDecode, "202");
 
             LTXVAudioVAEDecodeNode audioDecode = new();
@@ -886,14 +788,10 @@ public partial class StageFlowTests
             audioDecode.Samples.ConnectTo(separate.AudioLatent);
             bridge.AddNode(audioDecode, "203");
 
-            SwarmSaveAnimationWSNode save = new();
+            var save = new SwarmSaveAnimationWSNode()
+                .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
             save.Images.ConnectTo(videoDecode.IMAGE);
             save.Audio.ConnectTo(audioDecode.Audio);
-            save.Fps.Set(24.0);
-            save.Lossless.Set(false);
-            save.Quality.Set(95);
-            save.Method.Set("default");
-            save.Format.Set("h264-mp4");
             bridge.AddNode(save, "9");
 
             g.CurrentMedia = refinerDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_IMAGE,
