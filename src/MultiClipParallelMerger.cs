@@ -206,11 +206,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
 
             save.Images.ConnectToUntyped(images);
-            if (audio is not null)
-            {
-                save.Audio.ConnectToUntyped(audio);
-            }
-            else
+            if (!save.Audio.TryConnectToUntyped(audio))
             {
                 save.Audio.Clear();
             }

@@ -99,8 +99,8 @@ internal sealed class LtxAudioInjector(
 
     private SwarmAudioLengthToFramesNode CreateLengthToFramesNode(WorkflowBridge bridge, JToken audioPath, int fps)
     {
-        SwarmAudioLengthToFramesNode node = new();
-        node.FrameRate.Set(fps);
+        SwarmAudioLengthToFramesNode node = new SwarmAudioLengthToFramesNode().With(
+            FrameRate: fps);
         if (audioPath is JArray pathArray && bridge.ResolvePath(pathArray) is INodeOutput typedAudio)
         {
             node.AudioInput.ConnectToUntyped(typedAudio);
@@ -136,10 +136,10 @@ internal sealed class LtxAudioInjector(
             height = rootHeight;
         }
 
-        SolidMaskNode solidMask = new();
-        solidMask.Value.Set(0.0);
-        solidMask.Width.Set(width);
-        solidMask.Height.Set(height);
+        SolidMaskNode solidMask = new SolidMaskNode().With(
+            Value: 0.0,
+            Width: width,
+            Height: height);
         bridge.AddNode(solidMask, g.GetStableDynamicID(AudioInjectionIdBase + 200, 0));
 
         SetLatentNoiseMaskNode setMask = new();

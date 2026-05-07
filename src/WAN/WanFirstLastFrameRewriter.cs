@@ -49,10 +49,11 @@ internal static class WanFirstLastFrameRewriter
             height);
 
         WanFirstLastFrameToVideoNode flf = bridge.AddNode(new WanFirstLastFrameToVideoNode());
-        flf.Width.Set(width);
-        flf.Height.Set(height);
-        flf.Length.Set(length);
-        flf.BatchSize.Set(batchSize);
+        flf.With(
+            Width: width,
+            Height: height,
+            Length: length,
+            BatchSize: batchSize);
 
         if (wan.PositiveInput.Connection is INodeOutput pos)
         {
@@ -70,10 +71,7 @@ internal static class WanFirstLastFrameRewriter
         {
             flf.StartImage.ConnectToUntyped(startImg);
         }
-        if (scaledEndOutput is not null)
-        {
-            flf.EndImage.ConnectToUntyped(scaledEndOutput);
-        }
+        flf.EndImage.TryConnectToUntyped(scaledEndOutput);
 
         if (wan.ClipVisionOutput.Connection is INodeOutput clipVisionStart)
         {
@@ -89,11 +87,9 @@ internal static class WanFirstLastFrameRewriter
             {
                 encodeEnd.ClipVision.ConnectToUntyped(clipLoader);
             }
-            if (scaledEndOutput is not null)
-            {
-                encodeEnd.Image.ConnectToUntyped(scaledEndOutput);
-            }
-            encodeEnd.Crop.Set("center");
+            encodeEnd.Image.TryConnectToUntyped(scaledEndOutput);
+            encodeEnd.With(
+                Crop: "center");
             bridge.SyncNode(encodeEnd);
 
             flf.ClipVisionStartImage.ConnectToUntyped(clipVisionStart);

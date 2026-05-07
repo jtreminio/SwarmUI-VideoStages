@@ -28,8 +28,9 @@ internal sealed class LtxAudioMaskResizer(
                 continue;
             }
 
-            solidMask.Width.Set(width);
-            solidMask.Height.Set(height);
+            solidMask.With(
+                Width: width,
+                Height: height);
             bridge.SyncNode(solidMask);
         }
     }
@@ -64,8 +65,9 @@ internal sealed class LtxAudioMaskResizer(
             return;
         }
 
-        solidMask.Width.Set(media.Width.Value);
-        solidMask.Height.Set(media.Height.Value);
+        solidMask.With(
+            Width: media.Width.Value,
+            Height: media.Height.Value);
         bridge.SyncNode(solidMask);
     }
 }

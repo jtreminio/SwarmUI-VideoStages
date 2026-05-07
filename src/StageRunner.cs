@@ -252,10 +252,9 @@ internal class StageRunner(
 
         int steps = Math.Max(1, samplerNode.Steps.LiteralAsInt() ?? stage.Steps);
         int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
-        string leftover = endStep < steps ? "enable" : "disable";
-
-        samplerNode.EndAtStep.Set(endStep);
-        samplerNode.ReturnWithLeftoverNoise.Set(leftover);
+        samplerNode.With(
+            EndAtStep: endStep,
+            ReturnWithLeftoverNoise: endStep < steps ? "enable" : "disable");
         bridge.SyncNode(samplerNode);
     }
 
@@ -427,13 +426,13 @@ internal class StageRunner(
     private ImageFromBatchNode AddImageFromBatch(JArray imagePath, int batchIndex, int length)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
+        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
+            BatchIndex: batchIndex,
+            Length: length);
         if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
             node.Image.ConnectToUntyped(src);
         }
-        node.BatchIndex.Set(batchIndex);
-        node.Length.Set(length);
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
         return node;
@@ -519,13 +518,13 @@ internal class StageRunner(
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode());
+        LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode()).With(
+            LoraName: lora.ToString(g.ModelFolderFormat),
+            StrengthModel: 1.0);
         if (genInfo.Model?.Path is JArray modelPath && bridge.ResolvePath(modelPath) is INodeOutput modelOutput)
         {
             loraLoader.ModelInput.ConnectToUntyped(modelOutput);
         }
-        loraLoader.LoraName.Set(lora.ToString(g.ModelFolderFormat));
-        loraLoader.StrengthModel.Set(1.0);
         bridge.SyncNode(loraLoader);
         BridgeSync.SyncLastId(g);
         genInfo.Model = genInfo.Model.WithPath([loraLoader.Id, 0]);
@@ -646,8 +645,8 @@ internal class StageRunner(
     private ImageScaleNode AddModelUpscaleChain(JArray sourcePath, string modelName, int targetWidth, int targetHeight)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        UpscaleModelLoaderNode loader = bridge.AddNode(new UpscaleModelLoaderNode());
-        loader.ModelName.Set(modelName);
+        UpscaleModelLoaderNode loader = bridge.AddNode(new UpscaleModelLoaderNode()).With(
+            ModelName: modelName);
         bridge.SyncNode(loader);
 
         ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode());
@@ -720,11 +719,7 @@ internal class StageRunner(
                 {
                     staleAudioNodeIds.Add(oldAudioOutput.Node.Id);
                 }
-                if (newAudioOutput is not null)
-                {
-                    saveNode.Audio.ConnectToUntyped(newAudioOutput);
-                }
-                else
+                if (!saveNode.Audio.TryConnectToUntyped(newAudioOutput))
                 {
                     saveNode.Audio.Clear();
                 }

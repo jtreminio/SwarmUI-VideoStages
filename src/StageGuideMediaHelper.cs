@@ -163,9 +163,10 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
             collapsed = upstream;
         }
 
-        collapsed.Width.Set(targetWidth);
-        collapsed.Height.Set(targetHeight);
-        collapsed.Crop.Set("center");
+        collapsed.With(
+            Width: targetWidth,
+            Height: targetHeight,
+            Crop: "center");
         if (!collapsed.UpscaleMethod.HasValue)
         {
             collapsed.UpscaleMethod.Set("lanczos");

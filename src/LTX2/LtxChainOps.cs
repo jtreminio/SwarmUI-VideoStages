@@ -153,10 +153,7 @@ internal static class LtxChainOps
 
         LTXVAudioVAEDecodeNode dedicatedAudioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode());
         dedicatedAudioDecode.Samples.ConnectTo(newSeparate.AudioLatent);
-        if (capture.AudioVaeSource is not null)
-        {
-            dedicatedAudioDecode.AudioVae.ConnectToUntyped(capture.AudioVaeSource);
-        }
+        dedicatedAudioDecode.AudioVae.TryConnectToUntyped(capture.AudioVaeSource);
         bridge.SyncNode(dedicatedAudioDecode);
 
         MediaRef decodedVideo = new()

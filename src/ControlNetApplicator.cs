@@ -216,16 +216,16 @@ internal static class ControlNetApplicator
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        ControlNetLoaderNode loader = bridge.AddNode(new ControlNetLoaderNode());
-        loader.ControlNetName.Set(controlModel.ToString(g.ModelFolderFormat));
+        ControlNetLoaderNode loader = bridge.AddNode(new ControlNetLoaderNode()).With(
+            ControlNetName: controlModel.ToString(g.ModelFolderFormat));
         bridge.SyncNode(loader);
 
         NodeOutput<ControlNetType> controlNetOutput = loader.CONTROLNET;
         if (TryGetUnionType(g, index, out string unionType))
         {
-            SetUnionControlNetTypeNode union = bridge.AddNode(new SetUnionControlNetTypeNode());
+            SetUnionControlNetTypeNode union = bridge.AddNode(new SetUnionControlNetTypeNode()).With(
+                Type: unionType);
             union.ControlNet.ConnectTo(controlNetOutput);
-            union.Type.Set(unionType);
             bridge.SyncNode(union);
             controlNetOutput = union.CONTROLNET;
         }
@@ -395,10 +395,7 @@ internal static class ControlNetApplicator
             ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode()).With(
                 ResizeType: "scale to multiple",
                 ScaleMethod: "lanczos");
-            if (guideOutput is not null)
-            {
-                resize.Input.ConnectToUntyped(guideOutput);
-            }
+            resize.Input.TryConnectToUntyped(guideOutput);
             resize.ExtraInputs["resize_type.multiple"] = 64;
             bridge.SyncNode(resize);
             imageInput = resize.Resized;
@@ -419,13 +416,13 @@ internal static class ControlNetApplicator
         int batchIndex,
         long lengthLiteral)
     {
-        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
+        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
+            BatchIndex: batchIndex,
+            Length: lengthLiteral);
         if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
             node.Image.ConnectToUntyped(src);
         }
-        node.BatchIndex.Set(batchIndex);
-        node.Length.Set(lengthLiteral);
         bridge.SyncNode(node);
         return node.Id;
     }
@@ -436,12 +433,12 @@ internal static class ControlNetApplicator
         int batchIndex,
         JToken lengthToken)
     {
-        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode());
+        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
+            BatchIndex: batchIndex);
         if (imagePath is { Count: 2 } && bridge.ResolvePath(imagePath) is INodeOutput src)
         {
             node.Image.ConnectToUntyped(src);
         }
-        node.BatchIndex.Set(batchIndex);
         if (lengthToken is JArray { Count: 2 } lengthRef
             && bridge.ResolvePath(lengthRef) is INodeOutput lengthSrc)
         {
@@ -869,11 +866,12 @@ internal static class ControlNetApplicator
         double controlStrength)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        ModelPatchLoaderNode loader = bridge.AddNode(new ModelPatchLoaderNode());
-        loader.Name.Set(controlModel.ToString(g.ModelFolderFormat));
+        ModelPatchLoaderNode loader = bridge.AddNode(new ModelPatchLoaderNode()).With(
+            Name: controlModel.ToString(g.ModelFolderFormat));
         bridge.SyncNode(loader);
 
-        QwenImageDiffsynthControlnetNode diff = bridge.AddNode(new QwenImageDiffsynthControlnetNode());
+        QwenImageDiffsynthControlnetNode diff = bridge.AddNode(new QwenImageDiffsynthControlnetNode()).With(
+            Strength: controlStrength);
         if (genInfo.Model?.Path is JArray modelPath && bridge.ResolvePath(modelPath) is INodeOutput modelOutput)
         {
             diff.Model.ConnectToUntyped(modelOutput);
@@ -887,7 +885,6 @@ internal static class ControlNetApplicator
         {
             diff.Image.ConnectToUntyped(img);
         }
-        diff.Strength.Set(controlStrength);
         bridge.SyncNode(diff);
         BridgeSync.SyncLastId(g);
 
@@ -914,7 +911,10 @@ internal static class ControlNetApplicator
                 throw new SwarmUserErrorException("Alimama Inpainting ControlNet requires a mask.");
             }
             ControlNetInpaintingAliMamaApplyNode alimama = bridge.AddNode(
-                new ControlNetInpaintingAliMamaApplyNode());
+                new ControlNetInpaintingAliMamaApplyNode()).With(
+                    Strength: controlStrength,
+                    StartPercent: startPercent,
+                    EndPercent: endPercent);
             if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput pos)
             {
                 alimama.PositiveInput.ConnectToUntyped(pos);
@@ -936,15 +936,15 @@ internal static class ControlNetApplicator
             {
                 alimama.Mask.ConnectToUntyped(mask);
             }
-            alimama.Strength.Set(controlStrength);
-            alimama.StartPercent.Set(startPercent);
-            alimama.EndPercent.Set(endPercent);
             bridge.SyncNode(alimama);
             BridgeSync.SyncLastId(g);
             return alimama.Id;
         }
 
-        ControlNetApplyAdvancedNode apply = bridge.AddNode(new ControlNetApplyAdvancedNode());
+        ControlNetApplyAdvancedNode apply = bridge.AddNode(new ControlNetApplyAdvancedNode()).With(
+            Strength: controlStrength,
+            StartPercent: startPercent,
+            EndPercent: endPercent);
         if (bridge.ResolvePath(genInfo.PosCond) is INodeOutput posCond)
         {
             apply.PositiveInput.ConnectToUntyped(posCond);
@@ -959,9 +959,6 @@ internal static class ControlNetApplicator
         {
             apply.Image.ConnectToUntyped(applyImg);
         }
-        apply.Strength.Set(controlStrength);
-        apply.StartPercent.Set(startPercent);
-        apply.EndPercent.Set(endPercent);
         if (g.IsSD3() || g.IsFlux() || g.IsAnyFlux2() || g.IsChroma() || g.IsQwenImage())
         {
             if (genInfo.Vae?.Path is JArray applyVaePath

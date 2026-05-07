@@ -204,9 +204,10 @@ internal sealed class RootVideoStageResizer(
             g.CurrentMedia = g.CurrentMedia.WithPath([scale.Id, 0]);
         }
 
-        scale.Width.Set(width);
-        scale.Height.Set(height);
-        scale.Crop.Set("center");
+        scale.With(
+            Width: width,
+            Height: height,
+            Crop: "center");
         if (!scale.UpscaleMethod.HasValue)
         {
             scale.UpscaleMethod.Set("lanczos");
