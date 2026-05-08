@@ -32,22 +32,19 @@ public partial class StageFlowTests
             .Concat([SeedCoreVideoControlNetBranchStep(controlNetModel), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(T2IModel controlNetModel) =>
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithVideoControlNetFirstFrame(T2IModel controlNetModel) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedCoreVideoDiffPatchControlNetBranchStep(controlNetModel), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat([SeedCoreVideoControlNetBranchStep(controlNetModel, useFirstFrameForCoreApply: true), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetFirstFrame(T2IModel controlNetModel) =>
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithVideoControlNetNoPreprocessor(T2IModel controlNetModel) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedCoreVideoDiffPatchControlNetBranchStep(controlNetModel, true), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat([SeedCoreVideoControlNetBranchStepNoPreprocessor(controlNetModel), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetNoPreprocessor(T2IModel controlNetModel) =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedCoreVideoDiffPatchControlNetBranchStepNoPreprocessor(controlNetModel), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
-    private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoControlNetBranchStep(T2IModel controlNetModel) =>
+    private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoControlNetBranchStep(
+        T2IModel controlNetModel,
+        bool useFirstFrameForCoreApply = false) =>
         new(g =>
         {
             using var bridge = BridgeSync.For(g);
@@ -81,73 +78,30 @@ public partial class StageFlowTests
             UnknownNode positive = bridge.AddStub("UnitTest_PositiveCond", "306").WithOutputs("CONDITIONING");
             UnknownNode negative = bridge.AddStub("UnitTest_NegativeCond", "307").WithOutputs("CONDITIONING");
 
-            var controlApply = new ControlNetApplyAdvancedNode()
-                .With(Strength: 0.8, StartPercent: 0.0, EndPercent: 1.0);
-            controlApply.PositiveInput.ConnectToUntyped(positive.GetOutput(0));
-            controlApply.NegativeInput.ConnectToUntyped(negative.GetOutput(0));
-            controlApply.ControlNet.ConnectTo(controlNetLoader.CONTROLNET);
-            controlApply.Image.ConnectToUntyped(resize.Resized);
-            bridge.AddNode(controlApply, "308");
-
-            g.FinalPrompt = new JArray("308", 0);
-            g.FinalNegativePrompt = new JArray("308", 1);
-        }, -6.1);
-
-    private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoDiffPatchControlNetBranchStep(
-        T2IModel controlNetModel,
-        bool useFirstFrameForCoreApply = false) =>
-        new(g =>
-        {
-            using var bridge = BridgeSync.For(g);
-
-            var videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
-            bridge.AddNode(videoLoad, "300");
-
-            GetVideoComponentsNode videoComponents = new();
-            videoComponents.Video.ConnectTo(videoLoad.VIDEO);
-            bridge.AddNode(videoComponents, "301");
-
-            var scaled = new ImageScaleNode()
-                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
-            scaled.Image.ConnectTo(videoComponents.Images);
-            bridge.AddNode(scaled, "302");
-
-            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs(WGNodeData.DT_IMAGE);
-            preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
-
-            var resize = new ResizeImageMaskNodeNode
-            {
-                ExtraInputs = new JObject { ["resize_type.multiple"] = 8 }
-            }.With(ResizeType: "scale to multiple", ScaleMethod: "lanczos");
-            resize.Input.ConnectToUntyped(preprocessor.GetOutput(0));
-            bridge.AddNode(resize, "304");
-
-            var modelPatchLoader = new ModelPatchLoaderNode()
-                .With(Name: controlNetModel.ToString(g.ModelFolderFormat));
-            bridge.AddNode(modelPatchLoader, "305");
-
             INodeOutput controlImageOutput = resize.Resized;
-            string diffPatchId = "308";
+            string applyId = "308";
             if (useFirstFrameForCoreApply)
             {
                 var firstFrame = new ImageFromBatchNode().With(BatchIndex: 0, Length: 1);
                 firstFrame.Image.ConnectToUntyped(resize.Resized);
                 bridge.AddNode(firstFrame, "308");
                 controlImageOutput = firstFrame.IMAGE;
-                diffPatchId = "309";
+                applyId = "309";
             }
 
-            var diffPatch = new QwenImageDiffsynthControlnetNode().With(Strength: 0.8);
-            diffPatch.Model.ConnectToUntyped(bridge.ResolvePath(g.CurrentModel.Path));
-            diffPatch.ModelPatch.ConnectTo(modelPatchLoader.MODELPATCH);
-            diffPatch.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
-            diffPatch.Image.ConnectToUntyped(controlImageOutput);
-            bridge.AddNode(diffPatch, diffPatchId);
+            var controlApply = new ControlNetApplyAdvancedNode()
+                .With(Strength: 0.8, StartPercent: 0.0, EndPercent: 1.0);
+            controlApply.PositiveInput.ConnectToUntyped(positive.GetOutput(0));
+            controlApply.NegativeInput.ConnectToUntyped(negative.GetOutput(0));
+            controlApply.ControlNet.ConnectTo(controlNetLoader.CONTROLNET);
+            controlApply.Image.ConnectToUntyped(controlImageOutput);
+            bridge.AddNode(controlApply, applyId);
 
-            g.CurrentModel = g.CurrentModel.WithPath(new JArray(diffPatchId, 0));
+            g.FinalPrompt = new JArray(applyId, 0);
+            g.FinalNegativePrompt = new JArray(applyId, 1);
         }, -6.1);
 
-    private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoDiffPatchControlNetBranchStepNoPreprocessor(
+    private static WorkflowGenerator.WorkflowGenStep SeedCoreVideoControlNetBranchStepNoPreprocessor(
         T2IModel controlNetModel) =>
         new(g =>
         {
@@ -169,18 +123,23 @@ public partial class StageFlowTests
             firstFrame.Image.ConnectTo(scaled.IMAGE);
             bridge.AddNode(firstFrame, "303");
 
-            var modelPatchLoader = new ModelPatchLoaderNode()
-                .With(Name: controlNetModel.ToString(g.ModelFolderFormat));
-            bridge.AddNode(modelPatchLoader, "304");
+            var controlNetLoader = new ControlNetLoaderNode()
+                .With(ControlNetName: controlNetModel.ToString(g.ModelFolderFormat));
+            bridge.AddNode(controlNetLoader, "304");
 
-            var diffPatch = new QwenImageDiffsynthControlnetNode().With(Strength: 0.8);
-            diffPatch.Model.ConnectToUntyped(bridge.ResolvePath(g.CurrentModel.Path));
-            diffPatch.ModelPatch.ConnectTo(modelPatchLoader.MODELPATCH);
-            diffPatch.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
-            diffPatch.Image.ConnectTo(firstFrame.IMAGE);
-            bridge.AddNode(diffPatch, "305");
+            UnknownNode positive = bridge.AddStub("UnitTest_PositiveCond", "306").WithOutputs("CONDITIONING");
+            UnknownNode negative = bridge.AddStub("UnitTest_NegativeCond", "307").WithOutputs("CONDITIONING");
 
-            g.CurrentModel = g.CurrentModel.WithPath(new JArray("305", 0));
+            var controlApply = new ControlNetApplyAdvancedNode()
+                .With(Strength: 0.8, StartPercent: 0.0, EndPercent: 1.0);
+            controlApply.PositiveInput.ConnectToUntyped(positive.GetOutput(0));
+            controlApply.NegativeInput.ConnectToUntyped(negative.GetOutput(0));
+            controlApply.ControlNet.ConnectTo(controlNetLoader.CONTROLNET);
+            controlApply.Image.ConnectTo(firstFrame.IMAGE);
+            bridge.AddNode(controlApply, "305");
+
+            g.FinalPrompt = new JArray("305", 0);
+            g.FinalNegativePrompt = new JArray("305", 1);
         }, -6.1);
 
     private static void AssertCoreVideoControlNetResizeBumped(JObject workflow)
@@ -354,165 +313,6 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Clip_controlnet_diffpatch_video_source_reuses_core_preprocessor_for_stage_model_patch()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
-        {
-            ModelClass = new T2IModelClass()
-            {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
-                CompatClass = models.VideoModel.ModelClass.CompatClass
-            }
-        };
-
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
-        input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
-        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[0], "UnitTestPreprocessor");
-
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        AssertCoreVideoControlNetResizeBumped(workflow);
-        ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
-        ImageFromBatchNode imageFromBatch = Assert.Single(
-            bridge.Graph.NodesOfType<ImageFromBatchNode>(),
-            node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0);
-        Assert.Equal(0, imageFromBatch.BatchIndex.LiteralAsInt());
-        Assert.Equal(1, imageFromBatch.Length.LiteralAsInt());
-
-        List<QwenImageDiffsynthControlnetNode> diffPatchNodes = bridge.Graph.NodesOfType<QwenImageDiffsynthControlnetNode>()
-            .OrderBy(node => int.Parse(node.Id))
-            .ToList();
-        QwenImageDiffsynthControlnetNode stageDiffPatch = Assert.Single(diffPatchNodes);
-        Assert.Equal(imageFromBatch.Id, stageDiffPatch.Image.Connection!.Node.Id);
-        Assert.Equal(0, stageDiffPatch.Image.Connection.SlotIndex);
-        INodeInput preprocessorImage = preprocessor.FindInput("image");
-        Assert.NotNull(preprocessorImage);
-        Assert.True(ReachesUpstream(bridge, preprocessorImage.Connection!.Node, "301"));
-    }
-
-    [Fact]
-    public void Clip_controlnet_diffpatch_video_source_works_without_root_video_model_param()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
-        {
-            ModelClass = new T2IModelClass()
-            {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
-                CompatClass = models.VideoModel.ModelClass.CompatClass
-            }
-        };
-
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        T2IParamInput input = BuildInput(models.BaseModel, new JArray(clip).ToString());
-        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
-        input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
-        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[0], "UnitTestPreprocessor");
-
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        AssertCoreVideoControlNetResizeBumped(workflow);
-        Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
-        ImageFromBatchNode imageFromBatch = Assert.Single(
-            bridge.Graph.NodesOfType<ImageFromBatchNode>(),
-            node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0);
-        Assert.Equal(0, imageFromBatch.BatchIndex.LiteralAsInt());
-        Assert.Equal(1, imageFromBatch.Length.LiteralAsInt());
-    }
-
-    [Fact]
-    public void Ltx_ic_lora_controlnet_source_adds_video_guide_without_stage_diffpatch()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
-        {
-            ModelClass = new T2IModelClass()
-            {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
-                CompatClass = models.VideoModel.ModelClass.CompatClass
-            }
-        };
-        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
-        Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
-        loraHandler.Models[loraModel.Name] = loraModel;
-
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
-        input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
-        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[0], "UnitTestPreprocessor");
-
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        AssertCoreVideoControlNetResizeBumped(workflow);
-        LTXICLoRALoaderModelOnlyNode icLora = Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
-        ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ResizeImageMaskNodeNode scaleToMultipleNode = Assert.Single(
-            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
-            n => n.ResizeType.LiteralAsString() == "scale to multiple");
-        Assert.Equal("304", scaleToMultipleNode.Id);
-        Assert.Equal(64, scaleToMultipleNode.ExtraInputs?["resize_type.multiple"]?.Value<int>());
-        Assert.Equal(preprocessor.Id, scaleToMultipleNode.Input.Connection!.Node.Id);
-        Assert.Equal(0, scaleToMultipleNode.Input.Connection.SlotIndex);
-        ImageFromBatchNode firstFrame = Assert.Single(
-            bridge.Graph.NodesOfType<ImageFromBatchNode>(),
-            node => node.Image.Connection?.Node.Id == scaleToMultipleNode.Id && node.Image.Connection.SlotIndex == 0
-                && node.Length.LiteralAsInt() == 1);
-        Assert.Equal(0, firstFrame.BatchIndex.LiteralAsInt());
-        ImageFromBatchNode videoGuideFrames = Assert.Single(
-            bridge.Graph.NodesOfType<ImageFromBatchNode>(),
-            node => node.Image.Connection?.Node.Id == scaleToMultipleNode.Id && node.Image.Connection.SlotIndex == 0
-                && node.Length.LiteralAsInt() == 16);
-        Assert.Equal(0, videoGuideFrames.BatchIndex.LiteralAsInt());
-
-        QwenImageDiffsynthControlnetNode coreDiffPatch = Assert.Single(bridge.Graph.NodesOfType<QwenImageDiffsynthControlnetNode>());
-        Assert.Equal(firstFrame.Id, coreDiffPatch.Image.Connection!.Node.Id);
-        Assert.Equal(0, coreDiffPatch.Image.Connection.SlotIndex);
-        Assert.False(ReachesUpstream(bridge, coreDiffPatch.Model.Connection!.Node, icLora.Id));
-
-        LTXAddVideoICLoRAGuideNode icGuide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
-        Assert.Equal(0, (int?)icGuide.FrameIdx.LiteralAsLong());
-        Assert.Equal(0.8, icGuide.Strength.LiteralAsDouble());
-        Assert.Equal(2.0, icGuide.LatentDownscaleFactor.LiteralAsDouble());
-        Assert.Equal(videoGuideFrames.Id, icGuide.Image.Connection!.Node.Id);
-        Assert.Equal(0, icGuide.Image.Connection.SlotIndex);
-        Assert.Contains(
-            bridge.Graph.FindInputsConnectedTo(icGuide.Latent),
-            connection => connection.Input.Name == "video_latent" && connection.Node is LTXVConcatAVLatentNode);
-    }
-
-    [Fact]
     public void Clip_length_from_controlnet_uses_captured_video_batch_count_for_ltx_lengths()
     {
         using SwarmUiTestContext _ = new();
@@ -523,8 +323,8 @@ public partial class StageFlowTests
         {
             ModelClass = new T2IModelClass()
             {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
+                ID = "unit/controlnet",
+                Name = "Unit ControlNet",
                 CompatClass = models.VideoModel.ModelClass.CompatClass
             }
         };
@@ -544,7 +344,7 @@ public partial class StageFlowTests
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
+            BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
@@ -584,8 +384,8 @@ public partial class StageFlowTests
         {
             ModelClass = new T2IModelClass()
             {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
+                ID = "unit/controlnet",
+                Name = "Unit ControlNet",
                 CompatClass = models.VideoModel.ModelClass.CompatClass
             }
         };
@@ -618,7 +418,7 @@ public partial class StageFlowTests
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
+            BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         LTXVLatentUpsamplerNode upsamplerNode = Assert.Single(bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
@@ -637,8 +437,8 @@ public partial class StageFlowTests
         {
             ModelClass = new T2IModelClass()
             {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
+                ID = "unit/controlnet",
+                Name = "Unit ControlNet",
                 CompatClass = models.VideoModel.ModelClass.CompatClass
             }
         };
@@ -657,7 +457,7 @@ public partial class StageFlowTests
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetFirstFrame(controlNetModel));
+            BuildCoreVideoWorkflowStepsWithVideoControlNetFirstFrame(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         AssertCoreVideoControlNetResizeBumped(workflow);
@@ -678,9 +478,9 @@ public partial class StageFlowTests
             node => node.Image.Connection?.Node.Id == scaleToMultipleNode.Id && node.Image.Connection.SlotIndex == 0
                 && node.Length.LiteralAsInt() == 16);
 
-        QwenImageDiffsynthControlnetNode coreDiffPatch = Assert.Single(bridge.Graph.NodesOfType<QwenImageDiffsynthControlnetNode>());
-        Assert.Equal(firstFrame.Id, coreDiffPatch.Image.Connection!.Node.Id);
-        Assert.Equal(0, coreDiffPatch.Image.Connection.SlotIndex);
+        ControlNetApplyAdvancedNode coreApply = Assert.Single(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>());
+        Assert.Equal(firstFrame.Id, coreApply.Image.Connection!.Node.Id);
+        Assert.Equal(0, coreApply.Image.Connection.SlotIndex);
         LTXAddVideoICLoRAGuideNode icGuide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.Equal(videoGuideFrames.Id, icGuide.Image.Connection!.Node.Id);
         Assert.Equal(0, icGuide.Image.Connection.SlotIndex);
@@ -697,8 +497,8 @@ public partial class StageFlowTests
         {
             ModelClass = new T2IModelClass()
             {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
+                ID = "unit/controlnet",
+                Name = "Unit ControlNet",
                 CompatClass = models.VideoModel.ModelClass.CompatClass
             }
         };
@@ -717,7 +517,7 @@ public partial class StageFlowTests
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNetNoPreprocessor(controlNetModel));
+            BuildCoreVideoWorkflowStepsWithVideoControlNetNoPreprocessor(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         ImageScaleNode imageScale = RequireTypedNode<ImageScaleNode>(bridge, "302");
@@ -757,8 +557,8 @@ public partial class StageFlowTests
         {
             ModelClass = new T2IModelClass()
             {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
+                ID = "unit/controlnet",
+                Name = "Unit ControlNet",
                 CompatClass = models.VideoModel.ModelClass.CompatClass
             }
         };
@@ -778,7 +578,7 @@ public partial class StageFlowTests
         SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel),
+                BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel),
                 ComfyUIBackendExtension.FeaturesSupported
                     .Where(feature => feature != Constants.LtxVideoFeatureFlag)));
         Assert.Contains("ComfyUI-LTXVideo", ex.Message);
@@ -795,8 +595,8 @@ public partial class StageFlowTests
         {
             ModelClass = new T2IModelClass()
             {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
+                ID = "unit/controlnet",
+                Name = "Unit ControlNet",
                 CompatClass = models.VideoModel.ModelClass.CompatClass
             }
         };
@@ -819,7 +619,7 @@ public partial class StageFlowTests
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
+            BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         List<LTXAddVideoICLoRAGuideNode> addGuideNodes = bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()
@@ -841,8 +641,8 @@ public partial class StageFlowTests
         {
             ModelClass = new T2IModelClass()
             {
-                ID = "unit/control-diffpatch",
-                Name = "Unit ControlNet DiffPatch",
+                ID = "unit/controlnet",
+                Name = "Unit ControlNet",
                 CompatClass = models.VideoModel.ModelClass.CompatClass
             }
         };
@@ -863,7 +663,7 @@ public partial class StageFlowTests
 
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            BuildCoreVideoWorkflowStepsWithVideoDiffPatchControlNet(controlNetModel));
+            BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());

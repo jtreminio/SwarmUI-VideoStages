@@ -53,9 +53,9 @@ internal class StageRunner(
             bool needsCrop = ControlNetApplicator.Apply(
                 g,
                 currentGenInfo,
-                stageFrame.SourceMedia,
                 stage.ClipControlNetSource,
                 stage.ControlNetStrength,
+                stage.ClipFrames,
                 stage.ClipLengthFromControlNet);
             if (needsCrop)
             {
