@@ -3,10 +3,10 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Generated;
 using Xunit;
+using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
@@ -14,6 +14,7 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class AudioInjectionTests
 {
+    // Local override of Fixtures.MakeStage: pins Steps=10 and ImageReference="Generated" for audio-injection tests.
     private static JObject MakeStage(string model) => new()
     {
         ["Control"] = 1.0,
@@ -26,12 +27,6 @@ public class AudioInjectionTests
         ["Sampler"] = "euler",
         ["Scheduler"] = "normal",
         ["ImageReference"] = "Generated"
-    };
-
-    private static JObject MakeClip(params JObject[] stages) => new()
-    {
-        ["Name"] = "Clip 0",
-        ["Stages"] = new JArray(stages)
     };
 
     private static JObject MakeClipConfig(string audioSource, params JObject[] stages) => new()
@@ -48,9 +43,6 @@ public class AudioInjectionTests
         return clip;
     }
 
-    private static JObject MakeRootConfig(params JObject[] clips) =>
-        VideoStagesTestHelpers.MakeRootConfig(512, 512, clips);
-
     private static JObject MakeUploadedAudio(
         string data = "data:audio/wav;base64,QUJD",
         string fileName = "clip.wav") => new()
@@ -58,31 +50,6 @@ public class AudioInjectionTests
         ["Data"] = data,
         ["FileName"] = fileName
     };
-
-    private static T2IParamInput BuildNativeInput(
-        T2IModel baseModel,
-        T2IModel videoModel,
-        string stagesJson)
-    {
-        _ = WorkflowTestHarness.VideoStagesSteps();
-        T2IParamInput input = new(null);
-        input.Set(T2IParamTypes.Prompt, "unit test prompt");
-        input.Set(T2IParamTypes.Seed, 1);
-        input.Set(T2IParamTypes.Width, 512);
-        input.Set(T2IParamTypes.Height, 512);
-        input.Set(T2IParamTypes.Model, baseModel);
-        input.Set(T2IParamTypes.RefinerModel, baseModel);
-        input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
-        input.Set(T2IParamTypes.VideoModel, videoModel);
-        input.Set(T2IParamTypes.VideoFrames, 16);
-        input.Set(T2IParamTypes.VideoFPS, 24);
-        if (Program.T2IModelSets.TryGetValue("Clip", out T2IModelHandler clipHandler)
-            && clipHandler.Models.TryGetValue("gemma_3_12B_it.safetensors", out T2IModel gemmaModel))
-        {
-            input.Set(T2IParamTypes.GemmaModel, gemmaModel);
-        }
-        return input;
-    }
 
     private static WorkflowGenerator CreateInjectorGenerator(JObject workflow)
     {

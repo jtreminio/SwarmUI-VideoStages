@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using Xunit;
+using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
@@ -17,20 +18,20 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = JsonSingleClipStages512(
+        string stagesJson = JsonSingleClipStages(
             MakeStage(
                 models.VideoModel.Name,
                 "Base",
                 control: 0.5,
                 upscale: 2.0,
-                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+                upscaleMethod: LtxV23SpatialUpscaler,
                 steps: 10),
             MakeStage(
                 models.VideoModel.Name,
                 "PreviousStage",
                 control: 0.5,
                 upscale: 1.0,
-                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+                upscaleMethod: LtxV23SpatialUpscaler,
                 steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -53,14 +54,14 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = JsonSingleClipStages512(
+        string stagesJson = JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
             MakeStage(
                 models.VideoModel.Name,
                 "PreviousStage",
                 control: 0.5,
                 upscale: 2.0,
-                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+                upscaleMethod: LtxV23SpatialUpscaler,
                 steps: 8),
             MakeStage(
                 models.VideoModel.Name,
@@ -92,20 +93,20 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = JsonSingleClipStages512(
+        string stagesJson = JsonSingleClipStages(
             MakeStage(
                 models.VideoModel.Name,
                 "Generated",
                 control: 0.5,
                 upscale: 2.0,
-                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+                upscaleMethod: LtxV23SpatialUpscaler,
                 steps: 10),
             MakeStage(
                 models.VideoModel.Name,
                 "Generated",
                 control: 0.5,
                 upscale: 1.0,
-                upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+                upscaleMethod: LtxV23SpatialUpscaler,
                 steps: 12));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -134,7 +135,7 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = JsonSingleClipStages512(
+        string stagesJson = JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Base", steps: 10),
             MakeStage(models.VideoModel.Name, secondStageReference, steps: 12));
 

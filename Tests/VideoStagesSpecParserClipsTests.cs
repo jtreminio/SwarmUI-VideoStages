@@ -5,12 +5,15 @@ using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using Xunit;
+using static VideoStages.Tests.Fixtures;
 
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
 public class VideoStagesSpecParserClipsTests
 {
+    // Local override of Fixtures.MakeStage: parser tests omit ImageReference entirely (asserts absence behavior)
+    // and use lighter defaults (cfg=1, steps=8) since these tests don't exercise sampling.
     private static JObject MakeStage(string model, double cfg = 1, int steps = 8)
     {
         return new JObject
@@ -24,16 +27,6 @@ public class VideoStagesSpecParserClipsTests
             ["Control"] = 1,
             ["Upscale"] = 1,
             ["UpscaleMethod"] = "pixel-lanczos",
-        };
-    }
-
-    private static JObject MakeRef(string source, int frame = 1, bool fromEnd = false)
-    {
-        return new JObject
-        {
-            ["Source"] = source,
-            ["Frame"] = frame,
-            ["FromEnd"] = fromEnd,
         };
     }
 
@@ -145,7 +138,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_RootShape_PopulatesRootDimensionsAndClipAudioSource()
     {
-        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1344,
             height: 832,
             clips: [
@@ -280,7 +273,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_RootShape_UsesRootDimensionsAcrossClips()
     {
-        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -312,7 +305,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_ControlNetLength_PropagatesToClipAndDisablesAudioLength()
     {
-        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -334,7 +327,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_RegisteredRootParams_OverrideJsonRootDimensions()
     {
-        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -360,7 +353,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_RegisteredRootFps_OverridesCoreVideoFpsForClipDurationFrames()
     {
-        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -451,7 +444,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_PropagatesTopLevelDimensionsAndPerClipFrames()
     {
-        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 800,
             height: 600,
             clips: [
@@ -481,7 +474,7 @@ public class VideoStagesSpecParserClipsTests
     [InlineData(21.5, 521)]
     public void ParseConfig_ClipDurationFrames_AreAlignedUpToEightPlusOne(double duration, int expectedFrames)
     {
-        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+        string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -656,7 +649,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_WidthZero_FallsBackToGlobal()
     {
-        JObject root = VideoStagesTestHelpers.MakeRootConfig(
+        JObject root = MakeRootConfig(
             width: 0,
             height: 720,
             clips: [MakeClip(stages: [MakeStage("model-a")])]);
@@ -676,7 +669,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_HeightZero_FallsBackToGlobal()
     {
-        JObject root = VideoStagesTestHelpers.MakeRootConfig(
+        JObject root = MakeRootConfig(
             width: 1280,
             height: 0,
             clips: [MakeClip(stages: [MakeStage("model-a")])]);
@@ -717,7 +710,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseConfig_FpsMissing_FallsBackToVideoFps()
     {
-        JObject root = VideoStagesTestHelpers.MakeRootConfig(
+        JObject root = MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [MakeClip(stages: [MakeStage("model-a")])]);
