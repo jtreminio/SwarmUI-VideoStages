@@ -56,9 +56,6 @@ public class VideoStagesExtension : Extension
             Runner.CaptureCoreVideoControlNetPreprocessors,
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(
-            Runner.EnsureRootVideoStageModel,
-            Constants.WorkflowStepPriority.EnsureRootVideoStageModel);
-        WorkflowGenerator.AddStep(
             Runner.CaptureBase,
             Constants.WorkflowStepPriority.CaptureBase);
         WorkflowGenerator.AddStep(

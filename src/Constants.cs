@@ -5,9 +5,7 @@ public static class Constants
     public static class WorkflowStepPriority
     {
         public const double CoreImageToVideo = 11;
-
         public const double ControlNetPreprocessors = -5.9;
-        public const double EnsureRootVideoStageModel = -4.3;
         public const double CaptureBase = -4.2;
         public const double CaptureRefiner = 5.9;
         public const double CapturePreCoreVideoMedia = 10.95;

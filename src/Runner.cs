@@ -10,17 +10,15 @@ namespace VideoStages;
 // #  Pri    Phase                                         Reads                                          Writes / clears
 // -  -----  --------------------------------------------  ---------------------------------------------  ----------------------------------------------------
 // 1  -5.9   CaptureCoreVideoControlNetPreprocessors       —                                              writes videostages.controlnet.fullimage.{i}
-// 2  -4.3   EnsureRootVideoStageModel                     —                                              writes videostages.synth-root-video-model
-// 3  -4.2   CaptureBase                                   —                                              writes StageRefStore.Base
-// 4   5.9   CaptureRefiner                                —                                              writes StageRefStore.Refiner
-// 5  10.95  CapturePreCoreVideoMedia                      —                                              writes StageRefStore.PreRootVideo,
+// 2  -4.2   CaptureBase                                   —                                              writes StageRefStore.Base
+// 3   5.9   CaptureRefiner                                —                                              writes StageRefStore.Refiner
+// 4  10.95  CapturePreCoreVideoMedia                      —                                              writes StageRefStore.PreRootVideo,
 //                                                                                                                videostages.pre-core-node-ids
-// 6  11.05  DropCoreImageToVideoOutput                    StageRefStore.PreRootVideo,                    clears both above
+// 5  11.05  DropCoreImageToVideoOutput                    StageRefStore.PreRootVideo,                    clears both above
 //                                                         videostages.pre-core-node-ids
-// 7  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
-// 8  11.5   RunConfiguredStages                           StageRefStore.Base/Refiner,                    writes StageRefStore.Generated (intra-phase fallback only),
-//                                                         videostages.controlnet.fullimage.{i},          clears videostages.synth-root-video-model
-//                                                         videostages.synth-root-video-model
+// 6  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
+// 7  11.5   RunConfiguredStages                           StageRefStore.Base/Refiner,                    writes StageRefStore.Generated (intra-phase fallback only)
+//                                                         videostages.controlnet.fullimage.{i}
 //
 // Non-phase entry points (NOT registered as workflow steps — called from outside the pipeline):
 //   TryInjectLtxAudio         Tests/AudioInjectionTests — unit-level audio injection coverage.
@@ -35,19 +33,6 @@ public static class Runner
         }
 
         new ControlNetApplicator(g).CaptureCoreVideoControlNetPreprocessors();
-    }
-
-    public static void EnsureRootVideoStageModel(WorkflowGenerator g)
-    {
-        if (!IsExtensionActive(g))
-        {
-            return;
-        }
-
-        JsonParser jsonParser = new(g);
-        StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
-        rootVideoStageHandoff.EnsureRootVideoStageModel();
     }
 
     public static void CaptureBase(WorkflowGenerator g)

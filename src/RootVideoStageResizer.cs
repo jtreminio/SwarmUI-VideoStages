@@ -65,7 +65,7 @@ internal sealed class RootVideoStageResizer(
 
     internal void ApplyConfiguredRootStageResolutionToCurrentMedia()
     {
-        if (!TryGetConfiguredRootStageResolution(out int width, out int height))
+        if (!TryGetRootStageResolution(out int width, out int height))
         {
             return;
         }
@@ -106,13 +106,7 @@ internal sealed class RootVideoStageResizer(
 
     internal bool TryGetConfiguredRootStageResolution(out int width, out int height)
     {
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel model) && model is not null)
-        {
-            return TryGetRootStageResolution(out width, out height);
-        }
-        width = 0;
-        height = 0;
-        return false;
+        return TryGetRootStageResolution(out width, out height);
     }
 
     private bool CurrentMediaFeedsSaveImage()

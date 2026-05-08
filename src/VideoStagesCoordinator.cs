@@ -21,51 +21,43 @@ internal sealed class VideoStagesCoordinator(
 
     public void RunConfiguredStages()
     {
-        if (GetRootVideoModel() is null)
+        if (!HasUsableRootVideoSource())
         {
-            rootVideoStageHandoff.CleanupSynthesizedRootVideoStageModel();
             return;
         }
 
-        try
+        List<JsonParser.ClipSpec> clips = jsonParser.ParseClips();
+        List<JsonParser.ClipWithStages> clipsWithStages = jsonParser.ParseClipsWithStages();
+        bool rootStageHandoff = rootVideoStageHandoff.ShouldHandoffRootStage();
+        if (clipsWithStages.Count == 0)
         {
-            List<JsonParser.ClipSpec> clips = jsonParser.ParseClips();
-            List<JsonParser.ClipWithStages> clipsWithStages = jsonParser.ParseClipsWithStages();
-            bool rootStageHandoff = rootVideoStageHandoff.ShouldHandoffRootStage();
-            if (clipsWithStages.Count == 0)
-            {
-                TryInjectConfiguredAudio(clips);
-                return;
-            }
-            EnsureComfyDependencies(clipsWithStages);
-
-            ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
-            if (!rootStageHandoff)
-            {
-                JsonParser.StageSpec first = clipsWithStages[0].Stages[0];
-                TryApplyControlNetClipLength(
-                    first.ClipLengthFromControlNet,
-                    first.ClipControlNetSource,
-                    first.Model);
-                TryInjectResolvedClipAudio(
-                    first.ClipId,
-                    first.ClipAudioSource,
-                    first.ClipLengthFromAudio && !first.ClipLengthFromControlNet,
-                    clipAudioMaps);
-            }
-
-            stageSequenceRunner.Run(
-                clipsWithStages,
-                clipAudioMaps.NativeAudio,
-                clipAudioMaps.ClipAudios,
-                clipAudioMaps.UploadedAudios,
-                rootStageHandoff);
-            EnsureFinalStageOutputSaved();
+            TryInjectConfiguredAudio(clips);
+            return;
         }
-        finally
+        EnsureComfyDependencies(clipsWithStages);
+
+        ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
+        if (!rootStageHandoff)
         {
-            rootVideoStageHandoff.CleanupSynthesizedRootVideoStageModel();
+            JsonParser.StageSpec first = clipsWithStages[0].Stages[0];
+            TryApplyControlNetClipLength(
+                first.ClipLengthFromControlNet,
+                first.ClipControlNetSource,
+                first.Model);
+            TryInjectResolvedClipAudio(
+                first.ClipId,
+                first.ClipAudioSource,
+                first.ClipLengthFromAudio && !first.ClipLengthFromControlNet,
+                clipAudioMaps);
         }
+
+        stageSequenceRunner.Run(
+            clipsWithStages,
+            clipAudioMaps.NativeAudio,
+            clipAudioMaps.ClipAudios,
+            clipAudioMaps.UploadedAudios,
+            rootStageHandoff);
+        EnsureFinalStageOutputSaved();
     }
 
     private void EnsureComfyDependencies(IReadOnlyList<JsonParser.ClipWithStages> clipsWithStages)
@@ -197,21 +189,36 @@ internal sealed class VideoStagesCoordinator(
         return audios;
     }
 
-    private T2IModel GetRootVideoModel()
+    private bool HasUsableRootVideoSource()
     {
         if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel)
             && videoModel is not null)
         {
-            return videoModel;
+            return true;
         }
 
         if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
             && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true)
         {
-            return textToVideoModel;
+            return true;
         }
 
-        return null;
+        foreach (JsonParser.StageSpec stage in jsonParser.ParseStages())
+        {
+            if (!string.IsNullOrWhiteSpace(stage.Model) && CanResolveStageVideoModel(stage.Model))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool CanResolveStageVideoModel(string modelName)
+    {
+        g.UserInput.Set(T2IParamTypes.VideoModel.Type, modelName);
+        bool resolved = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel m) && m is not null;
+        g.UserInput.Remove(T2IParamTypes.VideoModel);
+        return resolved;
     }
 
     private void EnsureFinalStageOutputSaved()

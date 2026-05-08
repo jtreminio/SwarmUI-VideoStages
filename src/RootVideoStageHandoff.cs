@@ -1,13 +1,11 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
 internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser jsonParser, StageRefStore stageRefStore)
 {
-    private const string SynthesizedRootVideoModelKey = "videostages.synth-root-video-model";
     private const string PreCoreNodeIdsKey = "videostages.pre-core-node-ids";
 
     public static bool IsTextToVideoRootWorkflow(WorkflowGenerator g)
@@ -23,45 +21,7 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
 
     public bool ShouldReplaceTextToVideoRootStage(JsonParser.StageSpec stage)
     {
-        return stage is not null
-            && stage.ClipStageIndex == 0
-            && IsTextToVideoRootWorkflow(g);
-    }
-
-    public void EnsureRootVideoStageModel()
-    {
-        if (HasNativeVideoModel())
-        {
-            return;
-        }
-        if (IsTextToVideoRootWorkflow(g))
-        {
-            return;
-        }
-
-        JsonParser.StageSpec firstStage = jsonParser.ParseStages().FirstOrDefault();
-        if (firstStage is null || string.IsNullOrWhiteSpace(firstStage.Model))
-        {
-            return;
-        }
-
-        g.UserInput.Set(T2IParamTypes.VideoModel.Type, firstStage.Model);
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _))
-        {
-            g.NodeHelpers[SynthesizedRootVideoModelKey] = "1";
-            return;
-        }
-
-        g.UserInput.Remove(T2IParamTypes.VideoModel);
-        Logs.Warning($"VideoStages: could not resolve root video model '{firstStage.Model}'.");
-    }
-
-    public void CleanupSynthesizedRootVideoStageModel()
-    {
-        if (g.NodeHelpers.Remove(SynthesizedRootVideoModelKey))
-        {
-            g.UserInput.Remove(T2IParamTypes.VideoModel);
-        }
+        return stage.ClipStageIndex == 0 && IsTextToVideoRootWorkflow(g);
     }
 
     public bool ShouldHandoffRootStage()
@@ -70,17 +30,16 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
         {
             return false;
         }
-        bool hasNativeVideoModel = HasNativeVideoModel();
-        bool hasTextToVideoRootModel = IsTextToVideoRootWorkflow(g);
-        if (!hasNativeVideoModel && !hasTextToVideoRootModel)
+        if (jsonParser.ParseStages().Count == 0)
         {
             return false;
         }
+        bool hasNativeVideoModel = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _);
         if (hasNativeVideoModel && !WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep))
         {
             return false;
         }
-        return jsonParser.ParseStages().Count > 0;
+        return true;
     }
 
     public void CapturePreCoreVideoMedia()
@@ -142,10 +101,5 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
             }
         }
         WorkflowGraphCleanup.InvalidateNodeHelperCacheForRemovedIds(g.NodeHelpers, removed);
-    }
-
-    private bool HasNativeVideoModel()
-    {
-        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _);
     }
 }
