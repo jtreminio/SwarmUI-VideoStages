@@ -50,8 +50,7 @@ internal class StageRunner(
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
             ApplyControlNetLora(stage, currentGenInfo);
-            bool needsCrop = ControlNetApplicator.Apply(
-                g,
+            bool needsCrop = new ControlNetApplicator(g).Apply(
                 currentGenInfo,
                 stage.ClipControlNetSource,
                 stage.ControlNetStrength,

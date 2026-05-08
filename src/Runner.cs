@@ -34,7 +34,7 @@ public static class Runner
             return;
         }
 
-        ControlNetApplicator.CaptureCoreVideoControlNetPreprocessors(g);
+        new ControlNetApplicator(g).CaptureCoreVideoControlNetPreprocessors();
     }
 
     public static void EnsureRootVideoStageModel(WorkflowGenerator g)

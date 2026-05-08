@@ -10,7 +10,7 @@ using VideoStages.Generated;
 
 namespace VideoStages;
 
-internal static class ControlNetApplicator
+internal class ControlNetApplicator(WorkflowGenerator g)
 {
     private const string CapturedControlNetImageKeyPrefix = "videostages.controlnet.fullimage.";
     private const string CapturedControlNetFrameCountKeyPrefix = "videostages.controlnet.framecount.";
@@ -21,7 +21,7 @@ internal static class ControlNetApplicator
     private static string CapturedControlNetFrameCountKey(int index) =>
         $"{CapturedControlNetFrameCountKeyPrefix}{index}";
 
-    public static void CaptureCoreVideoControlNetPreprocessors(WorkflowGenerator g)
+    public void CaptureCoreVideoControlNetPreprocessors()
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         HashSet<string> usedApplyNodes = [];
@@ -31,22 +31,22 @@ internal static class ControlNetApplicator
             if (controlnetParams is null
                 || !g.UserInput.TryGet(controlnetParams.Strength, out double _)
                 || !g.UserInput.TryGet(controlnetParams.Model, out T2IModel model)
-                || !TryFindCoreControlNetApply(g, bridge, model, usedApplyNodes, out (string Id, JObject Node) applyNode, out JArray controlImage)
+                || !TryFindCoreControlNetApply(bridge, model, usedApplyNodes, out (string Id, JObject Node) applyNode, out JArray controlImage)
                 || !OutputHasVideoUpstream(bridge, controlImage))
             {
                 g.NodeHelpers.Remove(CapturedControlNetImageKey(i));
                 continue;
             }
 
-            EnsureResizeMultiple(g, bridge, controlImage);
+            EnsureResizeMultiple(bridge, controlImage);
             JArray capturePath = new(controlImage[0], controlImage[1]);
             g.NodeHelpers[CapturedControlNetImageKey(i)] = capturePath.ToString(Formatting.None);
-            EnsureSingleFrameWrap(g, bridge, controlImage);
+            EnsureSingleFrameWrap(bridge, controlImage);
             usedApplyNodes.Add(applyNode.Id);
         }
     }
 
-    private static void EnsureResizeMultiple(WorkflowGenerator g, WorkflowBridge bridge, JArray controlImage)
+    private void EnsureResizeMultiple(WorkflowBridge bridge, JArray controlImage)
     {
         if (FindUpstreamScaleToMultipleResize(bridge, controlImage)
             is ResizeImageMaskNodeNode existing)
@@ -88,7 +88,7 @@ internal static class ControlNetApplicator
         controlImage[1] = 0;
     }
 
-    private static void EnsureSingleFrameWrap(WorkflowGenerator g, WorkflowBridge bridge, JArray controlImage)
+    private void EnsureSingleFrameWrap(WorkflowBridge bridge, JArray controlImage)
     {
         if (bridge.Graph.GetNode($"{controlImage[0]}") is ImageFromBatchNode)
         {
@@ -122,8 +122,7 @@ internal static class ControlNetApplicator
         return null;
     }
 
-    public static bool Apply(
-        WorkflowGenerator g,
+    public bool Apply(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         string source,
         double? stageControlNetStrength,
@@ -137,7 +136,7 @@ internal static class ControlNetApplicator
         }
 
         int index = ParseControlNetSourceIndex(source);
-        if (!TryGetCapturedCoreControlImage(g, index, out WGNodeData controlImage))
+        if (!TryGetCapturedCoreControlImage(index, out WGNodeData controlImage))
         {
             return false;
         }
@@ -152,14 +151,13 @@ internal static class ControlNetApplicator
         }
 
         T2IParamTypes.ControlNetParamHolder controlnetParams = T2IParamTypes.Controlnets[index];
-        JToken guideFrameCount = ResolveGuideFrameCount(g, genInfo, frameCount, source, clipLengthFromControlNet);
+        JToken guideFrameCount = ResolveGuideFrameCount(genInfo, frameCount, source, clipLengthFromControlNet);
         double strength = stageControlNetStrength ?? g.UserInput.Get(controlnetParams.Strength);
 
-        return ApplyLtxIcloraGuide(g, genInfo, controlImage, strength, guideFrameCount);
+        return ApplyLtxIcloraGuide(genInfo, controlImage, strength, guideFrameCount);
     }
 
-    public static bool TryCreateCapturedControlImageFrameCount(
-        WorkflowGenerator g,
+    public bool TryCreateCapturedControlImageFrameCount(
         string controlNetSource,
         out JArray framesConnection)
     {
@@ -178,7 +176,7 @@ internal static class ControlNetApplicator
             return true;
         }
 
-        if (!TryGetCapturedCoreControlImage(g, index, out WGNodeData controlImage)
+        if (!TryGetCapturedCoreControlImage(index, out WGNodeData controlImage)
             || controlImage.Path is not JArray { Count: 2 } controlImagePath)
         {
             return false;
@@ -204,15 +202,14 @@ internal static class ControlNetApplicator
         return true;
     }
 
-    private static JToken ResolveGuideFrameCount(
-        WorkflowGenerator g,
+    private JToken ResolveGuideFrameCount(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         int? stageClipFrames,
         string controlNetSource,
         bool clipLengthFromControlNet)
     {
         if (clipLengthFromControlNet
-            && TryCreateCapturedControlImageFrameCount(g, controlNetSource, out JArray framesConnection))
+            && TryCreateCapturedControlImageFrameCount(controlNetSource, out JArray framesConnection))
         {
             return framesConnection;
         }
@@ -220,8 +217,7 @@ internal static class ControlNetApplicator
         return frames is int n ? new JValue(n) : null;
     }
 
-    private static bool ApplyLtxIcloraGuide(
-        WorkflowGenerator g,
+    private bool ApplyLtxIcloraGuide(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData controlImage,
         double strength,
@@ -239,7 +235,7 @@ internal static class ControlNetApplicator
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        JArray guideImagePath = ControlImageForLtxIcloraGuide(g, bridge, controlImage.Path, frameCount);
+        JArray guideImagePath = ControlImageForLtxIcloraGuide(bridge, controlImage.Path, frameCount);
 
         LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(
             FrameIdx: 0,
@@ -266,8 +262,7 @@ internal static class ControlNetApplicator
         return true;
     }
 
-    private static JArray ControlImageForLtxIcloraGuide(
-        WorkflowGenerator g,
+    private JArray ControlImageForLtxIcloraGuide(
         WorkflowBridge bridge,
         JArray controlImagePath,
         JToken frames)
@@ -319,8 +314,7 @@ internal static class ControlNetApplicator
         return new JArray(imagePath[0], imagePath[1]);
     }
 
-    private static bool TryFindCoreControlNetApply(
-        WorkflowGenerator g,
+    private bool TryFindCoreControlNetApply(
         WorkflowBridge bridge,
         T2IModel controlModel,
         ISet<string> usedApplyNodes,
@@ -429,7 +423,7 @@ internal static class ControlNetApplicator
         return false;
     }
 
-    private static bool TryGetCapturedCoreControlImage(WorkflowGenerator g, int index, out WGNodeData controlImage)
+    private bool TryGetCapturedCoreControlImage(int index, out WGNodeData controlImage)
     {
         controlImage = null;
         if (!g.NodeHelpers.TryGetValue(CapturedControlNetImageKey(index), out string encoded)
@@ -459,7 +453,7 @@ internal static class ControlNetApplicator
         return true;
     }
 
-    public static int ParseControlNetSourceIndex(string controlNetSource)
+    private static int ParseControlNetSourceIndex(string controlNetSource)
     {
         string compact = StringUtils.Compact(controlNetSource);
         if (StringUtils.Equals(compact, "ControlNet1"))

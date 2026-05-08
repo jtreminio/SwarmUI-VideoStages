@@ -49,8 +49,7 @@ internal sealed class LtxManager
         {
             return false;
         }
-        if (!ControlNetApplicator.TryCreateCapturedControlImageFrameCount(
-                g,
+        if (!new ControlNetApplicator(g).TryCreateCapturedControlImageFrameCount(
                 controlNetSource,
                 out JArray framesConnection))
         {
