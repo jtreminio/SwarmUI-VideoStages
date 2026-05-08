@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using ComfyTyped.Types;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using VideoStages.Generated;
 
 namespace VideoStages.LTX2;
@@ -25,10 +24,7 @@ internal sealed class LtxAudioInjector(
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        (
-            List<string> concatIds,
-            HashSet<string> removableSourceIds,
-            int? workflowFps) = FindConcatsToReplace(bridge);
+        (List<string> concatIds, HashSet<string> removableSourceIds) = FindConcatsToReplace(bridge);
         if (concatIds.Count == 0)
         {
             return false;
@@ -37,7 +33,7 @@ internal sealed class LtxAudioInjector(
         WGNodeData adjustedAudio = audio;
         if (matchVideoLengthToAudio)
         {
-            int fps = ResolveFps(workflowFps);
+            int fps = jsonParser.ResolveFps();
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
                 bridge,
                 audio.Path,
@@ -64,12 +60,11 @@ internal sealed class LtxAudioInjector(
         return true;
     }
 
-    private static (List<string> ConcatIds, HashSet<string> RemovableSourceIds, int? WorkflowFps)
+    private static (List<string> ConcatIds, HashSet<string> RemovableSourceIds)
         FindConcatsToReplace(WorkflowBridge bridge)
     {
         List<string> concatIds = [];
         HashSet<string> removableSourceIds = [];
-        int? workflowFps = null;
         foreach (LTXVConcatAVLatentNode concat in bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>())
         {
             if (concat.AudioLatent.Connection?.Node is not LTXVEmptyLatentAudioNode emptyAudio)
@@ -78,23 +73,8 @@ internal sealed class LtxAudioInjector(
             }
             concatIds.Add(concat.Id);
             removableSourceIds.Add(emptyAudio.Id);
-            workflowFps ??= ReadFrameRate(emptyAudio);
         }
-        return (concatIds, removableSourceIds, workflowFps);
-    }
-
-    private int ResolveFps(int? workflowFps)
-    {
-        int fps = jsonParser.ResolveFps();
-        if (fps <= 0)
-        {
-            fps = workflowFps ?? g.Text2VideoFPS();
-        }
-        if (fps <= 0)
-        {
-            fps = g.UserInput.Get(T2IParamTypes.VideoFPS, 24);
-        }
-        return fps > 0 ? fps : 24;
+        return (concatIds, removableSourceIds);
     }
 
     private SwarmAudioLengthToFramesNode CreateLengthToFramesNode(WorkflowBridge bridge, JToken audioPath, int fps)
@@ -175,17 +155,4 @@ internal sealed class LtxAudioInjector(
         }
     }
 
-    private static int? ReadFrameRate(LTXVEmptyLatentAudioNode emptyAudio)
-    {
-        return emptyAudio.FrameRate.LiteralValue switch
-        {
-            int i => i,
-            long l => (int)l,
-            double d => (int)Math.Round(d),
-            float f => (int)Math.Round(f),
-            string s when int.TryParse(s, out int parsed) => parsed,
-            string s when double.TryParse(s, out double parsed) => (int)Math.Round(parsed),
-            _ => null
-        };
-    }
 }

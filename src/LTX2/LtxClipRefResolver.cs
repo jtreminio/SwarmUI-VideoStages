@@ -19,11 +19,11 @@ internal sealed class LtxClipRefResolver(
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia)
     {
-        IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs ?? [];
-        IReadOnlyList<double> strengths = stage.RefStrengths ?? [];
+        IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs;
+        IReadOnlyList<double> strengths = stage.RefStrengths;
         if (refs.Count == 0 && !stage.ImageReferenceWasExplicit)
         {
-            JsonParser.RefSpec defaultRef = ResolveDefaultImageToVideoRef(refStore);
+            JsonParser.RefSpec defaultRef = ResolveDefaultImageToVideoRef(stage, refStore);
             if (defaultRef is not null)
             {
                 refs = [defaultRef];
@@ -31,11 +31,10 @@ internal sealed class LtxClipRefResolver(
             }
         }
         List<ResolvedClipRef> resolved = [];
-        bool textToVideoRootWorkflow = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         for (int i = 0; i < refs.Count; i++)
         {
             JsonParser.RefSpec spec = refs[i];
-            if (textToVideoRootWorkflow
+            if (stage.IsTextToVideo
                 && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -127,10 +126,9 @@ internal sealed class LtxClipRefResolver(
             && scaleSource.SlotIndex == (int)primaryGuidePath[1];
     }
 
-    private JsonParser.RefSpec ResolveDefaultImageToVideoRef(StageRefStore refStore)
+    private JsonParser.RefSpec ResolveDefaultImageToVideoRef(JsonParser.StageSpec stage, StageRefStore refStore)
     {
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _)
-            || RootVideoStageHandoff.IsTextToVideoRootWorkflow(g))
+        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _) || stage.IsTextToVideo)
         {
             return null;
         }
@@ -166,7 +164,7 @@ internal sealed class LtxClipRefResolver(
         {
             stageRef = refStore.Refiner;
         }
-        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(src, out int editStage))
+        else if (ImageReference.TryParseBase2EditStageIndex(src, out int editStage))
         {
             _ = base2EditPublishedStageRefs.TryGetStageRef(editStage, out stageRef);
         }
@@ -185,53 +183,7 @@ internal sealed class LtxClipRefResolver(
 
     private WGNodeData MaterializeUploadedRefImage(JsonParser.RefSpec spec)
     {
-        string material = spec.Data?.Trim();
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            material = spec.UploadFileName?.Trim();
-        }
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            Logs.Warning("VideoStages: Upload clip reference is missing inline data and a file name.");
-            return null;
-        }
-
-        if (material.StartsWith("inputs/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
-        {
-            if (g.UserInput?.SourceSession is null)
-            {
-                Logs.Warning(
-                    "VideoStages: reference image uses a server-side path but no session is available; "
-                    + "cannot load the file.");
-                return null;
-            }
-
-            try
-            {
-                material = T2IParamTypes.FilePathToDataString(
-                    g.UserInput.SourceSession,
-                    material,
-                    "for VideoStages reference image");
-            }
-            catch (SwarmReadableErrorException ex)
-            {
-                Logs.Warning(
-                    $"VideoStages: Could not resolve uploaded reference image path '{material}': {ex.Message}");
-                return null;
-            }
-        }
-
-        try
-        {
-            ImageFile img = ImageFile.FromDataString(material);
-            return g.LoadImage(img, "${videostagesrefimage}", false);
-        }
-        catch (Exception ex)
-        {
-            Logs.Warning($"VideoStages: Ignoring invalid clip reference image payload: {ex.Message}");
-            return null;
-        }
+        ImageFile img = ImageReference.MaterializeUploadedRefImage(g, spec, "clip reference image");
+        return img is null ? null : g.LoadImage(img, "${videostagesrefimage}", false);
     }
 }

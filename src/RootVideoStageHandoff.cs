@@ -21,7 +21,7 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
 
     public bool ShouldReplaceTextToVideoRootStage(JsonParser.StageSpec stage)
     {
-        return stage.ClipStageIndex == 0 && IsTextToVideoRootWorkflow(g);
+        return stage.ClipStageIndex == 0 && stage.IsTextToVideo;
     }
 
     public bool ShouldHandoffRootStage()

@@ -21,7 +21,7 @@ internal sealed class VideoStagesCoordinator(
 
     public void RunConfiguredStages()
     {
-        if (!HasUsableRootVideoSource())
+        if (!jsonParser.TryParseConfig(out _))
         {
             return;
         }
@@ -187,38 +187,6 @@ internal sealed class VideoStagesCoordinator(
                 g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
         }
         return audios;
-    }
-
-    private bool HasUsableRootVideoSource()
-    {
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel)
-            && videoModel is not null)
-        {
-            return true;
-        }
-
-        if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
-            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true)
-        {
-            return true;
-        }
-
-        foreach (JsonParser.StageSpec stage in jsonParser.ParseStages())
-        {
-            if (!string.IsNullOrWhiteSpace(stage.Model) && CanResolveStageVideoModel(stage.Model))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private bool CanResolveStageVideoModel(string modelName)
-    {
-        g.UserInput.Set(T2IParamTypes.VideoModel.Type, modelName);
-        bool resolved = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel m) && m is not null;
-        g.UserInput.Remove(T2IParamTypes.VideoModel);
-        return resolved;
     }
 
     private void EnsureFinalStageOutputSaved()

@@ -1,6 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.LTX2;
 
@@ -69,7 +68,7 @@ internal static class WanStageReferenceHandler
         {
             stageRef = refStore.Refiner;
         }
-        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(src, out int editStage))
+        else if (ImageReference.TryParseBase2EditStageIndex(src, out int editStage))
         {
             _ = base2EditPublishedStageRefs.TryGetStageRef(editStage, out stageRef);
         }
@@ -89,46 +88,7 @@ internal static class WanStageReferenceHandler
 
     private static WGNodeData MaterializeUploadedRefImage(WorkflowGenerator g, JsonParser.RefSpec spec)
     {
-        string material = spec.Data?.Trim();
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            material = spec.UploadFileName?.Trim();
-        }
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            Logs.Warning("VideoStages: Upload WAN clip reference is missing inline data and a file name.");
-            return null;
-        }
-
-        if (material.StartsWith("inputs/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                material = T2IParamTypes.FilePathToDataString(
-                    g.UserInput.SourceSession,
-                    material,
-                    "for VideoStages WAN reference image");
-            }
-            catch (SwarmReadableErrorException ex)
-            {
-                Logs.Warning(
-                    $"VideoStages: Could not resolve uploaded WAN reference image path '{material}': "
-                    + ex.Message);
-                return null;
-            }
-        }
-
-        try
-        {
-            ImageFile img = ImageFile.FromDataString(material);
-            return g.LoadImage(img, "${videostageswanrefimage}", false);
-        }
-        catch (Exception ex)
-        {
-            Logs.Warning($"VideoStages: Ignoring invalid WAN clip reference image payload: {ex.Message}");
-            return null;
-        }
+        ImageFile img = ImageReference.MaterializeUploadedRefImage(g, spec, "WAN clip reference image");
+        return img is null ? null : g.LoadImage(img, "${videostageswanrefimage}", false);
     }
 }

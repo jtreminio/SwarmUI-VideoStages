@@ -231,17 +231,17 @@ internal sealed class StageSequenceRunner(
         {
             g.UserInput.Set(T2IParamTypes.VideoFrames, stage.ClipFrames.Value, sectionId);
         }
-        if (stage.ClipFPS.HasValue && stage.ClipFPS.Value > 0)
+        if (stage.ClipFPS > 0)
         {
-            g.UserInput.Set(T2IParamTypes.VideoFPS, stage.ClipFPS.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.VideoFPS, stage.ClipFPS, sectionId);
         }
-        if (stage.ClipWidth.HasValue && stage.ClipWidth.Value > 0)
+        if (stage.ClipWidth > 0)
         {
-            g.UserInput.Set(T2IParamTypes.Width, stage.ClipWidth.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.Width, stage.ClipWidth, sectionId);
         }
-        if (stage.ClipHeight.HasValue && stage.ClipHeight.Value > 0)
+        if (stage.ClipHeight > 0)
         {
-            g.UserInput.Set(T2IParamTypes.Height, stage.ClipHeight.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.Height, stage.ClipHeight, sectionId);
         }
     }
 
@@ -279,7 +279,7 @@ internal sealed class StageSequenceRunner(
             }
             return _previousStageRef;
         }
-        if (ImageReferenceSyntax.TryParseExplicitStageIndex(stage.ImageReference, out int explicitStage))
+        if (ImageReference.TryParseExplicitStageIndex(stage.ImageReference, out int explicitStage))
         {
             if (!_stageOutputs.TryGetValue(explicitStage, out StageRefStore.StageRef explicitRef))
             {
@@ -290,7 +290,7 @@ internal sealed class StageSequenceRunner(
             }
             return explicitRef;
         }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(stage.ImageReference, out int editStage))
+        if (ImageReference.TryParseBase2EditStageIndex(stage.ImageReference, out int editStage))
         {
             if (!base2EditPublishedStageRefs.TryGetStageRef(editStage, out StageRefStore.StageRef publishedEditRef))
             {

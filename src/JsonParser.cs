@@ -30,13 +30,13 @@ public class JsonParser(WorkflowGenerator g)
         string ImageReference,
         bool Skipped = false,
         int ClipId = 0,
-        string ClipAudioSource = null,
+        string ClipAudioSource = null, // todo clip-values maybe as a nested object?
         bool ClipLengthFromAudio = false,
         bool ClipLengthFromControlNet = false,
-        int? ClipWidth = null,
-        int? ClipHeight = null,
+        int ClipWidth = 0,
+        int ClipHeight = 0,
         int? ClipFrames = null,
-        int? ClipFPS = null,
+        int ClipFPS = 0,
         bool ClipReuseAudio = false,
         string ClipControlNetSource = null,
         string ClipControlNetLora = null,
@@ -46,7 +46,8 @@ public class JsonParser(WorkflowGenerator g)
         IReadOnlyList<RefSpec> ClipRefs = null,
         IReadOnlyList<double> RefStrengths = null,
         bool ImageReferenceWasExplicit = false,
-        int? EndStep = null
+        int? EndStep = null,
+        bool IsTextToVideo = false // todo might be better as a global-accessible value? already on VideoStagesSpec
     );
 
     public sealed record RefSpec(
@@ -73,17 +74,18 @@ public class JsonParser(WorkflowGenerator g)
         bool ClipLengthFromAudio,
         bool ClipLengthFromControlNet,
         bool ReuseAudio,
-        int? Width,
-        int? Height,
+        int? Width, // should never be null, available on VideoStagesSpec
+        int? Height, // should never be null, available on VideoStagesSpec
         UploadedAudioSpec UploadedAudio,
         IReadOnlyList<RefSpec> Refs,
         IReadOnlyList<StageSpec> Stages
     );
 
     public sealed record VideoStagesSpec(
-        int? Width,
-        int? Height,
-        int? FPS,
+        int Width,
+        int Height,
+        int FPS,
+        bool IsTextToVideo,
         IReadOnlyList<ClipSpec> Clips
     );
 
@@ -116,11 +118,12 @@ public class JsonParser(WorkflowGenerator g)
     public List<ClipWithStages> ParseClipsWithStages()
     {
         VideoStagesSpec config = ParseConfig();
-        int? registeredRootWidth = ResolveRegisteredRootDimension(VideoStagesExtension.RootWidth);
-        int? registeredRootHeight = ResolveRegisteredRootDimension(VideoStagesExtension.RootHeight);
-        int? effectiveRootWidth = registeredRootWidth ?? config.Width;
-        int? effectiveRootHeight = registeredRootHeight ?? config.Height;
-        int fps = ResolveFps(config);
+        (int? rawJsonWidth, int? rawJsonHeight, _, _) = GetJsonTopLevelConfig();
+        int? registeredRootWidth = TryGetRegisteredRootDimension(VideoStagesExtension.RootWidth);
+        int? registeredRootHeight = TryGetRegisteredRootDimension(VideoStagesExtension.RootHeight);
+        int globalWidth = g.UserInput.GetImageWidth();
+        int globalHeight = g.UserInput.GetImageHeight();
+        int fps = config.FPS;
         List<ClipWithStages> result = [];
         int globalStageIndex = 0;
         foreach (ClipSpec clip in config.Clips)
@@ -142,6 +145,8 @@ public class JsonParser(WorkflowGenerator g)
                     activeStageCount++;
                 }
             }
+            int clipWidth = registeredRootWidth ?? rawJsonWidth ?? clip.Width ?? globalWidth;
+            int clipHeight = registeredRootHeight ?? rawJsonHeight ?? clip.Height ?? globalHeight;
             List<StageSpec> clipStages = [];
             int clipStageIndex = 0;
             for (int s = 0; s < clip.Stages.Count; s++)
@@ -162,12 +167,13 @@ public class JsonParser(WorkflowGenerator g)
                     ClipControlNetSource = clip.ControlNetSource,
                     ClipStageIndex = clipStageIndex,
                     ClipStageCount = activeStageCount,
-                    ClipWidth = effectiveRootWidth ?? clip.Width,
-                    ClipHeight = effectiveRootHeight ?? clip.Height,
+                    ClipWidth = clipWidth,
+                    ClipHeight = clipHeight,
                     ClipFrames = clipFrames,
                     ClipFPS = fps,
                     ClipRefs = clip.Refs,
                     ClipControlNetLora = clip.ControlNetLora,
+                    IsTextToVideo = config.IsTextToVideo,
                 });
                 clipStageIndex++;
                 globalStageIndex++;
@@ -180,22 +186,13 @@ public class JsonParser(WorkflowGenerator g)
         return result;
     }
 
-    public int ResolveFps(VideoStagesSpec parsedConfig = null)
+    public int ResolveFps(VideoStagesSpec parsedConfig = null) =>
+        parsedConfig?.FPS ?? ParseConfig().FPS;
+
+    public (int? Width, int? Height) GetRawJsonTopLevelDimensions()
     {
-        if (g.UserInput.TryGet(VideoStagesExtension.RootFPS, out int rootFps) && rootFps > 0)
-        {
-            return rootFps;
-        }
-        int? configFps = parsedConfig is not null ? parsedConfig.FPS : ParseConfig().FPS;
-        if (configFps.HasValue && configFps.Value > 0)
-        {
-            return configFps.Value;
-        }
-        if (g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int videoFps))
-        {
-            return videoFps;
-        }
-        return 24;
+        (int? w, int? h, _, _) = GetJsonTopLevelConfig();
+        return (w, h);
     }
 
     private static int CalculateAlignedFrameCount(double durationSeconds, int fps)
@@ -205,41 +202,120 @@ public class JsonParser(WorkflowGenerator g)
         return Math.Max(1, alignedFrames + 1);
     }
 
-    private int? ResolveRegisteredRootDimension(T2IRegisteredParam<int> param)
+    private int? TryGetRegisteredRootDimension(T2IRegisteredParam<int> param)
     {
         return g.UserInput.TryGet(param, out int value) && value >= Constants.RootDimensionMin
             ? value
             : null;
     }
 
+    private int ResolveTopLevelWidth(int? rawJsonWidth)
+    {
+        return TryGetRegisteredRootDimension(VideoStagesExtension.RootWidth)
+            ?? rawJsonWidth
+            ?? g.UserInput.GetImageWidth();
+    }
+
+    private int ResolveTopLevelHeight(int? rawJsonHeight)
+    {
+        return TryGetRegisteredRootDimension(VideoStagesExtension.RootHeight)
+            ?? rawJsonHeight
+            ?? g.UserInput.GetImageHeight();
+    }
+
+    private int ResolveTopLevelFps(int? rawJsonFps)
+    {
+        if (g.UserInput.TryGet(VideoStagesExtension.RootFPS, out int rootFps) && rootFps > 0)
+        {
+            return rootFps;
+        }
+        if (rawJsonFps is > 0)
+        {
+            return rawJsonFps.Value;
+        }
+        if (g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int videoFps) && videoFps > 0)
+        {
+            return videoFps;
+        }
+        return 24;
+    }
+
+    public bool TryParseConfig(out VideoStagesSpec spec)
+    {
+        VideoStagesSpec parsed = ParseConfig();
+        if (!HasUsableVideoModel(parsed))
+        {
+            spec = null;
+            return false;
+        }
+        spec = parsed;
+        return true;
+    }
+
+    private bool HasUsableVideoModel(VideoStagesSpec spec)
+    {
+        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel)
+            && videoModel is not null)
+        {
+            return true;
+        }
+        if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
+            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true)
+        {
+            return true;
+        }
+        foreach (ClipSpec clip in spec.Clips)
+        {
+            foreach (StageSpec stage in clip.Stages)
+            {
+                if (!string.IsNullOrWhiteSpace(stage.Model) && CanResolveStageVideoModel(stage.Model))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private bool CanResolveStageVideoModel(string modelName)
+    {
+        g.UserInput.Set(T2IParamTypes.VideoModel.Type, modelName);
+        bool resolved = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel m) && m is not null;
+        g.UserInput.Remove(T2IParamTypes.VideoModel);
+        return resolved;
+    }
+
     public VideoStagesSpec ParseConfig()
     {
-        (int? width, int? height, int? fps, List<JObject> rawEntries) = GetJsonTopLevelConfig();
+        (int? rawWidth, int? rawHeight, int? rawFps, List<JObject> rawEntries) = GetJsonTopLevelConfig();
+        int width = ResolveTopLevelWidth(rawWidth);
+        int height = ResolveTopLevelHeight(rawHeight);
+        int fps = ResolveTopLevelFps(rawFps);
+        bool isTextToVideo = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         if (rawEntries.Count == 0)
         {
-            return new VideoStagesSpec(width, height, fps, []);
+            return new VideoStagesSpec(width, height, fps, isTextToVideo, []);
         }
 
         if (!rawEntries.All(IsClipShape))
         {
             Logs.Warning("VideoStages: Each Video Stages entry must be a clip object with a Stages array.");
-            return new VideoStagesSpec(width, height, fps, []);
+            return new VideoStagesSpec(width, height, fps, isTextToVideo, []);
         }
 
         StageDefaults defaults = BuildDefaults();
-        bool isTextToVideoRootWorkflow = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         List<ClipSpec> parsed = [];
 
         for (int i = 0; i < rawEntries.Count; i++)
         {
             JObject clipObj = rawEntries[i];
-            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideoRootWorkflow);
+            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo);
             if (clip.Stages.Count > 0)
             {
                 parsed.Add(clip);
             }
         }
-        return new VideoStagesSpec(width, height, fps, parsed);
+        return new VideoStagesSpec(width, height, fps, isTextToVideo, parsed);
     }
 
     public AudioFile ParseUploadedAudioForClip(ClipSpec clip) =>
@@ -674,19 +750,6 @@ public class JsonParser(WorkflowGenerator g)
         {
             upscale = Math.Max(0.25, upscale);
         }
-        string vae = NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, index, allowEmpty: true));
-        int steps = GetOptionalInt(stage, "Steps", defaults.Steps, index);
-        double cfgScale = NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index));
-        string sampler = GetOptionalString(stage, "Sampler", defaults.Sampler, index, allowEmpty: false);
-        string scheduler = GetOptionalString(stage, "Scheduler", defaults.Scheduler, index, allowEmpty: false);
-        bool hasImageReferenceKey = JsonHasOwnProperty(stage, "ImageReference");
-        string imageReference = NormalizeImageReference(
-            GetString(stage, "ImageReference"),
-            index,
-            isTextToVideoRootWorkflow);
-        bool skipped = GetOptionalBool(stage, "Skipped", defaultValue: false);
-        double? controlNetStrength = ParseStageControlNetStrength(stage);
-        IReadOnlyList<double> refStrengths = ParseStageRefStrengths(stage, clipRefCount);
 
         parsedStage = new StageSpec(
             Id: index,
@@ -694,17 +757,17 @@ public class JsonParser(WorkflowGenerator g)
             Upscale: upscale,
             UpscaleMethod: upscaleMethod,
             Model: model,
-            Vae: vae,
-            Steps: Math.Max(1, steps),
-            CfgScale: cfgScale,
-            Sampler: sampler,
-            Scheduler: scheduler,
-            ImageReference: imageReference,
-            Skipped: skipped,
-            ControlNetStrength: controlNetStrength,
-            ClipRefs: null,
-            RefStrengths: refStrengths,
-            ImageReferenceWasExplicit: hasImageReferenceKey
+            Vae: NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, index, allowEmpty: true)),
+            Steps: Math.Max(1, GetOptionalInt(stage, "Steps", defaults.Steps, index)),
+            CfgScale: NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index)),
+            Sampler: GetOptionalString(stage, "Sampler", defaults.Sampler, index, allowEmpty: false),
+            Scheduler: GetOptionalString(stage, "Scheduler", defaults.Scheduler, index, allowEmpty: false),
+            ImageReference: NormalizeImageReference(GetString(stage, "ImageReference"), index, isTextToVideoRootWorkflow),
+            Skipped: GetOptionalBool(stage, "Skipped", defaultValue: false),
+            ControlNetStrength: ParseStageControlNetStrength(stage),
+            ClipRefs: [],
+            RefStrengths: ParseStageRefStrengths(stage, clipRefCount),
+            ImageReferenceWasExplicit: JsonHasOwnProperty(stage, "ImageReference")
         );
         return true;
     }
@@ -819,7 +882,7 @@ public class JsonParser(WorkflowGenerator g)
         {
             return index == 0 ? defaultReference : DefaultPreviousStageReference;
         }
-        if (ImageReferenceSyntax.TryParseExplicitStageIndex(compact, out int explicitStage))
+        if (ImageReference.TryParseExplicitStageIndex(compact, out int explicitStage))
         {
             if (explicitStage < index)
             {
@@ -830,9 +893,9 @@ public class JsonParser(WorkflowGenerator g)
                 + $"Using '{defaultReference}' instead.");
             return defaultReference;
         }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(compact, out int editStage))
+        if (ImageReference.TryParseBase2EditStageIndex(compact, out int editStage))
         {
-            return ImageReferenceSyntax.FormatBase2EditStageIndex(editStage);
+            return ImageReference.FormatBase2EditStageIndex(editStage);
         }
 
         Logs.Warning(

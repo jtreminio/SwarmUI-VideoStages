@@ -89,8 +89,7 @@ internal class StageRunner(
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(clipContext, stage);
-        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage)
-            && RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
+        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage) && stage.IsTextToVideo;
         LtxPostVideoChainCapture postVideoChain = replaceTextToVideoRootStage
             ? null
             : ltxManager.TryCapturePostVideoChain(clipContext, stage);
@@ -306,9 +305,9 @@ internal class StageRunner(
             VideoSwapPercent = 0.5,
             Frames = ResolveFrames(sourceMedia, sectionId),
             VideoCFG = stage.CfgScale,
-            VideoFPS = ResolveFps(sourceMedia, sectionId),
-            Width = sourceMedia.Width ?? g.UserInput.GetImageWidth(),
-            Height = sourceMedia.Height ?? g.UserInput.GetImageHeight(),
+            VideoFPS = stage.ClipFPS,
+            Width = sourceMedia.Width ?? stage.ClipWidth,
+            Height = sourceMedia.Height ?? stage.ClipHeight,
             Prompt = positivePrompt,
             NegativePrompt = negativePrompt,
             Steps = stage.Steps,
@@ -338,20 +337,7 @@ internal class StageRunner(
         return null;
     }
 
-    private int? ResolveFps(WGNodeData sourceMedia, int sectionId)
-    {
-        if (sourceMedia.FPS.HasValue)
-        {
-            return sourceMedia.FPS;
-        }
-        if (g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int explicitFps, sectionId: sectionId))
-        {
-            return explicitFps;
-        }
-        return null;
-    }
-
-    private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentApplier(
+private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentApplier(
         JsonParser.StageSpec stage,
         WGNodeData sourceMedia,
         bool isWanStage)
@@ -545,8 +531,8 @@ internal class StageRunner(
     private WGNodeData ApplyStageUpscaleIfNeeded(JsonParser.StageSpec stage, int sectionId)
     {
         WGNodeData source = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, g.CurrentVae);
-        int width = Math.Max(source.Width ?? g.UserInput.GetImageWidth(), 16);
-        int height = Math.Max(source.Height ?? g.UserInput.GetImageHeight(), 16);
+        int width = Math.Max(source.Width ?? stage.ClipWidth, 16);
+        int height = Math.Max(source.Height ?? stage.ClipHeight, 16);
         source.Width = width;
         source.Height = height;
 

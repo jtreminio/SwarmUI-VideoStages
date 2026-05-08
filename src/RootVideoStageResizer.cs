@@ -85,13 +85,13 @@ internal sealed class RootVideoStageResizer(
             return true;
         }
 
-        JsonParser.VideoStagesSpec config = jsonParser.ParseConfig();
-        if (TryPositiveDimensionPair(config.Width, config.Height, out width, out height))
+        (int? rawJsonWidth, int? rawJsonHeight) = jsonParser.GetRawJsonTopLevelDimensions();
+        if (TryPositiveDimensionPair(rawJsonWidth, rawJsonHeight, out width, out height))
         {
             return true;
         }
 
-        foreach (JsonParser.ClipSpec clip in config.Clips)
+        foreach (JsonParser.ClipSpec clip in jsonParser.ParseConfig().Clips)
         {
             if (!clip.Skipped)
             {
