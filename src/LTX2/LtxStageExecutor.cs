@@ -10,13 +10,12 @@ using VideoStages.Generated;
 
 namespace VideoStages.LTX2;
 
-internal sealed record ResolvedClipRef(WGNodeData Image, JsonParser.RefSpec Spec, double Strength);
+internal sealed record ResolvedClipRef(WGNodeData Image, ImageRefSpec Spec, double Strength);
 
 internal sealed class LtxStageExecutor(
     WorkflowGenerator g,
     RootVideoStageHandoff rootVideoStageHandoff,
-    RootVideoStageResizer rootVideoStageResizer,
-    JsonParser jsonParser)
+    RootVideoStageResizer rootVideoStageResizer)
 {
     private const int ImgCompression = 18;
     private const double DefaultGuideMergeStrength = 1.0;
@@ -33,7 +32,7 @@ internal sealed class LtxStageExecutor(
     internal const string DefaultSchedulerValue = DefaultScheduler;
 
     public void RunStage(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
         WGNodeData sourceMedia,
@@ -151,7 +150,7 @@ internal sealed class LtxStageExecutor(
 
     private void PrepareConditioning(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         StageFrame stageFrame,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
@@ -202,7 +201,7 @@ internal sealed class LtxStageExecutor(
 
     private WGNodeData BuildStageLatent(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WGNodeData sourceMedia,
         LtxPostVideoChainCapture postVideoChain)
     {
@@ -301,7 +300,7 @@ internal sealed class LtxStageExecutor(
 
     private WGNodeData CreateEmptyVideoLatent(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WGNodeData sourceMedia,
         JArray controlNetLengthFrames = null)
     {
@@ -321,7 +320,7 @@ internal sealed class LtxStageExecutor(
     }
 
     private WGNodeData CreateEmptyVideoLatentWithOptionalAudioLength(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData sourceMedia,
         int width,
@@ -431,7 +430,7 @@ internal sealed class LtxStageExecutor(
         bridge.SyncNode(emptyAudio);
     }
 
-    private JArray TryResolveControlNetLengthFrames(JsonParser.StageSpec stage)
+    private JArray TryResolveControlNetLengthFrames(StageSpec stage)
     {
         if (stage?.ClipLengthFromControlNet != true)
         {
@@ -495,7 +494,7 @@ internal sealed class LtxStageExecutor(
         return true;
     }
 
-    private static bool ShouldMatchStageLengthToAudio(JsonParser.StageSpec stage)
+    private static bool ShouldMatchStageLengthToAudio(StageSpec stage)
     {
         if (!stage.ClipLengthFromAudio)
         {
@@ -521,7 +520,7 @@ internal sealed class LtxStageExecutor(
         {
             return fps.Value;
         }
-        fps = jsonParser.ResolveFps();
+        fps = g.GetVideoStagesFps();
         return fps.HasValue && fps.Value > 0 ? fps.Value : DefaultFps;
     }
 

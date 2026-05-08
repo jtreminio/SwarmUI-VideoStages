@@ -12,7 +12,6 @@ internal sealed class LtxManager
 
     public LtxManager(
         WorkflowGenerator g,
-        JsonParser jsonParser,
         RootVideoStageHandoff rootVideoStageHandoff,
         RootVideoStageResizer rootVideoStageResizer,
         StageGuideMediaHelper stageGuideMediaHelper,
@@ -20,12 +19,11 @@ internal sealed class LtxManager
     {
         this.g = g;
         audioMaskResizer = new LtxAudioMaskResizer(g, rootVideoStageResizer);
-        audioInjector = new LtxAudioInjector(g, jsonParser, rootVideoStageResizer);
+        audioInjector = new LtxAudioInjector(g, rootVideoStageResizer);
         LtxStageExecutor stageExecutor = new(
             g,
             rootVideoStageHandoff,
-            rootVideoStageResizer,
-            jsonParser);
+            rootVideoStageResizer);
         LtxClipRefResolver clipRefResolver = new(
             g,
             stageGuideMediaHelper,
@@ -65,10 +63,10 @@ internal sealed class LtxManager
     public static void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
         LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
 
-    public void PrepareReusableAudio(ClipContext clipContext, JsonParser.StageSpec stage) =>
+    public void PrepareReusableAudio(ClipContext clipContext, StageSpec stage) =>
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
 
-    public LtxPostVideoChainCapture TryCapturePostVideoChain(ClipContext clipContext, JsonParser.StageSpec stage) =>
+    public LtxPostVideoChainCapture TryCapturePostVideoChain(ClipContext clipContext, StageSpec stage) =>
         LtxPostVideoChainCapture.TryCapture(g, clipContext, stage);
 
     public void ApplyPostVideoChainCaptureIfPresent(
@@ -80,7 +78,7 @@ internal sealed class LtxManager
             ref referenceVae);
 
     public bool TryRunLocalStage(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,

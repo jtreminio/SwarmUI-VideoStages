@@ -37,13 +37,7 @@ public static class Runner
 
     public static void CaptureBase(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
-        {
-            return;
-        }
-
-        JsonParser jsonParser = new(g);
-        if (!HasConfiguredStages(g, jsonParser))
+        if (!IsExtensionActive(g) || !HasConfiguredStages(g))
         {
             return;
         }
@@ -54,13 +48,7 @@ public static class Runner
 
     public static void CaptureRefiner(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
-        {
-            return;
-        }
-
-        JsonParser jsonParser = new(g);
-        if (!HasConfiguredStages(g, jsonParser))
+        if (!IsExtensionActive(g) || !HasConfiguredStages(g))
         {
             return;
         }
@@ -76,9 +64,8 @@ public static class Runner
             return;
         }
 
-        JsonParser jsonParser = new(g);
         StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
         rootVideoStageHandoff.CapturePreCoreVideoMedia();
     }
 
@@ -89,9 +76,8 @@ public static class Runner
             return;
         }
 
-        JsonParser jsonParser = new(g);
         StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
         rootVideoStageHandoff.DropCoreImageToVideoOutput();
     }
 
@@ -102,15 +88,13 @@ public static class Runner
             return;
         }
 
-        JsonParser jsonParser = new(g);
         StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
-        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff, jsonParser);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
+        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff);
         StageGuideMediaHelper stageGuideMediaHelper = new(g);
         Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
         LtxManager ltxManager = new(
             g,
-            jsonParser,
             rootVideoStageHandoff,
             rootVideoStageResizer,
             stageGuideMediaHelper,
@@ -125,17 +109,15 @@ public static class Runner
             return;
         }
 
-        JsonParser jsonParser = new(g);
         StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
-        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff, jsonParser);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
+        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff);
         StageGuideMediaHelper stageGuideMediaHelper = new(g);
         AudioHandler audioHandler = new(g);
         Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
         MultiClipParallelMerger multiClipParallelMerger = new(g);
         LtxManager ltxManager = new(
             g,
-            jsonParser,
             rootVideoStageHandoff,
             rootVideoStageResizer,
             stageGuideMediaHelper,
@@ -152,7 +134,6 @@ public static class Runner
             ltxManager);
         VideoStagesCoordinator coordinator = new(
             g,
-            jsonParser,
             rootVideoStageHandoff,
             stageSequenceRunner,
             audioHandler,
@@ -167,15 +148,13 @@ public static class Runner
         WGNodeData audio,
         bool matchVideoLengthToAudio = true)
     {
-        JsonParser jsonParser = new(g);
         StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
-        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff, jsonParser);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
+        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff);
         StageGuideMediaHelper stageGuideMediaHelper = new(g);
         Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
         LtxManager ltxManager = new(
             g,
-            jsonParser,
             rootVideoStageHandoff,
             rootVideoStageResizer,
             stageGuideMediaHelper,
@@ -185,10 +164,9 @@ public static class Runner
 
     internal static RootVideoStageResizer GetRootVideoStageResizer(WorkflowGenerator g)
     {
-        JsonParser jsonParser = new(g);
         StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, jsonParser, stageRefStore);
-        return new RootVideoStageResizer(g, rootVideoStageHandoff, jsonParser);
+        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
+        return new RootVideoStageResizer(g, rootVideoStageHandoff);
     }
 
     private static bool IsExtensionActive(WorkflowGenerator g)
@@ -197,7 +175,7 @@ public static class Runner
         return type is not null && g.UserInput.TryGetRaw(type, out _);
     }
 
-    private static bool HasConfiguredStages(WorkflowGenerator g, JsonParser jsonParser)
+    private static bool HasConfiguredStages(WorkflowGenerator g)
     {
         T2IParamType type = VideoStagesExtension.VideoStagesJson?.Type;
         if (type is null
@@ -214,6 +192,6 @@ public static class Runner
             return false;
         }
 
-        return jsonParser.ParseStages().Count > 0;
+        return g.GetActiveStages().Count > 0;
     }
 }

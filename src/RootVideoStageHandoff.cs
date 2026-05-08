@@ -4,7 +4,7 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
-internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser jsonParser, StageRefStore stageRefStore)
+internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore stageRefStore)
 {
     private const string PreCoreNodeIdsKey = "videostages.pre-core-node-ids";
 
@@ -19,7 +19,7 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
             && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
     }
 
-    public bool ShouldReplaceTextToVideoRootStage(JsonParser.StageSpec stage)
+    public bool ShouldReplaceTextToVideoRootStage(StageSpec stage)
     {
         return stage.ClipStageIndex == 0 && stage.IsTextToVideo;
     }
@@ -30,7 +30,7 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, JsonParser json
         {
             return false;
         }
-        if (jsonParser.ParseStages().Count == 0)
+        if (g.GetActiveStages().Count == 0)
         {
             return false;
         }

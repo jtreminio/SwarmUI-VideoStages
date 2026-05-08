@@ -13,7 +13,7 @@ internal static class WanStageReferenceHandler
         WorkflowGenerator g,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs,
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain)
     {
@@ -49,7 +49,7 @@ internal static class WanStageReferenceHandler
         WorkflowGenerator g,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs,
-        JsonParser.RefSpec spec,
+        ImageRefSpec spec,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain)
     {
@@ -86,7 +86,7 @@ internal static class WanStageReferenceHandler
         return stageGuideMediaHelper.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
-    private static WGNodeData MaterializeUploadedRefImage(WorkflowGenerator g, JsonParser.RefSpec spec)
+    private static WGNodeData MaterializeUploadedRefImage(WorkflowGenerator g, ImageRefSpec spec)
     {
         ImageFile img = ImageReference.MaterializeUploadedRefImage(g, spec, "WAN clip reference image");
         return img is null ? null : g.LoadImage(img, "${videostageswanrefimage}", false);

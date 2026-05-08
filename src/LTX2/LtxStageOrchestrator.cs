@@ -11,7 +11,7 @@ internal sealed class LtxStageOrchestrator(
     LtxClipRefResolver clipRefResolver)
 {
     internal bool TryRunLocalLtxPath(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -124,7 +124,7 @@ internal sealed class LtxStageOrchestrator(
     }
 
     private bool ShouldSkipGeneratedGuideReinjection(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WGNodeData sourceMedia,
         StageRefStore.StageRef guideReference,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,

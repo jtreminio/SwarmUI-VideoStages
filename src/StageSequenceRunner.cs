@@ -29,7 +29,7 @@ internal sealed class StageSequenceRunner(
     }
 
     public void Run(
-        IReadOnlyList<JsonParser.ClipWithStages> clips,
+        IReadOnlyList<ClipWithStages> clips,
         WGNodeData nativeAudio = null,
         IReadOnlyDictionary<int, WGNodeData> clipAudios = null,
         IReadOnlyDictionary<int, WGNodeData> uploadedAudios = null,
@@ -63,7 +63,7 @@ internal sealed class StageSequenceRunner(
 
             int totalStageCount = TotalStageCount(clips);
             bool isFirstClip = true;
-            foreach (JsonParser.ClipWithStages clip in clips)
+            foreach (ClipWithStages clip in clips)
             {
                 ClipContext clipContext = new(clip, rootSourceMedia, rootSourceVae);
                 if (parallelMultiClip && !isFirstClip)
@@ -84,12 +84,12 @@ internal sealed class StageSequenceRunner(
                 }
                 isFirstClip = false;
 
-                JsonParser.StageSpec firstStage = clip.Stages[0];
+                StageSpec firstStage = clip.Stages[0];
                 ApplyControlNetClipLengthIfApplicable(firstStage);
                 PrepareClipAudio(firstStage, context);
 
                 bool clipCompleted = true;
-                foreach (JsonParser.StageSpec stage in clip.Stages)
+                foreach (StageSpec stage in clip.Stages)
                 {
                     StageRefStore.StageRef guideRef = TryResolveGuideReference(stage);
                     if (guideRef is null)
@@ -147,17 +147,17 @@ internal sealed class StageSequenceRunner(
         }
     }
 
-    private static int TotalStageCount(IReadOnlyList<JsonParser.ClipWithStages> clips)
+    private static int TotalStageCount(IReadOnlyList<ClipWithStages> clips)
     {
         int total = 0;
-        foreach (JsonParser.ClipWithStages clip in clips)
+        foreach (ClipWithStages clip in clips)
         {
             total += clip.Stages.Count;
         }
         return total;
     }
 
-    private void PrepareClipAudio(JsonParser.StageSpec stage, RunContext context)
+    private void PrepareClipAudio(StageSpec stage, RunContext context)
     {
         if (g.CurrentMedia is null)
         {
@@ -187,7 +187,7 @@ internal sealed class StageSequenceRunner(
         }
     }
 
-    private void ApplyControlNetClipLengthIfApplicable(JsonParser.StageSpec stage)
+    private void ApplyControlNetClipLengthIfApplicable(StageSpec stage)
     {
         if (stage.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
         {
@@ -213,7 +213,7 @@ internal sealed class StageSequenceRunner(
         _previousStageRef = captured;
     }
 
-    private void PrepareStageOverrides(JsonParser.StageSpec stage, int sectionId)
+    private void PrepareStageOverrides(StageSpec stage, int sectionId)
     {
         g.UserInput.SectionParamOverrides.Remove(sectionId);
         g.UserInput.Set(T2IParamTypes.VideoModel.Type, stage.Model, sectionId);
@@ -223,7 +223,7 @@ internal sealed class StageSequenceRunner(
         g.UserInput.Set(T2IParamTypes.CFGScale, stage.CfgScale, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SamplerParam.Type, stage.Sampler, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SchedulerParam.Type, stage.Scheduler, sectionId);
-        if (JsonParser.IsUsableVaeValue(stage.Vae))
+        if (VideoStagesSpecParser.IsUsableVaeValue(stage.Vae))
         {
             g.UserInput.Set(T2IParamTypes.VAE.Type, stage.Vae, sectionId);
         }
@@ -245,7 +245,7 @@ internal sealed class StageSequenceRunner(
         }
     }
 
-    private StageRefStore.StageRef TryResolveGuideReference(JsonParser.StageSpec stage)
+    private StageRefStore.StageRef TryResolveGuideReference(StageSpec stage)
     {
         if (StringUtils.Equals(stage.ImageReference, "Base"))
         {

@@ -6,7 +6,7 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
-public class JsonParser(WorkflowGenerator g)
+internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
 {
     private const double DefaultControl = 0.5;
     private const double FirstStageControl = 1.0;
@@ -15,84 +15,6 @@ public class JsonParser(WorkflowGenerator g)
     private const string DefaultGeneratedReference = "Generated";
     private const string DefaultPreviousStageReference = "PreviousStage";
     private const int FrameAlignment = 8;
-
-    public sealed record StageSpec(
-        int Id,
-        double Control,
-        double Upscale,
-        string UpscaleMethod,
-        string Model,
-        string Vae,
-        int Steps,
-        double CfgScale,
-        string Sampler,
-        string Scheduler,
-        string ImageReference,
-        bool Skipped = false,
-        int ClipId = 0,
-        string ClipAudioSource = null, // todo clip-values maybe as a nested object?
-        bool ClipLengthFromAudio = false,
-        bool ClipLengthFromControlNet = false,
-        int ClipWidth = 0,
-        int ClipHeight = 0,
-        int? ClipFrames = null,
-        int ClipFPS = 0,
-        bool ClipReuseAudio = false,
-        string ClipControlNetSource = null,
-        string ClipControlNetLora = null,
-        int ClipStageIndex = 0,
-        int ClipStageCount = 0,
-        double? ControlNetStrength = null,
-        IReadOnlyList<RefSpec> ClipRefs = null,
-        IReadOnlyList<double> RefStrengths = null,
-        bool ImageReferenceWasExplicit = false,
-        int? EndStep = null,
-        bool IsTextToVideo = false // todo might be better as a global-accessible value? already on VideoStagesSpec
-    );
-
-    public sealed record RefSpec(
-        string Source,
-        int Frame,
-        bool FromEnd,
-        string UploadFileName,
-        string Data = null
-    );
-
-    public sealed record UploadedAudioSpec(
-        string Data,
-        string FileName
-    );
-
-    public sealed record ClipSpec(
-        int Id,
-        bool Skipped,
-        double DurationSeconds,
-        string AudioSource,
-        string ControlNetSource,
-        string ControlNetLora,
-        bool SaveAudioTrack,
-        bool ClipLengthFromAudio,
-        bool ClipLengthFromControlNet,
-        bool ReuseAudio,
-        int? Width, // should never be null, available on VideoStagesSpec
-        int? Height, // should never be null, available on VideoStagesSpec
-        UploadedAudioSpec UploadedAudio,
-        IReadOnlyList<RefSpec> Refs,
-        IReadOnlyList<StageSpec> Stages
-    );
-
-    public sealed record VideoStagesSpec(
-        int Width,
-        int Height,
-        int FPS,
-        bool IsTextToVideo,
-        IReadOnlyList<ClipSpec> Clips
-    );
-
-    public sealed record ClipWithStages(
-        ClipSpec Clip,
-        IReadOnlyList<StageSpec> Stages
-    );
 
     private sealed record StageDefaults(
         double Control,
@@ -117,7 +39,7 @@ public class JsonParser(WorkflowGenerator g)
 
     public List<ClipWithStages> ParseClipsWithStages()
     {
-        VideoStagesSpec config = ParseConfig();
+        VideoStagesSpec config = g.GetVideoStagesSpec();
         (int? rawJsonWidth, int? rawJsonHeight, _, _) = GetJsonTopLevelConfig();
         int? registeredRootWidth = TryGetRegisteredRootDimension(VideoStagesExtension.RootWidth);
         int? registeredRootHeight = TryGetRegisteredRootDimension(VideoStagesExtension.RootHeight);
@@ -187,7 +109,7 @@ public class JsonParser(WorkflowGenerator g)
     }
 
     public int ResolveFps(VideoStagesSpec parsedConfig = null) =>
-        parsedConfig?.FPS ?? ParseConfig().FPS;
+        parsedConfig?.FPS ?? g.GetVideoStagesSpec().FPS;
 
     public (int? Width, int? Height) GetRawJsonTopLevelDimensions()
     {
@@ -242,7 +164,7 @@ public class JsonParser(WorkflowGenerator g)
 
     public bool TryParseConfig(out VideoStagesSpec spec)
     {
-        VideoStagesSpec parsed = ParseConfig();
+        VideoStagesSpec parsed = g.GetVideoStagesSpec();
         if (!HasUsableVideoModel(parsed))
         {
             spec = null;
@@ -374,7 +296,7 @@ public class JsonParser(WorkflowGenerator g)
 
     public List<ClipSpec> ParseClips()
     {
-        return [.. ParseConfig().Clips];
+        return [.. g.GetVideoStagesSpec().Clips];
     }
 
     private static bool IsClipShape(JObject entry) =>
@@ -412,10 +334,10 @@ public class JsonParser(WorkflowGenerator g)
         List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
         bool clipHasWanModel = ClipRawStagesContainWanModel(rawStages);
         int refLimit = clipHasWanModel ? Math.Min(2, rawRefs.Count) : rawRefs.Count;
-        List<RefSpec> refs = [];
+        List<ImageRefSpec> refs = [];
         for (int i = 0; i < refLimit; i++)
         {
-            RefSpec parsedRef = ParseRef(rawRefs[i], clipIndex, i);
+            ImageRefSpec parsedRef = ParseRef(rawRefs[i], clipIndex, i);
             if (parsedRef is not null)
             {
                 refs.Add(parsedRef);
@@ -517,11 +439,11 @@ public class JsonParser(WorkflowGenerator g)
         return Math.Clamp(endStep, 0, clampedSteps);
     }
 
-    private static void NormalizeWanClipRefSemantics(List<RefSpec> refs)
+    private static void NormalizeWanClipRefSemantics(List<ImageRefSpec> refs)
     {
         if (refs.Count > 0)
         {
-            RefSpec first = refs[0];
+            ImageRefSpec first = refs[0];
             refs[0] = first with
             {
                 Frame = 1,
@@ -531,7 +453,7 @@ public class JsonParser(WorkflowGenerator g)
 
         if (refs.Count > 1)
         {
-            RefSpec second = refs[1];
+            ImageRefSpec second = refs[1];
             refs[1] = second with
             {
                 Frame = 1,
@@ -540,7 +462,7 @@ public class JsonParser(WorkflowGenerator g)
         }
     }
 
-    private static RefSpec ParseRef(JObject refObj, int clipIndex, int refIndex)
+    private static ImageRefSpec ParseRef(JObject refObj, int clipIndex, int refIndex)
     {
         string source = GetString(refObj, "Source");
         if (string.IsNullOrWhiteSpace(source))
@@ -574,7 +496,7 @@ public class JsonParser(WorkflowGenerator g)
             }
         }
 
-        return new RefSpec(
+        return new ImageRefSpec(
             Source: source.Trim(),
             Frame: frame,
             FromEnd: fromEnd,

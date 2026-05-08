@@ -23,7 +23,7 @@ internal class StageRunner(
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
     public void RunStage(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         int sectionId,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
@@ -85,7 +85,7 @@ internal class StageRunner(
         CleanupReplacedTextToVideoRootStage(stageFrame.PriorOutputPath, stageFrame.ReplacesTextToVideoRoot);
     }
 
-    private StageFrame PrepareStage(JsonParser.StageSpec stage, int sectionId, ClipContext clipContext)
+    private StageFrame PrepareStage(StageSpec stage, int sectionId, ClipContext clipContext)
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(clipContext, stage);
@@ -122,7 +122,7 @@ internal class StageRunner(
     }
 
     private void RunNativeStagePath(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         StageFrame stageFrame,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
@@ -153,7 +153,7 @@ internal class StageRunner(
     }
 
     private void RunNativeStage(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         StageGenerationPlan generationPlan,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
@@ -185,7 +185,7 @@ internal class StageRunner(
     }
 
     private void ApplyConditioningHandoff(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         ClipContext clipContext)
     {
@@ -220,7 +220,7 @@ internal class StageRunner(
     }
 
     private static bool ShouldReuseConditioningHandoff(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         return VideoStageModelCompat.SupportsWanFirstLastFrame(genInfo.VideoModel)
@@ -228,7 +228,7 @@ internal class StageRunner(
             && genInfo.NegCond is { Count: 2 };
     }
 
-    private void ApplyContinuationEndStep(JsonParser.StageSpec stage)
+    private void ApplyContinuationEndStep(StageSpec stage)
     {
         if (!stage.EndStep.HasValue || g.CurrentMedia?.Path is not JArray { Count: 2 } currentPath)
         {
@@ -274,7 +274,7 @@ internal class StageRunner(
     }
 
     private StageGenerationPlan BuildGenInfo(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         int sectionId,
         WGNodeData sourceMedia)
     {
@@ -338,7 +338,7 @@ internal class StageRunner(
     }
 
 private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentApplier(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WGNodeData sourceMedia,
         bool isWanStage)
     {
@@ -362,7 +362,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         };
     }
 
-    private (string Positive, string Negative) BuildStagePrompts(JsonParser.StageSpec stage)
+    private (string Positive, string Negative) BuildStagePrompts(StageSpec stage)
     {
         string positive = g.UserInput.Get(T2IParamTypes.Prompt, "");
         string negative = g.UserInput.Get(T2IParamTypes.NegativePrompt, "");
@@ -453,7 +453,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private static void ApplyWanStillImageMediaLenBypass(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WGNodeData sourceMedia,
         ClipContext clipContext)
     {
@@ -470,7 +470,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         genInfo.HasFixedMediaLen = true;
     }
 
-    private void ApplyControlNetLora(JsonParser.StageSpec stage, WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    private void ApplyControlNetLora(StageSpec stage, WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         if (string.IsNullOrWhiteSpace(stage.ClipControlNetLora) || genInfo.Model is null)
         {
@@ -528,7 +528,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         return lora;
     }
 
-    private WGNodeData ApplyStageUpscaleIfNeeded(JsonParser.StageSpec stage, int sectionId)
+    private WGNodeData ApplyStageUpscaleIfNeeded(StageSpec stage, int sectionId)
     {
         WGNodeData source = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, g.CurrentVae);
         int width = Math.Max(source.Width ?? stage.ClipWidth, 16);

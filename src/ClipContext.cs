@@ -5,20 +5,20 @@ namespace VideoStages;
 
 internal sealed class ClipContext
 {
-    public ClipContext(JsonParser.ClipWithStages clip, WGNodeData sourceMedia, WGNodeData sourceVae)
+    public ClipContext(ClipWithStages clip, WGNodeData sourceMedia, WGNodeData sourceVae)
     {
         Clip = clip;
         SourceMedia = sourceMedia;
         SourceVae = sourceVae;
     }
 
-    public JsonParser.ClipWithStages Clip { get; }
+    public ClipWithStages Clip { get; }
     public WGNodeData SourceMedia { get; }
     public WGNodeData SourceVae { get; }
     public ConditioningHandoff LastConditioningHandoff { get; set; }
     public ClipAudioState AudioReuse { get; } = new();
 
-    public bool IsFirstStage(JsonParser.StageSpec stage) =>
+    public bool IsFirstStage(StageSpec stage) =>
         Clip.Stages.Count > 0 && Clip.Stages[0].Id == stage.Id;
 }
 

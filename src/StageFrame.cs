@@ -7,7 +7,7 @@ namespace VideoStages;
 internal sealed class StageFrame
 {
     public StageFrame(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         int sectionId,
         ClipContext clipContext,
         JArray priorOutputPath,
@@ -28,7 +28,7 @@ internal sealed class StageFrame
         ParallelMultiClip = parallelMultiClip;
     }
 
-    public JsonParser.StageSpec Stage { get; }
+    public StageSpec Stage { get; }
     public int SectionId { get; }
     public ClipContext ClipContext { get; }
     public JArray PriorOutputPath { get; }

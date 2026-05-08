@@ -14,7 +14,7 @@ internal static class LtxAudioReuseState
     public static void PrepareReusableAudio(
         WorkflowGenerator generator,
         ClipContext clipContext,
-        JsonParser.StageSpec stage)
+        StageSpec stage)
     {
         if (generator.CurrentMedia is null)
         {

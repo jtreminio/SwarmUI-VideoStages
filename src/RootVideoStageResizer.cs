@@ -9,8 +9,7 @@ namespace VideoStages;
 
 internal sealed class RootVideoStageResizer(
     WorkflowGenerator g,
-    RootVideoStageHandoff handoff,
-    JsonParser jsonParser)
+    RootVideoStageHandoff handoff)
 {
     public static void RegisterHandlers()
     {
@@ -85,13 +84,13 @@ internal sealed class RootVideoStageResizer(
             return true;
         }
 
-        (int? rawJsonWidth, int? rawJsonHeight) = jsonParser.GetRawJsonTopLevelDimensions();
+        (int? rawJsonWidth, int? rawJsonHeight) = g.GetRawJsonTopLevelDimensions();
         if (TryPositiveDimensionPair(rawJsonWidth, rawJsonHeight, out width, out height))
         {
             return true;
         }
 
-        foreach (JsonParser.ClipSpec clip in jsonParser.ParseConfig().Clips)
+        foreach (ClipSpec clip in g.GetVideoStagesSpec().Clips)
         {
             if (!clip.Skipped)
             {

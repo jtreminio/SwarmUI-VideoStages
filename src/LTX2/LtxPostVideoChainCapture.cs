@@ -34,13 +34,13 @@ internal sealed class LtxPostVideoChainCapture
     public static LtxPostVideoChainCapture TryCapture(
         WorkflowGenerator generator,
         ClipContext clipContext,
-        JsonParser.StageSpec stage) =>
+        StageSpec stage) =>
         TryCaptureCore(generator, clipContext.AudioReuse, stage, mutateReuseAudioState: true);
 
     private static LtxPostVideoChainCapture TryCaptureCore(
         WorkflowGenerator generator,
         ClipAudioState audioReuse,
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         bool mutateReuseAudioState)
     {
         bool clipCanReuseAudio = stage?.ClipReuseAudio == true && stage.ClipStageCount >= 3;

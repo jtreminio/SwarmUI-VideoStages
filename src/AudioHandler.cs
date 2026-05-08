@@ -25,11 +25,11 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return decode is null ? null : CreateAudioNode(decode.AUDIO);
     }
 
-    public void PruneAceStepFunUnsavedTracks(IReadOnlyList<JsonParser.ClipSpec> clips)
+    public void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipSpec> clips)
     {
         HashSet<int> usedTracks = [];
         HashSet<int> savedTracks = [];
-        foreach (JsonParser.ClipSpec clip in clips)
+        foreach (ClipSpec clip in clips)
         {
             if (!TryParseAceStepFunAudioSource(clip.AudioSource, out int trackIndex))
             {

@@ -11,7 +11,6 @@ namespace VideoStages;
 
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
-    JsonParser jsonParser,
     RootVideoStageHandoff rootVideoStageHandoff,
     StageSequenceRunner stageSequenceRunner,
     AudioHandler audioHandler,
@@ -21,13 +20,13 @@ internal sealed class VideoStagesCoordinator(
 
     public void RunConfiguredStages()
     {
-        if (!jsonParser.TryParseConfig(out _))
+        if (!g.TryGetVideoStagesSpec(out _))
         {
             return;
         }
 
-        List<JsonParser.ClipSpec> clips = jsonParser.ParseClips();
-        List<JsonParser.ClipWithStages> clipsWithStages = jsonParser.ParseClipsWithStages();
+        List<ClipSpec> clips = [.. g.GetVideoStagesSpec().Clips];
+        List<ClipWithStages> clipsWithStages = g.GetClipsWithStages();
         bool rootStageHandoff = rootVideoStageHandoff.ShouldHandoffRootStage();
         if (clipsWithStages.Count == 0)
         {
@@ -39,7 +38,7 @@ internal sealed class VideoStagesCoordinator(
         ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
         if (!rootStageHandoff)
         {
-            JsonParser.StageSpec first = clipsWithStages[0].Stages[0];
+            StageSpec first = clipsWithStages[0].Stages[0];
             TryApplyControlNetClipLength(
                 first.ClipLengthFromControlNet,
                 first.ClipControlNetSource,
@@ -60,7 +59,7 @@ internal sealed class VideoStagesCoordinator(
         EnsureFinalStageOutputSaved();
     }
 
-    private void EnsureComfyDependencies(IReadOnlyList<JsonParser.ClipWithStages> clipsWithStages)
+    private void EnsureComfyDependencies(IReadOnlyList<ClipWithStages> clipsWithStages)
     {
         if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
             || !clipsWithStages.SelectMany(c => c.Stages).Any(stage =>
@@ -75,7 +74,7 @@ internal sealed class VideoStagesCoordinator(
             + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
     }
 
-    private void TryInjectConfiguredAudio(List<JsonParser.ClipSpec> clips)
+    private void TryInjectConfiguredAudio(List<ClipSpec> clips)
     {
         if (clips.Count == 0)
         {
@@ -84,7 +83,7 @@ internal sealed class VideoStagesCoordinator(
         }
 
         ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
-        JsonParser.ClipSpec first = clips[0];
+        ClipSpec first = clips[0];
         string firstClipStageModel = first.Stages is { Count: > 0 }
             ? first.Stages[0].Model
             : null;
@@ -115,7 +114,7 @@ internal sealed class VideoStagesCoordinator(
         IReadOnlyDictionary<int, WGNodeData> ClipAudios,
         IReadOnlyDictionary<int, WGNodeData> UploadedAudios);
 
-    private ClipAudioMaps BuildClipAudioMaps(IReadOnlyList<JsonParser.ClipSpec> clips)
+    private ClipAudioMaps BuildClipAudioMaps(IReadOnlyList<ClipSpec> clips)
     {
         WGNodeData nativeAudio = g.CurrentMedia?.AttachedAudio;
         IReadOnlyDictionary<int, WGNodeData> clipAudios =
@@ -150,10 +149,10 @@ internal sealed class VideoStagesCoordinator(
 
     private static IReadOnlyDictionary<int, WGNodeData> BuildPerClipAudioDetections(
         AudioHandler handler,
-        IReadOnlyList<JsonParser.ClipSpec> clips)
+        IReadOnlyList<ClipSpec> clips)
     {
         Dictionary<int, WGNodeData> audios = [];
-        foreach (JsonParser.ClipSpec clip in clips)
+        foreach (ClipSpec clip in clips)
         {
             WGNodeData audio = handler.DetectAceStepFunAudio(clip.AudioSource);
             if (audio is not null)
@@ -165,16 +164,16 @@ internal sealed class VideoStagesCoordinator(
     }
 
     private IReadOnlyDictionary<int, WGNodeData> BuildPerClipUploadDetections(
-        IReadOnlyList<JsonParser.ClipSpec> clips)
+        IReadOnlyList<ClipSpec> clips)
     {
         Dictionary<int, WGNodeData> audios = [];
-        foreach (JsonParser.ClipSpec clip in clips)
+        foreach (ClipSpec clip in clips)
         {
             if (!StringUtils.Equals(clip.AudioSource, Constants.AudioSourceUpload))
             {
                 continue;
             }
-            AudioFile uploaded = jsonParser.ParseUploadedAudioForClip(clip);
+            AudioFile uploaded = g.GetUploadedAudioForClip(clip);
             if (uploaded is null)
             {
                 continue;

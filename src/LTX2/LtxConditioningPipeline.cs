@@ -28,7 +28,7 @@ internal sealed class LtxConditioningPipeline(
         return this;
     }
 
-    public LtxConditioningPipeline WithUpscaleIfNeeded(JsonParser.StageSpec stage, WGNodeData sourceMedia)
+    public LtxConditioningPipeline WithUpscaleIfNeeded(StageSpec stage, WGNodeData sourceMedia)
     {
         if (stage.Upscale <= 1 || string.IsNullOrWhiteSpace(stage.UpscaleMethod))
         {
@@ -185,8 +185,8 @@ internal sealed class LtxConditioningPipeline(
         return upscaled;
     }
 
-    private static bool UseLtxvInplaceForRef(JsonParser.RefSpec spec) => !spec.FromEnd && spec.Frame == 1;
+    private static bool UseLtxvInplaceForRef(ImageRefSpec spec) => !spec.FromEnd && spec.Frame == 1;
 
-    private static int ComputeLtxvAddGuideFrameIndex(JsonParser.RefSpec spec)
+    private static int ComputeLtxvAddGuideFrameIndex(ImageRefSpec spec)
         => spec.FromEnd ? -Math.Max(1, spec.Frame) : Math.Max(1, spec.Frame);
 }

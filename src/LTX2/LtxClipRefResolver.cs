@@ -14,16 +14,16 @@ internal sealed class LtxClipRefResolver(
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
     internal List<ResolvedClipRef> ResolveStageClipRefs(
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia)
     {
-        IReadOnlyList<JsonParser.RefSpec> refs = stage.ClipRefs;
+        IReadOnlyList<ImageRefSpec> refs = stage.ClipRefs;
         IReadOnlyList<double> strengths = stage.RefStrengths;
         if (refs.Count == 0 && !stage.ImageReferenceWasExplicit)
         {
-            JsonParser.RefSpec defaultRef = ResolveDefaultImageToVideoRef(stage, refStore);
+            ImageRefSpec defaultRef = ResolveDefaultImageToVideoRef(stage, refStore);
             if (defaultRef is not null)
             {
                 refs = [defaultRef];
@@ -33,7 +33,7 @@ internal sealed class LtxClipRefResolver(
         List<ResolvedClipRef> resolved = [];
         for (int i = 0; i < refs.Count; i++)
         {
-            JsonParser.RefSpec spec = refs[i];
+            ImageRefSpec spec = refs[i];
             if (stage.IsTextToVideo
                 && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
             {
@@ -126,7 +126,7 @@ internal sealed class LtxClipRefResolver(
             && scaleSource.SlotIndex == (int)primaryGuidePath[1];
     }
 
-    private JsonParser.RefSpec ResolveDefaultImageToVideoRef(JsonParser.StageSpec stage, StageRefStore refStore)
+    private ImageRefSpec ResolveDefaultImageToVideoRef(StageSpec stage, StageRefStore refStore)
     {
         if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _) || stage.IsTextToVideo)
         {
@@ -135,17 +135,17 @@ internal sealed class LtxClipRefResolver(
 
         if (refStore.Refiner is not null)
         {
-            return new JsonParser.RefSpec("Refiner", 1, false, null);
+            return new ImageRefSpec("Refiner", 1, false, null);
         }
         if (refStore.Base is not null)
         {
-            return new JsonParser.RefSpec("Base", 1, false, null);
+            return new ImageRefSpec("Base", 1, false, null);
         }
         return null;
     }
 
     private WGNodeData ResolveClipRefSourceMedia(
-        JsonParser.RefSpec spec,
+        ImageRefSpec spec,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain)
     {
@@ -181,7 +181,7 @@ internal sealed class LtxClipRefResolver(
         return stageGuideMediaHelper.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
-    private WGNodeData MaterializeUploadedRefImage(JsonParser.RefSpec spec)
+    private WGNodeData MaterializeUploadedRefImage(ImageRefSpec spec)
     {
         ImageFile img = ImageReference.MaterializeUploadedRefImage(g, spec, "clip reference image");
         return img is null ? null : g.LoadImage(img, "${videostagesrefimage}", false);

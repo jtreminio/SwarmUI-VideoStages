@@ -514,10 +514,10 @@ internal static class PromptParser
             ModelFolderFormat = "/"
         };
 
-        List<JsonParser.StageSpec> flat;
+        List<StageSpec> flat;
         try
         {
-            flat = new JsonParser(generator).ParseStages();
+            flat = generator.GetActiveStages();
         }
         catch (Exception ex)
         {
@@ -527,7 +527,7 @@ internal static class PromptParser
             return false;
         }
 
-        foreach (JsonParser.StageSpec stage in flat)
+        foreach (StageSpec stage in flat)
         {
             if (stage.ClipId == clipId && stage.ClipStageIndex == clipStageIndex)
             {

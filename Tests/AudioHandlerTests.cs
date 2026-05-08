@@ -10,7 +10,7 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class AudioHandlerTests
 {
-    private static JsonParser.ClipSpec Clip(int id, string audioSource, bool saveAudioTrack) => new(
+    private static ClipSpec Clip(int id, string audioSource, bool saveAudioTrack) => new(
         Id: id,
         Skipped: false,
         DurationSeconds: 3,

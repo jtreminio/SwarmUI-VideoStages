@@ -10,7 +10,6 @@ namespace VideoStages.LTX2;
 
 internal sealed class LtxAudioInjector(
     WorkflowGenerator g,
-    JsonParser jsonParser,
     RootVideoStageResizer rootVideoStageResizer)
 {
     private const int AudioInjectionIdBase = 52300;
@@ -33,7 +32,7 @@ internal sealed class LtxAudioInjector(
         WGNodeData adjustedAudio = audio;
         if (matchVideoLengthToAudio)
         {
-            int fps = jsonParser.ResolveFps();
+            int fps = g.GetVideoStagesFps();
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
                 bridge,
                 audio.Path,

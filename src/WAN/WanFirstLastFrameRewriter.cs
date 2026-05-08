@@ -11,7 +11,7 @@ internal static class WanFirstLastFrameRewriter
 {
     internal static void TryRewriteToFirstLast(
         WorkflowGenerator g,
-        JsonParser.StageSpec stage,
+        StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData wanEndImagePrepared)
     {
