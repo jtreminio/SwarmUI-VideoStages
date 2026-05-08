@@ -21,7 +21,7 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
 
     public bool ShouldReplaceTextToVideoRootStage(StageSpec stage)
     {
-        return stage.ClipStageIndex == 0 && stage.IsTextToVideo;
+        return stage.ClipStageIndex == 0 && g.GetVideoStagesSpec().IsTextToVideo;
     }
 
     public bool ShouldHandoffRootStage()
@@ -30,7 +30,7 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
         {
             return false;
         }
-        if (g.GetActiveStages().Count == 0)
+        if (!g.GetVideoStagesSpec().Clips.Any(c => c.Stages.Count > 0))
         {
             return false;
         }

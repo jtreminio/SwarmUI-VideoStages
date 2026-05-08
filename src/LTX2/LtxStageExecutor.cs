@@ -32,7 +32,6 @@ internal sealed class LtxStageExecutor(
     internal const string DefaultSchedulerValue = DefaultScheduler;
 
     public void RunStage(
-        StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
         WGNodeData sourceMedia,
@@ -59,7 +58,6 @@ internal sealed class LtxStageExecutor(
             PrepareModelAndConditioning(genInfo, effectiveSourceMedia);
             PrepareConditioning(
                 genInfo,
-                stage,
                 stageFrame,
                 effectiveSourceMedia,
                 guideMedia,
@@ -150,7 +148,6 @@ internal sealed class LtxStageExecutor(
 
     private void PrepareConditioning(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageSpec stage,
         StageFrame stageFrame,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
@@ -160,7 +157,7 @@ internal sealed class LtxStageExecutor(
         IReadOnlyList<ResolvedClipRef> clipRefs,
         double guideMergeStrength)
     {
-        WGNodeData stageLatent = BuildStageLatent(genInfo, stage, sourceMedia, postVideoChain);
+        WGNodeData stageLatent = BuildStageLatent(genInfo, stageFrame, sourceMedia, postVideoChain);
         if (stageLatent is null)
         {
             genInfo.PrepFullCond(g, guideMedia);
@@ -170,7 +167,7 @@ internal sealed class LtxStageExecutor(
 
         new LtxConditioningPipeline(g, genInfo, stageFrame, this)
             .WithLatent(stageLatent, sourceMedia)
-            .WithUpscaleIfNeeded(stage, sourceMedia)
+            .WithUpscaleIfNeeded(sourceMedia)
             .WithInplaceMerges(clipRefs)
             .BindToCurrentMedia(skipGuideReinjection, guideMedia, guideMergeStrength)
             .WithLtxvConditioning()
@@ -201,16 +198,18 @@ internal sealed class LtxStageExecutor(
 
     private WGNodeData BuildStageLatent(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageSpec stage,
+        StageFrame stageFrame,
         WGNodeData sourceMedia,
         LtxPostVideoChainCapture postVideoChain)
     {
+        StageSpec stage = stageFrame.Stage;
+        ClipSpec clip = stageFrame.ClipContext.Clip;
         genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
-        JArray controlNetLengthFrames = TryResolveControlNetLengthFrames(stage);
+        JArray controlNetLengthFrames = TryResolveControlNetLengthFrames(clip);
 
         if (rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage))
         {
-            return CreateEmptyVideoLatent(genInfo, stage, sourceMedia, controlNetLengthFrames);
+            return CreateEmptyVideoLatent(genInfo, clip, sourceMedia, controlNetLengthFrames);
         }
 
         if (postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true)
@@ -230,7 +229,7 @@ internal sealed class LtxStageExecutor(
             int width = Math.Max(sourceMedia.Width ?? g.UserInput.GetImageWidth(), 16);
             int height = Math.Max(sourceMedia.Height ?? g.UserInput.GetImageHeight(), 16);
             return CreateEmptyVideoLatentWithOptionalAudioLength(
-                stage,
+                clip,
                 genInfo,
                 sourceMedia,
                 width,
@@ -300,7 +299,7 @@ internal sealed class LtxStageExecutor(
 
     private WGNodeData CreateEmptyVideoLatent(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageSpec stage,
+        ClipSpec clip,
         WGNodeData sourceMedia,
         JArray controlNetLengthFrames = null)
     {
@@ -309,7 +308,7 @@ internal sealed class LtxStageExecutor(
         int frames = genInfo.Frames ?? sourceMedia?.Frames ?? DefaultFrameCount;
         WGNodeData attachedAudio = sourceMedia?.AttachedAudio;
         return CreateEmptyVideoLatentWithOptionalAudioLength(
-            stage,
+            clip,
             genInfo,
             sourceMedia,
             width,
@@ -320,7 +319,7 @@ internal sealed class LtxStageExecutor(
     }
 
     private WGNodeData CreateEmptyVideoLatentWithOptionalAudioLength(
-        StageSpec stage,
+        ClipSpec clip,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData sourceMedia,
         int width,
@@ -336,7 +335,7 @@ internal sealed class LtxStageExecutor(
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
 
         if (controlNetLengthFrames is null
-            && ShouldMatchStageLengthToAudio(stage)
+            && ShouldMatchStageLengthToAudio(clip)
             && effectiveAttached?.Path is JToken audioPath)
         {
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
@@ -430,14 +429,14 @@ internal sealed class LtxStageExecutor(
         bridge.SyncNode(emptyAudio);
     }
 
-    private JArray TryResolveControlNetLengthFrames(StageSpec stage)
+    private JArray TryResolveControlNetLengthFrames(ClipSpec clip)
     {
-        if (stage?.ClipLengthFromControlNet != true)
+        if (!clip.ClipLengthFromControlNet)
         {
             return null;
         }
         return new ControlNetApplicator(g).TryCreateCapturedControlImageFrameCount(
-            stage.ClipControlNetSource,
+            clip.ControlNetSource,
             out JArray framesConnection)
             ? framesConnection
             : null;
@@ -494,13 +493,13 @@ internal sealed class LtxStageExecutor(
         return true;
     }
 
-    private static bool ShouldMatchStageLengthToAudio(StageSpec stage)
+    private static bool ShouldMatchStageLengthToAudio(ClipSpec clip)
     {
-        if (!stage.ClipLengthFromAudio)
+        if (!clip.ClipLengthFromAudio)
         {
             return false;
         }
-        return ClipAudioWorkflowHelper.IsUploadOrAceStepFunAudioSource(stage.ClipAudioSource);
+        return ClipAudioWorkflowHelper.IsUploadOrAceStepFunAudioSource(clip.AudioSource);
     }
 
     internal void ApplyResolvedFpsToWorkflow(WorkflowGenerator.ImageToVideoGenInfo genInfo, int fps)
@@ -520,8 +519,8 @@ internal sealed class LtxStageExecutor(
         {
             return fps.Value;
         }
-        fps = g.GetVideoStagesFps();
-        return fps.HasValue && fps.Value > 0 ? fps.Value : DefaultFps;
+        int specFps = g.GetVideoStagesSpec().FPS;
+        return specFps > 0 ? specFps : DefaultFps;
     }
 
     private static bool ReferencesCurrentOutputPath(WGNodeData media, LtxPostVideoChainCapture postVideoChain)

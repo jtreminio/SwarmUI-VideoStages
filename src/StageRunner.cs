@@ -35,9 +35,10 @@ internal class StageRunner(
             return;
         }
 
+        ClipSpec clip = clipContext.Clip;
         using PromptParser.LoraOverrideScope loraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
-            stage.ClipId,
+            clip.Id,
             sectionId);
 
         StageFrame stageFrame = PrepareStage(stage, sectionId, clipContext);
@@ -49,13 +50,13 @@ internal class StageRunner(
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.Plan.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
-            ApplyControlNetLora(stage, currentGenInfo);
+            ApplyControlNetLora(clip, currentGenInfo);
             bool needsCrop = new ControlNetApplicator(g).Apply(
                 currentGenInfo,
-                stage.ClipControlNetSource,
+                clip.ControlNetSource,
                 stage.ControlNetStrength,
-                stage.ClipFrames,
-                stage.ClipLengthFromControlNet);
+                clipContext.Clip.Frames,
+                clip.ClipLengthFromControlNet);
             if (needsCrop)
             {
                 stageFrame.NeedsCropGuidesAfterSampler = true;
@@ -63,7 +64,6 @@ internal class StageRunner(
         });
 
         if (ltxManager.TryRunLocalStage(
-                stage,
                 guideReference,
                 refStore,
                 genInfo,
@@ -80,7 +80,7 @@ internal class StageRunner(
         }
         else
         {
-            RunNativeStagePath(stage, stageFrame, guideReference, refStore, clipContext);
+            RunNativeStagePath(stageFrame, guideReference, refStore, clipContext);
         }
         CleanupReplacedTextToVideoRootStage(stageFrame.PriorOutputPath, stageFrame.ReplacesTextToVideoRoot);
     }
@@ -89,19 +89,19 @@ internal class StageRunner(
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(clipContext, stage);
-        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage) && stage.IsTextToVideo;
+        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage) && g.GetVideoStagesSpec().IsTextToVideo;
         LtxPostVideoChainCapture postVideoChain = replaceTextToVideoRootStage
             ? null
             : ltxManager.TryCapturePostVideoChain(clipContext, stage);
         WGNodeData sourceMedia = replaceTextToVideoRootStage
             ? CloneMedia(g.CurrentMedia)
-            : ApplyStageUpscaleIfNeeded(stage, sectionId);
+            : ApplyStageUpscaleIfNeeded(clipContext, stage, sectionId);
         if (sourceMedia is null)
         {
             Logs.Error($"VideoStages: Stage {stage.Id} could not resolve source media.");
             return null;
         }
-        StageGenerationPlan plan = BuildGenInfo(stage, sectionId, sourceMedia);
+        StageGenerationPlan plan = BuildGenInfo(clipContext, stage, sectionId, sourceMedia);
         if (plan is null)
         {
             return null;
@@ -122,17 +122,18 @@ internal class StageRunner(
     }
 
     private void RunNativeStagePath(
-        StageSpec stage,
         StageFrame stageFrame,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         ClipContext clipContext)
     {
+        StageSpec stage = stageFrame.Stage;
         WGNodeData guideRaw = stageGuideMediaHelper.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
         WanStageReferenceHandler.WanGuideResolution wanRefs = WanStageReferenceHandler.TryResolveClipRefs(
             g,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs,
+            clipContext.Clip,
             stage,
             refStore,
             stageFrame.PostVideoChain);
@@ -172,7 +173,7 @@ internal class StageRunner(
         using IDisposable wanPostScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
             CollapseWanStartImageScaleChain(currentGenInfo);
-            WanFirstLastFrameRewriter.TryRewriteToFirstLast(g, stage, currentGenInfo, wanEndPrepared);
+            WanFirstLastFrameRewriter.TryRewriteToFirstLast(g, clipContext.Clip.ImageRefs, stage, currentGenInfo, wanEndPrepared);
             ApplyConditioningHandoff(stage, currentGenInfo, clipContext);
         });
 
@@ -194,10 +195,11 @@ internal class StageRunner(
             return;
         }
 
+        int clipId = clipContext.Clip.Id;
         if (clipContext.IsFirstStage(stage))
         {
             clipContext.LastConditioningHandoff = new ConditioningHandoff(
-                stage.ClipId,
+                clipId,
                 CopyPath(genInfo.PosCond),
                 CopyPath(genInfo.NegCond));
             return;
@@ -205,7 +207,7 @@ internal class StageRunner(
 
         ConditioningHandoff handoff = clipContext.LastConditioningHandoff;
         if (handoff is null
-            || handoff.ClipId != stage.ClipId
+            || handoff.ClipId != clipId
             || handoff.Positive is null
             || handoff.Negative is null)
         {
@@ -274,10 +276,14 @@ internal class StageRunner(
     }
 
     private StageGenerationPlan BuildGenInfo(
+        ClipContext clipContext,
         StageSpec stage,
         int sectionId,
         WGNodeData sourceMedia)
     {
+        ClipSpec clip = clipContext.Clip;
+        ClipDimensionState dimensions = clipContext.Dimensions;
+        VideoStagesSpec spec = g.GetVideoStagesSpec();
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId);
         if (videoModel is null)
         {
@@ -295,7 +301,7 @@ internal class StageRunner(
             ? BuildSourceVideoLatentApplier(stage, sourceMedia, isWanStage)
             : null;
 
-        (string positivePrompt, string negativePrompt) = BuildStagePrompts(stage);
+        (string positivePrompt, string negativePrompt) = BuildStagePrompts(clip, stage);
 
         WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
         {
@@ -305,9 +311,9 @@ internal class StageRunner(
             VideoSwapPercent = 0.5,
             Frames = ResolveFrames(sourceMedia, sectionId),
             VideoCFG = stage.CfgScale,
-            VideoFPS = stage.ClipFPS,
-            Width = sourceMedia.Width ?? stage.ClipWidth,
-            Height = sourceMedia.Height ?? stage.ClipHeight,
+            VideoFPS = spec.FPS,
+            Width = sourceMedia.Width ?? dimensions.Width,
+            Height = sourceMedia.Height ?? dimensions.Height,
             Prompt = positivePrompt,
             NegativePrompt = negativePrompt,
             Steps = stage.Steps,
@@ -362,15 +368,15 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         };
     }
 
-    private (string Positive, string Negative) BuildStagePrompts(StageSpec stage)
+    private (string Positive, string Negative) BuildStagePrompts(ClipSpec clip, StageSpec stage)
     {
         string positive = g.UserInput.Get(T2IParamTypes.Prompt, "");
         string negative = g.UserInput.Get(T2IParamTypes.NegativePrompt, "");
         string originalPositive = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.Prompt.Type.ID, positive);
         string originalNegative = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.NegativePrompt.Type.ID, negative);
         return (
-            PromptParser.ExtractPrompt(positive, originalPositive, stage.ClipId, stage.Id, stage.ClipStageIndex),
-            PromptParser.ExtractPrompt(negative, originalNegative, stage.ClipId, stage.Id, stage.ClipStageIndex));
+            PromptParser.ExtractPrompt(positive, originalPositive, clip.Id, stage.Id, stage.ClipStageIndex),
+            PromptParser.ExtractPrompt(negative, originalNegative, clip.Id, stage.Id, stage.ClipStageIndex));
     }
 
     private bool TryReuseDecodedSourceVideoLatent(
@@ -470,9 +476,9 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         genInfo.HasFixedMediaLen = true;
     }
 
-    private void ApplyControlNetLora(StageSpec stage, WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    private void ApplyControlNetLora(ClipSpec clip, WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (string.IsNullOrWhiteSpace(stage.ClipControlNetLora) || genInfo.Model is null)
+        if (string.IsNullOrWhiteSpace(clip.ControlNetLora) || genInfo.Model is null)
         {
             return;
         }
@@ -482,7 +488,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             return;
         }
 
-        T2IModel lora = ResolveLoraModel(stage.ClipControlNetLora);
+        T2IModel lora = ResolveLoraModel(clip.ControlNetLora);
         if (lora is null)
         {
             return;
@@ -528,11 +534,12 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         return lora;
     }
 
-    private WGNodeData ApplyStageUpscaleIfNeeded(StageSpec stage, int sectionId)
+    private WGNodeData ApplyStageUpscaleIfNeeded(ClipContext clipContext, StageSpec stage, int sectionId)
     {
+        ClipDimensionState dimensions = clipContext.Dimensions;
         WGNodeData source = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, g.CurrentVae);
-        int width = Math.Max(source.Width ?? stage.ClipWidth, 16);
-        int height = Math.Max(source.Height ?? stage.ClipHeight, 16);
+        int width = Math.Max(source.Width ?? dimensions.Width, 16);
+        int height = Math.Max(source.Height ?? dimensions.Height, 16);
         source.Width = width;
         source.Height = height;
 
@@ -577,6 +584,8 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             g.CurrentMedia = source.WithPath([scaleNode.Id, 0]);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
+            dimensions.Width = targetWidth;
+            dimensions.Height = targetHeight;
             return g.CurrentMedia;
         }
 
@@ -587,6 +596,8 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             g.CurrentMedia = source.WithPath([fitScale.Id, 0]);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
+            dimensions.Width = targetWidth;
+            dimensions.Height = targetHeight;
             return g.CurrentMedia;
         }
 

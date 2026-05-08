@@ -149,8 +149,8 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         string stagesJson = new JArray(
-            MakeClip(width: 512, height: 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10)),
-            MakeClip(width: 512, height: 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10)),
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
         string prompt = "global prompt <videoclip[1]><lora:UnitTest_VideoClipLora:0.5>";
 
@@ -215,8 +215,6 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(
-            width: 512,
-            height: 512,
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         string stagesJson = new JArray(clip).ToString();

@@ -44,9 +44,8 @@ public class AudioSourceParamTests
         T2IParamInput input = new(null);
         input.Set(VideoStagesExtension.VideoStagesJson, BuildConfigJson(value));
         WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpecParser parser = new(generator);
 
-        ClipSpec clip = Assert.Single(parser.ParseClips());
+        ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(generator).Clips);
 
         Assert.Equal(value, clip.AudioSource);
     }

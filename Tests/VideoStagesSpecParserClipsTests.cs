@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -47,8 +48,6 @@ public class VideoStagesSpecParserClipsTests
         bool clipLengthFromAudio = false,
         bool clipLengthFromControlNet = false,
         bool reuseAudio = false,
-        int width = 1024,
-        int height = 768,
         JObject uploadedAudio = null)
     {
         JObject clip = new()
@@ -61,8 +60,6 @@ public class VideoStagesSpecParserClipsTests
             ["ClipLengthFromAudio"] = clipLengthFromAudio,
             ["ClipLengthFromControlNet"] = clipLengthFromControlNet,
             ["ReuseAudio"] = reuseAudio,
-            ["Width"] = width,
-            ["Height"] = height,
             ["Refs"] = new JArray(refs ?? []),
             ["Stages"] = new JArray(stages),
         };
@@ -71,19 +68,6 @@ public class VideoStagesSpecParserClipsTests
             clip["UploadedAudio"] = uploadedAudio;
         }
         return clip;
-    }
-
-    private static JObject MakeRootConfig(
-        int width,
-        int height,
-        IEnumerable<JObject> clips)
-    {
-        return new JObject
-        {
-            ["Width"] = width,
-            ["Height"] = height,
-            ["Clips"] = new JArray(clips),
-        };
     }
 
     private static JObject MakeUploadedAudio(
@@ -105,12 +89,14 @@ public class VideoStagesSpecParserClipsTests
         return input;
     }
 
-    private static VideoStagesSpecParser BuildParser(string json)
+    private static WorkflowGenerator BuildParser(string json)
     {
         T2IParamInput input = BuildInputWithJson(json);
-        WorkflowGenerator generator = new() { UserInput = input };
-        return new VideoStagesSpecParser(generator);
+        return new() { UserInput = input };
     }
+
+    private static List<StageSpec> FlattenedActiveStages(WorkflowGenerator parser) =>
+        [.. VideoStagesSpecParser.Parse(parser).Clips.SelectMany(c => c.Stages)];
 
 
     [Fact]
@@ -125,47 +111,41 @@ public class VideoStagesSpecParserClipsTests
                 saveAudioTrack: true,
                 clipLengthFromAudio: true,
                 clipLengthFromControlNet: true,
-                reuseAudio: true,
-                width: 800,
-                height: 600),
+                reuseAudio: true),
             MakeClip(
                 stages: [MakeStage("model-b"), MakeStage("model-c")],
                 duration: 6.0)
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<ClipSpec> clips = parser.ParseClips();
+        IReadOnlyList<ClipSpec> clips = VideoStagesSpecParser.Parse(parser).Clips;
 
         Assert.Equal(2, clips.Count);
         Assert.Equal(0, clips[0].Id);
-        Assert.Equal(4.0, clips[0].DurationSeconds);
         Assert.Equal(Constants.ControlNetSourceTwo, clips[0].ControlNetSource);
         Assert.True(clips[0].SaveAudioTrack);
         Assert.False(clips[0].ClipLengthFromAudio);
         Assert.True(clips[0].ClipLengthFromControlNet);
         Assert.True(clips[0].ReuseAudio);
-        Assert.Equal(800, clips[0].Width);
-        Assert.Equal(600, clips[0].Height);
-        Assert.Equal(2, clips[0].Refs.Count);
-        Assert.Equal("Base", clips[0].Refs[0].Source);
-        Assert.Equal(1, clips[0].Refs[0].Frame);
-        Assert.Equal("Refiner", clips[0].Refs[1].Source);
-        Assert.Equal(12, clips[0].Refs[1].Frame);
-        Assert.True(clips[0].Refs[1].FromEnd);
+        Assert.Equal(2, clips[0].ImageRefs.Count);
+        Assert.Equal("Base", clips[0].ImageRefs[0].Source);
+        Assert.Equal(1, clips[0].ImageRefs[0].Frame);
+        Assert.Equal("Refiner", clips[0].ImageRefs[1].Source);
+        Assert.Equal(12, clips[0].ImageRefs[1].Frame);
+        Assert.True(clips[0].ImageRefs[1].FromEnd);
         Assert.Single(clips[0].Stages);
         Assert.Equal("model-a", clips[0].Stages[0].Model);
 
         Assert.Equal(1, clips[1].Id);
-        Assert.Equal(6.0, clips[1].DurationSeconds);
         Assert.False(clips[1].SaveAudioTrack);
-        Assert.Empty(clips[1].Refs);
+        Assert.Empty(clips[1].ImageRefs);
         Assert.Equal(2, clips[1].Stages.Count);
     }
 
     [Fact]
     public void ParseConfig_RootShape_PopulatesRootDimensionsAndClipAudioSource()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
             width: 1344,
             height: 832,
             clips: [
@@ -173,9 +153,9 @@ public class VideoStagesSpecParserClipsTests
                     stages: [MakeStage("model-a")],
                     audioSource: Constants.AudioSourceUpload)
             ]));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        VideoStagesSpec config = parser.ParseConfig();
+        VideoStagesSpec config = VideoStagesSpecParser.Parse(parser);
 
         Assert.Equal(1344, config.Width);
         Assert.Equal(832, config.Height);
@@ -196,16 +176,16 @@ public class VideoStagesSpecParserClipsTests
                 audioSource: Constants.AudioSourceUpload,
                 uploadedAudio: MakeUploadedAudio(fileName: "second.wav"))
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<ClipSpec> clips = parser.ParseClips();
+        IReadOnlyList<ClipSpec> clips = VideoStagesSpecParser.Parse(parser).Clips;
 
         Assert.Equal(2, clips.Count);
         Assert.Equal("first.wav", clips[0].UploadedAudio.FileName);
         Assert.Equal("second.wav", clips[1].UploadedAudio.FileName);
 
-        AudioFile firstAudio = parser.ParseUploadedAudioForClip(clips[0]);
-        AudioFile secondAudio = parser.ParseUploadedAudioForClip(clips[1]);
+        AudioFile firstAudio = VideoStagesSpecParser.MaterializeUploadedAudioForClip(parser, clips[0]);
+        AudioFile secondAudio = VideoStagesSpecParser.MaterializeUploadedAudioForClip(parser, clips[1]);
         Assert.Equal("first.wav", firstAudio.SourceFilePath);
         Assert.Equal("second.wav", secondAudio.SourceFilePath);
     }
@@ -222,27 +202,27 @@ public class VideoStagesSpecParserClipsTests
                     ["Data"] = "inputs/_comfy1/clip_part02.wav",
                     ["FileName"] = "clip_part02.wav",
                 })));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        ClipSpec clip = parser.ParseClips().Single();
+        ClipSpec clip = VideoStagesSpecParser.Parse(parser).Clips.Single();
 
         Assert.Equal("inputs/_comfy1/clip_part02.wav", clip.UploadedAudio.Data);
 
-        AudioFile audio = parser.ParseUploadedAudioForClip(clip);
+        AudioFile audio = VideoStagesSpecParser.MaterializeUploadedAudioForClip(parser, clip);
 
         Assert.Null(audio);
     }
 
     [Fact]
-    public void ParseStages_Flattens_ClipShape_AcrossClips_AssigningSequentialIds()
+    public void ParseConfig_Flattens_ClipShape_AcrossClips_AssigningSequentialIds()
     {
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]),
             MakeClip(stages: [MakeStage("model-c")])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<StageSpec> stages = parser.ParseStages();
+        List<StageSpec> stages = FlattenedActiveStages(parser);
 
         Assert.Equal(3, stages.Count);
         Assert.Equal(0, stages[0].Id);
@@ -254,7 +234,7 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseStages_EnforcesStageZeroControlPerClip()
+    public void ParseConfig_EnforcesStageZeroControlPerClip()
     {
         JObject clipZeroStageZero = MakeStage("model-a");
         clipZeroStageZero["Control"] = 0.25;
@@ -267,9 +247,9 @@ public class VideoStagesSpecParserClipsTests
             MakeClip(stages: [clipZeroStageZero, clipZeroStageOne]),
             MakeClip(stages: [clipOneStageZero])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<StageSpec> stages = parser.ParseStages();
+        List<StageSpec> stages = FlattenedActiveStages(parser);
 
         Assert.Equal(3, stages.Count);
         Assert.Equal(1.0, stages[0].Control);
@@ -278,7 +258,7 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseStages_SkipsSkippedClipsAndStages()
+    public void ParseConfig_SkipsSkippedClipsAndStages()
     {
         JObject skippedStage = MakeStage("model-skip");
         skippedStage["Skipped"] = true;
@@ -288,9 +268,9 @@ public class VideoStagesSpecParserClipsTests
             MakeClip( stages: [MakeStage("model-skipped-clip")], skipped: true),
             MakeClip( stages: [MakeStage("model-c")])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<StageSpec> stages = parser.ParseStages();
+        List<StageSpec> stages = FlattenedActiveStages(parser);
 
         Assert.Equal(2, stages.Count);
         Assert.Equal("model-a", stages[0].Model);
@@ -298,43 +278,41 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseStages_RootShape_UsesRootDimensionsAcrossClips()
+    public void ParseConfig_RootShape_UsesRootDimensionsAcrossClips()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
-                    duration: 4.0,
-                    width: 800,
-                    height: 600)
+                    duration: 4.0)
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpecParser parser = new(generator);
+        WorkflowGenerator parser = generator;
 
-        List<StageSpec> stages = parser.ParseStages();
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        Assert.Single(stages);
-        Assert.Equal(0, stages[0].ClipId);
-        Assert.Equal(Constants.AudioSourceNative, stages[0].ClipAudioSource);
-        Assert.Equal(Constants.ControlNetSourceOne, stages[0].ClipControlNetSource);
-        Assert.False(stages[0].ClipLengthFromAudio);
-        Assert.False(stages[0].ClipLengthFromControlNet);
-        Assert.False(stages[0].ClipReuseAudio);
-        Assert.Equal(0, stages[0].ClipStageIndex);
-        Assert.Equal(1, stages[0].ClipStageCount);
-        Assert.Equal(1280, stages[0].ClipWidth);
-        Assert.Equal(720, stages[0].ClipHeight);
-        Assert.Equal(97, stages[0].ClipFrames);
+        ClipSpec clip = Assert.Single(spec.Clips);
+        StageSpec stage = Assert.Single(clip.Stages);
+        Assert.Equal(0, clip.Id);
+        Assert.Equal(Constants.AudioSourceNative, clip.AudioSource);
+        Assert.Equal(Constants.ControlNetSourceOne, clip.ControlNetSource);
+        Assert.False(clip.ClipLengthFromAudio);
+        Assert.False(clip.ClipLengthFromControlNet);
+        Assert.False(clip.ReuseAudio);
+        Assert.Equal(0, stage.ClipStageIndex);
+        Assert.Equal(1280, spec.Width);
+        Assert.Equal(720, spec.Height);
+        Assert.Equal(97, clip.Frames);
     }
 
     [Fact]
-    public void ParseStages_ControlNetLength_PropagatesToStageAndDisablesAudioLength()
+    public void ParseConfig_ControlNetLength_PropagatesToClipAndDisablesAudioLength()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -344,71 +322,67 @@ public class VideoStagesSpecParserClipsTests
                     clipLengthFromAudio: true,
                     clipLengthFromControlNet: true)
             ]));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<StageSpec> stages = parser.ParseStages();
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        Assert.Single(stages);
-        Assert.False(stages[0].ClipLengthFromAudio);
-        Assert.True(stages[0].ClipLengthFromControlNet);
+        ClipSpec clip = Assert.Single(spec.Clips);
+        Assert.False(clip.ClipLengthFromAudio);
+        Assert.True(clip.ClipLengthFromControlNet);
     }
 
     [Fact]
-    public void ParseStages_RegisteredRootParams_OverrideJsonRootDimensions()
+    public void ParseConfig_RegisteredRootParams_OverrideJsonRootDimensions()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
-                    duration: 4.0,
-                    width: 800,
-                    height: 600)
+                    duration: 4.0)
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(VideoStagesExtension.RootWidth, 1536);
         input.Set(VideoStagesExtension.RootHeight, 864);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpecParser parser = new(generator);
+        WorkflowGenerator parser = generator;
 
-        List<StageSpec> stages = parser.ParseStages();
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        Assert.Single(stages);
-        Assert.Equal(1536, stages[0].ClipWidth);
-        Assert.Equal(864, stages[0].ClipHeight);
-        Assert.Equal(97, stages[0].ClipFrames);
+        ClipSpec clip = Assert.Single(spec.Clips);
+        Assert.Equal(1536, spec.Width);
+        Assert.Equal(864, spec.Height);
+        Assert.Equal(97, clip.Frames);
     }
 
     [Fact]
-    public void ParseStages_RegisteredRootFps_OverridesCoreVideoFpsForClipDurationFrames()
+    public void ParseConfig_RegisteredRootFps_OverridesCoreVideoFpsForClipDurationFrames()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
-                    duration: 4.0,
-                    width: 800,
-                    height: 600)
+                    duration: 4.0)
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(VideoStagesExtension.RootFPS, 32);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpecParser parser = new(generator);
+        WorkflowGenerator parser = generator;
 
-        List<StageSpec> stages = parser.ParseStages();
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        Assert.Single(stages);
-        Assert.Equal(129, stages[0].ClipFrames);
-        Assert.Equal(32, stages[0].ClipFPS);
+        ClipSpec clip = Assert.Single(spec.Clips);
+        Assert.Equal(129, clip.Frames);
+        Assert.Equal(32, spec.FPS);
     }
 
     [Fact]
-    public void ParseClips_StagesMissingModel_AreSkippedSilently()
+    public void ParseClips_StagesMissingModel_ThrowsUserError()
     {
         JObject brokenStage = MakeStage("");
         brokenStage["Model"] = "";
@@ -416,29 +390,44 @@ public class VideoStagesSpecParserClipsTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip( stages: [brokenStage, MakeStage("model-a")])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<ClipSpec> clips = parser.ParseClips();
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
+            () => VideoStagesSpecParser.Parse(parser));
+        Assert.Contains("Clip 0 stage 0", ex.Message);
+        Assert.Contains("'Model'", ex.Message);
+    }
 
-        Assert.Single(clips);
-        Assert.Single(clips[0].Stages);
-        Assert.Equal("model-a", clips[0].Stages[0].Model);
+    [Fact]
+    public void ParseClips_NonClipShape_ThrowsUserError()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(new JObject
+        {
+            ["Model"] = "model-a"
+        }));
+        WorkflowGenerator parser = BuildParser(json);
+
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
+            () => VideoStagesSpecParser.Parse(parser));
+        Assert.Contains("Entry 0 is not a clip object", ex.Message);
+        Assert.Contains("'Stages' array", ex.Message);
     }
 
     [Fact]
     public void ParseClips_EmptyJson_ReturnsEmpty()
     {
-        VideoStagesSpecParser parser = BuildParser("[]");
-        Assert.Empty(parser.ParseClips());
-        Assert.Empty(parser.ParseStages());
+        WorkflowGenerator parser = BuildParser("[]");
+        Assert.Empty(VideoStagesSpecParser.Parse(parser).Clips);
+        Assert.Empty(FlattenedActiveStages(parser));
     }
 
     [Fact]
-    public void ParseClips_InvalidJson_ReturnsEmpty()
+    public void ParseClips_InvalidJson_ThrowsUserError()
     {
-        VideoStagesSpecParser parser = BuildParser("not json at all");
-        Assert.Empty(parser.ParseClips());
-        Assert.Empty(parser.ParseStages());
+        WorkflowGenerator parser = BuildParser("not json at all");
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
+            () => VideoStagesSpecParser.Parse(parser));
+        Assert.Contains("Could not parse Video Stages JSON", ex.Message);
     }
 
     [Fact]
@@ -450,70 +439,64 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 refs: [brokenRef, MakeRef("Base")])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<ClipSpec> clips = parser.ParseClips();
+        IReadOnlyList<ClipSpec> clips = VideoStagesSpecParser.Parse(parser).Clips;
 
         Assert.Single(clips);
-        Assert.Single(clips[0].Refs);
-        Assert.Equal("Base", clips[0].Refs[0].Source);
+        Assert.Single(clips[0].ImageRefs);
+        Assert.Equal("Base", clips[0].ImageRefs[0].Source);
     }
 
     [Fact]
-    public void ParseStages_PropagatesClipDimensionsAndFramesIntoEachStage()
+    public void ParseConfig_PropagatesTopLevelDimensionsAndPerClipFrames()
     {
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip(
-                stages: [MakeStage("model-a")],
-                duration: 4.0,
-                width: 800,
-                height: 600),
-            MakeClip(
-                stages: [MakeStage("model-b")],
-                duration: 2.0,
-                width: 1920,
-                height: 1080)
-        ));
+        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
+            width: 800,
+            height: 600,
+            clips: [
+                MakeClip(
+                    stages: [MakeStage("model-a")],
+                    duration: 4.0),
+                MakeClip(
+                    stages: [MakeStage("model-b")],
+                    duration: 2.0)
+            ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpecParser parser = new(generator);
+        WorkflowGenerator parser = generator;
 
-        List<StageSpec> stages = parser.ParseStages();
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        Assert.Equal(2, stages.Count);
-        Assert.Equal(800, stages[0].ClipWidth);
-        Assert.Equal(600, stages[0].ClipHeight);
-        Assert.Equal(97, stages[0].ClipFrames);
-        Assert.Equal(1920, stages[1].ClipWidth);
-        Assert.Equal(1080, stages[1].ClipHeight);
-        Assert.Equal(49, stages[1].ClipFrames);
+        Assert.Equal(800, spec.Width);
+        Assert.Equal(600, spec.Height);
+        Assert.Equal(2, spec.Clips.Count);
+        Assert.Equal(97, spec.Clips[0].Frames);
+        Assert.Equal(49, spec.Clips[1].Frames);
     }
 
     [Theory]
     [InlineData(10.0, 241)]
     [InlineData(21.5, 521)]
-    public void ParseStages_ClipDurationFrames_AreAlignedUpToEightPlusOne(double duration, int expectedFrames)
+    public void ParseConfig_ClipDurationFrames_AreAlignedUpToEightPlusOne(double duration, int expectedFrames)
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(VideoStagesTestHelpers.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
-                    duration: duration,
-                    width: 800,
-                    height: 600)
+                    duration: duration)
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpecParser parser = new(generator);
+        WorkflowGenerator parser = generator;
 
-        List<StageSpec> stages = parser.ParseStages();
+        ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(parser).Clips);
 
-        Assert.Single(stages);
-        Assert.Equal(expectedFrames, stages[0].ClipFrames);
+        Assert.Equal(expectedFrames, clip.Frames);
     }
 
     [Fact]
@@ -529,11 +512,11 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        ClipSpec clip = parser.ParseClips().Single();
-        Assert.Equal("Upload", clip.Refs[0].Source);
-        Assert.Equal("ref.png", clip.Refs[0].UploadFileName);
+        ClipSpec clip = VideoStagesSpecParser.Parse(parser).Clips.Single();
+        Assert.Equal("Upload", clip.ImageRefs[0].Source);
+        Assert.Equal("ref.png", clip.ImageRefs[0].UploadFileName);
     }
 
     [Fact]
@@ -554,10 +537,10 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        ClipSpec clip = parser.ParseClips().Single();
-        ImageRefSpec r = clip.Refs[0];
+        ClipSpec clip = VideoStagesSpecParser.Parse(parser).Clips.Single();
+        ImageRefSpec r = clip.ImageRefs[0];
         Assert.Equal("Upload", r.Source);
         Assert.Equal(imageData, r.Data);
         Assert.Equal("guide.png", r.UploadFileName);
@@ -581,15 +564,15 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        ImageRefSpec r = parser.ParseClips().Single().Refs[0];
+        ImageRefSpec r = VideoStagesSpecParser.Parse(parser).Clips.Single().ImageRefs[0];
         Assert.Equal("data:image/png;base64,TkVTVA==", r.Data);
         Assert.Equal("nested.png", r.UploadFileName);
     }
 
     [Fact]
-    public void ParseStages_FlattenedStagesIncludeClipRefsAndNormalizedRefStrengths()
+    public void ParseConfig_ClipExposesRefsAndStageNormalizedRefStrengths()
     {
         JObject stage = MakeStage("model-a");
         stage["refStrengths"] = new JArray(0.55, 0.66);
@@ -598,33 +581,32 @@ public class VideoStagesSpecParserClipsTests
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 9)])));
 
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<StageSpec> stages = parser.ParseStages();
-
-        StageSpec flattened = Assert.Single(stages);
-        Assert.Equal(2, flattened.ClipRefs.Count);
-        Assert.Equal(2, flattened.RefStrengths.Count);
-        Assert.Equal(0.55, flattened.RefStrengths[0]);
-        Assert.Equal(0.66, flattened.RefStrengths[1]);
+        ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(parser).Clips);
+        StageSpec flattened = Assert.Single(clip.Stages);
+        Assert.Equal(2, clip.ImageRefs.Count);
+        Assert.Equal(2, flattened.ImageRefStrengths.Count);
+        Assert.Equal(0.55, flattened.ImageRefStrengths[0]);
+        Assert.Equal(0.66, flattened.ImageRefStrengths[1]);
     }
 
     [Fact]
-    public void ParseStages_FlattenedStagesIncludeControlNetStrength()
+    public void ParseConfig_FlattenedStagesIncludeControlNetStrength()
     {
         JObject stage = MakeStage("model-a");
         stage["ControlNetStrength"] = 0.35;
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [stage])));
 
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        StageSpec flattened = Assert.Single(parser.ParseStages());
+        StageSpec flattened = Assert.Single(FlattenedActiveStages(parser));
         Assert.Equal(0.35, flattened.ControlNetStrength);
     }
 
     [Fact]
-    public void ParseStages_PadsMissingRefStrengthsToMatchReferenceCount()
+    public void ParseConfig_PadsMissingRefStrengthsToMatchReferenceCount()
     {
         JObject stage = MakeStage("model-a");
         string json = JsonConvert.SerializeObject(new JArray(
@@ -632,14 +614,12 @@ public class VideoStagesSpecParserClipsTests
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)])));
 
-        VideoStagesSpecParser parser = BuildParser(json);
+        WorkflowGenerator parser = BuildParser(json);
 
-        List<StageSpec> stages = parser.ParseStages();
-
-        StageSpec flattened = Assert.Single(stages);
-        Assert.Equal(2, flattened.RefStrengths.Count);
+        StageSpec flattened = Assert.Single(FlattenedActiveStages(parser));
+        Assert.Equal(2, flattened.ImageRefStrengths.Count);
         Assert.All(
-            flattened.RefStrengths,
+            flattened.ImageRefStrengths,
             strength => Assert.Equal(Constants.DefaultStageRefStrength, strength));
     }
 
@@ -660,18 +640,114 @@ public class VideoStagesSpecParserClipsTests
                     MakeRef("Base", frame: 2),
                 ])));
 
-        VideoStagesSpecParser parser = BuildParser(json);
-        ClipSpec clip = parser.ParseClips().Single();
+        WorkflowGenerator parser = BuildParser(json);
+        ClipSpec clip = VideoStagesSpecParser.Parse(parser).Clips.Single();
 
-        Assert.Equal(2, clip.Refs.Count);
-        Assert.Equal(1, clip.Refs[0].Frame);
-        Assert.False(clip.Refs[0].FromEnd);
-        Assert.Equal(1, clip.Refs[1].Frame);
-        Assert.True(clip.Refs[1].FromEnd);
+        Assert.Equal(2, clip.ImageRefs.Count);
+        Assert.Equal(1, clip.ImageRefs[0].Frame);
+        Assert.False(clip.ImageRefs[0].FromEnd);
+        Assert.Equal(1, clip.ImageRefs[1].Frame);
+        Assert.True(clip.ImageRefs[1].FromEnd);
 
-        List<StageSpec> flat = parser.ParseStages();
-        StageSpec stageSpec = Assert.Single(flat);
-        Assert.Equal(2, stageSpec.ClipRefs.Count);
-        Assert.Equal(2, stageSpec.RefStrengths.Count);
+        StageSpec stageSpec = Assert.Single(FlattenedActiveStages(parser));
+        Assert.Equal(2, stageSpec.ImageRefStrengths.Count);
+    }
+
+    [Fact]
+    public void ParseConfig_WidthZero_FallsBackToGlobal()
+    {
+        JObject root = VideoStagesTestHelpers.MakeRootConfig(
+            width: 0,
+            height: 720,
+            clips: [MakeClip(stages: [MakeStage("model-a")])]);
+        string json = JsonConvert.SerializeObject(root);
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(T2IParamTypes.Width, 1024);
+        input.Set(T2IParamTypes.Height, 768);
+        WorkflowGenerator generator = new() { UserInput = input };
+        WorkflowGenerator parser = generator;
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(1024, spec.Width);
+        Assert.Equal(720, spec.Height);
+    }
+
+    [Fact]
+    public void ParseConfig_HeightZero_FallsBackToGlobal()
+    {
+        JObject root = VideoStagesTestHelpers.MakeRootConfig(
+            width: 1280,
+            height: 0,
+            clips: [MakeClip(stages: [MakeStage("model-a")])]);
+        string json = JsonConvert.SerializeObject(root);
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(T2IParamTypes.Width, 1024);
+        input.Set(T2IParamTypes.Height, 768);
+        WorkflowGenerator generator = new() { UserInput = input };
+        WorkflowGenerator parser = generator;
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(1280, spec.Width);
+        Assert.Equal(768, spec.Height);
+    }
+
+    [Fact]
+    public void ParseConfig_FpsZero_FallsBackToVideoFps()
+    {
+        JObject root = new()
+        {
+            ["Width"] = 1280,
+            ["Height"] = 720,
+            ["FPS"] = 0,
+            ["Clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
+        };
+        string json = JsonConvert.SerializeObject(root);
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(T2IParamTypes.VideoFPS, 30);
+        WorkflowGenerator generator = new() { UserInput = input };
+        WorkflowGenerator parser = generator;
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(30, spec.FPS);
+    }
+
+    [Fact]
+    public void ParseConfig_FpsMissing_FallsBackToVideoFps()
+    {
+        JObject root = VideoStagesTestHelpers.MakeRootConfig(
+            width: 1280,
+            height: 720,
+            clips: [MakeClip(stages: [MakeStage("model-a")])]);
+        string json = JsonConvert.SerializeObject(root);
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(T2IParamTypes.VideoFPS, 30);
+        WorkflowGenerator generator = new() { UserInput = input };
+        WorkflowGenerator parser = generator;
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(30, spec.FPS);
+    }
+
+    [Fact]
+    public void ParseConfig_AllDimensionsAndFpsMissing_FallsBackToGlobalDefaults()
+    {
+        JObject root = new()
+        {
+            ["Clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
+        };
+        string json = JsonConvert.SerializeObject(root);
+        WorkflowGenerator parser = BuildParser(json);
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        // GetImageWidth/Height default to 512 when unset.
+        Assert.Equal(512, spec.Width);
+        Assert.Equal(512, spec.Height);
+        // FPS chain falls through to the hardcoded 24 default.
+        Assert.Equal(24, spec.FPS);
     }
 }

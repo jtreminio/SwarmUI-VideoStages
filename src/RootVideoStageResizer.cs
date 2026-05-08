@@ -84,28 +84,15 @@ internal sealed class RootVideoStageResizer(
             return true;
         }
 
-        (int? rawJsonWidth, int? rawJsonHeight) = g.GetRawJsonTopLevelDimensions();
+        (int? rawJsonWidth, int? rawJsonHeight) = VideoStagesSpecParser.GetRawJsonTopLevelDimensions(g);
         if (TryPositiveDimensionPair(rawJsonWidth, rawJsonHeight, out width, out height))
         {
             return true;
         }
 
-        foreach (ClipSpec clip in g.GetVideoStagesSpec().Clips)
-        {
-            if (!clip.Skipped)
-            {
-                return TryPositiveDimensionPair(clip.Width, clip.Height, out width, out height);
-            }
-        }
-
         width = 0;
         height = 0;
         return false;
-    }
-
-    internal bool TryGetConfiguredRootStageResolution(out int width, out int height)
-    {
-        return TryGetRootStageResolution(out width, out height);
     }
 
     private bool CurrentMediaFeedsSaveImage()

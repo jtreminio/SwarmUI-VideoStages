@@ -32,7 +32,6 @@ internal sealed class LtxAudioInjector(
         WGNodeData adjustedAudio = audio;
         if (matchVideoLengthToAudio)
         {
-            int fps = g.GetVideoStagesFps();
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
                 bridge,
                 audio.Path,
@@ -40,7 +39,7 @@ internal sealed class LtxAudioInjector(
             SwarmAudioLengthToFramesNode lengthToFrames = CreateLengthToFramesNode(
                 bridge,
                 lengthFramesAudioSource,
-                fps);
+                g.GetVideoStagesSpec().FPS);
             ApplyFramesConnectionToRemovableAudioSources(bridge, removableSourceIds, lengthToFrames.Frames);
             BridgeSync.SyncLastId(g);
             LtxFrameCountConnector.ApplyToExistingSources(g, WorkflowBridge.ToPath(lengthToFrames.Frames));
@@ -106,7 +105,7 @@ internal sealed class LtxAudioInjector(
     {
         int width = g.UserInput.GetImageWidth();
         int height = g.UserInput.GetImageHeight();
-        if (rootVideoStageResizer.TryGetConfiguredRootStageResolution(out int rootWidth, out int rootHeight))
+        if (rootVideoStageResizer.TryGetRootStageResolution(out int rootWidth, out int rootHeight))
         {
             width = rootWidth;
             height = rootHeight;

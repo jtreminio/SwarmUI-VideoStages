@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 using static VideoStages.Tests.TypedWorkflowAssertions;
 
@@ -193,7 +194,7 @@ public partial class StageFlowTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         stage["refStrengths"] = new JArray(0.55);
         string stagesJson = new JArray(
-            MakeClipWithRefs(width: 512, height: 512, refs: [MakeRef("Base", frame: 2)], stage)
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stage)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -215,8 +216,6 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClip(
-            width: 512,
-            height: 512,
             MakeStage(models.VideoModel.Name, "Base", steps: 10),
             MakeStage(models.VideoModel.Name, "PreviousStage", steps: 12),
             MakeStage(models.VideoModel.Name, "PreviousStage", steps: 14));
@@ -232,7 +231,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Skip_rest_of_clip_after_guide_ref_miss_does_not_cascade_to_next_clip()
+    public void Guide_ref_miss_throws_user_error_during_workflow_run()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -241,23 +240,19 @@ public partial class StageFlowTests
             width: 512,
             height: 512,
             MakeClip(
-                width: 512,
-                height: 512,
                 MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10),
                 MakeStage(models.VideoModel.Name, "edit99", control: 0.5, steps: 10)),
             MakeClip(
-                width: 512,
-                height: 512,
                 MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeSteps(attachAudioToCurrentMedia: true));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        Assert.Equal(2, SamplerNodesOrdered(bridge).Count);
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConditioningNode>().Count);
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true)));
+        Assert.Contains("Clip 0 stage 1", ex.Message);
+        Assert.Contains("could not resolve ImageReference 'edit99'", ex.Message);
     }
 }

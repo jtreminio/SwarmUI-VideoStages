@@ -28,8 +28,9 @@ internal sealed class LtxConditioningPipeline(
         return this;
     }
 
-    public LtxConditioningPipeline WithUpscaleIfNeeded(StageSpec stage, WGNodeData sourceMedia)
+    public LtxConditioningPipeline WithUpscaleIfNeeded(WGNodeData sourceMedia)
     {
+        StageSpec stage = stageFrame.Stage;
         if (stage.Upscale <= 1 || string.IsNullOrWhiteSpace(stage.UpscaleMethod))
         {
             return this;
@@ -43,6 +44,8 @@ internal sealed class LtxConditioningPipeline(
         {
             string modelName = stage.UpscaleMethod["latentmodel-".Length..];
             stageLatent = ApplyLatentModelUpscale(modelName, width, height);
+            stageFrame.ClipContext.Dimensions.Width = width;
+            stageFrame.ClipContext.Dimensions.Height = height;
             return this;
         }
 

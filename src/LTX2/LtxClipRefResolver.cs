@@ -14,16 +14,18 @@ internal sealed class LtxClipRefResolver(
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
     internal List<ResolvedClipRef> ResolveStageClipRefs(
+        ClipSpec clip,
         StageSpec stage,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia)
     {
-        IReadOnlyList<ImageRefSpec> refs = stage.ClipRefs;
-        IReadOnlyList<double> strengths = stage.RefStrengths;
-        if (refs.Count == 0 && !stage.ImageReferenceWasExplicit)
+        bool isTextToVideo = g.GetVideoStagesSpec().IsTextToVideo;
+        IReadOnlyList<ImageRefSpec> refs = clip.ImageRefs;
+        IReadOnlyList<double> strengths = stage.ImageRefStrengths;
+        if (refs.Count == 0 && !stage.ImageRefWasExplicit)
         {
-            ImageRefSpec defaultRef = ResolveDefaultImageToVideoRef(stage, refStore);
+            ImageRefSpec defaultRef = ResolveDefaultImageToVideoRef(isTextToVideo, refStore);
             if (defaultRef is not null)
             {
                 refs = [defaultRef];
@@ -34,7 +36,7 @@ internal sealed class LtxClipRefResolver(
         for (int i = 0; i < refs.Count; i++)
         {
             ImageRefSpec spec = refs[i];
-            if (stage.IsTextToVideo
+            if (isTextToVideo
                 && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -126,9 +128,9 @@ internal sealed class LtxClipRefResolver(
             && scaleSource.SlotIndex == (int)primaryGuidePath[1];
     }
 
-    private ImageRefSpec ResolveDefaultImageToVideoRef(StageSpec stage, StageRefStore refStore)
+    private ImageRefSpec ResolveDefaultImageToVideoRef(bool isTextToVideo, StageRefStore refStore)
     {
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _) || stage.IsTextToVideo)
+        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _) || isTextToVideo)
         {
             return null;
         }

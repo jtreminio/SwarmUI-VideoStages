@@ -78,7 +78,6 @@ internal sealed class LtxManager
             ref referenceVae);
 
     public bool TryRunLocalStage(
-        StageSpec stage,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -88,7 +87,6 @@ internal sealed class LtxManager
         JArray priorOutputPath,
         LtxPostVideoChainCapture postVideoChain) =>
         stageOrchestrator.TryRunLocalLtxPath(
-            stage,
             guideReference,
             refStore,
             genInfo,

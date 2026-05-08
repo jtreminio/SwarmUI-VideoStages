@@ -12,8 +12,7 @@ public class AudioHandlerTests
 {
     private static ClipSpec Clip(int id, string audioSource, bool saveAudioTrack) => new(
         Id: id,
-        Skipped: false,
-        DurationSeconds: 3,
+        Frames: null,
         AudioSource: audioSource,
         ControlNetSource: Constants.ControlNetSourceOne,
         ControlNetLora: "",
@@ -21,10 +20,8 @@ public class AudioHandlerTests
         ClipLengthFromAudio: false,
         ClipLengthFromControlNet: false,
         ReuseAudio: false,
-        Width: null,
-        Height: null,
         UploadedAudio: null,
-        Refs: [],
+        ImageRefs: [],
         Stages: []
     );
 

@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 using static VideoStages.Tests.TypedWorkflowAssertions;
 
@@ -61,7 +62,7 @@ public partial class StageFlowTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10);
         stage["refStrengths"] = new JArray(0.35);
         string stagesJson = new JArray(
-            MakeClipWithRefs(width: 512, height: 512, refs: [MakeRef("edit0", frame: 1)], stage)
+            MakeClipWithRefs(refs: [MakeRef("edit0", frame: 1)], stage)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -82,7 +83,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Missing_base2edit_edit_stage_reference_skips_stage_without_throwing()
+    public void Missing_base2edit_edit_stage_reference_throws_user_error()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -91,12 +92,12 @@ public partial class StageFlowTests
             MakeStage(models.VideoModel.Name, "edit0", control: 0.5, steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeSteps(attachAudioToCurrentMedia: false));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
+
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: false)));
+        Assert.Contains("could not resolve ImageReference 'edit0'", ex.Message);
     }
 
     [Fact]

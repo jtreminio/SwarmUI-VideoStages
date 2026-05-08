@@ -186,12 +186,6 @@ public static class Runner
             return false;
         }
 
-        ReadOnlySpan<char> trimmed = json.AsSpan().Trim();
-        if (trimmed.Length == 2 && trimmed[0] == '[' && trimmed[1] == ']')
-        {
-            return false;
-        }
-
-        return g.GetActiveStages().Count > 0;
+        return g.GetVideoStagesSpec().Clips.Any(c => c.Stages.Count > 0);
     }
 }

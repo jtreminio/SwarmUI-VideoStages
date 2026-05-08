@@ -20,38 +20,39 @@ internal sealed class VideoStagesCoordinator(
 
     public void RunConfiguredStages()
     {
-        if (!g.TryGetVideoStagesSpec(out _))
+        VideoStagesSpec spec = g.GetVideoStagesSpec();
+        if (!VideoStagesSpecParser.HasUsableVideoModel(g, spec))
         {
             return;
         }
 
-        List<ClipSpec> clips = [.. g.GetVideoStagesSpec().Clips];
-        List<ClipWithStages> clipsWithStages = g.GetClipsWithStages();
+        List<ClipSpec> clips = [.. spec.Clips];
         bool rootStageHandoff = rootVideoStageHandoff.ShouldHandoffRootStage();
-        if (clipsWithStages.Count == 0)
+        if (clips.Count == 0)
         {
             TryInjectConfiguredAudio(clips);
             return;
         }
-        EnsureComfyDependencies(clipsWithStages);
+        EnsureComfyDependencies(clips);
 
         ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
         if (!rootStageHandoff)
         {
-            StageSpec first = clipsWithStages[0].Stages[0];
+            ClipSpec firstClip = clips[0];
+            StageSpec first = firstClip.Stages[0];
             TryApplyControlNetClipLength(
-                first.ClipLengthFromControlNet,
-                first.ClipControlNetSource,
+                firstClip.ClipLengthFromControlNet,
+                firstClip.ControlNetSource,
                 first.Model);
             TryInjectResolvedClipAudio(
-                first.ClipId,
-                first.ClipAudioSource,
-                first.ClipLengthFromAudio && !first.ClipLengthFromControlNet,
+                firstClip.Id,
+                firstClip.AudioSource,
+                firstClip.ClipLengthFromAudio,
                 clipAudioMaps);
         }
 
         stageSequenceRunner.Run(
-            clipsWithStages,
+            clips,
             clipAudioMaps.NativeAudio,
             clipAudioMaps.ClipAudios,
             clipAudioMaps.UploadedAudios,
@@ -59,12 +60,12 @@ internal sealed class VideoStagesCoordinator(
         EnsureFinalStageOutputSaved();
     }
 
-    private void EnsureComfyDependencies(IReadOnlyList<ClipWithStages> clipsWithStages)
+    private void EnsureComfyDependencies(IReadOnlyList<ClipSpec> clips)
     {
         if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
-            || !clipsWithStages.SelectMany(c => c.Stages).Any(stage =>
-                !string.IsNullOrWhiteSpace(stage.ClipControlNetLora)
-                && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model)))
+            || !clips.Any(clip =>
+                !string.IsNullOrWhiteSpace(clip.ControlNetLora)
+                && clip.Stages.Any(stage => VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))))
         {
             return;
         }
@@ -94,7 +95,7 @@ internal sealed class VideoStagesCoordinator(
         TryInjectResolvedClipAudio(
             first.Id,
             first.AudioSource,
-            first.ClipLengthFromAudio && !first.ClipLengthFromControlNet,
+            first.ClipLengthFromAudio,
             clipAudioMaps);
     }
 
@@ -173,7 +174,7 @@ internal sealed class VideoStagesCoordinator(
             {
                 continue;
             }
-            AudioFile uploaded = g.GetUploadedAudioForClip(clip);
+            AudioFile uploaded = VideoStagesSpecParser.MaterializeUploadedAudioForClip(g, clip);
             if (uploaded is null)
             {
                 continue;

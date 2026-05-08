@@ -11,7 +11,6 @@ internal sealed class LtxStageOrchestrator(
     LtxClipRefResolver clipRefResolver)
 {
     internal bool TryRunLocalLtxPath(
-        StageSpec stage,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -26,7 +25,9 @@ internal sealed class LtxStageOrchestrator(
             return false;
         }
 
+        StageSpec stage = stageFrame.Stage;
         List<ResolvedClipRef> clipRefs = clipRefResolver.ResolveStageClipRefs(
+            stageFrame.ClipContext.Clip,
             stage,
             refStore,
             postVideoChain,
@@ -54,7 +55,6 @@ internal sealed class LtxStageOrchestrator(
             postVideoChain);
 
         stageExecutor.RunStage(
-            stage,
             genInfo,
             stageFrame,
             sourceMedia,

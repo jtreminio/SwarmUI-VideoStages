@@ -11,13 +11,14 @@ internal static class WanFirstLastFrameRewriter
 {
     internal static void TryRewriteToFirstLast(
         WorkflowGenerator g,
+        IReadOnlyList<ImageRefSpec> refs,
         StageSpec stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData wanEndImagePrepared)
     {
         if (!VideoStageModelCompat.SupportsWanFirstLastFrame(genInfo.VideoModel)
             || stage.ClipStageIndex != 0
-            || stage.ClipRefs is not { Count: >= 2 }
+            || refs.Count < 2
             || wanEndImagePrepared is null)
         {
             return;

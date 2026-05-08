@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -40,7 +41,7 @@ public class ImageReferenceTests
             Features = [],
             ModelFolderFormat = "/"
         };
-        return new VideoStagesSpecParser(generator).ParseStages();
+        return [.. VideoStagesSpecParser.Parse(generator).Clips.SelectMany(c => c.Stages)];
     }
 
     private static List<StageSpec> ParseStages(string stagesJson)
@@ -49,15 +50,38 @@ public class ImageReferenceTests
     }
 
     [Fact]
-    public void Stage_zero_defaults_to_generated_and_future_reference_falls_back_to_previous_stage()
+    public void Stage_zero_defaults_to_generated_when_no_image_reference_is_specified()
     {
         List<StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(
-            MakeStage("UnitTest_Video.safetensors"),
-            MakeStage("UnitTest_Video.safetensors", "Stage9")));
+            MakeStage("UnitTest_Video.safetensors")));
 
-        Assert.Equal(2, stages.Count);
+        Assert.Single(stages);
         Assert.Equal("Generated", stages[0].ImageReference);
-        Assert.Equal("PreviousStage", stages[1].ImageReference);
+    }
+
+    [Fact]
+    public void Forward_stage_image_reference_throws_user_error()
+    {
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            ParseStages(StageFlowTests.JsonSingleClipStages512(
+                MakeStage("UnitTest_Video.safetensors"),
+                MakeStage("UnitTest_Video.safetensors", "Stage9"))));
+
+        Assert.Contains("invalid ImageReference 'Stage9'", ex.Message);
+        Assert.Contains("strictly previous stage", ex.Message);
+        Assert.Contains("stage 1", ex.Message);
+    }
+
+    [Fact]
+    public void Invalid_image_reference_throws_user_error()
+    {
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            ParseStages(StageFlowTests.JsonSingleClipStages512(
+                MakeStage("UnitTest_Video.safetensors"),
+                MakeStage("UnitTest_Video.safetensors", "NotARealReference"))));
+
+        Assert.Contains("invalid ImageReference 'NotARealReference'", ex.Message);
+        Assert.Contains("Valid forms are", ex.Message);
     }
 
     [Fact]
@@ -129,10 +153,11 @@ public class ImageReferenceTests
     }
 
     [Fact]
-    public void Invalid_json_is_ignored_safely()
+    public void Invalid_json_throws_user_error()
     {
-        List<StageSpec> stages = ParseStages("{ definitely-not-json");
-        Assert.Empty(stages);
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            ParseStages("{ definitely-not-json"));
+        Assert.Contains("Could not parse Video Stages JSON", ex.Message);
     }
 
     [Fact]

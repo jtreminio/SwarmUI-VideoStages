@@ -38,21 +38,17 @@ public partial class StageFlowTests
             ["ImageReference"] = imageReference
         };
 
-    private static JObject MakeClip(int width, int height, params JObject[] stages) =>
+    private static JObject MakeClip(params JObject[] stages) =>
         new()
         {
             ["Name"] = "Clip 0",
-            ["Width"] = width,
-            ["Height"] = height,
             ["Stages"] = new JArray(stages)
         };
 
-    private static JObject MakeClipWithRefs(int width, int height, IEnumerable<JObject> refs, params JObject[] stages) =>
+    private static JObject MakeClipWithRefs(IEnumerable<JObject> refs, params JObject[] stages) =>
         new()
         {
             ["Name"] = "Clip 0",
-            ["Width"] = width,
-            ["Height"] = height,
             ["Refs"] = new JArray(refs ?? []),
             ["Stages"] = new JArray(stages)
         };
@@ -66,18 +62,10 @@ public partial class StageFlowTests
         };
 
     private static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
-        new()
-        {
-            ["Width"] = width,
-            ["Height"] = height,
-            ["Clips"] = new JArray(clips)
-        };
-
-    internal static string JsonSingleClipStages(int width, int height, params JObject[] stages) =>
-        new JArray(MakeClip(width, height, stages)).ToString();
+        VideoStagesTestHelpers.MakeRootConfig(width, height, clips);
 
     internal static string JsonSingleClipStages512(params JObject[] stages) =>
-        JsonSingleClipStages(512, 512, stages);
+        new JArray(MakeClip(stages)).ToString();
 
     private static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, string prompt = "unit test prompt")
     {

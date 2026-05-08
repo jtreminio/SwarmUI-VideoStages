@@ -514,10 +514,14 @@ internal static class PromptParser
             ModelFolderFormat = "/"
         };
 
-        List<StageSpec> flat;
+        VideoStagesSpec spec;
         try
         {
-            flat = generator.GetActiveStages();
+            spec = generator.GetVideoStagesSpec();
+        }
+        catch (SwarmUserErrorException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -527,12 +531,19 @@ internal static class PromptParser
             return false;
         }
 
-        foreach (StageSpec stage in flat)
+        foreach (ClipSpec clip in spec.Clips)
         {
-            if (stage.ClipId == clipId && stage.ClipStageIndex == clipStageIndex)
+            if (clip.Id != clipId)
             {
-                sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
-                return true;
+                continue;
+            }
+            foreach (StageSpec stage in clip.Stages)
+            {
+                if (stage.ClipStageIndex == clipStageIndex)
+                {
+                    sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
+                    return true;
+                }
             }
         }
 

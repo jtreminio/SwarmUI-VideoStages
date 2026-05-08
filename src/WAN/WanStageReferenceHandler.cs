@@ -13,12 +13,12 @@ internal static class WanStageReferenceHandler
         WorkflowGenerator g,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs,
+        ClipSpec clip,
         StageSpec stage,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain)
     {
-        if (!VideoStageModelCompat.IsWanVideoModel(stage.Model)
-            || stage.ClipRefs is not { Count: > 0 })
+        if (!VideoStageModelCompat.IsWanVideoModel(stage.Model) || clip.ImageRefs.Count == 0)
         {
             return new WanGuideResolution(null, null);
         }
@@ -27,17 +27,17 @@ internal static class WanStageReferenceHandler
             g,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs,
-            stage.ClipRefs[0],
+            clip.ImageRefs[0],
             refStore,
             postVideoChain);
         WGNodeData end = null;
-        if (stage.ClipRefs.Count > 1)
+        if (clip.ImageRefs.Count > 1)
         {
             end = ResolveClipRefSourceMedia(
                 g,
                 stageGuideMediaHelper,
                 base2EditPublishedStageRefs,
-                stage.ClipRefs[1],
+                clip.ImageRefs[1],
                 refStore,
                 postVideoChain);
         }

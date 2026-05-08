@@ -180,6 +180,20 @@ internal sealed class SwarmUiTestContext : IDisposable
     }
 }
 
+internal static class VideoStagesTestHelpers
+{
+    public static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
+        new()
+        {
+            ["Width"] = width,
+            ["Height"] = height,
+            ["Clips"] = new JArray(clips),
+        };
+
+    public static JObject MakeRootConfig(int width, int height, IEnumerable<JObject> clips) =>
+        MakeRootConfig(width, height, clips.ToArray());
+}
+
 internal sealed record TestModelBundle(T2IModel BaseModel, T2IModel VideoModel, T2IModel GemmaModel = null);
 
 internal static class TestModelFactory

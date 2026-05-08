@@ -28,19 +28,15 @@ public class AudioInjectionTests
         ["ImageReference"] = "Generated"
     };
 
-    private static JObject MakeClip(int width, int height, params JObject[] stages) => new()
+    private static JObject MakeClip(params JObject[] stages) => new()
     {
         ["Name"] = "Clip 0",
-        ["Width"] = width,
-        ["Height"] = height,
         ["Stages"] = new JArray(stages)
     };
 
     private static JObject MakeClipConfig(string audioSource, params JObject[] stages) => new()
     {
         ["Name"] = "Clip 0",
-        ["Width"] = 512,
-        ["Height"] = 512,
         ["AudioSource"] = audioSource,
         ["Stages"] = new JArray(stages)
     };
@@ -52,19 +48,8 @@ public class AudioInjectionTests
         return clip;
     }
 
-    private static JObject MakeRootConfig(JObject clip) => new()
-    {
-        ["Width"] = 512,
-        ["Height"] = 512,
-        ["Clips"] = new JArray(clip),
-    };
-
-    private static JObject MakeMultiClipRootConfig(params JObject[] clips) => new()
-    {
-        ["Width"] = 512,
-        ["Height"] = 512,
-        ["Clips"] = new JArray(clips)
-    };
+    private static JObject MakeRootConfig(params JObject[] clips) =>
+        VideoStagesTestHelpers.MakeRootConfig(512, 512, clips);
 
     private static JObject MakeUploadedAudio(
         string data = "data:audio/wav;base64,QUJD",
@@ -417,7 +402,7 @@ public class AudioInjectionTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(MakeClip(512, 512, MakeStage(models.VideoModel.Name))).ToString();
+        string stagesJson = new JArray(MakeClip(MakeStage(models.VideoModel.Name))).ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator generator) =
@@ -455,7 +440,7 @@ public class AudioInjectionTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = MakeMultiClipRootConfig(
+        string stagesJson = MakeRootConfig(
             MakeClipConfigWithUpload(
                 MakeUploadedAudio(data: "data:audio/wav;base64,QUFB", fileName: "first.wav"),
                 MakeStage(models.VideoModel.Name)),
@@ -482,7 +467,7 @@ public class AudioInjectionTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = MakeMultiClipRootConfig(
+        string stagesJson = MakeRootConfig(
             MakeClipConfigWithUpload(
                 MakeUploadedAudio(data: "data:audio/wav;base64,QUFB", fileName: "first.wav"),
                 MakeStage(models.VideoModel.Name)),
@@ -538,7 +523,7 @@ public class AudioInjectionTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = MakeMultiClipRootConfig(
+        string stagesJson = MakeRootConfig(
             MakeClipConfig(
                 Constants.AudioSourceNative,
                 MakeStage(models.VideoModel.Name)),
@@ -567,9 +552,13 @@ public class AudioInjectionTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
-            MakeClip(width: 384, height: 640, MakeStage(models.VideoModel.Name))
-        ).ToString();
+        string stagesJson = new JObject
+        {
+            ["Width"] = 384,
+            ["Height"] = 640,
+            ["Clips"] = new JArray(
+                MakeClip(MakeStage(models.VideoModel.Name)))
+        }.ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =

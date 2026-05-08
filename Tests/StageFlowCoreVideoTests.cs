@@ -240,8 +240,6 @@ public partial class StageFlowTests
         };
 
         JObject clip = MakeClip(
-            384,
-            640,
             MakeStage(
                 models.VideoModel.Name,
                 "Generated",
@@ -280,7 +278,7 @@ public partial class StageFlowTests
             }
         };
 
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["ControlNetSource"] = Constants.ControlNetSourceTwo;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[1].Strength, 0.8);
@@ -333,7 +331,7 @@ public partial class StageFlowTests
         T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         clip["ClipLengthFromControlNet"] = true;
@@ -407,7 +405,7 @@ public partial class StageFlowTests
         stageA["refStrengths"] = new JArray(1.0);
         stageB["ControlNetStrength"] = 0.6;
         stageB["refStrengths"] = new JArray(0.8);
-        JObject clip = MakeClipWithRefs(512, 768, [MakeRef("Base", frame: 1)], stageA, stageB);
+        JObject clip = MakeClipWithRefs([MakeRef("Base", frame: 1)], stageA, stageB);
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         clip["ClipLengthFromControlNet"] = true;
@@ -447,7 +445,7 @@ public partial class StageFlowTests
         T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -507,7 +505,7 @@ public partial class StageFlowTests
         T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         clip["ClipLengthFromControlNet"] = true;
@@ -567,7 +565,7 @@ public partial class StageFlowTests
         T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
-        JObject clip = MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -609,7 +607,7 @@ public partial class StageFlowTests
         JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
         stageA["ControlNetStrength"] = 0.7;
         stageB["ControlNetStrength"] = 0.3;
-        JObject clip = MakeClip(512, 512, stageA, stageB);
+        JObject clip = MakeClip(stageA, stageB);
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -653,7 +651,7 @@ public partial class StageFlowTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         stage["ControlNetStrength"] = 0.0;
-        JObject clip = MakeClip(512, 512, stage);
+        JObject clip = MakeClip(stage);
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -680,8 +678,10 @@ public partial class StageFlowTests
         JObject stage1 = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8);
         stage0.Remove("ImageReference");
         stage1.Remove("ImageReference");
-        string stagesJson = new JArray(
-            MakeClipWithRefs(width: 1024, height: 1024, refs: [], stage0, stage1)
+        string stagesJson = MakeRootConfig(
+            width: 1024,
+            height: 1024,
+            MakeClipWithRefs(refs: [], stage0, stage1)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -729,8 +729,10 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        string stagesJson = new JArray(
-            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+        string stagesJson = MakeRootConfig(
+            width: 768,
+            height: 448,
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -757,7 +759,7 @@ public partial class StageFlowTests
         string stagesJson = MakeRootConfig(
             width: 1024,
             height: 576,
-            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -781,10 +783,10 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = MakeRootConfig(
+            width: 960,
+            height: 544,
             MakeClip(
-                width: 960,
-                height: 544,
                 MakeStage(models.VideoModel.Name, "Generated", upscale: 2.0, upscaleMethod: "pixel-bicubic", steps: 10))
         ).ToString();
 
@@ -813,8 +815,6 @@ public partial class StageFlowTests
             1280,
             1024,
             MakeClipWithRefs(
-                832,
-                1216,
                 [MakeRef("Base"), MakeRef("Base", frame: 2)],
                 MakeStage(models.VideoModel.Name, "Generated", steps: 8)))
             .ToString();
@@ -843,8 +843,10 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
-            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+        string stagesJson = MakeRootConfig(
+            width: 768,
+            height: 448,
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -868,7 +870,7 @@ public partial class StageFlowTests
             ["Width"] = 512,
             ["Height"] = 512,
             ["Clips"] = new JArray(
-                MakeClip(512, 512, MakeStage(models.VideoModel.Name, "Generated", steps: 10)))
+                MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10)))
         }.ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -945,7 +947,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = new JArray(
-            MakeClip(width: 768, height: 448, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -971,8 +973,10 @@ public partial class StageFlowTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         stage["refStrengths"] = new JArray(0.55);
-        string stagesJson = new JArray(
-            MakeClipWithRefs(width: 768, height: 448, refs: [MakeRef("Base", frame: 1)], stage)
+        string stagesJson = MakeRootConfig(
+            width: 768,
+            height: 448,
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 1)], stage)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1003,7 +1007,7 @@ public partial class StageFlowTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         stage["refStrengths"] = new JArray(0.55);
         string stagesJson = new JArray(
-            MakeClipWithRefs(width: 768, height: 448, refs: [MakeRef("Base", frame: 1)], stage)
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 1)], stage)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1028,7 +1032,7 @@ public partial class StageFlowTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         stage["refStrengths"] = new JArray(0.55);
         string stagesJson = new JArray(
-            MakeClipWithRefs(width: 768, height: 448, refs: [MakeRef("Base", frame: 2)], stage)
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stage)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1071,7 +1075,7 @@ public partial class StageFlowTests
         stageA["refStrengths"] = new JArray(0.55);
         stageB["refStrengths"] = new JArray(0.65);
         string stagesJson = new JArray(
-            MakeClipWithRefs(width: 768, height: 448, refs: [MakeRef("Base", frame: 2)], stageA, stageB)
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stageA, stageB)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1108,7 +1112,7 @@ public partial class StageFlowTests
         stageA["refStrengths"] = new JArray(0.55);
         stageB["refStrengths"] = new JArray(0.65);
         string stagesJson = new JArray(
-            MakeClipWithRefs(width: 768, height: 448, refs: [MakeRef("Base", frame: 2)], stageA, stageB)
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stageA, stageB)
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1131,10 +1135,10 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        string stagesJson = MakeRootConfig(
+            width: 384,
+            height: 640,
             MakeClipWithRefs(
-                384,
-                640,
                 [MakeRef("Refiner", frame: 1)],
                 MakeStage(models.VideoModel.Name, "Generated", steps: 8),
                 MakeStage(
@@ -1188,8 +1192,10 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
-            MakeClip(width: 384, height: 640, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+        string stagesJson = MakeRootConfig(
+            width: 384,
+            height: 640,
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1218,8 +1224,10 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22VideoModels();
 
-        string stagesJson = new JArray(
-            MakeClip(width: 832, height: 480, MakeStage(models.VideoModel.Name, "Generated", steps: 10))
+        string stagesJson = MakeRootConfig(
+            width: 832,
+            height: 480,
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1247,7 +1255,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = new JArray(
-            MakeClip(width: 768, height: 448)
+            MakeClip()
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1270,8 +1278,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 512,
-                height: 512,
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)],
                 MakeStage(models.VideoModel.Name, "Base", steps: 10)))
             .ToString();
@@ -1347,6 +1353,40 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Stage_pixel_upscale_propagates_dims_to_next_stage()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        string stagesJson = JsonSingleClipStages512(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                upscale: 1.5,
+                upscaleMethod: "pixel-lanczos",
+                steps: 10),
+            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10));
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(3, samplers.Count);
+
+        IReadOnlyList<ImageScaleNode> upscaleNodes = bridge.Graph.NodesOfType<ImageScaleNode>()
+            .Where(node => node.Width.LiteralAsInt() == 768
+                && node.Height.LiteralAsInt() == 768
+                && node.UpscaleMethod.LiteralAsString() == "lanczos"
+                && node.Crop.LiteralAsString() == "disabled")
+            .ToList();
+        Assert.NotEmpty(upscaleNodes);
+        Assert.Contains(upscaleNodes, node => ReachesUpstream(bridge, samplers[2], node.Id));
+    }
+
+    [Fact]
     public void Native_stage_prompting_uses_video_prompt_sections()
     {
         using SwarmUiTestContext _ = new();
@@ -1378,8 +1418,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 512,
-                height: 512,
                 refs: [MakeRef("Refiner", frame: 3, fromEnd: true)],
                 MakeStage(models.VideoModel.Name, "Generated", steps: 6)))
             .ToString();
@@ -1402,8 +1440,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 384,
-                height: 512,
                 refs: [MakeRef("Base", frame: 1)],
                 MakeStage(models.VideoModel.Name, "Generated", upscale: 1.0, steps: 6),
                 MakeStage(models.VideoModel.Name, "Generated", upscale: 1.5, steps: 6)))
@@ -1441,8 +1477,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClip(
-                width: 384,
-                height: 512,
                 MakeStage(models.VideoModel.Name, "Generated", upscale: 1.0, steps: 10),
                 MakeStage(
                     models.VideoModel.Name,
@@ -1490,8 +1524,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 384,
-                height: 512,
                 refs: [MakeRef("Base", frame: 1)],
                 MakeStage(models.VideoModel.Name, "Generated", control: 0.5, upscale: 1.0, steps: 8),
                 MakeStage(lowNoiseModel.Name, "Generated", control: 0.5, upscale: 1.5, steps: 8)))
@@ -1524,8 +1556,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 512,
-                height: 512,
                 refs: [MakeRef("Refiner", frame: 1), MakeRef("Base", frame: 1)],
                 MakeStage(models.VideoModel.Name, "Generated", steps: 6)))
             .ToString();
@@ -1551,8 +1581,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 384,
-                height: 512,
                 refs: [MakeRef("Base", frame: 1), MakeRef("Base", frame: 1, fromEnd: true)],
                 MakeStage(models.VideoModel.Name, "Generated", steps: 6)))
             .ToString();
@@ -1575,8 +1603,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 384,
-                height: 512,
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 1, fromEnd: true)],
                 MakeStage(models.VideoModel.Name, "Generated", steps: 6)))
             .ToString();
@@ -1600,8 +1626,6 @@ public partial class StageFlowTests
 
         string stagesJson = new JArray(
             MakeClipWithRefs(
-                width: 384,
-                height: 512,
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 1, fromEnd: true)],
                 MakeStage(models.VideoModel.Name, "Generated", upscale: 1.0, steps: 6),
                 MakeStage(models.VideoModel.Name, "Generated", upscale: 1.5, steps: 6)))

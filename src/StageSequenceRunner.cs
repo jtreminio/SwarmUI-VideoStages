@@ -29,7 +29,7 @@ internal sealed class StageSequenceRunner(
     }
 
     public void Run(
-        IReadOnlyList<ClipWithStages> clips,
+        IReadOnlyList<ClipSpec> clips,
         WGNodeData nativeAudio = null,
         IReadOnlyDictionary<int, WGNodeData> clipAudios = null,
         IReadOnlyDictionary<int, WGNodeData> uploadedAudios = null,
@@ -62,10 +62,11 @@ internal sealed class StageSequenceRunner(
             }
 
             int totalStageCount = TotalStageCount(clips);
+            VideoStagesSpec spec = g.GetVideoStagesSpec();
             bool isFirstClip = true;
-            foreach (ClipWithStages clip in clips)
+            foreach (ClipSpec clip in clips)
             {
-                ClipContext clipContext = new(clip, rootSourceMedia, rootSourceVae);
+                ClipContext clipContext = new(clip, spec.Width, spec.Height, rootSourceMedia, rootSourceVae);
                 if (parallelMultiClip && !isFirstClip)
                 {
                     if (clipContext.SourceMedia is null)
@@ -85,28 +86,26 @@ internal sealed class StageSequenceRunner(
                 isFirstClip = false;
 
                 StageSpec firstStage = clip.Stages[0];
-                ApplyControlNetClipLengthIfApplicable(firstStage);
-                PrepareClipAudio(firstStage, context);
+                ApplyControlNetClipLengthIfApplicable(clip, firstStage);
+                PrepareClipAudio(clip, firstStage, context);
 
-                bool clipCompleted = true;
+                int clipStageIndex = 0;
                 foreach (StageSpec stage in clip.Stages)
                 {
                     StageRefStore.StageRef guideRef = TryResolveGuideReference(stage);
                     if (guideRef is null)
                     {
-                        Logs.Warning(
-                            $"VideoStages: Skipping all remaining stages for clip {stage.ClipId} after stage {stage.Id} "
-                            + "could not resolve its image reference.");
-                        clipCompleted = false;
-                        _previousStageRef = null;
-                        break;
+                        throw new SwarmUserErrorException(
+                            $"VideoStages: Clip {clip.Id} stage {clipStageIndex} could not resolve "
+                            + $"ImageReference '{stage.ImageReference}'.");
                     }
 
                     int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
                     usedSectionIds.Add(sectionId);
-                    PrepareStageOverrides(stage, sectionId);
+                    PrepareStageOverrides(clipContext, stage, sectionId);
                     singleStageRunner.RunStage(stage, sectionId, guideRef, store, clipContext);
                     CaptureStageOutput(stage.Id);
+                    clipStageIndex++;
 
                     if (stage.Id < totalStageCount - 1
                         && g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false))
@@ -118,7 +117,7 @@ internal sealed class StageSequenceRunner(
                     }
                 }
 
-                if (parallelMultiClip && clipCompleted)
+                if (parallelMultiClip)
                 {
                     clipParallelOutputs.Add(g.CurrentMedia.Duplicate());
                 }
@@ -128,10 +127,6 @@ internal sealed class StageSequenceRunner(
             {
                 multiClipParallelMerger.Apply(clipParallelOutputs, rootSourceMedia);
             }
-        }
-        catch (Exception ex)
-        {
-            Logs.Error($"VideoStages: Stage sequence aborted due to an unexpected error: {ex}");
         }
         finally
         {
@@ -147,17 +142,17 @@ internal sealed class StageSequenceRunner(
         }
     }
 
-    private static int TotalStageCount(IReadOnlyList<ClipWithStages> clips)
+    private static int TotalStageCount(IReadOnlyList<ClipSpec> clips)
     {
         int total = 0;
-        foreach (ClipWithStages clip in clips)
+        foreach (ClipSpec clip in clips)
         {
             total += clip.Stages.Count;
         }
         return total;
     }
 
-    private void PrepareClipAudio(StageSpec stage, RunContext context)
+    private void PrepareClipAudio(ClipSpec clip, StageSpec stage, RunContext context)
     {
         if (g.CurrentMedia is null)
         {
@@ -168,8 +163,8 @@ internal sealed class StageSequenceRunner(
         bool suppressNative = context.RootStageHandoff
             && rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);
         WGNodeData clipAudio = ClipAudioWorkflowHelper.ResolveClipAudio(
-            stage.ClipId,
-            stage.ClipAudioSource,
+            clip.Id,
+            clip.AudioSource,
             context.NativeAudio,
             context.ClipAudios,
             context.UploadedAudios,
@@ -179,19 +174,19 @@ internal sealed class StageSequenceRunner(
         g.CurrentMedia = currentMedia;
         if (context.RootStageHandoff
             && ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
-                stage.ClipAudioSource,
-                stage.ClipLengthFromAudio && !stage.ClipLengthFromControlNet,
+                clip.AudioSource,
+                clip.ClipLengthFromAudio,
                 restrictLengthMatchToUploadOrAce: true))
         {
             _ = ltxManager.TryInjectAudio(clipAudio);
         }
     }
 
-    private void ApplyControlNetClipLengthIfApplicable(StageSpec stage)
+    private void ApplyControlNetClipLengthIfApplicable(ClipSpec clip, StageSpec stage)
     {
-        if (stage.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
+        if (clip.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
         {
-            _ = ltxManager.TryApplyControlNetFrameCount(stage.ClipControlNetSource);
+            _ = ltxManager.TryApplyControlNetFrameCount(clip.ControlNetSource);
         }
     }
 
@@ -213,8 +208,10 @@ internal sealed class StageSequenceRunner(
         _previousStageRef = captured;
     }
 
-    private void PrepareStageOverrides(StageSpec stage, int sectionId)
+    private void PrepareStageOverrides(ClipContext clipContext, StageSpec stage, int sectionId)
     {
+        ClipDimensionState dimensions = clipContext.Dimensions;
+        VideoStagesSpec spec = g.GetVideoStagesSpec();
         g.UserInput.SectionParamOverrides.Remove(sectionId);
         g.UserInput.Set(T2IParamTypes.VideoModel.Type, stage.Model, sectionId);
         g.UserInput.Set(T2IParamTypes.VideoSteps, stage.Steps, sectionId);
@@ -223,25 +220,25 @@ internal sealed class StageSequenceRunner(
         g.UserInput.Set(T2IParamTypes.CFGScale, stage.CfgScale, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SamplerParam.Type, stage.Sampler, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SchedulerParam.Type, stage.Scheduler, sectionId);
-        if (VideoStagesSpecParser.IsUsableVaeValue(stage.Vae))
+        if (!string.IsNullOrEmpty(stage.Vae))
         {
             g.UserInput.Set(T2IParamTypes.VAE.Type, stage.Vae, sectionId);
         }
-        if (stage.ClipFrames.HasValue && stage.ClipFrames.Value > 0)
+        if (clipContext.Clip.Frames is int frames && frames > 0)
         {
-            g.UserInput.Set(T2IParamTypes.VideoFrames, stage.ClipFrames.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.VideoFrames, frames, sectionId);
         }
-        if (stage.ClipFPS > 0)
+        if (spec.FPS > 0)
         {
-            g.UserInput.Set(T2IParamTypes.VideoFPS, stage.ClipFPS, sectionId);
+            g.UserInput.Set(T2IParamTypes.VideoFPS, spec.FPS, sectionId);
         }
-        if (stage.ClipWidth > 0)
+        if (dimensions.Width > 0)
         {
-            g.UserInput.Set(T2IParamTypes.Width, stage.ClipWidth, sectionId);
+            g.UserInput.Set(T2IParamTypes.Width, dimensions.Width, sectionId);
         }
-        if (stage.ClipHeight > 0)
+        if (dimensions.Height > 0)
         {
-            g.UserInput.Set(T2IParamTypes.Height, stage.ClipHeight, sectionId);
+            g.UserInput.Set(T2IParamTypes.Height, dimensions.Height, sectionId);
         }
     }
 

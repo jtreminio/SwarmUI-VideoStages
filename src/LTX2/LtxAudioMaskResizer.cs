@@ -10,7 +10,7 @@ internal sealed class LtxAudioMaskResizer(
 {
     internal void ApplyRootAudioMaskDimensionsAfterNativeVideo()
     {
-        if (!rootVideoStageResizer.TryGetConfiguredRootStageResolution(out int width, out int height))
+        if (!rootVideoStageResizer.TryGetRootStageResolution(out int width, out int height))
         {
             return;
         }

@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
@@ -6,7 +7,7 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
-internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
+internal static class VideoStagesSpecParser
 {
     private const double DefaultControl = 0.5;
     private const double FirstStageControl = 1.0;
@@ -27,95 +28,14 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         string Scheduler
     );
 
-    public List<StageSpec> ParseStages()
+    public static (int? Width, int? Height) GetRawJsonTopLevelDimensions(WorkflowGenerator g)
     {
-        List<StageSpec> flattened = [];
-        foreach (ClipWithStages clip in ParseClipsWithStages())
-        {
-            flattened.AddRange(clip.Stages);
-        }
-        return flattened;
-    }
-
-    public List<ClipWithStages> ParseClipsWithStages()
-    {
-        VideoStagesSpec config = g.GetVideoStagesSpec();
-        (int? rawJsonWidth, int? rawJsonHeight, _, _) = GetJsonTopLevelConfig();
-        int? registeredRootWidth = TryGetRegisteredRootDimension(VideoStagesExtension.RootWidth);
-        int? registeredRootHeight = TryGetRegisteredRootDimension(VideoStagesExtension.RootHeight);
-        int globalWidth = g.UserInput.GetImageWidth();
-        int globalHeight = g.UserInput.GetImageHeight();
-        int fps = config.FPS;
-        List<ClipWithStages> result = [];
-        int globalStageIndex = 0;
-        foreach (ClipSpec clip in config.Clips)
-        {
-            if (clip.Skipped)
-            {
-                continue;
-            }
-            int? clipFrames = null;
-            if (clip.DurationSeconds > 0 && fps > 0)
-            {
-                clipFrames = CalculateAlignedFrameCount(clip.DurationSeconds, fps);
-            }
-            int activeStageCount = 0;
-            for (int s = 0; s < clip.Stages.Count; s++)
-            {
-                if (!clip.Stages[s].Skipped)
-                {
-                    activeStageCount++;
-                }
-            }
-            int clipWidth = registeredRootWidth ?? rawJsonWidth ?? clip.Width ?? globalWidth;
-            int clipHeight = registeredRootHeight ?? rawJsonHeight ?? clip.Height ?? globalHeight;
-            List<StageSpec> clipStages = [];
-            int clipStageIndex = 0;
-            for (int s = 0; s < clip.Stages.Count; s++)
-            {
-                StageSpec stage = clip.Stages[s];
-                if (stage.Skipped)
-                {
-                    continue;
-                }
-                clipStages.Add(stage with
-                {
-                    Id = globalStageIndex,
-                    ClipId = clip.Id,
-                    ClipAudioSource = clip.AudioSource,
-                    ClipLengthFromAudio = clip.ClipLengthFromAudio && !clip.ClipLengthFromControlNet,
-                    ClipLengthFromControlNet = clip.ClipLengthFromControlNet,
-                    ClipReuseAudio = clip.ReuseAudio,
-                    ClipControlNetSource = clip.ControlNetSource,
-                    ClipStageIndex = clipStageIndex,
-                    ClipStageCount = activeStageCount,
-                    ClipWidth = clipWidth,
-                    ClipHeight = clipHeight,
-                    ClipFrames = clipFrames,
-                    ClipFPS = fps,
-                    ClipRefs = clip.Refs,
-                    ClipControlNetLora = clip.ControlNetLora,
-                    IsTextToVideo = config.IsTextToVideo,
-                });
-                clipStageIndex++;
-                globalStageIndex++;
-            }
-            if (clipStages.Count > 0)
-            {
-                result.Add(new ClipWithStages(clip, clipStages));
-            }
-        }
-        return result;
-    }
-
-    public int ResolveFps(VideoStagesSpec parsedConfig = null) =>
-        parsedConfig?.FPS ?? g.GetVideoStagesSpec().FPS;
-
-    public (int? Width, int? Height) GetRawJsonTopLevelDimensions()
-    {
-        (int? w, int? h, _, _) = GetJsonTopLevelConfig();
+        (int? w, int? h, _, _) = GetJsonTopLevelConfig(g);
         return (w, h);
     }
+
+    public static AudioFile MaterializeUploadedAudioForClip(WorkflowGenerator g, ClipSpec clip) =>
+        MaterializeUploadedAudio(g, clip?.UploadedAudio);
 
     private static int CalculateAlignedFrameCount(double durationSeconds, int fps)
     {
@@ -124,28 +44,40 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         return Math.Max(1, alignedFrames + 1);
     }
 
-    private int? TryGetRegisteredRootDimension(T2IRegisteredParam<int> param)
+    private static int? TryGetRegisteredRootDimension(WorkflowGenerator g, T2IRegisteredParam<int> param)
     {
         return g.UserInput.TryGet(param, out int value) && value >= Constants.RootDimensionMin
             ? value
             : null;
     }
 
-    private int ResolveTopLevelWidth(int? rawJsonWidth)
+    private static int ResolveTopLevelWidth(WorkflowGenerator g, int? rawJsonWidth)
     {
-        return TryGetRegisteredRootDimension(VideoStagesExtension.RootWidth)
-            ?? rawJsonWidth
-            ?? g.UserInput.GetImageWidth();
+        if (TryGetRegisteredRootDimension(g, VideoStagesExtension.RootWidth) is int registered)
+        {
+            return registered;
+        }
+        if (rawJsonWidth is > 0)
+        {
+            return rawJsonWidth.Value;
+        }
+        return g.UserInput.GetImageWidth();
     }
 
-    private int ResolveTopLevelHeight(int? rawJsonHeight)
+    private static int ResolveTopLevelHeight(WorkflowGenerator g, int? rawJsonHeight)
     {
-        return TryGetRegisteredRootDimension(VideoStagesExtension.RootHeight)
-            ?? rawJsonHeight
-            ?? g.UserInput.GetImageHeight();
+        if (TryGetRegisteredRootDimension(g, VideoStagesExtension.RootHeight) is int registered)
+        {
+            return registered;
+        }
+        if (rawJsonHeight is > 0)
+        {
+            return rawJsonHeight.Value;
+        }
+        return g.UserInput.GetImageHeight();
     }
 
-    private int ResolveTopLevelFps(int? rawJsonFps)
+    private static int ResolveTopLevelFps(WorkflowGenerator g, int? rawJsonFps)
     {
         if (g.UserInput.TryGet(VideoStagesExtension.RootFPS, out int rootFps) && rootFps > 0)
         {
@@ -162,19 +94,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         return 24;
     }
 
-    public bool TryParseConfig(out VideoStagesSpec spec)
-    {
-        VideoStagesSpec parsed = g.GetVideoStagesSpec();
-        if (!HasUsableVideoModel(parsed))
-        {
-            spec = null;
-            return false;
-        }
-        spec = parsed;
-        return true;
-    }
-
-    private bool HasUsableVideoModel(VideoStagesSpec spec)
+    public static bool HasUsableVideoModel(WorkflowGenerator g, VideoStagesSpec spec)
     {
         if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel)
             && videoModel is not null)
@@ -190,7 +110,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         {
             foreach (StageSpec stage in clip.Stages)
             {
-                if (!string.IsNullOrWhiteSpace(stage.Model) && CanResolveStageVideoModel(stage.Model))
+                if (!string.IsNullOrWhiteSpace(stage.Model) && CanResolveStageVideoModel(g, stage.Model))
                 {
                     return true;
                 }
@@ -199,7 +119,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         return false;
     }
 
-    private bool CanResolveStageVideoModel(string modelName)
+    private static bool CanResolveStageVideoModel(WorkflowGenerator g, string modelName)
     {
         g.UserInput.Set(T2IParamTypes.VideoModel.Type, modelName);
         bool resolved = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel m) && m is not null;
@@ -207,43 +127,68 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         return resolved;
     }
 
-    public VideoStagesSpec ParseConfig()
+    public static VideoStagesSpec Parse(WorkflowGenerator g)
     {
-        (int? rawWidth, int? rawHeight, int? rawFps, List<JObject> rawEntries) = GetJsonTopLevelConfig();
-        int width = ResolveTopLevelWidth(rawWidth);
-        int height = ResolveTopLevelHeight(rawHeight);
-        int fps = ResolveTopLevelFps(rawFps);
+        (int? rawWidth, int? rawHeight, int? rawFps, List<JObject> rawEntries) = GetJsonTopLevelConfig(g);
+        int width = ResolveTopLevelWidth(g, rawWidth);
+        int height = ResolveTopLevelHeight(g, rawHeight);
+        int fps = ResolveTopLevelFps(g, rawFps);
         bool isTextToVideo = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
         if (rawEntries.Count == 0)
         {
             return new VideoStagesSpec(width, height, fps, isTextToVideo, []);
         }
 
-        if (!rawEntries.All(IsClipShape))
+        for (int entryIndex = 0; entryIndex < rawEntries.Count; entryIndex++)
         {
-            Logs.Warning("VideoStages: Each Video Stages entry must be a clip object with a Stages array.");
-            return new VideoStagesSpec(width, height, fps, isTextToVideo, []);
+            if (!IsClipShape(rawEntries[entryIndex]))
+            {
+                throw new SwarmUserErrorException(
+                    $"VideoStages: Entry {entryIndex} is not a clip object (must have a 'Stages' array).");
+            }
         }
 
-        StageDefaults defaults = BuildDefaults();
+        StageDefaults defaults = BuildDefaults(g);
         List<ClipSpec> parsed = [];
+        int globalStageIndex = 0;
 
         for (int i = 0; i < rawEntries.Count; i++)
         {
             JObject clipObj = rawEntries[i];
-            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo);
-            if (clip.Stages.Count > 0)
+            if (GetOptionalBool(clipObj, "Skipped", defaultValue: false))
             {
-                parsed.Add(clip);
+                continue;
             }
+            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo, fps);
+            if (clip.Stages.Count == 0)
+            {
+                continue;
+            }
+            List<StageSpec> activeStages = [];
+            int clipStageIndex = 0;
+            foreach (StageSpec stage in clip.Stages)
+            {
+                activeStages.Add(stage with
+                {
+                    Id = globalStageIndex,
+                    ClipStageIndex = clipStageIndex,
+                });
+                clipStageIndex++;
+                globalStageIndex++;
+            }
+            if (activeStages.Count == 0)
+            {
+                continue;
+            }
+            parsed.Add(clip with
+            {
+                Stages = activeStages,
+            });
         }
         return new VideoStagesSpec(width, height, fps, isTextToVideo, parsed);
     }
 
-    public AudioFile ParseUploadedAudioForClip(ClipSpec clip) =>
-        MaterializeUploadedAudio(clip?.UploadedAudio);
-
-    private AudioFile MaterializeUploadedAudio(UploadedAudioSpec spec)
+    private static AudioFile MaterializeUploadedAudio(WorkflowGenerator g, UploadedAudioSpec spec)
     {
         if (spec is null || string.IsNullOrWhiteSpace(spec.Data))
         {
@@ -294,22 +239,17 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         }
     }
 
-    public List<ClipSpec> ParseClips()
-    {
-        return [.. g.GetVideoStagesSpec().Clips];
-    }
-
     private static bool IsClipShape(JObject entry) =>
         entry.Properties().Any(p => StringUtils.Equals(p.Name, "Stages"));
 
-    private ClipSpec ParseClip(
+    private static ClipSpec ParseClip(
         JObject clipObj,
         int clipIndex,
         StageDefaults defaults,
-        bool isTextToVideoRootWorkflow)
+        bool isTextToVideoRootWorkflow,
+        int fps)
     {
-        bool skipped = GetOptionalBool(clipObj, "Skipped", defaultValue: false);
-        double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, clipIndex);
+        double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, $"Clip {clipIndex}");
         string audioSource = GetString(clipObj, "AudioSource");
         if (string.IsNullOrWhiteSpace(audioSource))
         {
@@ -325,14 +265,12 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
         string controlNetSource = NormalizeControlNetSource(GetString(clipObj, "ControlNetSource"));
         string controlNetLora = NormalizeControlNetLora(GetString(clipObj, "ControlNetLora"));
-        int? width = GetOptionalNullableInt(clipObj, "Width");
-        int? height = GetOptionalNullableInt(clipObj, "Height");
         UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, "UploadedAudio");
 
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
         List<StageSpec> stages = [];
         List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
-        bool clipHasWanModel = ClipRawStagesContainWanModel(rawStages);
+        bool clipHasWanModel = ClipRawStagesContainWanModel(rawStages, clipIndex);
         int refLimit = clipHasWanModel ? Math.Min(2, rawRefs.Count) : rawRefs.Count;
         List<ImageRefSpec> refs = [];
         for (int i = 0; i < refLimit; i++)
@@ -351,24 +289,29 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
 
         for (int i = 0; i < rawStages.Count; i++)
         {
-            if (!TryParseStage(
-                    rawStages[i],
-                    i,
-                    defaults,
-                    refs.Count,
-                    isTextToVideoRootWorkflow,
-                    out StageSpec parsed))
+            if (GetOptionalBool(rawStages[i], "Skipped", defaultValue: false))
             {
                 continue;
             }
+            StageSpec parsed = ParseStage(
+                rawStages[i],
+                clipIndex,
+                i,
+                defaults,
+                refs.Count,
+                isTextToVideoRootWorkflow);
             stages.Add(parsed);
         }
         ApplyStageContinuationSamplingPlan(stages);
 
+        double durationSeconds = Math.Max(0, duration);
+        int? clipFrames = durationSeconds > 0
+            ? CalculateAlignedFrameCount(durationSeconds, fps)
+            : null;
+
         return new ClipSpec(
             Id: clipIndex,
-            Skipped: skipped,
-            DurationSeconds: Math.Max(0, duration),
+            Frames: clipFrames,
             AudioSource: audioSource,
             ControlNetSource: controlNetSource,
             ControlNetLora: controlNetLora,
@@ -376,15 +319,13 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
             ClipLengthFromAudio: clipLengthFromAudio && !clipLengthFromControlNet,
             ClipLengthFromControlNet: clipLengthFromControlNet,
             ReuseAudio: reuseAudio,
-            Width: width,
-            Height: height,
             UploadedAudio: uploadedAudio,
-            Refs: refs,
+            ImageRefs: refs,
             Stages: stages
         );
     }
 
-    private static bool ClipRawStagesContainWanModel(List<JObject> rawStages)
+    private static bool ClipRawStagesContainWanModel(List<JObject> rawStages, int clipIndex)
     {
         for (int i = 0; i < rawStages.Count; i++)
         {
@@ -393,7 +334,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
                 continue;
             }
 
-            string model = GetOptionalString(rawStages[i], "Model", defaultValue: null, i, allowEmpty: false);
+            string model = GetOptionalString(rawStages[i], "Model", defaultValue: null, $"Clip {clipIndex} stage {i}", allowEmpty: false);
             if (VideoStageModelCompat.IsWanVideoModel(model))
             {
                 return true;
@@ -408,26 +349,19 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         for (int i = 0; i < stages.Count; i++)
         {
             StageSpec stage = stages[i];
-            if (stage.Skipped || !VideoStageModelCompat.IsWanVideoModel(stage.Model))
+            if (!VideoStageModelCompat.IsWanVideoModel(stage.Model))
             {
                 continue;
             }
 
-            for (int nextIndex = i + 1; nextIndex < stages.Count; nextIndex++)
+            if (i + 1 < stages.Count)
             {
-                StageSpec nextStage = stages[nextIndex];
-                if (nextStage.Skipped)
-                {
-                    continue;
-                }
-
+                StageSpec nextStage = stages[i + 1];
                 stages[i] = stage with
                 {
                     EndStep = CalculateContinuationEndStep(stage.Steps, nextStage.Control)
                 };
-                return;
             }
-
             return;
         }
     }
@@ -571,7 +505,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         );
     }
 
-    private (int? Width, int? Height, int? FPS, List<JObject> Entries) GetJsonTopLevelConfig()
+    private static (int? Width, int? Height, int? FPS, List<JObject> Entries) GetJsonTopLevelConfig(WorkflowGenerator g)
     {
         if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
             || string.IsNullOrWhiteSpace(json))
@@ -597,14 +531,14 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
             }
             return (null, null, null, []);
         }
-        catch (Exception)
+        catch (JsonException ex)
         {
-            Logs.Warning("VideoStages: Ignoring invalid Video Stages JSON.");
-            return (null, null, null, []);
+            throw new SwarmUserErrorException(
+                $"VideoStages: Could not parse Video Stages JSON. {ex.Message}");
         }
     }
 
-    private StageDefaults BuildDefaults()
+    private static StageDefaults BuildDefaults(WorkflowGenerator g)
     {
         int steps = g.UserInput.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
             ? explicitVideoSteps
@@ -631,28 +565,28 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         );
     }
 
-    private bool TryParseStage(
+    private static StageSpec ParseStage(
         JObject stage,
+        int clipIndex,
         int index,
         StageDefaults defaults,
         int clipRefCount,
-        bool isTextToVideoRootWorkflow,
-        out StageSpec parsedStage)
+        bool isTextToVideoRootWorkflow)
     {
-        parsedStage = null;
-        string model = GetOptionalString(stage, "Model", defaultValue: null, index, allowEmpty: false);
+        string locationPrefix = $"Clip {clipIndex} stage {index}";
+        string model = GetOptionalString(stage, "Model", defaultValue: null, locationPrefix, allowEmpty: false);
         if (string.IsNullOrWhiteSpace(model))
         {
-            Logs.Warning($"VideoStages: Stage {index} is missing required field 'Model' and will be skipped.");
-            return false;
+            throw new SwarmUserErrorException(
+                $"VideoStages: Clip {clipIndex} stage {index} is missing required field 'Model'.");
         }
-        double control = NormalizeControl(GetOptionalDouble(stage, "Control", defaults.Control, index));
-        double upscale = NormalizeUpscale(GetOptionalDouble(stage, "Upscale", defaults.Upscale, index));
+        double control = NormalizeControl(GetOptionalDouble(stage, "Control", defaults.Control, locationPrefix));
+        double upscale = NormalizeUpscale(GetOptionalDouble(stage, "Upscale", defaults.Upscale, locationPrefix));
         string upscaleMethod = GetOptionalString(
             stage,
             "UpscaleMethod",
             defaults.UpscaleMethod,
-            index,
+            locationPrefix,
             allowEmpty: false);
         if (index == 0)
         {
@@ -673,35 +607,32 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
             upscale = Math.Max(0.25, upscale);
         }
 
-        parsedStage = new StageSpec(
+        return new StageSpec(
             Id: index,
             Control: control,
             Upscale: upscale,
             UpscaleMethod: upscaleMethod,
             Model: model,
-            Vae: NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, index, allowEmpty: true)),
-            Steps: Math.Max(1, GetOptionalInt(stage, "Steps", defaults.Steps, index)),
-            CfgScale: NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, index)),
-            Sampler: GetOptionalString(stage, "Sampler", defaults.Sampler, index, allowEmpty: false),
-            Scheduler: GetOptionalString(stage, "Scheduler", defaults.Scheduler, index, allowEmpty: false),
-            ImageReference: NormalizeImageReference(GetString(stage, "ImageReference"), index, isTextToVideoRootWorkflow),
-            Skipped: GetOptionalBool(stage, "Skipped", defaultValue: false),
-            ControlNetStrength: ParseStageControlNetStrength(stage),
-            ClipRefs: [],
-            RefStrengths: ParseStageRefStrengths(stage, clipRefCount),
-            ImageReferenceWasExplicit: JsonHasOwnProperty(stage, "ImageReference")
+            Vae: NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, locationPrefix, allowEmpty: true)),
+            Steps: Math.Max(1, GetOptionalInt(stage, "Steps", defaults.Steps, locationPrefix)),
+            CfgScale: NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, locationPrefix)),
+            Sampler: GetOptionalString(stage, "Sampler", defaults.Sampler, locationPrefix, allowEmpty: false),
+            Scheduler: GetOptionalString(stage, "Scheduler", defaults.Scheduler, locationPrefix, allowEmpty: false),
+            ImageReference: NormalizeImageReference(GetString(stage, "ImageReference"), clipIndex, index, isTextToVideoRootWorkflow),
+            ControlNetStrength: ParseStageControlNetStrength(stage, locationPrefix),
+            ImageRefStrengths: ParseStageRefStrengths(stage, clipRefCount),
+            ImageRefWasExplicit: JsonHasOwnProperty(stage, "ImageReference")
         );
-        return true;
     }
 
-    private static double? ParseStageControlNetStrength(JObject stage)
+    private static double? ParseStageControlNetStrength(JObject stage, string locationPrefix)
     {
         if (!JsonHasOwnProperty(stage, "ControlNetStrength"))
         {
             return null;
         }
 
-        double value = GetOptionalDouble(stage, "ControlNetStrength", Constants.DefaultStageControlNetStrength, 0);
+        double value = GetOptionalDouble(stage, "ControlNetStrength", Constants.DefaultStageControlNetStrength, locationPrefix);
         if (double.IsNaN(value) || double.IsInfinity(value))
         {
             return Constants.DefaultStageControlNetStrength;
@@ -763,7 +694,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         return Math.Clamp(value, 0.01, 1.0);
     }
 
-    private string NormalizeImageReference(string rawValue, int index, bool isTextToVideoRootWorkflow)
+    private static string NormalizeImageReference(string rawValue, int clipIndex, int index, bool isTextToVideoRootWorkflow)
     {
         if (isTextToVideoRootWorkflow)
         {
@@ -773,7 +704,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
                 if (!StringUtils.Equals(rawCompact, DefaultGeneratedReference))
                 {
                     Logs.Warning(
-                        $"VideoStages: Stage {index} uses ImageReference '{rawValue}' on a text-to-video workflow. "
+                        $"VideoStages: Clip {clipIndex} stage {index} uses ImageReference '{rawValue}' on a text-to-video workflow. "
                         + $"Using '{DefaultGeneratedReference}' instead.");
                 }
             }
@@ -810,19 +741,18 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
             {
                 return $"Stage{explicitStage}";
             }
-            Logs.Warning(
-                $"VideoStages: Stage {index} has forward ImageReference '{rawValue}'. "
-                + $"Using '{defaultReference}' instead.");
-            return defaultReference;
+            throw new SwarmUserErrorException(
+                $"VideoStages: Clip {clipIndex} stage {index} has invalid ImageReference '{rawValue}' "
+                + "(must reference a strictly previous stage).");
         }
         if (ImageReference.TryParseBase2EditStageIndex(compact, out int editStage))
         {
             return ImageReference.FormatBase2EditStageIndex(editStage);
         }
 
-        Logs.Warning(
-            $"VideoStages: Stage {index} has invalid ImageReference '{rawValue}'. Using '{defaultReference}' instead.");
-        return defaultReference;
+        throw new SwarmUserErrorException(
+            $"VideoStages: Clip {clipIndex} stage {index} has invalid ImageReference '{rawValue}'. "
+            + "Valid forms are: Generated, Base, Refiner, PreviousStage, Stage<N>, edit<N>.");
     }
 
     private static string GetDefaultImageReference(int index)
@@ -832,7 +762,16 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
 
     private static string NormalizeVaeValue(string rawVae)
     {
-        return IsUsableVaeValue(rawVae) ? rawVae.Trim() : "";
+        if (string.IsNullOrWhiteSpace(rawVae))
+        {
+            return "";
+        }
+        string trimmed = rawVae.Trim();
+        if (StringUtils.Equals(trimmed, "Automatic") || StringUtils.Equals(trimmed, "None"))
+        {
+            return "";
+        }
+        return trimmed;
     }
 
     private static string NormalizeOptionalModelName(string rawModelName)
@@ -855,21 +794,11 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         return trimmed;
     }
 
-    public static bool IsUsableVaeValue(string rawVae)
-    {
-        if (string.IsNullOrWhiteSpace(rawVae))
-        {
-            return false;
-        }
-        string t = rawVae.Trim();
-        return !StringUtils.Equals(t, "Automatic") && !StringUtils.Equals(t, "None");
-    }
-
     private static string GetOptionalString(
         JObject obj,
         string key,
         string defaultValue,
-        int index,
+        string locationPrefix,
         bool allowEmpty)
     {
         string value = GetString(obj, key);
@@ -880,13 +809,13 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         value = value.Trim();
         if (!allowEmpty && string.IsNullOrWhiteSpace(value))
         {
-            Logs.Warning($"VideoStages: Stage {index} has empty field '{key}'. Using default '{defaultValue}'.");
+            Logs.Warning($"VideoStages: {locationPrefix} has empty field '{key}'. Using default '{defaultValue}'.");
             return defaultValue;
         }
         return value;
     }
 
-    private static int GetOptionalInt(JObject obj, string key, int defaultValue, int index)
+    private static int GetOptionalInt(JObject obj, string key, int defaultValue, string locationPrefix)
     {
         string raw = GetString(obj, key);
         if (string.IsNullOrWhiteSpace(raw))
@@ -896,14 +825,14 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         if (!int.TryParse(raw.Trim(), out int value))
         {
             Logs.Warning(
-                $"VideoStages: Stage {index} has invalid integer field '{key}' value '{raw}'. "
+                $"VideoStages: {locationPrefix} has invalid integer field '{key}' value '{raw}'. "
                 + $"Using default '{defaultValue}'.");
             return defaultValue;
         }
         return value;
     }
 
-    private static double GetOptionalDouble(JObject obj, string key, double defaultValue, int index)
+    private static double GetOptionalDouble(JObject obj, string key, double defaultValue, string locationPrefix)
     {
         string raw = GetString(obj, key);
         if (string.IsNullOrWhiteSpace(raw))
@@ -913,7 +842,7 @@ internal sealed class VideoStagesSpecParser(WorkflowGenerator g)
         if (!double.TryParse(raw.Trim(), out double value))
         {
             Logs.Warning(
-                $"VideoStages: Stage {index} has invalid numeric field '{key}' value '{raw}'. "
+                $"VideoStages: {locationPrefix} has invalid numeric field '{key}' value '{raw}'. "
                 + $"Using default '{defaultValue}'.");
             return defaultValue;
         }

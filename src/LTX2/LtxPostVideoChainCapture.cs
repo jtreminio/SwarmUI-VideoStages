@@ -29,21 +29,22 @@ internal sealed class LtxPostVideoChainCapture
     }
 
     public static LtxPostVideoChainCapture TryCapture(WorkflowGenerator generator) =>
-        TryCaptureCore(generator, audioReuse: null, stage: null, mutateReuseAudioState: false);
+        TryCaptureCore(generator, audioReuse: null, clip: null, stage: null, mutateReuseAudioState: false);
 
     public static LtxPostVideoChainCapture TryCapture(
         WorkflowGenerator generator,
         ClipContext clipContext,
         StageSpec stage) =>
-        TryCaptureCore(generator, clipContext.AudioReuse, stage, mutateReuseAudioState: true);
+        TryCaptureCore(generator, clipContext.AudioReuse, clipContext.Clip, stage, mutateReuseAudioState: true);
 
     private static LtxPostVideoChainCapture TryCaptureCore(
         WorkflowGenerator generator,
         ClipAudioState audioReuse,
+        ClipSpec clip,
         StageSpec stage,
         bool mutateReuseAudioState)
     {
-        bool clipCanReuseAudio = stage?.ClipReuseAudio == true && stage.ClipStageCount >= 3;
+        bool clipCanReuseAudio = clip?.ReuseAudio == true && clip.Stages.Count >= 3;
         bool useReusedAudio = clipCanReuseAudio && stage.ClipStageIndex > 0;
         bool captureReusableAudio = clipCanReuseAudio && stage.ClipStageIndex == 1;
         if (mutateReuseAudioState && !useReusedAudio && !captureReusableAudio)
