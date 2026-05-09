@@ -11,8 +11,14 @@ internal sealed class RootVideoStageResizer(
     WorkflowGenerator g,
     RootVideoStageHandoff handoff)
 {
+    private static int _registered;
+
     public static void RegisterHandlers()
     {
+        if (Interlocked.Exchange(ref _registered, 1) != 0)
+        {
+            return;
+        }
         WorkflowGenerator.AltImageToVideoPreHandlers.Add(ApplyRootResolutionBeforeImageToVideo);
         WorkflowGenerator.AltImageToVideoPostHandlers.Add(ApplyRootLatentResolutionAfterImageToVideo);
     }
