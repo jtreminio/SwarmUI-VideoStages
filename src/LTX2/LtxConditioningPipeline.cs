@@ -113,8 +113,8 @@ internal sealed class LtxConditioningPipeline(
         {
             cond.FrameRate.Set(genInfo.VideoFPS.Value);
         }
-        cond.PositiveInput.ConnectToUntyped(bridge.ResolvePath(genInfo.PosCond));
-        cond.NegativeInput.ConnectToUntyped(bridge.ResolvePath(genInfo.NegCond));
+        cond.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
+        cond.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
         bridge.SyncNode(cond);
         BridgeSync.SyncLastId(g);
 
@@ -139,11 +139,11 @@ internal sealed class LtxConditioningPipeline(
             LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode()).With(
                 FrameIdx: frameIdx,
                 Strength: clipRef.Strength);
-            addGuide.PositiveInput.ConnectToUntyped(bridge.ResolvePath(genInfo.PosCond));
-            addGuide.NegativeInput.ConnectToUntyped(bridge.ResolvePath(genInfo.NegCond));
-            addGuide.Vae.ConnectToUntyped(bridge.ResolvePath(genInfo.Vae.Path));
-            addGuide.LatentInput.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
-            addGuide.Image.ConnectToUntyped(bridge.ResolvePath(preprocessed));
+            addGuide.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
+            addGuide.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
+            addGuide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+            addGuide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
+            addGuide.Image.ConnectFromPath(bridge, preprocessed);
             bridge.SyncNode(addGuide);
             BridgeSync.SyncLastId(g);
 
@@ -176,8 +176,8 @@ internal sealed class LtxConditioningPipeline(
         bridge.SyncNode(loader);
 
         LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode());
-        upsampler.Vae.ConnectToUntyped(bridge.ResolvePath(genInfo.Vae.Path));
-        upsampler.Samples.ConnectToUntyped(bridge.ResolvePath(stageLatent.Path));
+        upsampler.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+        upsampler.Samples.ConnectFromPath(bridge, stageLatent.Path);
         upsampler.UpscaleModel.ConnectTo(loader.LATENTUPSCALEMODEL);
         bridge.SyncNode(upsampler);
         BridgeSync.SyncLastId(g);

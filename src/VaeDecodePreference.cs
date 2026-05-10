@@ -53,7 +53,7 @@ internal static class VaeDecodePreference
             LTXVSeparateAVLatentNode separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
             if (media.Path is JArray mediaPath)
             {
-                separate.AvLatent.ConnectToUntyped(bridge.ResolvePath(mediaPath));
+                separate.AvLatent.ConnectFromPath(bridge, mediaPath);
             }
             bridge.SyncNode(separate);
             BridgeSync.SyncLastId(g);
@@ -101,8 +101,8 @@ internal static class VaeDecodePreference
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         VAEDecodeNode decode = bridge.AddNode(new VAEDecodeNode());
-        decode.Vae.ConnectToUntyped(bridge.ResolvePath(vaePath));
-        decode.Samples.ConnectToUntyped(bridge.ResolvePath(latentPath));
+        decode.Vae.ConnectFromPath(bridge, vaePath);
+        decode.Samples.ConnectFromPath(bridge, latentPath);
         bridge.SyncNode(decode);
         BridgeSync.SyncLastId(g);
         return decode.Id;
@@ -116,8 +116,8 @@ internal static class VaeDecodePreference
             Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
             TemporalSize: g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 32),
             TemporalOverlap: g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)));
-        decode.Vae.ConnectToUntyped(bridge.ResolvePath(vaePath));
-        decode.Samples.ConnectToUntyped(bridge.ResolvePath(latentPath));
+        decode.Vae.ConnectFromPath(bridge, vaePath);
+        decode.Samples.ConnectFromPath(bridge, latentPath);
         bridge.SyncNode(decode);
         BridgeSync.SyncLastId(g);
         return decode.Id;

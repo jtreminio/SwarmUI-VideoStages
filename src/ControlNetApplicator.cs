@@ -154,7 +154,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         ImageFromBatchNode batch = bridge.AddNode(new ImageFromBatchNode()).With(
             BatchIndex: 0,
             Length: 1);
-        batch.Image.TryConnectToUntyped(bridge.ResolvePath(controlImage));
+        batch.Image.TryConnectFromPath(bridge, controlImage);
         bridge.SyncNode(batch);
         BridgeSync.SyncLastId(g);
         controlImage[0] = batch.Id;
@@ -302,11 +302,11 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             UseTiledEncode: false,
             TileSize: 256,
             TileOverlap: 64));
-        guide.PositiveInput.ConnectToUntyped(bridge.ResolvePath(genInfo.PosCond));
-        guide.NegativeInput.ConnectToUntyped(bridge.ResolvePath(genInfo.NegCond));
-        guide.Vae.ConnectToUntyped(bridge.ResolvePath(genInfo.Vae.Path));
-        guide.LatentInput.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
-        guide.Image.ConnectToUntyped(bridge.ResolvePath(guideImagePath));
+        guide.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
+        guide.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
+        guide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+        guide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
+        guide.Image.ConnectFromPath(bridge, guideImagePath);
         bridge.SyncNode(guide);
         BridgeSync.SyncLastId(g);
 
@@ -347,10 +347,10 @@ internal class ControlNetApplicator(WorkflowGenerator g)
     {
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
             BatchIndex: batchIndex);
-        node.Image.TryConnectToUntyped(bridge.ResolvePath(imagePath));
+        node.Image.TryConnectFromPath(bridge, imagePath);
         if (lengthToken is JArray lengthRef)
         {
-            node.Length.TryConnectToUntyped(bridge.ResolvePath(lengthRef));
+            node.Length.TryConnectFromPath(bridge, lengthRef);
         }
         else if (lengthToken is JValue v && v.Value is not null)
         {

@@ -79,7 +79,7 @@ internal sealed class LtxAudioInjector(
     {
         SwarmAudioLengthToFramesNode node = new SwarmAudioLengthToFramesNode().With(
             FrameRate: fps);
-        node.AudioInput.TryConnectToUntyped(bridge.ResolvePath(audioPath as JArray));
+        node.AudioInput.TryConnectFromPath(bridge, audioPath as JArray);
         bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 100, 0));
         return node;
     }
@@ -118,7 +118,7 @@ internal sealed class LtxAudioInjector(
         bridge.AddNode(solidMask, g.GetStableDynamicID(AudioInjectionIdBase + 200, 0));
 
         SetLatentNoiseMaskNode setMask = new();
-        setMask.Samples.TryConnectToUntyped(bridge.ResolvePath(encodedAudioPath));
+        setMask.Samples.TryConnectFromPath(bridge, encodedAudioPath);
         setMask.Mask.ConnectTo(solidMask.MASK);
         bridge.AddNode(setMask, g.GetStableDynamicID(AudioInjectionIdBase + 300, 0));
         return setMask;

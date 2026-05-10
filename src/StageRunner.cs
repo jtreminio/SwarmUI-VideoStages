@@ -420,7 +420,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
             BatchIndex: batchIndex,
             Length: length);
-        node.Image.ConnectToUntyped(bridge.ResolvePath(imagePath));
+        node.Image.ConnectFromPath(bridge, imagePath);
         bridge.SyncNode(node);
         BridgeSync.SyncLastId(g);
         return node;
@@ -518,7 +518,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             StrengthModel: 1.0);
         if (genInfo.Model?.Path is JArray modelPath)
         {
-            loraLoader.ModelInput.ConnectToUntyped(bridge.ResolvePath(modelPath));
+            loraLoader.ModelInput.ConnectFromPath(bridge, modelPath);
         }
         bridge.SyncNode(loraLoader);
         BridgeSync.SyncLastId(g);
@@ -634,7 +634,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             Height: height,
             UpscaleMethod: upscaleMethod,
             Crop: "disabled"));
-        scale.Image.ConnectToUntyped(bridge.ResolvePath(sourcePath));
+        scale.Image.ConnectFromPath(bridge, sourcePath);
         bridge.SyncNode(scale);
         BridgeSync.SyncLastId(g);
         return scale;
@@ -649,7 +649,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
         ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode());
         upscale.UpscaleModel.ConnectTo(loader.UPSCALEMODEL);
-        upscale.Image.ConnectToUntyped(bridge.ResolvePath(sourcePath));
+        upscale.Image.ConnectFromPath(bridge, sourcePath);
         bridge.SyncNode(upscale);
 
         ImageScaleNode fit = bridge.AddNode(new ImageScaleNode().With(

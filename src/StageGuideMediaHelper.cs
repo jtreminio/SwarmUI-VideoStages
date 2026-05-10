@@ -129,7 +129,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
             Height: height,
             UpscaleMethod: "lanczos",
             Crop: "center"));
-        scale.Image.ConnectToUntyped(bridge.ResolvePath(sourcePath));
+        scale.Image.ConnectFromPath(bridge, sourcePath);
         bridge.SyncNode(scale);
         BridgeSync.SyncLastId(g);
         return scale;
