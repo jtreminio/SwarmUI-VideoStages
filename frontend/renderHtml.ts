@@ -686,15 +686,17 @@ export const renderClipCard = (
         `data-clip-idx="${clipIdx}" title="Remove clip">&times;</button>` +
         `</span></span></span>`;
 
-    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
-    const audioSource = resolveAudioSourceValue(
-        clip.audioSource,
-        audioSourceOptions,
-    );
     const normalizedControlNetLora = normalizeControlNetLora(
         clip.controlNetLora,
     );
     const controlNetLoraActive = normalizedControlNetLora !== "";
+    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource, {
+        controlNetEnabled: controlNetLoraActive,
+    });
+    const audioSource = resolveAudioSourceValue(
+        clip.audioSource,
+        audioSourceOptions,
+    );
     const canUseAudioLength = canUseClipLengthFromAudio(audioSource);
     const clipLengthFromAudio = canUseAudioLength && !!clip.clipLengthFromAudio;
     const canUseControlNetLength = controlNetLoraActive && !clipLengthFromAudio;

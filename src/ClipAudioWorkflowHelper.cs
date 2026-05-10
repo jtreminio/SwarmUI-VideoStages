@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -15,7 +16,7 @@ internal static class ClipAudioWorkflowHelper
         bool clipLengthFromAudio,
         bool restrictLengthMatchToUploadOrAce)
     {
-        return IsUploadOrAceStepFunAudioSource(audioSource)
+        return IsExternalClipAudioSource(audioSource)
             ? clipLengthFromAudio
             : !restrictLengthMatchToUploadOrAce;
     }
@@ -43,10 +44,10 @@ internal static class ClipAudioWorkflowHelper
                 }
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(normalization), normalization, null);
+                throw new SwarmReadableErrorException($"Unhandled ClipAudioSourceNormalization value: {normalization}");
         }
 
-        if (!IsUploadOrAceStepFunAudioSource(source))
+        if (!IsExternalClipAudioSource(source))
         {
             return suppressNativeFallback ? null : nativeFallback;
         }
@@ -66,7 +67,22 @@ internal static class ClipAudioWorkflowHelper
 
     internal static bool IsUploadOrAceStepFunAudioSource(string audioSource)
     {
-        return string.Equals(audioSource, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
-            || AudioHandler.TryParseAceStepFunAudioSource(audioSource, out _);
+        string trimmed = audioSource?.Trim();
+        return string.Equals(trimmed, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
+            || AudioHandler.TryParseAceStepFunAudioSource(trimmed, out _);
+    }
+
+    internal static bool IsControlNetAudioSource(string audioSource)
+    {
+        return string.Equals(
+            audioSource?.Trim(),
+            Constants.AudioSourceControlNet,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsExternalClipAudioSource(string audioSource)
+    {
+        return IsUploadOrAceStepFunAudioSource(audioSource)
+            || IsControlNetAudioSource(audioSource);
     }
 }

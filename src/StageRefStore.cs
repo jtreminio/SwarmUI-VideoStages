@@ -30,7 +30,7 @@ public class StageRefStore(WorkflowGenerator g)
         StageKind.Refiner => "refiner",
         StageKind.Generated => "generated",
         StageKind.PreRootVideo => "preroot",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        _ => throw new SwarmReadableErrorException($"Unhandled StageKind value: {kind}")
     };
 
     private static string MediaKey(StageKind kind) => $"{Prefix}{StageName(kind)}.media";

@@ -14,6 +14,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
 {
     private const string CapturedControlNetImageKeyPrefix = "videostages.controlnet.fullimage.";
     private const string CapturedControlNetFrameCountKeyPrefix = "videostages.controlnet.framecount.";
+    private const string CapturedControlNetAudioKeyPrefix = "videostages.controlnet.audio.";
 
     private static readonly (string ApplyClass, string LoaderInputName)[] KnownControlNetApplyNodes =
     [
@@ -27,6 +28,9 @@ internal class ControlNetApplicator(WorkflowGenerator g)
 
     private static string CapturedControlNetFrameCountKey(int index) =>
         $"{CapturedControlNetFrameCountKeyPrefix}{index}";
+
+    private static string CapturedControlNetAudioKey(int index) =>
+        $"{CapturedControlNetAudioKeyPrefix}{index}";
 
     public void CaptureCoreVideoControlNetPreprocessors()
     {
@@ -42,15 +46,61 @@ internal class ControlNetApplicator(WorkflowGenerator g)
                 || !OutputHasVideoUpstream(bridge, controlImage))
             {
                 g.NodeHelpers.Remove(CapturedControlNetImageKey(i));
+                g.NodeHelpers.Remove(CapturedControlNetAudioKey(i));
                 continue;
             }
 
             EnsureResizeMultiple(bridge, controlImage);
             JArray capturePath = new(controlImage[0], controlImage[1]);
             g.NodeHelpers[CapturedControlNetImageKey(i)] = capturePath.ToString(Formatting.None);
+            CaptureUpstreamGetVideoComponentsAudio(bridge, controlImage, i);
             EnsureSingleFrameWrap(bridge, controlImage);
             usedApplyNodes.Add(applyNode.Id);
         }
+    }
+
+    private void CaptureUpstreamGetVideoComponentsAudio(
+        WorkflowBridge bridge,
+        JArray controlImage,
+        int index)
+    {
+        ComfyNode startNode = bridge.Graph.GetNode($"{controlImage[0]}");
+        if (FindUpstreamGetVideoComponents(bridge, startNode) is GetVideoComponentsNode components)
+        {
+            JArray audioPath = WorkflowBridge.ToPath(components.Audio);
+            g.NodeHelpers[CapturedControlNetAudioKey(index)] = audioPath.ToString(Formatting.None);
+            return;
+        }
+        g.NodeHelpers.Remove(CapturedControlNetAudioKey(index));
+    }
+
+    private static GetVideoComponentsNode FindUpstreamGetVideoComponents(
+        WorkflowBridge bridge,
+        ComfyNode startNode) =>
+        startNode as GetVideoComponentsNode
+            ?? bridge.Graph.FindNearestUpstream<GetVideoComponentsNode>(startNode);
+
+    public bool TryGetCapturedControlNetAudio(string controlNetSource, out WGNodeData audio)
+    {
+        audio = null;
+        if (!TryParseControlNetSourceIndex(controlNetSource, out int index))
+        {
+            return false;
+        }
+        if (!g.NodeHelpers.TryGetValue(CapturedControlNetAudioKey(index), out string encoded)
+            || string.IsNullOrWhiteSpace(encoded)
+            || JToken.Parse(encoded) is not JArray { Count: 2 } path)
+        {
+            return false;
+        }
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput output = bridge.ResolvePath(path);
+        if (output is null)
+        {
+            return false;
+        }
+        audio = output.ToWGNodeData(g, WGNodeData.DT_AUDIO, g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
+        return true;
     }
 
     private void EnsureResizeMultiple(WorkflowBridge bridge, JArray controlImage)
@@ -450,19 +500,32 @@ internal class ControlNetApplicator(WorkflowGenerator g)
 
     private static int ParseControlNetSourceIndex(string controlNetSource)
     {
+        if (TryParseControlNetSourceIndex(controlNetSource, out int index))
+        {
+            return index;
+        }
+        throw new SwarmUserErrorException($"Unrecognized ControlNet source: '{controlNetSource}'");
+    }
+
+    private static bool TryParseControlNetSourceIndex(string controlNetSource, out int index)
+    {
         string compact = StringUtils.Compact(controlNetSource);
         if (StringUtils.Equals(compact, "ControlNet1"))
         {
-            return 0;
+            index = 0;
+            return true;
         }
         if (StringUtils.Equals(compact, "ControlNet2"))
         {
-            return 1;
+            index = 1;
+            return true;
         }
         if (StringUtils.Equals(compact, "ControlNet3"))
         {
-            return 2;
+            index = 2;
+            return true;
         }
-        throw new ArgumentException($"Unrecognized ControlNet source: '{controlNetSource}'", nameof(controlNetSource));
+        index = -1;
+        return false;
     }
 }

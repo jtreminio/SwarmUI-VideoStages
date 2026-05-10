@@ -12,13 +12,16 @@
   // frontend/audioSource.ts
   var AUDIO_SOURCE_NATIVE = "Native";
   var AUDIO_SOURCE_UPLOAD = "Upload";
+  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
   var ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
   var SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
+  var CONTROLNET_SOURCE_SELECT_SELECTOR = '[data-clip-field="controlNetSource"]';
   var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
   var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
   var canUseClipLengthFromAudio = (source) => {
     const normalized = `${source ?? ""}`.trim();
-    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized);
+    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
   };
   var getSourceSelects = () => Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
     (elem) => elem instanceof HTMLSelectElement
@@ -48,13 +51,19 @@
     }
     return ref;
   };
-  var buildAudioSourceOptions = (currentValue = "") => {
+  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
     const options = [
       { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
       { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
     ];
     for (const ref of getAceStepFunRefs()) {
       options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+    if (context.controlNetEnabled) {
+      options.push({
+        value: AUDIO_SOURCE_CONTROLNET,
+        label: AUDIO_SOURCE_CONTROLNET
+      });
     }
     const selected = `${currentValue || ""}`.trim();
     if (isAceStepFunAudioSource(selected) && !options.some((option) => option.value === selected)) {
@@ -72,6 +81,20 @@
     }
     return AUDIO_SOURCE_NATIVE;
   };
+  var detectControlNetEnabledForAudioSelect = (audioSelect) => {
+    const clipIdx = audioSelect.dataset.clipIdx;
+    if (!clipIdx) {
+      return false;
+    }
+    for (const elem of document.querySelectorAll(
+      CONTROLNET_SOURCE_SELECT_SELECTOR
+    )) {
+      if (elem instanceof HTMLSelectElement && elem.dataset.clipIdx === clipIdx) {
+        return !elem.disabled;
+      }
+    }
+    return false;
+  };
   var audioSource = () => {
     const refreshOptions = (reason = "manual") => {
       const selects = getSourceSelects();
@@ -83,7 +106,9 @@
         return;
       }
       for (const select of selects) {
-        const options = buildAudioSourceOptions(select.value);
+        const options = buildAudioSourceOptions(select.value, {
+          controlNetEnabled: detectControlNetEnabledForAudioSelect(select)
+        });
         const desired = resolveAudioSourceValue(select.value, options);
         const newOptionsJson = JSON.stringify(
           options.map((o) => [o.value, o.label])
@@ -1140,7 +1165,12 @@
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
-    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource);
+    const rawControlNetLora = normalizeControlNetLora(
+      rawClip.controlNetLora ?? rawClip.ControlNetLora
+    );
+    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
+      controlNetEnabled: rawControlNetLora !== ""
+    });
     const fps = Math.max(1, defaults.fps);
     const rawDuration = utils.toNumber(
       `${rawClip.duration}`,
@@ -1175,9 +1205,7 @@
       rawAudioSource,
       audioSourceOptions
     );
-    const controlNetLora = normalizeControlNetLora(
-      rawClip.controlNetLora ?? rawClip.ControlNetLora
-    );
+    const controlNetLora = rawControlNetLora;
     const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet = controlNetLora !== "" && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
     const clip = {
@@ -1946,6 +1974,11 @@
     if (clip.controlNetLora === "") {
       clip.clipLengthFromControlNet = false;
       setRelatedClipCheckbox(elem, "clipLengthFromControlNet", false, true);
+      if (isControlNetAudioSource(clip.audioSource)) {
+        clip.audioSource = AUDIO_SOURCE_NATIVE;
+        clip.clipLengthFromAudio = false;
+        setRelatedClipCheckbox(elem, "clipLengthFromAudio", false);
+      }
     }
     return fieldChangeApplied({
       refreshClips: "always",
@@ -3425,15 +3458,17 @@ ${optionHtml}
     }
     const contentStyle = clip.expanded ? "" : ' style="display: none;"';
     const head = `<span id="input_group_vsclip${clipIdx}" class="input-group-header input-group-shrinkable"><span class="header-label-wrap"><span class="auto-symbol">${collapseGlyph}</span><span class="header-label">Clip ${clipIdx}</span><span class="header-label-spacer"></span><span class="vs-clip-card-actions"><button type="button" class="basic-button vs-btn-tiny ${skipBtnVariant}" data-clip-action="skip" data-clip-idx="${clipIdx}" title="${skipBtnTitle}">&#x23ED;&#xFE0E;</button><button type="button" class="interrupt-button vs-btn-tiny" data-clip-action="delete" data-clip-idx="${clipIdx}" title="Remove clip">&times;</button></span></span></span>`;
-    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource);
-    const audioSource2 = resolveAudioSourceValue(
-      clip.audioSource,
-      audioSourceOptions
-    );
     const normalizedControlNetLora = normalizeControlNetLora(
       clip.controlNetLora
     );
     const controlNetLoraActive = normalizedControlNetLora !== "";
+    const audioSourceOptions = buildAudioSourceOptions(clip.audioSource, {
+      controlNetEnabled: controlNetLoraActive
+    });
+    const audioSource2 = resolveAudioSourceValue(
+      clip.audioSource,
+      audioSourceOptions
+    );
     const canUseAudioLength = canUseClipLengthFromAudio(audioSource2);
     const clipLengthFromAudio = canUseAudioLength && !!clip.clipLengthFromAudio;
     const canUseControlNetLength = controlNetLoraActive && !clipLengthFromAudio;

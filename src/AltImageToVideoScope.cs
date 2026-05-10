@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -38,7 +39,7 @@ internal static class AltImageToVideoScope
         ArgumentNullException.ThrowIfNull(handler);
         if (Volatile.Read(ref _registered) == 0)
         {
-            throw new InvalidOperationException(
+            throw new SwarmReadableErrorException(
                 "AltImageToVideoScope.RegisterDispatcher() must be called before Pre/Post.");
         }
 

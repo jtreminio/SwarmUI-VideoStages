@@ -119,11 +119,30 @@ internal sealed class VideoStagesCoordinator(
     {
         WGNodeData nativeAudio = g.CurrentMedia?.AttachedAudio;
         IReadOnlyDictionary<int, WGNodeData> clipAudios =
-            BuildPerClipAudioDetections(audioHandler, clips);
+            BuildPerClipExternalAudioDetections(clips);
         IReadOnlyDictionary<int, WGNodeData> uploadedAudios =
             BuildPerClipUploadDetections(clips);
         audioHandler.PruneAceStepFunUnsavedTracks(clips);
         return new ClipAudioMaps(nativeAudio, clipAudios, uploadedAudios);
+    }
+
+    private IReadOnlyDictionary<int, WGNodeData> BuildPerClipExternalAudioDetections(
+        IReadOnlyList<ClipSpec> clips)
+    {
+        Dictionary<int, WGNodeData> audios = new(BuildPerClipAudioDetections(audioHandler, clips));
+        ControlNetApplicator applicator = new(g);
+        foreach (ClipSpec clip in clips)
+        {
+            if (!ClipAudioWorkflowHelper.IsControlNetAudioSource(clip.AudioSource))
+            {
+                continue;
+            }
+            if (applicator.TryGetCapturedControlNetAudio(clip.ControlNetSource, out WGNodeData audio))
+            {
+                audios[clip.Id] = audio;
+            }
+        }
+        return audios;
     }
 
     private void TryInjectResolvedClipAudio(

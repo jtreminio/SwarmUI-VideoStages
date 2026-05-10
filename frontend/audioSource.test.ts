@@ -4,7 +4,12 @@ import {
     stubAceStepFunRegistry,
     stubAceStepFunRegistryThrowing,
 } from "./__test_helpers__/registries";
-import { audioSource } from "./audioSource";
+import {
+    AUDIO_SOURCE_CONTROLNET,
+    audioSource,
+    canUseClipLengthFromAudio,
+    isControlNetAudioSource,
+} from "./audioSource";
 
 type Controller = ReturnType<typeof audioSource>;
 
@@ -38,6 +43,17 @@ const setupDom = (options: DomFixtureOptions = {}): DomFixture => {
     }
 
     return fixture;
+};
+
+const mountControlNetSourceSelect = (
+    clipIdx: number,
+    disabled: boolean,
+): HTMLSelectElement => {
+    const select = mountSelect(`vsclip${clipIdx}_controlNetSource`, {});
+    select.dataset.clipField = "controlNetSource";
+    select.dataset.clipIdx = String(clipIdx);
+    select.disabled = disabled;
+    return select;
 };
 
 describe("audioSource", () => {
@@ -348,6 +364,135 @@ describe("audioSource", () => {
             );
 
             consoleSpy.mockRestore();
+        });
+    });
+
+    describe("ControlNet audio source", () => {
+        it("isControlNetAudioSource matches only the literal 'ControlNet' value", () => {
+            expect(isControlNetAudioSource("ControlNet")).toBe(true);
+            expect(isControlNetAudioSource("  ControlNet  ")).toBe(true);
+            expect(isControlNetAudioSource("ControlNet 1")).toBe(false);
+            expect(isControlNetAudioSource("controlnet")).toBe(false);
+            expect(isControlNetAudioSource("Native")).toBe(false);
+            expect(isControlNetAudioSource("")).toBe(false);
+        });
+
+        it("canUseClipLengthFromAudio includes ControlNet audio sources", () => {
+            expect(canUseClipLengthFromAudio(AUDIO_SOURCE_CONTROLNET)).toBe(
+                true,
+            );
+            expect(canUseClipLengthFromAudio("Upload")).toBe(true);
+            expect(canUseClipLengthFromAudio("audio0")).toBe(true);
+            expect(canUseClipLengthFromAudio("Native")).toBe(false);
+        });
+
+        it("buildOptions includes ControlNet only when context.controlNetEnabled is true", () => {
+            setupDom();
+            controller = audioSource();
+
+            const without = controller
+                .buildOptions("", { controlNetEnabled: false })
+                .map((o) => o.value);
+            expect(without).not.toContain(AUDIO_SOURCE_CONTROLNET);
+
+            const withControlNet = controller
+                .buildOptions("", { controlNetEnabled: true })
+                .map((o) => o.value);
+            expect(withControlNet).toContain(AUDIO_SOURCE_CONTROLNET);
+        });
+
+        it("ControlNet option is appended after Upload and AceStepFun refs", () => {
+            setupDom();
+            stubAceStepFunRegistry(["audio0"]);
+            controller = audioSource();
+
+            const values = controller
+                .buildOptions("", { controlNetEnabled: true })
+                .map((o) => o.value);
+            expect(values).toEqual([
+                "Native",
+                "Upload",
+                "audio0",
+                AUDIO_SOURCE_CONTROLNET,
+            ]);
+        });
+
+        it("refreshOptions adds ControlNet when the matching controlNetSource select is enabled", () => {
+            const { select } = setupDom({
+                initialValue: "Native",
+                initialOptions: ["Native", "Upload"],
+            });
+            mountControlNetSourceSelect(0, false);
+            controller = audioSource();
+
+            controller.refreshOptions();
+
+            const values = Array.from(select?.options ?? []).map(
+                (o) => o.value,
+            );
+            expect(values).toContain(AUDIO_SOURCE_CONTROLNET);
+        });
+
+        it("refreshOptions omits ControlNet when the matching controlNetSource select is disabled", () => {
+            const { select } = setupDom({
+                initialValue: "Native",
+                initialOptions: ["Native", "Upload"],
+            });
+            mountControlNetSourceSelect(0, true);
+            controller = audioSource();
+
+            controller.refreshOptions();
+
+            const values = Array.from(select?.options ?? []).map(
+                (o) => o.value,
+            );
+            expect(values).not.toContain(AUDIO_SOURCE_CONTROLNET);
+        });
+
+        it("refreshOptions falls back to Native when ControlNet was selected but the dropdown becomes disabled", () => {
+            const { select } = setupDom({
+                initialValue: AUDIO_SOURCE_CONTROLNET,
+                initialOptions: ["Native", "Upload", AUDIO_SOURCE_CONTROLNET],
+            });
+            mountControlNetSourceSelect(0, true);
+            controller = audioSource();
+
+            controller.refreshOptions();
+
+            expect(select?.value).toBe("Native");
+            const values = Array.from(select?.options ?? []).map(
+                (o) => o.value,
+            );
+            expect(values).not.toContain(AUDIO_SOURCE_CONTROLNET);
+        });
+
+        it("ControlNet option is keyed by clip-idx so each clip is independent", () => {
+            const selectClip0 = mountSelect("vsclip0_audioSource", {
+                value: "Native",
+                options: ["Native", "Upload"],
+            });
+            selectClip0.dataset.clipField = "audioSource";
+            selectClip0.dataset.clipIdx = "0";
+            const selectClip1 = mountSelect("vsclip1_audioSource", {
+                value: "Native",
+                options: ["Native", "Upload"],
+            });
+            selectClip1.dataset.clipField = "audioSource";
+            selectClip1.dataset.clipIdx = "1";
+            mountControlNetSourceSelect(0, false);
+            mountControlNetSourceSelect(1, true);
+            controller = audioSource();
+
+            controller.refreshOptions();
+
+            const clip0Values = Array.from(selectClip0.options).map(
+                (o) => o.value,
+            );
+            const clip1Values = Array.from(selectClip1.options).map(
+                (o) => o.value,
+            );
+            expect(clip0Values).toContain(AUDIO_SOURCE_CONTROLNET);
+            expect(clip1Values).not.toContain(AUDIO_SOURCE_CONTROLNET);
         });
     });
 });

@@ -499,7 +499,7 @@ internal sealed class LtxStageExecutor(
         {
             return false;
         }
-        return ClipAudioWorkflowHelper.IsUploadOrAceStepFunAudioSource(clip.AudioSource);
+        return ClipAudioWorkflowHelper.IsExternalClipAudioSource(clip.AudioSource);
     }
 
     internal void ApplyResolvedFpsToWorkflow(WorkflowGenerator.ImageToVideoGenInfo genInfo, int fps)

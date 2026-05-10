@@ -2,6 +2,7 @@ import {
     AUDIO_SOURCE_NATIVE,
     canUseClipLengthFromAudio,
     isAceStepFunAudioSource,
+    isControlNetAudioSource,
 } from "./audioSource";
 import {
     CLIP_AUDIO_UPLOAD_FIELD,
@@ -499,6 +500,11 @@ const applyClipControlNetLoraChange = ({
     if (clip.controlNetLora === "") {
         clip.clipLengthFromControlNet = false;
         setRelatedClipCheckbox(elem, "clipLengthFromControlNet", false, true);
+        if (isControlNetAudioSource(clip.audioSource)) {
+            clip.audioSource = AUDIO_SOURCE_NATIVE;
+            clip.clipLengthFromAudio = false;
+            setRelatedClipCheckbox(elem, "clipLengthFromAudio", false);
+        }
     }
 
     return fieldChangeApplied({

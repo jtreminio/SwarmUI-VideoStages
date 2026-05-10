@@ -462,7 +462,12 @@ export const normalizeClip = (
 ): Clip => {
     const defaults = getRootDefaults();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
-    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource);
+    const controlNetLora = normalizeControlNetLora(
+        rawClip.controlNetLora ?? rawClip.ControlNetLora,
+    );
+    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
+        controlNetEnabled: controlNetLora !== "",
+    });
     const fps = Math.max(1, defaults.fps);
     const rawDuration = utils.toNumber(
         `${rawClip.duration}`,
@@ -500,9 +505,6 @@ export const normalizeClip = (
     const audioSource = resolveAudioSourceValue(
         rawAudioSource,
         audioSourceOptions,
-    );
-    const controlNetLora = normalizeControlNetLora(
-        rawClip.controlNetLora ?? rawClip.ControlNetLora,
     );
     const clipLengthFromAudio =
         canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
