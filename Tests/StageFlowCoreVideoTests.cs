@@ -1512,6 +1512,39 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Wan_14b_three_stage_chain_sets_end_step_on_every_stage_with_successor()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeClip(
+                MakeStage(models.VideoModel.Name, "Generated", upscale: 1.0, steps: 10),
+                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, upscale: 1.0, steps: 10),
+                MakeStage(models.VideoModel.Name, "Generated", control: 0.7, upscale: 1.0, steps: 10)))
+            .ToString();
+
+        T2IParamInput input = BuildInput(models.BaseModel, stagesJson);
+        input.Set(T2IParamTypes.VideoFrames, 121);
+        input.Set(T2IParamTypes.VideoFPS, 24);
+        input.Set(T2IParamTypes.VAE, models.BaseModel);
+        (JObject workflow, WorkflowGenerator unusedGenerator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNoopSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(3, samplers.Count);
+
+        Assert.Equal(5, (int?)samplers[0].FindInput("end_at_step")!.LiteralAsLong());
+        Assert.Equal("enable", samplers[0].FindInput("return_with_leftover_noise")!.LiteralAsString());
+
+        Assert.Equal(3, (int?)samplers[1].FindInput("end_at_step")!.LiteralAsLong());
+        Assert.Equal("enable", samplers[1].FindInput("return_with_leftover_noise")!.LiteralAsString());
+
+        Assert.NotEqual("enable", samplers[2].FindInput("return_with_leftover_noise")!.LiteralAsString());
+    }
+
+    [Fact]
     public void Wan_14b_chained_image_workflow_pixel_upscale_reuses_previous_sampler_latent()
     {
         using SwarmUiTestContext _ = new();

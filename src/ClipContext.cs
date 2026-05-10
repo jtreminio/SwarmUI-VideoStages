@@ -22,6 +22,7 @@ internal sealed class ClipContext
     public WGNodeData SourceMedia { get; }
     public WGNodeData SourceVae { get; }
     public ConditioningHandoff LastConditioningHandoff { get; set; }
+    public JArray CachedControlNetLoraModelPath { get; set; }
     public ClipAudioState AudioReuse { get; } = new();
 
     public bool IsFirstStage(StageSpec stage) =>

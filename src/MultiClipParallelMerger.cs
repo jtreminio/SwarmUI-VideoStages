@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -75,6 +76,12 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         }
 
         INodeOutput mergedVideo = MergeClipVideosWithBatchImagesNode(bridge, videoOutputs);
+        if (audioOutputs.Count > 0 && audioOutputs.Count != videoOutputs.Count)
+        {
+            Logs.Warning(
+                $"VideoStages: merged clip audio omitted — only {audioOutputs.Count} of "
+                + $"{videoOutputs.Count} clips have concatenatable audio.");
+        }
         INodeOutput mergedAudio = audioOutputs.Count == videoOutputs.Count
             ? CascadeAudioConcat(bridge, audioOutputs)
             : null;

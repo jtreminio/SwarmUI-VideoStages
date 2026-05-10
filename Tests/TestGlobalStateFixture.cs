@@ -19,6 +19,12 @@ public sealed class GlobalStateFixture : IDisposable
 
     public GlobalStateFixture()
     {
+        // RegisterDefaults is from SwarmUI core; in single-test runs nothing else triggers it.
+        if (T2IParamTypes.Controlnets[0] is null)
+        {
+            T2IParamTypes.RegisterDefaults();
+        }
+
         // Register typed node bindings once for the whole collection. The bridge-based code
         // paths (NodesOfType<T>(), GetNode<T>(id)) need these factories populated, and not all
         // tests go through WorkflowTestHarness which would otherwise trigger registration via

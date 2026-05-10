@@ -8,7 +8,6 @@ public sealed class AudioHandler(WorkflowGenerator g)
 {
     private const long AceStepFunDecodeIdBase = 64160;
     private const long AceStepFunTrackIdStride = 100;
-    private const long AceStepFunTrackIdWraparound = 1000;
     private const string AceStepFunAudioSourcePrefix = "audio";
 
     public static string MakeAceStepFunDecodeId(int trackIndex) =>
@@ -114,8 +113,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
         {
             return false;
         }
-        long diff = numericId - AceStepFunDecodeIdBase;
-        return diff >= 0 && diff % AceStepFunTrackIdWraparound == trackIndex * AceStepFunTrackIdStride;
+        return numericId == AceStepFunDecodeIdBase + (long)trackIndex * AceStepFunTrackIdStride;
     }
 
     private WGNodeData CreateAudioNode(INodeOutput output) =>

@@ -362,7 +362,6 @@ internal static class VideoStagesSpecParser
                     EndStep = CalculateContinuationEndStep(stage.Steps, nextStage.Control)
                 };
             }
-            return;
         }
     }
 

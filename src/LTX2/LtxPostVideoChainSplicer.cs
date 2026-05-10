@@ -28,8 +28,8 @@ internal static class LtxPostVideoChainSplicer
         if (result is not null)
         {
             g.CurrentMedia = result.ToWGNodeData(g);
+            capture.AttachSourceAudio(g.CurrentMedia);
         }
-        capture.AttachSourceAudio(g.CurrentMedia);
     }
 
     public static void SpliceCurrentOutputToDedicatedBranch(

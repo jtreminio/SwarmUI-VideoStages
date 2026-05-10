@@ -50,7 +50,7 @@ internal class StageRunner(
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.Plan.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
-            ApplyControlNetLora(clip, currentGenInfo);
+            ApplyControlNetLora(clipContext, currentGenInfo);
             bool needsCrop = new ControlNetApplicator(g).Apply(
                 currentGenInfo,
                 clip.ControlNetSource,
@@ -476,8 +476,9 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         genInfo.HasFixedMediaLen = true;
     }
 
-    private void ApplyControlNetLora(ClipSpec clip, WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    private void ApplyControlNetLora(ClipContext clipContext, WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
+        ClipSpec clip = clipContext.Clip;
         if (string.IsNullOrWhiteSpace(clip.ControlNetLora) || genInfo.Model is null)
         {
             return;
@@ -485,6 +486,12 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
         if (!VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel))
         {
+            return;
+        }
+
+        if (clipContext.CachedControlNetLoraModelPath is JArray cached && cached.Count == 2)
+        {
+            genInfo.Model = genInfo.Model.WithPath(CopyPath(cached));
             return;
         }
 
@@ -516,6 +523,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         bridge.SyncNode(loraLoader);
         BridgeSync.SyncLastId(g);
         genInfo.Model = genInfo.Model.WithPath([loraLoader.Id, 0]);
+        clipContext.CachedControlNetLoraModelPath = new JArray(loraLoader.Id, 0);
     }
 
     private static T2IModel ResolveLoraModel(string loraName)

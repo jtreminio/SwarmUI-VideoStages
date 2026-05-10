@@ -36,6 +36,7 @@ internal static class LtxAudioReuseState
             && IsValidAudioLatentPath(currentAudioPath))
         {
             audioReuse.Remember(new JArray(currentAudioPath[0], currentAudioPath[1]));
+            return;
         }
 
         if (!audioReuse.TryGetPath(out JArray reusedAudioPath))

@@ -48,6 +48,11 @@ internal static class WanFirstLastFrameRewriter
             wanEndImagePrepared.Path as JArray,
             width,
             height);
+        if (scaledEndOutput is null)
+        {
+            Logs.Warning("VideoStages: WAN FLF rewrite skipped because the end-image output could not be resolved.");
+            return;
+        }
 
         WanFirstLastFrameToVideoNode flf = bridge.AddNode(new WanFirstLastFrameToVideoNode());
         flf.With(

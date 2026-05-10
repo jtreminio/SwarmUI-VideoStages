@@ -15,6 +15,13 @@ internal class ControlNetApplicator(WorkflowGenerator g)
     private const string CapturedControlNetImageKeyPrefix = "videostages.controlnet.fullimage.";
     private const string CapturedControlNetFrameCountKeyPrefix = "videostages.controlnet.framecount.";
 
+    private static readonly (string ApplyClass, string LoaderInputName)[] KnownControlNetApplyNodes =
+    [
+        (ControlNetApplyAdvancedNode.ClassType, "control_net"),
+        (ControlNetInpaintingAliMamaApplyNode.ClassType, "control_net"),
+        (QwenImageDiffsynthControlnetNode.ClassType, "model_patch"),
+    ];
+
     private static string CapturedControlNetImageKey(int index) =>
         $"{CapturedControlNetImageKeyPrefix}{index}";
 
@@ -325,68 +332,56 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         fullControlImage = null;
         string controlModelName = controlModel.ToString(g.ModelFolderFormat);
 
-        IEnumerable<ControlNetApplyAdvancedNode> candidates = bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>()
-            .OrderBy(n => int.TryParse(n.Id, out int id) ? id : int.MaxValue);
-
-        foreach (ControlNetApplyAdvancedNode candidate in candidates)
+        foreach ((string applyClass, string loaderInputName) in KnownControlNetApplyNodes)
         {
-            if (usedApplyNodes.Contains(candidate.Id))
+            IEnumerable<ComfyNode> candidates = bridge.Graph.NodesOfType(applyClass)
+                .OrderBy(n => int.TryParse(n.Id, out int id) ? id : int.MaxValue);
+
+            foreach (ComfyNode candidate in candidates)
             {
-                continue;
+                if (usedApplyNodes.Contains(candidate.Id))
+                {
+                    continue;
+                }
+                if (g.Workflow[candidate.Id] is not JObject candidateNode
+                    || !TryGetInputRef(candidateNode, loaderInputName, out JArray loaderRef)
+                    || !TryGetInputRef(candidateNode, "image", out JArray imageInput))
+                {
+                    continue;
+                }
+                if (!LoaderChainContainsModel(bridge, loaderRef, controlModelName))
+                {
+                    continue;
+                }
+                applyNode = (candidate.Id, candidateNode);
+                fullControlImage = imageInput;
+                return true;
             }
-            JObject node = (JObject)g.Workflow[candidate.Id];
-            if (!TryGetInputRef(node, "control_net", out JArray controlNetRef)
-                || !ControlNetChainUsesModel(bridge, controlNetRef, controlModelName)
-                || !TryGetInputRef(node, "image", out JArray imageInput))
-            {
-                continue;
-            }
-            applyNode = (candidate.Id, node);
-            fullControlImage = imageInput;
-            return true;
         }
+
         return false;
     }
 
-    private static bool ControlNetChainUsesModel(
+    private static bool LoaderChainContainsModel(
         WorkflowBridge bridge,
-        JArray controlNetRef,
-        string modelName)
+        JArray loaderRef,
+        string controlModelName)
     {
-        if (controlNetRef is not { Count: 2 })
+        if (bridge.ResolvePath(loaderRef)?.Node is not ComfyNode start)
         {
             return false;
         }
-
-        Queue<string> pending = new();
-        HashSet<string> visited = [];
-        pending.Enqueue($"{controlNetRef[0]}");
-        while (pending.Count > 0)
-        {
-            string nodeId = pending.Dequeue();
-            if (!visited.Add(nodeId))
-            {
-                continue;
-            }
-            ComfyNode node = bridge.Graph.GetNode(nodeId);
-            if (node is null)
-            {
-                continue;
-            }
-            if (node is ControlNetLoaderNode loader && loader.ControlNetName.LiteralAsString() == modelName)
-            {
-                return true;
-            }
-            foreach (INodeInput input in node.Inputs)
-            {
-                if (input.Connection?.Node is ComfyNode upstream)
-                {
-                    pending.Enqueue(upstream.Id);
-                }
-            }
-        }
-        return false;
+        return LoaderMatches(start, controlModelName)
+            || LoaderMatches(bridge.Graph.FindNearestUpstream<ControlNetLoaderNode>(start), controlModelName)
+            || LoaderMatches(bridge.Graph.FindNearestUpstream<ModelPatchLoaderNode>(start), controlModelName);
     }
+
+    private static bool LoaderMatches(ComfyNode node, string controlModelName) => node switch
+    {
+        ControlNetLoaderNode cn => cn.ControlNetName.LiteralAsString() == controlModelName,
+        ModelPatchLoaderNode mp => mp.Name.LiteralAsString() == controlModelName,
+        _ => false,
+    };
 
     private static bool OutputHasVideoUpstream(WorkflowBridge bridge, JArray outputRef)
     {
