@@ -4,7 +4,7 @@ using Xunit;
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
-public class VideoStagesMetadataSanitizerTests
+public class MetadataSanitizerTests
 {
     [Fact]
     public void StripUploadData_RemovesEmbeddedPayloads_KeepsFileNames()
@@ -34,7 +34,7 @@ public class VideoStagesMetadataSanitizerTests
                 }
             }
         }.ToString();
-        string sanitized = VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
         JObject root = JObject.Parse(sanitized);
         JObject clip = (JObject)root["clips"]![0]!;
         Assert.Null(clip["uploadedAudio"]!["data"]);
@@ -60,7 +60,7 @@ public class VideoStagesMetadataSanitizerTests
                 }
             }
         }.ToString();
-        string sanitized = VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
         JObject clip = (JObject)JObject.Parse(sanitized)["clips"]![0]!;
         Assert.Null(clip["uploadedAudio"]);
     }
@@ -69,13 +69,13 @@ public class VideoStagesMetadataSanitizerTests
     public void StripUploadData_InvalidJson_ReturnsOriginal()
     {
         string raw = "{not json";
-        Assert.Equal(raw, VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter(raw));
+        Assert.Equal(raw, MetadataSanitizer.StripUploadDataFromJsonParameter(raw));
     }
 
     [Fact]
     public void StripUploadData_NonObjectRoot_ReturnsOriginal()
     {
         string raw = "[{\"uploadedAudio\":{\"data\":\"x\"}}]";
-        Assert.Equal(raw, VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter(raw));
+        Assert.Equal(raw, MetadataSanitizer.StripUploadDataFromJsonParameter(raw));
     }
 }
