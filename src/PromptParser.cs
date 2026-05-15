@@ -167,7 +167,7 @@ internal static class PromptParser
         return fallback ?? "";
     }
 
-    public static LoraOverrideScope ApplyLoraScope(T2IParamInput input, int clipIndex, int stageSectionId)
+    public static ParamSnapshot ApplyLoraScope(T2IParamInput input, int clipIndex, int stageSectionId)
     {
         if (!input.TryGet(T2IParamTypes.Loras, out List<string> loras)
             || loras is null
@@ -205,7 +205,6 @@ internal static class PromptParser
             return null;
         }
 
-        LoraOverrideScope scope = new(input);
         List<string> newLoras = [.. loras];
         List<string> newWeights = [.. weights];
         List<string> newTencWeights = [.. tencWeights];
@@ -234,11 +233,16 @@ internal static class PromptParser
             newConfinements.Add($"{T2IParamInput.SectionID_Video}");
         }
 
+        ParamSnapshot snapshot = ParamSnapshot.Of(input,
+            T2IParamTypes.Loras.Type,
+            T2IParamTypes.LoraWeights.Type,
+            T2IParamTypes.LoraTencWeights.Type,
+            T2IParamTypes.LoraSectionConfinement.Type);
         input.Set(T2IParamTypes.Loras, newLoras);
         input.Set(T2IParamTypes.LoraWeights, newWeights);
         input.Set(T2IParamTypes.LoraTencWeights, newTencWeights);
         input.Set(T2IParamTypes.LoraSectionConfinement, newConfinements);
-        return scope;
+        return snapshot;
     }
 
     /// <summary>
@@ -568,49 +572,4 @@ internal static class PromptParser
         dest.Append(add);
     }
 
-    internal sealed class LoraOverrideScope : IDisposable
-    {
-        private readonly T2IParamInput _input;
-        private readonly bool _hadLoras;
-        private readonly bool _hadWeights;
-        private readonly bool _hadTencWeights;
-        private readonly bool _hadConfinements;
-        private readonly List<string> _loras;
-        private readonly List<string> _weights;
-        private readonly List<string> _tencWeights;
-        private readonly List<string> _confinements;
-
-        public LoraOverrideScope(T2IParamInput input)
-        {
-            _input = input;
-            _hadLoras = input.TryGet(T2IParamTypes.Loras, out List<string> loras);
-            _hadWeights = input.TryGet(T2IParamTypes.LoraWeights, out List<string> weights);
-            _hadTencWeights = input.TryGet(T2IParamTypes.LoraTencWeights, out List<string> tencWeights);
-            _hadConfinements = input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> confinements);
-            _loras = loras is null ? null : [.. loras];
-            _weights = weights is null ? null : [.. weights];
-            _tencWeights = tencWeights is null ? null : [.. tencWeights];
-            _confinements = confinements is null ? null : [.. confinements];
-        }
-
-        public void Dispose()
-        {
-            Restore(T2IParamTypes.Loras, _hadLoras, _loras);
-            Restore(T2IParamTypes.LoraWeights, _hadWeights, _weights);
-            Restore(T2IParamTypes.LoraTencWeights, _hadTencWeights, _tencWeights);
-            Restore(T2IParamTypes.LoraSectionConfinement, _hadConfinements, _confinements);
-        }
-
-        private void Restore(T2IRegisteredParam<List<string>> param, bool hadValue, List<string> value)
-        {
-            if (hadValue)
-            {
-                _input.Set(param, value);
-            }
-            else
-            {
-                _input.Remove(param);
-            }
-        }
-    }
 }

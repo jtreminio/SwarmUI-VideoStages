@@ -36,7 +36,7 @@ internal class StageRunner(
         }
 
         ClipSpec clip = clipContext.Clip;
-        using PromptParser.LoraOverrideScope loraScope = PromptParser.ApplyLoraScope(
+        using ParamSnapshot loraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
             clip.Id,
             sectionId);
