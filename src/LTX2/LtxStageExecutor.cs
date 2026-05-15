@@ -1002,6 +1002,7 @@ internal sealed class LtxStageExecutor(
         return new MediaRef
         {
             Output = audioVaeOutput,
+            DataType = WGNodeData.DT_AUDIO,
             Compat = g.CurrentAudioVae?.Compat
         };
     }
