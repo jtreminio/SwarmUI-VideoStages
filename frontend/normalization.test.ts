@@ -202,6 +202,43 @@ describe("normalization", () => {
         expect(clip.clipLengthFromControlNet).toBe(false);
     });
 
+    it("normalizeClip preserves 'ControlNet' audio source when controlNetLora is set", () => {
+        const clip = normalizeClip(
+            {
+                audioSource: "ControlNet",
+                controlNetLora: "ltx-ic-lora.safetensors",
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.audioSource).toBe("ControlNet");
+    });
+
+    it("normalizeClip falls back to Native when ControlNet audio source is stored without controlNetLora", () => {
+        const clip = normalizeClip(
+            {
+                audioSource: "ControlNet",
+                controlNetLora: "",
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.audioSource).toBe("Native");
+    });
+
+    it("normalizeClip allows clipLengthFromAudio when audio source is ControlNet", () => {
+        const clip = normalizeClip(
+            {
+                audioSource: "ControlNet",
+                controlNetLora: "ltx-ic-lora.safetensors",
+                clipLengthFromAudio: true,
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.clipLengthFromAudio).toBe(true);
+    });
+
     it("normalizeClip reads camelCase controlNetSource and controlNetLora from stored JSON", () => {
         const clip = normalizeClip(
             {

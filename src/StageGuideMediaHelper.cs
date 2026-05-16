@@ -1,3 +1,6 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
@@ -7,7 +10,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
 {
     internal WGNodeData ResolveGuideMedia(
         StageRefStore.StageRef guideReference,
-        LTX2.LtxPostVideoChain postVideoChain)
+        LTX2.LtxPostVideoChainCapture postVideoChain)
     {
         if (guideReference?.Media is null)
         {
@@ -28,23 +31,29 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         }
 
         WGNodeData guideVae = guideReference.Vae ?? g.CurrentVae;
-        if (guideReference.Media.Path is JArray guidePath
-            && WorkflowUtils.TryResolveNearestDownstreamDecodeOutput(
-                g.Workflow, guidePath, out JArray decodedGuidePath))
+        if (guideReference.Media.Path is JArray { Count: 2 } guidePath)
         {
-            string rawDataType =
-                guideReference.Media.DataType == WGNodeData.DT_LATENT_VIDEO
-                || guideReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
-                    ? WGNodeData.DT_VIDEO
-                    : WGNodeData.DT_IMAGE;
-            return guideReference.Media.WithPath(decodedGuidePath, rawDataType, guideVae?.Compat);
+            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            INodeOutput guideOutput = bridge.ResolvePath(guidePath);
+            ComfyNode decode = guideOutput is not null
+                ? bridge.Graph.FindNearestDownstream(guideOutput, n => n is VAEDecodeNode or VAEDecodeTiledNode)
+                : null;
+            if (decode is not null)
+            {
+                string rawDataType =
+                    guideReference.Media.DataType == WGNodeData.DT_LATENT_VIDEO
+                    || guideReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
+                        ? WGNodeData.DT_VIDEO
+                        : WGNodeData.DT_IMAGE;
+                return guideReference.Media.WithPath(new JArray(decode.Id, 0), rawDataType, guideVae?.Compat);
+            }
         }
         return VaeDecodePreference.AsRawImage(g, guideReference.Media, guideVae);
     }
 
     internal bool IsLiveCurrentOutputReference(
         WGNodeData guideMedia,
-        LTX2.LtxPostVideoChain postVideoChain)
+        LTX2.LtxPostVideoChainCapture postVideoChain)
     {
         if (guideMedia?.Path is not JArray guidePath || postVideoChain is null)
         {
@@ -71,34 +80,36 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         int targetHeight = sourceMedia.Height ?? g.UserInput.GetImageHeight();
         int currentWidth = resolvedGuideMedia.Width ?? targetWidth;
         int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         if (TryNormalizeExistingImageScale(
-                resolvedGuideMedia.Path,
-                targetWidth,
-                targetHeight,
-                out JArray existingScalePath))
+            bridge,
+            resolvedGuideMedia.Path,
+            targetWidth,
+            targetHeight,
+            out string normalizedScaleId))
         {
-            resolvedGuideMedia = resolvedGuideMedia.WithPath(existingScalePath);
+            resolvedGuideMedia = resolvedGuideMedia.WithPath([normalizedScaleId, 0]);
         }
         else if (currentWidth != targetWidth || currentHeight != targetHeight)
         {
             if (TryFindReusableImageScale(
-                    resolvedGuideMedia.Path,
-                    targetWidth,
-                    targetHeight,
-                    out JArray reusableScalePath))
+                bridge,
+                resolvedGuideMedia.Path,
+                targetWidth,
+                targetHeight,
+                out string reusableScaleId))
             {
-                resolvedGuideMedia = resolvedGuideMedia.WithPath(reusableScalePath);
+                resolvedGuideMedia = resolvedGuideMedia.WithPath([reusableScaleId, 0]);
             }
             else
             {
-                JObject scaleInputs = BuildCenterLanczosImageScaleInputs(
+                ImageScaleNode scale = CreateCenterLanczosImageScale(
+                    bridge,
                     resolvedGuideMedia.Path,
                     targetWidth,
                     targetHeight);
-                string scaleNode = g.CreateNode(
-                    NodeTypes.ImageScale,
-                    scaleInputs);
-                resolvedGuideMedia = resolvedGuideMedia.WithPath([scaleNode, 0]);
+                resolvedGuideMedia = resolvedGuideMedia.WithPath([scale.Id, 0]);
             }
         }
 
@@ -107,87 +118,89 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         return resolvedGuideMedia;
     }
 
-    internal JObject BuildCenterLanczosImageScaleInputs(JToken image, int width, int height)
+    private ImageScaleNode CreateCenterLanczosImageScale(
+        WorkflowBridge bridge,
+        JArray sourcePath,
+        int width,
+        int height)
     {
-        return new JObject()
-        {
-            ["image"] = image,
-            ["width"] = width,
-            ["height"] = height,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "center"
-        };
+        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
+            Width: width,
+            Height: height,
+            UpscaleMethod: "lanczos",
+            Crop: "center"));
+        scale.Image.ConnectFromPath(bridge, sourcePath);
+        bridge.SyncNode(scale);
+        BridgeSync.SyncLastId(g);
+        return scale;
     }
 
-    private bool TryNormalizeExistingImageScale(
+    private static bool TryNormalizeExistingImageScale(
+        WorkflowBridge bridge,
         JArray sourcePath,
         int targetWidth,
         int targetHeight,
-        out JArray scaledPath)
+        out string scaleNodeId)
     {
-        scaledPath = null;
-        if (g.Workflow is null
-            || sourcePath is not { Count: 2 }
-            || g.Workflow[$"{sourcePath[0]}"] is not JObject node
-            || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
-            || node["inputs"] is not JObject inputs)
+        scaleNodeId = null;
+        if (sourcePath is not { Count: 2 }
+            || bridge.Graph.GetNode($"{sourcePath[0]}") is not ImageScaleNode scale)
         {
             return false;
         }
 
-        if (inputs["image"] is JArray upstreamPath
-            && upstreamPath.Count == 2
-            && g.Workflow[$"{upstreamPath[0]}"] is JObject upstreamNode
-            && StringUtils.NodeTypeMatches(upstreamNode, NodeTypes.ImageScale)
-            && upstreamNode["inputs"] is JObject upstreamInputs)
+        ImageScaleNode collapsed = scale;
+        if (scale.Image.Connection?.Node is ImageScaleNode upstream)
         {
-            if (WorkflowUtils.FindInputConnections(g.Workflow, sourcePath).Count == 0)
+            INodeOutput outerOutput = bridge.ResolvePath(sourcePath);
+            if (outerOutput is not null && !bridge.Graph.FindDownstream(outerOutput).Any())
             {
-                g.Workflow.Remove($"{sourcePath[0]}");
+                bridge.RemoveNode(scale);
             }
-            sourcePath = upstreamPath;
-            inputs = upstreamInputs;
+            collapsed = upstream;
         }
 
-        inputs["width"] = targetWidth;
-        inputs["height"] = targetHeight;
-        inputs["crop"] = "center";
-        if (inputs["upscale_method"] is null)
+        collapsed.With(
+            Width: targetWidth,
+            Height: targetHeight,
+            Crop: "center");
+        if (!collapsed.UpscaleMethod.HasValue)
         {
-            inputs["upscale_method"] = "lanczos";
+            collapsed.UpscaleMethod.Set("lanczos");
         }
-        scaledPath = [sourcePath[0], sourcePath[1]];
+        bridge.SyncNode(collapsed);
+        scaleNodeId = collapsed.Id;
         return true;
     }
 
-    private bool TryFindReusableImageScale(
+    private static bool TryFindReusableImageScale(
+        WorkflowBridge bridge,
         JArray sourcePath,
         int targetWidth,
         int targetHeight,
-        out JArray scaledPath)
+        out string scaleNodeId)
     {
-        scaledPath = null;
-        if (g.Workflow is null || sourcePath is not { Count: 2 })
+        scaleNodeId = null;
+        if (sourcePath is not { Count: 2 })
         {
             return false;
         }
+        string sourceId = $"{sourcePath[0]}";
+        int sourceSlot = (int)sourcePath[1];
 
-        foreach (JProperty property in g.Workflow.Properties())
+        foreach (ImageScaleNode candidate in bridge.Graph.NodesOfType<ImageScaleNode>())
         {
-            if (property.Value is not JObject node
-                || !StringUtils.NodeTypeMatches(node, NodeTypes.ImageScale)
-                || node["inputs"] is not JObject inputs
-                || inputs["image"] is not JArray imagePath
-                || imagePath.Count != 2
-                || !JToken.DeepEquals(imagePath, sourcePath)
-                || inputs.Value<int?>("width") != targetWidth
-                || inputs.Value<int?>("height") != targetHeight)
+            INodeOutput candidateImage = candidate.Image.Connection;
+            if (candidateImage?.Node.Id != sourceId
+                || candidateImage.SlotIndex != sourceSlot
+                || candidate.Width.LiteralAsInt() != targetWidth
+                || candidate.Height.LiteralAsInt() != targetHeight)
             {
                 continue;
             }
-
-            inputs["crop"] = "center";
-            scaledPath = [property.Name, 0];
+            candidate.Crop.Set("center");
+            bridge.SyncNode(candidate);
+            scaleNodeId = candidate.Id;
             return true;
         }
         return false;

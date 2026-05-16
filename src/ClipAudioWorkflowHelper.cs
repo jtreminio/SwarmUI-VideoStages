@@ -1,3 +1,4 @@
+using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
 
 namespace VideoStages;
@@ -15,33 +16,17 @@ internal static class ClipAudioWorkflowHelper
         bool clipLengthFromAudio,
         bool restrictLengthMatchToUploadOrAce)
     {
-        if (restrictLengthMatchToUploadOrAce)
-        {
-            if (!clipLengthFromAudio)
-            {
-                return false;
-            }
-            if (StringUtils.Equals(audioSource, Constants.AudioSourceUpload))
-            {
-                return true;
-            }
-            return AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _);
-        }
-
-        if (StringUtils.Equals(audioSource, Constants.AudioSourceUpload)
-            || AudioStageDetector.TryParseAceStepFunAudioSource(audioSource, out _))
-        {
-            return clipLengthFromAudio;
-        }
-        return true;
+        return IsExternalClipAudioSource(audioSource)
+            ? clipLengthFromAudio
+            : !restrictLengthMatchToUploadOrAce;
     }
 
-    internal static AudioStageDetector.Detection ResolveClipAudioDetection(
+    internal static WGNodeData ResolveClipAudio(
         int clipId,
         string audioSourceRaw,
-        AudioStageDetector.Detection nativeFallback,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios,
+        WGNodeData nativeFallback,
+        IReadOnlyDictionary<int, WGNodeData> clipAudios,
+        IReadOnlyDictionary<int, WGNodeData> uploadedAudios,
         bool suppressNativeFallback,
         ClipAudioSourceNormalization normalization)
     {
@@ -50,47 +35,54 @@ internal static class ClipAudioWorkflowHelper
         {
             case ClipAudioSourceNormalization.CoordinatorField:
                 source = audioSourceRaw?.Trim() ?? "";
-                if (string.IsNullOrWhiteSpace(source))
-                {
-                    return suppressNativeFallback ? null : nativeFallback;
-                }
                 break;
             case ClipAudioSourceNormalization.StageSpec:
                 source = (audioSourceRaw ?? Constants.AudioSourceNative).Trim();
-                if (string.IsNullOrWhiteSpace(source))
+                if (source.Length == 0)
                 {
                     return null;
                 }
                 break;
             default:
-                Logs.Error(nameof(normalization));
-                return null;
+                throw new SwarmReadableErrorException($"Unhandled ClipAudioSourceNormalization value: {normalization}");
         }
 
-        if (StringUtils.Equals(source, Constants.AudioSourceUpload))
+        if (!IsExternalClipAudioSource(source))
         {
-            if (uploadedAudios is null)
-            {
-                return null;
-            }
-            return uploadedAudios.TryGetValue(clipId, out AudioStageDetector.Detection uploaded)
-                ? uploaded
-                : null;
+            return suppressNativeFallback ? null : nativeFallback;
         }
-        if (AudioStageDetector.TryParseAceStepFunAudioSource(source, out _))
-        {
-            if (clipAudios is null)
-            {
-                return null;
-            }
-            return clipAudios.TryGetValue(clipId, out AudioStageDetector.Detection ace)
-                ? ace
-                : null;
-        }
-        if (suppressNativeFallback)
+        return string.Equals(source, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
+            ? AudioForClip(uploadedAudios, clipId)
+            : AudioForClip(clipAudios, clipId);
+    }
+
+    private static WGNodeData AudioForClip(IReadOnlyDictionary<int, WGNodeData> audiosByClipId, int clipId)
+    {
+        if (audiosByClipId is null)
         {
             return null;
         }
-        return nativeFallback;
+        return audiosByClipId.TryGetValue(clipId, out WGNodeData found) ? found : null;
+    }
+
+    internal static bool IsUploadOrAceStepFunAudioSource(string audioSource)
+    {
+        string trimmed = audioSource?.Trim();
+        return string.Equals(trimmed, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
+            || AudioHandler.TryParseAceStepFunAudioSource(trimmed, out _);
+    }
+
+    internal static bool IsControlNetAudioSource(string audioSource)
+    {
+        return string.Equals(
+            audioSource?.Trim(),
+            Constants.AudioSourceControlNet,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool IsExternalClipAudioSource(string audioSource)
+    {
+        return IsUploadOrAceStepFunAudioSource(audioSource)
+            || IsControlNetAudioSource(audioSource);
     }
 }

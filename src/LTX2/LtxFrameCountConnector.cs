@@ -1,3 +1,4 @@
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
@@ -15,14 +16,14 @@ internal static class LtxFrameCountConnector
             return;
         }
 
-        g.RunOnNodesOfClass(LtxNodeTypes.EmptyLTXVLatentVideo, (_, videoData) =>
+        g.RunOnNodesOfClass(EmptyLTXVLatentVideoNode.ClassType, (_, videoData) =>
         {
             if (videoData["inputs"] is JObject videoInputs)
             {
                 videoInputs["length"] = CloneConnection(framesConnection);
             }
         });
-        g.RunOnNodesOfClass(LtxNodeTypes.LTXVEmptyLatentAudio, (_, audioData) =>
+        g.RunOnNodesOfClass(LTXVEmptyLatentAudioNode.ClassType, (_, audioData) =>
         {
             if (audioData["inputs"] is JObject audioInputs)
             {
@@ -38,18 +39,10 @@ internal static class LtxFrameCountConnector
             return;
         }
 
-        string key;
-        if (inputs.ContainsKey("frames_number"))
-        {
-            key = "frames_number";
-        }
-        else if (inputs.ContainsKey("length"))
+        string key = "frames_number";
+        if (!inputs.ContainsKey("frames_number") && inputs.ContainsKey("length"))
         {
             key = "length";
-        }
-        else
-        {
-            key = "frames_number";
         }
         inputs[key] = CloneConnection(framesConnection);
     }

@@ -142,7 +142,7 @@ internal sealed class SwarmUiTestContext : IDisposable
     private readonly Dictionary<string, T2IModelHandler> _priorModelSets;
     private readonly bool _priorIncludeHash;
     private readonly List<WorkflowGenerator.WorkflowGenStep> _priorModelGenSteps;
-    private readonly ConcurrentDictionary<string, Func<string, Dictionary<string, Newtonsoft.Json.Linq.JObject>>> _priorExtraModelProviders;
+    private readonly ConcurrentDictionary<string, Func<string, Dictionary<string, JObject>>> _priorExtraModelProviders;
 
     public SwarmUiTestContext(
         bool disableImageMetadataModelHash = true,
@@ -160,9 +160,9 @@ internal sealed class SwarmUiTestContext : IDisposable
         }
         if (resetExtraModelProviders)
         {
-            ModelsAPI.ExtraModelProviders = new ConcurrentDictionary<string, Func<string, Dictionary<string, Newtonsoft.Json.Linq.JObject>>>(
+            ModelsAPI.ExtraModelProviders = new ConcurrentDictionary<string, Func<string, Dictionary<string, JObject>>>(
                 [
-                    new KeyValuePair<string, Func<string, Dictionary<string, Newtonsoft.Json.Linq.JObject>>>("unit_test", _ => new Dictionary<string, Newtonsoft.Json.Linq.JObject>())
+                    new KeyValuePair<string, Func<string, Dictionary<string, JObject>>>("unit_test", _ => [])
                 ]);
         }
         if (clearModelGenSteps)
@@ -290,7 +290,7 @@ internal static class TestModelFactory
         };
         T2IModel gemmaModel = new(clipHandler, "/tmp", "/tmp/gemma_3_12B_it.safetensors", "gemma_3_12B_it.safetensors")
         {
-            ModelClass = new T2IModelClass()
+            ModelClass = new T2IModelClass
             {
                 ID = "unit-gemma",
                 Name = "Unit Gemma",

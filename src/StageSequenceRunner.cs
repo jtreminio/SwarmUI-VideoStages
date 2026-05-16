@@ -1,4 +1,3 @@
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
@@ -11,61 +10,66 @@ internal sealed class StageSequenceRunner(
     StageRefStore store,
     StageRunner singleStageRunner,
     Base2EditPublishedStageRefs base2EditPublishedStageRefs,
-    RootVideoStageTakeover rootVideoStageTakeover,
+    RootVideoStageHandoff rootVideoStageHandoff,
     RootVideoStageResizer rootVideoStageResizer,
     MultiClipParallelMerger multiClipParallelMerger,
     LtxManager ltxManager)
 {
     private const int IntermediateStageSaveId = 52100;
 
+    private readonly Dictionary<int, StageRefStore.StageRef> _stageOutputs = [];
+    private StageRefStore.StageRef _previousStageRef;
+
     private sealed class RunContext
     {
-        public AudioStageDetector.Detection NativeAudioDetection { get; init; }
-        public IReadOnlyDictionary<int, AudioStageDetector.Detection> ClipAudios { get; init; }
-        public IReadOnlyDictionary<int, AudioStageDetector.Detection> UploadedAudios { get; init; }
-        public bool RootStageTakeover { get; init; }
-        public int? PreparedClipId { get; set; }
+        public WGNodeData NativeAudio { get; init; }
+        public IReadOnlyDictionary<int, WGNodeData> ClipAudios { get; init; }
+        public IReadOnlyDictionary<int, WGNodeData> UploadedAudios { get; init; }
+        public bool RootStageHandoff { get; init; }
     }
 
     public void Run(
-        IReadOnlyList<JsonParser.StageSpec> stages,
-        AudioStageDetector.Detection detectedAudio = null,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> clipAudios = null,
-        IReadOnlyDictionary<int, AudioStageDetector.Detection> uploadedAudios = null,
-        bool rootStageTakeover = false)
+        IReadOnlyList<ClipSpec> clips,
+        WGNodeData nativeAudio = null,
+        IReadOnlyDictionary<int, WGNodeData> clipAudios = null,
+        IReadOnlyDictionary<int, WGNodeData> uploadedAudios = null,
+        bool rootStageHandoff = false)
     {
         RunContext context = new()
         {
-            NativeAudioDetection = detectedAudio ?? BuildCurrentMediaAudioDetection(g),
+            NativeAudio = nativeAudio ?? g.CurrentMedia?.AttachedAudio,
             ClipAudios = clipAudios,
             UploadedAudios = uploadedAudios,
-            RootStageTakeover = rootStageTakeover
+            RootStageHandoff = rootStageHandoff
         };
+        _stageOutputs.Clear();
+        _previousStageRef = null;
         List<int> usedSectionIds = [];
-        bool parallelMultiClip = StagesUseMultipleClipIds(stages);
+        bool parallelMultiClip = clips.Count > 1;
         List<WGNodeData> clipParallelOutputs = [];
         try
         {
-            if (context.RootStageTakeover)
+            if (context.RootStageHandoff)
             {
                 rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
             }
-            CaptureReference(StageRefStore.StageKind.Generated);
-            WGNodeData parallelClipSourceMedia = g.CurrentMedia?.Duplicate();
-            WGNodeData parallelClipSourceVae = g.CurrentVae?.Duplicate();
+            CaptureGeneratedReference();
+            WGNodeData rootSourceMedia = g.CurrentMedia?.Duplicate();
+            WGNodeData rootSourceVae = g.CurrentVae?.Duplicate();
             if (parallelMultiClip)
             {
                 g.NodeHelpers[MultiClipParallelMerger.NodeHelperKey] = "1";
             }
 
-            for (int i = 0; i < stages.Count; i++)
+            int totalStageCount = TotalStageCount(clips);
+            VideoStagesSpec spec = g.GetVideoStagesSpec();
+            bool isFirstClip = true;
+            foreach (ClipSpec clip in clips)
             {
-                JsonParser.StageSpec stage = stages[i];
-                if (parallelMultiClip
-                    && i > 0
-                    && stage.ClipId != stages[i - 1].ClipId)
+                ClipContext clipContext = new(clip, spec.Width, spec.Height, rootSourceMedia, rootSourceVae);
+                if (parallelMultiClip && !isFirstClip)
                 {
-                    if (parallelClipSourceMedia is null)
+                    if (clipContext.SourceMedia is null)
                     {
                         Logs.Error(
                             "VideoStages: parallel clips require root media before the first stage. "
@@ -73,59 +77,56 @@ internal sealed class StageSequenceRunner(
                         break;
                     }
 
-                    g.CurrentMedia = parallelClipSourceMedia.Duplicate();
-                    if (parallelClipSourceVae is not null)
+                    g.CurrentMedia = clipContext.SourceMedia.Duplicate();
+                    if (clipContext.SourceVae is not null)
                     {
-                        g.CurrentVae = parallelClipSourceVae.Duplicate();
+                        g.CurrentVae = clipContext.SourceVae.Duplicate();
                     }
                 }
+                isFirstClip = false;
 
-                PrepareClipAudio(stage, context);
-                StageRefStore.StageRef guideRef = TryResolveGuideReference(stage);
-                if (guideRef is null)
+                StageSpec firstStage = clip.Stages[0];
+                ApplyControlNetClipLengthIfApplicable(clip, firstStage);
+                PrepareClipAudio(clip, firstStage, context);
+
+                int clipStageIndex = 0;
+                foreach (StageSpec stage in clip.Stages)
                 {
-                    int clipId = stage.ClipId;
-                    Logs.Warning(
-                        $"VideoStages: Skipping all remaining stages for clip {clipId} after stage {stage.Id} "
-                        + "could not resolve its image reference.");
-                    while (i + 1 < stages.Count && stages[i + 1].ClipId == clipId)
+                    StageRefStore.StageRef guideRef = TryResolveGuideReference(stage);
+                    if (guideRef is null)
                     {
-                        i++;
+                        throw new SwarmUserErrorException(
+                            $"VideoStages: Clip {clip.Id} stage {clipStageIndex} could not resolve "
+                            + $"ImageReference '{stage.ImageReference}'.");
                     }
-                    continue;
+
+                    int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
+                    usedSectionIds.Add(sectionId);
+                    PrepareStageOverrides(clipContext, stage, sectionId);
+                    singleStageRunner.RunStage(stage, sectionId, guideRef, store, clipContext);
+                    CaptureStageOutput(stage.Id);
+                    clipStageIndex++;
+
+                    if (stage.Id < totalStageCount - 1
+                        && g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false))
+                    {
+                        g.CurrentMedia.SaveOutput(
+                            g.CurrentVae,
+                            g.CurrentAudioVae,
+                            g.GetStableDynamicID(IntermediateStageSaveId, stage.Id));
+                    }
                 }
 
-                int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
-                usedSectionIds.Add(sectionId);
-                PrepareStageOverrides(stage, sectionId);
-                singleStageRunner.RunStage(stage, sectionId, guideRef, store);
-                CaptureReference(StageRefStore.StageKind.Stage, stage.Id);
-
-                if (parallelMultiClip
-                    && (i == stages.Count - 1 || stages[i + 1].ClipId != stage.ClipId))
+                if (parallelMultiClip)
                 {
                     clipParallelOutputs.Add(g.CurrentMedia.Duplicate());
-                }
-
-                if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
-                    && stage.Id < stages.Count - 1)
-                {
-                    g.CurrentMedia.SaveOutput(
-                        g.CurrentVae,
-                        g.CurrentAudioVae,
-                        g.GetStableDynamicID(IntermediateStageSaveId, stage.Id));
                 }
             }
 
             if (parallelMultiClip && clipParallelOutputs.Count > 1)
             {
-                JArray rootVideoPath = StageRunner.CopyPath(parallelClipSourceMedia?.Path as JArray);
-                multiClipParallelMerger.Apply(clipParallelOutputs, rootVideoPath);
+                multiClipParallelMerger.Apply(clipParallelOutputs, rootSourceMedia);
             }
-        }
-        catch (Exception ex)
-        {
-            Logs.Error($"VideoStages: Stage sequence aborted due to an unexpected error: {ex}");
         }
         finally
         {
@@ -141,51 +142,76 @@ internal sealed class StageSequenceRunner(
         }
     }
 
-    private void PrepareClipAudio(JsonParser.StageSpec stage, RunContext context)
+    private static int TotalStageCount(IReadOnlyList<ClipSpec> clips)
     {
-        if (context.PreparedClipId == stage.ClipId || g.CurrentMedia is null)
+        int total = 0;
+        foreach (ClipSpec clip in clips)
+        {
+            total += clip.Stages.Count;
+        }
+        return total;
+    }
+
+    private void PrepareClipAudio(ClipSpec clip, StageSpec stage, RunContext context)
+    {
+        if (g.CurrentMedia is null)
         {
             return;
         }
 
-        context.PreparedClipId = stage.ClipId;
         WGNodeData currentMedia = g.CurrentMedia.Duplicate();
-        bool suppressNative = context.RootStageTakeover
-            && rootVideoStageTakeover.ShouldReplaceTextToVideoRootStage(stage);
-        AudioStageDetector.Detection clipAudio = ClipAudioWorkflowHelper.ResolveClipAudioDetection(
-            stage.ClipId,
-            stage.ClipAudioSource,
-            context.NativeAudioDetection,
+        bool suppressNative = context.RootStageHandoff
+            && rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);
+        WGNodeData clipAudio = ClipAudioWorkflowHelper.ResolveClipAudio(
+            clip.Id,
+            clip.AudioSource,
+            context.NativeAudio,
             context.ClipAudios,
             context.UploadedAudios,
             suppressNative,
             ClipAudioWorkflowHelper.ClipAudioSourceNormalization.StageSpec);
-        currentMedia.AttachedAudio = clipAudio?.Audio;
+        currentMedia.AttachedAudio = clipAudio;
         g.CurrentMedia = currentMedia;
-        if (stage.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
-        {
-            _ = ltxManager.TryApplyControlNetFrameCount(stage.ClipControlNetSource);
-        }
-        if (context.RootStageTakeover
+        if (context.RootStageHandoff
             && ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
-                stage.ClipAudioSource,
-                stage.ClipLengthFromAudio && !stage.ClipLengthFromControlNet,
+                clip.AudioSource,
+                clip.ClipLengthFromAudio,
                 restrictLengthMatchToUploadOrAce: true))
         {
             _ = ltxManager.TryInjectAudio(clipAudio);
         }
     }
 
-    private void CaptureReference(StageRefStore.StageKind kind, int? index = null)
+    private void ApplyControlNetClipLengthIfApplicable(ClipSpec clip, StageSpec stage)
+    {
+        if (clip.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
+        {
+            _ = ltxManager.TryApplyControlNetFrameCount(clip.ControlNetSource);
+        }
+    }
+
+    private void CaptureGeneratedReference()
     {
         WGNodeData referenceMedia = g.CurrentMedia;
         WGNodeData referenceVae = g.CurrentVae;
         ltxManager.ApplyPostVideoChainCaptureIfPresent(ref referenceMedia, ref referenceVae);
-        store.Capture(kind, index, referenceMedia, referenceVae);
+        store.Capture(StageRefStore.StageKind.Generated, referenceMedia, referenceVae);
     }
 
-    private void PrepareStageOverrides(JsonParser.StageSpec stage, int sectionId)
+    private void CaptureStageOutput(int index)
     {
+        WGNodeData referenceMedia = g.CurrentMedia;
+        WGNodeData referenceVae = g.CurrentVae;
+        ltxManager.ApplyPostVideoChainCaptureIfPresent(ref referenceMedia, ref referenceVae);
+        StageRefStore.StageRef captured = new(referenceMedia, referenceVae);
+        _stageOutputs[index] = captured;
+        _previousStageRef = captured;
+    }
+
+    private void PrepareStageOverrides(ClipContext clipContext, StageSpec stage, int sectionId)
+    {
+        ClipDimensionState dimensions = clipContext.Dimensions;
+        VideoStagesSpec spec = g.GetVideoStagesSpec();
         g.UserInput.SectionParamOverrides.Remove(sectionId);
         g.UserInput.Set(T2IParamTypes.VideoModel.Type, stage.Model, sectionId);
         g.UserInput.Set(T2IParamTypes.VideoSteps, stage.Steps, sectionId);
@@ -194,29 +220,29 @@ internal sealed class StageSequenceRunner(
         g.UserInput.Set(T2IParamTypes.CFGScale, stage.CfgScale, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SamplerParam.Type, stage.Sampler, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SchedulerParam.Type, stage.Scheduler, sectionId);
-        if (JsonParser.IsUsableVaeValue(stage.Vae))
+        if (!string.IsNullOrEmpty(stage.Vae))
         {
             g.UserInput.Set(T2IParamTypes.VAE.Type, stage.Vae, sectionId);
         }
-        if (stage.ClipFrames.HasValue && stage.ClipFrames.Value > 0)
+        if (clipContext.Clip.Frames is int frames && frames > 0)
         {
-            g.UserInput.Set(T2IParamTypes.VideoFrames, stage.ClipFrames.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.VideoFrames, frames, sectionId);
         }
-        if (stage.ClipFPS.HasValue && stage.ClipFPS.Value > 0)
+        if (spec.FPS > 0)
         {
-            g.UserInput.Set(T2IParamTypes.VideoFPS, stage.ClipFPS.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.VideoFPS, spec.FPS, sectionId);
         }
-        if (stage.ClipWidth.HasValue && stage.ClipWidth.Value > 0)
+        if (dimensions.Width > 0)
         {
-            g.UserInput.Set(T2IParamTypes.Width, stage.ClipWidth.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.Width, dimensions.Width, sectionId);
         }
-        if (stage.ClipHeight.HasValue && stage.ClipHeight.Value > 0)
+        if (dimensions.Height > 0)
         {
-            g.UserInput.Set(T2IParamTypes.Height, stage.ClipHeight.Value, sectionId);
+            g.UserInput.Set(T2IParamTypes.Height, dimensions.Height, sectionId);
         }
     }
 
-    private StageRefStore.StageRef TryResolveGuideReference(JsonParser.StageSpec stage)
+    private StageRefStore.StageRef TryResolveGuideReference(StageSpec stage)
     {
         if (StringUtils.Equals(stage.ImageReference, "Base"))
         {
@@ -232,9 +258,9 @@ internal sealed class StageSequenceRunner(
         }
         if (StringUtils.Equals(stage.ImageReference, "Generated"))
         {
-            if (stage.Id > 0 && store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousGenerated))
+            if (_previousStageRef is not null)
             {
-                return previousGenerated;
+                return _previousStageRef;
             }
             return WarnIfMissing(
                 store.Generated,
@@ -242,23 +268,17 @@ internal sealed class StageSequenceRunner(
         }
         if (StringUtils.Equals(stage.ImageReference, "PreviousStage"))
         {
-            if (stage.Id <= 0)
+            if (_previousStageRef is null)
             {
                 Logs.Warning(
                     "VideoStages: ImageReference 'PreviousStage' cannot be used for the first stage.");
                 return null;
             }
-            if (!store.TryGetStageRef(stage.Id - 1, out StageRefStore.StageRef previousStage))
-            {
-                Logs.Warning(
-                    $"VideoStages: ImageReference 'PreviousStage' requested, but stage {stage.Id - 1} does not exist.");
-                return null;
-            }
-            return previousStage;
+            return _previousStageRef;
         }
-        if (ImageReferenceSyntax.TryParseExplicitStageIndex(stage.ImageReference, out int explicitStage))
+        if (ImageReference.TryParseExplicitStageIndex(stage.ImageReference, out int explicitStage))
         {
-            if (!store.TryGetStageRef(explicitStage, out StageRefStore.StageRef explicitRef))
+            if (!_stageOutputs.TryGetValue(explicitStage, out StageRefStore.StageRef explicitRef))
             {
                 Logs.Warning(
                     $"VideoStages: ImageReference '{stage.ImageReference}' requested, but stage {explicitStage} "
@@ -267,7 +287,7 @@ internal sealed class StageSequenceRunner(
             }
             return explicitRef;
         }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(stage.ImageReference, out int editStage))
+        if (ImageReference.TryParseBase2EditStageIndex(stage.ImageReference, out int editStage))
         {
             if (!base2EditPublishedStageRefs.TryGetStageRef(editStage, out StageRefStore.StageRef publishedEditRef))
             {
@@ -282,23 +302,6 @@ internal sealed class StageSequenceRunner(
         return null;
     }
 
-    private static bool StagesUseMultipleClipIds(IReadOnlyList<JsonParser.StageSpec> stages)
-    {
-        if (stages.Count == 0)
-        {
-            return false;
-        }
-        int firstClipId = stages[0].ClipId;
-        for (int i = 1; i < stages.Count; i++)
-        {
-            if (stages[i].ClipId != firstClipId)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static StageRefStore.StageRef WarnIfMissing(StageRefStore.StageRef r, string message)
     {
         if (r is null)
@@ -308,17 +311,4 @@ internal sealed class StageSequenceRunner(
         return r;
     }
 
-    private static AudioStageDetector.Detection BuildCurrentMediaAudioDetection(WorkflowGenerator g)
-    {
-        if (g.CurrentMedia?.AttachedAudio is null)
-        {
-            return null;
-        }
-        return new AudioStageDetector.Detection(
-            g.CurrentMedia.AttachedAudio,
-            "videostages.current-media-audio",
-            "CurrentMediaAttachedAudio",
-            "videostages.current-media-audio",
-            0);
-    }
 }

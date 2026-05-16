@@ -1,3 +1,6 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -6,14 +9,16 @@ namespace VideoStages;
 
 internal sealed class RootVideoStageResizer(
     WorkflowGenerator g,
-    RootVideoStageTakeover takeover,
-    JsonParser jsonParser,
-    StageGuideMediaHelper stageGuideMediaHelper)
+    RootVideoStageHandoff handoff)
 {
-    private readonly record struct Resolution(int Width, int Height);
+    private static int _registered;
 
     public static void RegisterHandlers()
     {
+        if (Interlocked.Exchange(ref _registered, 1) != 0)
+        {
+            return;
+        }
         WorkflowGenerator.AltImageToVideoPreHandlers.Add(ApplyRootResolutionBeforeImageToVideo);
         WorkflowGenerator.AltImageToVideoPostHandlers.Add(ApplyRootLatentResolutionAfterImageToVideo);
     }
@@ -21,101 +26,98 @@ internal sealed class RootVideoStageResizer(
     private static void ApplyRootResolutionBeforeImageToVideo(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!TryGetVideoContextResizerWithRootSize(genInfo, out RootVideoStageResizer resizer, out Resolution resolution))
+        if (!TryGetVideoContextResizerWithRootSize(
+            genInfo, out RootVideoStageResizer resizer, out int width, out int height))
         {
             return;
         }
 
-        resizer.ApplyRootResolutionToImageToVideoInput(genInfo, resolution);
+        genInfo.Width = width;
+        genInfo.Height = height;
+        resizer.ApplyCurrentMediaResolution(width, height);
     }
 
     private static void ApplyRootLatentResolutionAfterImageToVideo(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!TryGetVideoContextResizerWithRootSize(genInfo, out RootVideoStageResizer resizer, out Resolution resolution))
+        if (!TryGetVideoContextResizerWithRootSize(
+            genInfo, out RootVideoStageResizer resizer, out int width, out int height))
         {
             return;
         }
 
-        resizer.ApplyRootResolutionToCurrentMediaLatent(resolution);
+        resizer.SetCurrentMediaDimensions(width, height);
     }
 
     private static bool TryGetVideoContextResizerWithRootSize(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         out RootVideoStageResizer resizer,
-        out Resolution resolution)
+        out int width,
+        out int height)
     {
         resizer = null;
-        resolution = default;
+        width = 0;
+        height = 0;
 
         if (genInfo.ContextID != T2IParamInput.SectionID_Video)
         {
             return false;
         }
 
-        WorkflowGenerator g = genInfo.Generator;
-        resizer = new Runner(g).RootVideoStageResizer;
-        return resizer.TryGetRootStageResolution(out resolution);
-    }
-
-    private void ApplyRootResolutionToImageToVideoInput(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        Resolution resolution)
-    {
-        genInfo.Width = resolution.Width;
-        genInfo.Height = resolution.Height;
-        ApplyCurrentMediaResolution(resolution);
-    }
-
-    private void ApplyRootResolutionToCurrentMediaLatent(Resolution resolution)
-    {
-        if (g.CurrentMedia is null)
-        {
-            return;
-        }
-
-        g.CurrentMedia.Width = resolution.Width;
-        g.CurrentMedia.Height = resolution.Height;
+        resizer = Runner.GetRootVideoStageResizer(genInfo.Generator);
+        return resizer.TryGetRootStageResolution(out width, out height);
     }
 
     internal void ApplyConfiguredRootStageResolutionToCurrentMedia()
     {
-        if (!TryGetConfiguredRootStageResolution(out Resolution resolution))
+        if (!TryGetRootStageResolution(out int width, out int height))
         {
             return;
         }
-
         if (CurrentMediaFeedsSaveImage())
         {
-            g.CurrentMedia.Width = resolution.Width;
-            g.CurrentMedia.Height = resolution.Height;
+            SetCurrentMediaDimensions(width, height);
             return;
         }
 
-        ApplyCurrentMediaResolution(resolution);
+        ApplyCurrentMediaResolution(width, height);
+    }
+
+    internal bool TryGetRootStageResolution(out int width, out int height)
+    {
+        if (TryGetRegisteredRootStageResolution(out width, out height))
+        {
+            return true;
+        }
+
+        (int? rawJsonWidth, int? rawJsonHeight) = VideoStagesSpecParser.GetRawJsonTopLevelDimensions(g);
+        if (TryPositiveDimensionPair(rawJsonWidth, rawJsonHeight, out width, out height))
+        {
+            return true;
+        }
+
+        width = 0;
+        height = 0;
+        return false;
     }
 
     private bool CurrentMediaFeedsSaveImage()
     {
-        if (!takeover.ShouldTakeOverRootStage())
+        if (!handoff.ShouldHandoffRootStage()
+            || g.CurrentMedia?.Path is not { Count: 2 } mediaPath)
         {
             return false;
         }
 
-        if (g.CurrentMedia?.Path is not { Count: 2 } mediaPath)
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.ResolvePath(mediaPath) is not INodeOutput output)
         {
             return false;
         }
 
-        foreach (WorkflowInputConnection connection in WorkflowUtils.FindInputConnections(g.Workflow, mediaPath))
+        foreach (ComfyNode consumer in bridge.Graph.FindDownstream(output))
         {
-            if (!g.Workflow.TryGetValue(connection.NodeId, out JToken nodeToken) || nodeToken is not JObject node)
-            {
-                continue;
-            }
-
-            if (StringUtils.NodeTypeMatches(node, NodeTypes.SwarmSaveImageWS)
-                || StringUtils.NodeTypeMatches(node, NodeTypes.SaveImage))
+            if (consumer is SwarmSaveImageWSNode or SaveImageNode)
             {
                 return true;
             }
@@ -124,144 +126,78 @@ internal sealed class RootVideoStageResizer(
         return false;
     }
 
-    private bool HasNativeRootVideoModel()
+    private static bool TryPositiveDimensionPair(int? w, int? h, out int width, out int height)
     {
-        return g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel imageToVideoModel)
-            && imageToVideoModel is not null;
-    }
-
-    internal bool TryGetRootStageResolution(out int width, out int height)
-    {
-        if (!TryGetRootStageResolution(out Resolution resolution))
+        if (w is > 0 && h is > 0)
         {
-            width = 0;
-            height = 0;
-            return false;
-        }
-
-        width = resolution.Width;
-        height = resolution.Height;
-        return true;
-    }
-
-    private bool TryGetRootStageResolution(out Resolution resolution)
-    {
-        if (TryGetRegisteredRootStageResolution(out resolution))
-        {
+            width = w.Value;
+            height = h.Value;
             return true;
         }
-
-        JsonParser.VideoStagesSpec config = jsonParser.ParseConfig();
-        if (TryPositiveDimensionPair(config.Width, config.Height, out resolution))
-        {
-            return true;
-        }
-
-        foreach (JsonParser.ClipSpec clip in config.Clips)
-        {
-            if (!clip.Skipped)
-            {
-                return TryPositiveDimensionPair(clip.Width, clip.Height, out resolution);
-            }
-        }
-
-        resolution = default;
+        width = 0;
+        height = 0;
         return false;
     }
 
-    private static bool TryPositiveDimensionPair(int? w, int? h, out Resolution resolution)
+    private bool TryGetRegisteredRootStageResolution(out int width, out int height)
     {
-        resolution = default;
-        if (!w.HasValue || !h.HasValue || w.Value <= 0 || h.Value <= 0)
+        if (g.UserInput.TryGet(VideoStagesExtension.RootWidth, out width)
+            && g.UserInput.TryGet(VideoStagesExtension.RootHeight, out height)
+            && width >= Constants.RootDimensionMin
+            && height >= Constants.RootDimensionMin)
         {
-            return false;
+            return true;
         }
-
-        resolution = new Resolution(w.Value, h.Value);
-        return true;
+        width = 0;
+        height = 0;
+        return false;
     }
 
-    private bool TryGetRegisteredRootStageResolution(out Resolution resolution)
-    {
-        resolution = default;
-        if (!g.UserInput.TryGet(VideoStagesExtension.RootWidth, out int width)
-            || !g.UserInput.TryGet(VideoStagesExtension.RootHeight, out int height)
-            || width < Constants.RootDimensionMin
-            || height < Constants.RootDimensionMin)
-        {
-            return false;
-        }
-
-        resolution = new Resolution(width, height);
-        return true;
-    }
-
-    internal bool TryGetConfiguredRootStageResolution(out int width, out int height)
-    {
-        if (!TryGetConfiguredRootStageResolution(out Resolution resolution))
-        {
-            width = 0;
-            height = 0;
-            return false;
-        }
-
-        width = resolution.Width;
-        height = resolution.Height;
-        return true;
-    }
-
-    private bool TryGetConfiguredRootStageResolution(out Resolution resolution)
-    {
-        resolution = default;
-        return g is not null
-            && HasNativeRootVideoModel()
-            && TryGetRootStageResolution(out resolution);
-    }
-
-    private void ApplyCurrentMediaResolution(Resolution resolution)
+    private void SetCurrentMediaDimensions(int width, int height)
     {
         if (g.CurrentMedia is null)
         {
             return;
         }
+        g.CurrentMedia.Width = width;
+        g.CurrentMedia.Height = height;
+    }
 
-        g.CurrentMedia.Width = resolution.Width;
-        g.CurrentMedia.Height = resolution.Height;
-        if (TryUpdateExistingImageScaleNode(resolution))
+    private void ApplyCurrentMediaResolution(int width, int height)
+    {
+        if (g.CurrentMedia is null)
+        {
+            return;
+        }
+        SetCurrentMediaDimensions(width, height);
+
+        if (g.CurrentMedia.Path is not JArray path || path.Count != 2)
         {
             return;
         }
 
-        JObject scaleInputs = stageGuideMediaHelper.BuildCenterLanczosImageScaleInputs(
-            g.CurrentMedia.Path,
-            resolution.Width,
-            resolution.Height);
-
-        string scaleNode = g.CreateNode(
-            NodeTypes.ImageScale,
-            scaleInputs);
-        g.CurrentMedia = g.CurrentMedia.WithPath([scaleNode, 0]);
-    }
-
-    private bool TryUpdateExistingImageScaleNode(Resolution resolution)
-    {
-        if (g.CurrentMedia?.Path is not { Count: 2 } currentPath
-            || !g.Workflow.TryGetValue($"{currentPath[0]}", out JToken currentToken)
-            || currentToken is not JObject currentNode
-            || !StringUtils.NodeTypeMatches(currentNode, NodeTypes.ImageScale)
-            || currentNode["inputs"] is not JObject inputs)
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ImageScaleNode scale = bridge.Graph.GetNode<ImageScaleNode>($"{path[0]}");
+        if (scale is null)
         {
-            return false;
+            if (bridge.ResolvePath(path) is not INodeOutput sourceOutput)
+            {
+                return;
+            }
+            scale = bridge.AddNode(new ImageScaleNode());
+            scale.Image.ConnectToUntyped(sourceOutput);
+            BridgeSync.SyncLastId(g);
+            g.CurrentMedia = g.CurrentMedia.WithPath([scale.Id, 0]);
         }
 
-        inputs["width"] = resolution.Width;
-        inputs["height"] = resolution.Height;
-        inputs["crop"] = "center";
-        if (inputs["upscale_method"] is null)
+        scale.With(
+            Width: width,
+            Height: height,
+            Crop: "center");
+        if (!scale.UpscaleMethod.HasValue)
         {
-            inputs["upscale_method"] = "lanczos";
+            scale.UpscaleMethod.Set("lanczos");
         }
-
-        return true;
+        bridge.SyncNode(scale);
     }
 }

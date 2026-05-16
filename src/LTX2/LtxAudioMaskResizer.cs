@@ -1,4 +1,5 @@
-using Newtonsoft.Json.Linq;
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages.LTX2;
@@ -9,111 +10,64 @@ internal sealed class LtxAudioMaskResizer(
 {
     internal void ApplyRootAudioMaskDimensionsAfterNativeVideo()
     {
-        if (!rootVideoStageResizer.TryGetConfiguredRootStageResolution(out int width, out int height))
+        if (!rootVideoStageResizer.TryGetRootStageResolution(out int width, out int height))
         {
             return;
         }
 
-        UpdateAllAudioMaskDimensions(width, height);
-    }
-
-    internal void ApplyCurrentAudioMaskDimensions(WGNodeData media)
-    {
-        if (media?.Gen is not WorkflowGenerator generator
-            || !media.Width.HasValue
-            || !media.Height.HasValue
-            || media.Path is not { Count: 2 } mediaPath
-            || !generator.Workflow.TryGetValue($"{mediaPath[0]}", out JToken concatToken)
-            || concatToken is not JObject concatNode
-            || !StringUtils.NodeTypeMatches(concatNode, LtxNodeTypes.LTXVConcatAVLatent)
-            || concatNode["inputs"] is not JObject concatInputs
-            || concatInputs["audio_latent"] is not JArray audioLatentPath
-            || !TryGetSolidMaskInputsForAudioLatentPath(
-                generator,
-                audioLatentPath,
-                out JObject solidMaskInputs))
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        foreach (SetLatentNoiseMaskNode setMask in bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>())
         {
-            return;
-        }
-
-        int w = media.Width.Value;
-        int h = media.Height.Value;
-        solidMaskInputs["width"] = w;
-        solidMaskInputs["height"] = h;
-    }
-
-    private void UpdateAllAudioMaskDimensions(int width, int height)
-    {
-        foreach (
-            WorkflowNode setMaskNode in WorkflowUtils.NodesOfType(
-                g.Workflow,
-                NodeTypes.SetLatentNoiseMask))
-        {
-            if (setMaskNode.Node["inputs"] is not JObject setMaskInputs
-                || !IsAudioSamplesFromSetMaskInputs(setMaskInputs)
-                || !TryGetSolidMaskInputsFromSetMaskInputs(g, setMaskInputs, out JObject solidMaskInputs))
+            if (setMask.Samples.Connection?.Node is not (LTXVAudioVAEEncodeNode or VAEEncodeAudioNode))
             {
                 continue;
             }
 
-            solidMaskInputs["width"] = width;
-            solidMaskInputs["height"] = height;
+            if (setMask.Mask.Connection?.Node is not SolidMaskNode solidMask)
+            {
+                continue;
+            }
+
+            solidMask.With(
+                Width: width,
+                Height: height);
+            bridge.SyncNode(solidMask);
         }
     }
 
-    private bool IsAudioSamplesFromSetMaskInputs(JObject setMaskInputs)
+    internal static void ApplyCurrentAudioMaskDimensions(WGNodeData media)
     {
-        if (setMaskInputs["samples"] is not JArray samplesPath
-            || samplesPath.Count != 2
-            || !g.Workflow.TryGetValue($"{samplesPath[0]}", out JToken samplesToken)
-            || samplesToken is not JObject samplesNode)
+        if (media?.Gen is not WorkflowGenerator generator)
         {
-            return false;
+            return;
         }
 
-        return StringUtils.NodeTypeMatches(samplesNode, LtxNodeTypes.LTXVAudioVAEEncode)
-            || StringUtils.NodeTypeMatches(samplesNode, NodeTypes.VAEEncodeAudio);
-    }
-
-    private static bool TryGetSolidMaskInputsForAudioLatentPath(
-        WorkflowGenerator g,
-        JArray audioLatentPath,
-        out JObject solidMaskInputs)
-    {
-        solidMaskInputs = null;
-        if (audioLatentPath is not { Count: 2 }
-            || !g.Workflow.TryGetValue($"{audioLatentPath[0]}", out JToken setMaskToken)
-            || setMaskToken is not JObject setMaskNode
-            || !StringUtils.NodeTypeMatches(setMaskNode, NodeTypes.SetLatentNoiseMask))
+        if (!media.Width.HasValue || !media.Height.HasValue)
         {
-            return false;
+            return;
         }
 
-        if (setMaskNode["inputs"] is not JObject setMaskInputs)
+        if (media.Path is not { Count: 2 } mediaPath)
         {
-            return false;
+            return;
         }
 
-        return TryGetSolidMaskInputsFromSetMaskInputs(g, setMaskInputs, out solidMaskInputs);
-    }
-
-    private static bool TryGetSolidMaskInputsFromSetMaskInputs(
-        WorkflowGenerator g,
-        JObject setMaskInputs,
-        out JObject solidMaskInputs)
-    {
-        solidMaskInputs = null;
-        if (setMaskInputs["mask"] is not JArray solidMaskPath
-            || solidMaskPath.Count != 2
-            || !g.Workflow.TryGetValue($"{solidMaskPath[0]}", out JToken solidMaskToken)
-            || solidMaskToken is not JObject solidMaskNode
-            || !StringUtils.NodeTypeMatches(solidMaskNode, NodeTypes.SolidMask)
-            || solidMaskNode["inputs"] is not JObject inputs)
+        WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        INodeOutput output = bridge.ResolvePath(mediaPath);
+        if (output?.Node is not LTXVConcatAVLatentNode concat)
         {
-            return false;
+            return;
         }
 
-        solidMaskInputs = inputs;
-        return true;
+        if (concat.AudioLatent.Connection?.Node is not SetLatentNoiseMaskNode setMask
+            || setMask.Mask.Connection?.Node is not SolidMaskNode solidMask)
+        {
+            return;
+        }
+
+        solidMask.With(
+            Width: media.Width.Value,
+            Height: media.Height.Value);
+        bridge.SyncNode(solidMask);
     }
 }

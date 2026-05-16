@@ -1,6 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.LTX2;
 
@@ -14,12 +13,12 @@ internal static class WanStageReferenceHandler
         WorkflowGenerator g,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs,
-        JsonParser.StageSpec stage,
+        ClipSpec clip,
+        StageSpec stage,
         StageRefStore refStore,
-        LtxPostVideoChain postVideoChain)
+        LtxPostVideoChainCapture postVideoChain)
     {
-        if (!VideoStageModelCompat.IsWanVideoModel(stage.Model)
-            || stage.ClipRefs is not { Count: > 0 })
+        if (!VideoStageModelCompat.IsWanVideoModel(stage.Model) || clip.ImageRefs.Count == 0)
         {
             return new WanGuideResolution(null, null);
         }
@@ -28,17 +27,17 @@ internal static class WanStageReferenceHandler
             g,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs,
-            stage.ClipRefs[0],
+            clip.ImageRefs[0],
             refStore,
             postVideoChain);
         WGNodeData end = null;
-        if (stage.ClipRefs.Count > 1)
+        if (clip.ImageRefs.Count > 1)
         {
             end = ResolveClipRefSourceMedia(
                 g,
                 stageGuideMediaHelper,
                 base2EditPublishedStageRefs,
-                stage.ClipRefs[1],
+                clip.ImageRefs[1],
                 refStore,
                 postVideoChain);
         }
@@ -50,9 +49,9 @@ internal static class WanStageReferenceHandler
         WorkflowGenerator g,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs,
-        JsonParser.RefSpec spec,
+        ImageRefSpec spec,
         StageRefStore refStore,
-        LtxPostVideoChain postVideoChain)
+        LtxPostVideoChainCapture postVideoChain)
     {
         if (StringUtils.Equals(spec.Source, "Upload"))
         {
@@ -69,7 +68,7 @@ internal static class WanStageReferenceHandler
         {
             stageRef = refStore.Refiner;
         }
-        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(src, out int editStage))
+        else if (ImageReference.TryParseBase2EditStageIndex(src, out int editStage))
         {
             _ = base2EditPublishedStageRefs.TryGetStageRef(editStage, out stageRef);
         }
@@ -78,65 +77,18 @@ internal static class WanStageReferenceHandler
         {
             if (!string.IsNullOrWhiteSpace(src))
             {
-                Logs.Warning($"VideoStages: Unsupported or unresolved WAN clip reference source '{spec.Source}'.");
+                Logs.Warning(
+                    $"VideoStages: Unsupported or unresolved WAN clip reference source '{spec.Source}'.");
             }
-
             return null;
         }
 
         return stageGuideMediaHelper.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
-    private static WGNodeData MaterializeUploadedRefImage(WorkflowGenerator g, JsonParser.RefSpec spec)
+    private static WGNodeData MaterializeUploadedRefImage(WorkflowGenerator g, ImageRefSpec spec)
     {
-        string material = spec.Data?.Trim();
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            material = spec.UploadFileName?.Trim();
-        }
-
-        if (string.IsNullOrWhiteSpace(material))
-        {
-            Logs.Warning("VideoStages: Upload WAN clip reference is missing inline data and a file name.");
-            return null;
-        }
-
-        if (material.StartsWith("inputs/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
-        {
-            if (g.UserInput?.SourceSession is null)
-            {
-                Logs.Warning(
-                    "VideoStages: WAN reference image uses a server-side path but no session is available; "
-                    + "cannot load the file.");
-                return null;
-            }
-
-            try
-            {
-                material = T2IParamTypes.FilePathToDataString(
-                    g.UserInput.SourceSession,
-                    material,
-                    "for VideoStages WAN reference image");
-            }
-            catch (SwarmReadableErrorException ex)
-            {
-                Logs.Warning(
-                    $"VideoStages: Could not resolve uploaded WAN reference image path '{material}': {ex.Message}");
-                return null;
-            }
-        }
-
-        try
-        {
-            ImageFile img = ImageFile.FromDataString(material);
-            return g.LoadImage(img, "${videostageswanrefimage}", false);
-        }
-        catch (Exception ex)
-        {
-            Logs.Warning($"VideoStages: Ignoring invalid WAN clip reference image payload: {ex.Message}");
-            return null;
-        }
+        ImageFile img = ImageReference.MaterializeUploadedRefImage(g, spec, "WAN clip reference image");
+        return img is null ? null : g.LoadImage(img, "${videostageswanrefimage}", false);
     }
 }

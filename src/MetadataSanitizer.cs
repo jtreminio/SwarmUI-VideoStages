@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages;
 
-internal static class VideoStagesMetadataSanitizer
+internal static class MetadataSanitizer
 {
     public static string StripUploadDataFromJsonParameter(string raw)
     {

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ComfyTyped.Core;
 using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -21,23 +22,30 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
             return false;
         }
 
+        JObject payload;
         try
         {
-            JObject payload = JObject.Parse(encoded);
-            WGNodeData vae = payload["vae"] is JObject vaeObj ? DeserializeNodeData(vaeObj, null) : null;
-            WGNodeData media = payload["media"] is JObject mediaObj ? DeserializeNodeData(mediaObj, vae) : null;
-            if (media is null)
-            {
-                return false;
-            }
-
-            stageRef = new StageRefStore.StageRef(media, vae);
-            return true;
+            payload = JToken.Parse(encoded) as JObject;
         }
         catch
         {
             return false;
         }
+        if (payload?["media"] is not JObject mediaObj)
+        {
+            return false;
+        }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        WGNodeData vae = BuildNodeData(bridge, payload["vae"] as JObject, fallbackVae: null);
+        WGNodeData media = BuildNodeData(bridge, mediaObj, fallbackVae: vae);
+        if (media is null)
+        {
+            return false;
+        }
+
+        stageRef = new StageRefStore.StageRef(media, vae);
+        return true;
     }
 
     public static WGNodeData ResolveToRawImage(StageRefStore.StageRef stageRef)
@@ -58,16 +66,16 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
         return VaeDecodePreference.AsRawImage(stageRef.Media.Gen, stageRef.Media, stageRef.Vae);
     }
 
-    private WGNodeData DeserializeNodeData(JObject data, WGNodeData fallbackVae)
+    private WGNodeData BuildNodeData(WorkflowBridge bridge, JObject data, WGNodeData fallbackVae)
     {
-        if (data["path"] is not JArray path || path.Count != 2)
+        if (data is null || data["path"] is not JArray rawPath || bridge.ResolvePath(rawPath) is not INodeOutput output)
         {
             return null;
         }
 
         string dataType = data.Value<string>("dataType") ?? WGNodeData.DT_IMAGE;
         T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.Value<string>("compatId"));
-        return new WGNodeData(path, g, dataType, compat)
+        return new WGNodeData(WorkflowBridge.ToPath(output), g, dataType, compat)
         {
             Width = data.Value<int?>("width"),
             Height = data.Value<int?>("height"),
@@ -76,10 +84,7 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
         };
     }
 
-    private T2IModelCompatClass ResolveCompatFor(
-        string dataType,
-        WGNodeData fallbackVae,
-        string compatId)
+    private T2IModelCompatClass ResolveCompatFor(string dataType, WGNodeData fallbackVae, string compatId)
     {
         if (!string.IsNullOrWhiteSpace(compatId)
             && T2IModelClassSorter.CompatClasses.TryGetValue(

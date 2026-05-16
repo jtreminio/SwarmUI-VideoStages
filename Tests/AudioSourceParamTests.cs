@@ -1,7 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using Xunit;
 
@@ -45,9 +44,8 @@ public class AudioSourceParamTests
         T2IParamInput input = new(null);
         input.Set(VideoStagesExtension.VideoStagesJson, BuildConfigJson(value));
         WorkflowGenerator generator = new() { UserInput = input };
-        JsonParser parser = new(generator);
 
-        JsonParser.ClipSpec clip = Assert.Single(parser.ParseClips());
+        ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(generator).Clips);
 
         Assert.Equal(value, clip.AudioSource);
     }

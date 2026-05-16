@@ -1,7 +1,10 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using Xunit;
+using static VideoStages.Tests.Fixtures;
 
 namespace VideoStages.Tests;
 
@@ -11,31 +14,25 @@ public partial class StageFlowTests
     public void Native_ltx_stage_uses_current_source_instead_of_downstream_reference_preprocess_when_no_clip_refs_are_defined()
     {
         using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = JsonSingleClipStages512(
+        string stagesJson = JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Base", control: 0.5, steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(attachAudioToCurrentMedia: false));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         StageRefStore store = new(generator);
 
-        WorkflowNode imgToVideoNode = WorkflowUtils.NodesOfType(workflow, "LTXVImgToVideoInplace")
+        LTXVImgToVideoInplaceNode imgToVideoNode = bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()
             .Single(node => node.Id != "111");
-        WorkflowNode stagePreprocess = WorkflowAssertions.RequireNodeById(
-            workflow,
-            $"{WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image")[0]}");
-        Assert.Equal("LTXVPreprocess", $"{stagePreprocess.Node["class_type"]}");
+        LTXVPreprocessNode stagePreprocess = (LTXVPreprocessNode)imgToVideoNode.Image.Connection!.Node;
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
-            WorkflowAssertions.RequireConnectionInput(stagePreprocess.Node, "image"),
+            WorkflowBridge.ToPath(stagePreprocess.Image.Connection!),
             store.Generated);
-        Assert.True(JToken.DeepEquals(
-            WorkflowAssertions.RequireConnectionInput(imgToVideoNode.Node, "image"),
-            new JArray(stagePreprocess.Id, 0)));
+        Assert.Same(stagePreprocess.OutputImage, imgToVideoNode.Image.Connection);
     }
 }

@@ -12,33 +12,34 @@ internal sealed class LtxManager
 
     public LtxManager(
         WorkflowGenerator g,
-        JsonParser jsonParser,
-        RootVideoStageTakeover rootVideoStageTakeover,
+        RootVideoStageHandoff rootVideoStageHandoff,
         RootVideoStageResizer rootVideoStageResizer,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs)
     {
         this.g = g;
         audioMaskResizer = new LtxAudioMaskResizer(g, rootVideoStageResizer);
-        audioInjector = new LtxAudioInjector(g, jsonParser, rootVideoStageResizer);
+        audioInjector = new LtxAudioInjector(g, rootVideoStageResizer);
         LtxStageExecutor stageExecutor = new(
             g,
-            rootVideoStageTakeover,
-            rootVideoStageResizer,
-            jsonParser,
-            audioMaskResizer);
+            rootVideoStageHandoff,
+            rootVideoStageResizer);
+        LtxClipRefResolver clipRefResolver = new(
+            g,
+            stageGuideMediaHelper,
+            base2EditPublishedStageRefs);
         stageOrchestrator = new LtxStageOrchestrator(
             g,
             stageExecutor,
-            rootVideoStageTakeover,
+            rootVideoStageHandoff,
             stageGuideMediaHelper,
-            base2EditPublishedStageRefs);
+            clipRefResolver);
     }
 
     public bool TryInjectAudio(
-        AudioStageDetector.Detection detection,
+        WGNodeData audio,
         bool matchVideoLengthToAudio = true) =>
-        audioInjector.TryInject(detection, matchVideoLengthToAudio);
+        audioInjector.TryInject(audio, matchVideoLengthToAudio);
 
     public bool TryApplyControlNetFrameCount(string controlNetSource)
     {
@@ -46,8 +47,7 @@ internal sealed class LtxManager
         {
             return false;
         }
-        if (!ControlNetApplicator.TryCreateCapturedControlImageFrameCount(
-                g,
+        if (!new ControlNetApplicator(g).TryCreateCapturedControlImageFrameCount(
                 controlNetSource,
                 out JArray framesConnection))
         {
@@ -60,32 +60,37 @@ internal sealed class LtxManager
     public void ApplyRootAudioMaskDimensionsAfterNativeVideo() =>
         audioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo();
 
-    public void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
-        audioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
+    public static void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
+        LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
 
-    public void PrepareReusableAudio(JsonParser.StageSpec stage) =>
-        LtxAudioReuseState.PrepareReusableAudio(g, stage);
+    public void PrepareReusableAudio(ClipContext clipContext, StageSpec stage) =>
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
 
-    public LtxPostVideoChain TryCapturePostVideoChain(JsonParser.StageSpec stage) =>
-        LtxPostVideoChain.TryCapture(g, stage);
+    public LtxPostVideoChainCapture TryCapturePostVideoChain(ClipContext clipContext, StageSpec stage) =>
+        LtxPostVideoChainCapture.TryCapture(g, clipContext, stage);
 
-    public void ApplyPostVideoChainCaptureIfPresent(ref WGNodeData referenceMedia, ref WGNodeData referenceVae) =>
-        LtxStageRefCapture.ApplyPostVideoChainCaptureIfPresent(g, ref referenceMedia, ref referenceVae);
+    public void ApplyPostVideoChainCaptureIfPresent(
+        ref WGNodeData referenceMedia,
+        ref WGNodeData referenceVae) =>
+        LtxStageRefCapture.ApplyPostVideoChainCaptureIfPresent(
+            g,
+            ref referenceMedia,
+            ref referenceVae);
 
     public bool TryRunLocalStage(
-        JsonParser.StageSpec stage,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
-        LtxPostVideoChain postVideoChain) =>
+        LtxPostVideoChainCapture postVideoChain) =>
         stageOrchestrator.TryRunLocalLtxPath(
-            stage,
             guideReference,
             refStore,
             genInfo,
+            stageFrame,
             applySourceVideoLatent,
             sourceMedia,
             priorOutputPath,

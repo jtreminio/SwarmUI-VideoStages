@@ -1,13 +1,17 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
+using static VideoStages.Tests.Fixtures;
 
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
 public class ImageReferenceTests
 {
+    // Local override of Fixtures.MakeStage: imageReference is optional (tests cover both absent and explicit cases),
+    // and CfgScale=5.0 is the value these tests pin against.
     private static JObject MakeStage(string model, string imageReference = null) =>
         new()
         {
@@ -32,7 +36,7 @@ public class ImageReferenceTests
         return input;
     }
 
-    private static List<JsonParser.StageSpec> ParseStages(T2IParamInput input)
+    private static List<StageSpec> ParseStages(T2IParamInput input)
     {
         WorkflowGenerator generator = new()
         {
@@ -40,30 +44,53 @@ public class ImageReferenceTests
             Features = [],
             ModelFolderFormat = "/"
         };
-        return new JsonParser(generator).ParseStages();
+        return [.. VideoStagesSpecParser.Parse(generator).Clips.SelectMany(c => c.Stages)];
     }
 
-    private static List<JsonParser.StageSpec> ParseStages(string stagesJson)
+    private static List<StageSpec> ParseStages(string stagesJson)
     {
         return ParseStages(BuildInput(stagesJson));
     }
 
     [Fact]
-    public void Stage_zero_defaults_to_generated_and_future_reference_falls_back_to_previous_stage()
+    public void Stage_zero_defaults_to_generated_when_no_image_reference_is_specified()
     {
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(
-            MakeStage("UnitTest_Video.safetensors"),
-            MakeStage("UnitTest_Video.safetensors", "Stage9")));
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(
+            MakeStage("UnitTest_Video.safetensors")));
 
-        Assert.Equal(2, stages.Count);
+        Assert.Single(stages);
         Assert.Equal("Generated", stages[0].ImageReference);
-        Assert.Equal("PreviousStage", stages[1].ImageReference);
+    }
+
+    [Fact]
+    public void Forward_stage_image_reference_throws_user_error()
+    {
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            ParseStages(JsonSingleClipStages(
+                MakeStage("UnitTest_Video.safetensors"),
+                MakeStage("UnitTest_Video.safetensors", "Stage9"))));
+
+        Assert.Contains("invalid ImageReference 'Stage9'", ex.Message);
+        Assert.Contains("strictly previous stage", ex.Message);
+        Assert.Contains("stage 1", ex.Message);
+    }
+
+    [Fact]
+    public void Invalid_image_reference_throws_user_error()
+    {
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            ParseStages(JsonSingleClipStages(
+                MakeStage("UnitTest_Video.safetensors"),
+                MakeStage("UnitTest_Video.safetensors", "NotARealReference"))));
+
+        Assert.Contains("invalid ImageReference 'NotARealReference'", ex.Message);
+        Assert.Contains("Valid forms are", ex.Message);
     }
 
     [Fact]
     public void Explicit_earlier_stage_reference_is_preserved()
     {
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(
             MakeStage("UnitTest_Video.safetensors"),
             MakeStage("UnitTest_Video.safetensors", "PreviousStage"),
             MakeStage("UnitTest_Video.safetensors", "Stage0")));
@@ -75,7 +102,7 @@ public class ImageReferenceTests
     [Fact]
     public void Base2Edit_stage_reference_is_preserved_when_syntax_is_valid()
     {
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(
             MakeStage("UnitTest_Video.safetensors"),
             MakeStage("UnitTest_Video.safetensors", "edit0")));
 
@@ -86,7 +113,7 @@ public class ImageReferenceTests
     [Fact]
     public void Parser_assigns_linear_stage_ids_from_json_order()
     {
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(
             MakeStage("UnitTest_Video.safetensors"),
             MakeStage("UnitTest_Video.safetensors"),
             MakeStage("UnitTest_Video.safetensors")));
@@ -103,7 +130,7 @@ public class ImageReferenceTests
         JObject secondStage = MakeStage("UnitTest_Video.safetensors");
         secondStage.Remove("ImageReference");
 
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(firstStage, secondStage));
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(firstStage, secondStage));
 
         Assert.Equal(2, stages.Count);
         Assert.Equal("Generated", stages[0].ImageReference);
@@ -116,23 +143,24 @@ public class ImageReferenceTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        T2IParamInput input = BuildInput(StageFlowTests.JsonSingleClipStages512(
+        T2IParamInput input = BuildInput(JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Base"),
             MakeStage(models.VideoModel.Name, "Refiner")));
         input.Set(T2IParamTypes.Model, models.VideoModel);
         input.Set(T2IParamTypes.Text2VideoFrames, 25);
 
-        List<JsonParser.StageSpec> stages = ParseStages(input);
+        List<StageSpec> stages = ParseStages(input);
 
         Assert.Equal(2, stages.Count);
         Assert.All(stages, stage => Assert.Equal("Generated", stage.ImageReference));
     }
 
     [Fact]
-    public void Invalid_json_is_ignored_safely()
+    public void Invalid_json_throws_user_error()
     {
-        List<JsonParser.StageSpec> stages = ParseStages("{ definitely-not-json");
-        Assert.Empty(stages);
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            ParseStages("{ definitely-not-json"));
+        Assert.Contains("Could not parse Video Stages JSON", ex.Message);
     }
 
     [Fact]
@@ -142,7 +170,7 @@ public class ImageReferenceTests
         stage["Upscale"] = 2.5;
         stage["UpscaleMethod"] = "model-unit-test-upscaler";
 
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(stage));
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(stage));
 
         Assert.Single(stages);
         Assert.Equal(1.0, stages[0].Upscale);
@@ -155,7 +183,7 @@ public class ImageReferenceTests
         JObject stage = MakeStage("UnitTest_Video.safetensors");
         stage["Control"] = 0.35;
 
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(stage));
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(stage));
 
         Assert.Single(stages);
         Assert.Equal(1.0, stages[0].Control);
@@ -168,7 +196,7 @@ public class ImageReferenceTests
         JObject second = MakeStage("UnitTest_Video.safetensors", "PreviousStage");
         second["Upscale"] = "1.0000000001";
 
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(first, second));
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(first, second));
 
         Assert.Equal(2, stages.Count);
         Assert.Equal(1.0, stages[0].Upscale);
@@ -184,7 +212,7 @@ public class ImageReferenceTests
         second["Upscale"] = 1.239;
         second["CfgScale"] = 6.29;
 
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(first, second));
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(first, second));
 
         Assert.Equal(2, stages.Count);
         Assert.Equal(0.12, stages[1].Control);
@@ -202,7 +230,7 @@ public class ImageReferenceTests
         second["Upscale"] = 2.0;
         second["UpscaleMethod"] = "pixel-bicubic";
 
-        List<JsonParser.StageSpec> stages = ParseStages(StageFlowTests.JsonSingleClipStages512(first, second));
+        List<StageSpec> stages = ParseStages(JsonSingleClipStages(first, second));
 
         Assert.Equal(2, stages.Count);
         Assert.Equal(1.0, stages[0].Upscale);
@@ -216,10 +244,8 @@ public class ImageReferenceTests
     {
         using SwarmUiTestContext testContext = new();
         _ = WorkflowTestHarness.VideoStagesSteps();
-        UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
-        UnitTestStubs.EnsureComfyVideoParamsRegistered();
 
-        T2IParamInput input = BuildInput(StageFlowTests.JsonSingleClipStages512(
+        T2IParamInput input = BuildInput(JsonSingleClipStages(
             new JObject
             {
                 ["Model"] = "UnitTest_Video.safetensors"
@@ -229,7 +255,7 @@ public class ImageReferenceTests
         input.Set(T2IParamTypes.CFGScale, 12.5);
         input.Set(T2IParamTypes.VideoCFG, 6.25);
 
-        List<JsonParser.StageSpec> stages = ParseStages(input);
+        List<StageSpec> stages = ParseStages(input);
 
         Assert.Single(stages);
         Assert.Equal(1.0, stages[0].Control);

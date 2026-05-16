@@ -3,23 +3,39 @@ export interface AudioSourceOption {
     label: string;
 }
 
+export interface AudioSourceContext {
+    /**
+     * True when the clip's ControlNet source dropdown is enabled (i.e. a
+     * controlNetLora is selected). Drives whether "ControlNet" is offered
+     * as an audio source.
+     */
+    controlNetEnabled?: boolean;
+}
+
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
+export const AUDIO_SOURCE_CONTROLNET = "ControlNet";
 
 import { videoStagesDebugLog } from "./debugLog";
 
 const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
 const SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
+const CONTROLNET_SOURCE_SELECT_SELECTOR =
+    '[data-clip-field="controlNetSource"]';
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
 export const isAceStepFunAudioSource = (source: string): boolean =>
     ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
 
+export const isControlNetAudioSource = (source: string): boolean =>
+    `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
+
 export const canUseClipLengthFromAudio = (source: string): boolean => {
     const normalized = `${source ?? ""}`.trim();
     return (
         normalized === AUDIO_SOURCE_UPLOAD ||
-        isAceStepFunAudioSource(normalized)
+        isAceStepFunAudioSource(normalized) ||
+        isControlNetAudioSource(normalized)
     );
 };
 
@@ -62,6 +78,7 @@ const getAceStepFunRefLabel = (ref: string): string => {
 
 export const buildAudioSourceOptions = (
     currentValue = "",
+    context: AudioSourceContext = {},
 ): AudioSourceOption[] => {
     const options: AudioSourceOption[] = [
         { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
@@ -69,6 +86,12 @@ export const buildAudioSourceOptions = (
     ];
     for (const ref of getAceStepFunRefs()) {
         options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+    if (context.controlNetEnabled) {
+        options.push({
+            value: AUDIO_SOURCE_CONTROLNET,
+            label: AUDIO_SOURCE_CONTROLNET,
+        });
     }
     const selected = `${currentValue || ""}`.trim();
     if (
@@ -94,6 +117,26 @@ export const resolveAudioSourceValue = (
     return AUDIO_SOURCE_NATIVE;
 };
 
+const detectControlNetEnabledForAudioSelect = (
+    audioSelect: HTMLSelectElement,
+): boolean => {
+    const clipIdx = audioSelect.dataset.clipIdx;
+    if (!clipIdx) {
+        return false;
+    }
+    for (const elem of document.querySelectorAll(
+        CONTROLNET_SOURCE_SELECT_SELECTOR,
+    )) {
+        if (
+            elem instanceof HTMLSelectElement &&
+            elem.dataset.clipIdx === clipIdx
+        ) {
+            return !elem.disabled;
+        }
+    }
+    return false;
+};
+
 export const audioSource = () => {
     const refreshOptions = (reason = "manual"): void => {
         const selects = getSourceSelects();
@@ -105,7 +148,10 @@ export const audioSource = () => {
             return;
         }
         for (const select of selects) {
-            const options = buildAudioSourceOptions(select.value);
+            const options = buildAudioSourceOptions(select.value, {
+                controlNetEnabled:
+                    detectControlNetEnabledForAudioSelect(select),
+            });
             const desired = resolveAudioSourceValue(select.value, options);
             const newOptionsJson = JSON.stringify(
                 options.map((o) => [o.value, o.label]),

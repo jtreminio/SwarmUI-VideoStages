@@ -1,8 +1,9 @@
+using ComfyTyped.Core;
 using FreneticUtilities.FreneticExtensions;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -15,7 +16,7 @@ public class StageRefStore(WorkflowGenerator g)
         Base,
         Refiner,
         Generated,
-        Stage
+        PreRootVideo
     }
 
     public sealed record StageRef(
@@ -23,19 +24,18 @@ public class StageRefStore(WorkflowGenerator g)
         WGNodeData Vae
     );
 
-    private static string StageName(StageKind kind, int? index) => kind switch
+    private static string StageName(StageKind kind) => kind switch
     {
         StageKind.Base => "base",
         StageKind.Refiner => "refiner",
         StageKind.Generated => "generated",
-        StageKind.Stage => $"stage.{index ?? 0}",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind))
+        StageKind.PreRootVideo => "preroot",
+        _ => throw new SwarmReadableErrorException($"Unhandled StageKind value: {kind}")
     };
 
-    private static string NodeKey(StageKind kind, int? index, string property)
-    {
-        return $"{Prefix}{StageName(kind, index)}.{property}";
-    }
+    private static string MediaKey(StageKind kind) => $"{Prefix}{StageName(kind)}.media";
+    private static string VaeKey(StageKind kind) => $"{Prefix}{StageName(kind)}.vae";
+    private static string AudioKey(StageKind kind) => $"{Prefix}{StageName(kind)}.media.audio";
 
     public StageRef Base => GetIfCaptured(StageKind.Base);
 
@@ -43,118 +43,113 @@ public class StageRefStore(WorkflowGenerator g)
 
     public StageRef Generated => GetIfCaptured(StageKind.Generated);
 
+    public StageRef PreRootVideo => GetIfCaptured(StageKind.PreRootVideo);
+
+    public bool DiscardPreRootVideo()
+    {
+        bool removedMedia = g.NodeHelpers.Remove(MediaKey(StageKind.PreRootVideo));
+        bool removedVae = g.NodeHelpers.Remove(VaeKey(StageKind.PreRootVideo));
+        g.NodeHelpers.Remove(AudioKey(StageKind.PreRootVideo));
+        return removedMedia || removedVae;
+    }
+
     public void Capture(
         StageKind kind,
-        int? index = null,
         WGNodeData mediaOverride = null,
         WGNodeData vaeOverride = null)
     {
-        StoreNodeData(NodeKey(kind, index, "media"), mediaOverride ?? g.CurrentMedia);
-        StoreNodeData(NodeKey(kind, index, "vae"), vaeOverride ?? g.CurrentVae);
-    }
-
-    public bool TryGetStageRef(int index, out StageRef stageRef)
-    {
-        stageRef = null;
-        if (!HasCaptured(StageKind.Stage, index))
+        WGNodeData media = mediaOverride ?? g.CurrentMedia;
+        WGNodeData vae = vaeOverride ?? g.CurrentVae;
+        StoreMarker(MediaKey(kind), media);
+        StoreMarker(VaeKey(kind), vae);
+        if (media?.AttachedAudio is not null)
         {
-            return false;
+            StoreMarker(AudioKey(kind), media.AttachedAudio);
         }
-
-        stageRef = LoadStageRef(StageKind.Stage, index);
-        return true;
+        else
+        {
+            g.NodeHelpers.Remove(AudioKey(kind));
+        }
     }
 
-    private StageRef GetIfCaptured(StageKind kind) => HasCaptured(kind) ? LoadStageRef(kind) : null;
-
-    private bool HasCaptured(StageKind kind, int? index = null)
+    private StageRef GetIfCaptured(StageKind kind)
     {
-        return g.NodeHelpers.ContainsKey(NodeKey(kind, index, "media"));
+        return g.NodeHelpers.ContainsKey(MediaKey(kind)) ? LoadStageRef(kind) : null;
     }
 
-    private void StoreNodeData(string key, WGNodeData data)
+    private void StoreMarker(string key, WGNodeData data)
     {
-        if (data is null || !IsTwoElementPath(data.Path, out _))
+        if (data?.Path is not JArray { Count: 2 } path)
         {
             g.NodeHelpers.Remove(key);
             return;
         }
-
-        JObject encoded = SerializeNodeData(data);
-        g.NodeHelpers[key] = encoded.ToString(Formatting.None);
+        g.NodeHelpers[key] = string.Join("|",
+            $"{path[0]}", $"{path[1]}",
+            data.DataType ?? WGNodeData.DT_IMAGE,
+            data.Width.HasValue ? $"{data.Width.Value}" : "",
+            data.Height.HasValue ? $"{data.Height.Value}" : "",
+            data.Frames.HasValue ? $"{data.Frames.Value}" : "",
+            data.FPS.HasValue ? $"{data.FPS.Value}" : "",
+            data.Compat?.ID ?? "");
     }
 
-    private StageRef LoadStageRef(StageKind kind, int? index = null)
+    private StageRef LoadStageRef(StageKind kind)
     {
-        string vaeKey = NodeKey(kind, index, "vae");
-        string mediaKey = NodeKey(kind, index, "media");
-        WGNodeData vae = LoadNodeData(vaeKey, fallbackVae: null);
-        return new StageRef(
-            Media: LoadNodeData(mediaKey, vae),
-            Vae: vae
-        );
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        WGNodeData vae = LoadMarker(bridge, VaeKey(kind), fallbackVae: null);
+        WGNodeData media = LoadMarker(bridge, MediaKey(kind), fallbackVae: vae);
+        if (media is not null)
+        {
+            media.AttachedAudio = LoadMarker(bridge, AudioKey(kind), fallbackVae: g.CurrentAudioVae);
+        }
+        return new StageRef(Media: media, Vae: vae);
     }
 
-    private WGNodeData LoadNodeData(string key, WGNodeData fallbackVae)
+    private WGNodeData LoadMarker(WorkflowBridge bridge, string key, WGNodeData fallbackVae)
     {
         if (!g.NodeHelpers.TryGetValue(key, out string encoded) || string.IsNullOrWhiteSpace(encoded))
         {
             return null;
         }
-
-        JObject obj;
-        try
-        {
-            if (JToken.Parse(encoded) is not JObject parsed)
-            {
-                return null;
-            }
-            obj = parsed;
-        }
-        catch (JsonException)
+        string[] parts = encoded.Split('|');
+        if (parts.Length < 8 || !int.TryParse(parts[1], out int slot))
         {
             return null;
         }
-
-        return DeserializeNodeData(obj, fallbackVae);
-    }
-
-    private WGNodeData DeserializeNodeData(JObject data, WGNodeData fallbackVae)
-    {
-        if (!IsTwoElementPath(data["path"], out JArray path))
+        string nodeId = parts[0];
+        ComfyNode node = bridge.Graph.GetNode(nodeId);
+        if (node is null)
         {
+            Logs.Warning($"VideoStages: node '{nodeId}' not found in workflow; treating as not captured.");
             return null;
         }
-
-        string dataType = data.Value<string>("dataType") ?? WGNodeData.DT_IMAGE;
-        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.Value<string>("compatId"));
-        WGNodeData restored = new(path, g, dataType, compat)
+        INodeOutput output = node.FindOutput(slot)
+            ?? (node is UnknownNode u ? u.GetOutput(slot) : null);
+        if (output is null)
         {
-            Width = data.Value<int?>("width"),
-            Height = data.Value<int?>("height"),
-            Frames = data.Value<int?>("frames"),
-            FPS = data.Value<int?>("fps")
+            Logs.Warning($"VideoStages: slot {slot} on node '{nodeId}' not found; treating as not captured.");
+            return null;
+        }
+        string dataType = string.IsNullOrEmpty(parts[2]) ? WGNodeData.DT_IMAGE : parts[2];
+        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, parts[7]);
+        return new WGNodeData(WorkflowBridge.ToPath(output), g, dataType, compat)
+        {
+            Width = Nullable(parts[3]),
+            Height = Nullable(parts[4]),
+            Frames = Nullable(parts[5]),
+            FPS = Nullable(parts[6])
         };
-
-        if (data.TryGetValue("attachedAudio", out JToken attachedAudio) && attachedAudio is JObject audioObj)
-        {
-            restored.AttachedAudio = DeserializeNodeData(audioObj, g.CurrentAudioVae);
-        }
-        return restored;
     }
 
     private T2IModelCompatClass ResolveCompatFor(string dataType, WGNodeData fallbackVae, string compatId)
     {
         if (!string.IsNullOrWhiteSpace(compatId)
-            && T2IModelClassSorter.CompatClasses.TryGetValue(
-                compatId.ToLowerFast(),
-                out T2IModelCompatClass explicitCompat))
+            && T2IModelClassSorter.CompatClasses.TryGetValue(compatId.ToLowerFast(), out T2IModelCompatClass c))
         {
-            return explicitCompat;
+            return c;
         }
-        if (dataType == WGNodeData.DT_AUDIO
-            || dataType == WGNodeData.DT_LATENT_AUDIO
-            || dataType == WGNodeData.DT_AUDIOVAE)
+        if (dataType == WGNodeData.DT_AUDIO || dataType == WGNodeData.DT_LATENT_AUDIO || dataType == WGNodeData.DT_AUDIOVAE)
         {
             return g.CurrentAudioVae?.Compat;
         }
@@ -165,41 +160,6 @@ public class StageRefStore(WorkflowGenerator g)
         return fallbackVae?.Compat ?? g.CurrentVae?.Compat ?? g.CurrentCompat();
     }
 
-    private static JObject SerializeNodeData(WGNodeData data)
-    {
-        JObject result = new()
-        {
-            ["path"] = new JArray(data.Path[0], data.Path[1]),
-            ["dataType"] = data.DataType
-        };
-
-        if (!string.IsNullOrWhiteSpace(data.Compat?.ID))
-        {
-            result["compatId"] = data.Compat.ID;
-        }
-
-        AddIfHasValue(result, "width", data.Width);
-        AddIfHasValue(result, "height", data.Height);
-        AddIfHasValue(result, "frames", data.Frames);
-        AddIfHasValue(result, "fps", data.FPS);
-        if (data.AttachedAudio is not null)
-        {
-            result["attachedAudio"] = SerializeNodeData(data.AttachedAudio);
-        }
-        return result;
-    }
-
-    private static void AddIfHasValue(JObject o, string key, int? value)
-    {
-        if (value.HasValue)
-        {
-            o[key] = value.Value;
-        }
-    }
-
-    private static bool IsTwoElementPath(JToken token, out JArray path)
-    {
-        path = token as JArray;
-        return path is not null && path.Count == 2;
-    }
+    private static int? Nullable(string s) =>
+        !string.IsNullOrEmpty(s) && int.TryParse(s, out int v) ? v : null;
 }

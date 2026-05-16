@@ -4,7 +4,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
+using VideoStages.Generated;
 
 namespace VideoStages;
 
@@ -43,36 +43,36 @@ public class VideoStagesExtension : Extension
     public override void OnInit()
     {
         Logs.Info("VideoStages Extension initializing...");
+        ComfyTyped.Generated.NodeRegistrations.EnsureRegistered();
+        VideoStages.Generated.NodeRegistrations.EnsureRegistered();
         RegisterComfyDependencies();
         RegisterParameters();
         RegisterComfyNodes();
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
             step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
+        AltImageToVideoScope.RegisterDispatcher();
         RootVideoStageResizer.RegisterHandlers();
 
         WorkflowGenerator.AddStep(
-            g => new Runner(g).CaptureCoreVideoControlNetPreprocessors(),
+            Runner.CaptureCoreVideoControlNetPreprocessors,
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).EnsureRootVideoStageModel(),
-            Constants.WorkflowStepPriority.EnsureRootVideoStageModel);
-        WorkflowGenerator.AddStep(
-            g => new Runner(g).CaptureBase(),
+            Runner.CaptureBase,
             Constants.WorkflowStepPriority.CaptureBase);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).CaptureRefiner(),
+            Runner.CaptureRefiner,
             Constants.WorkflowStepPriority.CaptureRefiner);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).SuppressCoreRootVideoStage(),
-            Constants.WorkflowStepPriority.SuppressCoreRootVideoStage);
+            Runner.CapturePreCoreVideoMedia,
+            Constants.WorkflowStepPriority.CapturePreCoreVideoMedia);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).RestoreCoreRootVideoStageModel(),
-            Constants.WorkflowStepPriority.RestoreCoreRootVideoStageModel);
+            Runner.DropCoreImageToVideoOutput,
+            Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).ApplyRootAudioMaskDimensionsAfterNativeVideo(),
+            Runner.ApplyRootAudioMaskDimensionsAfterNativeVideo,
             Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
         WorkflowGenerator.AddStep(
-            g => new Runner(g).RunConfiguredStages(),
+            Runner.RunConfiguredStages,
             Constants.WorkflowStepPriority.RunConfiguredStages);
     }
 
@@ -87,9 +87,9 @@ public class VideoStagesExtension : Extension
             + "If you already installed ComfyUI-LTXVideo in your ComfyUI custom_nodes folder, you do not need to install it again.\n"
             + "Do you wish to install?"));
 
-        ComfyUIBackendExtension.NodeToFeatureMap[LtxNodeTypes.LTXICLoRALoaderModelOnly] =
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXICLoRALoaderModelOnlyNode.ClassType] =
             Constants.LtxVideoFeatureFlag;
-        ComfyUIBackendExtension.NodeToFeatureMap[LtxNodeTypes.LTXAddVideoICLoRAGuide] =
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideNode.ClassType] =
             Constants.LtxVideoFeatureFlag;
     }
 
@@ -179,7 +179,7 @@ public class VideoStagesExtension : Extension
             DoNotPreview: true,
             Group: VideoStagesGroup,
             FeatureFlag: Constants.ComfyUIFeatureFlag,
-            MetadataFormat: VideoStagesMetadataSanitizer.StripUploadDataFromJsonParameter
+            MetadataFormat: MetadataSanitizer.StripUploadDataFromJsonParameter
         ));
 
         T2IParamTypes.Register<string>(new T2IParamType(
