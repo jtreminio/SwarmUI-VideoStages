@@ -676,7 +676,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
     }
 
-    private void RetargetExistingAnimationSaves(
+    internal void RetargetExistingAnimationSaves(
         JArray priorOutputPath,
         JArray newOutputPath,
         bool retargetAudio = false)
@@ -688,6 +688,12 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             return;
         }
 
+        WGNodeData attachedAudio = g.CurrentMedia?.AttachedAudio;
+        if (retargetAudio && attachedAudio?.DataType == WGNodeData.DT_LATENT_AUDIO && g.CurrentAudioVae is not null)
+        {
+            attachedAudio = attachedAudio.DecodeLatents(g.CurrentAudioVae, true);
+        }
+
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         INodeOutput oldOutput = bridge.ResolvePath(priorOutputPath);
         INodeOutput newOutput = bridge.ResolvePath(newOutputPath);
@@ -696,7 +702,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             return;
         }
 
-        JArray newAudioPath = retargetAudio ? CopyPath(g.CurrentMedia?.AttachedAudio?.Path) : null;
+        JArray newAudioPath = retargetAudio && attachedAudio?.DataType == WGNodeData.DT_AUDIO ? CopyPath(attachedAudio.Path) : null;
         INodeOutput newAudioOutput = newAudioPath is not null ? bridge.ResolvePath(newAudioPath) : null;
         HashSet<string> staleAudioNodeIds = [];
 
