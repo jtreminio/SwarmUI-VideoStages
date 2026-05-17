@@ -6,7 +6,7 @@ namespace VideoStages;
 
 public sealed class AudioHandler(WorkflowGenerator g)
 {
-    private const long AceStepFunDecodeIdBase = 64160;
+    private const long AceStepFunDecodeIdBase = 65160;
     private const long AceStepFunTrackIdStride = 100;
     private const string AceStepFunAudioSourcePrefix = "audio";
 
