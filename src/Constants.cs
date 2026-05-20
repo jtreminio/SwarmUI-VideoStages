@@ -7,7 +7,7 @@ public static class Constants
         public const double CoreImageToVideo = 11;
         public const double ControlNetPreprocessors = -5.9;
         public const double CaptureBase = -4.2;
-        public const double CaptureRefiner = 5.9;
+        public const double CaptureRefiner = 5.89;
         public const double CapturePreCoreVideoMedia = 10.95;
         public const double DropCoreImageToVideoOutput = 11.05;
         public const double ApplyRootAudioMaskDimensions = 11.4;

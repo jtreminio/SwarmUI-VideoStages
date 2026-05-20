@@ -489,12 +489,6 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             return;
         }
 
-        if (clipContext.CachedControlNetLoraModelPath is JArray cached && cached.Count == 2)
-        {
-            genInfo.Model = genInfo.Model.WithPath(CopyPath(cached));
-            return;
-        }
-
         T2IModel lora = ResolveLoraModel(clip.ControlNetLora);
         if (lora is null)
         {
@@ -523,7 +517,6 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         bridge.SyncNode(loraLoader);
         BridgeSync.SyncLastId(g);
         genInfo.Model = genInfo.Model.WithPath([loraLoader.Id, 0]);
-        clipContext.CachedControlNetLoraModelPath = new JArray(loraLoader.Id, 0);
     }
 
     private static T2IModel ResolveLoraModel(string loraName)

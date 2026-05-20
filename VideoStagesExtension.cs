@@ -24,14 +24,8 @@ public class VideoStagesExtension : Extension
         PromptRegion.RegisterCustomPrefix("videoclip");
         T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (_, context) =>
         {
-            if (!PromptParser.TryResolveVideoclipSectionId(context.PreData?.Trim(), context, out int sectionId))
-            {
-                context.SectionID = Constants.SectionID_VideoClip;
-            }
-            else
-            {
-                context.SectionID = sectionId;
-            }
+            PromptParser.TryResolveVideoclipSectionId(context.PreData?.Trim(), context, out int sectionId);
+            context.SectionID = sectionId;
             return $"<videoclip//cid={context.SectionID}>";
         };
         T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (_, _) => "<break>";

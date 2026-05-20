@@ -205,6 +205,45 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Videoclip_bracket_orphan_stage_lora_does_not_bubble_into_existing_sibling_stage()
+    {
+        using SwarmUiTestContext testContext = new();
+        WorkflowGenerator.AddModelGenStep(g =>
+        {
+            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
+        }, -10);
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel stage0Lora = new(loraHandler, "/tmp", "/tmp/UnitTest_Stage0Lora.safetensors", "UnitTest_Stage0Lora.safetensors");
+        T2IModel stage1OrphanLora = new(loraHandler, "/tmp", "/tmp/UnitTest_Stage1OrphanLora.safetensors", "UnitTest_Stage1OrphanLora.safetensors");
+        loraHandler.Models[stage0Lora.Name] = stage0Lora;
+        loraHandler.Models[stage1OrphanLora.Name] = stage1OrphanLora;
+
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        string prompt = "global"
+            + " <videoclip[0,0]><lora:UnitTest_Stage0Lora:1>"
+            + " <videoclip[0,1]><lora:UnitTest_Stage1OrphanLora:1>";
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
+        Assert.True(input.TryGet(T2IParamTypes.Loras, out List<string> parsedLoras));
+        int orphanIndex = parsedLoras.IndexOf("UnitTest_Stage1OrphanLora");
+        Assert.True(orphanIndex >= 0, "Expected the orphan LoRA to be present in the parsed list.");
+        Assert.NotEqual($"{Constants.SectionID_VideoClip}", parsedConfinements[orphanIndex]);
+
+        List<string> loraLoaderNames = [.. bridge.Graph.NodesOfType<LoraLoaderNode>()
+            .Select(n => n.LoraName.LiteralAsString())];
+        Assert.Contains(stage0Lora.Name, loraLoaderNames);
+        Assert.DoesNotContain(stage1OrphanLora.Name, loraLoaderNames);
+    }
+
+    [Fact]
     public void Controlnet_lora_dropdown_uses_ltx_ic_model_only_loader()
     {
         using SwarmUiTestContext _ = new();
