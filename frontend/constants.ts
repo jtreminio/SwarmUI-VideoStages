@@ -16,7 +16,7 @@ export const CONTROLNET_SOURCE_OPTIONS = [
     "ControlNet 2",
     "ControlNet 3",
 ];
-export const STAGE_REF_STRENGTH_MIN = 0.1;
+export const STAGE_REF_STRENGTH_MIN = 0;
 export const STAGE_REF_STRENGTH_MAX = 1;
 export const STAGE_REF_STRENGTH_STEP = 0.1;
 export const STAGE_REF_STRENGTH_DEFAULT = 0.8;

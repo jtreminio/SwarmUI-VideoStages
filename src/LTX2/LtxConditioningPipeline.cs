@@ -59,7 +59,7 @@ internal sealed class LtxConditioningPipeline(
     {
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
-            if (!UseLtxvInplaceForRef(clipRef.Spec))
+            if (!UseLtxvInplaceForRef(clipRef.Spec) || clipRef.Strength <= 0)
             {
                 continue;
             }
@@ -85,7 +85,7 @@ internal sealed class LtxConditioningPipeline(
         WGNodeData guideMedia,
         double guideMergeStrength)
     {
-        if (skipGuideReinjection)
+        if (skipGuideReinjection || guideMergeStrength <= 0)
         {
             g.CurrentMedia = stageLatent;
             return this;
@@ -127,7 +127,7 @@ internal sealed class LtxConditioningPipeline(
     {
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
-            if (UseLtxvInplaceForRef(clipRef.Spec))
+            if (UseLtxvInplaceForRef(clipRef.Spec) || clipRef.Strength <= 0)
             {
                 continue;
             }

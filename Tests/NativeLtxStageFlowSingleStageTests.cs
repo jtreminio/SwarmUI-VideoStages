@@ -196,6 +196,47 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Native_ltx_zero_primary_ref_strength_skips_inplace_node()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10);
+        stage["refStrengths"] = new JArray(0.0);
+        string stagesJson = new JArray(
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 1)], stage)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVCropGuidesNode>());
+    }
+
+    [Fact]
+    public void Native_ltx_zero_add_guide_ref_strength_skips_add_guide_and_crop_guides()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10);
+        stage["refStrengths"] = new JArray(0.0);
+        string stagesJson = new JArray(
+            MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stage)
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVCropGuidesNode>());
+    }
+
+    [Fact]
     public void Native_ltx_final_decode_uses_core_vae_tiling_overrides()
     {
         using SwarmUiTestContext _ = new();

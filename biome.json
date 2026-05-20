@@ -7,7 +7,14 @@
     },
     "files": {
         "ignoreUnknown": false,
-        "includes": ["**", "!Assets", "!coverage", "!comfy_node", "!Tests"]
+        "includes": [
+            "**",
+            "!Assets",
+            "!coverage",
+            "!comfy_node",
+            "!nonversioned",
+            "!Tests"
+        ]
     },
     "formatter": {
         "enabled": true,

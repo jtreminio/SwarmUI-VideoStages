@@ -5,6 +5,7 @@ import {
     normalizeClip,
     normalizeRef,
     normalizeStage,
+    normalizeStageRefStrengthValue,
     readRawStageProp,
     readRawStageString,
 } from "./normalization";
@@ -91,6 +92,12 @@ describe("normalization", () => {
     it("normalizeRef clamps frame to max", () => {
         const ref = normalizeRef({ source: REF_SOURCE_BASE, frame: 999 }, 10);
         expect(ref.frame).toBe(10);
+    });
+
+    it("normalizeStageRefStrengthValue accepts 0 without clamping up", () => {
+        expect(normalizeStageRefStrengthValue(0)).toBe(0);
+        expect(normalizeStageRefStrengthValue("0")).toBe(0);
+        expect(normalizeStageRefStrengthValue(-0.5)).toBe(0);
     });
 
     it("normalizeClip pads refStrengths for each stage from raw", () => {

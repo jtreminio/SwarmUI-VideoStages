@@ -690,7 +690,7 @@ internal static class VideoStagesSpecParser
         {
             return Constants.DefaultStageRefStrength;
         }
-        return Math.Clamp(value, 0.01, 1.0);
+        return Math.Clamp(value, 0.0, 1.0);
     }
 
     private static string NormalizeImageReference(string rawValue, int clipIndex, int index, bool isTextToVideoRootWorkflow)

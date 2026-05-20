@@ -205,7 +205,7 @@
     "ControlNet 2",
     "ControlNet 3"
   ];
-  var STAGE_REF_STRENGTH_MIN = 0.1;
+  var STAGE_REF_STRENGTH_MIN = 0;
   var STAGE_REF_STRENGTH_MAX = 1;
   var STAGE_REF_STRENGTH_STEP = 0.1;
   var STAGE_REF_STRENGTH_DEFAULT = 0.8;
@@ -1165,11 +1165,11 @@
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
-    const rawControlNetLora = normalizeControlNetLora(
+    const controlNetLora = normalizeControlNetLora(
       rawClip.controlNetLora ?? rawClip.ControlNetLora
     );
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
-      controlNetEnabled: rawControlNetLora !== ""
+      controlNetEnabled: controlNetLora !== ""
     });
     const fps = Math.max(1, defaults.fps);
     const rawDuration = utils.toNumber(
@@ -1205,7 +1205,6 @@
       rawAudioSource,
       audioSourceOptions
     );
-    const controlNetLora = rawControlNetLora;
     const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet = controlNetLora !== "" && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
     const clip = {
