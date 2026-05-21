@@ -1,0 +1,4 @@
+{
+    "keep_modules": ["custom_nodes.ComfyUI-LTXVideo"],
+    "keep_class_types": []
+}

@@ -21,6 +21,7 @@ dotnet run --project tools/ComfyTyped.CodeGen -- \
     --comfy-json http://192.0.0.1:7801/ComfyBackendDirect/api/object_info \
     --output ../SwarmUI-VideoStages/src/Generated \
     --namespace VideoStages.Generated \
+    --keep-list ../SwarmUI-VideoStages/comfytyped.keep.json \
     --core-assembly ../SwarmUI-VideoStages/lib/ComfyTyped.dll
 ```
 
