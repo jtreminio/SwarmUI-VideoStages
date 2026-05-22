@@ -112,6 +112,21 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Videoclip_tag_only_section_falls_back_to_video_section_before_global()
+    {
+        int videoclipCid = Constants.SectionID_VideoClip;
+        int videoCid = T2IParamInput.SectionID_Video;
+        string processedPrompt =
+            $"Main prompt<video//cid={videoCid}>Video Prompt<videoclip//cid={videoclipCid}>";
+        string originalPrompt =
+            "Main prompt<video>Video Prompt<videoclip><lora:LTX-2/ltx-2.3-22b-distilled-lora-384-1.1>";
+
+        Assert.Equal(
+            "Video Prompt",
+            PromptParser.ExtractPrompt(processedPrompt, originalPrompt, clipIndex: 0).Trim());
+    }
+
+    [Fact]
     public void Videoclip_prompt_section_stops_at_registered_custom_prompt_sections()
     {
         HashSet<string> customPartPrefixes = [.. PromptRegion.CustomPartPrefixes];

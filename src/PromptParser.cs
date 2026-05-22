@@ -107,6 +107,12 @@ internal static class PromptParser
             }
         }
 
+        string videoText = GetVideoPromptText(prompt);
+        if (!string.IsNullOrWhiteSpace(videoText))
+        {
+            return videoText;
+        }
+
         return GetGlobalPromptText(prompt);
     }
 
@@ -411,6 +417,15 @@ internal static class PromptParser
             return "";
         }
         return new PromptRegion(prompt).GlobalPrompt.Trim();
+    }
+
+    private static string GetVideoPromptText(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return "";
+        }
+        return new PromptRegion(prompt).VideoPrompt.Trim();
     }
 
     /// <summary>
