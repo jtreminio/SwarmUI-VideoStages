@@ -127,6 +127,32 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Videoclip_stage_tier_tag_only_section_falls_back_to_video_section()
+    {
+        int stageFlatId = 0;
+        int stageSectionCid = VideoStagesExtension.SectionIdForStage(stageFlatId);
+        int baseCid = T2IParamInput.SectionID_BaseOnly;
+        int videoCid = T2IParamInput.SectionID_Video;
+        string processedPrompt =
+            $"<base//cid={baseCid}>Photograph, photo selfie.  <audio>music prompt  "
+            + $"<video//cid={videoCid}>A cinematic scene.  "
+            + $"<videoclip//cid={stageSectionCid}>";
+        string originalPrompt =
+            "<base>Photograph, photo selfie.  <audio>music prompt  "
+            + "<video>A cinematic scene.  "
+            + "<videoclip[0,0]><lora:LTX-2/ltx-2.3-22b-distilled-lora-384-1.1:0.6>";
+
+        Assert.Equal(
+            "A cinematic scene.",
+            PromptParser.ExtractPrompt(
+                processedPrompt,
+                originalPrompt,
+                clipIndex: 0,
+                clipStageFlatId: stageFlatId,
+                clipStageIndexWithinClip: 0).Trim());
+    }
+
+    [Fact]
     public void Videoclip_prompt_section_stops_at_registered_custom_prompt_sections()
     {
         HashSet<string> customPartPrefixes = [.. PromptRegion.CustomPartPrefixes];

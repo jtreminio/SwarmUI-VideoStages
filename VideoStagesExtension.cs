@@ -203,6 +203,8 @@ public class VideoStagesExtension : Extension
             Name: "Video Stages Refine Skip Stages",
             Description: "",
             Default: "0",
+            Min: 0,
+            Max: 99,
             VisibleNormally: false,
             DoNotPreview: true,
             HideFromMetadata: true,

@@ -360,7 +360,7 @@ internal static class PromptParser
         string originalPrompt,
         int clipIndex)
     {
-        if (clipIndex < 0 || !HasAnyVideoClipSectionForClip(parsedPrompt, clipIndex))
+        if (clipIndex < 0)
         {
             return false;
         }
