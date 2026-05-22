@@ -1,4 +1,5 @@
 import { audioSource } from "./audioSource";
+import { refineVideoButton } from "./refineVideoButton";
 import { videoStageEditor } from "./videoStageEditor";
 
 const stageEditor = videoStageEditor();
@@ -45,7 +46,6 @@ if (!tryRegisterStageEditor()) {
 }
 
 registerVideoClipPromptPrefix();
-
 stageEditor.startGenerateWrapRetry();
-
 audioSource();
+refineVideoButton();

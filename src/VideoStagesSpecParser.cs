@@ -134,6 +134,8 @@ internal static class VideoStagesSpecParser
         int height = ResolveTopLevelHeight(g, rawHeight);
         int fps = ResolveTopLevelFps(g, rawFps);
         bool isTextToVideo = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
+        bool refineMode = IsRefineSourceVideoMode(g);
+        int refineSkipStages = ResolveRefineSkipStages(g, refineMode);
         if (rawEntries.Count == 0)
         {
             return new VideoStagesSpec(width, height, fps, isTextToVideo, []);
@@ -159,7 +161,7 @@ internal static class VideoStagesSpecParser
             {
                 continue;
             }
-            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo, fps);
+            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo, fps, refineMode, refineSkipStages);
             if (clip.Stages.Count == 0)
             {
                 continue;
@@ -242,12 +244,29 @@ internal static class VideoStagesSpecParser
     private static bool IsClipShape(JObject entry) =>
         entry.Properties().Any(p => StringUtils.Equals(p.Name, "Stages"));
 
+    private static bool IsRefineSourceVideoMode(WorkflowGenerator g)
+    {
+        return g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image source)
+            && source is not null;
+    }
+
+    private static int ResolveRefineSkipStages(WorkflowGenerator g, bool refineMode)
+    {
+        if (!refineMode)
+        {
+            return 0;
+        }
+        return g.UserInput.TryGet(VideoStagesExtension.RefineSkipStages, out int value) ? value : 1;
+    }
+
     private static ClipSpec ParseClip(
         JObject clipObj,
         int clipIndex,
         StageDefaults defaults,
         bool isTextToVideoRootWorkflow,
-        int fps)
+        int fps,
+        bool refineMode,
+        int refineSkipStages)
     {
         double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, $"Clip {clipIndex}");
         string audioSource = GetString(clipObj, "AudioSource");
@@ -299,7 +318,9 @@ internal static class VideoStagesSpecParser
                 i,
                 defaults,
                 refs.Count,
-                isTextToVideoRootWorkflow);
+                isTextToVideoRootWorkflow,
+                refineMode,
+                refineSkipStages);
             stages.Add(parsed);
         }
         ApplyStageContinuationSamplingPlan(stages);
@@ -570,7 +591,9 @@ internal static class VideoStagesSpecParser
         int index,
         StageDefaults defaults,
         int clipRefCount,
-        bool isTextToVideoRootWorkflow)
+        bool isTextToVideoRootWorkflow,
+        bool refineMode,
+        int refineSkipStages)
     {
         string locationPrefix = $"Clip {clipIndex} stage {index}";
         string model = GetOptionalString(stage, "Model", defaultValue: null, locationPrefix, allowEmpty: false);
@@ -587,17 +610,19 @@ internal static class VideoStagesSpecParser
             defaults.UpscaleMethod,
             locationPrefix,
             allowEmpty: false);
-        if (index == 0)
+        bool isRefineSkipped = refineMode && clipIndex == 0 && index < refineSkipStages;
+        if (index == 0 || isRefineSkipped)
         {
-            bool hasUpscaleKey = JsonHasOwnProperty(stage, "Upscale");
-            bool hasUpscaleMethodKey = JsonHasOwnProperty(stage, "UpscaleMethod");
-            if (ShouldWarnFirstStageUpscaleIgnored(hasUpscaleKey, hasUpscaleMethodKey, upscale))
+            if (index == 0 && ShouldWarnFirstStageUpscaleIgnored(
+                JsonHasOwnProperty(stage, "Upscale"),
+                JsonHasOwnProperty(stage, "UpscaleMethod"),
+                upscale))
             {
                 Logs.Warning(
                     "VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', "
                     + "which are ignored for that stage only.");
             }
-            control = FirstStageControl;
+            control = isRefineSkipped ? 0.0 : FirstStageControl;
             upscale = DefaultUpscale;
             upscaleMethod = DefaultUpscaleMethod;
         }

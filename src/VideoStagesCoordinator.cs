@@ -27,7 +27,8 @@ internal sealed class VideoStagesCoordinator(
         }
 
         List<ClipSpec> clips = [.. spec.Clips];
-        bool rootStageHandoff = rootVideoStageHandoff.ShouldHandoffRootStage();
+        bool refineSourceVideo = TryInstallRefineSourceVideo(clips);
+        bool rootStageHandoff = !refineSourceVideo && rootVideoStageHandoff.ShouldHandoffRootStage();
         if (clips.Count == 0)
         {
             TryInjectConfiguredAudio(clips);
@@ -58,6 +59,27 @@ internal sealed class VideoStagesCoordinator(
             clipAudioMaps.UploadedAudios,
             rootStageHandoff);
         EnsureFinalStageOutputSaved();
+    }
+
+    private bool TryInstallRefineSourceVideo(IReadOnlyList<ClipSpec> clips)
+    {
+        if (!g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image refineSource)
+            || refineSource is null
+            || clips.Count == 0)
+        {
+            return false;
+        }
+        if (refineSource.Type?.MetaType != MediaMetaType.Video)
+        {
+            Logs.Warning(
+                "VideoStages: 'Refine Source Video' was set but its media type is not video. "
+                + "Ignoring and falling back to the normal pipeline.");
+            return false;
+        }
+
+        WGNodeData loadedVideo = g.LoadImage(refineSource, "${vsrefinesource}", resize: false);
+        g.CurrentMedia = loadedVideo;
+        return true;
     }
 
     private void EnsureComfyDependencies(IReadOnlyList<ClipSpec> clips)

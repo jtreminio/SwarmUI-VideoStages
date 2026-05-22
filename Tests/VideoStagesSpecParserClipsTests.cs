@@ -743,4 +743,109 @@ public class VideoStagesSpecParserClipsTests
         // FPS chain falls through to the hardcoded 24 default.
         Assert.Equal(24, spec.FPS);
     }
+
+    [Fact]
+    public void ParseStage_Clip0Stage0_DefaultsToHardcodedFirstStageControl()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
+        WorkflowGenerator parser = BuildParser(json);
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(1.0, spec.Clips[0].Stages[0].Control);
+    }
+
+    [Fact]
+    public void ParseStage_Clip0Stage0_RefineSourceVideoMode_ForcesControlToZero()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0x00], MediaType.VideoMp4));
+        WorkflowGenerator parser = new() { UserInput = input };
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
+        Assert.Equal(1.0, spec.Clips[0].Stages[1].Control);
+    }
+
+    [Fact]
+    public void ParseStage_NonZeroClip_RefineSourceVideoMode_KeepsHardcodedFirstStageControl()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a")]),
+            MakeClip(stages: [MakeStage("model-b")])));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0x00], MediaType.VideoMp4));
+        WorkflowGenerator parser = new() { UserInput = input };
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
+        Assert.Equal(1.0, spec.Clips[1].Stages[0].Control);
+    }
+
+    [Fact]
+    public void ParseStage_RefineSkipStagesTwo_ZeroesFirstTwoStagesOfClipZero()
+    {
+        JObject stage1 = MakeStage("model-b");
+        stage1["Control"] = 0.4;
+        stage1["Upscale"] = 1.5;
+        JObject stage2 = MakeStage("model-c");
+        stage2["Control"] = 0.6;
+
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a"), stage1, stage2])));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0x00], MediaType.VideoMp4));
+        input.Set(VideoStagesExtension.RefineSkipStages, 2);
+        WorkflowGenerator parser = new() { UserInput = input };
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
+        Assert.Equal(0.0, spec.Clips[0].Stages[1].Control);
+        Assert.Equal(1.0, spec.Clips[0].Stages[1].Upscale);
+        Assert.Equal(0.6, spec.Clips[0].Stages[2].Control);
+    }
+
+    [Fact]
+    public void ParseStage_RefineSkipStages_DefaultsToOneWhenParamUnset()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0x00], MediaType.VideoMp4));
+        WorkflowGenerator parser = new() { UserInput = input };
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
+        Assert.Equal(1.0, spec.Clips[0].Stages[1].Control);
+    }
+
+    [Fact]
+    public void ParseStage_RefineSkipStages_IgnoredWhenRefineModeOff()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(VideoStagesExtension.RefineSkipStages, 5);
+        WorkflowGenerator parser = new() { UserInput = input };
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(1.0, spec.Clips[0].Stages[0].Control);
+        Assert.Equal(1.0, spec.Clips[0].Stages[1].Control);
+    }
 }

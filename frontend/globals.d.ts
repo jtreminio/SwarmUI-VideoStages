@@ -125,6 +125,28 @@ declare function setMediaFileDirect(
 ): void;
 declare let postParamBuildSteps: (() => void)[] | undefined;
 
+declare function toDataURL(
+    url: string,
+    callback: (dataUrl: string) => void,
+): void;
+
+declare let currentMetadataVal: string | null;
+
+declare function interpretMetadata(metadata: string | null): string | null;
+
+declare function registerMediaButton(
+    name: string,
+    action: (src: string) => void,
+    title?: string,
+    mediaTypes?: string[] | null,
+    isDefault?: boolean,
+    showInHistory?: boolean,
+    href?: string | null,
+    is_download?: boolean,
+    can_multi?: boolean,
+    multi_only?: boolean,
+): void;
+
 declare const promptTabComplete:
     | {
           registerPrefix: (
