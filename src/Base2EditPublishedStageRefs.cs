@@ -80,7 +80,7 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
             Width = data.Value<int?>("width"),
             Height = data.Value<int?>("height"),
             Frames = data.Value<int?>("frames"),
-            FPS = data.Value<int?>("fps")
+            FPS = data.Value<int?>("fps") is int fps ? new JValue(fps) : null
         };
     }
 

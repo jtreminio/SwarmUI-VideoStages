@@ -514,7 +514,7 @@ internal sealed class LtxStageExecutor(
 
     internal int ResolveFps(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
     {
-        int? fps = genInfo.VideoFPS ?? sourceMedia.FPS;
+        int? fps = genInfo.VideoFPS ?? sourceMedia.GetRawFPS();
         if (fps.HasValue && fps.Value > 0)
         {
             return fps.Value;
@@ -908,7 +908,7 @@ internal sealed class LtxStageExecutor(
                     outputWidth,
                     outputHeight,
                     postVideoChain.CurrentOutputMedia.Frames,
-                    postVideoChain.CurrentOutputMedia.FPS);
+                    postVideoChain.CurrentOutputMedia.GetRawFPS());
             }
             else
             {

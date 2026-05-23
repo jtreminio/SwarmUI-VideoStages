@@ -90,7 +90,7 @@ public class StageRefStore(WorkflowGenerator g)
             data.Width.HasValue ? $"{data.Width.Value}" : "",
             data.Height.HasValue ? $"{data.Height.Value}" : "",
             data.Frames.HasValue ? $"{data.Frames.Value}" : "",
-            data.FPS.HasValue ? $"{data.FPS.Value}" : "",
+            data.GetRawFPS() is int fpsVal ? $"{fpsVal}" : "",
             data.Compat?.ID ?? "");
     }
 
@@ -138,7 +138,7 @@ public class StageRefStore(WorkflowGenerator g)
             Width = Nullable(parts[3]),
             Height = Nullable(parts[4]),
             Frames = Nullable(parts[5]),
-            FPS = Nullable(parts[6])
+            FPS = Nullable(parts[6]) is int fps ? new JValue(fps) : null
         };
     }
 
