@@ -9,6 +9,7 @@ obj/
 .idea/
 *.user
 *.suo
+*.pdb
 Properties/
 .dotnet/
 .aspnet/
