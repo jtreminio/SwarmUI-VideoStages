@@ -1,10 +1,12 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -228,6 +230,48 @@ public partial class StageFlowTests
             ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, loadVideo.Id),
             "Stage 1 sampler latent does not trace upstream to the SwarmLoadVideoB64 node on WAN.");
         Assert.Equal((int)Math.Floor(stage2Steps * 0.5), samplers[2].StartAtStep.LiteralAsInt());
+    }
+
+    private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrackStep(int trackIndex) =>
+        new(g =>
+        {
+            using var bridge = BridgeSync.For(g);
+            bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(trackIndex));
+        }, 11.05);
+
+    [Fact]
+    public void Refine_source_video_with_clip_length_from_audio_drives_frames_from_audio_not_default()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        const int stage0Steps = 10;
+        const int stage1Steps = 12;
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: stage0Steps),
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: stage1Steps));
+        clip["AudioSource"] = "audio0";
+        clip["ClipLengthFromAudio"] = true;
+        string stagesJson = new JArray(clip).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0xDE, 0xAD, 0xBE, 0xEF], MediaType.VideoMp4));
+
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeSteps(attachAudioToCurrentMedia: false).Append(SeedAceStepFunAudioTrackStep(0)),
+            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+
+        ImageFromBatchNode fromBatch = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>(), n => ReachesUpstream(bridge, n, loadVideo.Id));
+        Assert.Same(lengthToFrames.Frames, fromBatch.Length.Connection);
     }
 
     [Fact]

@@ -239,19 +239,23 @@ internal sealed class LtxStageExecutor(
                 controlNetLengthFrames);
         }
 
+        bool matchAudioLength = controlNetLengthFrames is null
+            && ShouldMatchStageLengthToAudio(clip)
+            && sourceMedia?.AttachedAudio?.Path is not null;
+
         if (TryGetReusableDecodedVideoLatent(
                 sourceMedia,
                 genInfo,
-                allowDynamicFrameCount: controlNetLengthFrames is not null,
+                allowDynamicFrameCount: controlNetLengthFrames is not null || matchAudioLength,
                 out JArray reusableLatentPath))
         {
             WGNodeData reusedLatent = sourceMedia.WithPath(
                 reusableLatentPath,
                 WGNodeData.DT_LATENT_VIDEO,
                 genInfo.Vae.Compat);
-            reusedLatent.Frames = genInfo.Frames.HasValue
-                ? Math.Min(genInfo.Frames.Value, reusedLatent.Frames ?? int.MaxValue)
-                : null;
+            reusedLatent.Frames = matchAudioLength || !genInfo.Frames.HasValue
+                ? null
+                : Math.Min(genInfo.Frames.Value, reusedLatent.Frames ?? int.MaxValue);
             return EnsureHasAudioWithLtxFps(reusedLatent, genInfo, sourceMedia);
         }
 
@@ -261,12 +265,17 @@ internal sealed class LtxStageExecutor(
             sourceSnapshot = postVideoChain.CreateDetachedGuideMedia(genInfo.Vae);
         }
 
+        JArray audioLengthFrames = matchAudioLength
+            ? BuildAudioLengthFramesNode(sourceMedia.AttachedAudio, ResolveFps(genInfo, sourceMedia)).FramesConnection
+            : null;
+        JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
+
         string fromBatch = AddImageFromBatch(
             sourceSnapshot.Path,
             batchIndex: 0,
-            length: FrameCountToken(controlNetLengthFrames, genInfo.Frames ?? DefaultFrameCount));
+            length: FrameCountToken(dynamicLengthFrames, genInfo.Frames ?? DefaultFrameCount));
         WGNodeData stageVideoInput = sourceSnapshot.WithPath([fromBatch, 0]);
-        stageVideoInput.Frames = controlNetLengthFrames is null
+        stageVideoInput.Frames = dynamicLengthFrames is null
             ? Math.Min(genInfo.Frames ?? DefaultFrameCount, stageVideoInput.Frames ?? int.MaxValue)
             : null;
         WGNodeData encodedLatent = stageVideoInput.AsLatentImage(genInfo.Vae);
@@ -318,6 +327,33 @@ internal sealed class LtxStageExecutor(
             controlNetLengthFrames);
     }
 
+    private (JArray FramesConnection, WGNodeData EffectiveAudio) BuildAudioLengthFramesNode(
+        WGNodeData attachedAudio,
+        int fps)
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
+            bridge,
+            attachedAudio.Path,
+            null);
+
+        SwarmAudioLengthToFramesNode lengthToFrames = bridge.AddNode(new SwarmAudioLengthToFramesNode()).With(
+            FrameRate: fps);
+        if (lengthFramesAudioSource is JArray audioSourceArr)
+        {
+            lengthToFrames.AudioInput.TryConnectFromPath(bridge, audioSourceArr);
+        }
+        bridge.SyncNode(lengthToFrames);
+        BridgeSync.SyncLastId(g);
+
+        WGNodeData effectiveAudio = new(
+            WorkflowBridge.ToPath(lengthToFrames.Audio),
+            g,
+            WGNodeData.DT_AUDIO,
+            g.CurrentAudioVae?.Compat ?? attachedAudio.Compat);
+        return (WorkflowBridge.ToPath(lengthToFrames.Frames), effectiveAudio);
+    }
+
     private WGNodeData CreateEmptyVideoLatentWithOptionalAudioLength(
         ClipSpec clip,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -332,32 +368,14 @@ internal sealed class LtxStageExecutor(
         JArray audioLengthFrames = null;
         WGNodeData effectiveAttached = attachedAudio;
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-
         if (controlNetLengthFrames is null
             && ShouldMatchStageLengthToAudio(clip)
-            && effectiveAttached?.Path is JToken audioPath)
+            && effectiveAttached?.Path is not null)
         {
-            JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
-                bridge,
-                audioPath,
-                null);
-
-            SwarmAudioLengthToFramesNode lengthToFrames = bridge.AddNode(new SwarmAudioLengthToFramesNode()).With(
-                FrameRate: fps);
-            if (lengthFramesAudioSource is JArray audioSourceArr)
-            {
-                lengthToFrames.AudioInput.TryConnectFromPath(bridge, audioSourceArr);
-            }
-            bridge.SyncNode(lengthToFrames);
-
-            audioLengthFrames = new JArray(lengthToFrames.Id, 1);
-            effectiveAttached = new WGNodeData(
-                new JArray(lengthToFrames.Id, 0),
-                g,
-                WGNodeData.DT_AUDIO,
-                g.CurrentAudioVae?.Compat ?? effectiveAttached.Compat);
+            (audioLengthFrames, effectiveAttached) = BuildAudioLengthFramesNode(effectiveAttached, fps);
         }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
 
         JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
         JToken latentLength = dynamicLengthFrames is null
