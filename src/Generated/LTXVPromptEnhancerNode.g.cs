@@ -25,11 +25,11 @@ public sealed class LTXVPromptEnhancerNode : ComfyNode
     public LTXVPromptEnhancerNode()
     {
         Str = AddOutput<StringType>(0, "str");
-        Prompt = AddInput<StringType>("prompt", required: true);
-        PromptEnhancer = AddInput<LtxvPromptEnhancerType>("prompt_enhancer", required: true);
-        MaxResultingTokens = AddInput<IntType>("max_resulting_tokens", required: true);
+        Prompt = AddInput<StringType>("prompt");
+        PromptEnhancer = AddInput<LtxvPromptEnhancerType>("prompt_enhancer");
+        MaxResultingTokens = AddInput<IntType>("max_resulting_tokens");
         MaxResultingTokens.Set(256L);
-        ImagePrompt = AddInput<ImageType>("image_prompt", required: false);
+        ImagePrompt = AddInput<ImageType>("image_prompt");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

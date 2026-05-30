@@ -30,21 +30,21 @@ public sealed class LTXVPreprocessMasksNode : ComfyNode
     public LTXVPreprocessMasksNode()
     {
         MASK = AddOutput<MaskType>(0, "MASK");
-        Masks = AddInput<MaskType>("masks", required: true);
-        Vae = AddInput<VaeType>("vae", required: true);
-        InvertInputMasks = AddInput<BooleanType>("invert_input_masks", required: true);
+        Masks = AddInput<MaskType>("masks");
+        Vae = AddInput<VaeType>("vae");
+        InvertInputMasks = AddInput<BooleanType>("invert_input_masks");
         InvertInputMasks.Set(false);
-        IgnoreFirstMask = AddInput<BooleanType>("ignore_first_mask", required: true);
+        IgnoreFirstMask = AddInput<BooleanType>("ignore_first_mask");
         IgnoreFirstMask.Set(true);
-        PoolingMethod = AddInput<StringType>("pooling_method", required: true);
+        PoolingMethod = AddInput<StringType>("pooling_method");
         PoolingMethod.Set("max");
-        GrowMask = AddInput<IntType>("grow_mask", required: true);
+        GrowMask = AddInput<IntType>("grow_mask");
         GrowMask.Set(0L);
-        TaperedCorners = AddInput<BooleanType>("tapered_corners", required: true);
+        TaperedCorners = AddInput<BooleanType>("tapered_corners");
         TaperedCorners.Set(true);
-        ClampMin = AddInput<FloatType>("clamp_min", required: true);
+        ClampMin = AddInput<FloatType>("clamp_min");
         ClampMin.Set(0.5);
-        ClampMax = AddInput<FloatType>("clamp_max", required: true);
+        ClampMax = AddInput<FloatType>("clamp_max");
         ClampMax.Set(1.0);
     }
 

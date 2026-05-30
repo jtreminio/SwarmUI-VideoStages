@@ -64,31 +64,31 @@ public sealed class STGGuiderAdvancedNode : ComfyNode
     public STGGuiderAdvancedNode()
     {
         GUIDER = AddOutput<GuiderType>(0, "GUIDER");
-        Model = AddInput<ModelType>("model", required: true);
-        Positive = AddInput<ConditioningType>("positive", required: true);
-        Negative = AddInput<ConditioningType>("negative", required: true);
-        SkipStepsSigmaThreshold = AddInput<FloatType>("skip_steps_sigma_threshold", required: true);
+        Model = AddInput<ModelType>("model");
+        Positive = AddInput<ConditioningType>("positive");
+        Negative = AddInput<ConditioningType>("negative");
+        SkipStepsSigmaThreshold = AddInput<FloatType>("skip_steps_sigma_threshold");
         SkipStepsSigmaThreshold.Set(0.998);
-        CfgStarRescale = AddInput<BooleanType>("cfg_star_rescale", required: true);
+        CfgStarRescale = AddInput<BooleanType>("cfg_star_rescale");
         CfgStarRescale.Set(true);
-        Sigmas = AddInput<StringType>("sigmas", required: true);
+        Sigmas = AddInput<StringType>("sigmas");
         Sigmas.Set("1.0, 0.9933, 0.9850, 0.9767, 0.9008, 0.6180");
-        CfgValues = AddInput<StringType>("cfg_values", required: true);
+        CfgValues = AddInput<StringType>("cfg_values");
         CfgValues.Set("8, 6, 6, 4, 3, 1");
-        StgScaleValues = AddInput<StringType>("stg_scale_values", required: true);
+        StgScaleValues = AddInput<StringType>("stg_scale_values");
         StgScaleValues.Set("4, 4, 3, 2, 1, 0");
-        StgRescaleValues = AddInput<StringType>("stg_rescale_values", required: true);
+        StgRescaleValues = AddInput<StringType>("stg_rescale_values");
         StgRescaleValues.Set("1, 1, 1, 1, 1, 1");
-        StgLayersIndices = AddInput<StringType>("stg_layers_indices", required: true);
+        StgLayersIndices = AddInput<StringType>("stg_layers_indices");
         StgLayersIndices.Set("[29], [29], [29], [29], [29], [29]");
-        Preset = AddInput<StgAdvancedPresetType>("preset", required: false);
-        ApplyApg = AddInput<BooleanType>("apply_apg", required: false);
+        Preset = AddInput<StgAdvancedPresetType>("preset");
+        ApplyApg = AddInput<BooleanType>("apply_apg");
         ApplyApg.Set(false);
-        ApgCfgScale = AddInput<FloatType>("apg_cfg_scale", required: false);
+        ApgCfgScale = AddInput<FloatType>("apg_cfg_scale");
         ApgCfgScale.Set(1.0);
-        Eta = AddInput<FloatType>("eta", required: false);
+        Eta = AddInput<FloatType>("eta");
         Eta.Set(1.0);
-        NormThreshold = AddInput<FloatType>("norm_threshold", required: false);
+        NormThreshold = AddInput<FloatType>("norm_threshold");
         NormThreshold.Set(0.0);
     }
 

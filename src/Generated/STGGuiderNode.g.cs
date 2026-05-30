@@ -27,14 +27,14 @@ public sealed class STGGuiderNode : ComfyNode
     public STGGuiderNode()
     {
         GUIDER = AddOutput<GuiderType>(0, "GUIDER");
-        Model = AddInput<ModelType>("model", required: true);
-        Positive = AddInput<ConditioningType>("positive", required: true);
-        Negative = AddInput<ConditioningType>("negative", required: true);
-        Cfg = AddInput<FloatType>("cfg", required: true);
+        Model = AddInput<ModelType>("model");
+        Positive = AddInput<ConditioningType>("positive");
+        Negative = AddInput<ConditioningType>("negative");
+        Cfg = AddInput<FloatType>("cfg");
         Cfg.Set(1.0);
-        Stg = AddInput<FloatType>("stg", required: true);
+        Stg = AddInput<FloatType>("stg");
         Stg.Set(1.0);
-        Rescale = AddInput<FloatType>("rescale", required: true);
+        Rescale = AddInput<FloatType>("rescale");
         Rescale.Set(0.7);
     }
 

@@ -24,13 +24,13 @@ public sealed class GemmaAPITextEncodeNode : ComfyNode
     public GemmaAPITextEncodeNode()
     {
         Conditioning = AddOutput<ConditioningType>(0, "conditioning");
-        ApiKey = AddInput<StringType>("api_key", required: true);
+        ApiKey = AddInput<StringType>("api_key");
         ApiKey.Set("");
-        Prompt = AddInput<StringType>("prompt", required: true);
+        Prompt = AddInput<StringType>("prompt");
         Prompt.Set("");
-        EnhancePrompt = AddInput<BooleanType>("enhance_prompt", required: true);
+        EnhancePrompt = AddInput<BooleanType>("enhance_prompt");
         EnhancePrompt.Set(true);
-        CkptName = AddInput<StringType>("ckpt_name", required: true);
+        CkptName = AddInput<StringType>("ckpt_name");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

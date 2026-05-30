@@ -27,14 +27,14 @@ public sealed class LTXVNormalizingSamplerNode : ComfyNode
     public LTXVNormalizingSamplerNode()
     {
         DenoisedOutput = AddOutput<LatentType>(0, "denoised_output");
-        Noise = AddInput<NoiseType>("noise", required: true);
-        Guider = AddInput<GuiderType>("guider", required: true);
-        Sampler = AddInput<SamplerType>("sampler", required: true);
-        Sigmas = AddInput<SigmasType>("sigmas", required: true);
-        LatentImage = AddInput<LatentType>("latent_image", required: true);
-        VideoNormalizationFactors = AddInput<StringType>("video_normalization_factors", required: true);
+        Noise = AddInput<NoiseType>("noise");
+        Guider = AddInput<GuiderType>("guider");
+        Sampler = AddInput<SamplerType>("sampler");
+        Sigmas = AddInput<SigmasType>("sigmas");
+        LatentImage = AddInput<LatentType>("latent_image");
+        VideoNormalizationFactors = AddInput<StringType>("video_normalization_factors");
         VideoNormalizationFactors.Set("1,1,1,1,1,1,1,1");
-        AudioNormalizationFactors = AddInput<StringType>("audio_normalization_factors", required: true);
+        AudioNormalizationFactors = AddInput<StringType>("audio_normalization_factors");
         AudioNormalizationFactors.Set("1,1,0.25,1,1,0.25,1,1");
     }
 

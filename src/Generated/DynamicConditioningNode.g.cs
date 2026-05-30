@@ -23,10 +23,10 @@ public sealed class DynamicConditioningNode : ComfyNode
     public DynamicConditioningNode()
     {
         MODEL = AddOutput<ModelType>(0, "MODEL");
-        Model = AddInput<ModelType>("model", required: true);
-        Power = AddInput<FloatType>("power", required: true);
+        Model = AddInput<ModelType>("model");
+        Power = AddInput<FloatType>("power");
         Power.Set(1.3);
-        OnlyFirstFrame = AddInput<BooleanType>("only_first_frame", required: true);
+        OnlyFirstFrame = AddInput<BooleanType>("only_first_frame");
         OnlyFirstFrame.Set(true);
     }
 

@@ -28,19 +28,19 @@ public sealed class LTXVTiledVAEDecodeNode : ComfyNode
     public LTXVTiledVAEDecodeNode()
     {
         Image = AddOutput<ImageType>(0, "image");
-        Vae = AddInput<VaeType>("vae", required: true);
-        Latents = AddInput<LatentType>("latents", required: true);
-        HorizontalTiles = AddInput<IntType>("horizontal_tiles", required: true);
+        Vae = AddInput<VaeType>("vae");
+        Latents = AddInput<LatentType>("latents");
+        HorizontalTiles = AddInput<IntType>("horizontal_tiles");
         HorizontalTiles.Set(1L);
-        VerticalTiles = AddInput<IntType>("vertical_tiles", required: true);
+        VerticalTiles = AddInput<IntType>("vertical_tiles");
         VerticalTiles.Set(1L);
-        Overlap = AddInput<IntType>("overlap", required: true);
+        Overlap = AddInput<IntType>("overlap");
         Overlap.Set(1L);
-        LastFrameFix = AddInput<BooleanType>("last_frame_fix", required: true);
+        LastFrameFix = AddInput<BooleanType>("last_frame_fix");
         LastFrameFix.Set(false);
-        WorkingDevice = AddInput<StringType>("working_device", required: false);
+        WorkingDevice = AddInput<StringType>("working_device");
         WorkingDevice.Set("auto");
-        WorkingDtype = AddInput<StringType>("working_dtype", required: false);
+        WorkingDtype = AddInput<StringType>("working_dtype");
         WorkingDtype.Set("auto");
     }
 

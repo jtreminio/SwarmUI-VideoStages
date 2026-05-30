@@ -21,7 +21,7 @@ public sealed class LTXVPatcherVAENode : ComfyNode
     public LTXVPatcherVAENode()
     {
         VAE = AddOutput<VaeType>(0, "VAE");
-        Vae = AddInput<VaeType>("vae", required: true);
+        Vae = AddInput<VaeType>("vae");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

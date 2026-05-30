@@ -23,8 +23,8 @@ public sealed class LTXVInpaintPreprocessNode : ComfyNode
     public LTXVInpaintPreprocessNode()
     {
         Image = AddOutput<ImageType>(0, "image");
-        Images = AddInput<ImageType>("images", required: true);
-        Mask = AddInput<MaskType>("mask", required: true);
+        Images = AddInput<ImageType>("images");
+        Mask = AddInput<MaskType>("mask");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

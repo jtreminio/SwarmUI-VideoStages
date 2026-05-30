@@ -28,9 +28,9 @@ public sealed class LTXVSetAudioRefTokensNode : ComfyNode
         Positive = AddOutput<ConditioningType>(0, "positive");
         Negative = AddOutput<ConditioningType>(1, "negative");
         FrozenAudio = AddOutput<LatentType>(2, "frozen_audio");
-        PositiveInput = AddInput<ConditioningType>("positive", required: true);
-        NegativeInput = AddInput<ConditioningType>("negative", required: true);
-        AudioLatent = AddInput<LatentType>("audio_latent", required: true);
+        PositiveInput = AddInput<ConditioningType>("positive");
+        NegativeInput = AddInput<ConditioningType>("negative");
+        AudioLatent = AddInput<LatentType>("audio_latent");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

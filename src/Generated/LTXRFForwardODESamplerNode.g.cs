@@ -27,17 +27,17 @@ public sealed class LTXRFForwardODESamplerNode : ComfyNode
     public LTXRFForwardODESamplerNode()
     {
         SAMPLER = AddOutput<SamplerType>(0, "SAMPLER");
-        Gamma = AddInput<FloatType>("gamma", required: true);
+        Gamma = AddInput<FloatType>("gamma");
         Gamma.Set(0.5);
-        StartStep = AddInput<IntType>("start_step", required: true);
+        StartStep = AddInput<IntType>("start_step");
         StartStep.Set(0L);
-        EndStep = AddInput<IntType>("end_step", required: true);
+        EndStep = AddInput<IntType>("end_step");
         EndStep.Set(5L);
-        GammaTrend = AddInput<StringType>("gamma_trend", required: true);
-        Seed = AddInput<IntType>("seed", required: false);
+        GammaTrend = AddInput<StringType>("gamma_trend");
+        Seed = AddInput<IntType>("seed");
         Seed.Set(0L);
-        AttnBank = AddInput<AttnBankType>("attn_bank", required: false);
-        Order = AddInput<StringType>("order", required: false);
+        AttnBank = AddInput<AttnBankType>("attn_bank");
+        Order = AddInput<StringType>("order");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

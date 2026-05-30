@@ -38,26 +38,26 @@ public sealed class LTXVAddGuideAdvancedAttentionNode : ComfyNode
         Positive = AddOutput<ConditioningType>(0, "positive");
         Negative = AddOutput<ConditioningType>(1, "negative");
         Latent = AddOutput<LatentType>(2, "latent");
-        PositiveInput = AddInput<ConditioningType>("positive", required: true);
-        NegativeInput = AddInput<ConditioningType>("negative", required: true);
-        Vae = AddInput<VaeType>("vae", required: true);
-        LatentInput = AddInput<LatentType>("latent", required: true);
-        Image = AddInput<ImageType>("image", required: true);
-        FrameIdx = AddInput<IntType>("frame_idx", required: true);
+        PositiveInput = AddInput<ConditioningType>("positive");
+        NegativeInput = AddInput<ConditioningType>("negative");
+        Vae = AddInput<VaeType>("vae");
+        LatentInput = AddInput<LatentType>("latent");
+        Image = AddInput<ImageType>("image");
+        FrameIdx = AddInput<IntType>("frame_idx");
         FrameIdx.Set(0L);
-        Strength = AddInput<FloatType>("strength", required: true);
+        Strength = AddInput<FloatType>("strength");
         Strength.Set(1.0);
-        Crf = AddInput<IntType>("crf", required: true);
+        Crf = AddInput<IntType>("crf");
         Crf.Set(29L);
-        BlurRadius = AddInput<IntType>("blur_radius", required: true);
+        BlurRadius = AddInput<IntType>("blur_radius");
         BlurRadius.Set(0L);
-        Interpolation = AddInput<StringType>("interpolation", required: true);
+        Interpolation = AddInput<StringType>("interpolation");
         Interpolation.Set("lanczos");
-        Crop = AddInput<StringType>("crop", required: true);
+        Crop = AddInput<StringType>("crop");
         Crop.Set("disabled");
-        AttentionStrength = AddInput<FloatType>("attention_strength", required: true);
+        AttentionStrength = AddInput<FloatType>("attention_strength");
         AttentionStrength.Set(1.0);
-        AttentionMask = AddInput<MaskType>("attention_mask", required: false);
+        AttentionMask = AddInput<MaskType>("attention_mask");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

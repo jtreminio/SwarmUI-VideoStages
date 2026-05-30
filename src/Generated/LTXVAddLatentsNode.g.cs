@@ -23,8 +23,8 @@ public sealed class LTXVAddLatentsNode : ComfyNode
     public LTXVAddLatentsNode()
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
-        Latents1 = AddInput<LatentType>("latents1", required: true);
-        Latents2 = AddInput<LatentType>("latents2", required: true);
+        Latents1 = AddInput<LatentType>("latents1");
+        Latents2 = AddInput<LatentType>("latents2");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

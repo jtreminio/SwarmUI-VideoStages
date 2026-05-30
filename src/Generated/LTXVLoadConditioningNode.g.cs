@@ -22,8 +22,8 @@ public sealed class LTXVLoadConditioningNode : ComfyNode
     public LTXVLoadConditioningNode()
     {
         CONDITIONING = AddOutput<ConditioningType>(0, "CONDITIONING");
-        FileName = AddInput<StringType>("file_name", required: true);
-        Device = AddInput<StringType>("device", required: true);
+        FileName = AddInput<StringType>("file_name");
+        Device = AddInput<StringType>("device");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

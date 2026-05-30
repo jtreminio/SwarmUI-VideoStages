@@ -23,10 +23,10 @@ public sealed class LTXFetaEnhanceNode : ComfyNode
     public LTXFetaEnhanceNode()
     {
         MODEL = AddOutput<ModelType>(0, "MODEL");
-        Model = AddInput<ModelType>("model", required: true);
-        FetaWeight = AddInput<FloatType>("feta_weight", required: true);
+        Model = AddInput<ModelType>("model");
+        FetaWeight = AddInput<FloatType>("feta_weight");
         FetaWeight.Set(4.0);
-        AttnOverride = AddInput<AttnOverrideType>("attn_override", required: false);
+        AttnOverride = AddInput<AttnOverrideType>("attn_override");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

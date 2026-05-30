@@ -27,14 +27,14 @@ public sealed class LTXFlowEditCFGGuiderNode : ComfyNode
     public LTXFlowEditCFGGuiderNode()
     {
         GUIDER = AddOutput<GuiderType>(0, "GUIDER");
-        Model = AddInput<ModelType>("model", required: true);
-        SourcePos = AddInput<ConditioningType>("source_pos", required: true);
-        SourceNeg = AddInput<ConditioningType>("source_neg", required: true);
-        TargetPos = AddInput<ConditioningType>("target_pos", required: true);
-        TargetNeg = AddInput<ConditioningType>("target_neg", required: true);
-        SourceCfg = AddInput<FloatType>("source_cfg", required: true);
+        Model = AddInput<ModelType>("model");
+        SourcePos = AddInput<ConditioningType>("source_pos");
+        SourceNeg = AddInput<ConditioningType>("source_neg");
+        TargetPos = AddInput<ConditioningType>("target_pos");
+        TargetNeg = AddInput<ConditioningType>("target_neg");
+        SourceCfg = AddInput<FloatType>("source_cfg");
         SourceCfg.Set(2.0);
-        TargetCfg = AddInput<FloatType>("target_cfg", required: true);
+        TargetCfg = AddInput<FloatType>("target_cfg");
         TargetCfg.Set(4.5);
     }
 

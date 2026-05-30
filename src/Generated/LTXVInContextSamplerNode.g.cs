@@ -32,14 +32,14 @@ public sealed class LTXVInContextSamplerNode : ComfyNode
         DenoisedVideo = AddOutput<LatentType>(0, "denoised_video");
         Positive = AddOutput<ConditioningType>(1, "positive");
         Negative = AddOutput<ConditioningType>(2, "negative");
-        Vae = AddInput<VaeType>("vae", required: true);
-        Guider = AddInput<GuiderType>("guider", required: true);
-        Sampler = AddInput<SamplerType>("sampler", required: true);
-        Sigmas = AddInput<SigmasType>("sigmas", required: true);
-        Noise = AddInput<NoiseType>("noise", required: true);
-        GuidingLatents = AddInput<LatentType>("guiding_latents", required: true);
-        OptionalCondImages = AddInput<ImageType>("optional_cond_images", required: false);
-        NumFrames = AddInput<IntType>("num_frames", required: false);
+        Vae = AddInput<VaeType>("vae");
+        Guider = AddInput<GuiderType>("guider");
+        Sampler = AddInput<SamplerType>("sampler");
+        Sigmas = AddInput<SigmasType>("sigmas");
+        Noise = AddInput<NoiseType>("noise");
+        GuidingLatents = AddInput<LatentType>("guiding_latents");
+        OptionalCondImages = AddInput<ImageType>("optional_cond_images");
+        NumFrames = AddInput<IntType>("num_frames");
         NumFrames.Set(-1L);
     }
 

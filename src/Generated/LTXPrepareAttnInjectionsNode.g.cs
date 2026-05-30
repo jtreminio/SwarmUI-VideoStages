@@ -29,17 +29,17 @@ public sealed class LTXPrepareAttnInjectionsNode : ComfyNode
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
         ATTNINJ = AddOutput<AttnInjType>(1, "ATTN_INJ");
-        Latent = AddInput<LatentType>("latent", required: true);
-        AttnBank = AddInput<AttnBankType>("attn_bank", required: true);
-        Query = AddInput<BooleanType>("query", required: true);
+        Latent = AddInput<LatentType>("latent");
+        AttnBank = AddInput<AttnBankType>("attn_bank");
+        Query = AddInput<BooleanType>("query");
         Query.Set(false);
-        Key = AddInput<BooleanType>("key", required: true);
+        Key = AddInput<BooleanType>("key");
         Key.Set(false);
-        Value = AddInput<BooleanType>("value", required: true);
+        Value = AddInput<BooleanType>("value");
         Value.Set(false);
-        InjectSteps = AddInput<IntType>("inject_steps", required: true);
+        InjectSteps = AddInput<IntType>("inject_steps");
         InjectSteps.Set(0L);
-        Blocks = AddInput<LtxBlocksType>("blocks", required: false);
+        Blocks = AddInput<LtxBlocksType>("blocks");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

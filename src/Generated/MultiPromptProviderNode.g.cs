@@ -22,8 +22,8 @@ public sealed class MultiPromptProviderNode : ComfyNode
     public MultiPromptProviderNode()
     {
         Conditionings = AddOutput<ConditioningType>(0, "conditionings");
-        Prompts = AddInput<StringType>("prompts", required: true);
-        Clip = AddInput<ClipType>("clip", required: true);
+        Prompts = AddInput<StringType>("prompts");
+        Clip = AddInput<ClipType>("clip");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

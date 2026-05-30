@@ -31,14 +31,14 @@ public sealed class AddLatentGuideNode : ComfyNode
         Positive = AddOutput<ConditioningType>(0, "positive");
         Negative = AddOutput<ConditioningType>(1, "negative");
         Latent = AddOutput<LatentType>(2, "latent");
-        PositiveInput = AddInput<ConditioningType>("positive", required: true);
-        NegativeInput = AddInput<ConditioningType>("negative", required: true);
-        Vae = AddInput<VaeType>("vae", required: true);
-        LatentInput = AddInput<LatentType>("latent", required: true);
-        Image = AddInput<ImageType>("image", required: true);
-        FrameIdx = AddInput<IntType>("frame_idx", required: true);
+        PositiveInput = AddInput<ConditioningType>("positive");
+        NegativeInput = AddInput<ConditioningType>("negative");
+        Vae = AddInput<VaeType>("vae");
+        LatentInput = AddInput<LatentType>("latent");
+        Image = AddInput<ImageType>("image");
+        FrameIdx = AddInput<IntType>("frame_idx");
         FrameIdx.Set(0L);
-        Strength = AddInput<FloatType>("strength", required: true);
+        Strength = AddInput<FloatType>("strength");
         Strength.Set(1.0);
     }
 

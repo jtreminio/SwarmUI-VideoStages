@@ -27,8 +27,8 @@ public sealed class LowVRAMCheckpointLoaderNode : ComfyNode
         MODEL = AddOutput<ModelType>(0, "MODEL");
         CLIP = AddOutput<ClipType>(1, "CLIP");
         VAE = AddOutput<VaeType>(2, "VAE");
-        CkptName = AddInput<StringType>("ckpt_name", required: true);
-        Dependencies = AddInput<AnyType>("dependencies", required: false);
+        CkptName = AddInput<StringType>("ckpt_name");
+        Dependencies = AddInput<AnyType>("dependencies");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

@@ -23,8 +23,8 @@ public sealed class LTXVApplySTGNode : ComfyNode
     public LTXVApplySTGNode()
     {
         Model = AddOutput<ModelType>(0, "model");
-        ModelInput = AddInput<ModelType>("model", required: true);
-        BlockIndices = AddInput<StringType>("block_indices", required: true);
+        ModelInput = AddInput<ModelType>("model");
+        BlockIndices = AddInput<StringType>("block_indices");
         BlockIndices.Set("14, 19");
     }
 

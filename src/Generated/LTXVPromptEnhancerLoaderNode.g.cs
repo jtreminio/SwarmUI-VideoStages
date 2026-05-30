@@ -23,8 +23,8 @@ public sealed class LTXVPromptEnhancerLoaderNode : ComfyNode
     public LTXVPromptEnhancerLoaderNode()
     {
         PromptEnhancer = AddOutput<LtxvPromptEnhancerType>(0, "prompt_enhancer");
-        LlmName = AddInput<StringType>("llm_name", required: true);
-        ImageCaptionerName = AddInput<StringType>("image_captioner_name", required: true);
+        LlmName = AddInput<StringType>("llm_name");
+        ImageCaptionerName = AddInput<StringType>("image_captioner_name");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

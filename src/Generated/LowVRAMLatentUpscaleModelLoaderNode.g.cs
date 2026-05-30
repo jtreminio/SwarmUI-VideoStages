@@ -22,8 +22,8 @@ public sealed class LowVRAMLatentUpscaleModelLoaderNode : ComfyNode
     public LowVRAMLatentUpscaleModelLoaderNode()
     {
         LATENTUPSCALEMODEL = AddOutput<LatentUpscaleModelType>(0, "LATENT_UPSCALE_MODEL");
-        ModelName = AddInput<StringType>("model_name", required: true);
-        Dependencies = AddInput<AnyType>("dependencies", required: false);
+        ModelName = AddInput<StringType>("model_name");
+        Dependencies = AddInput<AnyType>("dependencies");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

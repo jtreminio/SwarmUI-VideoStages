@@ -33,16 +33,16 @@ public sealed class APGGuiderNode : ComfyNode
     public APGGuiderNode()
     {
         GUIDER = AddOutput<GuiderType>(0, "GUIDER");
-        Model = AddInput<ModelType>("model", required: true);
-        Positive = AddInput<ConditioningType>("positive", required: true);
-        Negative = AddInput<ConditioningType>("negative", required: true);
-        CfgScale = AddInput<FloatType>("cfg_scale", required: true);
+        Model = AddInput<ModelType>("model");
+        Positive = AddInput<ConditioningType>("positive");
+        Negative = AddInput<ConditioningType>("negative");
+        CfgScale = AddInput<FloatType>("cfg_scale");
         CfgScale.Set(1.0);
-        Eta = AddInput<FloatType>("eta", required: true);
+        Eta = AddInput<FloatType>("eta");
         Eta.Set(1.0);
-        NormThreshold = AddInput<FloatType>("norm_threshold", required: true);
+        NormThreshold = AddInput<FloatType>("norm_threshold");
         NormThreshold.Set(0.0);
-        MomentumCoefficient = AddInput<FloatType>("momentum_coefficient", required: true);
+        MomentumCoefficient = AddInput<FloatType>("momentum_coefficient");
         MomentumCoefficient.Set(-0.9);
     }
 

@@ -25,11 +25,11 @@ public sealed class MultimodalGuiderNode : ComfyNode
     public MultimodalGuiderNode()
     {
         GUIDER = AddOutput<GuiderType>(0, "GUIDER");
-        Model = AddInput<ModelType>("model", required: true);
-        Positive = AddInput<ConditioningType>("positive", required: true);
-        Negative = AddInput<ConditioningType>("negative", required: true);
-        Parameters = AddInput<GuiderParametersType>("parameters", required: true);
-        SkipBlocks = AddInput<StringType>("skip_blocks", required: true);
+        Model = AddInput<ModelType>("model");
+        Positive = AddInput<ConditioningType>("positive");
+        Negative = AddInput<ConditioningType>("negative");
+        Parameters = AddInput<GuiderParametersType>("parameters");
+        SkipBlocks = AddInput<StringType>("skip_blocks");
         SkipBlocks.Set("");
     }
 

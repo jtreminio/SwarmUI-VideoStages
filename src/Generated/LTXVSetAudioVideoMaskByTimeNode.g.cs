@@ -44,29 +44,29 @@ public sealed class LTXVSetAudioVideoMaskByTimeNode : ComfyNode
         AvLatent = AddOutput<LatentType>(2, "av_latent");
         VideoLatentBlendCoefficients = AddOutput<FloatType>(3, "video_latent_blend_coefficients");
         VideoPixelBlendCoefficients = AddOutput<FloatType>(4, "video_pixel_blend_coefficients");
-        AvLatentInput = AddInput<LatentType>("av_latent", required: true);
-        PositiveInput = AddInput<ConditioningType>("positive", required: true);
-        NegativeInput = AddInput<ConditioningType>("negative", required: true);
-        Model = AddInput<ModelType>("model", required: true);
-        Vae = AddInput<VaeType>("vae", required: true);
-        AudioVae = AddInput<VaeType>("audio_vae", required: true);
-        StartTime = AddInput<FloatType>("start_time", required: true);
+        AvLatentInput = AddInput<LatentType>("av_latent");
+        PositiveInput = AddInput<ConditioningType>("positive");
+        NegativeInput = AddInput<ConditioningType>("negative");
+        Model = AddInput<ModelType>("model");
+        Vae = AddInput<VaeType>("vae");
+        AudioVae = AddInput<VaeType>("audio_vae");
+        StartTime = AddInput<FloatType>("start_time");
         StartTime.Set(0.0);
-        EndTime = AddInput<FloatType>("end_time", required: true);
+        EndTime = AddInput<FloatType>("end_time");
         EndTime.Set(10.0);
-        VideoFps = AddInput<FloatType>("video_fps", required: true);
+        VideoFps = AddInput<FloatType>("video_fps");
         VideoFps.Set(24.0);
-        MaskVideo = AddInput<BooleanType>("mask_video", required: true);
+        MaskVideo = AddInput<BooleanType>("mask_video");
         MaskVideo.Set(true);
-        MaskAudio = AddInput<BooleanType>("mask_audio", required: true);
+        MaskAudio = AddInput<BooleanType>("mask_audio");
         MaskAudio.Set(true);
-        MaskInitValueVideo = AddInput<FloatType>("mask_init_value_video", required: true);
+        MaskInitValueVideo = AddInput<FloatType>("mask_init_value_video");
         MaskInitValueVideo.Set(0.0);
-        MaskInitValueAudio = AddInput<FloatType>("mask_init_value_audio", required: true);
+        MaskInitValueAudio = AddInput<FloatType>("mask_init_value_audio");
         MaskInitValueAudio.Set(0.0);
-        SlopeLen = AddInput<IntType>("slope_len", required: true);
+        SlopeLen = AddInput<IntType>("slope_len");
         SlopeLen.Set(3L);
-        SpatialMask = AddInput<MaskType>("spatial_mask", required: false);
+        SpatialMask = AddInput<MaskType>("spatial_mask");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

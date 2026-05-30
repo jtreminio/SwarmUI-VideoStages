@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
 using Newtonsoft.Json.Linq;
@@ -66,9 +67,7 @@ public class WorkflowGraphTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         INodeOutput latentOutput = bridge.ResolvePath(new JArray("200", 0));
 
-        ComfyNode decode = bridge.Graph.FindNearestDownstream(
-            latentOutput,
-            n => n is VAEDecodeNode or VAEDecodeTiledNode);
+        IVaeDecode? decode = bridge.Graph.FindNearestDownstream<IVaeDecode>(latentOutput);
 
         Assert.NotNull(decode);
         Assert.Equal("202", decode.Id);

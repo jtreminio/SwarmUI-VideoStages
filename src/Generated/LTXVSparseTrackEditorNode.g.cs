@@ -25,12 +25,12 @@ public sealed class LTXVSparseTrackEditorNode : ComfyNode
     public LTXVSparseTrackEditorNode()
     {
         Tracks = AddOutput<StringType>(0, "tracks");
-        Image = AddInput<ImageType>("image", required: true);
-        PointsStore = AddInput<StringType>("points_store", required: true);
+        Image = AddInput<ImageType>("image");
+        PointsStore = AddInput<StringType>("points_store");
         PointsStore.Set("[]");
-        Coordinates = AddInput<StringType>("coordinates", required: true);
+        Coordinates = AddInput<StringType>("coordinates");
         Coordinates.Set("[]");
-        PointsToSample = AddInput<IntType>("points_to_sample", required: true);
+        PointsToSample = AddInput<IntType>("points_to_sample");
         PointsToSample.Set(121L);
     }
 

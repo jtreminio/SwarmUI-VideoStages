@@ -24,10 +24,10 @@ public sealed class LTXVDilateLatentNode : ComfyNode
     public LTXVDilateLatentNode()
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
-        Latent = AddInput<LatentType>("latent", required: true);
-        HorizontalScale = AddInput<IntType>("horizontal_scale", required: true);
+        Latent = AddInput<LatentType>("latent");
+        HorizontalScale = AddInput<IntType>("horizontal_scale");
         HorizontalScale.Set(1L);
-        VerticalScale = AddInput<IntType>("vertical_scale", required: true);
+        VerticalScale = AddInput<IntType>("vertical_scale");
         VerticalScale.Set(1L);
     }
 

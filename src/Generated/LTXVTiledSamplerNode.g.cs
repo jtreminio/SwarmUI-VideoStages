@@ -38,29 +38,29 @@ public sealed class LTXVTiledSamplerNode : ComfyNode
     {
         Output = AddOutput<LatentType>(0, "output");
         DenoisedOutput = AddOutput<LatentType>(1, "denoised_output");
-        Model = AddInput<ModelType>("model", required: true);
-        Vae = AddInput<VaeType>("vae", required: true);
-        Noise = AddInput<NoiseType>("noise", required: true);
-        Sampler = AddInput<SamplerType>("sampler", required: true);
-        Sigmas = AddInput<SigmasType>("sigmas", required: true);
-        Guider = AddInput<GuiderType>("guider", required: true);
-        Latents = AddInput<LatentType>("latents", required: true);
-        HorizontalTiles = AddInput<IntType>("horizontal_tiles", required: true);
+        Model = AddInput<ModelType>("model");
+        Vae = AddInput<VaeType>("vae");
+        Noise = AddInput<NoiseType>("noise");
+        Sampler = AddInput<SamplerType>("sampler");
+        Sigmas = AddInput<SigmasType>("sigmas");
+        Guider = AddInput<GuiderType>("guider");
+        Latents = AddInput<LatentType>("latents");
+        HorizontalTiles = AddInput<IntType>("horizontal_tiles");
         HorizontalTiles.Set(1L);
-        VerticalTiles = AddInput<IntType>("vertical_tiles", required: true);
+        VerticalTiles = AddInput<IntType>("vertical_tiles");
         VerticalTiles.Set(1L);
-        Overlap = AddInput<IntType>("overlap", required: true);
+        Overlap = AddInput<IntType>("overlap");
         Overlap.Set(1L);
-        LatentsCondStrength = AddInput<FloatType>("latents_cond_strength", required: true);
+        LatentsCondStrength = AddInput<FloatType>("latents_cond_strength");
         LatentsCondStrength.Set(0.15);
-        BoostLatentSimilarity = AddInput<BooleanType>("boost_latent_similarity", required: true);
+        BoostLatentSimilarity = AddInput<BooleanType>("boost_latent_similarity");
         BoostLatentSimilarity.Set(false);
-        Crop = AddInput<StringType>("crop", required: true);
+        Crop = AddInput<StringType>("crop");
         Crop.Set("disabled");
-        OptionalCondImages = AddInput<ImageType>("optional_cond_images", required: false);
-        OptionalCondIndices = AddInput<StringType>("optional_cond_indices", required: false);
+        OptionalCondImages = AddInput<ImageType>("optional_cond_images");
+        OptionalCondIndices = AddInput<StringType>("optional_cond_indices");
         OptionalCondIndices.Set("0");
-        ImagesCondStrengths = AddInput<StringType>("images_cond_strengths", required: false);
+        ImagesCondStrengths = AddInput<StringType>("images_cond_strengths");
         ImagesCondStrengths.Set("0.9");
     }
 

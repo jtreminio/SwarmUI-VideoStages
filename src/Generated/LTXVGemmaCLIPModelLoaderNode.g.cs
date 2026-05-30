@@ -23,9 +23,9 @@ public sealed class LTXVGemmaCLIPModelLoaderNode : ComfyNode
     public LTXVGemmaCLIPModelLoaderNode()
     {
         Clip = AddOutput<ClipType>(0, "clip");
-        GemmaPath = AddInput<StringType>("gemma_path", required: true);
-        LtxvPath = AddInput<StringType>("ltxv_path", required: true);
-        MaxLength = AddInput<IntType>("max_length", required: true);
+        GemmaPath = AddInput<StringType>("gemma_path");
+        LtxvPath = AddInput<StringType>("ltxv_path");
+        MaxLength = AddInput<IntType>("max_length");
         MaxLength.Set(1024L);
     }
 

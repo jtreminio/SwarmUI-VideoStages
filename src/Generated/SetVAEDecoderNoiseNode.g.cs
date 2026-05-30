@@ -24,12 +24,12 @@ public sealed class SetVAEDecoderNoiseNode : ComfyNode
     public SetVAEDecoderNoiseNode()
     {
         VAE = AddOutput<VaeType>(0, "VAE");
-        Vae = AddInput<VaeType>("vae", required: true);
-        Timestep = AddInput<FloatType>("timestep", required: true);
+        Vae = AddInput<VaeType>("vae");
+        Timestep = AddInput<FloatType>("timestep");
         Timestep.Set(0.05);
-        Scale = AddInput<FloatType>("scale", required: true);
+        Scale = AddInput<FloatType>("scale");
         Scale.Set(0.025);
-        Seed = AddInput<IntType>("seed", required: true);
+        Seed = AddInput<IntType>("seed");
         Seed.Set(42L);
     }
 

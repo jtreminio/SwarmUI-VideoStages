@@ -21,7 +21,7 @@ public sealed class ImageToCPUNode : ComfyNode
     public ImageToCPUNode()
     {
         IMAGE = AddOutput<ImageType>(0, "IMAGE");
-        Image = AddInput<ImageType>("image", required: true);
+        Image = AddInput<ImageType>("image");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

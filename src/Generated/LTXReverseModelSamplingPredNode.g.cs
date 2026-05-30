@@ -21,7 +21,7 @@ public sealed class LTXReverseModelSamplingPredNode : ComfyNode
     public LTXReverseModelSamplingPredNode()
     {
         MODEL = AddOutput<ModelType>(0, "MODEL");
-        Model = AddInput<ModelType>("model", required: true);
+        Model = AddInput<ModelType>("model");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

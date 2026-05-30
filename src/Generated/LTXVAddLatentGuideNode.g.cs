@@ -32,14 +32,14 @@ public sealed class LTXVAddLatentGuideNode : ComfyNode
         Positive = AddOutput<ConditioningType>(0, "positive");
         Negative = AddOutput<ConditioningType>(1, "negative");
         Latent = AddOutput<LatentType>(2, "latent");
-        Vae = AddInput<VaeType>("vae", required: true);
-        PositiveInput = AddInput<ConditioningType>("positive", required: true);
-        NegativeInput = AddInput<ConditioningType>("negative", required: true);
-        LatentInput = AddInput<LatentType>("latent", required: true);
-        GuidingLatent = AddInput<LatentType>("guiding_latent", required: true);
-        LatentIdx = AddInput<IntType>("latent_idx", required: true);
+        Vae = AddInput<VaeType>("vae");
+        PositiveInput = AddInput<ConditioningType>("positive");
+        NegativeInput = AddInput<ConditioningType>("negative");
+        LatentInput = AddInput<LatentType>("latent");
+        GuidingLatent = AddInput<LatentType>("guiding_latent");
+        LatentIdx = AddInput<IntType>("latent_idx");
         LatentIdx.Set(0L);
-        Strength = AddInput<FloatType>("strength", required: true);
+        Strength = AddInput<FloatType>("strength");
         Strength.Set(1.0);
     }
 

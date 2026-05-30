@@ -21,7 +21,7 @@ public sealed class LTXAttnOverrideNode : ComfyNode
     public LTXAttnOverrideNode()
     {
         ATTNOVERRIDE = AddOutput<AttnOverrideType>(0, "ATTN_OVERRIDE");
-        Layers = AddInput<StringType>("layers", required: true);
+        Layers = AddInput<StringType>("layers");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

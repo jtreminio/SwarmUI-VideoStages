@@ -23,11 +23,11 @@ public sealed class LTXFlowEditSamplerNode : ComfyNode
     public LTXFlowEditSamplerNode()
     {
         SAMPLER = AddOutput<SamplerType>(0, "SAMPLER");
-        SkipSteps = AddInput<IntType>("skip_steps", required: true);
+        SkipSteps = AddInput<IntType>("skip_steps");
         SkipSteps.Set(4L);
-        RefineSteps = AddInput<IntType>("refine_steps", required: true);
+        RefineSteps = AddInput<IntType>("refine_steps");
         RefineSteps.Set(0L);
-        Seed = AddInput<IntType>("seed", required: true);
+        Seed = AddInput<IntType>("seed");
         Seed.Set(0L);
     }
 

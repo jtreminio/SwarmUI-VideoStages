@@ -24,11 +24,11 @@ public sealed class LinearOverlapLatentTransitionNode : ComfyNode
     public LinearOverlapLatentTransitionNode()
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
-        Samples1 = AddInput<LatentType>("samples1", required: true);
-        Samples2 = AddInput<LatentType>("samples2", required: true);
-        Overlap = AddInput<IntType>("overlap", required: true);
+        Samples1 = AddInput<LatentType>("samples1");
+        Samples2 = AddInput<LatentType>("samples2");
+        Overlap = AddInput<IntType>("overlap");
         Overlap.Set(1L);
-        Axis = AddInput<IntType>("axis", required: false);
+        Axis = AddInput<IntType>("axis");
         Axis.Set(0L);
     }
 

@@ -26,16 +26,16 @@ public sealed class LTXVStatNormLatentNode : ComfyNode
     public LTXVStatNormLatentNode()
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
-        Latents = AddInput<LatentType>("latents", required: true);
-        TargetMean = AddInput<FloatType>("target_mean", required: true);
+        Latents = AddInput<LatentType>("latents");
+        TargetMean = AddInput<FloatType>("target_mean");
         TargetMean.Set(0.0);
-        TargetStd = AddInput<FloatType>("target_std", required: true);
+        TargetStd = AddInput<FloatType>("target_std");
         TargetStd.Set(1.0);
-        Percentile = AddInput<FloatType>("percentile", required: true);
+        Percentile = AddInput<FloatType>("percentile");
         Percentile.Set(95.0);
-        Factor = AddInput<FloatType>("factor", required: true);
+        Factor = AddInput<FloatType>("factor");
         Factor.Set(1.0);
-        ClipOutliers = AddInput<BooleanType>("clip_outliers", required: true);
+        ClipOutliers = AddInput<BooleanType>("clip_outliers");
         ClipOutliers.Set(false);
     }
 

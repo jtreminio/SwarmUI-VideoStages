@@ -44,42 +44,42 @@ public sealed class LTXVLoopingSamplerNode : ComfyNode
     public LTXVLoopingSamplerNode()
     {
         DenoisedOutput = AddOutput<LatentType>(0, "denoised_output");
-        Model = AddInput<ModelType>("model", required: true);
-        Vae = AddInput<VaeType>("vae", required: true);
-        Noise = AddInput<NoiseType>("noise", required: true);
-        Sampler = AddInput<SamplerType>("sampler", required: true);
-        Sigmas = AddInput<SigmasType>("sigmas", required: true);
-        Guider = AddInput<GuiderType>("guider", required: true);
-        Latents = AddInput<LatentType>("latents", required: true);
-        TemporalTileSize = AddInput<IntType>("temporal_tile_size", required: true);
+        Model = AddInput<ModelType>("model");
+        Vae = AddInput<VaeType>("vae");
+        Noise = AddInput<NoiseType>("noise");
+        Sampler = AddInput<SamplerType>("sampler");
+        Sigmas = AddInput<SigmasType>("sigmas");
+        Guider = AddInput<GuiderType>("guider");
+        Latents = AddInput<LatentType>("latents");
+        TemporalTileSize = AddInput<IntType>("temporal_tile_size");
         TemporalTileSize.Set(80L);
-        TemporalOverlap = AddInput<IntType>("temporal_overlap", required: true);
+        TemporalOverlap = AddInput<IntType>("temporal_overlap");
         TemporalOverlap.Set(24L);
-        GuidingStrength = AddInput<FloatType>("guiding_strength", required: true);
+        GuidingStrength = AddInput<FloatType>("guiding_strength");
         GuidingStrength.Set(1.0);
-        TemporalOverlapCondStrength = AddInput<FloatType>("temporal_overlap_cond_strength", required: true);
+        TemporalOverlapCondStrength = AddInput<FloatType>("temporal_overlap_cond_strength");
         TemporalOverlapCondStrength.Set(0.5);
-        CondImageStrength = AddInput<FloatType>("cond_image_strength", required: true);
+        CondImageStrength = AddInput<FloatType>("cond_image_strength");
         CondImageStrength.Set(1.0);
-        HorizontalTiles = AddInput<IntType>("horizontal_tiles", required: true);
+        HorizontalTiles = AddInput<IntType>("horizontal_tiles");
         HorizontalTiles.Set(1L);
-        VerticalTiles = AddInput<IntType>("vertical_tiles", required: true);
+        VerticalTiles = AddInput<IntType>("vertical_tiles");
         VerticalTiles.Set(1L);
-        SpatialOverlap = AddInput<IntType>("spatial_overlap", required: true);
+        SpatialOverlap = AddInput<IntType>("spatial_overlap");
         SpatialOverlap.Set(1L);
-        OptionalCondImages = AddInput<ImageType>("optional_cond_images", required: false);
-        OptionalGuidingLatents = AddInput<LatentType>("optional_guiding_latents", required: false);
-        AdainFactor = AddInput<FloatType>("adain_factor", required: false);
+        OptionalCondImages = AddInput<ImageType>("optional_cond_images");
+        OptionalGuidingLatents = AddInput<LatentType>("optional_guiding_latents");
+        AdainFactor = AddInput<FloatType>("adain_factor");
         AdainFactor.Set(0.0);
-        OptionalPositiveConditionings = AddInput<ConditioningType>("optional_positive_conditionings", required: false);
-        OptionalNegativeIndexLatents = AddInput<LatentType>("optional_negative_index_latents", required: false);
-        GuidingStartStep = AddInput<IntType>("guiding_start_step", required: false);
+        OptionalPositiveConditionings = AddInput<ConditioningType>("optional_positive_conditionings");
+        OptionalNegativeIndexLatents = AddInput<LatentType>("optional_negative_index_latents");
+        GuidingStartStep = AddInput<IntType>("guiding_start_step");
         GuidingStartStep.Set(0L);
-        GuidingEndStep = AddInput<IntType>("guiding_end_step", required: false);
+        GuidingEndStep = AddInput<IntType>("guiding_end_step");
         GuidingEndStep.Set(1000L);
-        OptionalCondImageIndices = AddInput<StringType>("optional_cond_image_indices", required: false);
+        OptionalCondImageIndices = AddInput<StringType>("optional_cond_image_indices");
         OptionalCondImageIndices.Set("0");
-        OptionalNormalizingLatents = AddInput<LatentType>("optional_normalizing_latents", required: false);
+        OptionalNormalizingLatents = AddInput<LatentType>("optional_normalizing_latents");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

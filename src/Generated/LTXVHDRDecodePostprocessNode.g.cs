@@ -29,16 +29,16 @@ public sealed class LTXVHDRDecodePostprocessNode : ComfyNode
     {
         Tonemapped = AddOutput<ImageType>(0, "tonemapped");
         HdrLinear = AddOutput<ImageType>(1, "hdr_linear");
-        Image = AddInput<ImageType>("image", required: true);
-        Exposure = AddInput<FloatType>("exposure", required: false);
+        Image = AddInput<ImageType>("image");
+        Exposure = AddInput<FloatType>("exposure");
         Exposure.Set(0.0);
-        SaveExr = AddInput<BooleanType>("save_exr", required: false);
+        SaveExr = AddInput<BooleanType>("save_exr");
         SaveExr.Set(false);
-        OutputDir = AddInput<StringType>("output_dir", required: false);
+        OutputDir = AddInput<StringType>("output_dir");
         OutputDir.Set("output/hdr_exr");
-        FilenamePrefix = AddInput<StringType>("filename_prefix", required: false);
+        FilenamePrefix = AddInput<StringType>("filename_prefix");
         FilenamePrefix.Set("frame");
-        HalfPrecision = AddInput<BooleanType>("half_precision", required: false);
+        HalfPrecision = AddInput<BooleanType>("half_precision");
         HalfPrecision.Set(true);
     }
 

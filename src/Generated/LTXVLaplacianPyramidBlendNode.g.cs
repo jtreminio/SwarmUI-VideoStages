@@ -26,12 +26,12 @@ public sealed class LTXVLaplacianPyramidBlendNode : ComfyNode
     public LTXVLaplacianPyramidBlendNode()
     {
         Image = AddOutput<ImageType>(0, "image");
-        ImageA = AddInput<ImageType>("image_a", required: true);
-        ImageB = AddInput<ImageType>("image_b", required: true);
-        Mask = AddInput<MaskType>("mask", required: true);
-        TrimToShortest = AddInput<BooleanType>("trim_to_shortest", required: true);
+        ImageA = AddInput<ImageType>("image_a");
+        ImageB = AddInput<ImageType>("image_b");
+        Mask = AddInput<MaskType>("mask");
+        TrimToShortest = AddInput<BooleanType>("trim_to_shortest");
         TrimToShortest.Set(true);
-        MaskLowResDilation = AddInput<IntType>("mask_low_res_dilation", required: true);
+        MaskLowResDilation = AddInput<IntType>("mask_low_res_dilation");
         MaskLowResDilation.Set(5L);
     }
 

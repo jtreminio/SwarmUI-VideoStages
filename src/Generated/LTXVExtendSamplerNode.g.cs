@@ -38,23 +38,23 @@ public sealed class LTXVExtendSamplerNode : ComfyNode
         DenoisedVideo = AddOutput<LatentType>(0, "denoised_video");
         Positive = AddOutput<ConditioningType>(1, "positive");
         Negative = AddOutput<ConditioningType>(2, "negative");
-        Model = AddInput<ModelType>("model", required: true);
-        Vae = AddInput<VaeType>("vae", required: true);
-        Latents = AddInput<LatentType>("latents", required: true);
-        NumNewFrames = AddInput<IntType>("num_new_frames", required: true);
+        Model = AddInput<ModelType>("model");
+        Vae = AddInput<VaeType>("vae");
+        Latents = AddInput<LatentType>("latents");
+        NumNewFrames = AddInput<IntType>("num_new_frames");
         NumNewFrames.Set(80L);
-        FrameOverlap = AddInput<IntType>("frame_overlap", required: true);
+        FrameOverlap = AddInput<IntType>("frame_overlap");
         FrameOverlap.Set(16L);
-        Guider = AddInput<GuiderType>("guider", required: true);
-        Sampler = AddInput<SamplerType>("sampler", required: true);
-        Sigmas = AddInput<SigmasType>("sigmas", required: true);
-        Noise = AddInput<NoiseType>("noise", required: true);
-        Strength = AddInput<FloatType>("strength", required: true);
+        Guider = AddInput<GuiderType>("guider");
+        Sampler = AddInput<SamplerType>("sampler");
+        Sigmas = AddInput<SigmasType>("sigmas");
+        Noise = AddInput<NoiseType>("noise");
+        Strength = AddInput<FloatType>("strength");
         Strength.Set(0.5);
-        OptionalGuidingLatents = AddInput<LatentType>("optional_guiding_latents", required: false);
-        OptionalCondImages = AddInput<ImageType>("optional_cond_images", required: false);
-        OptionalCondIndices = AddInput<StringType>("optional_cond_indices", required: false);
-        CondImageStrength = AddInput<FloatType>("cond_image_strength", required: false);
+        OptionalGuidingLatents = AddInput<LatentType>("optional_guiding_latents");
+        OptionalCondImages = AddInput<ImageType>("optional_cond_images");
+        OptionalCondIndices = AddInput<StringType>("optional_cond_indices");
+        CondImageStrength = AddInput<FloatType>("cond_image_strength");
         CondImageStrength.Set(1.0);
     }
 

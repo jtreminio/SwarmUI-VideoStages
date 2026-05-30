@@ -22,9 +22,9 @@ public sealed class LTXAttentionBankNode : ComfyNode
     public LTXAttentionBankNode()
     {
         ATTNBANK = AddOutput<AttnBankType>(0, "ATTN_BANK");
-        SaveSteps = AddInput<IntType>("save_steps", required: true);
+        SaveSteps = AddInput<IntType>("save_steps");
         SaveSteps.Set(0L);
-        Blocks = AddInput<StringType>("blocks", required: true);
+        Blocks = AddInput<StringType>("blocks");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

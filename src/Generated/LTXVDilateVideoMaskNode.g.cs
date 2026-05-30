@@ -25,12 +25,12 @@ public sealed class LTXVDilateVideoMaskNode : ComfyNode
     public LTXVDilateVideoMaskNode()
     {
         Mask = AddOutput<MaskType>(0, "mask");
-        SpatialRadius = AddInput<IntType>("spatial_radius", required: true);
+        SpatialRadius = AddInput<IntType>("spatial_radius");
         SpatialRadius.Set(1L);
-        TemporalRadius = AddInput<IntType>("temporal_radius", required: true);
+        TemporalRadius = AddInput<IntType>("temporal_radius");
         TemporalRadius.Set(0L);
-        MaskInput = AddInput<MaskType>("mask", required: false);
-        ImageAsMask = AddInput<ImageType>("image_as_mask", required: false);
+        MaskInput = AddInput<MaskType>("mask");
+        ImageAsMask = AddInput<ImageType>("image_as_mask");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

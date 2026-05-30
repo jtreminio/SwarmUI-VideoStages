@@ -24,11 +24,11 @@ public sealed class LTXVAdainLatentNode : ComfyNode
     public LTXVAdainLatentNode()
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
-        Latents = AddInput<LatentType>("latents", required: true);
-        Reference = AddInput<LatentType>("reference", required: true);
-        Factor = AddInput<FloatType>("factor", required: true);
+        Latents = AddInput<LatentType>("latents");
+        Reference = AddInput<LatentType>("reference");
+        Factor = AddInput<FloatType>("factor");
         Factor.Set(1.0);
-        PerFrame = AddInput<BooleanType>("per_frame", required: false);
+        PerFrame = AddInput<BooleanType>("per_frame");
         PerFrame.Set(false);
     }
 

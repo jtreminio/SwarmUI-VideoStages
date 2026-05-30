@@ -25,14 +25,14 @@ public sealed class LTXPerturbedAttentionNode : ComfyNode
     public LTXPerturbedAttentionNode()
     {
         MODEL = AddOutput<ModelType>(0, "MODEL");
-        Model = AddInput<ModelType>("model", required: true);
-        Scale = AddInput<FloatType>("scale", required: true);
+        Model = AddInput<ModelType>("model");
+        Scale = AddInput<FloatType>("scale");
         Scale.Set(2.0);
-        Rescale = AddInput<FloatType>("rescale", required: true);
+        Rescale = AddInput<FloatType>("rescale");
         Rescale.Set(0.5);
-        Cfg = AddInput<FloatType>("cfg", required: true);
+        Cfg = AddInput<FloatType>("cfg");
         Cfg.Set(3.0);
-        AttnOverride = AddInput<AttnOverrideType>("attn_override", required: false);
+        AttnOverride = AddInput<AttnOverrideType>("attn_override");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

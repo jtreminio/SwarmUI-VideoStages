@@ -21,7 +21,7 @@ public sealed class LTXFloatToIntNode : ComfyNode
     public LTXFloatToIntNode()
     {
         INT = AddOutput<IntType>(0, "INT");
-        A = AddInput<FloatType>("a", required: true);
+        A = AddInput<FloatType>("a");
         A.Set(0.0);
     }
 

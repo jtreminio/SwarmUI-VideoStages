@@ -19,10 +19,10 @@ public sealed class LTXVSaveConditioningNode : ComfyNode
 
     public LTXVSaveConditioningNode()
     {
-        Conditioning = AddInput<ConditioningType>("conditioning", required: true);
-        Filename = AddInput<StringType>("filename", required: true);
+        Conditioning = AddInput<ConditioningType>("conditioning");
+        Filename = AddInput<StringType>("filename");
         Filename.Set("conditioning");
-        Dtype = AddInput<StringType>("dtype", required: true);
+        Dtype = AddInput<StringType>("dtype");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

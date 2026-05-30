@@ -24,10 +24,10 @@ public sealed class LTXVDrawTracksNode : ComfyNode
     public LTXVDrawTracksNode()
     {
         IMAGE = AddOutput<ImageType>(0, "IMAGE");
-        Tracks = AddInput<StringType>("tracks", required: true);
-        Width = AddInput<IntType>("width", required: true);
+        Tracks = AddInput<StringType>("tracks");
+        Width = AddInput<IntType>("width");
         Width.Set(512L);
-        Height = AddInput<IntType>("height", required: true);
+        Height = AddInput<IntType>("height");
         Height.Set(512L);
     }
 

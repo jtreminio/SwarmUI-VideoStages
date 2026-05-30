@@ -28,17 +28,17 @@ public sealed class LTXRFReverseODESamplerNode : ComfyNode
     public LTXRFReverseODESamplerNode()
     {
         SAMPLER = AddOutput<SamplerType>(0, "SAMPLER");
-        Model = AddInput<ModelType>("model", required: true);
-        LatentImage = AddInput<LatentType>("latent_image", required: true);
-        Eta = AddInput<FloatType>("eta", required: true);
+        Model = AddInput<ModelType>("model");
+        LatentImage = AddInput<LatentType>("latent_image");
+        Eta = AddInput<FloatType>("eta");
         Eta.Set(0.8);
-        StartStep = AddInput<IntType>("start_step", required: true);
+        StartStep = AddInput<IntType>("start_step");
         StartStep.Set(0L);
-        EndStep = AddInput<IntType>("end_step", required: true);
+        EndStep = AddInput<IntType>("end_step");
         EndStep.Set(15L);
-        EtaTrend = AddInput<StringType>("eta_trend", required: false);
-        AttnInj = AddInput<AttnInjType>("attn_inj", required: false);
-        Order = AddInput<StringType>("order", required: false);
+        EtaTrend = AddInput<StringType>("eta_trend");
+        AttnInj = AddInput<AttnInjType>("attn_inj");
+        Order = AddInput<StringType>("order");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

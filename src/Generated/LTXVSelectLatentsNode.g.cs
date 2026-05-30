@@ -24,10 +24,10 @@ public sealed class LTXVSelectLatentsNode : ComfyNode
     public LTXVSelectLatentsNode()
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
-        Samples = AddInput<LatentType>("samples", required: true);
-        StartIndex = AddInput<IntType>("start_index", required: true);
+        Samples = AddInput<LatentType>("samples");
+        StartIndex = AddInput<IntType>("start_index");
         StartIndex.Set(0L);
-        EndIndex = AddInput<IntType>("end_index", required: true);
+        EndIndex = AddInput<IntType>("end_index");
         EndIndex.Set(-1L);
     }
 

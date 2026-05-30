@@ -21,7 +21,7 @@ public sealed class LTXAttentioOverrideNode : ComfyNode
     public LTXAttentioOverrideNode()
     {
         LTXBLOCKS = AddOutput<LtxBlocksType>(0, "LTX_BLOCKS");
-        Blocks = AddInput<StringType>("blocks", required: true);
+        Blocks = AddInput<StringType>("blocks");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

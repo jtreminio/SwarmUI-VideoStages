@@ -29,23 +29,23 @@ public sealed class GuiderParametersNode : ComfyNode
     public GuiderParametersNode()
     {
         GUIDERPARAMETERS = AddOutput<GuiderParametersType>(0, "GUIDER_PARAMETERS");
-        Modality = AddInput<StringType>("modality", required: true);
+        Modality = AddInput<StringType>("modality");
         Modality.Set("VIDEO");
-        Cfg = AddInput<FloatType>("cfg", required: true);
+        Cfg = AddInput<FloatType>("cfg");
         Cfg.Set(1.0);
-        Stg = AddInput<FloatType>("stg", required: true);
+        Stg = AddInput<FloatType>("stg");
         Stg.Set(1.0);
-        PerturbAttn = AddInput<BooleanType>("perturb_attn", required: true);
+        PerturbAttn = AddInput<BooleanType>("perturb_attn");
         PerturbAttn.Set(true);
-        Rescale = AddInput<FloatType>("rescale", required: true);
+        Rescale = AddInput<FloatType>("rescale");
         Rescale.Set(0.7);
-        ModalityScale = AddInput<FloatType>("modality_scale", required: true);
+        ModalityScale = AddInput<FloatType>("modality_scale");
         ModalityScale.Set(0.0);
-        SkipStep = AddInput<IntType>("skip_step", required: true);
+        SkipStep = AddInput<IntType>("skip_step");
         SkipStep.Set(0L);
-        CrossAttn = AddInput<BooleanType>("cross_attn", required: true);
+        CrossAttn = AddInput<BooleanType>("cross_attn");
         CrossAttn.Set(true);
-        Parameters = AddInput<GuiderParametersType>("parameters", required: false);
+        Parameters = AddInput<GuiderParametersType>("parameters");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

@@ -23,8 +23,8 @@ public sealed class LowVRAMAudioVAELoaderNode : ComfyNode
     public LowVRAMAudioVAELoaderNode()
     {
         AudioVae = AddOutput<VaeType>(0, "audio_vae");
-        CkptName = AddInput<StringType>("ckpt_name", required: true);
-        Dependencies = AddInput<AnyType>("dependencies", required: false);
+        CkptName = AddInput<StringType>("ckpt_name");
+        Dependencies = AddInput<AnyType>("dependencies");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

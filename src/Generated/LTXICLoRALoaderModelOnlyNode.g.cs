@@ -26,9 +26,9 @@ public sealed class LTXICLoRALoaderModelOnlyNode : ComfyNode
     {
         Model = AddOutput<ModelType>(0, "model");
         LatentDownscaleFactor = AddOutput<FloatType>(1, "latent_downscale_factor");
-        ModelInput = AddInput<ModelType>("model", required: true);
-        LoraName = AddInput<StringType>("lora_name", required: true);
-        StrengthModel = AddInput<FloatType>("strength_model", required: true);
+        ModelInput = AddInput<ModelType>("model");
+        LoraName = AddInput<StringType>("lora_name");
+        StrengthModel = AddInput<FloatType>("strength_model");
         StrengthModel.Set(1.0);
     }
 

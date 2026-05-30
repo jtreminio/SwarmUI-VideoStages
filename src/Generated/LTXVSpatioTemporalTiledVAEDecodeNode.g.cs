@@ -29,21 +29,21 @@ public sealed class LTXVSpatioTemporalTiledVAEDecodeNode : ComfyNode
     public LTXVSpatioTemporalTiledVAEDecodeNode()
     {
         Image = AddOutput<ImageType>(0, "image");
-        Vae = AddInput<VaeType>("vae", required: true);
-        Latents = AddInput<LatentType>("latents", required: true);
-        SpatialTiles = AddInput<IntType>("spatial_tiles", required: true);
+        Vae = AddInput<VaeType>("vae");
+        Latents = AddInput<LatentType>("latents");
+        SpatialTiles = AddInput<IntType>("spatial_tiles");
         SpatialTiles.Set(4L);
-        SpatialOverlap = AddInput<IntType>("spatial_overlap", required: true);
+        SpatialOverlap = AddInput<IntType>("spatial_overlap");
         SpatialOverlap.Set(1L);
-        TemporalTileLength = AddInput<IntType>("temporal_tile_length", required: true);
+        TemporalTileLength = AddInput<IntType>("temporal_tile_length");
         TemporalTileLength.Set(16L);
-        TemporalOverlap = AddInput<IntType>("temporal_overlap", required: true);
+        TemporalOverlap = AddInput<IntType>("temporal_overlap");
         TemporalOverlap.Set(1L);
-        LastFrameFix = AddInput<BooleanType>("last_frame_fix", required: true);
+        LastFrameFix = AddInput<BooleanType>("last_frame_fix");
         LastFrameFix.Set(false);
-        WorkingDevice = AddInput<StringType>("working_device", required: true);
+        WorkingDevice = AddInput<StringType>("working_device");
         WorkingDevice.Set("auto");
-        WorkingDtype = AddInput<StringType>("working_dtype", required: true);
+        WorkingDtype = AddInput<StringType>("working_dtype");
         WorkingDtype.Set("auto");
     }
 

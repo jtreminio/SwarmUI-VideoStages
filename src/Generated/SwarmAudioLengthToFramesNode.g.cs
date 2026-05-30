@@ -25,8 +25,8 @@ public sealed class SwarmAudioLengthToFramesNode : ComfyNode
     {
         Audio = AddOutput<AudioType>(0, "audio");
         Frames = AddOutput<IntType>(1, "frames");
-        AudioInput = AddInput<AudioType>("audio", required: true);
-        FrameRate = AddInput<IntType>("frame_rate", required: true);
+        AudioInput = AddInput<AudioType>("audio");
+        FrameRate = AddInput<IntType>("frame_rate");
         FrameRate.Set(24L);
     }
 

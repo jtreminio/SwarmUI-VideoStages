@@ -23,8 +23,8 @@ public sealed class LTXVSetVideoLatentNoiseMasksNode : ComfyNode
     public LTXVSetVideoLatentNoiseMasksNode()
     {
         LATENT = AddOutput<LatentType>(0, "LATENT");
-        Samples = AddInput<LatentType>("samples", required: true);
-        Masks = AddInput<MaskType>("masks", required: true);
+        Samples = AddInput<LatentType>("samples");
+        Masks = AddInput<MaskType>("masks");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.

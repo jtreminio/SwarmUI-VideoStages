@@ -26,16 +26,16 @@ public sealed class LTXQ8PatchNode : ComfyNode
     public LTXQ8PatchNode()
     {
         MODEL = AddOutput<ModelType>(0, "MODEL");
-        Model = AddInput<ModelType>("model", required: true);
-        UseFp8Attention = AddInput<BooleanType>("use_fp8_attention", required: true);
+        Model = AddInput<ModelType>("model");
+        UseFp8Attention = AddInput<BooleanType>("use_fp8_attention");
         UseFp8Attention.Set(false);
-        QuantizationPreset = AddInput<StringType>("quantization_preset", required: true);
+        QuantizationPreset = AddInput<StringType>("quantization_preset");
         QuantizationPreset.Set("0.9.8");
-        QuantizeSelfAttn = AddInput<BooleanType>("quantize_self_attn", required: true);
+        QuantizeSelfAttn = AddInput<BooleanType>("quantize_self_attn");
         QuantizeSelfAttn.Set(true);
-        QuantizeCrossAttn = AddInput<BooleanType>("quantize_cross_attn", required: true);
+        QuantizeCrossAttn = AddInput<BooleanType>("quantize_cross_attn");
         QuantizeCrossAttn.Set(true);
-        QuantizeFfn = AddInput<BooleanType>("quantize_ffn", required: true);
+        QuantizeFfn = AddInput<BooleanType>("quantize_ffn");
         QuantizeFfn.Set(true);
     }
 

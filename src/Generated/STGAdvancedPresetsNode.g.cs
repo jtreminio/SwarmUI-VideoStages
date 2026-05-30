@@ -21,7 +21,7 @@ public sealed class STGAdvancedPresetsNode : ComfyNode
     public STGAdvancedPresetsNode()
     {
         STGADVANCEDPRESET = AddOutput<StgAdvancedPresetType>(0, "STG_ADVANCED_PRESET");
-        Preset = AddInput<StringType>("preset", required: true);
+        Preset = AddInput<StringType>("preset");
         Preset.Set("13b Balanced");
     }
 

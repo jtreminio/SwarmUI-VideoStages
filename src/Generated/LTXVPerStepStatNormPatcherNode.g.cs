@@ -26,16 +26,16 @@ public sealed class LTXVPerStepStatNormPatcherNode : ComfyNode
     public LTXVPerStepStatNormPatcherNode()
     {
         MODEL = AddOutput<ModelType>(0, "MODEL");
-        Model = AddInput<ModelType>("model", required: true);
-        Factors = AddInput<StringType>("factors", required: true);
+        Model = AddInput<ModelType>("model");
+        Factors = AddInput<StringType>("factors");
         Factors.Set("0.9, 0.75, 0.0");
-        TargetMean = AddInput<FloatType>("target_mean", required: true);
+        TargetMean = AddInput<FloatType>("target_mean");
         TargetMean.Set(0.0);
-        TargetStd = AddInput<FloatType>("target_std", required: true);
+        TargetStd = AddInput<FloatType>("target_std");
         TargetStd.Set(1.0);
-        Percentile = AddInput<FloatType>("percentile", required: true);
+        Percentile = AddInput<FloatType>("percentile");
         Percentile.Set(95.0);
-        ClipOutliers = AddInput<BooleanType>("clip_outliers", required: true);
+        ClipOutliers = AddInput<BooleanType>("clip_outliers");
         ClipOutliers.Set(false);
     }
 

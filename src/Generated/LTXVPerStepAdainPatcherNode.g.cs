@@ -24,11 +24,11 @@ public sealed class LTXVPerStepAdainPatcherNode : ComfyNode
     public LTXVPerStepAdainPatcherNode()
     {
         MODEL = AddOutput<ModelType>(0, "MODEL");
-        Model = AddInput<ModelType>("model", required: true);
-        Factors = AddInput<StringType>("factors", required: true);
+        Model = AddInput<ModelType>("model");
+        Factors = AddInput<StringType>("factors");
         Factors.Set("0.9, 0.75, 0.0");
-        Reference = AddInput<LatentType>("reference", required: true);
-        PerFrame = AddInput<BooleanType>("per_frame", required: false);
+        Reference = AddInput<LatentType>("reference");
+        PerFrame = AddInput<BooleanType>("per_frame");
         PerFrame.Set(false);
     }
 
