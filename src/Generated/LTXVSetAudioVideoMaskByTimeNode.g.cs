@@ -69,28 +69,43 @@ public sealed class LTXVSetAudioVideoMaskByTimeNode : ComfyNode
         SpatialMask = AddInput<MaskType>("spatial_mask", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVSetAudioVideoMaskByTimeNode With(
-        double? StartTime = null,
-        double? EndTime = null,
-        double? VideoFps = null,
-        bool? MaskVideo = null,
-        bool? MaskAudio = null,
-        double? MaskInitValueVideo = null,
-        double? MaskInitValueAudio = null,
-        long? SlopeLen = null
+        In<LatentType>? AvLatentInput = null,
+        In<ConditioningType>? PositiveInput = null,
+        In<ConditioningType>? NegativeInput = null,
+        In<ModelType>? Model = null,
+        In<VaeType>? Vae = null,
+        In<VaeType>? AudioVae = null,
+        FloatArg? StartTime = null,
+        FloatArg? EndTime = null,
+        FloatArg? VideoFps = null,
+        BoolArg? MaskVideo = null,
+        BoolArg? MaskAudio = null,
+        FloatArg? MaskInitValueVideo = null,
+        FloatArg? MaskInitValueAudio = null,
+        IntArg? SlopeLen = null,
+        In<MaskType>? SpatialMask = null
     )
     {
-        if (StartTime is { } v_StartTime) this.StartTime.Set(v_StartTime);
-        if (EndTime is { } v_EndTime) this.EndTime.Set(v_EndTime);
-        if (VideoFps is { } v_VideoFps) this.VideoFps.Set(v_VideoFps);
-        if (MaskVideo is { } v_MaskVideo) this.MaskVideo.Set(v_MaskVideo);
-        if (MaskAudio is { } v_MaskAudio) this.MaskAudio.Set(v_MaskAudio);
-        if (MaskInitValueVideo is { } v_MaskInitValueVideo) this.MaskInitValueVideo.Set(v_MaskInitValueVideo);
-        if (MaskInitValueAudio is { } v_MaskInitValueAudio) this.MaskInitValueAudio.Set(v_MaskInitValueAudio);
-        if (SlopeLen is { } v_SlopeLen) this.SlopeLen.Set(v_SlopeLen);
+        AvLatentInput?.ApplyTo(this.AvLatentInput);
+        PositiveInput?.ApplyTo(this.PositiveInput);
+        NegativeInput?.ApplyTo(this.NegativeInput);
+        Model?.ApplyTo(this.Model);
+        Vae?.ApplyTo(this.Vae);
+        AudioVae?.ApplyTo(this.AudioVae);
+        StartTime?.ApplyTo(this.StartTime);
+        EndTime?.ApplyTo(this.EndTime);
+        VideoFps?.ApplyTo(this.VideoFps);
+        MaskVideo?.ApplyTo(this.MaskVideo);
+        MaskAudio?.ApplyTo(this.MaskAudio);
+        MaskInitValueVideo?.ApplyTo(this.MaskInitValueVideo);
+        MaskInitValueAudio?.ApplyTo(this.MaskInitValueAudio);
+        SlopeLen?.ApplyTo(this.SlopeLen);
+        SpatialMask?.ApplyTo(this.SpatialMask);
         return this;
     }
 }

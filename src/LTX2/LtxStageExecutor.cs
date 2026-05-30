@@ -834,8 +834,8 @@ internal sealed class LtxStageExecutor(
 
         NormalizeVideoLatentStartNode normalize = bridge.AddNode(new NormalizeVideoLatentStartNode().With(
             StartFrameCount: 4,
-            ReferenceFrameCount: 5));
-        normalize.LatentInput.ConnectTo(replace.LATENT);
+            ReferenceFrameCount: 5,
+            LatentInput: replace.LATENT));
         bridge.SyncNode(normalize);
         BridgeSync.SyncLastId(g);
 
@@ -876,8 +876,8 @@ internal sealed class LtxStageExecutor(
 
         if (shouldRestoreAudioVideoLatent)
         {
-            LTXVConcatAVLatentNode concat = bridge.AddNode(new LTXVConcatAVLatentNode());
-            concat.VideoLatent.ConnectTo(crop.Latent);
+            LTXVConcatAVLatentNode concat = bridge.AddNode(new LTXVConcatAVLatentNode().With(
+                VideoLatent: crop.Latent));
             concat.AudioLatent.TryConnectToUntyped(audioLatentSource);
             bridge.SyncNode(concat);
             BridgeSync.SyncLastId(g);

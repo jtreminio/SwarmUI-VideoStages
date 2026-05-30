@@ -63,28 +63,43 @@ public sealed class LTXVBaseSamplerNode : ComfyNode
         Blur.Set(0L);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVBaseSamplerNode With(
-        long? Width = null,
-        long? Height = null,
-        long? NumFrames = null,
-        string? OptionalCondIndices = null,
-        double? Strength = null,
-        string? Crop = null,
-        long? Crf = null,
-        long? Blur = null
+        In<ModelType>? Model = null,
+        In<VaeType>? Vae = null,
+        IntArg? Width = null,
+        IntArg? Height = null,
+        IntArg? NumFrames = null,
+        In<GuiderType>? Guider = null,
+        In<SamplerType>? Sampler = null,
+        In<SigmasType>? Sigmas = null,
+        In<NoiseType>? Noise = null,
+        In<ImageType>? OptionalCondImages = null,
+        StringArg? OptionalCondIndices = null,
+        FloatArg? Strength = null,
+        StringArg? Crop = null,
+        IntArg? Crf = null,
+        IntArg? Blur = null
     )
     {
-        if (Width is { } v_Width) this.Width.Set(v_Width);
-        if (Height is { } v_Height) this.Height.Set(v_Height);
-        if (NumFrames is { } v_NumFrames) this.NumFrames.Set(v_NumFrames);
-        if (OptionalCondIndices is { } v_OptionalCondIndices) this.OptionalCondIndices.Set(v_OptionalCondIndices);
-        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
-        if (Crop is { } v_Crop) this.Crop.Set(v_Crop);
-        if (Crf is { } v_Crf) this.Crf.Set(v_Crf);
-        if (Blur is { } v_Blur) this.Blur.Set(v_Blur);
+        Model?.ApplyTo(this.Model);
+        Vae?.ApplyTo(this.Vae);
+        Width?.ApplyTo(this.Width);
+        Height?.ApplyTo(this.Height);
+        NumFrames?.ApplyTo(this.NumFrames);
+        Guider?.ApplyTo(this.Guider);
+        Sampler?.ApplyTo(this.Sampler);
+        Sigmas?.ApplyTo(this.Sigmas);
+        Noise?.ApplyTo(this.Noise);
+        OptionalCondImages?.ApplyTo(this.OptionalCondImages);
+        OptionalCondIndices?.ApplyTo(this.OptionalCondIndices);
+        Strength?.ApplyTo(this.Strength);
+        Crop?.ApplyTo(this.Crop);
+        Crf?.ApplyTo(this.Crf);
+        Blur?.ApplyTo(this.Blur);
         return this;
     }
 }

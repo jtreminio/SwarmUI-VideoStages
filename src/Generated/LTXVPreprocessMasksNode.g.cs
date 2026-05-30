@@ -48,26 +48,31 @@ public sealed class LTXVPreprocessMasksNode : ComfyNode
         ClampMax.Set(1.0);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVPreprocessMasksNode With(
-        bool? InvertInputMasks = null,
-        bool? IgnoreFirstMask = null,
-        string? PoolingMethod = null,
-        long? GrowMask = null,
-        bool? TaperedCorners = null,
-        double? ClampMin = null,
-        double? ClampMax = null
+        In<MaskType>? Masks = null,
+        In<VaeType>? Vae = null,
+        BoolArg? InvertInputMasks = null,
+        BoolArg? IgnoreFirstMask = null,
+        StringArg? PoolingMethod = null,
+        IntArg? GrowMask = null,
+        BoolArg? TaperedCorners = null,
+        FloatArg? ClampMin = null,
+        FloatArg? ClampMax = null
     )
     {
-        if (InvertInputMasks is { } v_InvertInputMasks) this.InvertInputMasks.Set(v_InvertInputMasks);
-        if (IgnoreFirstMask is { } v_IgnoreFirstMask) this.IgnoreFirstMask.Set(v_IgnoreFirstMask);
-        if (PoolingMethod is { } v_PoolingMethod) this.PoolingMethod.Set(v_PoolingMethod);
-        if (GrowMask is { } v_GrowMask) this.GrowMask.Set(v_GrowMask);
-        if (TaperedCorners is { } v_TaperedCorners) this.TaperedCorners.Set(v_TaperedCorners);
-        if (ClampMin is { } v_ClampMin) this.ClampMin.Set(v_ClampMin);
-        if (ClampMax is { } v_ClampMax) this.ClampMax.Set(v_ClampMax);
+        Masks?.ApplyTo(this.Masks);
+        Vae?.ApplyTo(this.Vae);
+        InvertInputMasks?.ApplyTo(this.InvertInputMasks);
+        IgnoreFirstMask?.ApplyTo(this.IgnoreFirstMask);
+        PoolingMethod?.ApplyTo(this.PoolingMethod);
+        GrowMask?.ApplyTo(this.GrowMask);
+        TaperedCorners?.ApplyTo(this.TaperedCorners);
+        ClampMin?.ApplyTo(this.ClampMin);
+        ClampMax?.ApplyTo(this.ClampMax);
         return this;
     }
 }

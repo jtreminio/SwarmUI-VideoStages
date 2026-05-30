@@ -42,20 +42,27 @@ public sealed class LTXPrepareAttnInjectionsNode : ComfyNode
         Blocks = AddInput<LtxBlocksType>("blocks", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXPrepareAttnInjectionsNode With(
-        bool? Query = null,
-        bool? Key = null,
-        bool? Value = null,
-        long? InjectSteps = null
+        In<LatentType>? Latent = null,
+        In<AttnBankType>? AttnBank = null,
+        BoolArg? Query = null,
+        BoolArg? Key = null,
+        BoolArg? Value = null,
+        IntArg? InjectSteps = null,
+        In<LtxBlocksType>? Blocks = null
     )
     {
-        if (Query is { } v_Query) this.Query.Set(v_Query);
-        if (Key is { } v_Key) this.Key.Set(v_Key);
-        if (Value is { } v_Value) this.Value.Set(v_Value);
-        if (InjectSteps is { } v_InjectSteps) this.InjectSteps.Set(v_InjectSteps);
+        Latent?.ApplyTo(this.Latent);
+        AttnBank?.ApplyTo(this.AttnBank);
+        Query?.ApplyTo(this.Query);
+        Key?.ApplyTo(this.Key);
+        Value?.ApplyTo(this.Value);
+        InjectSteps?.ApplyTo(this.InjectSteps);
+        Blocks?.ApplyTo(this.Blocks);
         return this;
     }
 }

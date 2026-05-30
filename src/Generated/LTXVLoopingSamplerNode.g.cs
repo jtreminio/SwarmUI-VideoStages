@@ -82,36 +82,61 @@ public sealed class LTXVLoopingSamplerNode : ComfyNode
         OptionalNormalizingLatents = AddInput<LatentType>("optional_normalizing_latents", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVLoopingSamplerNode With(
-        long? TemporalTileSize = null,
-        long? TemporalOverlap = null,
-        double? GuidingStrength = null,
-        double? TemporalOverlapCondStrength = null,
-        double? CondImageStrength = null,
-        long? HorizontalTiles = null,
-        long? VerticalTiles = null,
-        long? SpatialOverlap = null,
-        double? AdainFactor = null,
-        long? GuidingStartStep = null,
-        long? GuidingEndStep = null,
-        string? OptionalCondImageIndices = null
+        In<ModelType>? Model = null,
+        In<VaeType>? Vae = null,
+        In<NoiseType>? Noise = null,
+        In<SamplerType>? Sampler = null,
+        In<SigmasType>? Sigmas = null,
+        In<GuiderType>? Guider = null,
+        In<LatentType>? Latents = null,
+        IntArg? TemporalTileSize = null,
+        IntArg? TemporalOverlap = null,
+        FloatArg? GuidingStrength = null,
+        FloatArg? TemporalOverlapCondStrength = null,
+        FloatArg? CondImageStrength = null,
+        IntArg? HorizontalTiles = null,
+        IntArg? VerticalTiles = null,
+        IntArg? SpatialOverlap = null,
+        In<ImageType>? OptionalCondImages = null,
+        In<LatentType>? OptionalGuidingLatents = null,
+        FloatArg? AdainFactor = null,
+        In<ConditioningType>? OptionalPositiveConditionings = null,
+        In<LatentType>? OptionalNegativeIndexLatents = null,
+        IntArg? GuidingStartStep = null,
+        IntArg? GuidingEndStep = null,
+        StringArg? OptionalCondImageIndices = null,
+        In<LatentType>? OptionalNormalizingLatents = null
     )
     {
-        if (TemporalTileSize is { } v_TemporalTileSize) this.TemporalTileSize.Set(v_TemporalTileSize);
-        if (TemporalOverlap is { } v_TemporalOverlap) this.TemporalOverlap.Set(v_TemporalOverlap);
-        if (GuidingStrength is { } v_GuidingStrength) this.GuidingStrength.Set(v_GuidingStrength);
-        if (TemporalOverlapCondStrength is { } v_TemporalOverlapCondStrength) this.TemporalOverlapCondStrength.Set(v_TemporalOverlapCondStrength);
-        if (CondImageStrength is { } v_CondImageStrength) this.CondImageStrength.Set(v_CondImageStrength);
-        if (HorizontalTiles is { } v_HorizontalTiles) this.HorizontalTiles.Set(v_HorizontalTiles);
-        if (VerticalTiles is { } v_VerticalTiles) this.VerticalTiles.Set(v_VerticalTiles);
-        if (SpatialOverlap is { } v_SpatialOverlap) this.SpatialOverlap.Set(v_SpatialOverlap);
-        if (AdainFactor is { } v_AdainFactor) this.AdainFactor.Set(v_AdainFactor);
-        if (GuidingStartStep is { } v_GuidingStartStep) this.GuidingStartStep.Set(v_GuidingStartStep);
-        if (GuidingEndStep is { } v_GuidingEndStep) this.GuidingEndStep.Set(v_GuidingEndStep);
-        if (OptionalCondImageIndices is { } v_OptionalCondImageIndices) this.OptionalCondImageIndices.Set(v_OptionalCondImageIndices);
+        Model?.ApplyTo(this.Model);
+        Vae?.ApplyTo(this.Vae);
+        Noise?.ApplyTo(this.Noise);
+        Sampler?.ApplyTo(this.Sampler);
+        Sigmas?.ApplyTo(this.Sigmas);
+        Guider?.ApplyTo(this.Guider);
+        Latents?.ApplyTo(this.Latents);
+        TemporalTileSize?.ApplyTo(this.TemporalTileSize);
+        TemporalOverlap?.ApplyTo(this.TemporalOverlap);
+        GuidingStrength?.ApplyTo(this.GuidingStrength);
+        TemporalOverlapCondStrength?.ApplyTo(this.TemporalOverlapCondStrength);
+        CondImageStrength?.ApplyTo(this.CondImageStrength);
+        HorizontalTiles?.ApplyTo(this.HorizontalTiles);
+        VerticalTiles?.ApplyTo(this.VerticalTiles);
+        SpatialOverlap?.ApplyTo(this.SpatialOverlap);
+        OptionalCondImages?.ApplyTo(this.OptionalCondImages);
+        OptionalGuidingLatents?.ApplyTo(this.OptionalGuidingLatents);
+        AdainFactor?.ApplyTo(this.AdainFactor);
+        OptionalPositiveConditionings?.ApplyTo(this.OptionalPositiveConditionings);
+        OptionalNegativeIndexLatents?.ApplyTo(this.OptionalNegativeIndexLatents);
+        GuidingStartStep?.ApplyTo(this.GuidingStartStep);
+        GuidingEndStep?.ApplyTo(this.GuidingEndStep);
+        OptionalCondImageIndices?.ApplyTo(this.OptionalCondImageIndices);
+        OptionalNormalizingLatents?.ApplyTo(this.OptionalNormalizingLatents);
         return this;
     }
 }

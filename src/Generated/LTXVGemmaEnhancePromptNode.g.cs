@@ -42,22 +42,27 @@ public sealed class LTXVGemmaEnhancePromptNode : ComfyNode
         Seed.Set(42L);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVGemmaEnhancePromptNode With(
-        string? Prompt = null,
-        string? SystemPrompt = null,
-        long? MaxTokens = null,
-        bool? BypassI2v = null,
-        long? Seed = null
+        In<ClipType>? Clip = null,
+        StringArg? Prompt = null,
+        StringArg? SystemPrompt = null,
+        IntArg? MaxTokens = null,
+        BoolArg? BypassI2v = null,
+        In<ImageType>? Image = null,
+        IntArg? Seed = null
     )
     {
-        if (Prompt is { } v_Prompt) this.Prompt.Set(v_Prompt);
-        if (SystemPrompt is { } v_SystemPrompt) this.SystemPrompt.Set(v_SystemPrompt);
-        if (MaxTokens is { } v_MaxTokens) this.MaxTokens.Set(v_MaxTokens);
-        if (BypassI2v is { } v_BypassI2v) this.BypassI2v.Set(v_BypassI2v);
-        if (Seed is { } v_Seed) this.Seed.Set(v_Seed);
+        Clip?.ApplyTo(this.Clip);
+        Prompt?.ApplyTo(this.Prompt);
+        SystemPrompt?.ApplyTo(this.SystemPrompt);
+        MaxTokens?.ApplyTo(this.MaxTokens);
+        BypassI2v?.ApplyTo(this.BypassI2v);
+        Image?.ApplyTo(this.Image);
+        Seed?.ApplyTo(this.Seed);
         return this;
     }
 }

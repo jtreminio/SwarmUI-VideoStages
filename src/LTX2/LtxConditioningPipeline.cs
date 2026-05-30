@@ -175,10 +175,10 @@ internal sealed class LtxConditioningPipeline(
             ModelName: modelName);
         bridge.SyncNode(loader);
 
-        LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode());
+        LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode().With(
+            UpscaleModel: loader.LATENTUPSCALEMODEL));
         upsampler.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
         upsampler.Samples.ConnectFromPath(bridge, stageLatent.Path);
-        upsampler.UpscaleModel.ConnectTo(loader.LATENTUPSCALEMODEL);
         bridge.SyncNode(upsampler);
         BridgeSync.SyncLastId(g);
 

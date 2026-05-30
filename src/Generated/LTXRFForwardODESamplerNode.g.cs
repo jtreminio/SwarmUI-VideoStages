@@ -40,24 +40,27 @@ public sealed class LTXRFForwardODESamplerNode : ComfyNode
         Order = AddInput<StringType>("order", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXRFForwardODESamplerNode With(
-        double? Gamma = null,
-        long? StartStep = null,
-        long? EndStep = null,
-        string? GammaTrend = null,
-        long? Seed = null,
-        string? Order = null
+        FloatArg? Gamma = null,
+        IntArg? StartStep = null,
+        IntArg? EndStep = null,
+        StringArg? GammaTrend = null,
+        IntArg? Seed = null,
+        In<AttnBankType>? AttnBank = null,
+        StringArg? Order = null
     )
     {
-        if (Gamma is { } v_Gamma) this.Gamma.Set(v_Gamma);
-        if (StartStep is { } v_StartStep) this.StartStep.Set(v_StartStep);
-        if (EndStep is { } v_EndStep) this.EndStep.Set(v_EndStep);
-        if (GammaTrend is { } v_GammaTrend) this.GammaTrend.Set(v_GammaTrend);
-        if (Seed is { } v_Seed) this.Seed.Set(v_Seed);
-        if (Order is { } v_Order) this.Order.Set(v_Order);
+        Gamma?.ApplyTo(this.Gamma);
+        StartStep?.ApplyTo(this.StartStep);
+        EndStep?.ApplyTo(this.EndStep);
+        GammaTrend?.ApplyTo(this.GammaTrend);
+        Seed?.ApplyTo(this.Seed);
+        AttnBank?.ApplyTo(this.AttnBank);
+        Order?.ApplyTo(this.Order);
         return this;
     }
 }

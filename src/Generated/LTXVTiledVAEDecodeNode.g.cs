@@ -44,24 +44,29 @@ public sealed class LTXVTiledVAEDecodeNode : ComfyNode
         WorkingDtype.Set("auto");
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVTiledVAEDecodeNode With(
-        long? HorizontalTiles = null,
-        long? VerticalTiles = null,
-        long? Overlap = null,
-        bool? LastFrameFix = null,
-        string? WorkingDevice = null,
-        string? WorkingDtype = null
+        In<VaeType>? Vae = null,
+        In<LatentType>? Latents = null,
+        IntArg? HorizontalTiles = null,
+        IntArg? VerticalTiles = null,
+        IntArg? Overlap = null,
+        BoolArg? LastFrameFix = null,
+        StringArg? WorkingDevice = null,
+        StringArg? WorkingDtype = null
     )
     {
-        if (HorizontalTiles is { } v_HorizontalTiles) this.HorizontalTiles.Set(v_HorizontalTiles);
-        if (VerticalTiles is { } v_VerticalTiles) this.VerticalTiles.Set(v_VerticalTiles);
-        if (Overlap is { } v_Overlap) this.Overlap.Set(v_Overlap);
-        if (LastFrameFix is { } v_LastFrameFix) this.LastFrameFix.Set(v_LastFrameFix);
-        if (WorkingDevice is { } v_WorkingDevice) this.WorkingDevice.Set(v_WorkingDevice);
-        if (WorkingDtype is { } v_WorkingDtype) this.WorkingDtype.Set(v_WorkingDtype);
+        Vae?.ApplyTo(this.Vae);
+        Latents?.ApplyTo(this.Latents);
+        HorizontalTiles?.ApplyTo(this.HorizontalTiles);
+        VerticalTiles?.ApplyTo(this.VerticalTiles);
+        Overlap?.ApplyTo(this.Overlap);
+        LastFrameFix?.ApplyTo(this.LastFrameFix);
+        WorkingDevice?.ApplyTo(this.WorkingDevice);
+        WorkingDtype?.ApplyTo(this.WorkingDtype);
         return this;
     }
 }

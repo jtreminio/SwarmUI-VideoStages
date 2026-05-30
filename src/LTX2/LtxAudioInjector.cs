@@ -117,9 +117,9 @@ internal sealed class LtxAudioInjector(
             Height: height);
         bridge.AddNode(solidMask, g.GetStableDynamicID(AudioInjectionIdBase + 200, 0));
 
-        SetLatentNoiseMaskNode setMask = new();
+        SetLatentNoiseMaskNode setMask = new SetLatentNoiseMaskNode().With(
+            Mask: solidMask.MASK);
         setMask.Samples.TryConnectFromPath(bridge, encodedAudioPath);
-        setMask.Mask.ConnectTo(solidMask.MASK);
         bridge.AddNode(setMask, g.GetStableDynamicID(AudioInjectionIdBase + 300, 0));
         return setMask;
     }

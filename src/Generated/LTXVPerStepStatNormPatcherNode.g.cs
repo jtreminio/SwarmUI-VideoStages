@@ -39,22 +39,25 @@ public sealed class LTXVPerStepStatNormPatcherNode : ComfyNode
         ClipOutliers.Set(false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVPerStepStatNormPatcherNode With(
-        string? Factors = null,
-        double? TargetMean = null,
-        double? TargetStd = null,
-        double? Percentile = null,
-        bool? ClipOutliers = null
+        In<ModelType>? Model = null,
+        StringArg? Factors = null,
+        FloatArg? TargetMean = null,
+        FloatArg? TargetStd = null,
+        FloatArg? Percentile = null,
+        BoolArg? ClipOutliers = null
     )
     {
-        if (Factors is { } v_Factors) this.Factors.Set(v_Factors);
-        if (TargetMean is { } v_TargetMean) this.TargetMean.Set(v_TargetMean);
-        if (TargetStd is { } v_TargetStd) this.TargetStd.Set(v_TargetStd);
-        if (Percentile is { } v_Percentile) this.Percentile.Set(v_Percentile);
-        if (ClipOutliers is { } v_ClipOutliers) this.ClipOutliers.Set(v_ClipOutliers);
+        Model?.ApplyTo(this.Model);
+        Factors?.ApplyTo(this.Factors);
+        TargetMean?.ApplyTo(this.TargetMean);
+        TargetStd?.ApplyTo(this.TargetStd);
+        Percentile?.ApplyTo(this.Percentile);
+        ClipOutliers?.ApplyTo(this.ClipOutliers);
         return this;
     }
 }

@@ -48,28 +48,31 @@ public sealed class GuiderParametersNode : ComfyNode
         Parameters = AddInput<GuiderParametersType>("parameters", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public GuiderParametersNode With(
-        string? Modality = null,
-        double? Cfg = null,
-        double? Stg = null,
-        bool? PerturbAttn = null,
-        double? Rescale = null,
-        double? ModalityScale = null,
-        long? SkipStep = null,
-        bool? CrossAttn = null
+        StringArg? Modality = null,
+        FloatArg? Cfg = null,
+        FloatArg? Stg = null,
+        BoolArg? PerturbAttn = null,
+        FloatArg? Rescale = null,
+        FloatArg? ModalityScale = null,
+        IntArg? SkipStep = null,
+        BoolArg? CrossAttn = null,
+        In<GuiderParametersType>? Parameters = null
     )
     {
-        if (Modality is { } v_Modality) this.Modality.Set(v_Modality);
-        if (Cfg is { } v_Cfg) this.Cfg.Set(v_Cfg);
-        if (Stg is { } v_Stg) this.Stg.Set(v_Stg);
-        if (PerturbAttn is { } v_PerturbAttn) this.PerturbAttn.Set(v_PerturbAttn);
-        if (Rescale is { } v_Rescale) this.Rescale.Set(v_Rescale);
-        if (ModalityScale is { } v_ModalityScale) this.ModalityScale.Set(v_ModalityScale);
-        if (SkipStep is { } v_SkipStep) this.SkipStep.Set(v_SkipStep);
-        if (CrossAttn is { } v_CrossAttn) this.CrossAttn.Set(v_CrossAttn);
+        Modality?.ApplyTo(this.Modality);
+        Cfg?.ApplyTo(this.Cfg);
+        Stg?.ApplyTo(this.Stg);
+        PerturbAttn?.ApplyTo(this.PerturbAttn);
+        Rescale?.ApplyTo(this.Rescale);
+        ModalityScale?.ApplyTo(this.ModalityScale);
+        SkipStep?.ApplyTo(this.SkipStep);
+        CrossAttn?.ApplyTo(this.CrossAttn);
+        Parameters?.ApplyTo(this.Parameters);
         return this;
     }
 }

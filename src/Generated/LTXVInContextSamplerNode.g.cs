@@ -43,14 +43,29 @@ public sealed class LTXVInContextSamplerNode : ComfyNode
         NumFrames.Set(-1L);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVInContextSamplerNode With(
-        long? NumFrames = null
+        In<VaeType>? Vae = null,
+        In<GuiderType>? Guider = null,
+        In<SamplerType>? Sampler = null,
+        In<SigmasType>? Sigmas = null,
+        In<NoiseType>? Noise = null,
+        In<LatentType>? GuidingLatents = null,
+        In<ImageType>? OptionalCondImages = null,
+        IntArg? NumFrames = null
     )
     {
-        if (NumFrames is { } v_NumFrames) this.NumFrames.Set(v_NumFrames);
+        Vae?.ApplyTo(this.Vae);
+        Guider?.ApplyTo(this.Guider);
+        Sampler?.ApplyTo(this.Sampler);
+        Sigmas?.ApplyTo(this.Sigmas);
+        Noise?.ApplyTo(this.Noise);
+        GuidingLatents?.ApplyTo(this.GuidingLatents);
+        OptionalCondImages?.ApplyTo(this.OptionalCondImages);
+        NumFrames?.ApplyTo(this.NumFrames);
         return this;
     }
 }

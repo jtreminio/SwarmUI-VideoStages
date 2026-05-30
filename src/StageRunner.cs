@@ -610,8 +610,8 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             ModelName: modelName);
         bridge.SyncNode(loader);
 
-        ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode());
-        upscale.UpscaleModel.ConnectTo(loader.UPSCALEMODEL);
+        ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode().With(
+            UpscaleModel: loader.UPSCALEMODEL));
         upscale.Image.ConnectFromPath(bridge, sourcePath);
         bridge.SyncNode(upscale);
 
@@ -619,8 +619,8 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             Width: targetWidth,
             Height: targetHeight,
             UpscaleMethod: "lanczos",
-            Crop: "disabled"));
-        fit.Image.ConnectTo(upscale.IMAGE);
+            Crop: "disabled",
+            Image: upscale.IMAGE));
         bridge.SyncNode(fit);
         BridgeSync.SyncLastId(g);
         return fit;

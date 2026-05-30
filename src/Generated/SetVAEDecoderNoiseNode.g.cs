@@ -33,18 +33,21 @@ public sealed class SetVAEDecoderNoiseNode : ComfyNode
         Seed.Set(42L);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public SetVAEDecoderNoiseNode With(
-        double? Timestep = null,
-        double? Scale = null,
-        long? Seed = null
+        In<VaeType>? Vae = null,
+        FloatArg? Timestep = null,
+        FloatArg? Scale = null,
+        IntArg? Seed = null
     )
     {
-        if (Timestep is { } v_Timestep) this.Timestep.Set(v_Timestep);
-        if (Scale is { } v_Scale) this.Scale.Set(v_Scale);
-        if (Seed is { } v_Seed) this.Seed.Set(v_Seed);
+        Vae?.ApplyTo(this.Vae);
+        Timestep?.ApplyTo(this.Timestep);
+        Scale?.ApplyTo(this.Scale);
+        Seed?.ApplyTo(this.Seed);
         return this;
     }
 }

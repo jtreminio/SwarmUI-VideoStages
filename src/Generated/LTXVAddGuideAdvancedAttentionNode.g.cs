@@ -60,26 +60,39 @@ public sealed class LTXVAddGuideAdvancedAttentionNode : ComfyNode
         AttentionMask = AddInput<MaskType>("attention_mask", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVAddGuideAdvancedAttentionNode With(
-        long? FrameIdx = null,
-        double? Strength = null,
-        long? Crf = null,
-        long? BlurRadius = null,
-        string? Interpolation = null,
-        string? Crop = null,
-        double? AttentionStrength = null
+        In<ConditioningType>? PositiveInput = null,
+        In<ConditioningType>? NegativeInput = null,
+        In<VaeType>? Vae = null,
+        In<LatentType>? LatentInput = null,
+        In<ImageType>? Image = null,
+        IntArg? FrameIdx = null,
+        FloatArg? Strength = null,
+        IntArg? Crf = null,
+        IntArg? BlurRadius = null,
+        StringArg? Interpolation = null,
+        StringArg? Crop = null,
+        FloatArg? AttentionStrength = null,
+        In<MaskType>? AttentionMask = null
     )
     {
-        if (FrameIdx is { } v_FrameIdx) this.FrameIdx.Set(v_FrameIdx);
-        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
-        if (Crf is { } v_Crf) this.Crf.Set(v_Crf);
-        if (BlurRadius is { } v_BlurRadius) this.BlurRadius.Set(v_BlurRadius);
-        if (Interpolation is { } v_Interpolation) this.Interpolation.Set(v_Interpolation);
-        if (Crop is { } v_Crop) this.Crop.Set(v_Crop);
-        if (AttentionStrength is { } v_AttentionStrength) this.AttentionStrength.Set(v_AttentionStrength);
+        PositiveInput?.ApplyTo(this.PositiveInput);
+        NegativeInput?.ApplyTo(this.NegativeInput);
+        Vae?.ApplyTo(this.Vae);
+        LatentInput?.ApplyTo(this.LatentInput);
+        Image?.ApplyTo(this.Image);
+        FrameIdx?.ApplyTo(this.FrameIdx);
+        Strength?.ApplyTo(this.Strength);
+        Crf?.ApplyTo(this.Crf);
+        BlurRadius?.ApplyTo(this.BlurRadius);
+        Interpolation?.ApplyTo(this.Interpolation);
+        Crop?.ApplyTo(this.Crop);
+        AttentionStrength?.ApplyTo(this.AttentionStrength);
+        AttentionMask?.ApplyTo(this.AttentionMask);
         return this;
     }
 }

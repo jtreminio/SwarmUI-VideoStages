@@ -64,28 +64,45 @@ public sealed class LTXVTiledSamplerNode : ComfyNode
         ImagesCondStrengths.Set("0.9");
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVTiledSamplerNode With(
-        long? HorizontalTiles = null,
-        long? VerticalTiles = null,
-        long? Overlap = null,
-        double? LatentsCondStrength = null,
-        bool? BoostLatentSimilarity = null,
-        string? Crop = null,
-        string? OptionalCondIndices = null,
-        string? ImagesCondStrengths = null
+        In<ModelType>? Model = null,
+        In<VaeType>? Vae = null,
+        In<NoiseType>? Noise = null,
+        In<SamplerType>? Sampler = null,
+        In<SigmasType>? Sigmas = null,
+        In<GuiderType>? Guider = null,
+        In<LatentType>? Latents = null,
+        IntArg? HorizontalTiles = null,
+        IntArg? VerticalTiles = null,
+        IntArg? Overlap = null,
+        FloatArg? LatentsCondStrength = null,
+        BoolArg? BoostLatentSimilarity = null,
+        StringArg? Crop = null,
+        In<ImageType>? OptionalCondImages = null,
+        StringArg? OptionalCondIndices = null,
+        StringArg? ImagesCondStrengths = null
     )
     {
-        if (HorizontalTiles is { } v_HorizontalTiles) this.HorizontalTiles.Set(v_HorizontalTiles);
-        if (VerticalTiles is { } v_VerticalTiles) this.VerticalTiles.Set(v_VerticalTiles);
-        if (Overlap is { } v_Overlap) this.Overlap.Set(v_Overlap);
-        if (LatentsCondStrength is { } v_LatentsCondStrength) this.LatentsCondStrength.Set(v_LatentsCondStrength);
-        if (BoostLatentSimilarity is { } v_BoostLatentSimilarity) this.BoostLatentSimilarity.Set(v_BoostLatentSimilarity);
-        if (Crop is { } v_Crop) this.Crop.Set(v_Crop);
-        if (OptionalCondIndices is { } v_OptionalCondIndices) this.OptionalCondIndices.Set(v_OptionalCondIndices);
-        if (ImagesCondStrengths is { } v_ImagesCondStrengths) this.ImagesCondStrengths.Set(v_ImagesCondStrengths);
+        Model?.ApplyTo(this.Model);
+        Vae?.ApplyTo(this.Vae);
+        Noise?.ApplyTo(this.Noise);
+        Sampler?.ApplyTo(this.Sampler);
+        Sigmas?.ApplyTo(this.Sigmas);
+        Guider?.ApplyTo(this.Guider);
+        Latents?.ApplyTo(this.Latents);
+        HorizontalTiles?.ApplyTo(this.HorizontalTiles);
+        VerticalTiles?.ApplyTo(this.VerticalTiles);
+        Overlap?.ApplyTo(this.Overlap);
+        LatentsCondStrength?.ApplyTo(this.LatentsCondStrength);
+        BoostLatentSimilarity?.ApplyTo(this.BoostLatentSimilarity);
+        Crop?.ApplyTo(this.Crop);
+        OptionalCondImages?.ApplyTo(this.OptionalCondImages);
+        OptionalCondIndices?.ApplyTo(this.OptionalCondIndices);
+        ImagesCondStrengths?.ApplyTo(this.ImagesCondStrengths);
         return this;
     }
 }

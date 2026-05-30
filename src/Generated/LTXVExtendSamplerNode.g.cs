@@ -58,22 +58,41 @@ public sealed class LTXVExtendSamplerNode : ComfyNode
         CondImageStrength.Set(1.0);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVExtendSamplerNode With(
-        long? NumNewFrames = null,
-        long? FrameOverlap = null,
-        double? Strength = null,
-        string? OptionalCondIndices = null,
-        double? CondImageStrength = null
+        In<ModelType>? Model = null,
+        In<VaeType>? Vae = null,
+        In<LatentType>? Latents = null,
+        IntArg? NumNewFrames = null,
+        IntArg? FrameOverlap = null,
+        In<GuiderType>? Guider = null,
+        In<SamplerType>? Sampler = null,
+        In<SigmasType>? Sigmas = null,
+        In<NoiseType>? Noise = null,
+        FloatArg? Strength = null,
+        In<LatentType>? OptionalGuidingLatents = null,
+        In<ImageType>? OptionalCondImages = null,
+        StringArg? OptionalCondIndices = null,
+        FloatArg? CondImageStrength = null
     )
     {
-        if (NumNewFrames is { } v_NumNewFrames) this.NumNewFrames.Set(v_NumNewFrames);
-        if (FrameOverlap is { } v_FrameOverlap) this.FrameOverlap.Set(v_FrameOverlap);
-        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
-        if (OptionalCondIndices is { } v_OptionalCondIndices) this.OptionalCondIndices.Set(v_OptionalCondIndices);
-        if (CondImageStrength is { } v_CondImageStrength) this.CondImageStrength.Set(v_CondImageStrength);
+        Model?.ApplyTo(this.Model);
+        Vae?.ApplyTo(this.Vae);
+        Latents?.ApplyTo(this.Latents);
+        NumNewFrames?.ApplyTo(this.NumNewFrames);
+        FrameOverlap?.ApplyTo(this.FrameOverlap);
+        Guider?.ApplyTo(this.Guider);
+        Sampler?.ApplyTo(this.Sampler);
+        Sigmas?.ApplyTo(this.Sigmas);
+        Noise?.ApplyTo(this.Noise);
+        Strength?.ApplyTo(this.Strength);
+        OptionalGuidingLatents?.ApplyTo(this.OptionalGuidingLatents);
+        OptionalCondImages?.ApplyTo(this.OptionalCondImages);
+        OptionalCondIndices?.ApplyTo(this.OptionalCondIndices);
+        CondImageStrength?.ApplyTo(this.CondImageStrength);
         return this;
     }
 }

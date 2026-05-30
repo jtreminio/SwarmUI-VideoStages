@@ -39,22 +39,25 @@ public sealed class LTXQ8PatchNode : ComfyNode
         QuantizeFfn.Set(true);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXQ8PatchNode With(
-        bool? UseFp8Attention = null,
-        string? QuantizationPreset = null,
-        bool? QuantizeSelfAttn = null,
-        bool? QuantizeCrossAttn = null,
-        bool? QuantizeFfn = null
+        In<ModelType>? Model = null,
+        BoolArg? UseFp8Attention = null,
+        StringArg? QuantizationPreset = null,
+        BoolArg? QuantizeSelfAttn = null,
+        BoolArg? QuantizeCrossAttn = null,
+        BoolArg? QuantizeFfn = null
     )
     {
-        if (UseFp8Attention is { } v_UseFp8Attention) this.UseFp8Attention.Set(v_UseFp8Attention);
-        if (QuantizationPreset is { } v_QuantizationPreset) this.QuantizationPreset.Set(v_QuantizationPreset);
-        if (QuantizeSelfAttn is { } v_QuantizeSelfAttn) this.QuantizeSelfAttn.Set(v_QuantizeSelfAttn);
-        if (QuantizeCrossAttn is { } v_QuantizeCrossAttn) this.QuantizeCrossAttn.Set(v_QuantizeCrossAttn);
-        if (QuantizeFfn is { } v_QuantizeFfn) this.QuantizeFfn.Set(v_QuantizeFfn);
+        Model?.ApplyTo(this.Model);
+        UseFp8Attention?.ApplyTo(this.UseFp8Attention);
+        QuantizationPreset?.ApplyTo(this.QuantizationPreset);
+        QuantizeSelfAttn?.ApplyTo(this.QuantizeSelfAttn);
+        QuantizeCrossAttn?.ApplyTo(this.QuantizeCrossAttn);
+        QuantizeFfn?.ApplyTo(this.QuantizeFfn);
         return this;
     }
 }

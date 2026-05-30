@@ -30,16 +30,19 @@ public sealed class DynamicConditioningNode : ComfyNode
         OnlyFirstFrame.Set(true);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public DynamicConditioningNode With(
-        double? Power = null,
-        bool? OnlyFirstFrame = null
+        In<ModelType>? Model = null,
+        FloatArg? Power = null,
+        BoolArg? OnlyFirstFrame = null
     )
     {
-        if (Power is { } v_Power) this.Power.Set(v_Power);
-        if (OnlyFirstFrame is { } v_OnlyFirstFrame) this.OnlyFirstFrame.Set(v_OnlyFirstFrame);
+        Model?.ApplyTo(this.Model);
+        Power?.ApplyTo(this.Power);
+        OnlyFirstFrame?.ApplyTo(this.OnlyFirstFrame);
         return this;
     }
 }

@@ -32,16 +32,21 @@ public sealed class LTXVPerStepAdainPatcherNode : ComfyNode
         PerFrame.Set(false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVPerStepAdainPatcherNode With(
-        string? Factors = null,
-        bool? PerFrame = null
+        In<ModelType>? Model = null,
+        StringArg? Factors = null,
+        In<LatentType>? Reference = null,
+        BoolArg? PerFrame = null
     )
     {
-        if (Factors is { } v_Factors) this.Factors.Set(v_Factors);
-        if (PerFrame is { } v_PerFrame) this.PerFrame.Set(v_PerFrame);
+        Model?.ApplyTo(this.Model);
+        Factors?.ApplyTo(this.Factors);
+        Reference?.ApplyTo(this.Reference);
+        PerFrame?.ApplyTo(this.PerFrame);
         return this;
     }
 }

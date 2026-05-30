@@ -43,16 +43,27 @@ public sealed class LTXVAddLatentGuideNode : ComfyNode
         Strength.Set(1.0);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVAddLatentGuideNode With(
-        long? LatentIdx = null,
-        double? Strength = null
+        In<VaeType>? Vae = null,
+        In<ConditioningType>? PositiveInput = null,
+        In<ConditioningType>? NegativeInput = null,
+        In<LatentType>? LatentInput = null,
+        In<LatentType>? GuidingLatent = null,
+        IntArg? LatentIdx = null,
+        FloatArg? Strength = null
     )
     {
-        if (LatentIdx is { } v_LatentIdx) this.LatentIdx.Set(v_LatentIdx);
-        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
+        Vae?.ApplyTo(this.Vae);
+        PositiveInput?.ApplyTo(this.PositiveInput);
+        NegativeInput?.ApplyTo(this.NegativeInput);
+        LatentInput?.ApplyTo(this.LatentInput);
+        GuidingLatent?.ApplyTo(this.GuidingLatent);
+        LatentIdx?.ApplyTo(this.LatentIdx);
+        Strength?.ApplyTo(this.Strength);
         return this;
     }
 }

@@ -47,26 +47,31 @@ public sealed class LTXVSpatioTemporalTiledVAEDecodeNode : ComfyNode
         WorkingDtype.Set("auto");
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVSpatioTemporalTiledVAEDecodeNode With(
-        long? SpatialTiles = null,
-        long? SpatialOverlap = null,
-        long? TemporalTileLength = null,
-        long? TemporalOverlap = null,
-        bool? LastFrameFix = null,
-        string? WorkingDevice = null,
-        string? WorkingDtype = null
+        In<VaeType>? Vae = null,
+        In<LatentType>? Latents = null,
+        IntArg? SpatialTiles = null,
+        IntArg? SpatialOverlap = null,
+        IntArg? TemporalTileLength = null,
+        IntArg? TemporalOverlap = null,
+        BoolArg? LastFrameFix = null,
+        StringArg? WorkingDevice = null,
+        StringArg? WorkingDtype = null
     )
     {
-        if (SpatialTiles is { } v_SpatialTiles) this.SpatialTiles.Set(v_SpatialTiles);
-        if (SpatialOverlap is { } v_SpatialOverlap) this.SpatialOverlap.Set(v_SpatialOverlap);
-        if (TemporalTileLength is { } v_TemporalTileLength) this.TemporalTileLength.Set(v_TemporalTileLength);
-        if (TemporalOverlap is { } v_TemporalOverlap) this.TemporalOverlap.Set(v_TemporalOverlap);
-        if (LastFrameFix is { } v_LastFrameFix) this.LastFrameFix.Set(v_LastFrameFix);
-        if (WorkingDevice is { } v_WorkingDevice) this.WorkingDevice.Set(v_WorkingDevice);
-        if (WorkingDtype is { } v_WorkingDtype) this.WorkingDtype.Set(v_WorkingDtype);
+        Vae?.ApplyTo(this.Vae);
+        Latents?.ApplyTo(this.Latents);
+        SpatialTiles?.ApplyTo(this.SpatialTiles);
+        SpatialOverlap?.ApplyTo(this.SpatialOverlap);
+        TemporalTileLength?.ApplyTo(this.TemporalTileLength);
+        TemporalOverlap?.ApplyTo(this.TemporalOverlap);
+        LastFrameFix?.ApplyTo(this.LastFrameFix);
+        WorkingDevice?.ApplyTo(this.WorkingDevice);
+        WorkingDtype?.ApplyTo(this.WorkingDtype);
         return this;
     }
 }

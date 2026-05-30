@@ -32,16 +32,21 @@ public sealed class LTXVAdainLatentNode : ComfyNode
         PerFrame.Set(false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVAdainLatentNode With(
-        double? Factor = null,
-        bool? PerFrame = null
+        In<LatentType>? Latents = null,
+        In<LatentType>? Reference = null,
+        FloatArg? Factor = null,
+        BoolArg? PerFrame = null
     )
     {
-        if (Factor is { } v_Factor) this.Factor.Set(v_Factor);
-        if (PerFrame is { } v_PerFrame) this.PerFrame.Set(v_PerFrame);
+        Latents?.ApplyTo(this.Latents);
+        Reference?.ApplyTo(this.Reference);
+        Factor?.ApplyTo(this.Factor);
+        PerFrame?.ApplyTo(this.PerFrame);
         return this;
     }
 }

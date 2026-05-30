@@ -41,22 +41,29 @@ public sealed class LTXRFReverseODESamplerNode : ComfyNode
         Order = AddInput<StringType>("order", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXRFReverseODESamplerNode With(
-        double? Eta = null,
-        long? StartStep = null,
-        long? EndStep = null,
-        string? EtaTrend = null,
-        string? Order = null
+        In<ModelType>? Model = null,
+        In<LatentType>? LatentImage = null,
+        FloatArg? Eta = null,
+        IntArg? StartStep = null,
+        IntArg? EndStep = null,
+        StringArg? EtaTrend = null,
+        In<AttnInjType>? AttnInj = null,
+        StringArg? Order = null
     )
     {
-        if (Eta is { } v_Eta) this.Eta.Set(v_Eta);
-        if (StartStep is { } v_StartStep) this.StartStep.Set(v_StartStep);
-        if (EndStep is { } v_EndStep) this.EndStep.Set(v_EndStep);
-        if (EtaTrend is { } v_EtaTrend) this.EtaTrend.Set(v_EtaTrend);
-        if (Order is { } v_Order) this.Order.Set(v_Order);
+        Model?.ApplyTo(this.Model);
+        LatentImage?.ApplyTo(this.LatentImage);
+        Eta?.ApplyTo(this.Eta);
+        StartStep?.ApplyTo(this.StartStep);
+        EndStep?.ApplyTo(this.EndStep);
+        EtaTrend?.ApplyTo(this.EtaTrend);
+        AttnInj?.ApplyTo(this.AttnInj);
+        Order?.ApplyTo(this.Order);
         return this;
     }
 }

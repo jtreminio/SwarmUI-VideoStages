@@ -38,16 +38,27 @@ public sealed class LTXVNormalizingSamplerNode : ComfyNode
         AudioNormalizationFactors.Set("1,1,0.25,1,1,0.25,1,1");
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVNormalizingSamplerNode With(
-        string? VideoNormalizationFactors = null,
-        string? AudioNormalizationFactors = null
+        In<NoiseType>? Noise = null,
+        In<GuiderType>? Guider = null,
+        In<SamplerType>? Sampler = null,
+        In<SigmasType>? Sigmas = null,
+        In<LatentType>? LatentImage = null,
+        StringArg? VideoNormalizationFactors = null,
+        StringArg? AudioNormalizationFactors = null
     )
     {
-        if (VideoNormalizationFactors is { } v_VideoNormalizationFactors) this.VideoNormalizationFactors.Set(v_VideoNormalizationFactors);
-        if (AudioNormalizationFactors is { } v_AudioNormalizationFactors) this.AudioNormalizationFactors.Set(v_AudioNormalizationFactors);
+        Noise?.ApplyTo(this.Noise);
+        Guider?.ApplyTo(this.Guider);
+        Sampler?.ApplyTo(this.Sampler);
+        Sigmas?.ApplyTo(this.Sigmas);
+        LatentImage?.ApplyTo(this.LatentImage);
+        VideoNormalizationFactors?.ApplyTo(this.VideoNormalizationFactors);
+        AudioNormalizationFactors?.ApplyTo(this.AudioNormalizationFactors);
         return this;
     }
 }

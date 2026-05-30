@@ -58,26 +58,37 @@ public sealed class LTXAddVideoICLoRAGuideNode : ComfyNode
         TileOverlap.Set(64L);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXAddVideoICLoRAGuideNode With(
-        long? FrameIdx = null,
-        double? Strength = null,
-        double? LatentDownscaleFactor = null,
-        string? Crop = null,
-        bool? UseTiledEncode = null,
-        long? TileSize = null,
-        long? TileOverlap = null
+        In<ConditioningType>? PositiveInput = null,
+        In<ConditioningType>? NegativeInput = null,
+        In<VaeType>? Vae = null,
+        In<LatentType>? LatentInput = null,
+        In<ImageType>? Image = null,
+        IntArg? FrameIdx = null,
+        FloatArg? Strength = null,
+        FloatArg? LatentDownscaleFactor = null,
+        StringArg? Crop = null,
+        BoolArg? UseTiledEncode = null,
+        IntArg? TileSize = null,
+        IntArg? TileOverlap = null
     )
     {
-        if (FrameIdx is { } v_FrameIdx) this.FrameIdx.Set(v_FrameIdx);
-        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
-        if (LatentDownscaleFactor is { } v_LatentDownscaleFactor) this.LatentDownscaleFactor.Set(v_LatentDownscaleFactor);
-        if (Crop is { } v_Crop) this.Crop.Set(v_Crop);
-        if (UseTiledEncode is { } v_UseTiledEncode) this.UseTiledEncode.Set(v_UseTiledEncode);
-        if (TileSize is { } v_TileSize) this.TileSize.Set(v_TileSize);
-        if (TileOverlap is { } v_TileOverlap) this.TileOverlap.Set(v_TileOverlap);
+        PositiveInput?.ApplyTo(this.PositiveInput);
+        NegativeInput?.ApplyTo(this.NegativeInput);
+        Vae?.ApplyTo(this.Vae);
+        LatentInput?.ApplyTo(this.LatentInput);
+        Image?.ApplyTo(this.Image);
+        FrameIdx?.ApplyTo(this.FrameIdx);
+        Strength?.ApplyTo(this.Strength);
+        LatentDownscaleFactor?.ApplyTo(this.LatentDownscaleFactor);
+        Crop?.ApplyTo(this.Crop);
+        UseTiledEncode?.ApplyTo(this.UseTiledEncode);
+        TileSize?.ApplyTo(this.TileSize);
+        TileOverlap?.ApplyTo(this.TileOverlap);
         return this;
     }
 }

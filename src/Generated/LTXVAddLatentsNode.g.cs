@@ -26,4 +26,18 @@ public sealed class LTXVAddLatentsNode : ComfyNode
         Latents1 = AddInput<LatentType>("latents1", required: true);
         Latents2 = AddInput<LatentType>("latents2", required: true);
     }
+
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
+    public LTXVAddLatentsNode With(
+        In<LatentType>? Latents1 = null,
+        In<LatentType>? Latents2 = null
+    )
+    {
+        Latents1?.ApplyTo(this.Latents1);
+        Latents2?.ApplyTo(this.Latents2);
+        return this;
+    }
 }

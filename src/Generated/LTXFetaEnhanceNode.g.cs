@@ -29,14 +29,19 @@ public sealed class LTXFetaEnhanceNode : ComfyNode
         AttnOverride = AddInput<AttnOverrideType>("attn_override", required: false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXFetaEnhanceNode With(
-        double? FetaWeight = null
+        In<ModelType>? Model = null,
+        FloatArg? FetaWeight = null,
+        In<AttnOverrideType>? AttnOverride = null
     )
     {
-        if (FetaWeight is { } v_FetaWeight) this.FetaWeight.Set(v_FetaWeight);
+        Model?.ApplyTo(this.Model);
+        FetaWeight?.ApplyTo(this.FetaWeight);
+        AttnOverride?.ApplyTo(this.AttnOverride);
         return this;
     }
 }

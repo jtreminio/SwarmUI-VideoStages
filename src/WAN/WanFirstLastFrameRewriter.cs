@@ -61,22 +61,10 @@ internal static class WanFirstLastFrameRewriter
             Length: length,
             BatchSize: batchSize);
 
-        if (wan.PositiveInput.Connection is INodeOutput pos)
-        {
-            flf.PositiveInput.ConnectToUntyped(pos);
-        }
-        if (wan.NegativeInput.Connection is INodeOutput neg)
-        {
-            flf.NegativeInput.ConnectToUntyped(neg);
-        }
-        if (wan.Vae.Connection is INodeOutput vae)
-        {
-            flf.Vae.ConnectToUntyped(vae);
-        }
-        if (wan.StartImage.Connection is INodeOutput startImg)
-        {
-            flf.StartImage.ConnectToUntyped(startImg);
-        }
+        flf.PositiveInput.TryConnectSameAs(wan.PositiveInput);
+        flf.NegativeInput.TryConnectSameAs(wan.NegativeInput);
+        flf.Vae.TryConnectSameAs(wan.Vae);
+        flf.StartImage.TryConnectSameAs(wan.StartImage);
         flf.EndImage.TryConnectToUntyped(scaledEndOutput);
 
         if (wan.ClipVisionOutput.Connection is INodeOutput clipVisionStart)
@@ -89,16 +77,13 @@ internal static class WanFirstLastFrameRewriter
             }
 
             CLIPVisionEncodeNode encodeEnd = bridge.AddNode(new CLIPVisionEncodeNode());
-            if (encodeStart.ClipVision.Connection is INodeOutput clipLoader)
-            {
-                encodeEnd.ClipVision.ConnectToUntyped(clipLoader);
-            }
+            encodeEnd.ClipVision.TryConnectSameAs(encodeStart.ClipVision);
             encodeEnd.Image.TryConnectToUntyped(scaledEndOutput);
             encodeEnd.With(
                 Crop: "center");
             bridge.SyncNode(encodeEnd);
 
-            flf.ClipVisionStartImage.ConnectToUntyped(clipVisionStart);
+            flf.ClipVisionStartImage.ConnectSameAs(wan.ClipVisionOutput);
             flf.ClipVisionEndImage.ConnectTo(encodeEnd.CLIPVISIONOUTPUT);
         }
 

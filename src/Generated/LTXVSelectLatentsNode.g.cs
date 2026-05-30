@@ -31,16 +31,19 @@ public sealed class LTXVSelectLatentsNode : ComfyNode
         EndIndex.Set(-1L);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVSelectLatentsNode With(
-        long? StartIndex = null,
-        long? EndIndex = null
+        In<LatentType>? Samples = null,
+        IntArg? StartIndex = null,
+        IntArg? EndIndex = null
     )
     {
-        if (StartIndex is { } v_StartIndex) this.StartIndex.Set(v_StartIndex);
-        if (EndIndex is { } v_EndIndex) this.EndIndex.Set(v_EndIndex);
+        Samples?.ApplyTo(this.Samples);
+        StartIndex?.ApplyTo(this.StartIndex);
+        EndIndex?.ApplyTo(this.EndIndex);
         return this;
     }
 }

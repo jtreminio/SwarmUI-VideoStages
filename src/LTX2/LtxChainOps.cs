@@ -151,8 +151,8 @@ internal static class LtxChainOps
         ComfyNode dedicatedDecode = AddDecode(
             bridge, vae.Output, newSeparate.VideoLatent, decodeConfig);
 
-        LTXVAudioVAEDecodeNode dedicatedAudioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode());
-        dedicatedAudioDecode.Samples.ConnectTo(newSeparate.AudioLatent);
+        LTXVAudioVAEDecodeNode dedicatedAudioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode().With(
+            Samples: newSeparate.AudioLatent));
         dedicatedAudioDecode.AudioVae.TryConnectToUntyped(capture.AudioVaeSource);
         bridge.SyncNode(dedicatedAudioDecode);
 
@@ -197,8 +197,8 @@ internal static class LtxChainOps
             return;
         }
 
-        LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode());
-        audioDecode.Samples.ConnectTo(separate.AudioLatent);
+        LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode().With(
+            Samples: separate.AudioLatent));
         audioDecode.AudioVae.ConnectToUntyped(audioVae.Output);
         bridge.SyncNode(audioDecode);
 

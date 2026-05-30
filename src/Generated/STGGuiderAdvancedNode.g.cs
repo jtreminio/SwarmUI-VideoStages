@@ -92,34 +92,43 @@ public sealed class STGGuiderAdvancedNode : ComfyNode
         NormThreshold.Set(0.0);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public STGGuiderAdvancedNode With(
-        double? SkipStepsSigmaThreshold = null,
-        bool? CfgStarRescale = null,
-        string? Sigmas = null,
-        string? CfgValues = null,
-        string? StgScaleValues = null,
-        string? StgRescaleValues = null,
-        string? StgLayersIndices = null,
-        bool? ApplyApg = null,
-        double? ApgCfgScale = null,
-        double? Eta = null,
-        double? NormThreshold = null
+        In<ModelType>? Model = null,
+        In<ConditioningType>? Positive = null,
+        In<ConditioningType>? Negative = null,
+        FloatArg? SkipStepsSigmaThreshold = null,
+        BoolArg? CfgStarRescale = null,
+        StringArg? Sigmas = null,
+        StringArg? CfgValues = null,
+        StringArg? StgScaleValues = null,
+        StringArg? StgRescaleValues = null,
+        StringArg? StgLayersIndices = null,
+        In<StgAdvancedPresetType>? Preset = null,
+        BoolArg? ApplyApg = null,
+        FloatArg? ApgCfgScale = null,
+        FloatArg? Eta = null,
+        FloatArg? NormThreshold = null
     )
     {
-        if (SkipStepsSigmaThreshold is { } v_SkipStepsSigmaThreshold) this.SkipStepsSigmaThreshold.Set(v_SkipStepsSigmaThreshold);
-        if (CfgStarRescale is { } v_CfgStarRescale) this.CfgStarRescale.Set(v_CfgStarRescale);
-        if (Sigmas is { } v_Sigmas) this.Sigmas.Set(v_Sigmas);
-        if (CfgValues is { } v_CfgValues) this.CfgValues.Set(v_CfgValues);
-        if (StgScaleValues is { } v_StgScaleValues) this.StgScaleValues.Set(v_StgScaleValues);
-        if (StgRescaleValues is { } v_StgRescaleValues) this.StgRescaleValues.Set(v_StgRescaleValues);
-        if (StgLayersIndices is { } v_StgLayersIndices) this.StgLayersIndices.Set(v_StgLayersIndices);
-        if (ApplyApg is { } v_ApplyApg) this.ApplyApg.Set(v_ApplyApg);
-        if (ApgCfgScale is { } v_ApgCfgScale) this.ApgCfgScale.Set(v_ApgCfgScale);
-        if (Eta is { } v_Eta) this.Eta.Set(v_Eta);
-        if (NormThreshold is { } v_NormThreshold) this.NormThreshold.Set(v_NormThreshold);
+        Model?.ApplyTo(this.Model);
+        Positive?.ApplyTo(this.Positive);
+        Negative?.ApplyTo(this.Negative);
+        SkipStepsSigmaThreshold?.ApplyTo(this.SkipStepsSigmaThreshold);
+        CfgStarRescale?.ApplyTo(this.CfgStarRescale);
+        Sigmas?.ApplyTo(this.Sigmas);
+        CfgValues?.ApplyTo(this.CfgValues);
+        StgScaleValues?.ApplyTo(this.StgScaleValues);
+        StgRescaleValues?.ApplyTo(this.StgRescaleValues);
+        StgLayersIndices?.ApplyTo(this.StgLayersIndices);
+        Preset?.ApplyTo(this.Preset);
+        ApplyApg?.ApplyTo(this.ApplyApg);
+        ApgCfgScale?.ApplyTo(this.ApgCfgScale);
+        Eta?.ApplyTo(this.Eta);
+        NormThreshold?.ApplyTo(this.NormThreshold);
         return this;
     }
 }

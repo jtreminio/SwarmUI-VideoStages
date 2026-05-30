@@ -42,22 +42,25 @@ public sealed class LTXVHDRDecodePostprocessNode : ComfyNode
         HalfPrecision.Set(true);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVHDRDecodePostprocessNode With(
-        double? Exposure = null,
-        bool? SaveExr = null,
-        string? OutputDir = null,
-        string? FilenamePrefix = null,
-        bool? HalfPrecision = null
+        In<ImageType>? Image = null,
+        FloatArg? Exposure = null,
+        BoolArg? SaveExr = null,
+        StringArg? OutputDir = null,
+        StringArg? FilenamePrefix = null,
+        BoolArg? HalfPrecision = null
     )
     {
-        if (Exposure is { } v_Exposure) this.Exposure.Set(v_Exposure);
-        if (SaveExr is { } v_SaveExr) this.SaveExr.Set(v_SaveExr);
-        if (OutputDir is { } v_OutputDir) this.OutputDir.Set(v_OutputDir);
-        if (FilenamePrefix is { } v_FilenamePrefix) this.FilenamePrefix.Set(v_FilenamePrefix);
-        if (HalfPrecision is { } v_HalfPrecision) this.HalfPrecision.Set(v_HalfPrecision);
+        Image?.ApplyTo(this.Image);
+        Exposure?.ApplyTo(this.Exposure);
+        SaveExr?.ApplyTo(this.SaveExr);
+        OutputDir?.ApplyTo(this.OutputDir);
+        FilenamePrefix?.ApplyTo(this.FilenamePrefix);
+        HalfPrecision?.ApplyTo(this.HalfPrecision);
         return this;
     }
 }

@@ -62,30 +62,39 @@ public sealed class LTXVImgToVideoAdvancedNode : ComfyNode
         Strength.Set(0.9);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVImgToVideoAdvancedNode With(
-        long? Width = null,
-        long? Height = null,
-        long? Length = null,
-        long? BatchSize = null,
-        long? Crf = null,
-        long? BlurRadius = null,
-        string? Interpolation = null,
-        string? Crop = null,
-        double? Strength = null
+        In<ConditioningType>? PositiveInput = null,
+        In<ConditioningType>? NegativeInput = null,
+        In<VaeType>? Vae = null,
+        In<ImageType>? Image = null,
+        IntArg? Width = null,
+        IntArg? Height = null,
+        IntArg? Length = null,
+        IntArg? BatchSize = null,
+        IntArg? Crf = null,
+        IntArg? BlurRadius = null,
+        StringArg? Interpolation = null,
+        StringArg? Crop = null,
+        FloatArg? Strength = null
     )
     {
-        if (Width is { } v_Width) this.Width.Set(v_Width);
-        if (Height is { } v_Height) this.Height.Set(v_Height);
-        if (Length is { } v_Length) this.Length.Set(v_Length);
-        if (BatchSize is { } v_BatchSize) this.BatchSize.Set(v_BatchSize);
-        if (Crf is { } v_Crf) this.Crf.Set(v_Crf);
-        if (BlurRadius is { } v_BlurRadius) this.BlurRadius.Set(v_BlurRadius);
-        if (Interpolation is { } v_Interpolation) this.Interpolation.Set(v_Interpolation);
-        if (Crop is { } v_Crop) this.Crop.Set(v_Crop);
-        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
+        PositiveInput?.ApplyTo(this.PositiveInput);
+        NegativeInput?.ApplyTo(this.NegativeInput);
+        Vae?.ApplyTo(this.Vae);
+        Image?.ApplyTo(this.Image);
+        Width?.ApplyTo(this.Width);
+        Height?.ApplyTo(this.Height);
+        Length?.ApplyTo(this.Length);
+        BatchSize?.ApplyTo(this.BatchSize);
+        Crf?.ApplyTo(this.Crf);
+        BlurRadius?.ApplyTo(this.BlurRadius);
+        Interpolation?.ApplyTo(this.Interpolation);
+        Crop?.ApplyTo(this.Crop);
+        Strength?.ApplyTo(this.Strength);
         return this;
     }
 }

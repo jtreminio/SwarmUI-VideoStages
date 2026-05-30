@@ -35,16 +35,23 @@ public sealed class LTXVImgToVideoConditionOnlyNode : ComfyNode
         Bypass.Set(false);
     }
 
-    /// <summary>Fluent setter for primitive inputs. Returns <c>this</c> for chaining.
-    /// Pass only the inputs you want to set; <c>null</c> leaves the existing value untouched.
-    /// Connection inputs are not exposed here — use <c>ConnectTo(...)</c>.</summary>
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public LTXVImgToVideoConditionOnlyNode With(
-        double? Strength = null,
-        bool? Bypass = null
+        In<VaeType>? Vae = null,
+        In<ImageType>? Image = null,
+        In<LatentType>? LatentInput = null,
+        FloatArg? Strength = null,
+        BoolArg? Bypass = null
     )
     {
-        if (Strength is { } v_Strength) this.Strength.Set(v_Strength);
-        if (Bypass is { } v_Bypass) this.Bypass.Set(v_Bypass);
+        Vae?.ApplyTo(this.Vae);
+        Image?.ApplyTo(this.Image);
+        LatentInput?.ApplyTo(this.LatentInput);
+        Strength?.ApplyTo(this.Strength);
+        Bypass?.ApplyTo(this.Bypass);
         return this;
     }
 }
