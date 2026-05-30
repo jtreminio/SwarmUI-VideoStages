@@ -37,7 +37,12 @@ import { clipHasWanStage, rawStageListContainsWanModel } from "./wanModel";
 
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
-): string => upscaleMethodValues[0] ?? "";
+): string =>
+    upscaleMethodValues.find((value) =>
+        value.trim().toLowerCase().startsWith("latentmodel-"),
+    ) ??
+    upscaleMethodValues[0] ??
+    "";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);

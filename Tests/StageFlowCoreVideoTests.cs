@@ -1131,6 +1131,141 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Ltx_stage_pixel_upscale_runs_in_pixel_space_and_respects_upscale_value()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = MakeRootConfig(
+            width: 512,
+            height: 512,
+            MakeClipWithRefs(
+                [MakeRef("Refiner", frame: 1)],
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    upscale: 1.5,
+                    upscaleMethod: "pixel-lanczos",
+                    steps: 8))
+        ).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // A non-latent-model method must not engage the latent upsampler.
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
+        // Instead, the upscale is applied in pixel space at the requested 1.5x (512 -> 768).
+        Assert.NotEmpty(bridge.Graph.NodesOfType<ImageScaleNode>()
+            .Where(node => node.Width.LiteralAsInt() == 768
+                && node.Height.LiteralAsInt() == 768
+                && node.UpscaleMethod.LiteralAsString() == "lanczos"
+                && node.Crop.LiteralAsString() == "disabled")
+            .ToList());
+        Assert.Equal(768, generator.CurrentMedia.Width);
+        Assert.Equal(768, generator.CurrentMedia.Height);
+
+        // The upscaled image is encoded directly — no redundant ImageFromBatch re-slice (the prior
+        // stage already fixed the frame count).
+        ImageScaleNode upscaleScale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            node => node.Crop.LiteralAsString() == "disabled");
+        Assert.Empty(bridge.Graph.NodesOfType<ImageFromBatchNode>());
+        Assert.Contains(
+            bridge.Graph.FindInputsConnectedTo(upscaleScale.IMAGE),
+            c => c.Node is VAEEncodeNode && c.Input.Name == "pixels");
+
+        // The prior stage's sampler output is split by a single LTXVSeparateAVLatent that feeds both
+        // the upscale decode and the reused audio latent — not a duplicate per branch.
+        foreach (SwarmKSamplerNode sampler in bridge.Graph.NodesOfType<SwarmKSamplerNode>())
+        {
+            int separateCount = bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>()
+                .Count(sep => sep.AvLatent.Connection?.Node.Id == sampler.Id);
+            Assert.True(
+                separateCount <= 1,
+                $"Sampler {sampler.Id} is split by {separateCount} LTXVSeparateAVLatent nodes; expected at most one.");
+        }
+    }
+
+    [Fact]
+    public void Ltx_chained_pixel_upscale_reuses_prior_audio_latent_without_redriving_length()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject stage0 = MakeStage(models.VideoModel.Name, "Generated", steps: 8);
+        JObject stage1 = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            upscale: 1.5,
+            upscaleMethod: "pixel-lanczos",
+            steps: 8);
+        JObject clip = MakeClipWithRefs(stages: [stage0, stage1]);
+        clip["AudioSource"] = "audio0";
+        clip["ClipLengthFromAudio"] = true;
+        string stagesJson = MakeRootConfig(width: 512, height: 512, clip).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowSteps().Append(SeedAceStepFunAudioTrackStep(0)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // A chained stage inherits its length from the prior stage and reuses that stage's audio
+        // latent directly (see the core refiner reference workflow). It must NOT re-derive clip
+        // length by decoding a separated audio latent: that decode is the captured post-video-chain
+        // node which FinalizeOutput later retargets to this stage's own output — a graph cycle.
+        Assert.DoesNotContain(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>(),
+            node => node.AudioInput.Connection!.Node is LTXVAudioVAEDecodeNode);
+        foreach (SwarmKSamplerNode sampler in bridge.Graph.NodesOfType<SwarmKSamplerNode>())
+        {
+            Assert.False(
+                bridge.Graph.IsReachableUpstream(sampler, sampler.Id),
+                $"Sampler {sampler.Id} is reachable from its own inputs — a stage feeds its output back into itself.");
+        }
+    }
+
+    [Fact]
+    public void Ltx_stage_pixel_upscale_does_not_feed_stage_output_back_into_its_own_input()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 8),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 1.5,
+                upscaleMethod: "pixel-lanczos",
+                steps: 8));
+        clip["AudioSource"] = "audio0";
+        clip["ClipLengthFromAudio"] = true;
+        string stagesJson = new JArray(clip).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeStepsWithTrimWrapper(attachAudioToCurrentMedia: true).Append(SeedAceStepFunAudioTrackStep(0)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // The pixel-space upscale decodes the prior stage's output and re-encodes it into this stage's
+        // input. Both the video decode and the audio length-to-frames decode must use detached copies:
+        // FinalizeOutput retargets the captured post-video-chain decodes to this stage's own output, so
+        // reusing them would make the stage input reachable from the stage output — a graph cycle.
+        foreach (ComfyNode node in bridge.Graph.NodesOfType<SwarmKSamplerNode>())
+        {
+            Assert.False(
+                bridge.Graph.IsReachableUpstream(node, node.Id),
+                $"Sampler {node.Id} is reachable from its own inputs — the stage feeds its output back into itself.");
+        }
+    }
+
+    [Fact]
     public void Chained_ltx_latent_model_upscales_preprocess_guides_at_stage_resolution()
     {
         using SwarmUiTestContext _ = new();

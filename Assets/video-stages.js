@@ -398,7 +398,9 @@
   };
 
   // frontend/normalization.ts
-  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues[0] ?? "";
+  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
+    (value) => value.trim().toLowerCase().startsWith("latentmodel-")
+  ) ?? upscaleMethodValues[0] ?? "";
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var normalizeExpanded = (raw) => raw.expanded === void 0 ? true : !!raw.expanded;
   var snapStrengthToStep = (value, fallback, min, max, step) => {
@@ -904,12 +906,7 @@
   };
 
   // frontend/rootDefaults.ts
-  var isStageLatentModelUpscaleOption = (value, label) => {
-    if (value.trim().toLowerCase().startsWith("latentmodel-")) {
-      return true;
-    }
-    return label.trimStart().startsWith("Latent Model:");
-  };
+  var isStageUpscaleOption = (value) => !value.trim().toLowerCase().startsWith("latent-");
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var firstPresentInput = (...ids) => {
     for (let i = 0; i < ids.length; i++) {
@@ -945,17 +942,14 @@
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const stageUpscaleValues = [];
-    const stageUpscaleLabels = [];
+    const upscaleMethodValues = [];
+    const upscaleMethodLabels = [];
     for (let i = 0; i < allUpscaleMethodValues.length; i++) {
-      const value = allUpscaleMethodValues[i];
-      if (isStageLatentModelUpscaleOption(value, allUpscaleMethodLabels[i])) {
-        stageUpscaleValues.push(value);
-        stageUpscaleLabels.push(allUpscaleMethodLabels[i]);
+      if (isStageUpscaleOption(allUpscaleMethodValues[i])) {
+        upscaleMethodValues.push(allUpscaleMethodValues[i]);
+        upscaleMethodLabels.push(allUpscaleMethodLabels[i]);
       }
     }
-    const fallbackUpscaleMethodValues = [];
-    const fallbackUpscaleMethodLabels = [];
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
     const widthInput = firstPresentInput(
@@ -993,8 +987,8 @@
       samplerLabels: sampler.labels,
       schedulerValues: scheduler.values,
       schedulerLabels: scheduler.labels,
-      upscaleMethodValues: stageUpscaleValues.length > 0 ? stageUpscaleValues : fallbackUpscaleMethodValues,
-      upscaleMethodLabels: stageUpscaleLabels.length > 0 ? stageUpscaleLabels : fallbackUpscaleMethodLabels,
+      upscaleMethodValues,
+      upscaleMethodLabels,
       width: getRegisteredRootDimension("width") ?? Math.max(
         ROOT_DIMENSION_MIN,
         Math.round(utils.toNumber(widthInput?.value, 1024))

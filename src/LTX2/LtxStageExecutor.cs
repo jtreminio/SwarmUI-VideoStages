@@ -262,21 +262,36 @@ internal sealed class LtxStageExecutor(
             sourceSnapshot = postVideoChain.CreateDetachedGuideMedia(genInfo.Vae);
         }
 
-        JArray audioLengthFrames = matchAudioLength
+        bool sourceCarriesPriorAudioLatent = sourceMedia.AttachedAudio?.DataType == WGNodeData.DT_LATENT_AUDIO;
+        JArray audioLengthFrames = matchAudioLength && !sourceCarriesPriorAudioLatent
             ? BuildAudioLengthFramesNode(sourceMedia.AttachedAudio, ResolveFps(genInfo, sourceMedia)).FramesConnection
             : null;
         JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
 
-        string fromBatch = AddImageFromBatch(
-            sourceSnapshot.Path,
-            batchIndex: 0,
-            length: FrameCountToken(dynamicLengthFrames, genInfo.Frames ?? DefaultFrameCount));
-        WGNodeData stageVideoInput = sourceSnapshot.WithPath([fromBatch, 0]);
-        stageVideoInput.Frames = dynamicLengthFrames is null
-            ? Math.Min(genInfo.Frames ?? DefaultFrameCount, stageVideoInput.Frames ?? int.MaxValue)
-            : null;
+        WGNodeData stageVideoInput;
+        if (dynamicLengthFrames is null && IsPixelOrModelUpscaleStage(stageFrame.Stage))
+        {
+            stageVideoInput = sourceSnapshot.WithPath(sourceSnapshot.Path);
+            stageVideoInput.Frames = Math.Min(genInfo.Frames ?? DefaultFrameCount, stageVideoInput.Frames ?? int.MaxValue);
+        }
+        else
+        {
+            string fromBatch = AddImageFromBatch(
+                sourceSnapshot.Path,
+                batchIndex: 0,
+                length: FrameCountToken(dynamicLengthFrames, genInfo.Frames ?? DefaultFrameCount));
+            stageVideoInput = sourceSnapshot.WithPath([fromBatch, 0]);
+            stageVideoInput.Frames = dynamicLengthFrames is null
+                ? Math.Min(genInfo.Frames ?? DefaultFrameCount, stageVideoInput.Frames ?? int.MaxValue)
+                : null;
+        }
         WGNodeData encodedLatent = stageVideoInput.AsLatentImage(genInfo.Vae);
         return EnsureHasAudioWithLtxFps(encodedLatent, genInfo, sourceMedia);
+    }
+
+    private static bool IsPixelOrModelUpscaleStage(StageSpec stage)
+    {
+        return stage.Upscale > 1 && (stage.IsPixelUpscale || stage.IsModelUpscale);
     }
 
     private string AddImageFromBatch(JArray imagePath, int batchIndex, JToken length)
@@ -351,7 +366,8 @@ internal sealed class LtxStageExecutor(
 
         if (controlNetLengthFrames is null
             && ShouldMatchStageLengthToAudio(clip)
-            && effectiveAttached?.Path is not null)
+            && effectiveAttached?.Path is not null
+            && effectiveAttached.DataType != WGNodeData.DT_LATENT_AUDIO)
         {
             (audioLengthFrames, effectiveAttached) = BuildAudioLengthFramesNode(effectiveAttached, fps);
         }

@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 
 namespace VideoStages.LTX2;
 
@@ -31,7 +30,7 @@ internal sealed class LtxConditioningPipeline(
     public LtxConditioningPipeline WithUpscaleIfNeeded(WGNodeData sourceMedia)
     {
         StageSpec stage = stageFrame.Stage;
-        if (stage.Upscale <= 1 || string.IsNullOrWhiteSpace(stage.UpscaleMethod))
+        if (stage.Upscale <= 1 || !stage.IsLatentModelUpscale)
         {
             return this;
         }
@@ -40,18 +39,10 @@ internal sealed class LtxConditioningPipeline(
         int baseHeight = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
         (int width, int height) = GetUpscaledDimensions(baseWidth, baseHeight, stage.Upscale);
 
-        if (stage.UpscaleMethod.StartsWith("latentmodel-", StringComparison.OrdinalIgnoreCase))
-        {
-            string modelName = stage.UpscaleMethod["latentmodel-".Length..];
-            stageLatent = ApplyLatentModelUpscale(modelName, width, height);
-            stageFrame.ClipContext.Dimensions.Width = width;
-            stageFrame.ClipContext.Dimensions.Height = height;
-            return this;
-        }
-
-        Logs.Warning(
-            $"VideoStages: Stage {stage.Id} uses unsupported LTX upscale method '{stage.UpscaleMethod}'. "
-            + "Ignoring upscale.");
+        string modelName = stage.UpscaleMethod["latentmodel-".Length..];
+        stageLatent = ApplyLatentModelUpscale(modelName, width, height);
+        stageFrame.ClipContext.Dimensions.Width = width;
+        stageFrame.ClipContext.Dimensions.Height = height;
         return this;
     }
 

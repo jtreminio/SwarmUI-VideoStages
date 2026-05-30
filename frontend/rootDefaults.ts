@@ -9,15 +9,8 @@ import {
 import type { RootDefaults } from "./types";
 import { utils } from "./utils";
 
-const isStageLatentModelUpscaleOption = (
-    value: string,
-    label: string,
-): boolean => {
-    if (value.trim().toLowerCase().startsWith("latentmodel-")) {
-        return true;
-    }
-    return label.trimStart().startsWith("Latent Model:");
-};
+const isStageUpscaleOption = (value: string): boolean =>
+    !value.trim().toLowerCase().startsWith("latent-");
 
 const trimDomValue = (el: { value: string } | null | undefined): string =>
     `${el?.value ?? ""}`.trim();
@@ -58,18 +51,14 @@ export const getRootDefaults = (): RootDefaults => {
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const stageUpscaleValues: string[] = [];
-    const stageUpscaleLabels: string[] = [];
+    const upscaleMethodValues: string[] = [];
+    const upscaleMethodLabels: string[] = [];
     for (let i = 0; i < allUpscaleMethodValues.length; i++) {
-        const value = allUpscaleMethodValues[i];
-        if (isStageLatentModelUpscaleOption(value, allUpscaleMethodLabels[i])) {
-            stageUpscaleValues.push(value);
-            stageUpscaleLabels.push(allUpscaleMethodLabels[i]);
+        if (isStageUpscaleOption(allUpscaleMethodValues[i])) {
+            upscaleMethodValues.push(allUpscaleMethodValues[i]);
+            upscaleMethodLabels.push(allUpscaleMethodLabels[i]);
         }
     }
-
-    const fallbackUpscaleMethodValues: string[] = [];
-    const fallbackUpscaleMethodLabels: string[] = [];
 
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
@@ -111,14 +100,8 @@ export const getRootDefaults = (): RootDefaults => {
         samplerLabels: sampler.labels,
         schedulerValues: scheduler.values,
         schedulerLabels: scheduler.labels,
-        upscaleMethodValues:
-            stageUpscaleValues.length > 0
-                ? stageUpscaleValues
-                : fallbackUpscaleMethodValues,
-        upscaleMethodLabels:
-            stageUpscaleLabels.length > 0
-                ? stageUpscaleLabels
-                : fallbackUpscaleMethodLabels,
+        upscaleMethodValues,
+        upscaleMethodLabels,
         width:
             getRegisteredRootDimension("width") ??
             Math.max(

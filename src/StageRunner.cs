@@ -96,7 +96,7 @@ internal class StageRunner(
             : ltxManager.TryCapturePostVideoChain(clipContext, stage);
         WGNodeData sourceMedia = replaceTextToVideoRootStage
             ? CloneMedia(g.CurrentMedia)
-            : ApplyStageUpscaleIfNeeded(clipContext, stage, sectionId);
+            : ApplyStageUpscaleIfNeeded(clipContext, stage, sectionId, postVideoChain);
         if (sourceMedia is null)
         {
             Logs.Error($"VideoStages: Stage {stage.Id} could not resolve source media.");
@@ -501,7 +501,11 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         return lora;
     }
 
-    private WGNodeData ApplyStageUpscaleIfNeeded(ClipContext clipContext, StageSpec stage, int sectionId)
+    private WGNodeData ApplyStageUpscaleIfNeeded(
+        ClipContext clipContext,
+        StageSpec stage,
+        int sectionId,
+        LtxPostVideoChainCapture postVideoChain)
     {
         ClipDimensionState dimensions = clipContext.Dimensions;
         WGNodeData source = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, g.CurrentVae);
@@ -529,26 +533,19 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             return source;
         }
 
-        if (isLtxv2Stage)
+        if (isLtxv2Stage && stage.IsLatentModelUpscale)
         {
-            if (IsSupportedLtxUpscaleMethod(stage.UpscaleMethod))
-            {
-                g.CurrentMedia = source;
-                return source;
-            }
-
-            Logs.Warning(
-                $"VideoStages: Stage {stage.Id} uses unsupported LTX upscale method "
-                + $"'{stage.UpscaleMethod}'. Ignoring upscale.");
             g.CurrentMedia = source;
             return source;
         }
 
-        if (stage.UpscaleMethod.StartsWith("pixel-", StringComparison.OrdinalIgnoreCase))
+        WGNodeData upscaleSource = ResolveUpscaleSourceMedia(source, postVideoChain, width, height);
+
+        if (stage.IsPixelUpscale)
         {
             string method = stage.UpscaleMethod["pixel-".Length..];
-            ImageScaleNode scaleNode = AddDisabledCropImageScale(source.Path, targetWidth, targetHeight, method);
-            g.CurrentMedia = source.WithPath(scaleNode.IMAGE);
+            ImageScaleNode scaleNode = AddDisabledCropImageScale(upscaleSource.Path, targetWidth, targetHeight, method);
+            g.CurrentMedia = upscaleSource.WithPath(scaleNode.IMAGE);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
             dimensions.Width = targetWidth;
@@ -556,11 +553,11 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             return g.CurrentMedia;
         }
 
-        if (stage.UpscaleMethod.StartsWith("model-", StringComparison.OrdinalIgnoreCase))
+        if (stage.IsModelUpscale)
         {
             string modelName = stage.UpscaleMethod["model-".Length..];
-            ImageScaleNode fitScale = AddModelUpscaleChain(source.Path, modelName, targetWidth, targetHeight);
-            g.CurrentMedia = source.WithPath(fitScale.IMAGE);
+            ImageScaleNode fitScale = AddModelUpscaleChain(upscaleSource.Path, modelName, targetWidth, targetHeight);
+            g.CurrentMedia = upscaleSource.WithPath(fitScale.IMAGE);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
             dimensions.Width = targetWidth;
@@ -579,10 +576,32 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         return source;
     }
 
-    private static bool IsSupportedLtxUpscaleMethod(string upscaleMethod)
+    private WGNodeData ResolveUpscaleSourceMedia(
+        WGNodeData source,
+        LtxPostVideoChainCapture postVideoChain,
+        int width,
+        int height)
     {
-        return upscaleMethod.StartsWith("latent-", StringComparison.OrdinalIgnoreCase)
-            || upscaleMethod.StartsWith("latentmodel-", StringComparison.OrdinalIgnoreCase);
+        if (postVideoChain is null || !ReferencesPostVideoChainOutput(source, postVideoChain))
+        {
+            return source;
+        }
+
+        WGNodeData detached = postVideoChain.CreateDetachedGuideMedia(g.CurrentVae);
+        if (detached is null)
+        {
+            return source;
+        }
+        detached.Width = width;
+        detached.Height = height;
+        return detached;
+    }
+
+    private static bool ReferencesPostVideoChainOutput(WGNodeData media, LtxPostVideoChainCapture postVideoChain)
+    {
+        return media?.Path is JArray mediaPath
+            && (JToken.DeepEquals(mediaPath, postVideoChain.CurrentOutputMedia?.Path)
+                || JToken.DeepEquals(mediaPath, postVideoChain.DecodeOutputPath));
     }
 
     private ImageScaleNode AddDisabledCropImageScale(JArray sourcePath, int width, int height, string upscaleMethod)

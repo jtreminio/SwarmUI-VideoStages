@@ -146,13 +146,17 @@ internal sealed class LtxPostVideoChainCapture
             return CloneCurrentOutputWithAttachedAudio();
         }
 
-        LTXVSeparateAVLatentNode detachedSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
-        detachedSeparate.AvLatent.ConnectToUntyped(avLatentSource);
-        bridge.SyncNode(detachedSeparate);
+        LTXVSeparateAVLatentNode separate = bridge.NodeAt<LTXVSeparateAVLatentNode>(State.AudioLatentPath);
+        if (separate is null)
+        {
+            separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
+            separate.AvLatent.ConnectToUntyped(avLatentSource);
+            bridge.SyncNode(separate);
+        }
 
         string decodeNodeId = ShouldUseTiledVaeDecode()
-            ? AddTiledVideoDecode(bridge, vaeSource, detachedSeparate.VideoLatent)
-            : AddPlainVideoDecode(bridge, vaeSource, detachedSeparate.VideoLatent);
+            ? AddTiledVideoDecode(bridge, vaeSource, separate.VideoLatent)
+            : AddPlainVideoDecode(bridge, vaeSource, separate.VideoLatent);
 
         WGNodeData detachedGuide = new(new JArray(decodeNodeId, 0), g, WGNodeData.DT_VIDEO, vae.Compat)
         {

@@ -17,7 +17,15 @@ public sealed record StageSpec(
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
     int? EndStep = null
-);
+)
+{
+    public bool IsLatentModelUpscale => HasUpscaleMethodPrefix("latentmodel-");
+    public bool IsPixelUpscale => HasUpscaleMethodPrefix("pixel-");
+    public bool IsModelUpscale => HasUpscaleMethodPrefix("model-");
+
+    private bool HasUpscaleMethodPrefix(string prefix) =>
+        UpscaleMethod?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ?? false;
+}
 
 public sealed record ImageRefSpec(
     string Source,
