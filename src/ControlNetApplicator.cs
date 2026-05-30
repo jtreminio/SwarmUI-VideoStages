@@ -34,7 +34,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
 
     public void CaptureCoreVideoControlNetPreprocessors()
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         HashSet<string> usedApplyNodes = [];
         for (int i = 0; i < T2IParamTypes.Controlnets.Length; i++)
         {
@@ -124,7 +124,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             batch.Image.ConnectToUntyped(rewired.Resized);
             bridge.SyncNode(rewired);
             bridge.SyncNode(batch);
-            BridgeSync.SyncLastId(g);
             return;
         }
         ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode()).With(
@@ -133,7 +132,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         resize.Input.ConnectToUntyped(consumerOutput);
         resize.ExtraInputs["resize_type.multiple"] = 64;
         bridge.SyncNode(resize);
-        BridgeSync.SyncLastId(g);
         controlImage[0] = resize.Id;
         controlImage[1] = 0;
     }
@@ -149,7 +147,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             Length: 1);
         batch.Image.TryConnectFromPath(bridge, controlImage);
         bridge.SyncNode(batch);
-        BridgeSync.SyncLastId(g);
         controlImage[0] = batch.Id;
         controlImage[1] = 0;
     }
@@ -232,7 +229,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             return false;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         ResizeImageMaskNodeNode upstreamResize =
             FindUpstreamScaleToMultipleResize(bridge, controlImagePath);
         INodeOutput frameSource = upstreamResize?.Resized
@@ -246,7 +243,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         GetImageSizeNode sizeNode = bridge.AddNode(new GetImageSizeNode());
         sizeNode.Image.ConnectToUntyped(frameSource);
         bridge.SyncNode(sizeNode);
-        BridgeSync.SyncLastId(g);
         framesConnection = WorkflowBridge.ToPath(sizeNode.BatchSize);
         g.NodeHelpers[helperKey] = framesConnection.ToString(Formatting.None);
         return true;
@@ -284,7 +280,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
                 + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         JArray guideImagePath = ControlImageForLtxIcloraGuide(bridge, controlImage.Path, frameCount);
 
         LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(
@@ -300,7 +296,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         guide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
         guide.Image.ConnectFromPath(bridge, guideImagePath);
         bridge.SyncNode(guide);
-        BridgeSync.SyncLastId(g);
 
         genInfo.SetConditioning(guide);
         g.CurrentMedia = g.CurrentMedia.WithPath(
@@ -326,7 +321,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         node.Image.TryConnectFromPath(bridge, guideSource);
         node.Length.SetFromToken(bridge, frames.DeepClone());
         bridge.SyncNode(node);
-        BridgeSync.SyncLastId(g);
         return WorkflowBridge.ToPath(node.IMAGE);
     }
 

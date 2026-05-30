@@ -176,7 +176,7 @@ internal sealed class RootVideoStageResizer(
             return;
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         ImageScaleNode scale = bridge.NodeAt<ImageScaleNode>(path);
         if (scale is null)
         {

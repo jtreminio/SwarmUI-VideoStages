@@ -75,4 +75,12 @@ public sealed class LTXVPreprocessMasksNode : ComfyNode
         ClampMax?.ApplyTo(this.ClampMax);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>pooling_method</c> (suggestions — any string is also accepted).</summary>
+    public static class PoolingMethodValues
+    {
+        public const string Max = "max";
+        public const string Mean = "mean";
+        public const string Min = "min";
+    }
 }

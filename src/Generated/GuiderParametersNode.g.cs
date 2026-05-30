@@ -75,4 +75,11 @@ public sealed class GuiderParametersNode : ComfyNode
         Parameters?.ApplyTo(this.Parameters);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>modality</c> (suggestions — any string is also accepted).</summary>
+    public static class ModalityValues
+    {
+        public const string VIDEO = "VIDEO";
+        public const string AUDIO = "AUDIO";
+    }
 }

@@ -36,4 +36,15 @@ public sealed class STGAdvancedPresetsNode : ComfyNode
         Preset?.ApplyTo(this.Preset);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>preset</c> (suggestions — any string is also accepted).</summary>
+    public static class PresetValues
+    {
+        public const string Custom = "Custom";
+        public const string _13bDynamic = "13b Dynamic";
+        public const string _13bBalanced = "13b Balanced";
+        public const string _13bUpscale = "13b Upscale";
+        public const string _13bDistilled = "13b Distilled";
+        public const string _2b = "2b";
+    }
 }

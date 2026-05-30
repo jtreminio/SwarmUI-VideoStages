@@ -92,7 +92,7 @@ public class AudioInjectionTests
             g.FinalLoadedModel = videoModel;
             g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
 
-            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
 
             UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
             g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
@@ -152,7 +152,7 @@ public class AudioInjectionTests
     private static WorkflowGenerator.WorkflowGenStep SeedNativeAudioStep() =>
         new(g =>
         {
-            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
 
             UnknownNode audioSource = bridge.AddStub("UnitTest_AudioSource", "300").WithOutputs(WGNodeData.DT_AUDIO);
 

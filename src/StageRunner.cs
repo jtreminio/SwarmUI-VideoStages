@@ -386,7 +386,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private ImageFromBatchNode AddImageFromBatch(JArray imagePath, int batchIndex, int length)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
             BatchIndex: batchIndex,
             Length: length);
@@ -474,7 +474,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             lora.GetOrGenerateTensorHashSha256();
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode()).With(
             LoraName: lora.ToString(g.ModelFolderFormat),
             StrengthModel: 1.0);
@@ -587,7 +587,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private ImageScaleNode AddDisabledCropImageScale(JArray sourcePath, int width, int height, string upscaleMethod)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
             Width: width,
             Height: height,
@@ -599,7 +599,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private ImageScaleNode AddModelUpscaleChain(JArray sourcePath, string modelName, int targetWidth, int targetHeight)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         UpscaleModelLoaderNode loader = bridge.AddNode(new UpscaleModelLoaderNode()).With(
             ModelName: modelName);
 
@@ -691,7 +691,6 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         {
             WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, staleAudioNodeId, protectedNodes);
         }
-        BridgeSync.SyncLastId(g);
     }
 
     internal static JArray CopyPath(JArray path)

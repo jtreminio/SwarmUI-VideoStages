@@ -66,4 +66,19 @@ public sealed class LTXRFReverseODESamplerNode : ComfyNode
         Order?.ApplyTo(this.Order);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>eta_trend</c> (suggestions — any string is also accepted).</summary>
+    public static class EtaTrendValues
+    {
+        public const string LinearDecrease = "linear_decrease";
+        public const string LinearIncrease = "linear_increase";
+        public const string Constant = "constant";
+    }
+
+    /// <summary>Known ComfyUI values for <c>order</c> (suggestions — any string is also accepted).</summary>
+    public static class OrderValues
+    {
+        public const string First = "first";
+        public const string Second = "second";
+    }
 }

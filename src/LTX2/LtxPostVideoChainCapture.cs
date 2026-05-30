@@ -138,7 +138,7 @@ internal sealed class LtxPostVideoChainCapture
             return CloneCurrentOutputWithAttachedAudio();
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput avLatentSource = bridge.ResolvePath(State.AvLatentPath);
         INodeOutput vaeSource = bridge.ResolvePath(vaePath);
         if (avLatentSource is null || vaeSource is null)
@@ -153,7 +153,6 @@ internal sealed class LtxPostVideoChainCapture
         string decodeNodeId = ShouldUseTiledVaeDecode()
             ? AddTiledVideoDecode(bridge, vaeSource, detachedSeparate.VideoLatent)
             : AddPlainVideoDecode(bridge, vaeSource, detachedSeparate.VideoLatent);
-        BridgeSync.SyncLastId(g);
 
         WGNodeData detachedGuide = new(new JArray(decodeNodeId, 0), g, WGNodeData.DT_VIDEO, vae.Compat)
         {

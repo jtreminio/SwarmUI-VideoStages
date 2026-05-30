@@ -14,7 +14,7 @@ internal static class LtxPostVideoChainSplicer
             return;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         LtxChainCapture chainCapture = capture.BuildChainCapture(bridge);
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
         MediaRef vaeRef =
@@ -23,7 +23,6 @@ internal static class LtxPostVideoChainSplicer
 
         MediaRef result =
             LtxChainOps.SpliceCurrentOutput(bridge, chainCapture, stageOutput, vaeRef, decodeConfig);
-        BridgeSync.SyncLastId(g);
 
         if (result is not null)
         {
@@ -46,7 +45,7 @@ internal static class LtxPostVideoChainSplicer
             return;
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         LtxChainCapture chainCapture = capture.BuildChainCapture(bridge);
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
         MediaRef vaeRef =
@@ -80,7 +79,7 @@ internal static class LtxPostVideoChainSplicer
             return;
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput oldOutput = bridge.ResolvePath(capture.CurrentOutputMedia.Path);
         INodeOutput newOutput = bridge.ResolvePath(newImagePath);
         if (oldOutput is null || newOutput is null)

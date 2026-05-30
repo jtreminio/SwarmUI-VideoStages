@@ -101,7 +101,7 @@ internal sealed class LtxStageExecutor(
         string positivePrompt = ExtractVideoConditioningPrompt(genInfo.Prompt);
         string negativePrompt = ExtractVideoConditioningPrompt(genInfo.NegativePrompt);
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput clipOutput = bridge.ResolvePath(clip.Path);
 
         SwarmClipTextEncodeAdvancedNode posCondNode = AddSwarmClipTextEncodeAdvanced(
@@ -180,7 +180,7 @@ internal sealed class LtxStageExecutor(
         double strength,
         bool bypass)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         LTXVImgToVideoInplaceNode node = bridge.AddNode(new LTXVImgToVideoInplaceNode().With(
             Strength: strength,
             Bypass: bypass));
@@ -281,7 +281,7 @@ internal sealed class LtxStageExecutor(
 
     private string AddImageFromBatch(JArray imagePath, int batchIndex, JToken length)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode().With(
             BatchIndex: batchIndex));
         node.Image.TryConnectFromPath(bridge, imagePath);
@@ -314,7 +314,7 @@ internal sealed class LtxStageExecutor(
         WGNodeData attachedAudio,
         int fps)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
             bridge,
             attachedAudio.Path,
@@ -356,7 +356,7 @@ internal sealed class LtxStageExecutor(
             (audioLengthFrames, effectiveAttached) = BuildAudioLengthFramesNode(effectiveAttached, fps);
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
 
         JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
         JToken latentLength = dynamicLengthFrames is null
@@ -537,7 +537,7 @@ internal sealed class LtxStageExecutor(
             return reusedPath;
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         LTXVPreprocessNode preprocess = bridge.AddNode(new LTXVPreprocessNode().With(
             ImgCompression: ImgCompression));
         preprocess.Image.TryConnectFromPath(bridge, scaledGuidePath);
@@ -564,7 +564,7 @@ internal sealed class LtxStageExecutor(
             }
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         if (TryGetExistingScaleAtTargetDimensions(
                 bridge,
                 guideImagePath,
@@ -791,7 +791,7 @@ internal sealed class LtxStageExecutor(
 
     private void ApplyFirstFrameLatentSwap(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         ReplaceVideoLatentFramesNode replace = bridge.AddNode(new ReplaceVideoLatentFramesNode().With(
             Index: 0));
         if (g.CurrentMedia?.Path is JArray destPath)
@@ -815,7 +815,7 @@ internal sealed class LtxStageExecutor(
     {
         bool shouldRestoreAudioVideoLatent = g.CurrentMedia.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO;
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput cropLatentSource;
         INodeOutput audioLatentSource = null;
         if (shouldRestoreAudioVideoLatent)
@@ -925,7 +925,7 @@ internal sealed class LtxStageExecutor(
 
     private string AddSwarmTrimFrames(JArray imagePath, int trimStart, int trimEnd)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         SwarmTrimFramesNode node = bridge.AddNode(new SwarmTrimFramesNode().With(
             TrimStart: trimStart,
             TrimEnd: trimEnd));
@@ -940,7 +940,7 @@ internal sealed class LtxStageExecutor(
             return;
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         MediaRef currentMedia = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
         if (currentMedia is null)
         {

@@ -48,7 +48,7 @@ internal static class WanLatentReuse
             return;
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput reuseOutput = bridge.ResolvePath(capture.LatentPath);
         ComfyNode mediaNode = bridge.ResolvePath(g.CurrentMedia.Path)?.Node;
         SwarmKSamplerNode sampler = mediaNode as SwarmKSamplerNode

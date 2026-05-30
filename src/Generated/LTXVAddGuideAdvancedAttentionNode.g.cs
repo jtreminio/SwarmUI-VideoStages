@@ -95,4 +95,23 @@ public sealed class LTXVAddGuideAdvancedAttentionNode : ComfyNode
         AttentionMask?.ApplyTo(this.AttentionMask);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>interpolation</c> (suggestions — any string is also accepted).</summary>
+    public static class InterpolationValues
+    {
+        public const string Lanczos = "lanczos";
+        public const string Bislerp = "bislerp";
+        public const string Nearest = "nearest";
+        public const string Bilinear = "bilinear";
+        public const string Bicubic = "bicubic";
+        public const string Area = "area";
+        public const string NearestExact = "nearest-exact";
+    }
+
+    /// <summary>Known ComfyUI values for <c>crop</c> (suggestions — any string is also accepted).</summary>
+    public static class CropValues
+    {
+        public const string Center = "center";
+        public const string Disabled = "disabled";
+    }
 }

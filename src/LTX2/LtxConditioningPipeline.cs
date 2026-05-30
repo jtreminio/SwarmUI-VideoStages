@@ -107,7 +107,7 @@ internal sealed class LtxConditioningPipeline(
 
     public LtxConditioningPipeline WithLtxvConditioning()
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         LTXVConditioningNode cond = bridge.AddNode(new LTXVConditioningNode());
         if (genInfo.VideoFPS.HasValue)
         {
@@ -131,7 +131,7 @@ internal sealed class LtxConditioningPipeline(
             JArray preprocessed = executor.ResolvePreprocessedGuidePath(clipRef.Image.Path, g.CurrentMedia);
             int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
 
-            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
             LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode()).With(
                 FrameIdx: frameIdx,
                 Strength: clipRef.Strength);
@@ -162,7 +162,7 @@ internal sealed class LtxConditioningPipeline(
 
     private WGNodeData ApplyLatentModelUpscale(string modelName, int width, int height)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         LatentUpscaleModelLoaderNode loader = bridge.AddNode(new LatentUpscaleModelLoaderNode()).With(
             ModelName: modelName);
 

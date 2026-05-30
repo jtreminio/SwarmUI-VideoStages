@@ -74,4 +74,19 @@ public sealed class LTXVSpatioTemporalTiledVAEDecodeNode : ComfyNode
         WorkingDtype?.ApplyTo(this.WorkingDtype);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>working_device</c> (suggestions — any string is also accepted).</summary>
+    public static class WorkingDeviceValues
+    {
+        public const string Cpu = "cpu";
+        public const string Auto = "auto";
+    }
+
+    /// <summary>Known ComfyUI values for <c>working_dtype</c> (suggestions — any string is also accepted).</summary>
+    public static class WorkingDtypeValues
+    {
+        public const string Float16 = "float16";
+        public const string Float32 = "float32";
+        public const string Auto = "auto";
+    }
 }

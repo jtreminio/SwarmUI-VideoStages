@@ -102,4 +102,11 @@ public sealed class LTXVBaseSamplerNode : ComfyNode
         Blur?.ApplyTo(this.Blur);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>crop</c> (suggestions — any string is also accepted).</summary>
+    public static class CropValues
+    {
+        public const string Center = "center";
+        public const string Disabled = "disabled";
+    }
 }

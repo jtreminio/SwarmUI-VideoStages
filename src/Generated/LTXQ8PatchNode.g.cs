@@ -60,4 +60,13 @@ public sealed class LTXQ8PatchNode : ComfyNode
         QuantizeFfn?.ApplyTo(this.QuantizeFfn);
         return this;
     }
+
+    /// <summary>Known ComfyUI values for <c>quantization_preset</c> (suggestions — any string is also accepted).</summary>
+    public static class QuantizationPresetValues
+    {
+        public const string _098 = "0.9.8";
+        public const string Ltxv2 = "ltxv2";
+        public const string FullBf16 = "full_bf16";
+        public const string Custom = "custom";
+    }
 }

@@ -50,7 +50,7 @@ internal static class VaeDecodePreference
         }
         else
         {
-            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
             LTXVSeparateAVLatentNode separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
             if (media.Path is JArray mediaPath)
             {
@@ -96,7 +96,7 @@ internal static class VaeDecodePreference
 
     private static string AddPlainVaeDecode(WorkflowGenerator g, JArray vaePath, JArray latentPath)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         VAEDecodeNode decode = bridge.AddNode(new VAEDecodeNode());
         decode.Vae.ConnectFromPath(bridge, vaePath);
         decode.Samples.ConnectFromPath(bridge, latentPath);
@@ -105,7 +105,7 @@ internal static class VaeDecodePreference
 
     private static string AddTiledVaeDecode(WorkflowGenerator g, JArray vaePath, JArray latentPath)
     {
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
         VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode().With(
             TileSize: g.UserInput.Get(T2IParamTypes.VAETileSize, 256),
             Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),

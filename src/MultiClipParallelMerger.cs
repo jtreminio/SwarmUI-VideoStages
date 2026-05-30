@@ -45,7 +45,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
         }
 
-        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(g);
 
         List<INodeOutput> videoOutputs = [];
         HashSet<string> terminalKeys = [];

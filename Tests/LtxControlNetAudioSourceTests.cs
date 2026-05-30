@@ -252,7 +252,7 @@ public class LtxControlNetAudioSourceTests
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
         new(g =>
         {
-            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
             UnknownNode refinerImage = bridge.AddStub("UnitTest_RefinerImage", "200")
                 .WithOutputs(WGNodeData.DT_IMAGE);
             g.CurrentMedia = refinerImage.GetOutput(0).ToWGMedia(g, WGNodeData.DT_IMAGE,
@@ -263,7 +263,7 @@ public class LtxControlNetAudioSourceTests
         T2IModel controlNetModel) =>
         new(g =>
         {
-            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
 
             SwarmLoadVideoB64Node videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
             bridge.AddNode(videoLoad, "300");
@@ -310,7 +310,7 @@ public class LtxControlNetAudioSourceTests
         T2IModel controlNetModel) =>
         new(g =>
         {
-            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
 
             SwarmLoadVideoB64Node videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
             bridge.AddNode(videoLoad, "300");
