@@ -285,6 +285,50 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Videoclip_orphan_stage_lora_is_not_loaded_into_global_base_model()
+    {
+        using SwarmUiTestContext _ = new();
+        WorkflowGenerator.AddModelGenStep(g =>
+        {
+            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(-1, g.LoadingModel, g.LoadingClip);
+            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(0, g.LoadingModel, g.LoadingClip);
+        }, -10);
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel stage0Lora = new(loraHandler, "/tmp", "/tmp/UnitTest_Stage0Lora.safetensors", "UnitTest_Stage0Lora.safetensors");
+        T2IModel orphanLora = new(loraHandler, "/tmp", "/tmp/UnitTest_OrphanLora.safetensors", "UnitTest_OrphanLora.safetensors");
+        loraHandler.Models[stage0Lora.Name] = stage0Lora;
+        loraHandler.Models[orphanLora.Name] = orphanLora;
+
+        // Single-stage single clip: [0,1] is an orphan (no second stage exists).
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        string prompt = "global"
+            + " <videoclip[0,0]><lora:UnitTest_Stage0Lora:0.6>"
+            + " <videoclip[0,1]><lora:UnitTest_OrphanLora:2>";
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.True(input.TryGet(T2IParamTypes.Loras, out List<string> parsedLoras));
+        Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
+        int orphanIndex = parsedLoras.IndexOf("UnitTest_OrphanLora");
+        Assert.True(orphanIndex >= 0, "Expected the orphan LoRA to be present in the parsed list.");
+
+        string orphanConfinement = parsedConfinements[orphanIndex];
+        Assert.NotEqual("-1", orphanConfinement);
+        Assert.NotEqual("0", orphanConfinement);
+        Assert.NotEqual($"{Constants.SectionID_VideoClip}", orphanConfinement);
+
+        List<string> loadedLoraNames = [.. bridge.Graph.NodesOfType<LoraLoaderNode>().Select(n => n.LoraName.LiteralAsString())];
+        loadedLoraNames.AddRange(bridge.Graph.NodesOfType<LoraLoaderModelOnlyNode>().Select(n => n.LoraName.LiteralAsString()));
+        Assert.DoesNotContain(orphanLora.Name, loadedLoraNames);
+    }
+
+    [Fact]
     public void Controlnet_lora_dropdown_uses_ltx_ic_model_only_loader()
     {
         using SwarmUiTestContext _ = new();

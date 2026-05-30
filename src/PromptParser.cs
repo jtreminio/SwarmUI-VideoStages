@@ -34,14 +34,14 @@ internal static class PromptParser
                 return true;
             }
 
-            sectionId = NoMatchCid;
+            sectionId = Constants.SectionID_VideoClipUnmatched;
             return false;
         }
 
         if (!int.TryParse(clipToken, out int clipId) || clipId < 0
             || !int.TryParse(stageToken, out int clipStageIdx) || clipStageIdx < 0)
         {
-            sectionId = NoMatchCid;
+            sectionId = Constants.SectionID_VideoClipUnmatched;
             return false;
         }
 
@@ -51,7 +51,7 @@ internal static class PromptParser
             return true;
         }
 
-        sectionId = NoMatchCid;
+        sectionId = Constants.SectionID_VideoClipUnmatched;
         return false;
     }
 

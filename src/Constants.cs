@@ -16,6 +16,7 @@ public static class Constants
 
     public const int SectionID_VideoStages = 48823;
     public const int SectionID_VideoClip = 58823;
+    public const int SectionID_VideoClipUnmatched = 68823;
     public const double DefaultStageRefStrength = 0.8;
     public const double DefaultStageControlNetStrength = 0.8;
     public const int RootDimensionMin = 256;
