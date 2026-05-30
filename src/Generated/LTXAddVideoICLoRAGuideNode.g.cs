@@ -7,7 +7,7 @@ namespace VideoStages.Generated;
 
 /// <summary>Adds one or more conditioning frames starting at the specified frame index. Supports both single images and multi-frame videos. The latent_downscale_factor resizes input to a fraction of the target size (1 = original, 2 = half, 3 = third, etc.) for IC-LoRA on small grids.</summary>
 /// <remarks>Category: Lightricks/IC-LoRA</remarks>
-public sealed class LTXAddVideoICLoRAGuideNode : ComfyNode
+public sealed class LTXAddVideoICLoRAGuideNode : ComfyNode, ComfyTyped.Families.IConditioningPairNode
 {
     /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
     public const string ClassType = "LTXAddVideoICLoRAGuide";

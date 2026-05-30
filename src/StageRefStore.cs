@@ -124,8 +124,7 @@ public class StageRefStore(WorkflowGenerator g)
             Logs.Warning($"VideoStages: node '{nodeId}' not found in workflow; treating as not captured.");
             return null;
         }
-        INodeOutput output = node.FindOutput(slot)
-            ?? (node is UnknownNode u ? u.GetOutput(slot) : null);
+        INodeOutput output = node.FindOutput(slot);
         if (output is null)
         {
             Logs.Warning($"VideoStages: slot {slot} on node '{nodeId}' not found; treating as not captured.");

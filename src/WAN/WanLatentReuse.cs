@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
@@ -27,12 +28,10 @@ internal static class WanLatentReuse
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         INodeOutput vaeOutput = bridge.ResolvePath(vae.Path);
-        (INodeOutput samples, INodeOutput decodeVae) = bridge.ResolvePath(sourceMedia.Path)?.Node switch
-        {
-            VAEDecodeNode decode => (decode.Samples.Connection, decode.Vae.Connection),
-            VAEDecodeTiledNode tiled => (tiled.Samples.Connection, tiled.Vae.Connection),
-            _ => (null, null)
-        };
+        (INodeOutput samples, INodeOutput decodeVae) =
+            bridge.ResolvePath(sourceMedia.Path)?.Node is IVaeDecode decode
+                ? (decode.Samples.Connection, decode.Vae.Connection)
+                : (null, null);
         if (samples is null || !SameOutput(decodeVae, vaeOutput))
         {
             return false;
@@ -49,7 +48,7 @@ internal static class WanLatentReuse
             return;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput reuseOutput = bridge.ResolvePath(capture.LatentPath);
         ComfyNode mediaNode = bridge.ResolvePath(g.CurrentMedia.Path)?.Node;
         SwarmKSamplerNode sampler = mediaNode as SwarmKSamplerNode
@@ -67,7 +66,6 @@ internal static class WanLatentReuse
 
         HashSet<string> protectedNodes = [reuseOutput.Node.Id, mediaNode.Id];
         WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, staleLatentNode.Id, protectedNodes);
-        BridgeSync.SyncLastId(g);
     }
 
     private static bool SameOutput(INodeOutput a, INodeOutput b) =>

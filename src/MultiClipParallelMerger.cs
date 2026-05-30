@@ -45,7 +45,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
 
         List<INodeOutput> videoOutputs = [];
         HashSet<string> terminalKeys = [];
@@ -93,7 +93,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         }
 
         RetargetSwarmSaveAnimationWsForClipTerminals(bridge, terminalKeys, mergedVideo, mergedAudio);
-        BridgeSync.SyncLastId(g);
 
         WGNodeData template = clipOutputsInOrder[0];
         g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, template.Compat)

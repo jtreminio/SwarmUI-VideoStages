@@ -240,7 +240,7 @@ internal class StageRunner(
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.Graph.GetNode($"{currentPath[0]}") is not ComfyNode startNode)
+        if (bridge.NodeAt(currentPath) is not ComfyNode startNode)
         {
             return;
         }
@@ -362,12 +362,12 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             {
                 genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
                 g.CurrentMedia = reusedLatent;
-                wanLatentReuse.LatentPath = reusedLatent?.Path as JArray;
+                wanLatentReuse.LatentPath = reusedLatent?.Path;
                 return;
             }
             ImageFromBatchNode fromBatch = AddImageFromBatch(sourceMedia.Path, batchIndex: 0, length: genInfo.Frames.Value);
             genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
-            g.CurrentMedia = sourceMedia.WithPath([fromBatch.Id, 0]);
+            g.CurrentMedia = sourceMedia.WithPath(fromBatch.IMAGE);
             g.CurrentMedia.Frames = Math.Min(genInfo.Frames.Value, g.CurrentMedia.Frames ?? int.MaxValue);
             g.CurrentMedia = g.CurrentMedia.AsLatentImage(genInfo.Vae);
         };
@@ -386,13 +386,11 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private ImageFromBatchNode AddImageFromBatch(JArray imagePath, int batchIndex, int length)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
             BatchIndex: batchIndex,
             Length: length);
         node.Image.ConnectFromPath(bridge, imagePath);
-        bridge.SyncNode(node);
-        BridgeSync.SyncLastId(g);
         return node;
     }
 
@@ -405,7 +403,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.Graph.GetNode<WanImageToVideoNode>($"{genInfo.PosCond[0]}") is not WanImageToVideoNode wan
+        if (bridge.NodeAt<WanImageToVideoNode>(genInfo.PosCond) is not WanImageToVideoNode wan
             || wan.StartImage.Connection?.Node is not ImageScaleNode startScale
             || startScale.Image.Connection?.Node is not ImageScaleNode upstreamScale)
         {
@@ -476,7 +474,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             lora.GetOrGenerateTensorHashSha256();
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode()).With(
             LoraName: lora.ToString(g.ModelFolderFormat),
             StrengthModel: 1.0);
@@ -484,9 +482,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         {
             loraLoader.ModelInput.ConnectFromPath(bridge, modelPath);
         }
-        bridge.SyncNode(loraLoader);
-        BridgeSync.SyncLastId(g);
-        genInfo.Model = genInfo.Model.WithPath([loraLoader.Id, 0]);
+        genInfo.Model = genInfo.Model.WithPath(loraLoader.Model);
     }
 
     private static T2IModel ResolveLoraModel(string loraName)
@@ -552,7 +548,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         {
             string method = stage.UpscaleMethod["pixel-".Length..];
             ImageScaleNode scaleNode = AddDisabledCropImageScale(source.Path, targetWidth, targetHeight, method);
-            g.CurrentMedia = source.WithPath([scaleNode.Id, 0]);
+            g.CurrentMedia = source.WithPath(scaleNode.IMAGE);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
             dimensions.Width = targetWidth;
@@ -564,7 +560,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         {
             string modelName = stage.UpscaleMethod["model-".Length..];
             ImageScaleNode fitScale = AddModelUpscaleChain(source.Path, modelName, targetWidth, targetHeight);
-            g.CurrentMedia = source.WithPath([fitScale.Id, 0]);
+            g.CurrentMedia = source.WithPath(fitScale.IMAGE);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
             dimensions.Width = targetWidth;
@@ -591,29 +587,25 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private ImageScaleNode AddDisabledCropImageScale(JArray sourcePath, int width, int height, string upscaleMethod)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
             Width: width,
             Height: height,
             UpscaleMethod: upscaleMethod,
             Crop: "disabled"));
         scale.Image.ConnectFromPath(bridge, sourcePath);
-        bridge.SyncNode(scale);
-        BridgeSync.SyncLastId(g);
         return scale;
     }
 
     private ImageScaleNode AddModelUpscaleChain(JArray sourcePath, string modelName, int targetWidth, int targetHeight)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         UpscaleModelLoaderNode loader = bridge.AddNode(new UpscaleModelLoaderNode()).With(
             ModelName: modelName);
-        bridge.SyncNode(loader);
 
         ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode().With(
             UpscaleModel: loader.UPSCALEMODEL));
         upscale.Image.ConnectFromPath(bridge, sourcePath);
-        bridge.SyncNode(upscale);
 
         ImageScaleNode fit = bridge.AddNode(new ImageScaleNode().With(
             Width: targetWidth,
@@ -621,8 +613,6 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             UpscaleMethod: "lanczos",
             Crop: "disabled",
             Image: upscale.IMAGE));
-        bridge.SyncNode(fit);
-        BridgeSync.SyncLastId(g);
         return fit;
     }
 

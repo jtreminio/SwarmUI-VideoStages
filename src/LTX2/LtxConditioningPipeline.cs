@@ -107,19 +107,15 @@ internal sealed class LtxConditioningPipeline(
 
     public LtxConditioningPipeline WithLtxvConditioning()
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         LTXVConditioningNode cond = bridge.AddNode(new LTXVConditioningNode());
         if (genInfo.VideoFPS.HasValue)
         {
             cond.FrameRate.Set(genInfo.VideoFPS.Value);
         }
-        cond.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
-        cond.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
-        bridge.SyncNode(cond);
-        BridgeSync.SyncLastId(g);
+        cond.ConnectConditioning(bridge, genInfo);
 
-        genInfo.PosCond = [cond.Id, 0];
-        genInfo.NegCond = [cond.Id, 1];
+        genInfo.SetConditioning(cond);
         return this;
     }
 
@@ -135,23 +131,19 @@ internal sealed class LtxConditioningPipeline(
             JArray preprocessed = executor.ResolvePreprocessedGuidePath(clipRef.Image.Path, g.CurrentMedia);
             int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
 
-            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using SyncingWorkflowBridge bridge = BridgeSync.For(g);
             LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode()).With(
                 FrameIdx: frameIdx,
                 Strength: clipRef.Strength);
-            addGuide.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
-            addGuide.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
+            addGuide.ConnectConditioning(bridge, genInfo);
             addGuide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
             addGuide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
             addGuide.Image.ConnectFromPath(bridge, preprocessed);
-            bridge.SyncNode(addGuide);
-            BridgeSync.SyncLastId(g);
 
             stageFrame.NeedsCropGuidesAfterSampler = true;
-            genInfo.PosCond = [addGuide.Id, 0];
-            genInfo.NegCond = [addGuide.Id, 1];
+            genInfo.SetConditioning(addGuide);
             g.CurrentMedia = g.CurrentMedia.WithPath(
-                [addGuide.Id, 2],
+                addGuide.Latent,
                 WGNodeData.DT_LATENT_VIDEO,
                 genInfo.Model.Compat);
         }
@@ -170,19 +162,16 @@ internal sealed class LtxConditioningPipeline(
 
     private WGNodeData ApplyLatentModelUpscale(string modelName, int width, int height)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         LatentUpscaleModelLoaderNode loader = bridge.AddNode(new LatentUpscaleModelLoaderNode()).With(
             ModelName: modelName);
-        bridge.SyncNode(loader);
 
         LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode().With(
             UpscaleModel: loader.LATENTUPSCALEMODEL));
         upsampler.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
         upsampler.Samples.ConnectFromPath(bridge, stageLatent.Path);
-        bridge.SyncNode(upsampler);
-        BridgeSync.SyncLastId(g);
 
-        WGNodeData upscaled = stageLatent.WithPath([upsampler.Id, 0], WGNodeData.DT_LATENT_VIDEO);
+        WGNodeData upscaled = stageLatent.WithPath(upsampler.LATENT, WGNodeData.DT_LATENT_VIDEO);
         upscaled.Width = width;
         upscaled.Height = height;
         return upscaled;

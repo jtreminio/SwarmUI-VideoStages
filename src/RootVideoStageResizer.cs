@@ -176,8 +176,8 @@ internal sealed class RootVideoStageResizer(
             return;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        ImageScaleNode scale = bridge.Graph.GetNode<ImageScaleNode>($"{path[0]}");
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        ImageScaleNode scale = bridge.NodeAt<ImageScaleNode>(path);
         if (scale is null)
         {
             if (bridge.ResolvePath(path) is not INodeOutput sourceOutput)
@@ -186,8 +186,7 @@ internal sealed class RootVideoStageResizer(
             }
             scale = bridge.AddNode(new ImageScaleNode());
             scale.Image.ConnectToUntyped(sourceOutput);
-            BridgeSync.SyncLastId(g);
-            g.CurrentMedia = g.CurrentMedia.WithPath([scale.Id, 0]);
+            g.CurrentMedia = g.CurrentMedia.WithPath(scale.IMAGE);
         }
 
         scale.With(

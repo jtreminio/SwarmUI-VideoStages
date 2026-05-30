@@ -64,8 +64,10 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         JArray controlImage,
         int index)
     {
-        ComfyNode startNode = bridge.Graph.GetNode($"{controlImage[0]}");
-        if (FindUpstreamGetVideoComponents(bridge, startNode) is GetVideoComponentsNode components)
+        ComfyNode startNode = bridge.NodeAt(controlImage);
+        GetVideoComponentsNode components = startNode as GetVideoComponentsNode
+            ?? bridge.Graph.FindNearestUpstream<GetVideoComponentsNode>(startNode);
+        if (components is not null)
         {
             JArray audioPath = WorkflowBridge.ToPath(components.Audio);
             g.NodeHelpers[CapturedControlNetAudioKey(index)] = audioPath.ToString(Formatting.None);
@@ -73,12 +75,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         }
         g.NodeHelpers.Remove(CapturedControlNetAudioKey(index));
     }
-
-    private static GetVideoComponentsNode FindUpstreamGetVideoComponents(
-        WorkflowBridge bridge,
-        ComfyNode startNode) =>
-        startNode as GetVideoComponentsNode
-            ?? bridge.Graph.FindNearestUpstream<GetVideoComponentsNode>(startNode);
 
     public bool TryGetCapturedControlNetAudio(string controlNetSource, out WGNodeData audio)
     {
@@ -116,9 +112,6 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         {
             return;
         }
-        // If core wrapped the apply image in ImageFromBatch(length=1), the resize must go
-        // upstream of the wrap — otherwise GetImageSize on the resize sees batch_size=1 and the
-        // IC-LoRA guide receives a single frame instead of the full video.
         if (consumerOutput.Node is ImageFromBatchNode batch
             && batch.Length.LiteralAsInt() == 1
             && batch.Image.Connection is INodeOutput batchSource)
@@ -147,7 +140,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
 
     private void EnsureSingleFrameWrap(WorkflowBridge bridge, JArray controlImage)
     {
-        if (bridge.Graph.GetNode($"{controlImage[0]}") is ImageFromBatchNode)
+        if (bridge.NodeAt(controlImage) is ImageFromBatchNode)
         {
             return;
         }
@@ -165,19 +158,19 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         WorkflowBridge bridge,
         JArray startRef)
     {
-        INodeOutput current = bridge.ResolvePath(startRef);
-        for (int i = 0; i < 4 && current is not null; i++)
+        if (bridge.ResolvePath(startRef)?.Node is not ComfyNode start)
         {
-            if (current.Node is ResizeImageMaskNodeNode candidate
-                && candidate.ResizeType.LiteralAsString() == "scale to multiple")
-            {
-                return candidate;
-            }
-            INodeInput next = current.Node.FindInput("image") ?? current.Node.FindInput("input");
-            current = next?.Connection;
+            return null;
         }
-        return null;
+        return (IsScaleToMultipleResize(start)
+            ? start
+            : bridge.Graph.FindNearestUpstream(start, IsScaleToMultipleResize))
+            as ResizeImageMaskNodeNode;
     }
+
+    private static bool IsScaleToMultipleResize(ComfyNode node) =>
+        node is ResizeImageMaskNodeNode resize
+        && resize.ResizeType.LiteralAsString() == "scale to multiple";
 
     public bool Apply(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -198,8 +191,8 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             return false;
         }
 
-        JObject modelNode = g.Workflow[$"{genInfo.Model.Path[0]}"] as JObject;
-        if (modelNode?["class_type"]?.Value<string>() != LTXICLoRALoaderModelOnlyNode.ClassType)
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.NodeAt(genInfo.Model.Path) is not LTXICLoRALoaderModelOnlyNode)
         {
             Logs.Warning(
                 $"VideoStages: ControlNet '{source}' is configured but no controlnet_lora "
@@ -229,7 +222,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             && !string.IsNullOrWhiteSpace(encoded)
             && JToken.Parse(encoded) is JArray { Count: 2 } cached)
         {
-            framesConnection = new JArray(cached[0], cached[1]);
+            framesConnection = cached;
             return true;
         }
 
@@ -302,18 +295,16 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             UseTiledEncode: false,
             TileSize: 256,
             TileOverlap: 64));
-        guide.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
-        guide.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
+        guide.ConnectConditioning(bridge, genInfo);
         guide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
         guide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
         guide.Image.ConnectFromPath(bridge, guideImagePath);
         bridge.SyncNode(guide);
         BridgeSync.SyncLastId(g);
 
-        genInfo.PosCond = new JArray(guide.Id, 0);
-        genInfo.NegCond = new JArray(guide.Id, 1);
+        genInfo.SetConditioning(guide);
         g.CurrentMedia = g.CurrentMedia.WithPath(
-            new JArray(guide.Id, 2),
+            guide.Latent,
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);
         return true;
@@ -330,43 +321,22 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         }
 
         JArray guideSource = PeelSingleFrameWrap(bridge, controlImagePath);
-        string croppedGuide = AddImageFromBatch(
-            bridge,
-            guideSource,
-            batchIndex: 0,
-            lengthToken: frames.DeepClone());
-        BridgeSync.SyncLastId(g);
-        return new JArray(croppedGuide, 0);
-    }
-
-    private static string AddImageFromBatch(
-        WorkflowBridge bridge,
-        JArray imagePath,
-        int batchIndex,
-        JToken lengthToken)
-    {
         ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
-            BatchIndex: batchIndex);
-        node.Image.TryConnectFromPath(bridge, imagePath);
-        if (lengthToken is JArray lengthRef)
-        {
-            node.Length.TryConnectFromPath(bridge, lengthRef);
-        }
-        else if (lengthToken is JValue v && v.Value is not null)
-        {
-            node.Length.Set(Convert.ToInt64(v.Value));
-        }
+            BatchIndex: 0);
+        node.Image.TryConnectFromPath(bridge, guideSource);
+        node.Length.SetFromToken(bridge, frames.DeepClone());
         bridge.SyncNode(node);
-        return node.Id;
+        BridgeSync.SyncLastId(g);
+        return WorkflowBridge.ToPath(node.IMAGE);
     }
 
     private static JArray PeelSingleFrameWrap(WorkflowBridge bridge, JArray imagePath)
     {
-        if (bridge.Graph.GetNode<ImageFromBatchNode>($"{imagePath[0]}") is ImageFromBatchNode batch
+        if (bridge.NodeAt<ImageFromBatchNode>(imagePath) is ImageFromBatchNode batch
             && batch.Length.LiteralAsInt() == 1
             && batch.Image.Connection is INodeOutput imageIn)
         {
-            return new JArray(imageIn.Node.Id, imageIn.SlotIndex);
+            return WorkflowBridge.ToPath(imageIn);
         }
         return new JArray(imagePath[0], imagePath[1]);
     }
@@ -440,7 +410,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             return false;
         }
 
-        ComfyNode startNode = bridge.Graph.GetNode($"{outputRef[0]}");
+        ComfyNode startNode = bridge.NodeAt(outputRef);
         if (startNode is null)
         {
             return false;
@@ -478,7 +448,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             return false;
         }
         controlImage = new WGNodeData(
-            new JArray(path[0], path[1]),
+            path,
             g,
             WGNodeData.DT_IMAGE,
             g.CurrentCompat());

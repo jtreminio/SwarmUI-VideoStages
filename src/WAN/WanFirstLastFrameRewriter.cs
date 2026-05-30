@@ -30,9 +30,8 @@ internal static class WanFirstLastFrameRewriter
             return;
         }
 
-        string wanNodeId = $"{genInfo.PosCond[0]}";
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.Graph.GetNode<WanImageToVideoNode>(wanNodeId) is not WanImageToVideoNode wan)
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
+        if (bridge.NodeAt<WanImageToVideoNode>(genInfo.PosCond) is not WanImageToVideoNode wan)
         {
             return;
         }
@@ -61,8 +60,7 @@ internal static class WanFirstLastFrameRewriter
             Length: length,
             BatchSize: batchSize);
 
-        flf.PositiveInput.TryConnectSameAs(wan.PositiveInput);
-        flf.NegativeInput.TryConnectSameAs(wan.NegativeInput);
+        flf.ConnectConditioningSameAs(wan);
         flf.Vae.TryConnectSameAs(wan.Vae);
         flf.StartImage.TryConnectSameAs(wan.StartImage);
         flf.EndImage.TryConnectToUntyped(scaledEndOutput);
@@ -89,12 +87,10 @@ internal static class WanFirstLastFrameRewriter
 
         bridge.SyncNode(flf);
         bridge.RemoveNode(wan);
-        BridgeSync.SyncLastId(g);
 
-        genInfo.PosCond = new JArray(flf.Id, 0);
-        genInfo.NegCond = new JArray(flf.Id, 1);
+        genInfo.SetConditioning(flf);
         g.CurrentMedia = g.CurrentMedia.WithPath(
-            new JArray(flf.Id, 2),
+            flf.Latent,
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);
     }

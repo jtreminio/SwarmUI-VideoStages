@@ -1,0 +1,4 @@
+{
+  "_comment": "Consumer-side family memberships for VideoStages' own custom nodes. Maps a fully-qualified ComfyTyped family interface (shipped in ComfyTyped.dll) to this extension's ComfyUI class_types that should implement it. Passed to the diff-mode codegen via --families during consumer regen (see regen.sh). Core-node memberships live in ComfyTyped's own families.json, not here — this file only names nodes that exist solely in VideoStages. Keys starting with '_' are comments.",
+  "ComfyTyped.Families.IConditioningPairNode": ["LTXAddVideoICLoRAGuide"]
+}

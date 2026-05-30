@@ -37,7 +37,7 @@ internal sealed class LtxClipRefResolver(
         {
             ImageRefSpec spec = refs[i];
             if (isTextToVideo
-                && !string.Equals(spec.Source, "Upload", StringComparison.OrdinalIgnoreCase))
+                && !StringUtils.Equals(spec.Source, "Upload"))
             {
                 continue;
             }
@@ -117,7 +117,7 @@ internal sealed class LtxClipRefResolver(
             return false;
         }
 
-        if (WorkflowBridge.Create(g.Workflow).Graph.GetNode<ImageScaleNode>($"{sourcePath[0]}")
+        if (WorkflowBridge.Create(g.Workflow).NodeAt<ImageScaleNode>(sourcePath)
             is not ImageScaleNode scale
             || scale.Image.Connection is not INodeOutput scaleSource)
         {

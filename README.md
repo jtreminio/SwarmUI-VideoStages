@@ -65,7 +65,7 @@ cp bin/Release/net8.0/ComfyTyped.dll \
     ../SwarmUI-VideoStages/lib/ComfyTyped.dll
 
 dotnet run --project tools/ComfyTyped.CodeGen -- \
-    --comfy-json http://192.0.0.1:7801/ComfyBackendDirect/api/object_info \
+    --comfy-json http://127.0.0.1:7801/ComfyBackendDirect/api/object_info \
     --output ../SwarmUI-VideoStages/src/Generated \
     --namespace VideoStages.Generated \
     --keep-list ../SwarmUI-VideoStages/comfytyped.keep.json \

@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
@@ -35,8 +36,8 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         {
             WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
             INodeOutput guideOutput = bridge.ResolvePath(guidePath);
-            ComfyNode decode = guideOutput is not null
-                ? bridge.Graph.FindNearestDownstream(guideOutput, n => n is VAEDecodeNode or VAEDecodeTiledNode)
+            IVaeDecode decode = guideOutput is not null
+                ? bridge.Graph.FindNearestDownstream<IVaeDecode>(guideOutput)
                 : null;
             if (decode is not null)
             {
@@ -45,7 +46,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
                     || guideReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
                         ? WGNodeData.DT_VIDEO
                         : WGNodeData.DT_IMAGE;
-                return guideReference.Media.WithPath(new JArray(decode.Id, 0), rawDataType, guideVae?.Compat);
+                return guideReference.Media.WithPath(decode.IMAGE, rawDataType, guideVae?.Compat);
             }
         }
         return VaeDecodePreference.AsRawImage(g, guideReference.Media, guideVae);
@@ -81,7 +82,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         int currentWidth = resolvedGuideMedia.Width ?? targetWidth;
         int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using SyncingWorkflowBridge bridge = BridgeSync.For(g);
         if (TryNormalizeExistingImageScale(
             bridge,
             resolvedGuideMedia.Path,
@@ -109,7 +110,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
                     resolvedGuideMedia.Path,
                     targetWidth,
                     targetHeight);
-                resolvedGuideMedia = resolvedGuideMedia.WithPath([scale.Id, 0]);
+                resolvedGuideMedia = resolvedGuideMedia.WithPath(scale.IMAGE);
             }
         }
 
@@ -130,8 +131,6 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
             UpscaleMethod: "lanczos",
             Crop: "center"));
         scale.Image.ConnectFromPath(bridge, sourcePath);
-        bridge.SyncNode(scale);
-        BridgeSync.SyncLastId(g);
         return scale;
     }
 
@@ -144,7 +143,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
     {
         scaleNodeId = null;
         if (sourcePath is not { Count: 2 }
-            || bridge.Graph.GetNode($"{sourcePath[0]}") is not ImageScaleNode scale)
+            || bridge.NodeAt(sourcePath) is not ImageScaleNode scale)
         {
             return false;
         }

@@ -24,7 +24,7 @@ internal static class LtxAudioPathResolution
                 && audioConn.Node.Id == rawNodeId
                 && audioConn.SlotIndex == rawSlot)
             {
-                return new JArray(existing.Id, 0);
+                return existing.AUDIO.ToPath();
             }
         }
 
@@ -39,6 +39,6 @@ internal static class LtxAudioPathResolution
         ensure.Audio.ConnectFromPath(bridge, rawRef);
         ensure.TargetDuration.Set(0.1);
         bridge.SyncNode(ensure);
-        return new JArray(ensure.Id, 0);
+        return ensure.AUDIO.ToPath();
     }
 }

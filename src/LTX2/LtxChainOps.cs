@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
@@ -19,17 +20,14 @@ internal static class LtxChainOps
             return null;
         }
 
-        ComfyNode decode = mediaNode as VAEDecodeNode
-            ?? mediaNode as VAEDecodeTiledNode
-            ?? bridge.Graph.FindNearestUpstream<VAEDecodeNode>(mediaNode)
-            ?? (ComfyNode)bridge.Graph.FindNearestUpstream<VAEDecodeTiledNode>(mediaNode);
+        IVaeDecode decode = mediaNode as IVaeDecode
+            ?? bridge.Graph.FindNearestUpstream<IVaeDecode>(mediaNode);
         if (decode is null)
         {
             return null;
         }
 
-        INodeInput samplesInput = decode.FindInput("samples");
-        if (samplesInput?.Connection?.Node is not LTXVSeparateAVLatentNode separate)
+        if (decode.Samples.Connection?.Node is not LTXVSeparateAVLatentNode separate)
         {
             return null;
         }
@@ -38,8 +36,7 @@ internal static class LtxChainOps
         {
             return null;
         }
-        INodeInput vaeInput = decode.FindInput("vae");
-        if (vaeInput?.Connection is null)
+        if (decode.Vae.Connection is null)
         {
             return null;
         }
@@ -87,7 +84,7 @@ internal static class LtxChainOps
         }
 
         LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
-        newSeparate.AvLatent.ConnectToUntyped(stageOutput.Output);
+        newSeparate.AvLatent.ConnectFrom(stageOutput);
         bridge.SyncNode(newSeparate);
 
         ReplaceVideoDecode(
@@ -140,7 +137,7 @@ internal static class LtxChainOps
         }
 
         LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
-        newSeparate.AvLatent.ConnectToUntyped(stageOutput.Output);
+        newSeparate.AvLatent.ConnectFrom(stageOutput);
         bridge.SyncNode(newSeparate);
 
         if (vae?.Output is null)
@@ -188,18 +185,15 @@ internal static class LtxChainOps
             return;
         }
 
-        ComfyNode decodeNode = currentMedia.Output.Node;
-        INodeInput samplesInput = decodeNode.FindInput("samples");
-        if (samplesInput is null
-            || decodeNode is not VAEDecodeNode && decodeNode is not VAEDecodeTiledNode
-            || samplesInput.Connection?.Node is not LTXVSeparateAVLatentNode separate)
+        if (currentMedia.Output.Node is not IVaeDecode decode
+            || decode.Samples.Connection?.Node is not LTXVSeparateAVLatentNode separate)
         {
             return;
         }
 
         LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode().With(
             Samples: separate.AudioLatent));
-        audioDecode.AudioVae.ConnectToUntyped(audioVae.Output);
+        audioDecode.AudioVae.ConnectFrom(audioVae);
         bridge.SyncNode(audioDecode);
 
         currentMedia.AttachedAudio = new MediaRef
@@ -316,8 +310,7 @@ internal static class LtxChainOps
             audioDecode["inputs"] = inputs;
         }
 
-        JArray samplesRef = WorkflowBridge.ToPath(newSeparate.AudioLatent);
-        inputs["samples"] = new JArray(samplesRef[0], samplesRef[1]);
+        inputs["samples"] = WorkflowBridge.ToPath(newSeparate.AudioLatent);
     }
 
     private static bool HasAudioDecodeConnectedToSeparate(
