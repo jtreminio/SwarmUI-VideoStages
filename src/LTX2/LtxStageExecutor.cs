@@ -473,8 +473,8 @@ internal sealed class LtxStageExecutor(
     {
         latentPath = null;
         if (sourceMedia?.DataType != WGNodeData.DT_VIDEO
-            || sourceMedia.Path is not JArray { Count: 2 } sourcePath
-            || genInfo?.Vae?.Path is not JArray { Count: 2 } vaePath
+            || sourceMedia.Path is null
+            || genInfo?.Vae?.Path is null
             || (!genInfo.Frames.HasValue && !allowDynamicFrameCount)
             || genInfo.Frames.HasValue
                 && sourceMedia.Frames is int sourceFrames
@@ -484,20 +484,21 @@ internal sealed class LtxStageExecutor(
         }
 
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        ComfyNode sourceNode = bridge.Graph.GetNode($"{sourcePath[0]}");
-        if (sourceNode is not (VAEDecodeNode or VAEDecodeTiledNode))
+        (INodeOutput samples, INodeOutput decodeVae) = bridge.ResolvePath(sourceMedia.Path)?.Node switch
         {
-            return false;
-        }
-        INodeOutput samplesConn = sourceNode.FindInput("samples")?.Connection;
-        INodeOutput decodeVaeConn = sourceNode.FindInput("vae")?.Connection;
-        if (samplesConn is null || decodeVaeConn is null)
+            VAEDecodeNode decode => (decode.Samples.Connection, decode.Vae.Connection),
+            VAEDecodeTiledNode tiled => (tiled.Samples.Connection, tiled.Vae.Connection),
+            _ => (null, null)
+        };
+        if (samples is null || decodeVae is null)
         {
             return false;
         }
 
-        bool sameVaeNode = decodeVaeConn.Node.Id == $"{vaePath[0]}"
-            && decodeVaeConn.SlotIndex == (int)vaePath[1];
+        INodeOutput vaeOutput = bridge.ResolvePath(genInfo.Vae.Path);
+        bool sameVaeNode = vaeOutput is not null
+            && decodeVae.Node == vaeOutput.Node
+            && decodeVae.SlotIndex == vaeOutput.SlotIndex;
         bool sameDynamicLtxCompat =
             allowDynamicFrameCount
             && !string.IsNullOrWhiteSpace(sourceMedia.Compat?.ID)
@@ -507,7 +508,7 @@ internal sealed class LtxStageExecutor(
             return false;
         }
 
-        latentPath = new JArray(samplesConn.Node.Id, samplesConn.SlotIndex);
+        latentPath = WorkflowBridge.ToPath(samples);
         return true;
     }
 

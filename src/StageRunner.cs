@@ -14,7 +14,8 @@ namespace VideoStages;
 
 internal sealed record StageGenerationPlan(
     WorkflowGenerator.ImageToVideoGenInfo GenInfo,
-    Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
+    Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent,
+    WanLatentReuse.Capture WanLatentReuse = null);
 
 internal class StageRunner(
     WorkflowGenerator g,
@@ -178,6 +179,7 @@ internal class StageRunner(
         });
 
         g.CreateImageToVideo(genInfo);
+        WanLatentReuse.ReapplyToSampler(g, generationPlan.WanLatentReuse);
         ApplyContinuationEndStep(stage);
 
         g.CurrentVae = genInfo.Vae;
@@ -297,8 +299,9 @@ internal class StageRunner(
         bool isWanStage = VideoStageModelCompat.IsWanVideoModel(videoModel);
         (int batchIndex, int batchLen) = sourceIsVideo ? (0, 1) : (-1, -1);
 
+        WanLatentReuse.Capture wanLatentReuse = new();
         Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent = sourceIsVideo && !shouldUseLocalLtxv2Path
-            ? BuildSourceVideoLatentApplier(stage, sourceMedia, isWanStage)
+            ? BuildSourceVideoLatentApplier(stage, sourceMedia, isWanStage, wanLatentReuse)
             : null;
 
         (string positivePrompt, string negativePrompt) = BuildStagePrompts(clip, stage);
@@ -323,7 +326,7 @@ internal class StageRunner(
             ContextID = sectionId,
             VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
         };
-        return new StageGenerationPlan(genInfo, applySourceVideoLatent);
+        return new StageGenerationPlan(genInfo, applySourceVideoLatent, wanLatentReuse);
     }
 
     private int? ResolveFrames(WGNodeData sourceMedia, int sectionId)
@@ -346,7 +349,8 @@ internal class StageRunner(
 private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentApplier(
         StageSpec stage,
         WGNodeData sourceMedia,
-        bool isWanStage)
+        bool isWanStage,
+        WanLatentReuse.Capture wanLatentReuse)
     {
         return genInfo =>
         {
@@ -354,10 +358,11 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             {
                 return;
             }
-            if (isWanStage && TryReuseDecodedSourceVideoLatent(sourceMedia, genInfo.Vae, out WGNodeData reusedLatent))
+            if (isWanStage && WanLatentReuse.TryResolveReusableLatent(g, sourceMedia, genInfo.Vae, out WGNodeData reusedLatent))
             {
                 genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
                 g.CurrentMedia = reusedLatent;
+                wanLatentReuse.LatentPath = reusedLatent?.Path as JArray;
                 return;
             }
             ImageFromBatchNode fromBatch = AddImageFromBatch(sourceMedia.Path, batchIndex: 0, length: genInfo.Frames.Value);
@@ -377,41 +382,6 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         return (
             PromptParser.ExtractPrompt(positive, originalPositive, clip.Id, stage.Id, stage.ClipStageIndex),
             PromptParser.ExtractPrompt(negative, originalNegative, clip.Id, stage.Id, stage.ClipStageIndex));
-    }
-
-    private bool TryReuseDecodedSourceVideoLatent(
-        WGNodeData sourceMedia,
-        WGNodeData vae,
-        out WGNodeData reusedLatent)
-    {
-        reusedLatent = null;
-        if (sourceMedia?.Path is not JArray { Count: 2 } sourcePath
-            || vae?.Path is not JArray { Count: 2 } vaePath)
-        {
-            return false;
-        }
-
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        ComfyNode sourceNode = bridge.Graph.GetNode($"{sourcePath[0]}");
-        if (sourceNode is not (VAEDecodeNode or VAEDecodeTiledNode))
-        {
-            return false;
-        }
-        INodeOutput samplesConn = sourceNode.FindInput("samples")?.Connection;
-        INodeOutput decodeVaeConn = sourceNode.FindInput("vae")?.Connection;
-        if (samplesConn is null
-            || decodeVaeConn is null
-            || decodeVaeConn.Node.Id != $"{vaePath[0]}"
-            || decodeVaeConn.SlotIndex != (int)vaePath[1])
-        {
-            return false;
-        }
-
-        reusedLatent = sourceMedia.WithPath(
-            new JArray(samplesConn.Node.Id, samplesConn.SlotIndex),
-            WGNodeData.DT_LATENT_VIDEO,
-            vae.Compat);
-        return true;
     }
 
     private ImageFromBatchNode AddImageFromBatch(JArray imagePath, int batchIndex, int length)
