@@ -115,6 +115,34 @@ internal sealed class LtxPostVideoChainCapture
         return stageInput;
     }
 
+    public WGNodeData CreateStageInputVideoLatent()
+    {
+        WGNodeData videoLatent = new(
+            ResolveReusableVideoLatentRoute(),
+            g,
+            WGNodeData.DT_LATENT_VIDEO,
+            ResolveVideoCompat())
+        {
+            Width = State.CurrentOutputMedia.Width,
+            Height = State.CurrentOutputMedia.Height,
+            Frames = State.CurrentOutputMedia.Frames,
+            FPS = State.CurrentOutputMedia.FPS
+        };
+        AttachSourceAudio(videoLatent);
+        return videoLatent;
+    }
+
+    private JArray ResolveReusableVideoLatentRoute()
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.ResolvePath(State.AvLatentPath)?.Node is LTXVConcatAVLatentNode concat
+            && concat.VideoLatent.Connection is INodeOutput concatVideo)
+        {
+            return WorkflowBridge.ToPath(concatVideo);
+        }
+        return new JArray(State.AudioLatentPath[0], 0);
+    }
+
     public WGNodeData CreateStageInputVae()
     {
         return new WGNodeData(

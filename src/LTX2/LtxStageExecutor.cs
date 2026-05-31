@@ -211,9 +211,7 @@ internal sealed class LtxStageExecutor(
 
         if (postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true)
         {
-            WGNodeData nativeStageInput = postVideoChain.CreateStageInput();
-            WGNodeData nativeVideoLatent = nativeStageInput.AsLatentImage(genInfo.Vae);
-            postVideoChain.AttachSourceAudio(nativeVideoLatent);
+            WGNodeData nativeVideoLatent = postVideoChain.CreateStageInputVideoLatent();
             return EnsureHasAudioWithLtxFps(nativeVideoLatent, genInfo, sourceMedia);
         }
 

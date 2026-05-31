@@ -20,6 +20,7 @@ public sealed record StageSpec(
 )
 {
     public bool IsLatentModelUpscale => HasUpscaleMethodPrefix("latentmodel-");
+    public bool IsLatentUpscale => HasUpscaleMethodPrefix("latent-");
     public bool IsPixelUpscale => HasUpscaleMethodPrefix("pixel-");
     public bool IsModelUpscale => HasUpscaleMethodPrefix("model-");
 

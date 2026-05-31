@@ -88,6 +88,57 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Chained_native_ltx_latent_upscale_uses_latent_upscale_by_node_without_vae_round_trip()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 2.0,
+                upscaleMethod: "latent-bislerp",
+                steps: 8));
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        LatentUpscaleByNode upscale = Assert.Single(bridge.Graph.NodesOfType<LatentUpscaleByNode>());
+        Assert.Equal("bislerp", upscale.UpscaleMethod.LiteralAsString());
+        Assert.Equal(2.0, upscale.ScaleBy.LiteralAsDouble());
+
+        // The latent method upscales in latent space, so it must not introduce the model-upscaler scaffolding.
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
+
+        // The prior stage's AV latent must be split by a single LTXVSeparateAVLatent feeding both the
+        // upscaled video branch and the reused audio latent — never two separates each using one output.
+        AssertNoAvLatentSplitTwice(bridge);
+    }
+
+    // A LATENT_AUDIOVIDEO tensor (e.g. a sampler output) split by more than one LTXVSeparateAVLatent is
+    // the duplicate-separate bug: one node's video and another node's audio are used, each leaving its
+    // other output dangling. Reusing a single separate (or reading a concat's pre-join tensors) avoids it.
+    private static void AssertNoAvLatentSplitTwice(WorkflowBridge bridge)
+    {
+        IEnumerable<IGrouping<string, LTXVSeparateAVLatentNode>> grouped = bridge.Graph
+            .NodesOfType<LTXVSeparateAVLatentNode>()
+            .Where(separate => separate.AvLatent.Connection is not null)
+            .GroupBy(separate => $"{separate.AvLatent.Connection.Node.Id}:{separate.AvLatent.Connection.SlotIndex}");
+
+        foreach (IGrouping<string, LTXVSeparateAVLatentNode> group in grouped)
+        {
+            string ids = string.Join(", ", group.Select(separate => separate.Id));
+            Assert.True(
+                group.Count() == 1,
+                $"AV latent '{group.Key}' is split by {group.Count()} LTXVSeparateAVLatent nodes ({ids}); expected exactly one.");
+        }
+    }
+
+    [Fact]
     public void Chained_native_ltx_generated_reference_tracks_previous_stage_output_and_skips_redundant_guide_reinjection()
     {
         using SwarmUiTestContext _ = new();

@@ -9,9 +9,6 @@ import {
 import type { RootDefaults } from "./types";
 import { utils } from "./utils";
 
-const isStageUpscaleOption = (value: string): boolean =>
-    !value.trim().toLowerCase().startsWith("latent-");
-
 const trimDomValue = (el: { value: string } | null | undefined): string =>
     `${el?.value ?? ""}`.trim();
 
@@ -49,16 +46,8 @@ export const getRootDefaults = (): RootDefaults => {
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
-    const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
-    const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const upscaleMethodValues: string[] = [];
-    const upscaleMethodLabels: string[] = [];
-    for (let i = 0; i < allUpscaleMethodValues.length; i++) {
-        if (isStageUpscaleOption(allUpscaleMethodValues[i])) {
-            upscaleMethodValues.push(allUpscaleMethodValues[i]);
-            upscaleMethodLabels.push(allUpscaleMethodLabels[i]);
-        }
-    }
+    const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
+    const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
 
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");

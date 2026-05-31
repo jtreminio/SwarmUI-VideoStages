@@ -533,7 +533,7 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             return source;
         }
 
-        if (isLtxv2Stage && stage.IsLatentModelUpscale)
+        if (isLtxv2Stage && (stage.IsLatentModelUpscale || stage.IsLatentUpscale))
         {
             g.CurrentMedia = source;
             return source;

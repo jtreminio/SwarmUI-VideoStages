@@ -906,7 +906,6 @@
   };
 
   // frontend/rootDefaults.ts
-  var isStageUpscaleOption = (value) => !value.trim().toLowerCase().startsWith("latent-");
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var firstPresentInput = (...ids) => {
     for (let i = 0; i < ids.length; i++) {
@@ -940,16 +939,8 @@
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
-    const allUpscaleMethodValues = utils.getSelectValues(upscaleMethod);
-    const allUpscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const upscaleMethodValues = [];
-    const upscaleMethodLabels = [];
-    for (let i = 0; i < allUpscaleMethodValues.length; i++) {
-      if (isStageUpscaleOption(allUpscaleMethodValues[i])) {
-        upscaleMethodValues.push(allUpscaleMethodValues[i]);
-        upscaleMethodLabels.push(allUpscaleMethodLabels[i]);
-      }
-    }
+    const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
+    const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
     const widthInput = firstPresentInput(

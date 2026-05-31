@@ -67,7 +67,7 @@ public class WorkflowGraphTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         INodeOutput latentOutput = bridge.ResolvePath(new JArray("200", 0));
 
-        IVaeDecode? decode = bridge.Graph.FindNearestDownstream<IVaeDecode>(latentOutput);
+        IVaeDecode decode = bridge.Graph.FindNearestDownstream<IVaeDecode>(latentOutput);
 
         Assert.NotNull(decode);
         Assert.Equal("202", decode.Id);

@@ -30,7 +30,7 @@ internal sealed class LtxConditioningPipeline(
     public LtxConditioningPipeline WithUpscaleIfNeeded(WGNodeData sourceMedia)
     {
         StageSpec stage = stageFrame.Stage;
-        if (stage.Upscale <= 1 || !stage.IsLatentModelUpscale)
+        if (stage.Upscale <= 1 || !(stage.IsLatentModelUpscale || stage.IsLatentUpscale))
         {
             return this;
         }
@@ -39,8 +39,9 @@ internal sealed class LtxConditioningPipeline(
         int baseHeight = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
         (int width, int height) = GetUpscaledDimensions(baseWidth, baseHeight, stage.Upscale);
 
-        string modelName = stage.UpscaleMethod["latentmodel-".Length..];
-        stageLatent = ApplyLatentModelUpscale(modelName, width, height);
+        stageLatent = stage.IsLatentUpscale
+            ? ApplyLatentUpscale(stage.UpscaleMethod["latent-".Length..], stage.Upscale, width, height)
+            : ApplyLatentModelUpscale(stage.UpscaleMethod["latentmodel-".Length..], width, height);
         stageFrame.ClipContext.Dimensions.Width = width;
         stageFrame.ClipContext.Dimensions.Height = height;
         return this;
@@ -150,6 +151,20 @@ internal sealed class LtxConditioningPipeline(
     }
 
     private static int AlignTo16(int value) => Math.Max(16, Math.Max(value, 16) / 16 * 16);
+
+    private WGNodeData ApplyLatentUpscale(string method, double scaleBy, int width, int height)
+    {
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        LatentUpscaleByNode upscale = bridge.AddNode(new LatentUpscaleByNode().With(
+            UpscaleMethod: method,
+            ScaleBy: scaleBy));
+        upscale.Samples.ConnectFromPath(bridge, stageLatent.Path);
+
+        WGNodeData upscaled = stageLatent.WithPath(upscale.LATENT, WGNodeData.DT_LATENT_VIDEO);
+        upscaled.Width = width;
+        upscaled.Height = height;
+        return upscaled;
+    }
 
     private WGNodeData ApplyLatentModelUpscale(string modelName, int width, int height)
     {
