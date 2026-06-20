@@ -18,7 +18,9 @@ internal static class WanStageReferenceHandler
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain)
     {
-        if (!VideoStageModelCompat.IsWanVideoModel(stage.Model) || clip.ImageRefs.Count == 0)
+        if (!VideoStageModelCompat.IsWanVideoModel(stage.Model)
+            || clip.ImageRefs.Count == 0
+            || stage.ClipStageIndex != 0)
         {
             return new WanGuideResolution(null, null);
         }

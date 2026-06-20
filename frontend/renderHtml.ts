@@ -48,7 +48,7 @@ import {
     type Stage,
 } from "./types";
 import { getRefSourceError } from "./validation";
-import { clipHasWanStage } from "./wanModel";
+import { clipHasWanStage, isWanVideoModelValue } from "./wanModel";
 
 const CONTROLNET_SOURCE_DROPDOWN_OPTIONS: ImageSourceOption[] =
     CONTROLNET_SOURCE_OPTIONS.map((value) => ({ value, label: value }));
@@ -616,8 +616,7 @@ export const renderStageRow = (
               controlNetStrengthDisabled,
           )
         : "";
-    const wanClip = clipHasWanStage(clip);
-    const refStrengthFields = wanClip
+    const refStrengthFields = isWanVideoModelValue(stage.model)
         ? ""
         : clip.refs
               .map((_, refIdx) =>

@@ -3482,8 +3482,7 @@ ${optionHtml}
       STAGE_CONTROLNET_STRENGTH_STEP,
       controlNetStrengthDisabled
     ) : "";
-    const wanClip = clipHasWanStage(clip);
-    const refStrengthFields = wanClip ? "" : clip.refs.map(
+    const refStrengthFields = isWanVideoModelValue(stage.model) ? "" : clip.refs.map(
       (_, refIdx) => stageSliderField(
         stageRefStrengthField(refIdx),
         `Reference Image ${refIdx} Strength`,

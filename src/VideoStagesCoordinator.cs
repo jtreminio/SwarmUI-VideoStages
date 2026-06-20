@@ -52,6 +52,8 @@ internal sealed class VideoStagesCoordinator(
                 clipAudioMaps);
         }
 
+        g.LastID = Math.Max(g.LastID, Constants.StagedNodeIdReservationFloor);
+
         stageSequenceRunner.Run(
             clips,
             clipAudioMaps.NativeAudio,

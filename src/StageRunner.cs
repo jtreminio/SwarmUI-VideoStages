@@ -180,11 +180,111 @@ internal class StageRunner(
 
         g.CreateImageToVideo(genInfo);
         WanLatentReuse.ReapplyToSampler(g, generationPlan.WanLatentReuse);
+        PruneDiscardedSourceLatentChain(generationPlan.WanLatentReuse);
+        CollapseRedundantWanContinuationNodes(genInfo, sourceMedia, guideMedia);
         ApplyContinuationEndStep(stage);
 
         g.CurrentVae = genInfo.Vae;
         StampCurrentMediaMetadata(sourceMedia, genInfo);
         RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
+    }
+
+    private void PruneDiscardedSourceLatentChain(WanLatentReuse.Capture capture)
+    {
+        if (string.IsNullOrEmpty(capture?.DiscardedSourceLatentNodeId))
+        {
+            return;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        if (bridge.Graph.GetNode(capture.DiscardedSourceLatentNodeId) is null)
+        {
+            return;
+        }
+
+        HashSet<string> protectedNodes = [];
+        AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
+        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, capture.DiscardedSourceLatentNodeId, protectedNodes);
+    }
+
+    private void CollapseRedundantWanContinuationNodes(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData sourceMedia,
+        WGNodeData guideMedia)
+    {
+        if (!VideoStageModelCompat.IsWanVideoModel(genInfo.VideoModel)
+            || sourceMedia?.DataType != WGNodeData.DT_VIDEO
+            || guideMedia?.Path is not JArray { Count: 2 } guidePath)
+        {
+            return;
+        }
+
+        int? sourceWidth = sourceMedia.Width;
+        int? sourceHeight = sourceMedia.Height;
+        int? sourceFrames = sourceMedia.Frames;
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        INodeOutput source = bridge.ResolvePath(guidePath);
+        if (source is null)
+        {
+            return;
+        }
+
+        bool collapsedAny = true;
+        while (collapsedAny)
+        {
+            collapsedAny = false;
+            foreach ((ComfyNode consumerNode, INodeInput _) in bridge.Graph.FindInputsConnectedTo(source).ToList())
+            {
+                if (consumerNode is ImageScaleNode scale
+                    && IsIdentityImageScale(scale, sourceWidth, sourceHeight))
+                {
+                    CollapsePassthroughNode(bridge, scale, scale.Image.Connection, scale.IMAGE);
+                    collapsedAny = true;
+                    break;
+                }
+                if (consumerNode is ImageFromBatchNode batch
+                    && IsFullLengthImageFromBatch(batch, sourceFrames))
+                {
+                    CollapsePassthroughNode(bridge, batch, batch.Image.Connection, batch.IMAGE);
+                    collapsedAny = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    private static bool IsIdentityImageScale(ImageScaleNode scale, int? width, int? height)
+    {
+        return width.HasValue && height.HasValue
+            && scale.Width.LiteralAsInt() == width
+            && scale.Height.LiteralAsInt() == height;
+    }
+
+    private static bool IsFullLengthImageFromBatch(ImageFromBatchNode batch, int? sourceFrames)
+    {
+        return sourceFrames is int frames and > 1
+            && batch.BatchIndex.LiteralAsInt() == 0
+            && batch.Length.LiteralAsInt() is int length
+            && length >= frames;
+    }
+
+    private static void CollapsePassthroughNode(
+        WorkflowBridge bridge,
+        ComfyNode node,
+        INodeOutput upstream,
+        INodeOutput nodeOutput)
+    {
+        if (upstream is null)
+        {
+            return;
+        }
+        foreach ((ComfyNode consumerNode, INodeInput consumerInput) in bridge.Graph.FindInputsConnectedTo(nodeOutput).ToList())
+        {
+            consumerInput.ConnectToUntyped(upstream);
+            bridge.SyncNode(consumerNode);
+        }
+        bridge.RemoveNode(node);
     }
 
     private void ApplyConditioningHandoff(
@@ -370,6 +470,10 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
             g.CurrentMedia = sourceMedia.WithPath(fromBatch.IMAGE);
             g.CurrentMedia.Frames = Math.Min(genInfo.Frames.Value, g.CurrentMedia.Frames ?? int.MaxValue);
             g.CurrentMedia = g.CurrentMedia.AsLatentImage(genInfo.Vae);
+            if (g.CurrentMedia?.Path is JArray { Count: 2 } discardedLatentPath)
+            {
+                wanLatentReuse.DiscardedSourceLatentNodeId = $"{discardedLatentPath[0]}";
+            }
         };
     }
 

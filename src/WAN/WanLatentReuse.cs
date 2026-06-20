@@ -12,6 +12,7 @@ internal static class WanLatentReuse
     internal sealed class Capture
     {
         public JArray LatentPath { get; set; }
+        public string DiscardedSourceLatentNodeId { get; set; }
     }
 
     internal static bool TryResolveReusableLatent(

@@ -2599,6 +2599,49 @@ describe("videoStageEditor", () => {
             ).toBeNull();
         });
 
+        it("keeps ref strength sliders on a non-WAN stage when a later stage is WAN", async () => {
+            initEditor();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-ref"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            (
+                document.querySelector(
+                    '[data-clip-action="add-stage"]',
+                ) as HTMLButtonElement
+            ).click();
+            await flushReRender();
+
+            // Set ONLY stage 1 to a WAN model; stage 0 stays a non-WAN (LTX) stage.
+            const stage1Model = must(
+                document.querySelector(
+                    '[data-stage-field="model"][data-stage-idx="1"]',
+                ) as HTMLSelectElement | null,
+            );
+            const opt = document.createElement("option");
+            opt.value = "wan-2_2-image2video-14b";
+            stage1Model.appendChild(opt);
+            stage1Model.value = "wan-2_2-image2video-14b";
+            dispatchSimulatedUserFieldChange(stage1Model);
+            await flushReRender();
+
+            // Non-WAN stage 0 keeps its ref-strength slider; WAN stage 1 hides it.
+            expect(
+                document.querySelector(
+                    '[data-stage-field="refStrength_0"][data-stage-idx="0"]',
+                ),
+            ).not.toBeNull();
+            expect(
+                document.querySelector(
+                    '[data-stage-field="refStrength_0"][data-stage-idx="1"]',
+                ),
+            ).toBeNull();
+        });
+
         it("updates stored ControlNet strength when its stage slider moves", async () => {
             setImageToVideoWorkflow();
             initEditor();
