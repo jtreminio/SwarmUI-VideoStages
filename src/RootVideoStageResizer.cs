@@ -74,7 +74,7 @@ internal sealed class RootVideoStageResizer(
         {
             return;
         }
-        if (CurrentMediaFeedsSaveImage())
+        if (g.GetVideoStagesSpec().IsTextToVideo || CurrentMediaFeedsSaveImage())
         {
             SetCurrentMediaDimensions(width, height);
             return;

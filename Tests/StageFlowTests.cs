@@ -406,60 +406,73 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 11.4)])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static WorkflowGenerator.WorkflowGenStep SeedTextToVideoLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
-        new(g =>
+    private static void SeedTextToVideoLtxVideoChain(WorkflowGenerator g, bool attachAudioToCurrentMedia)
+    {
+        T2IModel videoModel = g.UserInput.Get(T2IParamTypes.Model, null);
+        g.FinalLoadedModel = videoModel;
+        g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
+
+        using var bridge = BridgeSync.For(g);
+
+        UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
+        g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
+        g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
+
+        UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
+        g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
+
+        UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
+        g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
+
+        SwarmKSamplerNode avLatent = bridge.AddNode(new SwarmKSamplerNode(), "200");
+
+        LTXVSeparateAVLatentNode separate = new();
+        separate.AvLatent.ConnectTo(avLatent.LATENT);
+        bridge.AddNode(separate, "201");
+
+        var videoDecode = new VAEDecodeTiledNode()
+            .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
+        videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
+        videoDecode.Samples.ConnectTo(separate.VideoLatent);
+        bridge.AddNode(videoDecode, "202");
+
+        LTXVAudioVAEDecodeNode audioDecode = new();
+        audioDecode.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
+        audioDecode.Samples.ConnectTo(separate.AudioLatent);
+        bridge.AddNode(audioDecode, "203");
+
+        var save = new SwarmSaveAnimationWSNode()
+            .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
+        save.Images.ConnectTo(videoDecode.IMAGE);
+        save.Audio.ConnectTo(audioDecode.Audio);
+        bridge.AddNode(save, "9");
+
+        g.CurrentMedia = videoDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_VIDEO,
+            width: 512, height: 512, frames: 25, fps: 24);
+
+        if (attachAudioToCurrentMedia)
         {
-            T2IModel videoModel = g.UserInput.Get(T2IParamTypes.Model, null);
-            g.FinalLoadedModel = videoModel;
-            g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
+            g.CurrentMedia.AttachedAudio = audioDecode.Audio.ToWGAttachedAudio(g);
+        }
+    }
 
-            using var bridge = BridgeSync.For(g);
+    private static WorkflowGenerator.WorkflowGenStep SeedTextToVideoLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
+        new(g => SeedTextToVideoLtxVideoChain(g, attachAudioToCurrentMedia), 11);
 
-            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
-            g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
-            g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
-
-            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
-            g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
-
-            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
-            g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
-
-            SwarmKSamplerNode avLatent = bridge.AddNode(new SwarmKSamplerNode(), "200");
-
-            LTXVSeparateAVLatentNode separate = new();
-            separate.AvLatent.ConnectTo(avLatent.LATENT);
-            bridge.AddNode(separate, "201");
-
-            var videoDecode = new VAEDecodeTiledNode()
-                .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
-            videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
-            videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            bridge.AddNode(videoDecode, "202");
-
-            LTXVAudioVAEDecodeNode audioDecode = new();
-            audioDecode.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
-            audioDecode.Samples.ConnectTo(separate.AudioLatent);
-            bridge.AddNode(audioDecode, "203");
-
-            var save = new SwarmSaveAnimationWSNode()
-                .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
-            save.Images.ConnectTo(videoDecode.IMAGE);
-            save.Audio.ConnectTo(audioDecode.Audio);
-            bridge.AddNode(save, "9");
-
-            g.CurrentMedia = videoDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_VIDEO,
-                width: 512, height: 512, frames: 25, fps: 24);
-
-            if (attachAudioToCurrentMedia)
-            {
-                g.CurrentMedia.AttachedAudio = audioDecode.Audio.ToWGAttachedAudio(g);
-            }
-        }, 11);
+    // Native text-to-video where the main model IS the video model: the full video is produced by
+    // core sampling and is already CurrentMedia before VideoStages' pre-core capture (priority
+    // 10.95). Seeding at priority 6 mirrors that, so the video becomes the pre-core media that the
+    // root-stage resizer and replacement operate on (rather than being dropped as image-to-video).
+    private static WorkflowGenerator.WorkflowGenStep SeedNativeTextToVideoChainAsPreCoreMediaStep(bool attachAudioToCurrentMedia) =>
+        new(g => SeedTextToVideoLtxVideoChain(g, attachAudioToCurrentMedia), 6);
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildTextToVideoSteps(bool attachAudioToCurrentMedia) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedTextToVideoLtxVideoChainStep(attachAudioToCurrentMedia)])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeTextToVideoStepsWithPreCoreVideo(bool attachAudioToCurrentMedia) =>
+        new[] { SeedNativeTextToVideoChainAsPreCoreMediaStep(attachAudioToCurrentMedia) }
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithCurrentVaeMismatch(T2IModel baseModel, bool attachAudioToCurrentMedia) =>

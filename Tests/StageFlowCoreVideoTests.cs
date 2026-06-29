@@ -1438,6 +1438,78 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Text_to_video_root_model_with_configured_root_dimensions_replaces_core_stage_and_keeps_single_save()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JArray(
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 8)))
+            .ToString();
+
+        T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
+        // The native text-to-video chain is the pre-core media at 512x512; configuring different
+        // root dimensions forces the root-stage resizer. It previously inserted an ImageScale node
+        // that detached CurrentMedia from the core decode output, so RetargetExistingAnimationSaves
+        // could not find the core save node and the whole core path survived next to a second
+        // VideoStages save.
+        input.Set(VideoStagesExtension.RootWidth, 384);
+        input.Set(VideoStagesExtension.RootHeight, 512);
+
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // The replacement stage must take over the single existing save node rather than the
+        // core path surviving alongside a second VideoStages save.
+        Assert.Single(SamplerNodesOrdered(bridge));
+        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.False(workflow.ContainsKey("200"));
+        Assert.False(workflow.ContainsKey("202"));
+        Assert.Empty(bridge.Graph.NodesOfType<ImageScaleNode>());
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.Equal(384, generator.CurrentMedia.Width);
+        Assert.Equal(512, generator.CurrentMedia.Height);
+        Assert.True(JToken.DeepEquals(
+            WorkflowBridge.ToPath(saveNode.Images.Connection!),
+            generator.CurrentMedia.Path));
+    }
+
+    [Fact]
+    public void Text_to_video_root_stage_uses_clip_duration_not_core_video_frame_count()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = new JObject
+        {
+            ["Clips"] = new JArray(
+                new JObject
+                {
+                    ["Duration"] = 10.0,
+                    ["Stages"] = new JArray(
+                        MakeStage(models.VideoModel.Name, "Generated", steps: 8))
+                })
+        }.ToString();
+
+        T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
+        input.Set(VideoStagesExtension.RootFPS, 24);
+
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // duration 10s * 24fps -> 240, aligned to 8 + 1 = 241. The discarded core video's 25 frames
+        // must not override the clip's configured length for the replacement root stage.
+        EmptyLTXVLatentVideoNode emptyLatentNode = Assert.Single(bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
+        Assert.Equal(241, emptyLatentNode.Length.LiteralAsInt());
+        LTXVEmptyLatentAudioNode emptyAudioNode = Assert.Single(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+        Assert.Equal(241, emptyAudioNode.FramesNumber.LiteralAsInt());
+    }
+
+    [Fact]
     public void Text_to_video_chained_ltx_stages_without_upload_refs_reuse_av_latent_directly()
     {
         using SwarmUiTestContext _ = new();

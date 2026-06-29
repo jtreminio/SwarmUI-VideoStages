@@ -102,7 +102,7 @@ internal class StageRunner(
             Logs.Error($"VideoStages: Stage {stage.Id} could not resolve source media.");
             return null;
         }
-        StageGenerationPlan plan = BuildGenInfo(clipContext, stage, sectionId, sourceMedia);
+        StageGenerationPlan plan = BuildGenInfo(clipContext, stage, sectionId, sourceMedia, replaceTextToVideoRootStage);
         if (plan is null)
         {
             return null;
@@ -381,7 +381,8 @@ internal class StageRunner(
         ClipContext clipContext,
         StageSpec stage,
         int sectionId,
-        WGNodeData sourceMedia)
+        WGNodeData sourceMedia,
+        bool replaceTextToVideoRootStage)
     {
         ClipSpec clip = clipContext.Clip;
         ClipDimensionState dimensions = clipContext.Dimensions;
@@ -412,7 +413,7 @@ internal class StageRunner(
             VideoModel = videoModel,
             VideoSwapModel = null,
             VideoSwapPercent = 0.5,
-            Frames = ResolveFrames(sourceMedia, sectionId),
+            Frames = ResolveFrames(sourceMedia, sectionId, replaceTextToVideoRootStage),
             VideoCFG = stage.CfgScale,
             VideoFPS = spec.FPS,
             Width = sourceMedia.Width ?? dimensions.Width,
@@ -429,9 +430,9 @@ internal class StageRunner(
         return new StageGenerationPlan(genInfo, applySourceVideoLatent, wanLatentReuse);
     }
 
-    private int? ResolveFrames(WGNodeData sourceMedia, int sectionId)
+    private int? ResolveFrames(WGNodeData sourceMedia, int sectionId, bool replaceTextToVideoRootStage = false)
     {
-        if (sourceMedia.Frames.HasValue)
+        if (!replaceTextToVideoRootStage && sourceMedia.Frames.HasValue)
         {
             return sourceMedia.Frames;
         }
@@ -443,7 +444,7 @@ internal class StageRunner(
         {
             return textToVideoFrames;
         }
-        return null;
+        return sourceMedia.Frames;
     }
 
 private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentApplier(
