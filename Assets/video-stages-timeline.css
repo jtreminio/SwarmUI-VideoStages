@@ -88,7 +88,6 @@
     color: var(--text-soft);
     white-space: nowrap;
 }
-.vst-readout-time,
 .vst-readout-sel {
     color: var(--emphasis);
     font-weight: 500;
@@ -270,54 +269,6 @@
     color: var(--text);
 }
 
-.vst-scale {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: var(--vst-header-w);
-    right: 0;
-    pointer-events: none;
-    z-index: 7;
-}
-.vst-playhead {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    margin-left: -1px;
-    background: var(--emphasis);
-    pointer-events: none;
-}
-.vst-playhead-cap {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 14px;
-    height: calc(var(--vst-ruler-h) - 9px);
-    margin-left: -7px;
-    background: var(--emphasis);
-    border-radius: 3px 3px 0 0;
-    box-shadow: 0 0 6px color-mix(in srgb, var(--emphasis) 45%, transparent);
-    cursor: ew-resize;
-    pointer-events: auto;
-    z-index: 3;
-}
-.vst-playhead-cap::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -5px;
-    border: 5px solid transparent;
-    border-top-color: var(--emphasis);
-}
-.vst-playhead-cap:hover {
-    background: color-mix(in srgb, var(--emphasis) 80%, var(--text));
-}
-.vst-playhead-cap:hover::after {
-    border-top-color: color-mix(in srgb, var(--emphasis) 80%, var(--text));
-}
-
 .vst-track-row {
     display: flex;
     border-bottom: 1px solid var(--vst-hairline);
@@ -447,11 +398,6 @@
         0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent),
         0 4px 14px color-mix(in srgb, var(--shadow) 40%, transparent);
 }
-.vst-region-hover {
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent),
-        0 0 0 1px var(--box-selected-border, var(--emphasis)),
-        0 4px 14px color-mix(in srgb, var(--shadow) 40%, transparent);
-}
 .vst-region-selected,
 .vst-region-selected:hover {
     border-color: color-mix(
@@ -477,11 +423,8 @@
 }
 .vst-region-tiny .vst-region-head,
 .vst-region-tiny .vst-badges,
-.vst-region-tiny .vst-prompt,
 .vst-region-tiny .vst-region-controls,
-.vst-region-tiny .vst-region-resize,
-.vst-region-tiny .vst-region-resize-left,
-.vst-region-tiny .vst-boundary-chip {
+.vst-region-tiny .vst-region-resize {
     display: none;
 }
 
@@ -582,60 +525,6 @@
     color: var(--emphasis);
 }
 
-.vst-prompt {
-    position: absolute;
-    left: 8px;
-    right: 8px;
-    bottom: 6px;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: var(--vst-font-xs);
-    line-height: 1.35;
-    color: var(--text);
-    background: color-mix(in srgb, var(--background) 55%, transparent);
-    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
-    border-radius: 4px;
-    padding: 2px 6px;
-}
-.vst-prompt-text {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-}
-.vst-prompt-edit {
-    flex: none;
-    background: transparent;
-    border: none;
-    color: var(--text-soft);
-    cursor: pointer;
-    font-size: var(--vst-font-sm);
-    line-height: 1;
-    padding: 1px 4px;
-    border-radius: 3px;
-    opacity: 0;
-    transition: opacity var(--vst-ease), color var(--vst-ease),
-        background var(--vst-ease);
-}
-.vst-region:hover .vst-prompt-edit,
-.vst-prompt-edit:focus-visible {
-    opacity: 1;
-}
-.vst-prompt-edit:hover {
-    color: var(--text);
-    background: color-mix(in srgb, var(--emphasis) 14%, transparent);
-}
-.vst-prompt-muted {
-    color: var(--text-soft);
-    font-style: italic;
-    border-style: dashed;
-    background: transparent;
-}
-
 .vst-region-controls {
     position: absolute;
     top: 4px;
@@ -699,112 +588,31 @@
     background: color-mix(in srgb, var(--red) 16%, var(--background));
 }
 
-.vst-region-resize,
-.vst-region-resize-left {
+.vst-region-resize {
     position: absolute;
     top: 0;
     bottom: 0;
     width: 7px;
     z-index: 6;
     transition: background var(--vst-ease);
-}
-.vst-region-resize {
     right: 0;
     cursor: ew-resize;
     border-radius: 0 var(--vst-radius) var(--vst-radius) 0;
 }
-.vst-region-resize-left {
-    left: 0;
-    cursor: col-resize;
-    border-radius: var(--vst-radius) 0 0 var(--vst-radius);
-}
-.vst-region-resize:hover,
-.vst-region-resize-left:hover {
+.vst-region-resize:hover {
     background: color-mix(in srgb, var(--text) 18%, transparent);
 }
 .vst-resizing,
 .vst-resizing .vst-region {
     cursor: ew-resize;
 }
-.vst-rolling,
-.vst-rolling .vst-region {
-    cursor: col-resize;
-}
 .vst-resizing,
-.vst-rolling,
 .vst-dragging {
     user-select: none;
 }
 .vst-dragging,
 .vst-dragging .vst-region {
     cursor: grabbing;
-}
-.vst-roll-readout {
-    position: absolute;
-    top: 2px;
-    left: 0;
-    transform: translateX(-50%);
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-3xs);
-    background: var(--vst-panel-2);
-    border: 1px solid var(--vst-hairline);
-    border-radius: 3px;
-    padding: 1px 5px;
-    color: var(--text);
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 6;
-}
-
-.vst-boundary-chip {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    transform: translate(50%, -50%);
-    z-index: 7;
-    width: 18px;
-    height: 18px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    font-size: var(--vst-font-sm);
-    line-height: 1;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    color: var(--text-soft);
-    background: var(--vst-panel);
-    cursor: pointer;
-    opacity: 0.85;
-    transition: border-color var(--vst-ease), color var(--vst-ease),
-        background var(--vst-ease), opacity var(--vst-ease);
-}
-.vst-boundary-chip:hover {
-    opacity: 1;
-    border-color: var(--emphasis);
-    color: var(--text);
-}
-.vst-boundary-chip:focus-visible {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
-}
-.vst-boundary-continue,
-.vst-boundary-crossfade {
-    opacity: 1;
-    color: var(--text);
-    border-color: color-mix(in srgb, var(--emphasis) 55%, transparent);
-    background: color-mix(in srgb, var(--emphasis) 18%, var(--background));
-}
-.vst-boundary-crossfade {
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--emphasis) 30%, var(--background)) 0%,
-        color-mix(in srgb, var(--emphasis) 8%, var(--background)) 100%
-    );
-    border-style: dashed;
-}
-.vst-boundary-glyph {
-    pointer-events: none;
 }
 
 .vst-keys {
@@ -986,104 +794,8 @@
     padding: 6px 14px;
 }
 
-.vst-ltx-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: color-mix(in srgb, var(--background) 62%, transparent);
-    backdrop-filter: blur(2px);
-}
-.vst-ltx-card {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: min(720px, 92vw);
-    max-height: 88vh;
-    padding: 18px;
-    border: 1px solid var(--light-border);
-    border-radius: var(--vst-radius, 8px);
-    background: var(--background-panel, var(--background-gray));
-    color: var(--text);
-    box-shadow: 0 16px 48px color-mix(in srgb, var(--shadow) 70%, transparent);
-}
-.vst-ltx-title {
-    font-weight: 700;
-    font-size: var(--vst-font-md, 14px);
-    letter-spacing: 0.01em;
-    color: var(--text);
-}
-.vst-ltx-subtitle {
-    margin-top: -8px;
-    font-size: 11px;
-    line-height: 1.4;
-    color: var(--text-soft);
-}
-.vst-ltx-textarea {
-    width: 100%;
-    min-height: 320px;
-    resize: vertical;
-    padding: 9px 10px;
-    border: 1px solid var(--light-border);
-    border-radius: var(--vst-radius-sm, 5px);
-    background: var(--background);
-    color: var(--text);
-    font-family: var(--font-monospace, ui-monospace, Menlo, Consolas, monospace);
-    font-size: 12px;
-    line-height: 1.45;
-    white-space: pre;
-    overflow: auto;
-}
-.vst-ltx-textarea:focus-visible {
-    outline: none;
-    border-color: var(--emphasis);
-    box-shadow: inset 0 0 0 1px
-        color-mix(in srgb, var(--emphasis) 55%, transparent);
-}
-.vst-ltx-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-}
-.vst-ltx-btn {
-    font-size: 12px;
-    font-weight: 500;
-    padding: 6px 14px;
-    border-radius: var(--vst-radius-sm, 5px);
-    border: 1px solid var(--light-border);
-    color: var(--text);
-    background: var(--button-background, var(--background));
-    cursor: pointer;
-    transition: border-color var(--vst-ease, 150ms ease),
-        background var(--vst-ease, 150ms ease);
-}
-.vst-ltx-btn:hover {
-    border-color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 12%, var(--background));
-}
-.vst-ltx-btn:focus-visible {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
-}
-.vst-ltx-btn-primary {
-    background: var(--emphasis);
-    border-color: var(--emphasis);
-    color: var(--emphasis-text, var(--button-text));
-    font-weight: 600;
-}
-.vst-ltx-btn-primary:hover {
-    background: color-mix(in srgb, var(--emphasis) 85%, var(--emphasis-text, var(--button-text)));
-    border-color: color-mix(in srgb, var(--emphasis) 85%, var(--emphasis-text, var(--button-text)));
-}
-
 @media (prefers-reduced-motion: reduce) {
-    .vst-timeline *,
-    .vst-ltx-overlay,
-    .vst-ltx-card,
-    .vst-ltx-card * {
+    .vst-timeline * {
         transition-duration: 0.01ms !important;
         animation-duration: 0.01ms !important;
     }
