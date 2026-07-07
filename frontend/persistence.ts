@@ -1,3 +1,4 @@
+import { assignMissingHues } from "./clipColor";
 import { videoStagesDebugLog } from "./debugLog";
 import { buildDefaultClip, normalizeClip } from "./normalization";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
@@ -24,6 +25,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
         (clip): StoredClip => ({
             expanded: clip.expanded,
             skipped: clip.skipped,
+            hue: clip.hue,
             duration: clip.duration,
             audioSource: clip.audioSource,
             controlNetSource: clip.controlNetSource,
@@ -101,6 +103,7 @@ const parseSerializedState = (
                 getDefaultStageModel,
             ),
         );
+        assignMissingHues(clips);
         return rootConfig(fallbackDefaults, clips);
     } catch {
         return null;
@@ -133,6 +136,7 @@ export const saveState = (
     callbacks?: PersistenceCallbacks,
     options?: SaveStateOptions,
 ): void => {
+    assignMissingHues(state.clips);
     const serialized = serializeStateForStorage(state);
     lastSerializedState = serialized;
     const willNotifyDom = options?.notifyDomChange !== false;

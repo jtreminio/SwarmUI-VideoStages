@@ -24,6 +24,8 @@ import { DEFAULT_PX_PER_SECOND } from "./timelineView";
 const REGION_SELECTOR = ".vst-region[data-clip-idx]";
 const REGION_ACTION_SELECTOR = "[data-vst-region-action]";
 const REGION_RESIZE_SELECTOR = ".vst-region-resize";
+const CLIP_SHIFT_SELECTOR =
+    ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
 const KEY_SELECTOR = ".vst-key[data-ref-idx]";
 const KEY_DELETE_SELECTOR = "[data-vst-key-action='delete']";
 
@@ -76,6 +78,26 @@ export const parseClipIdx = (el: Element | null): number | null => {
     }
     const idx = Number.parseInt(raw, 10);
     return Number.isInteger(idx) && idx >= 0 ? idx : null;
+};
+
+const shiftClipsAfter = (
+    body: HTMLElement,
+    idx: number,
+    deltaPx: number,
+): void => {
+    for (const el of body.querySelectorAll<HTMLElement>(CLIP_SHIFT_SELECTOR)) {
+        const elIdx = parseClipIdx(el);
+        if (elIdx !== null && elIdx > idx) {
+            el.style.transform =
+                deltaPx !== 0 ? `translateX(${deltaPx}px)` : "";
+        }
+    }
+};
+
+const clearClipShifts = (body: HTMLElement): void => {
+    for (const el of body.querySelectorAll<HTMLElement>(CLIP_SHIFT_SELECTOR)) {
+        el.style.transform = "";
+    }
 };
 
 export const parseRefIdx = (el: Element | null): number | null => {
@@ -253,6 +275,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         if (resizeState) {
             resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
         }
+        clearClipShifts(body);
         resizeState = null;
         body.classList.remove(RESIZING_CLASS);
     };
@@ -463,6 +486,11 @@ export const createTimelineLinking = (): TimelineLinking => {
             );
             body.classList.add(RESIZING_CLASS);
             resizeState.el.style.width = `${width}px`;
+            shiftClipsAfter(
+                body,
+                resizeState.idx,
+                width - resizeState.originalWidthPx,
+            );
             return;
         }
         if (!dragState) {

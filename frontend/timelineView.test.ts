@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import {
-    CLIP_HUES,
     clampPxPerSecond,
     computeFitPxPerSecond,
     computeRegionLayout,
@@ -19,10 +18,12 @@ const makeClip = (
     stages: number,
     refs: number,
     skipped = false,
+    hue = 210,
 ): Clip =>
     ({
         duration,
         skipped,
+        hue,
         stages: Array.from({ length: stages }, () => ({})),
         refs: Array.from({ length: refs }, () => ({})),
     }) as unknown as Clip;
@@ -97,15 +98,6 @@ describe("waveBarHeights", () => {
 
     it("varies bars per clip so adjacent lanes don't render identically", () => {
         expect(waveBarHeights(0, 16)).not.toEqual(waveBarHeights(1, 16));
-    });
-});
-
-describe("clip hues", () => {
-    it("ships exactly four hues for the clipColorIndex 4-cycle", () => {
-        expect(CLIP_HUES).toHaveLength(4);
-        for (const hue of CLIP_HUES) {
-            expect(hue).toMatch(/^#[0-9a-f]{6}$/i);
-        }
     });
 });
 
@@ -351,21 +343,18 @@ describe("renderTimeline (DOM)", () => {
         expect(redos).toBe(1);
     });
 
-    it("stamps a --clip-hue per region, cycling the 4-hue palette", () => {
+    it("stamps each region's --clip-hue from the clip's own persistent hue", () => {
         renderTimeline(body, [
-            makeClip(1, 1, 0),
-            makeClip(1, 1, 0),
-            makeClip(1, 1, 0),
-            makeClip(1, 1, 0),
-            makeClip(1, 1, 0),
+            makeClip(1, 1, 0, false, 40),
+            makeClip(1, 1, 0, false, 200),
+            makeClip(1, 1, 0, false, 300),
         ]);
         const regions = body.querySelectorAll<HTMLElement>(".vst-region");
         const hueOf = (el: HTMLElement): string | undefined =>
-            el.getAttribute("style")?.match(/--clip-hue:(#[0-9a-f]{6})/i)?.[1];
-        expect(hueOf(regions[0])).toBe(CLIP_HUES[0]);
-        expect(hueOf(regions[1])).toBe(CLIP_HUES[1]);
-        expect(hueOf(regions[3])).toBe(CLIP_HUES[3]);
-        expect(hueOf(regions[4])).toBe(CLIP_HUES[0]);
+            el.getAttribute("style")?.match(/--clip-hue:(hsl\([^)]*\))/i)?.[1];
+        expect(hueOf(regions[0])).toBe("hsl(40 65% 55%)");
+        expect(hueOf(regions[1])).toBe("hsl(200 65% 55%)");
+        expect(hueOf(regions[2])).toBe("hsl(300 65% 55%)");
     });
 
     it("renders the audio lane only when a clip has a non-Native audio source", () => {

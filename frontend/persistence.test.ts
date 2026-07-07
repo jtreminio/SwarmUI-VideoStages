@@ -35,6 +35,7 @@ describe("persistence", () => {
                 {
                     expanded: true,
                     skipped: false,
+                    hue: 210,
                     duration: 3,
                     audioSource: "Native",
                     controlNetSource: "ControlNet 2",

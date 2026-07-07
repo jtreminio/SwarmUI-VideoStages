@@ -750,9 +750,74 @@
     autoSelectWidth(select);
   };
 
+  // frontend/clipColor.ts
+  var HUE_MIN = 0;
+  var HUE_MAX = 359;
+  var HUE_RANGE = 360;
+  var BASE_HUE = 210;
+  var UNASSIGNED_HUE = -1;
+  var HUE_SATURATION = 65;
+  var HUE_LIGHTNESS = 55;
+  var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
+  var normalizeStoredHue = (value) => {
+    if (value == null || value === "") {
+      return UNASSIGNED_HUE;
+    }
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) {
+      return UNASSIGNED_HUE;
+    }
+    return (Math.round(num) % HUE_RANGE + HUE_RANGE) % HUE_RANGE;
+  };
+  var hueDistance = (a, b) => {
+    const d = Math.abs(a - b) % HUE_RANGE;
+    return d > 180 ? HUE_RANGE - d : d;
+  };
+  var pickDistinctHue = (existing) => {
+    const inUse = existing.filter(isAssignedHue);
+    if (inUse.length === 0) {
+      return BASE_HUE;
+    }
+    let best = 0;
+    let bestScore = -1;
+    for (let hue = HUE_MIN; hue <= HUE_MAX; hue++) {
+      let minDist = 180;
+      for (const used of inUse) {
+        const d = hueDistance(hue, used);
+        if (d < minDist) {
+          minDist = d;
+        }
+      }
+      if (minDist > bestScore) {
+        bestScore = minDist;
+        best = hue;
+      }
+    }
+    return best;
+  };
+  var assignMissingHues = (clips) => {
+    const assigned = [];
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        assigned.push(clip.hue);
+      }
+    }
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        continue;
+      }
+      const hue = pickDistinctHue(assigned);
+      clip.hue = hue;
+      assigned.push(hue);
+    }
+  };
+  var clipHueCss = (hue) => {
+    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
+    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
+  };
+
   // frontend/renderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var clipColorIndex = (clipIndex) => clipIndex % 4 + 1;
   var FRAME_ALIGNMENT = 8;
   var framesForClip = (durationSeconds, fps) => Math.max(
     1,
@@ -961,6 +1026,8 @@
     return {
       expanded: true,
       skipped: false,
+      // Assigned a distinct hue by assignMissingHues on the next save/load.
+      hue: UNASSIGNED_HUE,
       duration: snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
@@ -1193,6 +1260,7 @@
     const clip = {
       expanded: normalizeExpanded(rawClip),
       skipped: !!rawClip.skipped,
+      hue: normalizeStoredHue(rawClip.hue),
       duration,
       audioSource: audioSource2,
       controlNetSource: normalizeControlNetSource(
@@ -1328,6 +1396,7 @@
     (clip) => ({
       expanded: clip.expanded,
       skipped: clip.skipped,
+      hue: clip.hue,
       duration: clip.duration,
       audioSource: clip.audioSource,
       controlNetSource: clip.controlNetSource,
@@ -1384,6 +1453,7 @@
           getDefaultStageModel
         )
       );
+      assignMissingHues(clips);
       return rootConfig(fallbackDefaults, clips);
     } catch {
       return null;
@@ -1409,6 +1479,7 @@
     return rootConfig(defaults, []);
   };
   var saveState = (state, callbacks, options) => {
+    assignMissingHues(state.clips);
     const serialized = serializeStateForStorage(state);
     lastSerializedState = serialized;
     const willNotifyDom = options?.notifyDomChange !== false;
@@ -1644,12 +1715,6 @@
   var MAX_PX_PER_SECOND = 400;
   var ZOOM_FACTOR = 1.25;
   var TRACK_HEADER_W_PX = 168;
-  var CLIP_HUES = [
-    "#009be6",
-    "#c797ff",
-    "#009b9b",
-    "#ff8a8b"
-  ];
   var waveBarHeights = (clipIdx, count) => {
     const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
     const heights = [];
@@ -1874,7 +1939,7 @@
       const skipGlyph = l.skipped ? "⟲" : "⊘";
       const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${l.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button><button type="button" class="vst-region-btn vst-region-btn-delete" data-vst-region-action="delete" title="Delete clip" aria-label="Delete clip">✕</button></div>`;
       const rightGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
-      const hue = CLIP_HUES[clipColorIndex(l.index) - 1];
+      const hue = clipHueCss(clip.hue);
       const skippedStages = (clip.stages ?? []).filter(
         (stage) => stage?.skipped
       ).length;
@@ -1907,6 +1972,7 @@
   var REGION_SELECTOR = ".vst-region[data-clip-idx]";
   var REGION_ACTION_SELECTOR = "[data-vst-region-action]";
   var REGION_RESIZE_SELECTOR = ".vst-region-resize";
+  var CLIP_SHIFT_SELECTOR = ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
   var KEY_SELECTOR = ".vst-key[data-ref-idx]";
   var KEY_DELETE_SELECTOR = "[data-vst-key-action='delete']";
   var REGION_SELECTED_CLASS = "vst-region-selected";
@@ -1945,6 +2011,19 @@
     }
     const idx = Number.parseInt(raw, 10);
     return Number.isInteger(idx) && idx >= 0 ? idx : null;
+  };
+  var shiftClipsAfter = (body, idx, deltaPx) => {
+    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
+      const elIdx = parseClipIdx(el);
+      if (elIdx !== null && elIdx > idx) {
+        el.style.transform = deltaPx !== 0 ? `translateX(${deltaPx}px)` : "";
+      }
+    }
+  };
+  var clearClipShifts = (body) => {
+    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
+      el.style.transform = "";
+    }
   };
   var parseRefIdx = (el) => {
     if (!el) {
@@ -2068,6 +2147,7 @@
       if (resizeState) {
         resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
       }
+      clearClipShifts(body);
       resizeState = null;
       body.classList.remove(RESIZING_CLASS);
     };
@@ -2257,6 +2337,11 @@
         );
         body.classList.add(RESIZING_CLASS);
         resizeState.el.style.width = `${width}px`;
+        shiftClipsAfter(
+          body,
+          resizeState.idx,
+          width - resizeState.originalWidthPx
+        );
         return;
       }
       if (!dragState) {

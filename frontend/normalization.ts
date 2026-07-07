@@ -4,6 +4,7 @@ import {
     canUseClipLengthFromAudio,
     resolveAudioSourceValue,
 } from "./audioSource";
+import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import {
     CLIP_DURATION_MIN,
     CONTROLNET_SOURCE_OPTIONS,
@@ -243,6 +244,7 @@ export const buildDefaultClip = (
     return {
         expanded: true,
         skipped: false,
+        hue: UNASSIGNED_HUE,
         duration: snapDurationToFps(
             Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
             defaults.fps,
@@ -522,6 +524,7 @@ export const normalizeClip = (
     const clip: Clip = {
         expanded: normalizeExpanded(rawClip),
         skipped: !!rawClip.skipped,
+        hue: normalizeStoredHue(rawClip.hue),
         duration,
         audioSource,
         controlNetSource: normalizeControlNetSource(

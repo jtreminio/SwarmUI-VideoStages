@@ -1,5 +1,5 @@
+import { clipHueCss } from "./clipColor";
 import { mediaPreviewSrc } from "./constants";
-import { clipColorIndex } from "./renderUtils";
 import {
     audioSourceBadge,
     type Badge,
@@ -54,12 +54,6 @@ export const MIN_PX_PER_SECOND = 6;
 export const MAX_PX_PER_SECOND = 400;
 export const ZOOM_FACTOR = 1.25;
 export const TRACK_HEADER_W_PX = 168;
-export const CLIP_HUES: readonly string[] = [
-    "#009be6",
-    "#c797ff",
-    "#009b9b",
-    "#ff8a8b",
-];
 
 export const waveBarHeights = (clipIdx: number, count: number): number[] => {
     const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
@@ -400,7 +394,7 @@ export const renderTimeline = (
             const rightGrip = lengthDerived(clip)
                 ? ""
                 : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
-            const hue = CLIP_HUES[clipColorIndex(l.index) - 1];
+            const hue = clipHueCss(clip.hue);
             const skippedStages = (clip.stages ?? []).filter(
                 (stage) => stage?.skipped,
             ).length;

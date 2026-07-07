@@ -35,6 +35,7 @@ export const minimalRef = (overrides: Partial<RefImage> = {}): RefImage => ({
 export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     expanded: true,
     skipped: false,
+    hue: 210,
     duration: 2,
     audioSource: "Native",
     controlNetSource: "ControlNet 1",

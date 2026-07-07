@@ -73,6 +73,7 @@ export interface RefImage {
 export interface Clip {
     expanded: boolean;
     skipped: boolean;
+    hue: number;
     duration: number;
     audioSource: string;
     controlNetSource: string;
@@ -117,6 +118,7 @@ export type StoredClip = Pick<
     Clip,
     | "expanded"
     | "skipped"
+    | "hue"
     | "duration"
     | "audioSource"
     | "controlNetSource"
