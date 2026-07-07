@@ -63,7 +63,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Stage_prompt_overrides_clip_prompt_from_json()
+    public void Stage_prompt_is_ignored_and_clip_prompt_is_used()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
@@ -83,8 +83,9 @@ public partial class StageFlowTests
             .Where(text => !string.IsNullOrWhiteSpace(text))
             .ToList();
 
-        Assert.Contains(conditioningTexts, text => text.Contains("stage-zero words"));
-        Assert.DoesNotContain(conditioningTexts, text => text.Contains("clip-zero words"));
+        Assert.Contains(conditioningTexts, text => text.Contains("clip-zero words"));
+        Assert.DoesNotContain(conditioningTexts, text => text.Contains("stage-zero words"));
+        Assert.DoesNotContain(conditioningTexts, text => text.Contains("global-only words"));
     }
 
     [Fact]

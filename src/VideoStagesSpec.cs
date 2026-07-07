@@ -23,8 +23,6 @@ public sealed record StageSpec(
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
     int? EndStep = null,
-    string Prompt = "",
-    string NegativePrompt = "",
     IReadOnlyList<LoraRef> Loras = null
 )
 {

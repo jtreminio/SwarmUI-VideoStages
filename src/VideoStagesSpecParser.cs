@@ -649,8 +649,6 @@ internal static class VideoStagesSpecParser
             ControlNetStrength: ParseStageControlNetStrength(stage, locationPrefix),
             ImageRefStrengths: ParseStageRefStrengths(stage, clipRefCount),
             ImageRefWasExplicit: JsonHasOwnProperty(stage, "ImageReference"),
-            Prompt: ParsePromptField(stage, "Prompt"),
-            NegativePrompt: ParsePromptField(stage, "NegativePrompt"),
             Loras: ParseLoras(stage)
         );
     }

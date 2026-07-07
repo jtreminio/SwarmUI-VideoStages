@@ -402,7 +402,7 @@ internal class StageRunner(
             ? BuildSourceVideoLatentApplier(stage, sourceMedia, isWanStage, wanLatentReuse)
             : null;
 
-        (string positivePrompt, string negativePrompt) = BuildStagePrompts(clip, stage);
+        (string positivePrompt, string negativePrompt) = BuildClipPrompts(clip);
 
         WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
         {
@@ -475,13 +475,13 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
         };
     }
 
-    private (string Positive, string Negative) BuildStagePrompts(ClipSpec clip, StageSpec stage)
+    private (string Positive, string Negative) BuildClipPrompts(ClipSpec clip)
     {
         string globalPositive = VideoStagesPromptSection.StripSection(g.UserInput.Get(T2IParamTypes.Prompt, ""));
         string globalNegative = VideoStagesPromptSection.StripSection(g.UserInput.Get(T2IParamTypes.NegativePrompt, ""));
         return (
-            FirstNonBlank(stage.Prompt, clip.Prompt, globalPositive),
-            FirstNonBlank(stage.NegativePrompt, clip.NegativePrompt, globalNegative));
+            FirstNonBlank(clip.Prompt, globalPositive),
+            FirstNonBlank(clip.NegativePrompt, globalNegative));
     }
 
     private static string FirstNonBlank(params string[] values)
