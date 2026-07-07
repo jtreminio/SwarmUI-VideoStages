@@ -2,9 +2,10 @@ import { videoStagesDebugLog } from "./debugLog";
 import { buildDefaultClip, normalizeClip } from "./normalization";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import {
-    getClipsInput,
     isImageToVideoWorkflow,
     isVideoStagesEnabled,
+    readVideoStagesSection,
+    writeVideoStagesSection,
 } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 
@@ -108,7 +109,7 @@ const parseSerializedState = (
 
 export const getState = (): VideoStagesConfig => {
     const defaults = getRootDefaults();
-    const serialized = (getClipsInput()?.value ?? "") || lastSerializedState;
+    const serialized = readVideoStagesSection() || lastSerializedState;
     if (!serialized) {
         return rootConfig(defaults, []);
     }
@@ -134,20 +135,14 @@ export const saveState = (
 ): void => {
     const serialized = serializeStateForStorage(state);
     lastSerializedState = serialized;
-    const input = getClipsInput();
-    if (input) {
-        input.value = serialized;
-    }
+    const willNotifyDom = options?.notifyDomChange !== false;
+    writeVideoStagesSection(serialized, willNotifyDom);
     callbacks?.onAfterSerialize?.(serialized);
-    const willNotifyDom = !!(input && options?.notifyDomChange !== false);
     videoStagesDebugLog("persistence", "saveState", {
         notifyDomChange: options?.notifyDomChange,
         willNotifyDom,
         jsonChars: serialized.length,
     });
-    if (willNotifyDom && input) {
-        triggerChangeFor(input);
-    }
 };
 
 export const getClips = (): Clip[] => getState().clips;

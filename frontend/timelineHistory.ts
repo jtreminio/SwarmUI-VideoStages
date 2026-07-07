@@ -1,0 +1,69 @@
+export interface TimelineHistoryDeps {
+    read: () => string | null;
+    write: (value: string) => void;
+    maxDepth?: number;
+}
+
+export interface TimelineHistory {
+    syncBaseline: () => void;
+    capture: () => void;
+    undo: () => boolean;
+    redo: () => boolean;
+    canUndo: () => boolean;
+    canRedo: () => boolean;
+}
+
+export const createTimelineHistory = (
+    deps: TimelineHistoryDeps,
+): TimelineHistory => {
+    const max = deps.maxDepth ?? 50;
+    const undoStack: string[] = [];
+    let redoStack: string[] = [];
+    let last: string | null = deps.read();
+    let suppress = false;
+
+    const syncBaseline = (): void => {
+        last = deps.read();
+    };
+
+    const capture = (): void => {
+        if (suppress) {
+            return;
+        }
+        const current = deps.read();
+        if (current === last) {
+            return;
+        }
+        if (last !== null) {
+            undoStack.push(last);
+            if (undoStack.length > max) {
+                undoStack.shift();
+            }
+            redoStack = [];
+        }
+        last = current;
+    };
+
+    const restore = (from: string[], to: string[]): boolean => {
+        if (from.length === 0) {
+            return false;
+        }
+        const current = deps.read() ?? "";
+        const target = from.pop() as string;
+        to.push(current);
+        suppress = true;
+        deps.write(target);
+        suppress = false;
+        last = target;
+        return true;
+    };
+
+    return {
+        syncBaseline,
+        capture,
+        undo: () => restore(undoStack, redoStack),
+        redo: () => restore(redoStack, undoStack),
+        canUndo: () => undoStack.length > 0,
+        canRedo: () => redoStack.length > 0,
+    };
+};

@@ -1,0 +1,50 @@
+export interface DropRegion {
+    startPx: number;
+    widthPx: number;
+}
+
+export const computeDropIndex = (
+    pointerX: number,
+    regions: DropRegion[],
+): number => {
+    for (let i = 0; i < regions.length; i++) {
+        const region = regions[i];
+        const midpoint = region.startPx + region.widthPx / 2;
+        if (pointerX < midpoint) {
+            return i;
+        }
+    }
+    return regions.length;
+};
+
+export const finalIndexAfterMove = (from: number, to: number): number =>
+    to > from ? to - 1 : to;
+
+export const moveItem = <T>(array: T[], from: number, to: number): T[] => {
+    const result = array.slice();
+    if (!Number.isInteger(from) || from < 0 || from >= result.length) {
+        return result;
+    }
+    const [item] = result.splice(from, 1);
+    const insertAt = to > from ? to - 1 : to;
+    const clamped = Math.max(0, Math.min(insertAt, result.length));
+    result.splice(clamped, 0, item);
+    return result;
+};
+
+export const isNoOpMove = (from: number, to: number): boolean =>
+    to === from || to === from + 1;
+
+export const remapIndexAfterReorder = (
+    idx: number,
+    from: number,
+    dest: number,
+): number => {
+    if (idx === from) {
+        return dest;
+    }
+    if (from < dest) {
+        return idx > from && idx <= dest ? idx - 1 : idx;
+    }
+    return idx >= dest && idx < from ? idx + 1 : idx;
+};

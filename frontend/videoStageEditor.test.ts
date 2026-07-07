@@ -118,6 +118,11 @@ const setupParameterPanel = (): void => {
     stagesInput.id = "input_videostages";
     document.body.appendChild(stagesInput);
 
+    // The config now rides in the <videostages> section of the positive prompt; persistence reads/writes it.
+    const promptInput = document.createElement("textarea");
+    promptInput.id = "input_prompt";
+    document.body.appendChild(promptInput);
+
     const vsWidthInput = document.createElement("input");
     vsWidthInput.type = "number";
     vsWidthInput.id = "input_videostageswidth";
@@ -261,8 +266,23 @@ const setupParameterPanel = (): void => {
     document.body.appendChild(framesInput);
 };
 
+// The clip config lives in the <videostages> section of #input_prompt (persistence's single write surface).
+const SECTION_OPENER = "<videostages>";
+
 const getStagesInput = (): HTMLInputElement =>
-    document.getElementById("input_videostages") as HTMLInputElement;
+    document.getElementById("input_prompt") as unknown as HTMLInputElement;
+
+// Extract the <videostages> section body (up to the next '<' or end), mirroring readVideoStagesSection.
+const readSection = (): string => {
+    const value = getStagesInput().value ?? "";
+    const at = value.indexOf(SECTION_OPENER);
+    if (at < 0) {
+        return "";
+    }
+    const rest = value.slice(at + SECTION_OPENER.length);
+    const stop = rest.indexOf("<");
+    return (stop < 0 ? rest : rest.slice(0, stop)).trim();
+};
 
 const setImageToVideoWorkflow = (): void => {
     const videoModel = document.getElementById(
@@ -272,7 +292,7 @@ const setImageToVideoWorkflow = (): void => {
 };
 
 const parseStoredConfig = (): ParsedConfig => {
-    const parsed = JSON.parse(getStagesInput().value || "[]") as
+    const parsed = JSON.parse(readSection() || "[]") as
         | ParsedClip[]
         | ParsedConfig;
     if (Array.isArray(parsed)) {
@@ -649,18 +669,26 @@ describe("videoStageEditor", () => {
         });
 
         it("preserves existing JSON state", () => {
-            getStagesInput().value = JSON.stringify({
-                clips: [
-                    {
-                        duration: 4,
-                        audioSource: "Upload",
-                        refs: [{ source: "Refiner", frame: 5, fromEnd: true }],
-                        stages: [
-                            { model: "ltx-2.3-22b-dev", steps: 8, cfgScale: 1 },
-                        ],
-                    },
-                ],
-            });
+            getStagesInput().value =
+                SECTION_OPENER +
+                JSON.stringify({
+                    clips: [
+                        {
+                            duration: 4,
+                            audioSource: "Upload",
+                            refs: [
+                                { source: "Refiner", frame: 5, fromEnd: true },
+                            ],
+                            stages: [
+                                {
+                                    model: "ltx-2.3-22b-dev",
+                                    steps: 8,
+                                    cfgScale: 1,
+                                },
+                            ],
+                        },
+                    ],
+                });
 
             initEditor();
 
@@ -681,17 +709,19 @@ describe("videoStageEditor", () => {
         });
 
         it("disables stored clip duration when Clip Length from Audio is enabled", () => {
-            getStagesInput().value = JSON.stringify({
-                clips: [
-                    {
-                        duration: 4,
-                        audioSource: "Upload",
-                        clipLengthFromAudio: true,
-                        refs: [],
-                        stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
-                    },
-                ],
-            });
+            getStagesInput().value =
+                SECTION_OPENER +
+                JSON.stringify({
+                    clips: [
+                        {
+                            duration: 4,
+                            audioSource: "Upload",
+                            clipLengthFromAudio: true,
+                            refs: [],
+                            stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
+                        },
+                    ],
+                });
 
             initEditor();
 
@@ -707,16 +737,18 @@ describe("videoStageEditor", () => {
         });
 
         it("renders stored AceStepFun audio source with a friendly label", () => {
-            getStagesInput().value = JSON.stringify({
-                clips: [
-                    {
-                        duration: 4,
-                        audioSource: "audio0",
-                        refs: [],
-                        stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
-                    },
-                ],
-            });
+            getStagesInput().value =
+                SECTION_OPENER +
+                JSON.stringify({
+                    clips: [
+                        {
+                            duration: 4,
+                            audioSource: "audio0",
+                            refs: [],
+                            stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
+                        },
+                    ],
+                });
 
             initEditor();
 
@@ -802,20 +834,22 @@ describe("videoStageEditor", () => {
         });
 
         it("derives Clip 0 header from index even when stored JSON used a different clip name", () => {
-            getStagesInput().value = JSON.stringify({
-                width: 1024,
-                height: 768,
-                fps: 24,
-                clips: [
-                    {
-                        name: "Clip 1",
-                        duration: 2,
-                        audioSource: "Native",
-                        refs: [],
-                        stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
-                    },
-                ],
-            });
+            getStagesInput().value =
+                SECTION_OPENER +
+                JSON.stringify({
+                    width: 1024,
+                    height: 768,
+                    fps: 24,
+                    clips: [
+                        {
+                            name: "Clip 1",
+                            duration: 2,
+                            audioSource: "Native",
+                            refs: [],
+                            stages: [{ model: "ltx-2.3-22b-dev", steps: 8 }],
+                        },
+                    ],
+                });
 
             initEditor();
 
@@ -1595,7 +1629,7 @@ describe("videoStageEditor", () => {
             );
             expect(clips[0].uploadedAudio?.fileName).toBe("clip.wav");
 
-            const rawConfig = JSON.parse(getStagesInput().value) as Record<
+            const rawConfig = JSON.parse(readSection()) as Record<
                 string,
                 unknown
             >;
@@ -1870,7 +1904,7 @@ describe("videoStageEditor", () => {
         it("adds a ref when the persisted input is temporarily empty", async () => {
             initEditor();
 
-            getStagesInput().value = "";
+            getStagesInput().value = SECTION_OPENER;
 
             const addRefBtn = document.querySelector(
                 '[data-clip-action="add-ref"]',
@@ -2082,31 +2116,33 @@ describe("videoStageEditor", () => {
         });
 
         it("removes the matching ref strength from each stage when a ref is deleted", async () => {
-            getStagesInput().value = JSON.stringify([
-                {
-                    duration: 4,
-                    width: 800,
-                    height: 600,
-                    refs: [
-                        { source: "Base", frame: 1 },
-                        { source: "Refiner", frame: 5 },
-                    ],
-                    stages: [
-                        {
-                            model: "ltx-2.3-22b-dev",
-                            steps: 8,
-                            cfgScale: 1,
-                            refStrengths: [0.3, 0.7],
-                        },
-                        {
-                            model: "ltx-2.3-22b-dev",
-                            steps: 12,
-                            cfgScale: 1,
-                            refStrengths: [0.4, 0.9],
-                        },
-                    ],
-                },
-            ]);
+            getStagesInput().value =
+                SECTION_OPENER +
+                JSON.stringify([
+                    {
+                        duration: 4,
+                        width: 800,
+                        height: 600,
+                        refs: [
+                            { source: "Base", frame: 1 },
+                            { source: "Refiner", frame: 5 },
+                        ],
+                        stages: [
+                            {
+                                model: "ltx-2.3-22b-dev",
+                                steps: 8,
+                                cfgScale: 1,
+                                refStrengths: [0.3, 0.7],
+                            },
+                            {
+                                model: "ltx-2.3-22b-dev",
+                                steps: 12,
+                                cfgScale: 1,
+                                refStrengths: [0.4, 0.9],
+                            },
+                        ],
+                    },
+                ]);
 
             initEditor();
 

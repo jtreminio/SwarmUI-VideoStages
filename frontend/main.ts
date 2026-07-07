@@ -1,4 +1,5 @@
 import { audioSource } from "./audioSource";
+import { injectTimelineTab } from "./bottomTimelineTab";
 import {
     applyVideoStagesPresetDimensionsBeforeGenerate,
     wireDimensionsPreset,
@@ -7,6 +8,9 @@ import {
     isVideoStagesEnabled,
     seedRegisteredDimensionsFromCore,
 } from "./swarmInputs";
+import { videoStagesTimeline } from "./videoStagesTimeline";
+
+const timeline = videoStagesTimeline();
 
 const registerVideoStagesPromptPrefix = (): void => {
     if (typeof promptTabComplete === "undefined") {
@@ -31,6 +35,11 @@ const initDimensions = (): void => {
         wireDimensionsPreset();
     } catch (error) {
         console.warn("VideoStages: failed to init dimensions", error);
+    }
+    try {
+        timeline.init();
+    } catch (error) {
+        console.warn("VideoStages: failed to init timeline", error);
     }
 };
 
@@ -75,3 +84,4 @@ scheduleDimensionsInit();
 scheduleGenerateWrap();
 registerVideoStagesPromptPrefix();
 audioSource();
+injectTimelineTab();

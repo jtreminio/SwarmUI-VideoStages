@@ -23,6 +23,7 @@ public class VideoStagesExtension : Extension
     {
         PromptRegion.RegisterCustomPrefix(VideoStagesPromptSection.Prefix);
         StyleSheetFiles.Add("Assets/video-stages.css");
+        StyleSheetFiles.Add("Assets/video-stages-timeline.css");
         ScriptFiles.Add("Assets/video-stages.js");
     }
 

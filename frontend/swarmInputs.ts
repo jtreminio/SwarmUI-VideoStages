@@ -16,6 +16,53 @@ export const getClipsInput = ():
     return null;
 };
 
+const VIDEOSTAGES_OPENER = "<videostages>";
+
+export const getPromptInput = ():
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | null => {
+    const el = document.getElementById("input_prompt");
+    return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+        ? el
+        : null;
+};
+
+export const readVideoStagesSection = (): string => {
+    const value = getPromptInput()?.value ?? "";
+    const at = value.indexOf(VIDEOSTAGES_OPENER);
+    if (at < 0) {
+        return "";
+    }
+    const rest = value.slice(at + VIDEOSTAGES_OPENER.length);
+    const stop = rest.indexOf("<");
+    return (stop < 0 ? rest : rest.slice(0, stop)).trim();
+};
+
+export const writeVideoStagesSection = (json: string, notify = true): void => {
+    const el = getPromptInput();
+    if (!el) {
+        return;
+    }
+    const escaped = json.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+    const section = VIDEOSTAGES_OPENER + escaped;
+    const prompt = el.value ?? "";
+    const at = prompt.indexOf(VIDEOSTAGES_OPENER);
+    if (at < 0) {
+        const sep = prompt.length === 0 || prompt.endsWith("\n") ? "" : "\n";
+        el.value = prompt + sep + section;
+    } else {
+        const afterOpener = at + VIDEOSTAGES_OPENER.length;
+        const rest = prompt.slice(afterOpener);
+        const stop = rest.indexOf("<");
+        const spanEnd = stop < 0 ? prompt.length : afterOpener + stop;
+        el.value = prompt.slice(0, at) + section + prompt.slice(spanEnd);
+    }
+    if (notify) {
+        triggerChangeFor(el);
+    }
+};
+
 export const ROOT_DIMENSION_WIDTH_INPUT_ID = "input_videostageswidth";
 export const ROOT_DIMENSION_HEIGHT_INPUT_ID = "input_videostagesheight";
 export const DIMENSIONS_PRESET_SELECT_ID = "input_videostagesdimensions";

@@ -1,10 +1,15 @@
-import { describe, expect, it } from "@jest/globals";
+import { beforeEach, describe, expect, it } from "@jest/globals";
 import {
     minimalClip,
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
-import { serializeClipsForStorage } from "./persistence";
+import {
+    __resetPersistenceForTests,
+    getClips,
+    saveClips,
+    serializeClipsForStorage,
+} from "./persistence";
 import { REF_SOURCE_BASE, type StoredClip } from "./types";
 
 describe("persistence", () => {
@@ -69,6 +74,44 @@ describe("persistence", () => {
                 },
             ];
             expect(serializeClipsForStorage(clips)).toEqual(expected);
+        });
+    });
+
+    describe("round-trips through the <videostages> section of #input_prompt", () => {
+        const promptEl = (): HTMLTextAreaElement =>
+            document.getElementById("input_prompt") as HTMLTextAreaElement;
+
+        beforeEach(() => {
+            __resetPersistenceForTests();
+            const prompt = document.createElement("textarea");
+            prompt.id = "input_prompt";
+            prompt.value = "a cinematic shot";
+            document.body.appendChild(prompt);
+        });
+
+        it("writes the config into the section, preserving surrounding prompt text, and reads it back", () => {
+            saveClips([
+                minimalClip({ duration: 3 }),
+                minimalClip({ duration: 4 }),
+            ]);
+
+            expect(promptEl().value.startsWith("a cinematic shot")).toBe(true);
+            expect(promptEl().value).toContain("<videostages>");
+            expect(getClips().map((clip) => clip.duration)).toEqual([3, 4]);
+        });
+
+        it("replaces only the section body on a subsequent save, leaving prose intact", () => {
+            saveClips([minimalClip({ duration: 2 })]);
+            saveClips([
+                minimalClip({ duration: 5 }),
+                minimalClip({ duration: 6 }),
+            ]);
+
+            const value = promptEl().value;
+            expect(value.startsWith("a cinematic shot")).toBe(true);
+            // Exactly one section — the write replaces the old body rather than appending a second opener.
+            expect(value.split("<videostages>").length - 1).toBe(1);
+            expect(getClips().map((clip) => clip.duration)).toEqual([5, 6]);
         });
     });
 });

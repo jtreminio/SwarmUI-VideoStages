@@ -1,0 +1,282 @@
+import { injectTimelineTab, TIMELINE_BODY_ID } from "./bottomTimelineTab";
+import { buildDefaultClip } from "./normalization";
+import { getClips, saveClips } from "./persistence";
+import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import {
+    getPromptInput,
+    isVideoStagesEnabled,
+    readVideoStagesSection,
+    writeVideoStagesSection,
+} from "./swarmInputs";
+import type { TimelineUnit } from "./timelineDetail";
+import { createTimelineHistory } from "./timelineHistory";
+import { createTimelineLinking } from "./timelineLinking";
+import {
+    clampPxPerSecond,
+    computeFitPxPerSecond,
+    DEFAULT_PX_PER_SECOND,
+    renderTimeline,
+    TRACK_HEADER_W_PX,
+    ZOOM_FACTOR,
+    zoomAnchorScrollLeft,
+    zoomAnchorTime,
+} from "./timelineView";
+
+const getFps = (): number => {
+    try {
+        const fps = getRootDefaults().fps;
+        return typeof fps === "number" && fps > 0 ? fps : 24;
+    } catch {
+        return 24;
+    }
+};
+
+export interface VideoStagesTimeline {
+    init(): void;
+    refresh(): void;
+    dispose(): void;
+}
+
+const INPUT_SYNC_INTERVAL_MS = 200;
+
+export const videoStagesTimeline = (): VideoStagesTimeline => {
+    let boundInput: HTMLInputElement | HTMLTextAreaElement | null = null;
+    let inputSyncInterval: ReturnType<typeof setInterval> | null = null;
+    let lastSeenValue: string | null = null;
+    let unit: TimelineUnit = "seconds";
+    let pxPerSecond = DEFAULT_PX_PER_SECOND;
+    const linking = createTimelineLinking();
+
+    const history = createTimelineHistory({
+        read: () => readVideoStagesSection(),
+        write: (value) => writeVideoStagesSection(value),
+    });
+
+    const VIEW_STATE_KEY = "videostages.timeline.viewState";
+    const loadViewState = (): void => {
+        try {
+            const raw = localStorage.getItem(VIEW_STATE_KEY);
+            if (!raw) {
+                return;
+            }
+            const parsed = JSON.parse(raw) as {
+                pxPerSecond?: unknown;
+                unit?: unknown;
+            };
+            if (typeof parsed.pxPerSecond === "number") {
+                pxPerSecond = clampPxPerSecond(parsed.pxPerSecond);
+            }
+            if (parsed.unit === "frames" || parsed.unit === "seconds") {
+                unit = parsed.unit;
+            }
+        } catch {}
+    };
+    const saveViewState = (): void => {
+        try {
+            localStorage.setItem(
+                VIEW_STATE_KEY,
+                JSON.stringify({ pxPerSecond, unit }),
+            );
+        } catch {}
+    };
+
+    const toggleUnit = (): void => {
+        unit = unit === "seconds" ? "frames" : "seconds";
+        saveViewState();
+        refresh();
+    };
+
+    const timelineBody = (): HTMLElement | null =>
+        document.getElementById(TIMELINE_BODY_ID);
+    const scrollEl = (): HTMLElement | null =>
+        timelineBody()?.querySelector<HTMLElement>(".vst-scroll") ?? null;
+
+    const setZoom = (value: number): void => {
+        pxPerSecond = clampPxPerSecond(value);
+        saveViewState();
+        refresh();
+    };
+    const zoomIn = (): void => setZoom(pxPerSecond * ZOOM_FACTOR);
+    const zoomOut = (): void => setZoom(pxPerSecond / ZOOM_FACTOR);
+    const zoomFit = (): void => {
+        const totalSeconds = getClips().reduce(
+            (sum, clip) => sum + Math.max(0, clip.duration || 0),
+            0,
+        );
+        const width =
+            scrollEl()?.clientWidth ?? timelineBody()?.clientWidth ?? 0;
+        setZoom(
+            computeFitPxPerSecond(totalSeconds, width, TRACK_HEADER_W_PX + 24),
+        );
+    };
+    const zoomWheel = (factor: number, clientX: number): void => {
+        const scroll = scrollEl();
+        if (!scroll || pxPerSecond <= 0) {
+            setZoom(pxPerSecond * factor);
+            return;
+        }
+        const offsetX = clientX - scroll.getBoundingClientRect().left;
+        const timeAtPointer = zoomAnchorTime(
+            offsetX,
+            scroll.scrollLeft,
+            pxPerSecond,
+        );
+        setZoom(pxPerSecond * factor);
+        const fresh = scrollEl();
+        if (fresh) {
+            fresh.scrollLeft = zoomAnchorScrollLeft(
+                timeAtPointer,
+                pxPerSecond,
+                offsetX,
+            );
+        }
+    };
+
+    const onBodyClickSyncReadout = (): void => {
+        void Promise.resolve().then(() => {
+            const body = timelineBody();
+            if (!body) {
+                return;
+            }
+            const sel = linking.getSelectedIndex();
+            const selEl = body.querySelector<HTMLElement>(
+                "[data-vst-readout-sel]",
+            );
+            const dotEl = body.querySelector<HTMLElement>(
+                "[data-vst-readout-sel-dot]",
+            );
+            if (!selEl || !dotEl) {
+                return;
+            }
+            selEl.hidden = sel === null;
+            dotEl.hidden = sel === null;
+            selEl.textContent = sel === null ? "" : `clip ${sel}`;
+        });
+    };
+
+    const addClip = (): void => {
+        const clips = getClips();
+        clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
+        saveClips(clips);
+    };
+
+    const refresh = (): void => {
+        const body = document.getElementById(TIMELINE_BODY_ID);
+        if (!body) {
+            return;
+        }
+        lastSeenValue = readVideoStagesSection();
+        history.capture();
+        try {
+            const clips = getClips();
+            renderTimeline(body, clips, {
+                fps: getFps(),
+                unit,
+                pxPerSecond,
+                selectedIndex: linking.getSelectedIndex(),
+                onToggleUnit: toggleUnit,
+                onAddClip: addClip,
+                onZoomIn: zoomIn,
+                onZoomOut: zoomOut,
+                onZoomFit: zoomFit,
+                onZoomSlider: setZoom,
+                onZoomWheel: zoomWheel,
+                onUndo: () => history.undo(),
+                onRedo: () => history.redo(),
+            });
+            linking.reapplySelection(body, clips.length);
+        } catch (error) {
+            console.warn("VideoStages: timeline render failed", error);
+        }
+    };
+
+    const onInputChanged = (): void => {
+        if (readVideoStagesSection() !== lastSeenValue) {
+            refresh();
+        }
+    };
+
+    const bindInputListener = (): void => {
+        const input = getPromptInput();
+        if (!input || input === boundInput) {
+            return;
+        }
+        if (boundInput) {
+            boundInput.removeEventListener("input", onInputChanged);
+            boundInput.removeEventListener("change", onInputChanged);
+        }
+        input.addEventListener("input", onInputChanged);
+        input.addEventListener("change", onInputChanged);
+        boundInput = input;
+    };
+
+    const startInputSync = (): void => {
+        if (inputSyncInterval) {
+            return;
+        }
+        lastSeenValue = readVideoStagesSection();
+        inputSyncInterval = setInterval(() => {
+            if (readVideoStagesSection() !== lastSeenValue) {
+                refresh();
+            }
+        }, INPUT_SYNC_INTERVAL_MS);
+    };
+
+    const onKeydown = (event: KeyboardEvent): void => {
+        if (!(event.ctrlKey || event.metaKey)) {
+            return;
+        }
+        const key = event.key.toLowerCase();
+        const isUndo = key === "z" && !event.shiftKey;
+        const isRedo = (key === "z" && event.shiftKey) || key === "y";
+        if (!isUndo && !isRedo) {
+            return;
+        }
+        const active = document.activeElement;
+        const inTextField =
+            active instanceof HTMLInputElement ||
+            active instanceof HTMLTextAreaElement ||
+            (active instanceof HTMLElement && active.isContentEditable);
+        if (inTextField || !isVideoStagesEnabled()) {
+            return;
+        }
+        if (isUndo ? history.undo() : history.redo()) {
+            event.preventDefault();
+        }
+    };
+
+    const init = (): void => {
+        loadViewState();
+        injectTimelineTab();
+        const body = document.getElementById(TIMELINE_BODY_ID);
+        if (body) {
+            linking.attach(body);
+            body.removeEventListener("click", onBodyClickSyncReadout);
+            body.addEventListener("click", onBodyClickSyncReadout);
+        }
+        bindInputListener();
+        history.syncBaseline();
+        document.removeEventListener("keydown", onKeydown);
+        document.addEventListener("keydown", onKeydown);
+        startInputSync();
+        refresh();
+    };
+
+    const dispose = (): void => {
+        if (inputSyncInterval) {
+            clearInterval(inputSyncInterval);
+            inputSyncInterval = null;
+        }
+        if (boundInput) {
+            boundInput.removeEventListener("input", onInputChanged);
+            boundInput.removeEventListener("change", onInputChanged);
+            boundInput = null;
+        }
+        linking.dispose();
+        const body = document.getElementById(TIMELINE_BODY_ID);
+        body?.removeEventListener("click", onBodyClickSyncReadout);
+        document.removeEventListener("keydown", onKeydown);
+    };
+
+    return { init, refresh, dispose };
+};

@@ -91,3 +91,12 @@ export const normalizeUploadFileName = (
 
 export const clamp = (value: number, min: number, max: number): number =>
     Math.min(Math.max(value, min), max);
+
+export const mediaPreviewSrc = (value: string): string => {
+    if (`${value ?? ""}`.startsWith("data:")) {
+        return value;
+    }
+    const prefix =
+        typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "";
+    return `${prefix}/${value}`;
+};

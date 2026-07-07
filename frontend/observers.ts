@@ -1,7 +1,7 @@
 import { videoStagesDebugLog } from "./debugLog";
 import { type SaveStateOptions, serializeStateForStorage } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
-import { getClipsInput } from "./swarmInputs";
+import { getPromptInput, readVideoStagesSection } from "./swarmInputs";
 import type { VideoStagesConfig } from "./types";
 import { utils } from "./utils";
 
@@ -50,9 +50,9 @@ export const createObservers = (deps: {
             return;
         }
 
-        lastKnownClipsJson = getClipsInput()?.value ?? "";
+        lastKnownClipsJson = readVideoStagesSection();
         clipsInputSyncInterval = setInterval(() => {
-            const currentValue = getClipsInput()?.value ?? "";
+            const currentValue = readVideoStagesSection();
             if (currentValue === lastKnownClipsJson) {
                 return;
             }
@@ -129,8 +129,7 @@ export const createObservers = (deps: {
     };
 
     const handleRootVideoTimingCommittedChange = (inputId: string): void => {
-        const input = getClipsInput();
-        if (!input) {
+        if (!getPromptInput()) {
             return;
         }
 
@@ -140,7 +139,7 @@ export const createObservers = (deps: {
         state.height = rootDefaults.height;
         state.fps = rootDefaults.fps;
         const serialized = serializeStateForStorage(state);
-        if (serialized !== input.value) {
+        if (serialized !== readVideoStagesSection()) {
             videoStagesDebugLog(
                 "observers",
                 "root video timing change → saveState (notifyDomChange: false)",

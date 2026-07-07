@@ -125,6 +125,8 @@ declare function setMediaFileDirect(
 ): void;
 declare let postParamBuildSteps: (() => void)[] | undefined;
 
+declare function getImageOutPrefix(): string;
+
 declare function toDataURL(
     url: string,
     callback: (dataUrl: string) => void,
@@ -207,4 +209,23 @@ interface Window {
     __VIDEO_STAGES_DEBUG__?: boolean;
     base2editStageRegistry?: Base2EditStageRegistry;
     acestepfunTrackRegistry?: AceStepFunTrackRegistry;
+}
+
+declare const browserUtil: {
+    makeVisible(elem: Element | Document): void;
+};
+
+interface GenTabLayoutLike {
+    managedTabs: MovableGenTab[];
+    managedTabContainers: Element[];
+    reapplyPositions(): void;
+}
+
+declare const genTabLayout: GenTabLayoutLike;
+
+declare class MovableGenTab {
+    constructor(navLink: Element, handler: GenTabLayoutLike);
+    contentElem: HTMLElement;
+    navElem: HTMLElement;
+    update(): void;
 }

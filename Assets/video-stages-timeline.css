@@ -1,0 +1,1090 @@
+.vst-timeline {
+    --vst-panel: var(--background-panel, var(--background-gray));
+    --vst-panel-2: color-mix(in srgb, var(--text) 7%, var(--vst-panel));
+    --vst-bed: color-mix(in srgb, var(--background) 55%, var(--vst-panel));
+    --vst-hairline: color-mix(in srgb, var(--light-border) 60%, transparent);
+    --vst-border-strong: var(--border-color, var(--light-border));
+    --vst-header-w: 168px;
+    --vst-ruler-h: 26px;
+    --vst-lane-video-h: 132px;
+    --vst-lane-audio-h: 54px;
+    --vst-refs-band: 22px;
+    --vst-radius: 5px;
+    --vst-radius-sm: 3px;
+    --vst-ease: 150ms ease;
+    --vst-font-md: 0.929em;
+    --vst-font-sm: 0.857em;
+    --vst-font-xs: 0.786em;
+    --vst-font-2xs: 0.714em;
+    --vst-font-3xs: 0.7em;
+    --vst-mono: var(--font-monospace, ui-monospace, Menlo, Consolas, monospace);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 240px;
+    color: var(--text);
+    font-size: var(--vst-font-md);
+    background: var(--background);
+}
+.vst-timeline * {
+    box-sizing: border-box;
+}
+
+.vst-topbar {
+    display: flex;
+    align-items: center;
+    gap: 6px 12px;
+    flex-wrap: wrap;
+    min-height: 2.5rem;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--vst-hairline);
+    background: var(--vst-panel);
+    flex: 0 0 auto;
+}
+.vst-topbar-main {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+.vst-title {
+    font-weight: 700;
+    font-size: var(--vst-font-sm);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text);
+}
+.vst-sub {
+    color: var(--text-soft);
+    font-size: var(--vst-font-xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.vst-stat-num {
+    color: var(--text);
+    font-weight: 600;
+}
+.vst-dot {
+    margin: 0 5px;
+    opacity: 0.55;
+}
+.vst-topbar-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.vst-tool-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--vst-hairline);
+    margin: 0 2px;
+}
+.vst-readout {
+    margin-left: auto;
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-soft);
+    white-space: nowrap;
+}
+.vst-readout-time,
+.vst-readout-sel {
+    color: var(--emphasis);
+    font-weight: 500;
+}
+
+.vst-toggle {
+    font-size: var(--vst-font-sm);
+    font-weight: 500;
+    padding: 0.25em 0.8em;
+    border-radius: 4px;
+    border: 1px solid var(--vst-hairline);
+    color: var(--text);
+    background: var(--vst-panel-2);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color var(--vst-ease), background var(--vst-ease),
+        color var(--vst-ease);
+}
+.vst-toggle:hover {
+    border-color: var(--emphasis);
+    color: var(--emphasis);
+}
+.vst-toggle:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-toggle-unit {
+    font-weight: 600;
+}
+.vst-hist-btn {
+    min-width: 26px;
+    padding-left: 0.45em;
+    padding-right: 0.45em;
+    text-align: center;
+}
+.vst-add-clip {
+    font-weight: 600;
+    background: var(--emphasis);
+    border-color: var(--emphasis);
+    color: var(--emphasis-text, var(--button-text));
+}
+.vst-add-clip:hover {
+    background: color-mix(in srgb, var(--emphasis) 85%, var(--text));
+    border-color: color-mix(in srgb, var(--emphasis) 85%, var(--text));
+    color: var(--emphasis-text, var(--button-text));
+}
+
+.vst-zoom {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.vst-zoom-btn {
+    min-width: 26px;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+    text-align: center;
+}
+.vst-zoom-pct {
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-2xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-soft);
+    min-width: 3.2em;
+    text-align: center;
+}
+.vst-zoom-slider {
+    width: 7rem;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--vst-panel-2);
+    border: 1px solid var(--vst-hairline);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+.vst-zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--emphasis);
+    border: 0;
+    cursor: pointer;
+}
+.vst-zoom-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--emphasis);
+    border: 0;
+    cursor: pointer;
+}
+.vst-zoom-slider:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 2px;
+}
+
+.vst-scroll {
+    flex: 1 1 auto;
+    overflow: auto;
+    background: var(--vst-bed);
+    scrollbar-width: thin;
+    scrollbar-color: var(--vst-panel-2) transparent;
+}
+.vst-plane {
+    position: relative;
+    min-width: 100%;
+}
+
+.vst-ruler-row {
+    position: sticky;
+    top: 0;
+    z-index: 9;
+    display: flex;
+    height: var(--vst-ruler-h);
+    background: var(--vst-panel);
+    border-bottom: 1px solid var(--vst-hairline);
+}
+.vst-corner {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    width: var(--vst-header-w);
+    flex: none;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    background: var(--vst-panel);
+    border-right: 1px solid var(--vst-hairline);
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    font-weight: 500;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.vst-ruler {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+.vst-tick {
+    position: absolute;
+    bottom: 0;
+    width: 1px;
+    background: var(--vst-hairline);
+}
+.vst-tick-minor {
+    height: 5px;
+}
+.vst-tick-grid {
+    height: 11px;
+    background: var(--vst-border-strong);
+}
+.vst-tick-seam {
+    height: 14px;
+    background: color-mix(in srgb, var(--emphasis) 45%, var(--vst-hairline));
+}
+.vst-tick-end {
+    height: 14px;
+    background: color-mix(in srgb, var(--emphasis) 55%, var(--vst-hairline));
+}
+.vst-tick-label {
+    position: absolute;
+    bottom: 11px;
+    left: 4px;
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-soft);
+    white-space: nowrap;
+}
+.vst-tick-end .vst-tick-label {
+    left: auto;
+    right: 4px;
+    color: var(--text);
+}
+
+.vst-scale {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--vst-header-w);
+    right: 0;
+    pointer-events: none;
+    z-index: 7;
+}
+.vst-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--emphasis);
+    pointer-events: none;
+}
+.vst-playhead-cap {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 14px;
+    height: calc(var(--vst-ruler-h) - 9px);
+    margin-left: -7px;
+    background: var(--emphasis);
+    border-radius: 3px 3px 0 0;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--emphasis) 45%, transparent);
+    cursor: ew-resize;
+    pointer-events: auto;
+    z-index: 3;
+}
+.vst-playhead-cap::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top-color: var(--emphasis);
+}
+.vst-playhead-cap:hover {
+    background: color-mix(in srgb, var(--emphasis) 80%, var(--text));
+}
+.vst-playhead-cap:hover::after {
+    border-top-color: color-mix(in srgb, var(--emphasis) 80%, var(--text));
+}
+
+.vst-track-row {
+    display: flex;
+    border-bottom: 1px solid var(--vst-hairline);
+    background: var(--vst-bed);
+}
+.vst-track-head {
+    width: var(--vst-header-w);
+    flex: none;
+    position: sticky;
+    left: 0;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 12px;
+    background: var(--vst-panel);
+    border-right: 1px solid var(--vst-hairline);
+}
+.vst-track-icon {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    background: var(--vst-panel-2);
+    border: 1px solid var(--vst-hairline);
+    font-size: var(--vst-font-xs);
+}
+.vst-track-icon-video {
+    color: var(--emphasis);
+    border-color: color-mix(in srgb, var(--emphasis) 35%, transparent);
+}
+.vst-track-icon-audio {
+    color: color-mix(in srgb, var(--green) 45%, var(--text));
+    border-color: color-mix(in srgb, var(--green) 35%, transparent);
+}
+.vst-track-label {
+    flex: 1;
+    min-width: 0;
+}
+.vst-track-label strong {
+    display: block;
+    font-size: var(--vst-font-xs);
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.vst-track-label small {
+    display: block;
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+.vst-track-cell {
+    flex: 1;
+    position: relative;
+}
+.vst-track-video .vst-track-cell {
+    height: var(--vst-lane-video-h);
+}
+.vst-track-audio .vst-track-cell {
+    height: var(--vst-lane-audio-h);
+}
+.vst-track-cell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--text) 2.5%, transparent) 1px,
+        transparent 1px
+    );
+    background-size: 40px 100%;
+    pointer-events: none;
+}
+
+.vst-region {
+    position: absolute;
+    top: var(--vst-refs-band);
+    bottom: 10px;
+    border-radius: var(--vst-radius);
+    border: 1.5px solid
+        color-mix(in srgb, var(--clip-hue, var(--emphasis)) 45%, var(--light-border));
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--clip-hue, var(--emphasis)) 34%, var(--vst-panel)) 0%,
+        color-mix(in srgb, var(--clip-hue, var(--emphasis)) 16%, var(--vst-panel)) 100%
+    );
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent),
+        0 1px 2px color-mix(in srgb, var(--shadow) 35%, transparent);
+    cursor: pointer;
+    overflow: visible;
+    transition: box-shadow var(--vst-ease), border-color var(--vst-ease);
+}
+.vst-region::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: calc(var(--vst-radius) - 1px);
+    background: repeating-linear-gradient(
+        90deg,
+        transparent 0 12px,
+        color-mix(in srgb, var(--text) 7%, transparent) 12px 13px
+    );
+    pointer-events: none;
+    z-index: 1;
+}
+.vst-region-thumb {
+    position: absolute;
+    inset: 0;
+    border-radius: calc(var(--vst-radius) - 1px);
+    background-size: cover;
+    background-position: center;
+    opacity: 0.28;
+    z-index: 0;
+    pointer-events: none;
+}
+.vst-region:hover {
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent),
+        0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent),
+        0 4px 14px color-mix(in srgb, var(--shadow) 40%, transparent);
+}
+.vst-region-hover {
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent),
+        0 0 0 1px var(--box-selected-border, var(--emphasis)),
+        0 4px 14px color-mix(in srgb, var(--shadow) 40%, transparent);
+}
+.vst-region-selected,
+.vst-region-selected:hover {
+    border-color: color-mix(
+        in srgb,
+        var(--box-selected-border, var(--emphasis)) 80%,
+        var(--light-border)
+    );
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent),
+        0 0 0 2px var(--box-selected-border, var(--emphasis)),
+        0 6px 22px color-mix(in srgb, var(--emphasis) 42%, transparent);
+}
+.vst-region[data-clip-idx] {
+    cursor: pointer;
+}
+.vst-region-dragging {
+    opacity: 0.45;
+}
+.vst-region-skipped {
+    opacity: 0.55;
+    filter: grayscale(0.6);
+    border-style: dashed;
+    box-shadow: none;
+}
+.vst-region-tiny .vst-region-head,
+.vst-region-tiny .vst-badges,
+.vst-region-tiny .vst-prompt,
+.vst-region-tiny .vst-region-controls,
+.vst-region-tiny .vst-region-resize,
+.vst-region-tiny .vst-region-resize-left,
+.vst-region-tiny .vst-boundary-chip {
+    display: none;
+}
+
+.vst-region-head {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.vst-region-name {
+    font-size: var(--vst-font-xs);
+    font-weight: 600;
+    color: var(--text);
+    text-shadow: 0 1px 2px color-mix(in srgb, var(--background) 60%, transparent);
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.vst-chip {
+    flex: none;
+    font-size: var(--vst-font-3xs);
+    padding: 0 5px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
+    color: color-mix(in srgb, var(--text) 92%, transparent);
+    background: color-mix(in srgb, var(--background) 40%, transparent);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.vst-chip-skip {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--yellow) 50%, var(--light-border));
+    background: color-mix(in srgb, var(--yellow) 18%, var(--background));
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+.vst-region-dur {
+    margin-left: auto;
+    flex: none;
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in srgb, var(--text) 90%, transparent);
+    text-shadow: 0 1px 2px color-mix(in srgb, var(--background) 60%, transparent);
+    transition: opacity var(--vst-ease);
+}
+.vst-region:hover .vst-region-dur {
+    opacity: 0;
+}
+
+.vst-badges {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    padding: 4px 8px 0;
+}
+.vst-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: var(--vst-font-3xs);
+    line-height: 1.5;
+    padding: 0 6px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
+    color: var(--text);
+    background: color-mix(in srgb, var(--background) 45%, transparent);
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+}
+.vst-badge::before {
+    font-size: var(--vst-font-3xs);
+    line-height: 1;
+    opacity: 0.9;
+}
+.vst-badge-audio {
+    border-color: color-mix(in srgb, var(--green) 45%, var(--light-border));
+}
+.vst-badge-audio::before {
+    content: "♪";
+    color: color-mix(in srgb, var(--green) 70%, var(--text));
+}
+.vst-badge-lora {
+    border-color: color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
+}
+.vst-badge-lora::before {
+    content: "◈";
+    color: var(--emphasis);
+}
+
+.vst-prompt {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 6px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--vst-font-xs);
+    line-height: 1.35;
+    color: var(--text);
+    background: color-mix(in srgb, var(--background) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+.vst-prompt-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+}
+.vst-prompt-edit {
+    flex: none;
+    background: transparent;
+    border: none;
+    color: var(--text-soft);
+    cursor: pointer;
+    font-size: var(--vst-font-sm);
+    line-height: 1;
+    padding: 1px 4px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity var(--vst-ease), color var(--vst-ease),
+        background var(--vst-ease);
+}
+.vst-region:hover .vst-prompt-edit,
+.vst-prompt-edit:focus-visible {
+    opacity: 1;
+}
+.vst-prompt-edit:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--emphasis) 14%, transparent);
+}
+.vst-prompt-muted {
+    color: var(--text-soft);
+    font-style: italic;
+    border-style: dashed;
+    background: transparent;
+}
+
+.vst-region-controls {
+    position: absolute;
+    top: 4px;
+    right: 10px;
+    display: flex;
+    gap: 4px;
+    z-index: 6;
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: opacity var(--vst-ease), transform var(--vst-ease);
+}
+.vst-region:hover .vst-region-controls,
+.vst-region-selected .vst-region-controls,
+.vst-region:focus-within .vst-region-controls,
+.vst-region-controls:focus-within {
+    opacity: 1;
+    transform: translateY(0);
+}
+.vst-region-btn {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: var(--vst-font-sm);
+    line-height: 1;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    color: var(--text-soft);
+    background: var(--vst-panel);
+    cursor: pointer;
+    transition: border-color var(--vst-ease), color var(--vst-ease),
+        background var(--vst-ease);
+}
+.vst-region-btn::before {
+    content: "";
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+}
+.vst-region-btn:hover {
+    border-color: var(--emphasis);
+    color: var(--text);
+}
+.vst-region-btn:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-region-btn-active {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--emphasis) 55%, transparent);
+    background: color-mix(in srgb, var(--emphasis) 18%, var(--background));
+}
+.vst-region-btn-delete:hover {
+    border-color: var(--danger-button-border, var(--red));
+    color: var(--danger-button-foreground, var(--red));
+    background: color-mix(in srgb, var(--red) 16%, var(--background));
+}
+
+.vst-region-resize,
+.vst-region-resize-left {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 7px;
+    z-index: 6;
+    transition: background var(--vst-ease);
+}
+.vst-region-resize {
+    right: 0;
+    cursor: ew-resize;
+    border-radius: 0 var(--vst-radius) var(--vst-radius) 0;
+}
+.vst-region-resize-left {
+    left: 0;
+    cursor: col-resize;
+    border-radius: var(--vst-radius) 0 0 var(--vst-radius);
+}
+.vst-region-resize:hover,
+.vst-region-resize-left:hover {
+    background: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.vst-resizing,
+.vst-resizing .vst-region {
+    cursor: ew-resize;
+}
+.vst-rolling,
+.vst-rolling .vst-region {
+    cursor: col-resize;
+}
+.vst-resizing,
+.vst-rolling,
+.vst-dragging {
+    user-select: none;
+}
+.vst-dragging,
+.vst-dragging .vst-region {
+    cursor: grabbing;
+}
+.vst-roll-readout {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    transform: translateX(-50%);
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    background: var(--vst-panel-2);
+    border: 1px solid var(--vst-hairline);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--text);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 6;
+}
+
+.vst-boundary-chip {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translate(50%, -50%);
+    z-index: 7;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: var(--vst-font-sm);
+    line-height: 1;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    color: var(--text-soft);
+    background: var(--vst-panel);
+    cursor: pointer;
+    opacity: 0.85;
+    transition: border-color var(--vst-ease), color var(--vst-ease),
+        background var(--vst-ease), opacity var(--vst-ease);
+}
+.vst-boundary-chip:hover {
+    opacity: 1;
+    border-color: var(--emphasis);
+    color: var(--text);
+}
+.vst-boundary-chip:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-boundary-continue,
+.vst-boundary-crossfade {
+    opacity: 1;
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--emphasis) 55%, transparent);
+    background: color-mix(in srgb, var(--emphasis) 18%, var(--background));
+}
+.vst-boundary-crossfade {
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--emphasis) 30%, var(--background)) 0%,
+        color-mix(in srgb, var(--emphasis) 8%, var(--background)) 100%
+    );
+    border-style: dashed;
+}
+.vst-boundary-glyph {
+    pointer-events: none;
+}
+
+.vst-keys {
+    position: absolute;
+    top: calc(-1 * var(--vst-refs-band) + 3px);
+    left: 0;
+    right: 0;
+    height: 18px;
+    pointer-events: none;
+    z-index: 3;
+}
+.vst-key {
+    position: absolute;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    transform: translateX(-50%);
+    pointer-events: auto;
+    cursor: grab;
+}
+.vst-keyframing .vst-key {
+    cursor: grabbing;
+}
+.vst-key:hover {
+    z-index: 4;
+}
+.vst-key:focus-visible {
+    outline: none;
+}
+.vst-key-dot {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 18px;
+    height: 13px;
+    border-radius: 2px;
+    border: 1.5px solid var(--emphasis);
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--emphasis) 80%, var(--text)) 0%,
+        var(--emphasis) 100%
+    );
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--background) 70%, transparent);
+    pointer-events: none;
+    transition: box-shadow var(--vst-ease);
+}
+.vst-key::after {
+    content: "";
+    position: absolute;
+    top: 13px;
+    left: 50%;
+    width: 1px;
+    height: 6px;
+    background: var(--emphasis);
+}
+.vst-key-end .vst-key-dot {
+    border-style: dashed;
+    background-color: color-mix(in srgb, var(--emphasis) 25%, var(--vst-panel));
+}
+.vst-key:hover .vst-key-dot,
+.vst-key:focus-visible .vst-key-dot {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--emphasis) 35%, transparent);
+}
+.vst-key-del {
+    position: absolute;
+    top: -3px;
+    right: -5px;
+    width: 13px;
+    height: 13px;
+    padding: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--vst-font-2xs);
+    line-height: 1;
+    border-radius: 50%;
+    border: none;
+    color: var(--emphasis-text, var(--button-text));
+    background: var(--red);
+    cursor: pointer;
+    z-index: 5;
+}
+.vst-key:hover .vst-key-del,
+.vst-key:focus-within .vst-key-del,
+.vst-key-del:focus-visible {
+    display: inline-flex;
+}
+.vst-key-del:hover {
+    filter: brightness(1.15);
+}
+
+.vst-drop-indicator {
+    position: absolute;
+    top: var(--vst-refs-band);
+    bottom: 10px;
+    width: 3px;
+    margin-left: -1px;
+    border-radius: 2px;
+    background: var(--emphasis);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--emphasis) 60%, transparent);
+    pointer-events: none;
+    z-index: 6;
+}
+
+.vst-audio-clip {
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    border-radius: 4px;
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--green) 16%, var(--vst-panel)) 0%,
+        color-mix(in srgb, var(--green) 34%, var(--vst-panel)) 50%,
+        color-mix(in srgb, var(--green) 16%, var(--vst-panel)) 100%
+    );
+    border: 1px solid color-mix(in srgb, var(--green) 40%, var(--light-border));
+    overflow: hidden;
+}
+.vst-audio-wave {
+    position: absolute;
+    inset: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 1.5px;
+    overflow: hidden;
+}
+.vst-audio-wave span {
+    flex: none;
+    width: 2px;
+    min-height: 2px;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--green) 45%, var(--text));
+    opacity: 0.7;
+}
+.vst-audio-label {
+    position: absolute;
+    top: 2px;
+    left: 8px;
+    z-index: 1;
+    font-size: var(--vst-font-2xs);
+    font-weight: 500;
+    color: var(--text);
+    text-shadow: 0 1px 2px color-mix(in srgb, var(--background) 60%, transparent);
+    pointer-events: none;
+}
+
+.vst-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin: 32px auto;
+    padding: 26px 28px;
+    border: 1px dashed var(--light-border);
+    border-radius: var(--vst-radius);
+    background: color-mix(in srgb, var(--vst-panel) 55%, transparent);
+    color: var(--text-soft);
+    text-align: center;
+    max-width: 30rem;
+}
+.vst-empty-icon {
+    font-size: 26px;
+    line-height: 1;
+    opacity: 0.85;
+}
+.vst-empty-title {
+    font-weight: 600;
+    font-size: var(--vst-font-md);
+    color: var(--text);
+}
+.vst-empty-hint {
+    font-size: var(--vst-font-xs);
+    line-height: 1.5;
+}
+.vst-empty-add {
+    margin-top: 12px;
+    padding: 6px 14px;
+}
+
+.vst-ltx-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: color-mix(in srgb, var(--background) 62%, transparent);
+    backdrop-filter: blur(2px);
+}
+.vst-ltx-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(720px, 92vw);
+    max-height: 88vh;
+    padding: 18px;
+    border: 1px solid var(--light-border);
+    border-radius: var(--vst-radius, 8px);
+    background: var(--background-panel, var(--background-gray));
+    color: var(--text);
+    box-shadow: 0 16px 48px color-mix(in srgb, var(--shadow) 70%, transparent);
+}
+.vst-ltx-title {
+    font-weight: 700;
+    font-size: var(--vst-font-md, 14px);
+    letter-spacing: 0.01em;
+    color: var(--text);
+}
+.vst-ltx-subtitle {
+    margin-top: -8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-soft);
+}
+.vst-ltx-textarea {
+    width: 100%;
+    min-height: 320px;
+    resize: vertical;
+    padding: 9px 10px;
+    border: 1px solid var(--light-border);
+    border-radius: var(--vst-radius-sm, 5px);
+    background: var(--background);
+    color: var(--text);
+    font-family: var(--font-monospace, ui-monospace, Menlo, Consolas, monospace);
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre;
+    overflow: auto;
+}
+.vst-ltx-textarea:focus-visible {
+    outline: none;
+    border-color: var(--emphasis);
+    box-shadow: inset 0 0 0 1px
+        color-mix(in srgb, var(--emphasis) 55%, transparent);
+}
+.vst-ltx-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.vst-ltx-btn {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: var(--vst-radius-sm, 5px);
+    border: 1px solid var(--light-border);
+    color: var(--text);
+    background: var(--button-background, var(--background));
+    cursor: pointer;
+    transition: border-color var(--vst-ease, 150ms ease),
+        background var(--vst-ease, 150ms ease);
+}
+.vst-ltx-btn:hover {
+    border-color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 12%, var(--background));
+}
+.vst-ltx-btn:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-ltx-btn-primary {
+    background: var(--emphasis);
+    border-color: var(--emphasis);
+    color: var(--emphasis-text, var(--button-text));
+    font-weight: 600;
+}
+.vst-ltx-btn-primary:hover {
+    background: color-mix(in srgb, var(--emphasis) 85%, var(--emphasis-text, var(--button-text)));
+    border-color: color-mix(in srgb, var(--emphasis) 85%, var(--emphasis-text, var(--button-text)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vst-timeline *,
+    .vst-ltx-overlay,
+    .vst-ltx-card,
+    .vst-ltx-card * {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
