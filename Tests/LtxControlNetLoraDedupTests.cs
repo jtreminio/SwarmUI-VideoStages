@@ -177,16 +177,15 @@ public sealed class LtxControlNetLoraDedupTests
         JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
         stageA["ControlNetStrength"] = 0.7;
         stageB["ControlNetStrength"] = 0.3;
+        // Per-stage scoped LoRAs now come from the Video Stages JSON (folds in the old <videoclip[0,s]><lora:…>).
+        stageA["Loras"] = new JArray(new JObject { ["Name"] = "UnitTest_ScopedStageLora", ["Weight"] = 1.0 });
+        stageB["Loras"] = new JArray(new JObject { ["Name"] = "UnitTest_ScopedStageLora", ["Weight"] = 0.4 });
         JObject clip = MakeClip(stageA, stageB);
         clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         clip["ControlNetLora"] = "UnitTest_ControlNetLora";
         string stagesJson = new JArray(clip).ToString();
 
-        string prompt = "global prompt"
-            + " <videoclip[0,0]><lora:UnitTest_ScopedStageLora:1>"
-            + " <videoclip[0,1]><lora:UnitTest_ScopedStageLora:0.4>";
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
         input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[0], "UnitTestPreprocessor");

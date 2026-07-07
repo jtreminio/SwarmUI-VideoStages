@@ -37,10 +37,7 @@ internal class StageRunner(
         }
 
         ClipSpec clip = clipContext.Clip;
-        using ParamSnapshot loraScope = PromptParser.ApplyLoraScope(
-            g.UserInput,
-            clip.Id,
-            sectionId);
+        using ParamSnapshot loraScope = ApplyStageLoras(g.UserInput, clip, stage);
 
         StageFrame stageFrame = PrepareStage(stage, sectionId, clipContext);
         if (stageFrame is null)
@@ -480,14 +477,72 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private (string Positive, string Negative) BuildStagePrompts(ClipSpec clip, StageSpec stage)
     {
-        string positive = g.UserInput.Get(T2IParamTypes.Prompt, "");
-        string negative = g.UserInput.Get(T2IParamTypes.NegativePrompt, "");
-        string originalPositive = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.Prompt.Type.ID, positive);
-        string originalNegative = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.NegativePrompt.Type.ID, negative);
+        string globalPositive = VideoStagesPromptSection.StripSection(g.UserInput.Get(T2IParamTypes.Prompt, ""));
+        string globalNegative = VideoStagesPromptSection.StripSection(g.UserInput.Get(T2IParamTypes.NegativePrompt, ""));
         return (
-            PromptParser.ExtractPrompt(positive, originalPositive, clip.Id, stage.Id, stage.ClipStageIndex),
-            PromptParser.ExtractPrompt(negative, originalNegative, clip.Id, stage.Id, stage.ClipStageIndex));
+            FirstNonBlank(stage.Prompt, clip.Prompt, globalPositive),
+            FirstNonBlank(stage.NegativePrompt, clip.NegativePrompt, globalNegative));
     }
+
+    private static string FirstNonBlank(params string[] values)
+    {
+        foreach (string value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+        return "";
+    }
+
+    private static ParamSnapshot ApplyStageLoras(T2IParamInput input, ClipSpec clip, StageSpec stage)
+    {
+        List<LoraRef> toApply = [];
+        if (clip.Loras is not null)
+        {
+            toApply.AddRange(clip.Loras);
+        }
+        if (stage.Loras is not null)
+        {
+            toApply.AddRange(stage.Loras);
+        }
+        if (toApply.Count == 0)
+        {
+            return null;
+        }
+
+        List<string> loras = [.. input.Get(T2IParamTypes.Loras) ?? []];
+        List<string> weights = [.. input.Get(T2IParamTypes.LoraWeights) ?? []];
+        List<string> tencWeights = [.. input.Get(T2IParamTypes.LoraTencWeights) ?? []];
+        List<string> confinements = [.. input.Get(T2IParamTypes.LoraSectionConfinement) ?? []];
+
+        while (weights.Count < loras.Count) { weights.Add("1"); }
+        while (tencWeights.Count < loras.Count) { tencWeights.Add(weights[tencWeights.Count]); }
+        while (confinements.Count < loras.Count) { confinements.Add("-1"); }
+
+        foreach (LoraRef lora in toApply)
+        {
+            loras.Add(lora.Name);
+            weights.Add(FormatLoraWeight(lora.Weight));
+            tencWeights.Add(FormatLoraWeight(lora.TencWeight ?? lora.Weight));
+            confinements.Add($"{T2IParamInput.SectionID_Video}");
+        }
+
+        ParamSnapshot snapshot = ParamSnapshot.Of(input,
+            T2IParamTypes.Loras.Type,
+            T2IParamTypes.LoraWeights.Type,
+            T2IParamTypes.LoraTencWeights.Type,
+            T2IParamTypes.LoraSectionConfinement.Type);
+        input.Set(T2IParamTypes.Loras, loras);
+        input.Set(T2IParamTypes.LoraWeights, weights);
+        input.Set(T2IParamTypes.LoraTencWeights, tencWeights);
+        input.Set(T2IParamTypes.LoraSectionConfinement, confinements);
+        return snapshot;
+    }
+
+    private static string FormatLoraWeight(double weight) =>
+        weight.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private ImageFromBatchNode AddImageFromBatch(JArray imagePath, int batchIndex, int length)
     {

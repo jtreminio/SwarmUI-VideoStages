@@ -42,7 +42,7 @@ public class AudioSourceParamTests
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
-        input.Set(VideoStagesExtension.VideoStagesJson, BuildConfigJson(value));
+        Fixtures.SetVideoStagesConfig(input, BuildConfigJson(value));
         WorkflowGenerator generator = new() { UserInput = input };
 
         ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(generator).Clips);

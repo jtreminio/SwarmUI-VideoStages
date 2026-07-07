@@ -11,26 +11,19 @@ namespace VideoStages;
 public class VideoStagesExtension : Extension
 {
     public static int SectionIdForStage(int stageIndex) => Constants.SectionID_VideoStages + 1 + stageIndex;
-    public static int SectionIdForClip(int clipIndex) => Constants.SectionID_VideoClip + 1 + clipIndex;
     public static T2IRegisteredParam<string> DimensionsPreset;
     public static T2IRegisteredParam<int> RootWidth;
     public static T2IRegisteredParam<int> RootHeight;
     public static T2IRegisteredParam<int> RootFPS;
-    public static T2IRegisteredParam<string> VideoStagesJson;
     public static T2IRegisteredParam<Image> RefineSourceVideo;
     public static T2IRegisteredParam<int> RefineSkipStages;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
 
     public override void OnPreInit()
     {
-        PromptRegion.RegisterCustomPrefix("videoclip");
-        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (_, context) =>
-        {
-            PromptParser.TryResolveVideoclipSectionId(context.PreData?.Trim(), context, out int sectionId);
-            context.SectionID = sectionId;
-            return $"<videoclip//cid={context.SectionID}>";
-        };
-        T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (_, _) => "<break>";
+        PromptRegion.RegisterCustomPrefix(VideoStagesPromptSection.Prefix);
+        T2IPromptHandling.PromptTagBasicProcessors[VideoStagesPromptSection.Prefix] = (_, _) => "";
+        T2IPromptHandling.PromptTagLengthEstimators[VideoStagesPromptSection.Prefix] = (_, _) => "";
 
         StyleSheetFiles.Add("Assets/video-stages.css");
         ScriptFiles.Add("Assets/video-stages.js");
@@ -165,17 +158,6 @@ public class VideoStagesExtension : Extension
             Group: VideoStagesGroup,
             OrderPriority: orderPriority++,
             FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
-
-        VideoStagesJson = T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Video Stages",
-            Description: "",
-            Default: "",
-            VisibleNormally: false,
-            DoNotPreview: true,
-            Group: VideoStagesGroup,
-            FeatureFlag: Constants.ComfyUIFeatureFlag,
-            MetadataFormat: MetadataSanitizer.StripUploadDataFromJsonParameter
         ));
 
         T2IParamTypes.Register<string>(new T2IParamType(

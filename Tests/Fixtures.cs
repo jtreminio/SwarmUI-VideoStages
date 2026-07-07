@@ -82,9 +82,23 @@ internal static class Fixtures
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, baseModel);
         input.Set(T2IParamTypes.RefinerModel, baseModel);
-        input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
+        SetVideoStagesConfig(input, stagesJson);
         return input;
     }
+
+    /// <summary>
+    /// Attaches the Video Stages config to the input the way the real app does: as a <c>&lt;videostages:JSON&gt;</c>
+    /// section appended to the prompt (angle brackets escaped), not the retired VideoStagesJson param.
+    /// </summary>
+    public static void SetVideoStagesConfig(T2IParamInput input, string json)
+    {
+        string existing = input.Get(T2IParamTypes.Prompt, "");
+        string section = WrapVideoStagesSection(json);
+        input.Set(T2IParamTypes.Prompt, string.IsNullOrEmpty(existing) ? section : $"{existing} {section}");
+    }
+
+    public static string WrapVideoStagesSection(string json) =>
+        $"<videostages:{json.Replace("<", "\\u003c").Replace(">", "\\u003e")}>";
 
     public static T2IParamInput BuildNativeInput(
         T2IModel baseModel,
@@ -116,7 +130,7 @@ internal static class Fixtures
         input.Set(T2IParamTypes.Width, 512);
         input.Set(T2IParamTypes.Height, 512);
         input.Set(T2IParamTypes.Model, videoModel);
-        input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
+        SetVideoStagesConfig(input, stagesJson);
         input.Set(T2IParamTypes.Text2VideoFrames, 25);
         if (Program.T2IModelSets.TryGetValue("Clip", out T2IModelHandler clipHandler)
             && clipHandler.Models.TryGetValue("gemma_3_12B_it.safetensors", out T2IModel gemmaModel))

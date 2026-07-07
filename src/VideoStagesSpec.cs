@@ -1,5 +1,11 @@
 namespace VideoStages;
 
+public sealed record LoraRef(
+    string Name,
+    double Weight = 1.0,
+    double? TencWeight = null
+);
+
 public sealed record StageSpec(
     int Id,
     double Control,
@@ -16,7 +22,10 @@ public sealed record StageSpec(
     double? ControlNetStrength = null,
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
-    int? EndStep = null
+    int? EndStep = null,
+    string Prompt = "",
+    string NegativePrompt = "",
+    IReadOnlyList<LoraRef> Loras = null
 )
 {
     public bool IsLatentModelUpscale => HasUpscaleMethodPrefix("latentmodel-");
@@ -53,7 +62,10 @@ public sealed record ClipSpec(
     bool ReuseAudio,
     UploadedAudioSpec UploadedAudio,
     IReadOnlyList<ImageRefSpec> ImageRefs,
-    IReadOnlyList<StageSpec> Stages
+    IReadOnlyList<StageSpec> Stages,
+    string Prompt = "",
+    string NegativePrompt = "",
+    IReadOnlyList<LoraRef> Loras = null
 );
 
 public sealed record VideoStagesSpec(

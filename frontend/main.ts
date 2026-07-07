@@ -1,52 +1,77 @@
 import { audioSource } from "./audioSource";
-import { refineVideoButton } from "./refineVideoButton";
-import { videoStageEditor } from "./videoStageEditor";
+import {
+    applyVideoStagesPresetDimensionsBeforeGenerate,
+    wireDimensionsPreset,
+} from "./dimensionsDropdown";
+import {
+    isVideoStagesEnabled,
+    seedRegisteredDimensionsFromCore,
+} from "./swarmInputs";
 
-const stageEditor = videoStageEditor();
-
-const registerVideoClipPromptPrefix = (): void => {
+const registerVideoStagesPromptPrefix = (): void => {
     if (typeof promptTabComplete === "undefined") {
         return;
     }
 
     promptTabComplete.registerPrefix(
-        "videoclip",
-        "Add a prompt section that applies to VideoStages clips.",
+        "videostages",
+        "Configure all VideoStages settings as one JSON prompt section.",
         () => [
-            '\nUse "<videoclip>..." to apply to ALL VideoStages clips (including LoRAs inside the section).',
-            '\nUse "<videoclip[0]>..." to apply to clip 0, "<videoclip[1]>..." for clip 1, etc.',
-            '\nUse "<videoclip[0,0]>..." for clip 0 stage 0 only, e.g. "<videoclip[1,2]>" for clip 1 stage 2.',
-            "\nFor each stage, text from every matching <videoclip*> tier is CONCATENATED (e.g. clip 1 stage 0 gets <videoclip> + <videoclip[1]> + <videoclip[1,0]>).",
-            "\nIf the concatenated <videoclip*> text is empty (or LoRA-only), VideoStages falls back to <video>, then to the global prompt. LoRAs inside <videoclip*> are always scoped, even when the text is empty.",
+            '\nUse "<videostages:{ ...JSON... }>" to configure clips, stages, refs, audio, prompts and loras in one JSON blob.',
+            '\nExample: <videostages:{"clips":[{"prompt":"a red fox","stages":[{"model":"...","steps":30}]}]}>',
+            '\nPer-clip / per-stage "prompt" and "loras" fold into this JSON — there is no more <videoclip> section.',
         ],
         true,
     );
 };
 
-const tryRegisterStageEditor = (): boolean => {
+const initDimensions = (): void => {
+    try {
+        seedRegisteredDimensionsFromCore(isVideoStagesEnabled());
+        wireDimensionsPreset();
+    } catch (error) {
+        console.warn("VideoStages: failed to init dimensions", error);
+    }
+};
+
+const scheduleDimensionsInit = (): void => {
     if (!Array.isArray(postParamBuildSteps)) {
+        setTimeout(scheduleDimensionsInit, 200);
+        return;
+    }
+    postParamBuildSteps.push(initDimensions);
+};
+
+const wrapGenerateForDimensions = (): boolean => {
+    if (
+        typeof mainGenHandler === "undefined" ||
+        !mainGenHandler ||
+        typeof mainGenHandler.doGenerate !== "function"
+    ) {
         return false;
     }
-
-    postParamBuildSteps.push(() => {
-        try {
-            stageEditor.init();
-        } catch (error) {
-            console.warn("VideoStages: failed to build stage editor", error);
+    const original = mainGenHandler.doGenerate.bind(mainGenHandler);
+    mainGenHandler.doGenerate = (...args: unknown[]) => {
+        if (isVideoStagesEnabled()) {
+            applyVideoStagesPresetDimensionsBeforeGenerate();
         }
-    });
+        return original(...args);
+    };
     return true;
 };
 
-if (!tryRegisterStageEditor()) {
+const scheduleGenerateWrap = (): void => {
+    if (wrapGenerateForDimensions()) {
+        return;
+    }
     const interval = setInterval(() => {
-        if (tryRegisterStageEditor()) {
+        if (wrapGenerateForDimensions()) {
             clearInterval(interval);
         }
-    }, 200);
-}
+    }, 250);
+};
 
-registerVideoClipPromptPrefix();
-stageEditor.startGenerateWrapRetry();
+scheduleDimensionsInit();
+scheduleGenerateWrap();
+registerVideoStagesPromptPrefix();
 audioSource();
-refineVideoButton();

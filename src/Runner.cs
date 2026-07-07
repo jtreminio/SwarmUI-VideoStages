@@ -169,19 +169,11 @@ public static class Runner
         return new RootVideoStageResizer(g, rootVideoStageHandoff);
     }
 
-    private static bool IsExtensionActive(WorkflowGenerator g)
-    {
-        T2IParamType type = VideoStagesExtension.VideoStagesJson?.Type;
-        return type is not null && g.UserInput.TryGetRaw(type, out _);
-    }
+    private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsPresent(g);
 
     private static bool HasConfiguredStages(WorkflowGenerator g)
     {
-        T2IParamType type = VideoStagesExtension.VideoStagesJson?.Type;
-        if (type is null
-            || !g.UserInput.TryGetRaw(type, out object rawValue)
-            || rawValue is not string json
-            || string.IsNullOrWhiteSpace(json))
+        if (!IsExtensionActive(g))
         {
             return false;
         }

@@ -32,7 +32,7 @@ public class ImageReferenceTests
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
         input.Set(T2IParamTypes.Prompt, "unit test prompt");
-        input.Set(VideoStagesExtension.VideoStagesJson, stagesJson);
+        SetVideoStagesConfig(input, stagesJson);
         return input;
     }
 

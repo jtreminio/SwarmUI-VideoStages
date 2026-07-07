@@ -78,7 +78,7 @@ public class VideoStagesSpecParserClipsTests
     {
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
         T2IParamInput input = new(null);
-        input.Set(VideoStagesExtension.VideoStagesJson, json);
+        SetVideoStagesConfig(input, json);
         return input;
     }
 

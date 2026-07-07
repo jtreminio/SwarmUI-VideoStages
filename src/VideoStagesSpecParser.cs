@@ -342,7 +342,10 @@ internal static class VideoStagesSpecParser
             ReuseAudio: reuseAudio,
             UploadedAudio: uploadedAudio,
             ImageRefs: refs,
-            Stages: stages
+            Stages: stages,
+            Prompt: ParsePromptField(clipObj, "Prompt"),
+            NegativePrompt: ParsePromptField(clipObj, "NegativePrompt"),
+            Loras: ParseLoras(clipObj)
         );
     }
 
@@ -527,8 +530,8 @@ internal static class VideoStagesSpecParser
 
     private static (int? Width, int? Height, int? FPS, List<JObject> Entries) GetJsonTopLevelConfig(WorkflowGenerator g)
     {
-        if (!g.UserInput.TryGet(VideoStagesExtension.VideoStagesJson, out string json)
-            || string.IsNullOrWhiteSpace(json))
+        string json = VideoStagesPromptSection.ExtractJson(g);
+        if (string.IsNullOrWhiteSpace(json))
         {
             return (null, null, null, []);
         }
@@ -645,7 +648,10 @@ internal static class VideoStagesSpecParser
             ImageReference: NormalizeImageReference(GetString(stage, "ImageReference"), clipIndex, index, isTextToVideoRootWorkflow),
             ControlNetStrength: ParseStageControlNetStrength(stage, locationPrefix),
             ImageRefStrengths: ParseStageRefStrengths(stage, clipRefCount),
-            ImageRefWasExplicit: JsonHasOwnProperty(stage, "ImageReference")
+            ImageRefWasExplicit: JsonHasOwnProperty(stage, "ImageReference"),
+            Prompt: ParsePromptField(stage, "Prompt"),
+            NegativePrompt: ParsePromptField(stage, "NegativePrompt"),
+            Loras: ParseLoras(stage)
         );
     }
 
@@ -717,6 +723,36 @@ internal static class VideoStagesSpecParser
         }
         return Math.Clamp(value, 0.0, 1.0);
     }
+
+    private static string ParsePromptField(JObject obj, string key)
+    {
+        string value = GetString(obj, key);
+        return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+    }
+
+    private static IReadOnlyList<LoraRef> ParseLoras(JObject obj)
+    {
+        List<LoraRef> loras = [];
+        foreach (JObject entry in GetObjectArray(obj, "Loras"))
+        {
+            string name = GetString(entry, "Name");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+            double weight = SanitizeLoraWeight(GetOptionalDouble(entry, "Weight", 1.0, "Lora"), 1.0);
+            double? tencWeight = null;
+            if (JsonHasOwnProperty(entry, "TextEncoderWeight"))
+            {
+                tencWeight = SanitizeLoraWeight(GetOptionalDouble(entry, "TextEncoderWeight", weight, "Lora"), weight);
+            }
+            loras.Add(new LoraRef(name.Trim(), weight, tencWeight));
+        }
+        return loras;
+    }
+
+    private static double SanitizeLoraWeight(double value, double fallback) =>
+        double.IsNaN(value) || double.IsInfinity(value) ? fallback : value;
 
     private static string NormalizeImageReference(string rawValue, int clipIndex, int index, bool isTextToVideoRootWorkflow)
     {
