@@ -22,9 +22,6 @@ public class VideoStagesExtension : Extension
     public override void OnPreInit()
     {
         PromptRegion.RegisterCustomPrefix(VideoStagesPromptSection.Prefix);
-        T2IPromptHandling.PromptTagBasicProcessors[VideoStagesPromptSection.Prefix] = (_, _) => "";
-        T2IPromptHandling.PromptTagLengthEstimators[VideoStagesPromptSection.Prefix] = (_, _) => "";
-
         StyleSheetFiles.Add("Assets/video-stages.css");
         ScriptFiles.Add("Assets/video-stages.js");
     }

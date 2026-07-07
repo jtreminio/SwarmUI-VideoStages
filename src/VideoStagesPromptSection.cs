@@ -6,7 +6,7 @@ namespace VideoStages;
 internal static class VideoStagesPromptSection
 {
     public const string Prefix = "videostages";
-    private const string Opener = "<videostages:";
+    private const string Opener = "<videostages>";
 
     private static string OriginalPositivePrompt(WorkflowGenerator g)
     {
@@ -33,9 +33,9 @@ internal static class VideoStagesPromptSection
         {
             return null;
         }
-        int dataStart = start + Opener.Length;
-        int end = prompt.IndexOf('>', dataStart);
-        return end < 0 ? null : prompt[dataStart..end];
+        int bodyStart = start + Opener.Length;
+        int bodyEnd = prompt.IndexOf('<', bodyStart);
+        return (bodyEnd < 0 ? prompt[bodyStart..] : prompt[bodyStart..bodyEnd]).Trim();
     }
 
     public static bool IsPresent(WorkflowGenerator g) => ExtractJson(g) is not null;
@@ -51,11 +51,7 @@ internal static class VideoStagesPromptSection
         {
             return prompt.Trim();
         }
-        int end = prompt.IndexOf('>', start + Opener.Length);
-        if (end < 0)
-        {
-            return prompt.Trim();
-        }
-        return (prompt[..start] + prompt[(end + 1)..]).Trim();
+        int bodyEnd = prompt.IndexOf('<', start + Opener.Length);
+        return (bodyEnd < 0 ? prompt[..start] : prompt[..start] + prompt[bodyEnd..]).Trim();
     }
 }

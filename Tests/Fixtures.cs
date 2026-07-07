@@ -86,10 +86,6 @@ internal static class Fixtures
         return input;
     }
 
-    /// <summary>
-    /// Attaches the Video Stages config to the input the way the real app does: as a <c>&lt;videostages:JSON&gt;</c>
-    /// section appended to the prompt (angle brackets escaped), not the retired VideoStagesJson param.
-    /// </summary>
     public static void SetVideoStagesConfig(T2IParamInput input, string json)
     {
         string existing = input.Get(T2IParamTypes.Prompt, "");
@@ -98,7 +94,7 @@ internal static class Fixtures
     }
 
     public static string WrapVideoStagesSection(string json) =>
-        $"<videostages:{json.Replace("<", "\\u003c").Replace(">", "\\u003e")}>";
+        $"<videostages>{json.Replace("<", "\\u003c").Replace(">", "\\u003e")}";
 
     public static T2IParamInput BuildNativeInput(
         T2IModel baseModel,

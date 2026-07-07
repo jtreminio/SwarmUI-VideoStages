@@ -11,8 +11,6 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-// Per-clip / per-stage prompt + LoRA now live in the <videostages:JSON> section (folding in the old
-// <videoclip[c]> / <videoclip[c,s]> tiers). Fallback chain is stage prompt → clip prompt → residual global.
 public partial class StageFlowTests
 {
     [Fact]
@@ -39,7 +37,6 @@ public partial class StageFlowTests
         Assert.NotEmpty(conditioningTexts);
         Assert.Contains(conditioningTexts, text => text.Contains("clip-zero words"));
         Assert.DoesNotContain(conditioningTexts, text => text.Contains("global-only words"));
-        // The <videostages:JSON> section must never leak into sampling conditioning.
         Assert.DoesNotContain(conditioningTexts, text => text.Contains("videostages") || text.Contains("\"stages\""));
     }
 
