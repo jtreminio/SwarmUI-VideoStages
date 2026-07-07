@@ -1005,7 +1005,6 @@
       upscale: previousStage ? previousStage.upscale : defaults.upscale,
       upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
       model: previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues),
-      vae: previousStage ? previousStage.vae : defaults.vaeValues[0] ?? "",
       steps: previousStage ? previousStage.steps : defaults.steps,
       cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
       sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
@@ -1026,7 +1025,6 @@
     return {
       expanded: true,
       skipped: false,
-      // Assigned a distinct hue by assignMissingHues on the next save/load.
       hue: UNASSIGNED_HUE,
       duration: snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
@@ -1128,7 +1126,6 @@
       upscale: firstStageUpscale.upscale,
       upscaleMethod: firstStageUpscale.upscaleMethod,
       model: `${rawStage.model ?? fallback.model}` || fallback.model,
-      vae: `${rawStage.vae ?? fallback.vae ?? ""}`,
       steps: Math.max(
         1,
         Math.round(
@@ -1308,7 +1305,6 @@
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
       model = utils.getSelectElement("input_model");
     }
-    const vae = utils.getSelectElement("input_vae");
     const loras = getDropdownOptions("loras", "input_loras");
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
@@ -1346,8 +1342,6 @@
       modelLabels: utils.getSelectLabels(model),
       loraValues: loras.values,
       loraLabels: loras.labels,
-      vaeValues: utils.getSelectValues(vae),
-      vaeLabels: utils.getSelectLabels(vae),
       samplerValues: sampler.values,
       samplerLabels: sampler.labels,
       schedulerValues: scheduler.values,
@@ -1423,7 +1417,6 @@
         upscale: stage.upscale,
         upscaleMethod: stage.upscaleMethod,
         model: stage.model,
-        vae: stage.vae,
         steps: stage.steps,
         cfgScale: stage.cfgScale,
         sampler: stage.sampler,

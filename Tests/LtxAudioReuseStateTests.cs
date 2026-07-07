@@ -28,7 +28,6 @@ public class LtxAudioReuseStateTests
         Upscale: 1.0,
         UpscaleMethod: "pixel-lanczos",
         Model: "model-a",
-        Vae: "",
         Steps: 8,
         CfgScale: 1.0,
         Sampler: "euler",

@@ -24,7 +24,6 @@ internal static class Fixtures
             ["Upscale"] = upscale,
             ["UpscaleMethod"] = upscaleMethod,
             ["Model"] = model,
-            ["Vae"] = "",
             ["Steps"] = steps,
             ["CfgScale"] = cfgScale,
             ["Sampler"] = sampler,

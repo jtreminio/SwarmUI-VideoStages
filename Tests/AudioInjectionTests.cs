@@ -21,7 +21,6 @@ public class AudioInjectionTests
         ["Upscale"] = 1.0,
         ["UpscaleMethod"] = "pixel-lanczos",
         ["Model"] = model,
-        ["Vae"] = "",
         ["Steps"] = 10,
         ["CfgScale"] = 4.5,
         ["Sampler"] = "euler",

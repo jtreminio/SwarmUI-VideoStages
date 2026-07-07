@@ -211,7 +211,6 @@ export const buildDefaultStage = (
         model: previousStage
             ? previousStage.model
             : getDefaultStageModel(defaults.modelValues),
-        vae: previousStage ? previousStage.vae : (defaults.vaeValues[0] ?? ""),
         steps: previousStage ? previousStage.steps : defaults.steps,
         cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
         sampler: previousStage
@@ -361,7 +360,6 @@ export const normalizeStage = (
         upscale: firstStageUpscale.upscale,
         upscaleMethod: firstStageUpscale.upscaleMethod,
         model: `${rawStage.model ?? fallback.model}` || fallback.model,
-        vae: `${rawStage.vae ?? fallback.vae ?? ""}`,
         steps: Math.max(
             1,
             Math.round(

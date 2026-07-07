@@ -41,7 +41,6 @@ export const getRootDefaults = (): RootDefaults => {
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
         model = utils.getSelectElement("input_model");
     }
-    const vae = utils.getSelectElement("input_vae");
     const loras = getDropdownOptions("loras", "input_loras");
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
@@ -83,8 +82,6 @@ export const getRootDefaults = (): RootDefaults => {
         modelLabels: utils.getSelectLabels(model),
         loraValues: loras.values,
         loraLabels: loras.labels,
-        vaeValues: utils.getSelectValues(vae),
-        vaeLabels: utils.getSelectLabels(vae),
         samplerValues: sampler.values,
         samplerLabels: sampler.labels,
         schedulerValues: scheduler.values,

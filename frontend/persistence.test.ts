@@ -26,7 +26,6 @@ describe("persistence", () => {
                         minimalStage({
                             controlNetStrength: 0.7,
                             refStrengths: [0.8],
-                            vae: "v",
                         }),
                     ],
                 }),
@@ -65,7 +64,6 @@ describe("persistence", () => {
                             upscale: 1,
                             upscaleMethod: "latentmodel-test.safetensors",
                             model: "m",
-                            vae: "v",
                             steps: 8,
                             cfgScale: 1,
                             sampler: "euler",

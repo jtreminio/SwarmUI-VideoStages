@@ -21,7 +21,6 @@ internal static class VideoStagesSpecParser
         double Control,
         double Upscale,
         string UpscaleMethod,
-        string Vae,
         int Steps,
         double CfgScale,
         string Sampler,
@@ -580,7 +579,6 @@ internal static class VideoStagesSpecParser
             Control: NormalizeControl(DefaultControl),
             Upscale: NormalizeUpscale(DefaultUpscale),
             UpscaleMethod: DefaultUpscaleMethod,
-            Vae: "",
             Steps: Math.Max(1, steps),
             CfgScale: NormalizeCfgScale(cfgScale),
             Sampler: sampler,
@@ -640,7 +638,6 @@ internal static class VideoStagesSpecParser
             Upscale: upscale,
             UpscaleMethod: upscaleMethod,
             Model: model,
-            Vae: NormalizeVaeValue(GetOptionalString(stage, "Vae", defaults.Vae, locationPrefix, allowEmpty: true)),
             Steps: Math.Max(1, GetOptionalInt(stage, "Steps", defaults.Steps, locationPrefix)),
             CfgScale: NormalizeCfgScale(GetOptionalDouble(stage, "CfgScale", defaults.CfgScale, locationPrefix)),
             Sampler: GetOptionalString(stage, "Sampler", defaults.Sampler, locationPrefix, allowEmpty: false),
@@ -816,20 +813,6 @@ internal static class VideoStagesSpecParser
     private static string GetDefaultImageReference(int index)
     {
         return index == 0 ? DefaultGeneratedReference : DefaultPreviousStageReference;
-    }
-
-    private static string NormalizeVaeValue(string rawVae)
-    {
-        if (string.IsNullOrWhiteSpace(rawVae))
-        {
-            return "";
-        }
-        string trimmed = rawVae.Trim();
-        if (StringUtils.Equals(trimmed, "Automatic") || StringUtils.Equals(trimmed, "None"))
-        {
-            return "";
-        }
-        return trimmed;
     }
 
     private static string NormalizeOptionalModelName(string rawModelName)

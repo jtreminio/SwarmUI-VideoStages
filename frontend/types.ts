@@ -3,8 +3,6 @@ export interface RootDefaults {
     modelLabels: string[];
     loraValues: string[];
     loraLabels: string[];
-    vaeValues: string[];
-    vaeLabels: string[];
     samplerValues: string[];
     samplerLabels: string[];
     schedulerValues: string[];
@@ -54,7 +52,6 @@ export interface Stage {
     upscale: number;
     upscaleMethod: string;
     model: string;
-    vae: string;
     steps: number;
     cfgScale: number;
     sampler: string;
@@ -107,7 +104,6 @@ export type StoredStage = Pick<
     | "upscale"
     | "upscaleMethod"
     | "model"
-    | "vae"
     | "steps"
     | "cfgScale"
     | "sampler"

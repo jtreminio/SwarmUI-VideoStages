@@ -52,7 +52,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
                 model: stage.model,
-                vae: stage.vae,
                 steps: stage.steps,
                 cfgScale: stage.cfgScale,
                 sampler: stage.sampler,

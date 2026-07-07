@@ -23,7 +23,6 @@ public class VideoStagesSpecParserClipsTests
             ["CfgScale"] = cfg,
             ["Sampler"] = "euler",
             ["Scheduler"] = "normal",
-            ["Vae"] = "",
             ["Control"] = 1,
             ["Upscale"] = 1,
             ["UpscaleMethod"] = "pixel-lanczos",

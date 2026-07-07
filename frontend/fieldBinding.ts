@@ -345,11 +345,6 @@ export const applyStageField = (
         return;
     }
 
-    if (field === "vae") {
-        stage.vae = target.value;
-        return;
-    }
-
     if (field === "sampler") {
         stage.sampler = target.value;
         return;

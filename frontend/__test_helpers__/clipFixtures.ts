@@ -14,7 +14,6 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     upscale: 1,
     upscaleMethod: "latentmodel-test.safetensors",
     model: "m",
-    vae: "",
     steps: 8,
     cfgScale: 1,
     sampler: "euler",

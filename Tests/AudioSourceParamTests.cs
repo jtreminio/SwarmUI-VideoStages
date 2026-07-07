@@ -16,7 +16,6 @@ public class AudioSourceParamTests
         ["CfgScale"] = 1,
         ["Sampler"] = "euler",
         ["Scheduler"] = "normal",
-        ["Vae"] = "",
         ["Control"] = 1,
         ["Upscale"] = 1,
         ["UpscaleMethod"] = "pixel-lanczos",

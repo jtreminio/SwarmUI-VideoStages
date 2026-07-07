@@ -19,7 +19,6 @@ public class ImageReferenceTests
             ["Upscale"] = 1.0,
             ["UpscaleMethod"] = "pixel-lanczos",
             ["Model"] = model,
-            ["Vae"] = "",
             ["Steps"] = 12,
             ["CfgScale"] = 5.0,
             ["Sampler"] = "euler",
@@ -261,7 +260,6 @@ public class ImageReferenceTests
         Assert.Equal(1.0, stages[0].Control);
         Assert.Equal(1.0, stages[0].Upscale);
         Assert.Equal("pixel-lanczos", stages[0].UpscaleMethod);
-        Assert.Equal("", stages[0].Vae);
         Assert.Equal(6.2, stages[0].CfgScale);
         Assert.Equal("euler", stages[0].Sampler);
         Assert.Equal("normal", stages[0].Scheduler);

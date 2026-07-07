@@ -233,14 +233,6 @@ const setupParameterPanel = (): void => {
     }
     document.body.appendChild(refinerUpscaleMethod);
 
-    const vae = document.createElement("select");
-    vae.id = "input_vae";
-    const vaeOpt = document.createElement("option");
-    vaeOpt.value = "Automatic";
-    vaeOpt.text = "Automatic";
-    vae.appendChild(vaeOpt);
-    document.body.appendChild(vae);
-
     const widthInput = document.createElement("input");
     widthInput.type = "number";
     widthInput.id = "input_aspectratiowidth";

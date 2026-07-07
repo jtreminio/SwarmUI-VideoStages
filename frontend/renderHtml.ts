@@ -594,13 +594,6 @@ export const renderStageRow = (
         defaults.schedulerLabels,
         stage.scheduler,
     );
-    const vaeField = stageDropdownField(
-        "vae",
-        "VAE",
-        defaults.vaeValues,
-        defaults.vaeLabels,
-        stage.vae,
-    );
     const controlNetLoraActive =
         normalizeControlNetLora(clip.controlNetLora) !== "";
     const controlNetStrengthDisabled =
@@ -642,7 +635,6 @@ export const renderStageRow = (
                 ${upscaleMethodField}
                 ${samplerField}
                 ${schedulerField}
-                ${vaeField}
                 ${controlNetStrengthField}
                 ${refStrengthFields}
             </div>

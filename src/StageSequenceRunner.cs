@@ -220,10 +220,6 @@ internal sealed class StageSequenceRunner(
         g.UserInput.Set(T2IParamTypes.CFGScale, stage.CfgScale, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SamplerParam.Type, stage.Sampler, sectionId);
         g.UserInput.Set(ComfyUIBackendExtension.SchedulerParam.Type, stage.Scheduler, sectionId);
-        if (!string.IsNullOrEmpty(stage.Vae))
-        {
-            g.UserInput.Set(T2IParamTypes.VAE.Type, stage.Vae, sectionId);
-        }
         if (clipContext.Clip.Frames is int frames && frames > 0)
         {
             g.UserInput.Set(T2IParamTypes.VideoFrames, frames, sectionId);

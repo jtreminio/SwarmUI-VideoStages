@@ -12,7 +12,6 @@ public sealed record StageSpec(
     double Upscale,
     string UpscaleMethod,
     string Model,
-    string Vae,
     int Steps,
     double CfgScale,
     string Sampler,

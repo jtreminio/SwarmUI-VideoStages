@@ -20,8 +20,6 @@ const getRootDefaults = (): RootDefaults => ({
     modelLabels: ["LTX"],
     loraValues: ["ltx-ic-lora.safetensors"],
     loraLabels: ["LTX IC LoRA"],
-    vaeValues: ["Automatic"],
-    vaeLabels: ["Automatic"],
     samplerValues: ["euler"],
     samplerLabels: ["Euler"],
     schedulerValues: ["normal"],

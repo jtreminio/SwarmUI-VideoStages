@@ -94,7 +94,6 @@ export const createObservers = (deps: {
         const observableIds = [
             "input_videomodel",
             "input_model",
-            "input_vae",
             "input_sampler",
             "input_scheduler",
             "input_refinerupscalemethod",
