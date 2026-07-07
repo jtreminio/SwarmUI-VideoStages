@@ -23,7 +23,7 @@ const registerVideoStagesPromptPrefix = (): void => {
         () => [
             '\nUse "<videostages>{ ...JSON... }" to configure clips, stages, refs, audio, prompts and loras in one JSON blob.',
             '\nExample: <videostages>{"clips":[{"prompt":"a red fox","stages":[{"model":"...","steps":30}]}]}',
-            '\nPer-clip / per-stage "prompt" and "loras" fold into this JSON — there is no more <videoclip> section.',
+            '\nPer-clip "prompt" and per-clip / per-stage "loras" fold into this JSON — there is no more <videoclip> section.',
         ],
         true,
     );
