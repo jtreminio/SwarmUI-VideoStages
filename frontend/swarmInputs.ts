@@ -63,6 +63,19 @@ export const writeVideoStagesSection = (json: string, notify = true): void => {
     }
 };
 
+export const readGlobalPrompt = (): string => {
+    const value = getPromptInput()?.value ?? "";
+    const at = value.indexOf(VIDEOSTAGES_OPENER);
+    if (at < 0) {
+        return value.trim();
+    }
+    const afterOpener = at + VIDEOSTAGES_OPENER.length;
+    const rest = value.slice(afterOpener);
+    const stop = rest.indexOf("<");
+    const spanEnd = stop < 0 ? value.length : afterOpener + stop;
+    return (value.slice(0, at) + value.slice(spanEnd)).trim();
+};
+
 export const ROOT_DIMENSION_WIDTH_INPUT_ID = "input_videostageswidth";
 export const ROOT_DIMENSION_HEIGHT_INPUT_ID = "input_videostagesheight";
 export const DIMENSIONS_PRESET_SELECT_ID = "input_videostagesdimensions";

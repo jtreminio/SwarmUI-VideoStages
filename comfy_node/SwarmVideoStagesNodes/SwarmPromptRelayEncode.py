@@ -1,0 +1,164 @@
+"""ComfyUI node: PromptRelay temporal cross-attention prompt scheduling (LTX only).
+
+Trimmed port of WhatDreamsCost-ComfyUI/ltx_director.py::_encode_relay. Schedules N
+local prompts across the frame axis of a single LTX generation via an additive
+Gaussian penalty on the text-key cross-attention, plus a global prompt that
+conditions the whole clip. The latent input is optional: when connected it gives
+exact latent geometry, otherwise geometry is derived from the model + segment
+lengths (the attention-time mask closure recovers the true tokens-per-frame).
+"""
+
+from __future__ import annotations
+
+import logging
+
+import torch
+from comfy_api.latest import io
+
+from .swarm_prompt_relay import (
+    apply_patches,
+    build_segments,
+    convert_to_latent_lengths,
+    create_mask_fn,
+    detect_model_type,
+    distribute_segment_lengths,
+    get_raw_tokenizer,
+    map_token_indices,
+    parse_windows,
+)
+
+log = logging.getLogger(__name__)
+
+
+class SwarmPromptRelayEncode(io.ComfyNode):
+    """Encode a global + per-window local prompt schedule and patch an LTX model's
+    cross-attention so each frame window attends to its own local prompt."""
+
+    @classmethod
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="SwarmPromptRelayEncode",
+            display_name="Swarm Prompt Relay Encode",
+            category="SwarmUI/Video",
+            description=(
+                "PromptRelay temporal cross-attention scheduling for LTX: a global prompt "
+                "plus a JSON array of local prompt windows (each an object with a per-window "
+                "duration in seconds and prompt), scheduled temporally across the clip. Window "
+                "durations are converted to frames using the fps input."
+            ),
+            inputs=[
+                io.Model.Input("model"),
+                io.Clip.Input("clip"),
+                io.String.Input(
+                    "global_prompt", multiline=True, default="",
+                    tooltip="Conditions the entire clip (persistent characters, scene, style).",
+                ),
+                io.String.Input(
+                    "windows", multiline=True, default="",
+                    tooltip=(
+                        'JSON array of window objects [{"prompt": str, "seconds": float}, ...], '
+                        "in schedule order. seconds is the window duration; it is converted to "
+                        "frames using the fps input."
+                    ),
+                ),
+                io.Float.Input(
+                    "fps", default=24.0, min=1.0, max=240.0, step=0.1,
+                    tooltip="Frames per second, used to convert each window's seconds into a frame count.",
+                ),
+                io.Float.Input(
+                    "epsilon", default=0.001, min=0.0001, max=0.99, step=0.0001,
+                    tooltip="Penalty decay. <~0.1 gives sharp boundaries (paper default 0.001); higher softens.",
+                ),
+                io.Latent.Input(
+                    "latent", optional=True,
+                    tooltip="Optional. Connect the sampling latent for exact frame geometry.",
+                ),
+            ],
+            outputs=[
+                io.Model.Output(display_name="model"),
+                io.Conditioning.Output(display_name="positive"),
+            ],
+        )
+
+    @classmethod
+    @torch.inference_mode()
+    def execute(
+        cls,
+        model,
+        clip,
+        global_prompt: str = "",
+        windows: str = "",
+        fps: float = 24.0,
+        epsilon: float = 1e-3,
+        latent=None,
+    ) -> io.NodeOutput:
+        for name, val in (("global_prompt", global_prompt), ("windows", windows)):
+            if val is None:
+                raise ValueError(
+                    f"PromptRelay: '{name}' arrived as None. Set it to an empty string "
+                    "or fix the upstream connection."
+                )
+
+        # Parallel per-window lists; empties are kept so we can fill them from the global below.
+        locals_list, seconds_parsed = parse_windows(windows)
+
+        # Convert each window's duration (seconds) to a pixel-space frame count via fps. A window
+        # that rounds to zero frames is kept as a single frame so it still holds a schedule slot.
+        fps = fps if fps and fps > 0 else 24.0
+        pixel_lengths_parsed = [
+            max(1, round(sec * fps)) if sec > 0 else 0 for sec in seconds_parsed
+        ]
+
+        if not locals_list or (len(locals_list) == 1 and not locals_list[0]):
+            log.info("[PromptRelay] No local segments found. Using global prompt exclusively.")
+            conditioning = clip.encode_from_tokens_scheduled(clip.tokenize(global_prompt))
+            return io.NodeOutput(model.clone(), conditioning)
+
+        for i, p in enumerate(locals_list):
+            if not p:
+                fallback = global_prompt.strip() if global_prompt else "video"
+                if not fallback:
+                    fallback = "video"
+                locals_list[i] = fallback
+
+        arch, patch_size, temporal_stride = detect_model_type(model)
+
+        # Any positive per-window length means explicit geometry; all-zero falls back to auto-distribute.
+        pixel_lengths = pixel_lengths_parsed if any(pixel_lengths_parsed) else None
+
+        parsed_lengths = None
+        if latent is not None:
+            samples = latent["samples"]
+            latent_frames = samples.shape[2]
+            tokens_per_frame = (samples.shape[3] // patch_size[1]) * (samples.shape[4] // patch_size[2])
+            if pixel_lengths:
+                parsed_lengths = convert_to_latent_lengths(pixel_lengths, temporal_stride, latent_frames)
+        elif pixel_lengths:
+            estimate = max(len(locals_list), max(1, round(sum(pixel_lengths) / max(1, temporal_stride))))
+            parsed_lengths = convert_to_latent_lengths(pixel_lengths, temporal_stride, estimate)
+            latent_frames = max(1, sum(parsed_lengths))
+            # Fallback; mask closure recovers true tokens-per-frame at attention time.
+            tokens_per_frame = 1
+        else:
+            latent_frames = max(1, len(locals_list))
+            tokens_per_frame = 1
+
+        raw_tokenizer = get_raw_tokenizer(clip)
+        full_prompt, token_ranges = map_token_indices(raw_tokenizer, global_prompt, locals_list)
+
+        conditioning = clip.encode_from_tokens_scheduled(clip.tokenize(full_prompt))
+
+        effective_lengths = distribute_segment_lengths(len(locals_list), latent_frames, parsed_lengths)
+
+        log.info(
+            "[PromptRelay] Latent: %d frames, %d tokens/frame (fallback), segments: %s",
+            latent_frames, tokens_per_frame, effective_lengths,
+        )
+
+        q_token_idx = build_segments(token_ranges, effective_lengths, epsilon, None)
+        mask_fn = create_mask_fn(q_token_idx, tokens_per_frame, latent_frames)
+
+        patched = model.clone()
+        apply_patches(patched, arch, mask_fn)
+
+        return io.NodeOutput(patched, conditioning)

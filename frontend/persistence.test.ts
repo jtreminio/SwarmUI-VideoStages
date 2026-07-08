@@ -44,6 +44,9 @@ describe("persistence", () => {
                     clipLengthFromControlNet: true,
                     reuseAudio: false,
                     uploadedAudio: null,
+                    prompt: "",
+                    negativePrompt: "",
+                    promptWindows: [],
                     refs: [
                         {
                             expanded: true,

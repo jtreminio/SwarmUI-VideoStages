@@ -35,6 +35,14 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
             clipLengthFromControlNet: clip.clipLengthFromControlNet,
             reuseAudio: clip.reuseAudio,
             uploadedAudio: clip.uploadedAudio,
+            prompt: clip.prompt,
+            negativePrompt: clip.negativePrompt,
+            promptWindows: clip.promptWindows.map((window) => ({
+                prompt: window.prompt,
+                start: window.start,
+                duration: window.duration,
+                skipped: window.skipped,
+            })),
             refs: clip.refs.map((ref) => ({
                 expanded: ref.expanded,
                 source: ref.source,

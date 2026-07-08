@@ -27,6 +27,7 @@ import {
 import { framesForClip, snapDurationToFps } from "./renderUtils";
 import {
     type Clip,
+    type PromptWindow,
     REF_SOURCE_REFINER,
     type RefImage,
     type RootDefaults,
@@ -34,6 +35,50 @@ import {
     type UploadedAudio,
 } from "./types";
 import { utils } from "./utils";
+
+const readProp = (raw: Record<string, unknown>, ...keys: string[]): unknown => {
+    for (const key of keys) {
+        if (Object.hasOwn(raw, key)) {
+            return raw[key];
+        }
+    }
+    return undefined;
+};
+
+const normalizePromptWindow = (
+    raw: Record<string, unknown>,
+): PromptWindow | null => {
+    const duration = utils.toNumber(
+        `${readProp(raw, "duration", "Duration") ?? 0}`,
+        0,
+    );
+    if (!(duration > 0)) {
+        return null;
+    }
+    const start = Math.max(
+        0,
+        utils.toNumber(`${readProp(raw, "start", "Start") ?? 0}`, 0),
+    );
+    return {
+        prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
+        start,
+        duration,
+        skipped: !!readProp(raw, "skipped", "Skipped"),
+    };
+};
+
+export const normalizePromptWindows = (
+    rawClip: Record<string, unknown>,
+): PromptWindow[] => {
+    const rawList = readProp(rawClip, "promptWindows", "PromptWindows");
+    if (!Array.isArray(rawList)) {
+        return [];
+    }
+    return rawList
+        .map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {}))
+        .filter((window): window is PromptWindow => window !== null)
+        .sort((a, b) => a.start - b.start);
+};
 
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
@@ -255,6 +300,9 @@ export const buildDefaultClip = (
         clipLengthFromControlNet: false,
         reuseAudio: false,
         uploadedAudio: null,
+        prompt: "",
+        negativePrompt: "",
+        promptWindows: [],
         refs,
         stages: [
             {
@@ -500,6 +548,9 @@ export const normalizeClip = (
         clipLengthFromControlNet,
         reuseAudio: !!rawClip.reuseAudio,
         uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
+        prompt: `${readProp(rawClip, "prompt", "Prompt") ?? ""}`,
+        negativePrompt: `${readProp(rawClip, "negativePrompt", "NegativePrompt") ?? ""}`,
+        promptWindows: normalizePromptWindows(rawClip),
         refs,
         stages,
     };

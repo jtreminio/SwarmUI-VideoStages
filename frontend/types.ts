@@ -58,6 +58,13 @@ export interface Stage {
     scheduler: string;
 }
 
+export interface PromptWindow {
+    prompt: string;
+    start: number;
+    duration: number;
+    skipped: boolean;
+}
+
 export interface RefImage {
     expanded: boolean;
     source: string;
@@ -80,6 +87,9 @@ export interface Clip {
     clipLengthFromControlNet: boolean;
     reuseAudio: boolean;
     uploadedAudio: UploadedAudio | null;
+    prompt: string;
+    negativePrompt: string;
+    promptWindows: PromptWindow[];
     refs: RefImage[];
     stages: Stage[];
 }
@@ -124,7 +134,10 @@ export type StoredClip = Pick<
     | "clipLengthFromControlNet"
     | "reuseAudio"
     | "uploadedAudio"
+    | "prompt"
+    | "negativePrompt"
 > & {
+    promptWindows: PromptWindow[];
     refs: StoredRefImage[];
     stages: StoredStage[];
 };

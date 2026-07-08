@@ -336,8 +336,45 @@ internal static class VideoStagesSpecParser
             Stages: stages,
             Prompt: ParsePromptField(clipObj, "Prompt"),
             NegativePrompt: ParsePromptField(clipObj, "NegativePrompt"),
-            Loras: ParseLoras(clipObj)
+            Loras: ParseLoras(clipObj),
+            PromptWindows: ParsePromptWindows(clipObj, clipIndex)
         );
+    }
+
+    private static IReadOnlyList<PromptWindowSpec> ParsePromptWindows(JObject clipObj, int clipIndex)
+    {
+        List<JObject> rawWindows = GetObjectArray(clipObj, "PromptWindows");
+        if (rawWindows.Count == 0)
+        {
+            return [];
+        }
+
+        List<(PromptWindowSpec Window, double SortKey, int Seen)> collected = [];
+        for (int i = 0; i < rawWindows.Count; i++)
+        {
+            JObject entry = rawWindows[i];
+            string prompt = GetString(entry, "Prompt") ?? GetString(entry, "Text");
+            prompt = prompt?.Trim() ?? "";
+
+            double duration = GetOptionalDouble(entry, "Duration", 0, $"Clip {clipIndex} PromptWindow {i}");
+            if (duration <= 0)
+            {
+                continue;
+            }
+
+            double start = Math.Max(0, GetOptionalDouble(entry, "Start", 0, $"Clip {clipIndex} PromptWindow {i}"));
+            bool skipped = GetOptionalBool(entry, "Skipped", defaultValue: false);
+
+            collected.Add((new PromptWindowSpec(prompt, start, duration, skipped), start, i));
+        }
+
+        collected.Sort((a, b) =>
+        {
+            int keyCompare = a.SortKey.CompareTo(b.SortKey);
+            return keyCompare != 0 ? keyCompare : a.Seen.CompareTo(b.Seen);
+        });
+
+        return [.. collected.Select(entry => entry.Window)];
     }
 
     private static ImageRefSpec ParseRef(JObject refObj, int clipIndex, int refIndex)

@@ -250,6 +250,8 @@
   var REF_FRAME_MIN = 1;
   var DEFAULT_CLIP_DURATION_SECONDS = 5;
   var CLIP_DURATION_MIN = 1;
+  var PROMPT_WINDOW_MIN_DURATION = 0.25;
+  var PROMPT_WINDOW_DEFAULT_DURATION = 1.5;
   var ROOT_DIMENSION_MIN = 256;
   var DIMENSIONS_PRESET_CUSTOM_VALUE = "custom";
   var ROOT_FPS_MIN = 4;
@@ -345,6 +347,18 @@
     if (notify) {
       triggerChangeFor(el);
     }
+  };
+  var readGlobalPrompt = () => {
+    const value = getPromptInput()?.value ?? "";
+    const at = value.indexOf(VIDEOSTAGES_OPENER);
+    if (at < 0) {
+      return value.trim();
+    }
+    const afterOpener = at + VIDEOSTAGES_OPENER.length;
+    const rest = value.slice(afterOpener);
+    const stop = rest.indexOf("<");
+    const spanEnd = stop < 0 ? value.length : afterOpener + stop;
+    return (value.slice(0, at) + value.slice(spanEnd)).trim();
   };
   var ROOT_DIMENSION_WIDTH_INPUT_ID = "input_videostageswidth";
   var ROOT_DIMENSION_HEIGHT_INPUT_ID = "input_videostagesheight";
@@ -838,6 +852,40 @@
   var REF_SOURCE_REFINER = "Refiner";
 
   // frontend/normalization.ts
+  var readProp = (raw, ...keys) => {
+    for (const key of keys) {
+      if (Object.hasOwn(raw, key)) {
+        return raw[key];
+      }
+    }
+    return void 0;
+  };
+  var normalizePromptWindow = (raw) => {
+    const duration = utils.toNumber(
+      `${readProp(raw, "duration", "Duration") ?? 0}`,
+      0
+    );
+    if (!(duration > 0)) {
+      return null;
+    }
+    const start = Math.max(
+      0,
+      utils.toNumber(`${readProp(raw, "start", "Start") ?? 0}`, 0)
+    );
+    return {
+      prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
+      start,
+      duration,
+      skipped: !!readProp(raw, "skipped", "Skipped")
+    };
+  };
+  var normalizePromptWindows = (rawClip) => {
+    const rawList = readProp(rawClip, "promptWindows", "PromptWindows");
+    if (!Array.isArray(rawList)) {
+      return [];
+    }
+    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
+  };
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
     (value) => value.trim().toLowerCase().startsWith("latentmodel-")
   ) ?? upscaleMethodValues[0] ?? "";
@@ -972,6 +1020,9 @@
       clipLengthFromControlNet: false,
       reuseAudio: false,
       uploadedAudio: null,
+      prompt: "",
+      negativePrompt: "",
+      promptWindows: [],
       refs,
       stages: [
         {
@@ -1173,6 +1224,9 @@
       clipLengthFromControlNet,
       reuseAudio: !!rawClip.reuseAudio,
       uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
+      prompt: `${readProp(rawClip, "prompt", "Prompt") ?? ""}`,
+      negativePrompt: `${readProp(rawClip, "negativePrompt", "NegativePrompt") ?? ""}`,
+      promptWindows: normalizePromptWindows(rawClip),
       refs,
       stages
     };
@@ -1303,6 +1357,14 @@
       clipLengthFromControlNet: clip.clipLengthFromControlNet,
       reuseAudio: clip.reuseAudio,
       uploadedAudio: clip.uploadedAudio,
+      prompt: clip.prompt,
+      negativePrompt: clip.negativePrompt,
+      promptWindows: clip.promptWindows.map((window2) => ({
+        prompt: window2.prompt,
+        start: window2.start,
+        duration: window2.duration,
+        skipped: window2.skipped
+      })),
       refs: clip.refs.map((ref) => ({
         expanded: ref.expanded,
         source: ref.source,
@@ -1706,6 +1768,56 @@
     return `<div class="vst-badges">${badges.join("")}</div>`;
   };
   var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+  var promptWindowGeom = (layout, window2, pxPerSecond) => {
+    const clipDur = Math.max(0, layout.durationSeconds);
+    const startSec = clamp(window2.start, 0, clipDur);
+    const endSec = clamp(window2.start + window2.duration, startSec, clipDur);
+    return {
+      startSec,
+      endSec,
+      leftPx: startSec * pxPerSecond,
+      widthPx: Math.max(2, (endSec - startSec) * pxPerSecond),
+      active: !window2.skipped && `${window2.prompt ?? ""}`.trim() !== ""
+    };
+  };
+  var PROMPT_PLACEHOLDER = "(no prompt)";
+  var truncatePrompt = (text, max = 120) => text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt) => {
+    const globalTrimmed = `${globalPrompt ?? ""}`.trim();
+    const parts = [];
+    for (let i = 0; i < layouts.length; i++) {
+      const layout = layouts[i];
+      const clip = clips[i];
+      if (!clip) {
+        continue;
+      }
+      const clipWidth = Math.max(1, layout.widthPx - 2);
+      const windows = clip.promptWindows ?? [];
+      const ownPrompt = `${clip.prompt ?? ""}`.trim();
+      const inherited = ownPrompt === "";
+      const major = inherited ? globalTrimmed : ownPrompt;
+      const overlays = windows.map((w) => promptWindowGeom(layout, w, pxPerSecond)).filter((g) => g.active && g.endSec > g.startSec).map(
+        (g) => `<div class="vst-major-off" style="left:${g.leftPx}px;width:${g.widthPx}px" aria-hidden="true"></div>`
+      ).join("");
+      const majorText = major === "" ? PROMPT_PLACEHOLDER : truncatePrompt(major);
+      const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
+      const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
+      parts.push(
+        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="${escapeAttr(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+      );
+      const minorSegs = windows.map((w, j) => {
+        const g = promptWindowGeom(layout, w, pxPerSecond);
+        const skippedClass = w.skipped ? " vst-minor-skipped" : "";
+        const text = `${w.prompt ?? ""}`.trim();
+        const label = text === "" ? "(empty)" : truncatePrompt(text, 60);
+        return `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeAttr(text || "(empty minor prompt)")}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-actions"><button type="button" class="vst-minor-act" data-vst-minor-action="skip" title="${w.skipped ? "Enable this minor prompt" : "Skip this minor prompt"}" aria-label="${w.skipped ? "Enable minor prompt" : "Skip minor prompt"}">${w.skipped ? "○" : "◉"}</button><button type="button" class="vst-minor-act" data-vst-minor-action="delete" title="Delete this minor prompt" aria-label="Delete minor prompt">×</button></span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+      }).join("");
+      parts.push(
+        `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="Click empty space to add a minor prompt">${minorSegs}</div>`
+      );
+    }
+    return `<div class="vst-track-row vst-track-prompt"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-prompt" aria-hidden="true">✎</div><div class="vst-track-label"><strong>Prompt</strong><small>major · relay</small></div></div><div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
+  };
   var renderTimeline = (body, clips, options) => {
     const fps = safeFps(options?.fps);
     const unit = options?.unit === "frames" ? "frames" : "seconds";
@@ -1858,8 +1970,14 @@
     });
     const audioRow = audioSegments.length === 0 ? "" : `<div class="vst-track-row vst-track-audio"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell">${audioSegments.join("")}</div></div>`;
     const videoHead = `<div class="vst-track-head"><div class="vst-track-icon vst-track-icon-video" aria-hidden="true">▶</div><div class="vst-track-label"><strong>Video</strong><small>V1 · ${clips.length} ${clipWord}</small></div></div>`;
+    const promptRow = renderPromptTrackRow(
+      clips,
+      layouts,
+      pxPerSecond,
+      `${options?.globalPrompt ?? ""}`
+    );
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${ticks.join("")}</div></div><div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}</div></div>` + audioRow + `</div></div>`;
+    body.innerHTML = `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${ticks.join("")}</div></div>` + promptRow + `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}</div></div>` + audioRow + `</div></div>`;
     wireTopbar();
     wireScroll();
   };
@@ -2473,6 +2591,633 @@
     return { attach, reapplySelection, getSelectedIndex, dispose };
   };
 
+  // frontend/timelinePromptTrack.ts
+  var MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
+  var MINOR_SELECTOR = ".vst-minor-seg[data-clip-idx]";
+  var MINOR_EDGE_SELECTOR = "[data-vst-minor-edge]";
+  var MINOR_ACTION_SELECTOR = "[data-vst-minor-action]";
+  var LANE_SELECTOR = ".vst-minor-lane[data-clip-idx]";
+  var DRAG_THRESHOLD_PX2 = 4;
+  var DRAGGING_CLASS2 = "vst-prompt-dragging";
+  var GHOST_CLASS = "vst-minor-ghost";
+  var parseIntAttr = (el, name) => {
+    if (!el) {
+      return null;
+    }
+    const raw = el.getAttribute(name);
+    if (raw === null) {
+      return null;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  };
+  var clipDurationOf = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
+  var roundSeconds = (seconds) => Math.round(seconds * 10) / 10;
+  var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
+    k,
+    start: clamp(w.start, 0, clipDuration),
+    end: clamp(w.start + w.duration, 0, clipDuration)
+  })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
+  var freeIntervalAt = (spans, clipDuration, point) => {
+    const p = clamp(point, 0, clipDuration);
+    let lo = 0;
+    let hi = clipDuration;
+    for (const span of spans) {
+      if (span.end <= p) {
+        if (span.end > lo) {
+          lo = span.end;
+        }
+      } else if (span.start >= p) {
+        hi = span.start;
+        break;
+      } else {
+        return [p, p];
+      }
+    }
+    return [lo, hi];
+  };
+  var createTimelinePromptTrack = () => {
+    let moveState = null;
+    let resizeState = null;
+    let createState = null;
+    let suppressClick = false;
+    let activeEditorWrap = null;
+    let editingAnchor = null;
+    let outsideMouseHandler = null;
+    let boundBody = null;
+    const closeEditor = () => {
+      if (outsideMouseHandler) {
+        document.removeEventListener(
+          "mousedown",
+          outsideMouseHandler,
+          true
+        );
+        outsideMouseHandler = null;
+      }
+      if (editingAnchor) {
+        editingAnchor.classList.remove("vst-prompt-editing");
+        editingAnchor = null;
+      }
+      if (activeEditorWrap) {
+        activeEditorWrap.remove();
+        activeEditorWrap = null;
+      }
+    };
+    const openEditor = (anchor, label, initial, placeholder, commit) => {
+      closeEditor();
+      const sourceJson = readVideoStagesSection();
+      const hostRect = (boundBody ?? document.body).getBoundingClientRect();
+      const viewportW = window.innerWidth || document.documentElement.clientWidth;
+      const width = clamp(Math.round(hostRect.width - 32), 280, 560);
+      const left = clamp(
+        Math.round(hostRect.left + (hostRect.width - width) / 2),
+        8,
+        Math.max(8, viewportW - width - 8)
+      );
+      const wrap = document.createElement("div");
+      wrap.className = "vst-prompt-inspector";
+      wrap.style.left = `${left}px`;
+      wrap.style.top = `${Math.round(Math.max(8, hostRect.top + 46))}px`;
+      wrap.style.width = `${width}px`;
+      const head = document.createElement("div");
+      head.className = "vst-prompt-inspector-head";
+      head.textContent = label;
+      const editor = document.createElement("textarea");
+      editor.className = "vst-prompt-editor";
+      editor.value = initial;
+      editor.placeholder = placeholder;
+      const hint = document.createElement("div");
+      hint.className = "vst-prompt-inspector-hint";
+      hint.textContent = "Enter to save · Shift+Enter for a new line · Esc to cancel";
+      wrap.append(head, editor, hint);
+      anchor.classList.add("vst-prompt-editing");
+      editingAnchor = anchor;
+      let done = false;
+      const finish = (save) => {
+        if (done) {
+          return;
+        }
+        done = true;
+        const value = editor.value;
+        closeEditor();
+        if (save && !isStale(sourceJson)) {
+          commit(value);
+        }
+      };
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          finish(true);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          finish(false);
+        }
+        event.stopPropagation();
+      });
+      const onOutside = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        if (target.closest(".vst-prompt-inspector") || target.closest(".sui-popover")) {
+          return;
+        }
+        finish(true);
+      };
+      outsideMouseHandler = onOutside;
+      document.addEventListener("mousedown", onOutside, true);
+      document.body.appendChild(wrap);
+      activeEditorWrap = wrap;
+      if (typeof textPromptAddKeydownHandler === "function") {
+        textPromptAddKeydownHandler(editor);
+      }
+      editor.focus();
+      editor.select();
+    };
+    const isStale = (sourceJson) => readVideoStagesSection() !== sourceJson;
+    const commitMajorPrompt = (clipIdx, text) => {
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      if (!clip) {
+        return;
+      }
+      clip.prompt = text.trim();
+      saveClips(clips);
+    };
+    const commitMinorPrompt = (clipIdx, windowIdx, text) => {
+      const clips = getClips();
+      const window2 = clips[clipIdx]?.promptWindows?.[windowIdx];
+      if (!window2) {
+        return;
+      }
+      window2.prompt = text.trim();
+      saveClips(clips);
+    };
+    const applyMinorAction = (clipIdx, windowIdx, action) => {
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      const window2 = clip?.promptWindows?.[windowIdx];
+      if (!clip || !window2) {
+        return;
+      }
+      if (action === "delete") {
+        clip.promptWindows.splice(windowIdx, 1);
+      } else if (action === "skip") {
+        window2.skipped = !window2.skipped;
+      } else {
+        return;
+      }
+      saveClips(clips);
+    };
+    const commitMove = (state, dxPx, pps) => {
+      if (isStale(state.sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      const window2 = clip?.promptWindows?.[state.windowIdx];
+      if (!clip || !window2) {
+        return;
+      }
+      const clipDur = clipDurationOf(clip);
+      const desiredStart = state.startStart + dxPx / pps;
+      const dur = Math.min(state.duration, clipDur);
+      const maxStart = Math.max(state.boundLo, state.boundHi - dur);
+      window2.start = roundSeconds(
+        clamp(desiredStart, state.boundLo, maxStart)
+      );
+      window2.duration = roundSeconds(
+        Math.max(
+          PROMPT_WINDOW_MIN_DURATION,
+          Math.min(dur, state.boundHi - window2.start)
+        )
+      );
+      saveClips(clips);
+    };
+    const commitResize = (state, dxPx, pps) => {
+      if (isStale(state.sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      const window2 = clip?.promptWindows?.[state.windowIdx];
+      if (!clip || !window2) {
+        return;
+      }
+      const clipDur = clipDurationOf(clip);
+      const spans = otherSpans(clip.promptWindows, state.windowIdx, clipDur);
+      const deltaSec = dxPx / pps;
+      if (state.edge === "right") {
+        const [, hi] = freeIntervalAt(spans, clipDur, state.startStart);
+        const end = clamp(
+          state.startStart + state.startDuration + deltaSec,
+          state.startStart + PROMPT_WINDOW_MIN_DURATION,
+          hi
+        );
+        window2.start = roundSeconds(state.startStart);
+        window2.duration = roundSeconds(end - state.startStart);
+      } else {
+        const end = state.startStart + state.startDuration;
+        const [lo] = freeIntervalAt(
+          spans,
+          clipDur,
+          Math.max(0, end - 1e-3)
+        );
+        const start = clamp(
+          state.startStart + deltaSec,
+          lo,
+          end - PROMPT_WINDOW_MIN_DURATION
+        );
+        window2.start = roundSeconds(start);
+        window2.duration = roundSeconds(end - start);
+      }
+      saveClips(clips);
+    };
+    const commitCreate = (state, endSec) => {
+      if (isStale(state.sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      if (!clip) {
+        return;
+      }
+      const clipDur = clipDurationOf(clip);
+      const spans = otherSpans(clip.promptWindows, -1, clipDur);
+      const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
+      const gap = hi - lo;
+      if (gap < PROMPT_WINDOW_MIN_DURATION) {
+        return;
+      }
+      let start;
+      let duration;
+      if (endSec === null) {
+        duration = Math.min(PROMPT_WINDOW_DEFAULT_DURATION, gap);
+        start = clamp(state.startSec, lo, hi - duration);
+      } else {
+        const a = clamp(Math.min(state.startSec, endSec), lo, hi);
+        const b = clamp(Math.max(state.startSec, endSec), lo, hi);
+        start = a;
+        duration = Math.max(PROMPT_WINDOW_MIN_DURATION, b - a);
+        if (start + duration > hi) {
+          duration = hi - start;
+        }
+      }
+      if (duration < PROMPT_WINDOW_MIN_DURATION) {
+        return;
+      }
+      const window2 = {
+        prompt: "",
+        start: roundSeconds(start),
+        duration: roundSeconds(duration),
+        skipped: false
+      };
+      clip.promptWindows.push(window2);
+      clip.promptWindows.sort((x, y) => x.start - y.start);
+      saveClips(clips);
+    };
+    const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
+    const clearGesture = (body) => {
+      if (createState?.ghost) {
+        createState.ghost.remove();
+      }
+      moveState = null;
+      resizeState = null;
+      createState = null;
+      body.classList.remove(DRAGGING_CLASS2);
+    };
+    const onBodyMouseDown = (event) => {
+      suppressClick = false;
+      const me = event;
+      if (me.button !== 0 || !(me.target instanceof Element)) {
+        return;
+      }
+      if (me.target.closest(MINOR_ACTION_SELECTOR)) {
+        return;
+      }
+      const edgeEl = me.target.closest(MINOR_EDGE_SELECTOR);
+      if (edgeEl) {
+        const seg2 = edgeEl.closest(MINOR_SELECTOR);
+        const clipIdx = parseIntAttr(seg2, "data-clip-idx");
+        const windowIdx = parseIntAttr(seg2, "data-window-idx");
+        const edge = edgeEl.getAttribute("data-vst-minor-edge") === "left" ? "left" : "right";
+        if (clipIdx === null || windowIdx === null || !(seg2 instanceof HTMLElement)) {
+          return;
+        }
+        const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
+        if (!window2) {
+          return;
+        }
+        resizeState = {
+          clipIdx,
+          windowIdx,
+          edge,
+          el: seg2,
+          startX: me.clientX,
+          startStart: window2.start,
+          startDuration: window2.duration,
+          clipDuration: clipDurationOf(getClips()[clipIdx]),
+          originalLeft: seg2.style.left,
+          originalWidth: seg2.style.width,
+          active: false,
+          sourceJson: readVideoStagesSection()
+        };
+        me.preventDefault();
+        return;
+      }
+      const seg = me.target.closest(MINOR_SELECTOR);
+      if (seg instanceof HTMLElement) {
+        const clipIdx = parseIntAttr(seg, "data-clip-idx");
+        const windowIdx = parseIntAttr(seg, "data-window-idx");
+        if (clipIdx === null || windowIdx === null) {
+          return;
+        }
+        const clip = getClips()[clipIdx];
+        const window2 = clip?.promptWindows?.[windowIdx];
+        if (!clip || !window2) {
+          return;
+        }
+        const clipDuration = clipDurationOf(clip);
+        const [boundLo, boundHi] = freeIntervalAt(
+          otherSpans(clip.promptWindows, windowIdx, clipDuration),
+          clipDuration,
+          window2.start
+        );
+        moveState = {
+          clipIdx,
+          windowIdx,
+          el: seg,
+          startX: me.clientX,
+          startStart: window2.start,
+          duration: window2.duration,
+          clipDuration,
+          boundLo,
+          boundHi,
+          originalLeft: seg.style.left,
+          active: false,
+          sourceJson: readVideoStagesSection()
+        };
+        me.preventDefault();
+        return;
+      }
+      const lane = me.target.closest(LANE_SELECTOR);
+      if (lane instanceof HTMLElement) {
+        const clipIdx = parseIntAttr(lane, "data-clip-idx");
+        if (clipIdx === null) {
+          return;
+        }
+        const rect = lane.getBoundingClientRect();
+        const pps = livePxPerSecond(boundBody ?? lane);
+        const clipDuration = clipDurationOf(getClips()[clipIdx]);
+        const startSec = clamp(
+          (me.clientX - rect.left) / pps,
+          0,
+          clipDuration
+        );
+        createState = {
+          clipIdx,
+          lane,
+          laneLeft: rect.left,
+          startSec,
+          startX: me.clientX,
+          clipDuration,
+          ghost: null,
+          active: false,
+          sourceJson: readVideoStagesSection()
+        };
+        me.preventDefault();
+      }
+    };
+    const onDocMouseMove = (body, event) => {
+      const me = event;
+      const pps = livePxPerSecond(body);
+      if (resizeState) {
+        const dx = me.clientX - resizeState.startX;
+        if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX2) {
+          return;
+        }
+        resizeState.active = true;
+        body.classList.add(DRAGGING_CLASS2);
+        const clipDur = resizeState.clipDuration;
+        const deltaSec = dx / pps;
+        if (resizeState.edge === "right") {
+          const end = clamp(
+            resizeState.startStart + resizeState.startDuration + deltaSec,
+            resizeState.startStart + PROMPT_WINDOW_MIN_DURATION,
+            clipDur
+          );
+          resizeState.el.style.width = `${Math.max(2, (end - resizeState.startStart) * pps)}px`;
+        } else {
+          const end = resizeState.startStart + resizeState.startDuration;
+          const start = clamp(
+            resizeState.startStart + deltaSec,
+            0,
+            end - PROMPT_WINDOW_MIN_DURATION
+          );
+          resizeState.el.style.left = `${start * pps}px`;
+          resizeState.el.style.width = `${Math.max(2, (end - start) * pps)}px`;
+        }
+        return;
+      }
+      if (moveState) {
+        const dx = me.clientX - moveState.startX;
+        if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX2) {
+          return;
+        }
+        moveState.active = true;
+        body.classList.add(DRAGGING_CLASS2);
+        const dur = Math.min(moveState.duration, moveState.clipDuration);
+        const maxStart = Math.max(
+          moveState.boundLo,
+          moveState.boundHi - dur
+        );
+        const start = clamp(
+          moveState.startStart + dx / pps,
+          moveState.boundLo,
+          maxStart
+        );
+        moveState.el.style.left = `${start * pps}px`;
+        return;
+      }
+      if (createState) {
+        const dx = me.clientX - createState.startX;
+        if (!createState.active && Math.abs(dx) < DRAG_THRESHOLD_PX2) {
+          return;
+        }
+        createState.active = true;
+        body.classList.add(DRAGGING_CLASS2);
+        const nowSec = laneTimeAt(createState, me.clientX, pps);
+        const a = Math.min(createState.startSec, nowSec);
+        const b = Math.max(createState.startSec, nowSec);
+        if (!createState.ghost) {
+          const ghost = document.createElement("div");
+          ghost.className = GHOST_CLASS;
+          createState.lane.appendChild(ghost);
+          createState.ghost = ghost;
+        }
+        createState.ghost.style.left = `${a * pps}px`;
+        createState.ghost.style.width = `${Math.max(2, (b - a) * pps)}px`;
+      }
+    };
+    const onDocMouseUp = (body, event) => {
+      const me = event;
+      const pps = livePxPerSecond(body);
+      if (resizeState) {
+        const state = resizeState;
+        resizeState = null;
+        body.classList.remove(DRAGGING_CLASS2);
+        if (state.active) {
+          suppressClick = true;
+          commitResize(state, me.clientX - state.startX, pps);
+        } else {
+          state.el.style.left = state.originalLeft;
+          state.el.style.width = state.originalWidth;
+        }
+        return;
+      }
+      if (moveState) {
+        const state = moveState;
+        moveState = null;
+        body.classList.remove(DRAGGING_CLASS2);
+        if (state.active) {
+          suppressClick = true;
+          commitMove(state, me.clientX - state.startX, pps);
+        } else {
+          state.el.style.left = state.originalLeft;
+        }
+        return;
+      }
+      if (createState) {
+        const state = createState;
+        createState = null;
+        body.classList.remove(DRAGGING_CLASS2);
+        if (state.ghost) {
+          state.ghost.remove();
+        }
+        suppressClick = true;
+        if (state.active) {
+          commitCreate(state, laneTimeAt(state, me.clientX, pps));
+        } else {
+          commitCreate(state, null);
+        }
+      }
+    };
+    const onBodyClick = (event) => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const actionEl = event.target.closest(MINOR_ACTION_SELECTOR);
+      if (actionEl) {
+        const seg = actionEl.closest(MINOR_SELECTOR);
+        const clipIdx = parseIntAttr(seg, "data-clip-idx");
+        const windowIdx = parseIntAttr(seg, "data-window-idx");
+        const action = actionEl.getAttribute("data-vst-minor-action") ?? "";
+        if (clipIdx !== null && windowIdx !== null) {
+          applyMinorAction(clipIdx, windowIdx, action);
+        }
+        return;
+      }
+      const minor = event.target.closest(MINOR_SELECTOR);
+      if (minor instanceof HTMLElement) {
+        const clipIdx = parseIntAttr(minor, "data-clip-idx");
+        const windowIdx = parseIntAttr(minor, "data-window-idx");
+        if (clipIdx === null || windowIdx === null) {
+          return;
+        }
+        const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
+        if (!window2) {
+          return;
+        }
+        openEditor(
+          minor,
+          `Clip ${clipIdx} · relay window ${windowIdx + 1}`,
+          window2.prompt,
+          "Minor prompt for this window…",
+          (value) => commitMinorPrompt(clipIdx, windowIdx, value)
+        );
+        return;
+      }
+      const major = event.target.closest(MAJOR_SELECTOR);
+      if (major instanceof HTMLElement) {
+        const clipIdx = parseIntAttr(major, "data-clip-idx");
+        if (clipIdx === null) {
+          return;
+        }
+        const clip = getClips()[clipIdx];
+        if (!clip) {
+          return;
+        }
+        openEditor(
+          major,
+          `Clip ${clipIdx} · major prompt`,
+          clip.prompt,
+          "Clip prompt (blank inherits the global prompt)…",
+          (value) => commitMajorPrompt(clipIdx, value)
+        );
+      }
+    };
+    const onDocKeyDown = (body, event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (resizeState) {
+        resizeState.el.style.left = resizeState.originalLeft;
+        resizeState.el.style.width = resizeState.originalWidth;
+      } else if (moveState) {
+        moveState.el.style.left = moveState.originalLeft;
+      } else if (!createState) {
+        return;
+      }
+      clearGesture(body);
+    };
+    let moveHandler = null;
+    let upHandler = null;
+    let keyHandler = null;
+    const attach = (body) => {
+      if (boundBody === body) {
+        return;
+      }
+      dispose();
+      boundBody = body;
+      body.addEventListener("mousedown", onBodyMouseDown);
+      body.addEventListener("click", onBodyClick);
+      moveHandler = (event) => onDocMouseMove(body, event);
+      upHandler = (event) => onDocMouseUp(body, event);
+      keyHandler = (event) => onDocKeyDown(body, event);
+      document.addEventListener("mousemove", moveHandler);
+      document.addEventListener("mouseup", upHandler);
+      document.addEventListener("keydown", keyHandler);
+    };
+    const dispose = () => {
+      closeEditor();
+      if (boundBody) {
+        boundBody.removeEventListener("mousedown", onBodyMouseDown);
+        boundBody.removeEventListener("click", onBodyClick);
+      }
+      if (moveHandler) {
+        document.removeEventListener("mousemove", moveHandler);
+        moveHandler = null;
+      }
+      if (upHandler) {
+        document.removeEventListener("mouseup", upHandler);
+        upHandler = null;
+      }
+      if (keyHandler) {
+        document.removeEventListener("keydown", keyHandler);
+        keyHandler = null;
+      }
+      moveState = null;
+      resizeState = null;
+      createState = null;
+      boundBody = null;
+    };
+    return { attach, dispose };
+  };
+
   // frontend/videoStagesTimeline.ts
   var getFps = () => {
     try {
@@ -2490,6 +3235,7 @@
     let unit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
     const linking = createTimelineLinking();
+    const promptTrack = createTimelinePromptTrack();
     const history = createTimelineHistory({
       read: () => readVideoStagesSection(),
       write: (value) => writeVideoStagesSection(value)
@@ -2614,7 +3360,8 @@
           onZoomSlider: setZoom,
           onZoomWheel: zoomWheel,
           onUndo: () => history.undo(),
-          onRedo: () => history.redo()
+          onRedo: () => history.redo(),
+          globalPrompt: readGlobalPrompt()
         });
         linking.reapplySelection(body, clips.length);
       } catch (error) {
@@ -2675,6 +3422,7 @@
       const body = document.getElementById(TIMELINE_BODY_ID);
       if (body) {
         linking.attach(body);
+        promptTrack.attach(body);
         body.removeEventListener("click", onBodyClickSyncReadout);
         body.addEventListener("click", onBodyClickSyncReadout);
       }
@@ -2696,6 +3444,7 @@
         boundInput = null;
       }
       linking.dispose();
+      promptTrack.dispose();
       const body = document.getElementById(TIMELINE_BODY_ID);
       body?.removeEventListener("click", onBodyClickSyncReadout);
       document.removeEventListener("keydown", onKeydown);

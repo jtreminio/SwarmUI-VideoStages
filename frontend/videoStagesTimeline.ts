@@ -5,12 +5,14 @@ import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import {
     getPromptInput,
     isVideoStagesEnabled,
+    readGlobalPrompt,
     readVideoStagesSection,
     writeVideoStagesSection,
 } from "./swarmInputs";
 import type { TimelineUnit } from "./timelineDetail";
 import { createTimelineHistory } from "./timelineHistory";
 import { createTimelineLinking } from "./timelineLinking";
+import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -46,6 +48,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let unit: TimelineUnit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
     const linking = createTimelineLinking();
+    const promptTrack = createTimelinePromptTrack();
 
     const history = createTimelineHistory({
         read: () => readVideoStagesSection(),
@@ -183,6 +186,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 onZoomWheel: zoomWheel,
                 onUndo: () => history.undo(),
                 onRedo: () => history.redo(),
+                globalPrompt: readGlobalPrompt(),
             });
             linking.reapplySelection(body, clips.length);
         } catch (error) {
@@ -251,6 +255,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         const body = document.getElementById(TIMELINE_BODY_ID);
         if (body) {
             linking.attach(body);
+            promptTrack.attach(body);
             body.removeEventListener("click", onBodyClickSyncReadout);
             body.addEventListener("click", onBodyClickSyncReadout);
         }
@@ -273,6 +278,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             boundInput = null;
         }
         linking.dispose();
+        promptTrack.dispose();
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);
         document.removeEventListener("keydown", onKeydown);

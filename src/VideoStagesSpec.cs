@@ -46,6 +46,13 @@ public sealed record UploadedAudioSpec(
     string FileName
 );
 
+public sealed record PromptWindowSpec(
+    string Prompt,
+    double Start,
+    double Duration,
+    bool Skipped = false
+);
+
 public sealed record ClipSpec(
     int Id,
     int? Frames,
@@ -61,7 +68,8 @@ public sealed record ClipSpec(
     IReadOnlyList<StageSpec> Stages,
     string Prompt = "",
     string NegativePrompt = "",
-    IReadOnlyList<LoraRef> Loras = null
+    IReadOnlyList<LoraRef> Loras = null,
+    IReadOnlyList<PromptWindowSpec> PromptWindows = null
 );
 
 public sealed record VideoStagesSpec(

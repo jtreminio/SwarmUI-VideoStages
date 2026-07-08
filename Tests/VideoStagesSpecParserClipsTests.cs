@@ -90,6 +90,68 @@ public class VideoStagesSpecParserClipsTests
     private static List<StageSpec> FlattenedActiveStages(WorkflowGenerator parser) =>
         [.. VideoStagesSpecParser.Parse(parser).Clips.SelectMany(c => c.Stages)];
 
+    private static JObject MakePromptWindow(string prompt, double start, double duration, bool? skipped = null)
+    {
+        JObject window = new()
+        {
+            ["Prompt"] = prompt,
+            ["Start"] = start,
+            ["Duration"] = duration,
+        };
+        if (skipped is not null)
+        {
+            window["Skipped"] = skipped.Value;
+        }
+        return window;
+    }
+
+    private static ClipSpec ParseSingleClip(JObject clip)
+    {
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        return Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
+    }
+
+    [Fact]
+    public void ParseClips_PromptWindows_ParsesStartDurationAndSkipped()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 4.0);
+        clip["PromptWindows"] = new JArray(
+            MakePromptWindow("a red car", start: 0.5, duration: 1.0),
+            MakePromptWindow("a blue boat", start: 2.0, duration: 1.0, skipped: true));
+
+        ClipSpec parsed = ParseSingleClip(clip);
+
+        Assert.Equal(2, parsed.PromptWindows.Count);
+        Assert.Equal("a red car", parsed.PromptWindows[0].Prompt);
+        Assert.Equal(0.5, parsed.PromptWindows[0].Start);
+        Assert.Equal(1.0, parsed.PromptWindows[0].Duration);
+        Assert.False(parsed.PromptWindows[0].Skipped);
+        Assert.True(parsed.PromptWindows[1].Skipped);
+    }
+
+    [Fact]
+    public void ParseClips_PromptWindows_SortsByStartAndDropsNonPositiveDuration()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 4.0);
+        clip["PromptWindows"] = new JArray(
+            MakePromptWindow("late", start: 3.0, duration: 0.5),
+            MakePromptWindow("zero", start: 1.0, duration: 0.0),
+            MakePromptWindow("early", start: 0.0, duration: 0.5));
+
+        ClipSpec parsed = ParseSingleClip(clip);
+
+        Assert.Equal(2, parsed.PromptWindows.Count);
+        Assert.Equal("early", parsed.PromptWindows[0].Prompt);
+        Assert.Equal("late", parsed.PromptWindows[1].Prompt);
+    }
+
+    [Fact]
+    public void ParseClips_NoPromptWindows_YieldsEmptyList()
+    {
+        ClipSpec parsed = ParseSingleClip(MakeClip(stages: [MakeStage("model-a")], duration: 4.0));
+        Assert.Empty(parsed.PromptWindows);
+    }
+
 
     [Fact]
     public void ParseClips_ClipShape_PopulatesPerClipFields()

@@ -8,6 +8,7 @@
     --vst-ruler-h: 26px;
     --vst-lane-video-h: 132px;
     --vst-lane-audio-h: 54px;
+    --vst-lane-prompt-h: 72px;
     --vst-refs-band: 22px;
     --vst-radius: 5px;
     --vst-radius-sm: 3px;
@@ -796,6 +797,221 @@
 .vst-empty-add {
     margin-top: 12px;
     padding: 6px 14px;
+}
+
+/* ── Prompt track (MAJOR top half · MINOR relay bottom half) ── */
+.vst-track-icon-prompt {
+    color: color-mix(in srgb, var(--emphasis) 60%, var(--text));
+    border-color: color-mix(in srgb, var(--emphasis) 35%, transparent);
+}
+.vst-track-prompt .vst-track-cell {
+    height: var(--vst-lane-prompt-h);
+}
+.vst-prompt-cell::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 1px dashed var(--vst-hairline);
+    pointer-events: none;
+}
+
+.vst-major-seg {
+    position: absolute;
+    top: 6px;
+    height: calc(50% - 10px);
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: var(--vst-panel-2);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    overflow: hidden;
+    cursor: text;
+    transition: border-color var(--vst-ease), background var(--vst-ease);
+}
+.vst-major-seg:hover {
+    border-color: color-mix(in srgb, var(--emphasis) 45%, var(--vst-hairline));
+}
+.vst-major-text {
+    font-size: var(--vst-font-2xs);
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+    z-index: 1;
+}
+.vst-major-empty .vst-major-text,
+.vst-major-inherited .vst-major-text {
+    color: var(--text-soft);
+    font-style: italic;
+}
+.vst-major-off {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-image: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--text) 16%, transparent) 0,
+        color-mix(in srgb, var(--text) 16%, transparent) 3px,
+        transparent 3px,
+        transparent 7px
+    );
+    border-left: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.vst-minor-lane {
+    position: absolute;
+    bottom: 6px;
+    height: calc(50% - 10px);
+    border-radius: var(--vst-radius-sm);
+    background: color-mix(in srgb, var(--emphasis) 5%, transparent);
+    box-shadow: inset 0 0 0 1px var(--vst-hairline);
+    cursor: copy;
+}
+.vst-minor-seg {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid
+        color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
+    background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--emphasis) 40%, var(--vst-panel)) 0%,
+        color-mix(in srgb, var(--emphasis) 22%, var(--vst-panel)) 100%
+    );
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    overflow: hidden;
+    cursor: grab;
+    min-width: 8px;
+}
+.vst-prompt-dragging .vst-minor-seg {
+    cursor: grabbing;
+}
+.vst-minor-skipped {
+    opacity: 0.4;
+    filter: grayscale(0.6);
+}
+.vst-minor-text {
+    flex: 1;
+    font-size: var(--vst-font-3xs);
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+.vst-minor-resize {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 7px;
+    cursor: ew-resize;
+    z-index: 2;
+}
+.vst-minor-resize-l {
+    left: -1px;
+}
+.vst-minor-resize-r {
+    right: -1px;
+}
+.vst-minor-actions {
+    display: none;
+    gap: 2px;
+    z-index: 3;
+}
+.vst-minor-seg:hover .vst-minor-actions {
+    display: flex;
+}
+.vst-minor-act {
+    border: none;
+    background: color-mix(in srgb, var(--vst-panel) 70%, transparent);
+    color: var(--text-soft);
+    border-radius: var(--vst-radius-sm);
+    font-size: var(--vst-font-3xs);
+    line-height: 1;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+.vst-minor-act:hover {
+    color: var(--text);
+    background: var(--vst-panel-2);
+}
+.vst-minor-ghost {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px dashed color-mix(in srgb, var(--emphasis) 65%, transparent);
+    background: color-mix(in srgb, var(--emphasis) 18%, transparent);
+    pointer-events: none;
+    z-index: 4;
+}
+
+.vst-major-seg.vst-prompt-editing,
+.vst-minor-seg.vst-prompt-editing {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-major-seg.vst-prompt-editing .vst-major-text,
+.vst-major-seg.vst-prompt-editing .vst-major-off,
+.vst-minor-seg.vst-prompt-editing .vst-minor-text,
+.vst-minor-seg.vst-prompt-editing .vst-minor-actions {
+    visibility: hidden;
+}
+
+.vst-prompt-inspector {
+    position: fixed;
+    z-index: 100000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px 8px;
+    border-radius: var(--vst-radius);
+    border: 1px solid var(--emphasis);
+    background: var(--background-panel, var(--vst-panel));
+    box-shadow: 0 10px 34px color-mix(in srgb, var(--shadow) 62%, transparent),
+        0 0 0 1px var(--vst-hairline);
+}
+.vst-prompt-inspector-head {
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--emphasis);
+    font-weight: 600;
+}
+.vst-prompt-inspector-hint {
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+}
+.vst-prompt-editor {
+    width: 100%;
+    min-height: 72px;
+    max-height: 260px;
+    padding: 8px 10px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: var(--background, var(--vst-panel));
+    opacity: 1;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--vst-font-xs);
+    line-height: 1.45;
+    resize: vertical;
+    box-sizing: border-box;
+}
+.vst-prompt-editor:focus {
+    outline: none;
+    border-color: var(--emphasis);
 }
 
 @media (prefers-reduced-motion: reduce) {

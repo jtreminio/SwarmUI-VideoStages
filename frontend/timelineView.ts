@@ -1,5 +1,5 @@
 import { clipHueCss } from "./clipColor";
-import { mediaPreviewSrc } from "./constants";
+import { clamp, mediaPreviewSrc } from "./constants";
 import {
     audioSourceBadge,
     type Badge,
@@ -14,7 +14,7 @@ import {
     safeFps,
     type TimelineUnit,
 } from "./timelineDetail";
-import type { Clip, RefImage } from "./types";
+import type { Clip, PromptWindow, RefImage } from "./types";
 
 export interface RegionLayout {
     index: number;
@@ -46,6 +46,7 @@ export interface RenderTimelineOptions {
     onZoomWheel?: (factor: number, clientX: number) => void;
     onUndo?: () => void;
     onRedo?: () => void;
+    globalPrompt?: string;
 }
 
 export const DEFAULT_PX_PER_SECOND = 44;
@@ -197,6 +198,116 @@ const renderBadges = (clip: Clip): string => {
 
 const lengthDerived = (clip: Clip): boolean =>
     clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+
+export interface PromptWindowGeom {
+    startSec: number;
+    endSec: number;
+    leftPx: number;
+    widthPx: number;
+    active: boolean;
+}
+
+export const promptWindowGeom = (
+    layout: RegionLayout,
+    window: PromptWindow,
+    pxPerSecond: number,
+): PromptWindowGeom => {
+    const clipDur = Math.max(0, layout.durationSeconds);
+    const startSec = clamp(window.start, 0, clipDur);
+    const endSec = clamp(window.start + window.duration, startSec, clipDur);
+    return {
+        startSec,
+        endSec,
+        leftPx: startSec * pxPerSecond,
+        widthPx: Math.max(2, (endSec - startSec) * pxPerSecond),
+        active: !window.skipped && `${window.prompt ?? ""}`.trim() !== "",
+    };
+};
+
+const PROMPT_PLACEHOLDER = "(no prompt)";
+
+const truncatePrompt = (text: string, max = 120): string =>
+    text.length > max ? `${text.slice(0, max - 1)}…` : text;
+
+export const renderPromptTrackRow = (
+    clips: Clip[],
+    layouts: RegionLayout[],
+    pxPerSecond: number,
+    globalPrompt: string,
+): string => {
+    const globalTrimmed = `${globalPrompt ?? ""}`.trim();
+    const parts: string[] = [];
+    for (let i = 0; i < layouts.length; i++) {
+        const layout = layouts[i];
+        const clip = clips[i];
+        if (!clip) {
+            continue;
+        }
+        const clipWidth = Math.max(1, layout.widthPx - 2);
+        const windows = clip.promptWindows ?? [];
+
+        const ownPrompt = `${clip.prompt ?? ""}`.trim();
+        const inherited = ownPrompt === "";
+        const major = inherited ? globalTrimmed : ownPrompt;
+        const overlays = windows
+            .map((w) => promptWindowGeom(layout, w, pxPerSecond))
+            .filter((g) => g.active && g.endSec > g.startSec)
+            .map(
+                (g) =>
+                    `<div class="vst-major-off" style="left:${g.leftPx}px;width:${g.widthPx}px" aria-hidden="true"></div>`,
+            )
+            .join("");
+        const majorText =
+            major === "" ? PROMPT_PLACEHOLDER : truncatePrompt(major);
+        const majorClass =
+            (major === "" ? " vst-major-empty" : "") +
+            (inherited && major !== "" ? " vst-major-inherited" : "");
+        const majorTitle =
+            (major === "" ? PROMPT_PLACEHOLDER : major) +
+            (inherited && major !== ""
+                ? " — inherited from the global prompt; click to set a clip prompt"
+                : " — click to edit");
+        parts.push(
+            `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="${escapeHtml(majorTitle)}">` +
+                overlays +
+                `<span class="vst-major-text">${escapeHtml(majorText)}</span>` +
+                `</div>`,
+        );
+
+        const minorSegs = windows
+            .map((w, j) => {
+                const g = promptWindowGeom(layout, w, pxPerSecond);
+                const skippedClass = w.skipped ? " vst-minor-skipped" : "";
+                const text = `${w.prompt ?? ""}`.trim();
+                const label =
+                    text === "" ? "(empty)" : truncatePrompt(text, 60);
+                return (
+                    `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeHtml(text || "(empty minor prompt)")}">` +
+                    `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span>` +
+                    `<span class="vst-minor-text">${escapeHtml(label)}</span>` +
+                    `<span class="vst-minor-actions">` +
+                    `<button type="button" class="vst-minor-act" data-vst-minor-action="skip" title="${w.skipped ? "Enable this minor prompt" : "Skip this minor prompt"}" aria-label="${w.skipped ? "Enable minor prompt" : "Skip minor prompt"}">${w.skipped ? "○" : "◉"}</button>` +
+                    `<button type="button" class="vst-minor-act" data-vst-minor-action="delete" title="Delete this minor prompt" aria-label="Delete minor prompt">×</button>` +
+                    `</span>` +
+                    `<span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span>` +
+                    `</div>`
+                );
+            })
+            .join("");
+        parts.push(
+            `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="Click empty space to add a minor prompt">${minorSegs}</div>`,
+        );
+    }
+    return (
+        `<div class="vst-track-row vst-track-prompt">` +
+        `<div class="vst-track-head">` +
+        `<div class="vst-track-icon vst-track-icon-prompt" aria-hidden="true">✎</div>` +
+        `<div class="vst-track-label"><strong>Prompt</strong><small>major · relay</small></div>` +
+        `</div>` +
+        `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div>` +
+        `</div>`
+    );
+};
 
 export const renderTimeline = (
     body: HTMLElement,
@@ -461,6 +572,13 @@ export const renderTimeline = (
         `<div class="vst-track-label"><strong>Video</strong><small>V1 · ${clips.length} ${clipWord}</small></div>` +
         `</div>`;
 
+    const promptRow = renderPromptTrackRow(
+        clips,
+        layouts,
+        pxPerSecond,
+        `${options?.globalPrompt ?? ""}`,
+    );
+
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
     body.innerHTML =
         `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +
@@ -468,6 +586,7 @@ export const renderTimeline = (
         `<div class="vst-corner">Timeline</div>` +
         `<div class="vst-ruler">${ticks.join("")}</div>` +
         `</div>` +
+        promptRow +
         `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}</div></div>` +
         audioRow +
         `</div></div>`;

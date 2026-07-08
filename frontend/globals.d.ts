@@ -6,6 +6,7 @@ declare const mainGenHandler: {
 
 declare function showError(message: string): void;
 declare function triggerChangeFor(element: HTMLElement): void;
+declare function textPromptAddKeydownHandler(element: HTMLElement): void;
 declare function doToggleEnable(prefix: string): void;
 declare function findParentOfClass(
     element: Element,

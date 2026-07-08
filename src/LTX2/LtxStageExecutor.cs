@@ -18,6 +18,7 @@ internal sealed class LtxStageExecutor(
     RootVideoStageResizer rootVideoStageResizer)
 {
     private const int ImgCompression = 18;
+    private const double PromptRelayEpsilon = 0.001;
     private const double DefaultGuideMergeStrength = 1.0;
     private const int DefaultFps = 24;
     private const int DefaultFrameCount = 97;
@@ -55,7 +56,7 @@ internal sealed class LtxStageExecutor(
             }
 
             WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
-            PrepareModelAndConditioning(genInfo, effectiveSourceMedia);
+            PrepareModelAndConditioning(genInfo, stageFrame, effectiveSourceMedia);
             PrepareConditioning(
                 genInfo,
                 stageFrame,
@@ -84,7 +85,10 @@ internal sealed class LtxStageExecutor(
         }
     }
 
-    private void PrepareModelAndConditioning(WorkflowGenerator.ImageToVideoGenInfo genInfo, WGNodeData sourceMedia)
+    private void PrepareModelAndConditioning(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
+        WGNodeData sourceMedia)
     {
         g.FinalLoadedModel = genInfo.VideoModel;
         (genInfo.VideoModel, genInfo.Model, WGNodeData clip, genInfo.Vae) = g.CreateModelLoader(
@@ -104,13 +108,110 @@ internal sealed class LtxStageExecutor(
         using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput clipOutput = bridge.ResolvePath(clip.Path);
 
-        SwarmClipTextEncodeAdvancedNode posCondNode = AddSwarmClipTextEncodeAdvanced(
-            bridge, clipOutput, steps, positivePrompt, width, height, guidance);
         SwarmClipTextEncodeAdvancedNode negCondNode = AddSwarmClipTextEncodeAdvanced(
             bridge, clipOutput, steps, negativePrompt, width, height, guidance);
-
-        genInfo.PosCond = posCondNode.CONDITIONING.ToPath();
         genInfo.NegCond = negCondNode.CONDITIONING.ToPath();
+
+        if (TryBuildPromptRelay(
+                bridge, genInfo, stageFrame, clipOutput, positivePrompt, sourceMedia,
+                out string overridePositive))
+        {
+            return;
+        }
+
+        SwarmClipTextEncodeAdvancedNode posCondNode = AddSwarmClipTextEncodeAdvanced(
+            bridge, clipOutput, steps, overridePositive ?? positivePrompt, width, height, guidance);
+        genInfo.PosCond = posCondNode.CONDITIONING.ToPath();
+    }
+
+    private bool TryBuildPromptRelay(
+        WorkflowBridge bridge,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
+        INodeOutput clipOutput,
+        string globalPrompt,
+        WGNodeData sourceMedia,
+        out string overridePositive)
+    {
+        overridePositive = null;
+        if (stageFrame?.ClipContext?.Clip?.PromptWindows is not { Count: > 0 } windows
+            || genInfo.Model?.Path is not JArray modelPath)
+        {
+            return false;
+        }
+
+        int fps = ResolveFps(genInfo, sourceMedia);
+        int frameCount = genInfo.Frames ?? sourceMedia?.Frames ?? DefaultFrameCount;
+        double clipSeconds = frameCount / (double)Math.Max(1, fps);
+
+        List<(string Prompt, double Seconds)> tiled = TilePromptWindows(windows, clipSeconds);
+        if (tiled.Count == 1 && !string.IsNullOrWhiteSpace(tiled[0].Prompt))
+        {
+            overridePositive = tiled[0].Prompt;
+            return false;
+        }
+        if (tiled.Count < 2)
+        {
+            return false;
+        }
+
+        JArray windowsJson = new(tiled.Select(window => new JObject
+        {
+            ["prompt"] = window.Prompt ?? "",
+            ["seconds"] = window.Seconds,
+        }));
+
+        SwarmPromptRelayEncodeNode relay = bridge.AddNode(new SwarmPromptRelayEncodeNode().With(
+            GlobalPrompt: globalPrompt ?? "",
+            Windows: windowsJson.ToString(Newtonsoft.Json.Formatting.None),
+            Fps: fps,
+            Epsilon: PromptRelayEpsilon));
+        relay.ModelInput.ConnectFromPath(bridge, modelPath);
+        relay.Clip.TryConnectToUntyped(clipOutput);
+        bridge.SyncNode(relay);
+
+        genInfo.Model = genInfo.Model.WithPath(relay.Model);
+        genInfo.PosCond = relay.Positive.ToPath();
+        return true;
+    }
+
+    internal static List<(string Prompt, double Seconds)> TilePromptWindows(
+        IReadOnlyList<PromptWindowSpec> windows,
+        double clipSeconds)
+    {
+        const double epsilon = 1e-4;
+        double total = clipSeconds > 0 ? clipSeconds : 0;
+
+        List<PromptWindowSpec> active = [.. windows
+            .Where(w => !w.Skipped && !string.IsNullOrWhiteSpace(w.Prompt) && w.Duration > 0)
+            .OrderBy(w => w.Start)];
+        if (active.Count == 0)
+        {
+            return [];
+        }
+
+        List<(string Prompt, double Seconds)> tiled = [];
+        double cursor = 0;
+        foreach (PromptWindowSpec window in active)
+        {
+            double start = Math.Clamp(window.Start, 0, total);
+            double end = Math.Clamp(window.Start + window.Duration, start, total);
+            if (start > cursor + epsilon)
+            {
+                tiled.Add(("", start - cursor));
+                cursor = start;
+            }
+            if (end > cursor + epsilon)
+            {
+                tiled.Add((window.Prompt.Trim(), end - cursor));
+                cursor = end;
+            }
+        }
+        if (total - cursor > epsilon)
+        {
+            tiled.Add(("", total - cursor));
+        }
+        return tiled;
     }
 
     private static SwarmClipTextEncodeAdvancedNode AddSwarmClipTextEncodeAdvanced(
