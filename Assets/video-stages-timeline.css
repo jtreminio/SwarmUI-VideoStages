@@ -1014,6 +1014,154 @@
     border-color: var(--emphasis);
 }
 
+.vst-audio-clip {
+    cursor: pointer;
+    transition: outline-color var(--vst-ease), filter var(--vst-ease);
+}
+.vst-audio-clip:hover {
+    filter: brightness(1.06);
+}
+.vst-audio-clip:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-audio-clip.vst-audio-editing {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-audio-clip.vst-audio-native {
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--text) 5%, var(--vst-panel)) 0%,
+        color-mix(in srgb, var(--text) 9%, var(--vst-panel)) 100%
+    );
+    border-color: var(--vst-hairline);
+}
+.vst-audio-native .vst-audio-label {
+    color: var(--text-soft);
+}
+.vst-audio-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--vst-ease);
+}
+.vst-audio-native:hover .vst-audio-hint,
+.vst-audio-native:focus-visible .vst-audio-hint {
+    opacity: 0.85;
+}
+.vst-audio-flags {
+    position: absolute;
+    top: 2px;
+    right: 6px;
+    z-index: 2;
+    display: flex;
+    gap: 3px;
+    pointer-events: none;
+}
+.vst-audio-flag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 3px;
+    font-size: var(--vst-font-3xs);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text);
+    background: color-mix(in srgb, var(--green) 28%, var(--vst-panel));
+    border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
+}
+
+.vst-audio-inspector {
+    gap: 8px;
+}
+.vst-audio-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: var(--vst-font-xs);
+    color: var(--text);
+}
+.vst-audio-field-check {
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+}
+.vst-audio-field-check input {
+    margin: 0;
+}
+.vst-audio-field-label {
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+}
+.vst-audio-field-check .vst-audio-field-label {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: var(--vst-font-xs);
+    color: var(--text);
+}
+.vst-audio-select {
+    width: 100%;
+    padding: 5px 8px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: var(--background, var(--vst-panel));
+    color: var(--text);
+    font: inherit;
+    font-size: var(--vst-font-xs);
+}
+.vst-audio-select:focus {
+    outline: none;
+    border-color: var(--emphasis);
+}
+.vst-audio-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.vst-audio-upload {
+    flex-direction: column;
+    gap: 5px;
+}
+.vst-audio-upload input[type="file"] {
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+    max-width: 100%;
+}
+.vst-audio-upload-name {
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.vst-audio-upload-clear {
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: var(--vst-font-3xs);
+    cursor: pointer;
+}
+.vst-audio-upload-clear:hover {
+    color: var(--text);
+    border-color: var(--emphasis);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .vst-timeline * {
         transition-duration: 0.01ms !important;

@@ -357,26 +357,43 @@ describe("renderTimeline (DOM)", () => {
         expect(hueOf(regions[2])).toBe("hsl(300 65% 55%)");
     });
 
-    it("renders the audio lane only when a clip has a non-Native audio source", () => {
+    it("always renders an editable audio segment per clip, muting Native ones", () => {
+        // The lane is always present so every clip (even Native) is clickable
+        // to set/change its audio source.
         renderTimeline(body, [makeClip(2, 1, 0)]);
-        expect(body.querySelector(".vst-track-audio")).toBeNull();
+        const lane = body.querySelector(".vst-track-audio");
+        expect(lane).not.toBeNull();
+        const nativeSeg = lane?.querySelector(".vst-audio-clip");
+        expect(nativeSeg).not.toBeNull();
+        expect(nativeSeg?.classList.contains("vst-audio-native")).toBe(true);
+        expect(nativeSeg?.getAttribute("role")).toBe("button");
+        // Native segments show a call-to-action hint, not a waveform.
+        expect(nativeSeg?.querySelector(".vst-audio-wave")).toBeNull();
+        expect(nativeSeg?.querySelector(".vst-audio-hint")).not.toBeNull();
+        expect(nativeSeg?.querySelector(".vst-audio-label")?.textContent).toBe(
+            "Native",
+        );
 
         const withAudio = {
             ...makeClip(2, 1, 0),
             audioSource: "Upload",
         } as unknown as Clip;
         renderTimeline(body, [makeClip(2, 1, 0), withAudio]);
-        const lane = body.querySelector(".vst-track-audio");
-        expect(lane).not.toBeNull();
-        const segments = lane?.querySelectorAll(".vst-audio-clip");
-        expect(segments).toHaveLength(1);
-        expect(segments?.[0].getAttribute("data-clip-idx")).toBe("1");
+        const segments = body
+            .querySelector(".vst-track-audio")
+            ?.querySelectorAll(".vst-audio-clip");
+        expect(segments).toHaveLength(2);
+        // Clip 0 is Native (muted, no wave); clip 1 is Upload (wave + label).
+        expect(segments?.[0].classList.contains("vst-audio-native")).toBe(true);
+        const uploadSeg = segments?.[1];
+        expect(uploadSeg?.getAttribute("data-clip-idx")).toBe("1");
+        expect(uploadSeg?.classList.contains("vst-audio-native")).toBe(false);
         expect(
-            segments?.[0].querySelectorAll(".vst-audio-wave span").length,
+            uploadSeg?.querySelectorAll(".vst-audio-wave span").length,
         ).toBeGreaterThan(0);
-        expect(
-            segments?.[0].querySelector(".vst-audio-label")?.textContent,
-        ).toBe("Upload");
+        expect(uploadSeg?.querySelector(".vst-audio-label")?.textContent).toBe(
+            "Upload",
+        );
     });
 
     it("marks sub-12px regions as tiny so CSS can collapse their interiors", () => {

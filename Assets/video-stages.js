@@ -1460,6 +1460,341 @@
     saveState(state, callbacks, { ...options, notifyDomChange });
   };
 
+  // frontend/timelineAudioTrack.ts
+  var CLIP_SELECTOR = '.vst-audio-clip[data-vst-audio="clip"]';
+  var EDITING_CLASS = "vst-audio-editing";
+  var parseClipIdx = (el) => {
+    if (!el) {
+      return null;
+    }
+    const raw = el.getAttribute("data-clip-idx");
+    if (raw === null) {
+      return null;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  };
+  var draftFromClip = (clip) => ({
+    audioSource: `${clip.audioSource ?? AUDIO_SOURCE_NATIVE}`,
+    reuseAudio: clip.reuseAudio === true,
+    clipLengthFromAudio: clip.clipLengthFromAudio === true,
+    clipLengthFromControlNet: clip.clipLengthFromControlNet === true,
+    saveAudioTrack: clip.saveAudioTrack === true,
+    uploadedAudio: clip.uploadedAudio ?? null
+  });
+  var createTimelineAudioTrack = () => {
+    let boundBody = null;
+    let activeWrap = null;
+    let editingAnchor = null;
+    let outsideMouseHandler = null;
+    const isStale = (sourceJson) => readVideoStagesSection() !== sourceJson;
+    const closeEditor = () => {
+      if (outsideMouseHandler) {
+        document.removeEventListener(
+          "mousedown",
+          outsideMouseHandler,
+          true
+        );
+        outsideMouseHandler = null;
+      }
+      if (editingAnchor) {
+        editingAnchor.classList.remove(EDITING_CLASS);
+        editingAnchor = null;
+      }
+      if (activeWrap) {
+        activeWrap.remove();
+        activeWrap = null;
+      }
+    };
+    const commit = (clipIdx, draft) => {
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      if (!clip) {
+        return;
+      }
+      const source = resolveAudioSourceValue(
+        draft.audioSource,
+        buildAudioSourceOptions(draft.audioSource, {
+          controlNetEnabled: `${clip.controlNetLora ?? ""}`.trim() !== ""
+        })
+      );
+      const canLength = canUseClipLengthFromAudio(source);
+      const isAce = isAceStepFunAudioSource(source);
+      clip.audioSource = source;
+      clip.reuseAudio = draft.reuseAudio;
+      clip.clipLengthFromAudio = canLength && draft.clipLengthFromAudio;
+      if (clip.clipLengthFromAudio) {
+        clip.clipLengthFromControlNet = false;
+      }
+      clip.saveAudioTrack = isAce && draft.saveAudioTrack;
+      clip.uploadedAudio = source === AUDIO_SOURCE_UPLOAD ? draft.uploadedAudio : null;
+      saveClips(clips);
+    };
+    const buildField = (label, control, hint) => {
+      const row = document.createElement("div");
+      row.className = "vst-audio-field";
+      const text = document.createElement("span");
+      text.className = "vst-audio-field-label";
+      text.textContent = label;
+      row.append(text, control);
+      if (hint) {
+        const small = document.createElement("small");
+        small.className = "vst-audio-field-hint";
+        small.textContent = hint;
+        row.appendChild(small);
+      }
+      return row;
+    };
+    const buildCheckbox = (label, checked, onChange) => {
+      const row = document.createElement("label");
+      row.className = "vst-audio-field vst-audio-field-check";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = checked;
+      input.addEventListener("change", () => onChange(input.checked));
+      const text = document.createElement("span");
+      text.className = "vst-audio-field-label";
+      text.textContent = label;
+      row.append(input, text);
+      return { row, input };
+    };
+    const openEditor = (anchor, clipIdx) => {
+      closeEditor();
+      const clip = getClips()[clipIdx];
+      if (!clip) {
+        return;
+      }
+      const sourceJson = readVideoStagesSection();
+      const draft = draftFromClip(clip);
+      const controlNetEnabled = `${clip.controlNetLora ?? ""}`.trim() !== "";
+      const host = boundBody ?? document.body;
+      const hostRect = host.getBoundingClientRect();
+      const viewportW = window.innerWidth || document.documentElement.clientWidth;
+      const width = clamp(Math.round(hostRect.width - 32), 260, 420);
+      const left = clamp(
+        Math.round(hostRect.left + (hostRect.width - width) / 2),
+        8,
+        Math.max(8, viewportW - width - 8)
+      );
+      const wrap = document.createElement("div");
+      wrap.className = "vst-prompt-inspector vst-audio-inspector";
+      wrap.style.left = `${left}px`;
+      wrap.style.top = `${Math.round(Math.max(8, hostRect.top + 46))}px`;
+      wrap.style.width = `${width}px`;
+      const head = document.createElement("div");
+      head.className = "vst-prompt-inspector-head";
+      head.textContent = `Clip ${clipIdx} · audio`;
+      const select = document.createElement("select");
+      select.className = "vst-audio-select";
+      const rebuildOptions = () => {
+        const options = buildAudioSourceOptions(draft.audioSource, {
+          controlNetEnabled
+        });
+        draft.audioSource = resolveAudioSourceValue(
+          draft.audioSource,
+          options
+        );
+        select.innerHTML = "";
+        for (const option of options) {
+          const elem = document.createElement("option");
+          elem.value = option.value;
+          elem.textContent = option.label;
+          elem.dataset.cleanname = option.label;
+          elem.selected = option.value === draft.audioSource;
+          select.appendChild(elem);
+        }
+      };
+      rebuildOptions();
+      const sourceField = buildField("Audio Source", select);
+      const reuse = buildCheckbox(
+        "Reuse Audio",
+        draft.reuseAudio,
+        (value) => {
+          draft.reuseAudio = value;
+        }
+      );
+      const lengthCheck = buildCheckbox(
+        "Clip Length from Audio",
+        draft.clipLengthFromAudio,
+        (value) => {
+          draft.clipLengthFromAudio = value;
+        }
+      );
+      const saveCheck = buildCheckbox(
+        "Save Audio Track",
+        draft.saveAudioTrack,
+        (value) => {
+          draft.saveAudioTrack = value;
+        }
+      );
+      const uploadRow = document.createElement("div");
+      uploadRow.className = "vst-audio-field vst-audio-upload";
+      const uploadLabel = document.createElement("span");
+      uploadLabel.className = "vst-audio-field-label";
+      uploadLabel.textContent = "Audio Upload";
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "audio/*";
+      const fileName = document.createElement("span");
+      fileName.className = "vst-audio-upload-name";
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "vst-audio-upload-clear";
+      clearBtn.textContent = "Clear";
+      const renderUploadName = () => {
+        const name = draft.uploadedAudio?.fileName;
+        fileName.textContent = name ? name : "No file chosen";
+        clearBtn.hidden = !draft.uploadedAudio;
+      };
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files?.[0];
+        if (!file) {
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = `${reader.result ?? ""}`;
+          if (!data) {
+            return;
+          }
+          draft.uploadedAudio = { data, fileName: file.name };
+          renderUploadName();
+        };
+        reader.readAsDataURL(file);
+      });
+      clearBtn.addEventListener("click", () => {
+        draft.uploadedAudio = null;
+        fileInput.value = "";
+        renderUploadName();
+      });
+      renderUploadName();
+      uploadRow.append(uploadLabel, fileInput, fileName, clearBtn);
+      const hint = document.createElement("div");
+      hint.className = "vst-prompt-inspector-hint";
+      hint.textContent = "Click away to apply · Esc to cancel";
+      wrap.append(
+        head,
+        sourceField,
+        reuse.row,
+        lengthCheck.row,
+        saveCheck.row,
+        uploadRow,
+        hint
+      );
+      const syncVisibility = () => {
+        const canLength = canUseClipLengthFromAudio(draft.audioSource);
+        lengthCheck.input.disabled = !canLength;
+        lengthCheck.row.classList.toggle("vst-audio-disabled", !canLength);
+        if (!canLength) {
+          lengthCheck.input.checked = false;
+          draft.clipLengthFromAudio = false;
+        }
+        const isAce = isAceStepFunAudioSource(draft.audioSource);
+        saveCheck.input.disabled = !isAce;
+        saveCheck.row.classList.toggle("vst-audio-disabled", !isAce);
+        if (!isAce) {
+          saveCheck.input.checked = false;
+          draft.saveAudioTrack = false;
+        }
+        uploadRow.hidden = draft.audioSource !== AUDIO_SOURCE_UPLOAD;
+      };
+      select.addEventListener("change", () => {
+        draft.audioSource = select.value;
+        syncVisibility();
+      });
+      syncVisibility();
+      anchor.classList.add(EDITING_CLASS);
+      editingAnchor = anchor;
+      let done = false;
+      const finish = (save) => {
+        if (done) {
+          return;
+        }
+        done = true;
+        closeEditor();
+        if (save && !isStale(sourceJson)) {
+          commit(clipIdx, draft);
+        }
+      };
+      wrap.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          finish(false);
+        } else if (event.key === "Enter" && !(event.target instanceof HTMLSelectElement)) {
+          event.preventDefault();
+          finish(true);
+        }
+        event.stopPropagation();
+      });
+      const onOutside = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        if (target.closest(".vst-audio-inspector") || target.closest(".sui-popover")) {
+          return;
+        }
+        finish(true);
+      };
+      outsideMouseHandler = onOutside;
+      document.addEventListener("mousedown", onOutside, true);
+      document.body.appendChild(wrap);
+      activeWrap = wrap;
+      select.focus();
+    };
+    const onBodyClick = (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const seg = event.target.closest(CLIP_SELECTOR);
+      if (!(seg instanceof HTMLElement)) {
+        return;
+      }
+      const clipIdx = parseClipIdx(seg);
+      if (clipIdx === null) {
+        return;
+      }
+      openEditor(seg, clipIdx);
+    };
+    const onBodyKeyDown = (event) => {
+      const ke = event;
+      if (ke.key !== "Enter" && ke.key !== " ") {
+        return;
+      }
+      if (!(ke.target instanceof Element)) {
+        return;
+      }
+      const seg = ke.target.closest(CLIP_SELECTOR);
+      if (!(seg instanceof HTMLElement)) {
+        return;
+      }
+      const clipIdx = parseClipIdx(seg);
+      if (clipIdx === null) {
+        return;
+      }
+      ke.preventDefault();
+      openEditor(seg, clipIdx);
+    };
+    const attach = (body) => {
+      if (boundBody === body) {
+        return;
+      }
+      dispose();
+      boundBody = body;
+      body.addEventListener("click", onBodyClick);
+      body.addEventListener("keydown", onBodyKeyDown);
+    };
+    const dispose = () => {
+      closeEditor();
+      if (boundBody) {
+        boundBody.removeEventListener("click", onBodyClick);
+        boundBody.removeEventListener("keydown", onBodyKeyDown);
+        boundBody = null;
+      }
+    };
+    return { attach, dispose };
+  };
+
   // frontend/timelineHistory.ts
   var createTimelineHistory = (deps) => {
     const max = deps.maxDepth ?? 50;
@@ -1818,6 +2153,50 @@
     }
     return `<div class="vst-track-row vst-track-prompt"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-prompt" aria-hidden="true">✎</div><div class="vst-track-label"><strong>Prompt</strong><small>major · relay</small></div></div><div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
   };
+  var audioFlagChips = (clip) => {
+    const chips = [];
+    if (clip.reuseAudio === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Reuse the first stage's audio latent for later stages">↻</span>`
+      );
+    }
+    if (clip.clipLengthFromAudio === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Clip length follows the audio length">⇥</span>`
+      );
+    }
+    if (clip.saveAudioTrack === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Save a standalone MP3 for this clip's audio">MP3</span>`
+      );
+    }
+    return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
+  };
+  var renderAudioTrackRow = (clips, layouts) => {
+    const segments = layouts.map((l) => {
+      const clip = clips[l.index];
+      if (!clip) {
+        return "";
+      }
+      const badge = audioSourceBadge(clip.audioSource ?? "");
+      const native = badge.label === "Native";
+      const nativeClass = native ? " vst-audio-native" : "";
+      const width = Math.max(1, l.widthPx - 2);
+      const upload = !native && clip.audioSource === "Upload" ? clip.uploadedAudio?.fileName : null;
+      const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
+      const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
+      const body = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : (() => {
+        const barCount = Math.min(
+          400,
+          Math.max(8, Math.floor(width / 5.5))
+        );
+        const bars = waveBarHeights(l.index, barCount).map((h) => `<span style="height:${h}%"></span>`).join("");
+        return `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>`;
+      })();
+      return `<div class="vst-audio-clip${nativeClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${l.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
+    }).join("");
+    return `<div class="vst-track-row vst-track-audio"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell">${segments}</div></div>`;
+  };
   var renderTimeline = (body, clips, options) => {
     const fps = safeFps(options?.fps);
     const unit = options?.unit === "frames" ? "frames" : "seconds";
@@ -1955,20 +2334,7 @@
       const renderWidth = Math.max(1, l.widthPx - 2);
       return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur}">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span><span class="vst-chip" title="${escapeAttr(stagesTitle)}">▤ ${l.stageCount}</span><span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip) + controls + rightGrip + `</div>`;
     }).join("");
-    const audioSegments = layouts.filter((l) => {
-      const badge = audioSourceBadge(clips[l.index].audioSource ?? "");
-      return badge.label !== "Native";
-    }).map((l) => {
-      const clip = clips[l.index];
-      const badge = audioSourceBadge(clip.audioSource ?? "");
-      const barCount = Math.min(
-        400,
-        Math.max(8, Math.floor(l.widthPx / 5.5))
-      );
-      const bars = waveBarHeights(l.index, barCount).map((h) => `<span style="height:${h}%"></span>`).join("");
-      return `<div class="vst-audio-clip" data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${l.widthPx}px" title="${escapeAttr(badge.title)}"><span class="vst-audio-label">${escapeAttr(badge.label)}</span><div class="vst-audio-wave" aria-hidden="true">${bars}</div></div>`;
-    });
-    const audioRow = audioSegments.length === 0 ? "" : `<div class="vst-track-row vst-track-audio"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell">${audioSegments.join("")}</div></div>`;
+    const audioRow = renderAudioTrackRow(clips, layouts);
     const videoHead = `<div class="vst-track-head"><div class="vst-track-icon vst-track-icon-video" aria-hidden="true">▶</div><div class="vst-track-label"><strong>Video</strong><small>V1 · ${clips.length} ${clipWord}</small></div></div>`;
     const promptRow = renderPromptTrackRow(
       clips,
@@ -2015,7 +2381,7 @@
     }
     return selectedIndex;
   };
-  var parseClipIdx = (el) => {
+  var parseClipIdx2 = (el) => {
     if (!el) {
       return null;
     }
@@ -2028,7 +2394,7 @@
   };
   var shiftClipsAfter = (body, idx, deltaPx) => {
     for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
-      const elIdx = parseClipIdx(el);
+      const elIdx = parseClipIdx2(el);
       if (elIdx !== null && elIdx > idx) {
         el.style.transform = deltaPx !== 0 ? `translateX(${deltaPx}px)` : "";
       }
@@ -2084,7 +2450,7 @@
         event.stopPropagation();
         const pip = keyDeleteButton.closest(KEY_SELECTOR);
         const keyRegion = pip?.closest(REGION_SELECTOR) ?? null;
-        const clipIdx = parseClipIdx(keyRegion);
+        const clipIdx = parseClipIdx2(keyRegion);
         const refIdx = parseRefIdx(pip);
         if (clipIdx !== null && refIdx !== null) {
           applyDeleteKeyframe(clipIdx, refIdx);
@@ -2095,7 +2461,7 @@
       if (actionButton) {
         event.stopPropagation();
         const actionRegion = actionButton.closest(REGION_SELECTOR);
-        const actionIdx = parseClipIdx(actionRegion);
+        const actionIdx = parseClipIdx2(actionRegion);
         if (actionIdx === null) {
           return;
         }
@@ -2108,7 +2474,7 @@
         return;
       }
       const region = target.closest(REGION_SELECTOR);
-      const idx = parseClipIdx(region);
+      const idx = parseClipIdx2(region);
       if (idx === null) {
         return;
       }
@@ -2242,7 +2608,7 @@
       const pip = me.target.closest(KEY_SELECTOR);
       if (pip instanceof HTMLElement) {
         const pipRegion = pip.closest(REGION_SELECTOR);
-        const clipIdx = parseClipIdx(pipRegion);
+        const clipIdx = parseClipIdx2(pipRegion);
         const refIdx = parseRefIdx(pip);
         if (clipIdx === null || refIdx === null || !(pipRegion instanceof HTMLElement)) {
           return;
@@ -2276,7 +2642,7 @@
       const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
       if (resizeGrip) {
         const region = resizeGrip.closest(REGION_SELECTOR);
-        const idx2 = parseClipIdx(region);
+        const idx2 = parseClipIdx2(region);
         if (idx2 === null || !(region instanceof HTMLElement)) {
           return;
         }
@@ -2294,7 +2660,7 @@
         return;
       }
       const target = me.target.closest(REGION_SELECTOR);
-      const idx = parseClipIdx(target);
+      const idx = parseClipIdx2(target);
       if (idx === null) {
         return;
       }
@@ -2513,7 +2879,7 @@
       }
       ke.preventDefault();
       const pipRegion = pipEl.closest(REGION_SELECTOR);
-      const clipIdx = parseClipIdx(pipRegion);
+      const clipIdx = parseClipIdx2(pipRegion);
       const refIdx = parseRefIdx(pipEl);
       if (clipIdx === null || refIdx === null) {
         return;
@@ -3236,6 +3602,7 @@
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
     const linking = createTimelineLinking();
     const promptTrack = createTimelinePromptTrack();
+    const audioTrack = createTimelineAudioTrack();
     const history = createTimelineHistory({
       read: () => readVideoStagesSection(),
       write: (value) => writeVideoStagesSection(value)
@@ -3423,6 +3790,7 @@
       if (body) {
         linking.attach(body);
         promptTrack.attach(body);
+        audioTrack.attach(body);
         body.removeEventListener("click", onBodyClickSyncReadout);
         body.addEventListener("click", onBodyClickSyncReadout);
       }
@@ -3445,6 +3813,7 @@
       }
       linking.dispose();
       promptTrack.dispose();
+      audioTrack.dispose();
       const body = document.getElementById(TIMELINE_BODY_ID);
       body?.removeEventListener("click", onBodyClickSyncReadout);
       document.removeEventListener("keydown", onKeydown);

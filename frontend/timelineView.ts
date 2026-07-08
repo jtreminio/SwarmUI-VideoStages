@@ -309,6 +309,84 @@ export const renderPromptTrackRow = (
     );
 };
 
+const audioFlagChips = (clip: Clip): string => {
+    const chips: string[] = [];
+    if (clip.reuseAudio === true) {
+        chips.push(
+            `<span class="vst-audio-flag" title="Reuse the first stage's audio latent for later stages">↻</span>`,
+        );
+    }
+    if (clip.clipLengthFromAudio === true) {
+        chips.push(
+            `<span class="vst-audio-flag" title="Clip length follows the audio length">⇥</span>`,
+        );
+    }
+    if (clip.saveAudioTrack === true) {
+        chips.push(
+            `<span class="vst-audio-flag" title="Save a standalone MP3 for this clip's audio">MP3</span>`,
+        );
+    }
+    return chips.length === 0
+        ? ""
+        : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
+};
+
+export const renderAudioTrackRow = (
+    clips: Clip[],
+    layouts: RegionLayout[],
+): string => {
+    const segments = layouts
+        .map((l) => {
+            const clip = clips[l.index];
+            if (!clip) {
+                return "";
+            }
+            const badge = audioSourceBadge(clip.audioSource ?? "");
+            const native = badge.label === "Native";
+            const nativeClass = native ? " vst-audio-native" : "";
+            const width = Math.max(1, l.widthPx - 2);
+            const upload =
+                !native && clip.audioSource === "Upload"
+                    ? clip.uploadedAudio?.fileName
+                    : null;
+            const labelText = upload
+                ? `${badge.label} · ${upload}`
+                : badge.label;
+            const title = native
+                ? "Audio: Native — click to choose an audio source"
+                : `${badge.title} — click to edit`;
+            const body = native
+                ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>`
+                : (() => {
+                      const barCount = Math.min(
+                          400,
+                          Math.max(8, Math.floor(width / 5.5)),
+                      );
+                      const bars = waveBarHeights(l.index, barCount)
+                          .map((h) => `<span style="height:${h}%"></span>`)
+                          .join("");
+                      return `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>`;
+                  })();
+            return (
+                `<div class="vst-audio-clip${nativeClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeHtml(title)}" aria-label="Edit audio for clip ${l.index}">` +
+                `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +
+                audioFlagChips(clip) +
+                body +
+                `</div>`
+            );
+        })
+        .join("");
+    return (
+        `<div class="vst-track-row vst-track-audio">` +
+        `<div class="vst-track-head">` +
+        `<div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div>` +
+        `<div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div>` +
+        `</div>` +
+        `<div class="vst-track-cell">${segments}</div>` +
+        `</div>`
+    );
+};
+
 export const renderTimeline = (
     body: HTMLElement,
     clips: Clip[],
@@ -533,38 +611,7 @@ export const renderTimeline = (
         })
         .join("");
 
-    const audioSegments = layouts
-        .filter((l) => {
-            const badge = audioSourceBadge(clips[l.index].audioSource ?? "");
-            return badge.label !== "Native";
-        })
-        .map((l) => {
-            const clip = clips[l.index];
-            const badge = audioSourceBadge(clip.audioSource ?? "");
-            const barCount = Math.min(
-                400,
-                Math.max(8, Math.floor(l.widthPx / 5.5)),
-            );
-            const bars = waveBarHeights(l.index, barCount)
-                .map((h) => `<span style="height:${h}%"></span>`)
-                .join("");
-            return (
-                `<div class="vst-audio-clip" data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${l.widthPx}px" title="${escapeHtml(badge.title)}">` +
-                `<span class="vst-audio-label">${escapeHtml(badge.label)}</span>` +
-                `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>` +
-                `</div>`
-            );
-        });
-    const audioRow =
-        audioSegments.length === 0
-            ? ""
-            : `<div class="vst-track-row vst-track-audio">` +
-              `<div class="vst-track-head">` +
-              `<div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div>` +
-              `<div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div>` +
-              `</div>` +
-              `<div class="vst-track-cell">${audioSegments.join("")}</div>` +
-              `</div>`;
+    const audioRow = renderAudioTrackRow(clips, layouts);
 
     const videoHead =
         `<div class="vst-track-head">` +

@@ -9,6 +9,7 @@ import {
     readVideoStagesSection,
     writeVideoStagesSection,
 } from "./swarmInputs";
+import { createTimelineAudioTrack } from "./timelineAudioTrack";
 import type { TimelineUnit } from "./timelineDetail";
 import { createTimelineHistory } from "./timelineHistory";
 import { createTimelineLinking } from "./timelineLinking";
@@ -49,6 +50,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
     const linking = createTimelineLinking();
     const promptTrack = createTimelinePromptTrack();
+    const audioTrack = createTimelineAudioTrack();
 
     const history = createTimelineHistory({
         read: () => readVideoStagesSection(),
@@ -256,6 +258,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (body) {
             linking.attach(body);
             promptTrack.attach(body);
+            audioTrack.attach(body);
             body.removeEventListener("click", onBodyClickSyncReadout);
             body.addEventListener("click", onBodyClickSyncReadout);
         }
@@ -279,6 +282,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         }
         linking.dispose();
         promptTrack.dispose();
+        audioTrack.dispose();
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);
         document.removeEventListener("keydown", onKeydown);
