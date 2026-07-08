@@ -358,7 +358,6 @@ describe("createTimelineLinking keyframe editing (DOM)", () => {
             `<div class="vst-keys">` +
             `<span class="vst-key" data-clip-idx="0" data-ref-idx="0" role="button" tabindex="0" style="left:50%">` +
             `<span class="vst-key-dot"></span>` +
-            `<button type="button" class="vst-key-del" data-vst-key-action="delete">×</button>` +
             `</span>` +
             `</div>` +
             `</div>`;
@@ -373,29 +372,6 @@ describe("createTimelineLinking keyframe editing (DOM)", () => {
         linking = null;
         jest.restoreAllMocks();
         document.body.innerHTML = "";
-    });
-
-    it("clicking a pip's delete button removes that ref via saveClips", () => {
-        clipsSection([
-            {
-                duration: 2,
-                stages: [{ refStrengths: [0.8] }],
-                refs: [{ frame: 10 }],
-            },
-        ]);
-        const body = makeBody();
-        renderPipRegion(body);
-        const saveSpy = jest.spyOn(persistence, "saveClips");
-
-        linking = createTimelineLinking();
-        linking.attach(body);
-
-        body.querySelector<HTMLButtonElement>(
-            "[data-vst-key-action='delete']",
-        )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-        expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].refs).toHaveLength(0);
     });
 
     it("shift-clicking a pip toggles its ref.fromEnd via saveClips", () => {

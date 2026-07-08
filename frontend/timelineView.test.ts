@@ -281,6 +281,36 @@ describe("renderTimeline (DOM)", () => {
         expect(body.dataset.vstPps).toBe("100");
     });
 
+    it("reflects the enabled state on the Enable switch and reports toggles", () => {
+        const seen: boolean[] = [];
+        renderTimeline(body, [makeClip(2, 1, 0)], {
+            enabled: false,
+            onToggleEnabled: (value) => seen.push(value),
+        });
+        const input = body.querySelector<HTMLInputElement>("[data-vst-enable]");
+        if (!input) {
+            throw new Error("Enable switch not rendered");
+        }
+        expect(input.checked).toBe(false);
+
+        // The handler reads back true when the user flips it on.
+        input.checked = true;
+        input.dispatchEvent(new Event("change"));
+        expect(seen).toEqual([true]);
+    });
+
+    it("renders the Enable switch checked and the topbar undimmed by default", () => {
+        renderTimeline(body, [makeClip(2, 1, 0)]);
+        expect(
+            body.querySelector<HTMLInputElement>("[data-vst-enable]")?.checked,
+        ).toBe(true);
+        expect(
+            body
+                .querySelector(".vst-topbar")
+                ?.classList.contains("vst-topbar-disabled"),
+        ).toBe(false);
+    });
+
     it("renders unlabeled minor ticks between the labeled grid ticks", () => {
         renderTimeline(body, [makeClip(2, 1, 0), makeClip(3, 1, 0)]);
         expect(body.querySelectorAll(".vst-tick-minor").length).toBeGreaterThan(
@@ -451,21 +481,123 @@ describe("renderTimeline (DOM)", () => {
         expect(chip?.textContent).toBe("▤ 3");
     });
 
-    it("shows a ref's uploaded image on its keyframe marker chip", () => {
+    it("draws a bare arrow marker on the clip and shows the ref image on the References-track thumbnail", () => {
         const clip = {
             duration: 2,
             stages: [{}],
             refs: [
                 {
                     frame: 10,
+                    source: "Upload",
                     uploadedImage: { data: "data:image/png;base64,QQ==" },
                 },
             ],
         } as unknown as Clip;
         renderTimeline(body, [clip]);
+        // The on-clip marker is now a plain arrow: it carries no thumbnail.
         const dot = body.querySelector<HTMLElement>(".vst-key .vst-key-dot");
-        expect(dot?.getAttribute("style")).toContain(
+        expect(dot).not.toBeNull();
+        expect(dot?.getAttribute("style") ?? "").not.toContain("data:image");
+        // The image lives on the References-track thumbnail below the clip.
+        const thumb = body.querySelector<HTMLElement>(
+            ".vst-track-refs .vst-refs-thumb",
+        );
+        expect(thumb?.style.backgroundImage).toContain(
             "data:image/png;base64,QQ==",
         );
+    });
+
+    it("renders the References track between the video and audio tracks", () => {
+        renderTimeline(body, [makeClip(2, 1, 1)]);
+        const rows = Array.from(
+            body.querySelectorAll<HTMLElement>(".vst-track-row"),
+        ).map((el) => el.className);
+        const videoIdx = rows.findIndex((c) => c.includes("vst-track-video"));
+        const refsIdx = rows.findIndex((c) => c.includes("vst-track-refs"));
+        const audioIdx = rows.findIndex((c) => c.includes("vst-track-audio"));
+        expect(videoIdx).toBeGreaterThanOrEqual(0);
+        expect(refsIdx).toBe(videoIdx + 1);
+        expect(audioIdx).toBe(refsIdx + 1);
+    });
+
+    it("renders one References mark per ref, flagging primary (cover) and from-end refs", () => {
+        const clip = {
+            duration: 4,
+            stages: [{}],
+            refs: [
+                { frame: 1, source: "Refiner", fromEnd: false },
+                { frame: 6, source: "Base", fromEnd: true },
+            ],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const marks = body.querySelectorAll(
+            '.vst-track-refs .vst-refs-mark[data-vst-ref="thumb"]',
+        );
+        expect(marks).toHaveLength(2);
+        expect(marks[0].className).toContain("vst-refs-primary");
+        expect(marks[0].className).not.toContain("vst-refs-fromend");
+        expect(marks[1].className).toContain("vst-refs-fromend");
+        expect(marks[1].className).not.toContain("vst-refs-primary");
+        // The marker face shows the signed frame ("R 1"; "R -N" for from-end).
+        expect(marks[0].querySelector(".vst-refs-ph")?.textContent).toBe("R 1");
+        expect(marks[1].querySelector(".vst-refs-ph")?.textContent).toBe(
+            "R -6",
+        );
+    });
+
+    it("edge-aligns refs within a few frames of a clip boundary, centers the rest", () => {
+        const clip = {
+            duration: 4,
+            stages: [{}],
+            refs: [
+                { frame: 2, source: "Refiner", fromEnd: false }, // near start
+                { frame: 2, source: "Base", fromEnd: true }, // near end
+                { frame: 40, source: "Refiner", fromEnd: false }, // mid-clip
+            ],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const marks = body.querySelectorAll<HTMLElement>(
+            '.vst-track-refs .vst-refs-mark[data-vst-ref="thumb"]',
+        );
+        expect(marks[0].querySelector(".vst-refs-ph")?.textContent).toBe("R 2");
+        expect(marks[1].querySelector(".vst-refs-ph")?.textContent).toBe(
+            "R -2",
+        );
+        expect(marks[0].className).toContain("vst-refs-align-start");
+        expect(marks[1].className).toContain("vst-refs-align-end");
+        expect(marks[2].className).not.toContain("vst-refs-align");
+    });
+
+    it("keeps the frame label over an uploaded image via a footer chip", () => {
+        const clip = {
+            duration: 4,
+            stages: [{}],
+            refs: [
+                {
+                    frame: 3,
+                    source: "Upload",
+                    uploadedImage: { data: "data:image/png;base64,QQ==" },
+                },
+            ],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const thumb = body.querySelector<HTMLElement>(
+            ".vst-track-refs .vst-refs-thumb",
+        );
+        expect(thumb?.className).toContain("vst-refs-has-image");
+        expect(thumb?.style.backgroundImage).toContain(
+            "data:image/png;base64,QQ==",
+        );
+        expect(thumb?.querySelector(".vst-refs-ph")?.textContent).toBe("R 3");
+    });
+
+    it("exposes a clickable add-lane per clip in the References track", () => {
+        renderTimeline(body, [makeClip(2, 1, 0), makeClip(3, 1, 0)]);
+        const lanes = body.querySelectorAll(
+            ".vst-track-refs .vst-refs-lane[data-vst-ref-add]",
+        );
+        expect(lanes).toHaveLength(2);
+        expect(lanes[0].getAttribute("data-clip-idx")).toBe("0");
+        expect(lanes[1].getAttribute("data-clip-idx")).toBe("1");
     });
 });

@@ -3,10 +3,12 @@ import { buildDefaultClip } from "./normalization";
 import { getClips, saveClips } from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import {
+    getGroupToggle,
     getPromptInput,
     isVideoStagesEnabled,
     readGlobalPrompt,
     readVideoStagesSection,
+    setVideoStagesEnabled,
     writeVideoStagesSection,
 } from "./swarmInputs";
 import { createTimelineAudioTrack } from "./timelineAudioTrack";
@@ -14,6 +16,7 @@ import type { TimelineUnit } from "./timelineDetail";
 import { createTimelineHistory } from "./timelineHistory";
 import { createTimelineLinking } from "./timelineLinking";
 import { createTimelinePromptTrack } from "./timelinePromptTrack";
+import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -44,6 +47,7 @@ const INPUT_SYNC_INTERVAL_MS = 200;
 
 export const videoStagesTimeline = (): VideoStagesTimeline => {
     let boundInput: HTMLInputElement | HTMLTextAreaElement | null = null;
+    let boundToggle: HTMLInputElement | null = null;
     let inputSyncInterval: ReturnType<typeof setInterval> | null = null;
     let lastSeenValue: string | null = null;
     let unit: TimelineUnit = "seconds";
@@ -51,6 +55,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const linking = createTimelineLinking();
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
+    const referencesTrack = createTimelineReferencesTrack();
 
     const history = createTimelineHistory({
         read: () => readVideoStagesSection(),
@@ -179,6 +184,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 unit,
                 pxPerSecond,
                 selectedIndex: linking.getSelectedIndex(),
+                enabled: isVideoStagesEnabled(),
+                onToggleEnabled: setVideoStagesEnabled,
                 onToggleUnit: toggleUnit,
                 onAddClip: addClip,
                 onZoomIn: zoomIn,
@@ -214,6 +221,22 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         input.addEventListener("input", onInputChanged);
         input.addEventListener("change", onInputChanged);
         boundInput = input;
+    };
+
+    const onEnabledToggled = (): void => {
+        refresh();
+    };
+
+    const bindToggleListener = (): void => {
+        const toggle = getGroupToggle();
+        if (!toggle || toggle === boundToggle) {
+            return;
+        }
+        if (boundToggle) {
+            boundToggle.removeEventListener("change", onEnabledToggled);
+        }
+        toggle.addEventListener("change", onEnabledToggled);
+        boundToggle = toggle;
     };
 
     const startInputSync = (): void => {
@@ -259,10 +282,12 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             linking.attach(body);
             promptTrack.attach(body);
             audioTrack.attach(body);
+            referencesTrack.attach(body);
             body.removeEventListener("click", onBodyClickSyncReadout);
             body.addEventListener("click", onBodyClickSyncReadout);
         }
         bindInputListener();
+        bindToggleListener();
         history.syncBaseline();
         document.removeEventListener("keydown", onKeydown);
         document.addEventListener("keydown", onKeydown);
@@ -280,9 +305,14 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             boundInput.removeEventListener("change", onInputChanged);
             boundInput = null;
         }
+        if (boundToggle) {
+            boundToggle.removeEventListener("change", onEnabledToggled);
+            boundToggle = null;
+        }
         linking.dispose();
         promptTrack.dispose();
         audioTrack.dispose();
+        referencesTrack.dispose();
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);
         document.removeEventListener("keydown", onKeydown);

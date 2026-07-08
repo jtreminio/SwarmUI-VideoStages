@@ -37,6 +37,8 @@ export interface RenderTimelineOptions {
     unit?: TimelineUnit;
     pxPerSecond?: number;
     selectedIndex?: number | null;
+    enabled?: boolean;
+    onToggleEnabled?: (enabled: boolean) => void;
     onToggleUnit?: () => void;
     onAddClip?: () => void;
     onZoomIn?: () => void;
@@ -170,23 +172,21 @@ const renderKeyframes = (
             );
             const left = keyframeLeftPercent(time, durationSeconds);
             const isEnd = ref.fromEnd === true;
+            const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
             const source = refSourceLabel(ref.source ?? "");
-            const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""} · ${formatTimeLabel(time, unit, fps)} · drag to move, shift-click to toggle from-end`;
-            const kindClass = isEnd ? " vst-key-end" : " vst-key-start";
-            const label = `Keyframe ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
-            const image = ref.uploadedImage?.data;
-            const dotStyle = image
-                ? ` style="background-image:url('${escapeHtml(mediaPreviewSrc(image))}')"`
-                : "";
+            const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)} · drag to move, shift-click to toggle from-end`;
+            const kindClass =
+                (isEnd ? " vst-key-end" : " vst-key-start") +
+                (isPrimary ? " vst-key-primary" : "");
+            const markAria = `Reference ${refIdx} marker (${source}${isEnd ? ", from end" : ""}) — drag to move, Enter toggles from end`;
             return (
-                `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" role="button" tabindex="0" aria-label="${escapeHtml(label)}">` +
-                `<span class="vst-key-dot"${dotStyle} aria-hidden="true"></span>` +
-                `<button type="button" class="vst-key-del" data-vst-key-action="delete" tabindex="-1" title="Delete keyframe" aria-label="Delete ${escapeHtml(label)}">×</button>` +
+                `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" role="button" tabindex="0" aria-label="${escapeHtml(markAria)}">` +
+                `<span class="vst-key-dot" aria-hidden="true"></span>` +
                 `</span>`
             );
         })
         .join("");
-    return `<div class="vst-keys" title="Keyframes">${pips}</div>`;
+    return `<div class="vst-keys" title="Reference markers">${pips}</div>`;
 };
 
 const renderBadges = (clip: Clip): string => {
@@ -387,6 +387,77 @@ export const renderAudioTrackRow = (
     );
 };
 
+const REF_EDGE_ALIGN_FRAMES = 3;
+
+export const renderReferencesTrackRow = (
+    clips: Clip[],
+    layouts: RegionLayout[],
+    fps: number,
+    unit: TimelineUnit,
+): string => {
+    const lanes = layouts
+        .map((l) => {
+            const clip = clips[l.index];
+            if (!clip) {
+                return "";
+            }
+            const laneWidth = Math.max(1, l.widthPx - 2);
+            const marks = (clip.refs ?? [])
+                .map((ref: RefImage, refIdx: number) => {
+                    const isEnd = ref.fromEnd === true;
+                    const frame = Math.max(0, ref.frame ?? 0);
+                    const isPrimary = frame === 1 && !isEnd;
+                    const time = keyframeTimeSeconds(
+                        ref.frame,
+                        isEnd,
+                        l.durationSeconds,
+                        fps,
+                    );
+                    const left = keyframeLeftPercent(time, l.durationSeconds);
+                    const source = refSourceLabel(ref.source ?? "");
+                    const image = ref.uploadedImage?.data;
+                    const thumbStyle = image
+                        ? ` style="background-image:url('${escapeHtml(mediaPreviewSrc(image))}')"`
+                        : "";
+                    const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
+                    const thumbClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
+                    const thumbInner = `<span class="vst-refs-ph">${escapeHtml(frameLabel)}</span>`;
+                    const alignClass =
+                        frame > REF_EDGE_ALIGN_FRAMES
+                            ? ""
+                            : isEnd
+                              ? " vst-refs-align-end"
+                              : " vst-refs-align-start";
+                    const kindClass =
+                        (isPrimary ? " vst-refs-primary" : "") +
+                        (isEnd ? " vst-refs-fromend" : "") +
+                        alignClass;
+                    const title =
+                        `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""}` +
+                        ` · frame ${frame} · ${formatTimeLabel(time, unit, fps)}` +
+                        ` · click to edit, drag to move`;
+                    const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
+                    return (
+                        `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${l.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}">` +
+                        `<span class="${thumbClass}"${thumbStyle}>${thumbInner}</span>` +
+                        `</div>`
+                    );
+                })
+                .join("");
+            return `<div class="vst-refs-lane" data-vst-ref-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${laneWidth}px" title="Click to add a reference image at this frame">${marks}</div>`;
+        })
+        .join("");
+    return (
+        `<div class="vst-track-row vst-track-refs">` +
+        `<div class="vst-track-head">` +
+        `<div class="vst-track-icon vst-track-icon-refs" aria-hidden="true">⧉</div>` +
+        `<div class="vst-track-label"><strong>References</strong><small>image refs</small></div>` +
+        `</div>` +
+        `<div class="vst-track-cell">${lanes}</div>` +
+        `</div>`
+    );
+};
+
 export const renderTimeline = (
     body: HTMLElement,
     clips: Clip[],
@@ -426,10 +497,17 @@ export const renderTimeline = (
         `<span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span>` +
         `<span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span>` +
         `</span>`;
+    const enabled = options?.enabled !== false;
+    const enableToggle =
+        `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual.">` +
+        `<input type="checkbox" class="vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}>` +
+        `<span class="vst-enable-label">Enable</span>` +
+        `</label>`;
     const header =
-        `<div class="vst-topbar">` +
+        `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}">` +
         `<div class="vst-topbar-main">` +
         `<span class="vst-title">Timeline</span>` +
+        enableToggle +
         `<span class="vst-sub"><span class="vst-stat-num">${clips.length}</span> ${clipWord}</span>` +
         `</div>` +
         `<div class="vst-topbar-tools">` +
@@ -463,6 +541,13 @@ export const renderTimeline = (
                 btn.addEventListener("click", () => handler());
             }
         };
+        const enableInput =
+            body.querySelector<HTMLInputElement>("[data-vst-enable]");
+        if (enableInput && options?.onToggleEnabled) {
+            enableInput.addEventListener("change", () => {
+                options.onToggleEnabled?.(enableInput.checked);
+            });
+        }
         wire("[data-vst-unit-toggle]", options?.onToggleUnit);
         wire("[data-vst-zoom-in]", options?.onZoomIn);
         wire("[data-vst-zoom-out]", options?.onZoomOut);
@@ -612,6 +697,7 @@ export const renderTimeline = (
         .join("");
 
     const audioRow = renderAudioTrackRow(clips, layouts);
+    const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
 
     const videoHead =
         `<div class="vst-track-head">` +
@@ -635,6 +721,7 @@ export const renderTimeline = (
         `</div>` +
         promptRow +
         `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}</div></div>` +
+        referencesRow +
         audioRow +
         `</div></div>`;
     wireTopbar();

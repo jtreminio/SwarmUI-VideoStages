@@ -87,9 +87,11 @@ internal static class Fixtures
 
     public static void SetVideoStagesConfig(T2IParamInput input, string json)
     {
+        _ = WorkflowTestHarness.VideoStagesSteps();
         string existing = input.Get(T2IParamTypes.Prompt, "");
         string section = WrapVideoStagesSection(json);
         input.Set(T2IParamTypes.Prompt, string.IsNullOrEmpty(existing) ? section : $"{existing} {section}");
+        input.Set(VideoStagesExtension.DimensionsPreset, Constants.DimensionsPresetCustomValue);
     }
 
     public static string WrapVideoStagesSection(string json) =>

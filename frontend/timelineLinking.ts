@@ -24,7 +24,6 @@ const REGION_RESIZE_SELECTOR = ".vst-region-resize";
 const CLIP_SHIFT_SELECTOR =
     ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
 const KEY_SELECTOR = ".vst-key[data-ref-idx]";
-const KEY_DELETE_SELECTOR = "[data-vst-key-action='delete']";
 
 const REGION_SELECTED_CLASS = "vst-region-selected";
 const DRAGGING_CLASS = "vst-dragging";
@@ -179,18 +178,6 @@ export const createTimelineLinking = (): TimelineLinking => {
         if (!(target instanceof Element)) {
             return;
         }
-        const keyDeleteButton = target.closest(KEY_DELETE_SELECTOR);
-        if (keyDeleteButton) {
-            event.stopPropagation();
-            const pip = keyDeleteButton.closest(KEY_SELECTOR);
-            const keyRegion = pip?.closest(REGION_SELECTOR) ?? null;
-            const clipIdx = parseClipIdx(keyRegion);
-            const refIdx = parseRefIdx(pip);
-            if (clipIdx !== null && refIdx !== null) {
-                applyDeleteKeyframe(clipIdx, refIdx);
-            }
-            return;
-        }
         const actionButton = target.closest(REGION_ACTION_SELECTOR);
         if (actionButton) {
             event.stopPropagation();
@@ -302,21 +289,6 @@ export const createTimelineLinking = (): TimelineLinking => {
         saveClips(clips);
     };
 
-    const applyDeleteKeyframe = (clipIdx: number, refIdx: number): void => {
-        const clips = getClips();
-        const clip = clips[clipIdx];
-        if (!clip || refIdx < 0 || refIdx >= clip.refs.length) {
-            return;
-        }
-        clip.refs.splice(refIdx, 1);
-        for (const stage of clip.stages) {
-            if (refIdx < stage.refStrengths.length) {
-                stage.refStrengths.splice(refIdx, 1);
-            }
-        }
-        saveClips(clips);
-    };
-
     const applyToggleKeyframeFromEnd = (
         clipIdx: number,
         refIdx: number,
@@ -355,9 +327,6 @@ export const createTimelineLinking = (): TimelineLinking => {
             return;
         }
         if (!(me.target instanceof Element)) {
-            return;
-        }
-        if (me.target.closest(KEY_DELETE_SELECTOR)) {
             return;
         }
         const pip = me.target.closest(KEY_SELECTOR);
@@ -642,9 +611,6 @@ export const createTimelineLinking = (): TimelineLinking => {
         }
         const target = event.target;
         if (!(target instanceof Element)) {
-            return;
-        }
-        if (target.closest(KEY_DELETE_SELECTOR)) {
             return;
         }
         const pipEl = target.closest(KEY_SELECTOR);

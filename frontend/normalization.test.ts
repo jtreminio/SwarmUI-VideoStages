@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+    appendRefToClip,
     buildDefaultClip,
     buildDefaultRef,
     normalizeClip,
@@ -8,6 +9,7 @@ import {
     normalizeStageRefStrengthValue,
     readRawStageProp,
     readRawStageString,
+    removeRefAt,
 } from "./normalization";
 import {
     REF_SOURCE_BASE,
@@ -327,5 +329,49 @@ describe("normalization", () => {
         expect(ref.source).toBe(REF_SOURCE_REFINER);
         expect(ref.frame).toBe(1);
         expect(ref.uploadedImage).toBeNull();
+    });
+});
+
+describe("appendRefToClip / removeRefAt", () => {
+    const twoStageClip = () =>
+        normalizeClip(
+            {
+                duration: 4,
+                refs: [{ source: REF_SOURCE_REFINER, frame: 2 }],
+                stages: [{ refStrengths: [0.3] }, { refStrengths: [0.7] }],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+
+    it("appendRefToClip adds the ref and pads every stage's refStrengths", () => {
+        const clip = twoStageClip();
+        appendRefToClip(clip, buildDefaultRef(REF_SOURCE_BASE));
+        expect(clip.refs).toHaveLength(2);
+        expect(clip.refs[1].source).toBe(REF_SOURCE_BASE);
+        expect(clip.stages[0].refStrengths).toHaveLength(2);
+        expect(clip.stages[1].refStrengths).toHaveLength(2);
+        // Existing strengths preserved; the appended one uses the default 0.8.
+        expect(clip.stages[0].refStrengths[0]).toBe(0.3);
+        expect(clip.stages[1].refStrengths[0]).toBe(0.7);
+        expect(clip.stages[0].refStrengths[1]).toBe(0.8);
+    });
+
+    it("removeRefAt removes the ref and the matching strength from every stage", () => {
+        const clip = twoStageClip();
+        appendRefToClip(clip, buildDefaultRef(REF_SOURCE_BASE));
+        expect(removeRefAt(clip, 0)).toBe(true);
+        expect(clip.refs).toHaveLength(1);
+        expect(clip.refs[0].source).toBe(REF_SOURCE_BASE);
+        expect(clip.stages[0].refStrengths).toEqual([0.8]);
+        expect(clip.stages[1].refStrengths).toEqual([0.8]);
+    });
+
+    it("removeRefAt returns false and leaves the clip untouched for an out-of-range index", () => {
+        const clip = twoStageClip();
+        expect(removeRefAt(clip, 5)).toBe(false);
+        expect(removeRefAt(clip, -1)).toBe(false);
+        expect(clip.refs).toHaveLength(1);
+        expect(clip.stages[0].refStrengths).toHaveLength(1);
     });
 });

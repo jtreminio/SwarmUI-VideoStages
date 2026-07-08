@@ -8,6 +8,9 @@ internal static class VideoStagesPromptSection
     public const string Prefix = "videostages";
     private const string Opener = "<videostages>";
 
+    private static bool IsGroupEnabled(WorkflowGenerator g) =>
+        g.UserInput.TryGetRaw(VideoStagesExtension.DimensionsPreset.Type, out _);
+
     private static string OriginalPositivePrompt(WorkflowGenerator g)
     {
         T2IParamInput input = g.UserInput;
@@ -20,7 +23,8 @@ internal static class VideoStagesPromptSection
         return input.Get(T2IParamTypes.Prompt, "");
     }
 
-    public static string ExtractJson(WorkflowGenerator g) => ExtractJson(OriginalPositivePrompt(g));
+    public static string ExtractJson(WorkflowGenerator g) =>
+        IsGroupEnabled(g) ? ExtractJson(OriginalPositivePrompt(g)) : null;
 
     public static string ExtractJson(string prompt)
     {

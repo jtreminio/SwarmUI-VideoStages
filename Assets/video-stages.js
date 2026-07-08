@@ -421,6 +421,19 @@
   };
   var getGroupToggle = () => utils.getInputElement("input_group_content_videostages_toggle");
   var getRootModelInput = () => utils.getInputElement("input_model");
+  var getBase2EditStageRefs = () => {
+    const snapshot = window.base2editStageRegistry?.getSnapshot?.();
+    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+      return [];
+    }
+    const refs = snapshot.refs.map((value) => {
+      const stageIndex = parseBase2EditStageIndex(value);
+      return stageIndex == null ? null : `edit${stageIndex}`;
+    }).filter((value) => !!value);
+    return [...new Set(refs)].sort(
+      (left, right) => (parseBase2EditStageIndex(left) ?? 0) - (parseBase2EditStageIndex(right) ?? 0)
+    );
+  };
   var isRootTextToVideoModel = () => {
     const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
     if (!modelName) {
@@ -458,6 +471,14 @@
   var isVideoStagesEnabled = () => {
     const toggler = getGroupToggle();
     return toggler ? toggler.checked : false;
+  };
+  var setVideoStagesEnabled = (enabled) => {
+    const toggler = getGroupToggle();
+    if (!toggler || toggler.checked === enabled) {
+      return;
+    }
+    toggler.checked = enabled;
+    triggerChangeFor(toggler);
   };
 
   // frontend/dimensionsDropdown.ts
@@ -849,7 +870,9 @@
   };
 
   // frontend/types.ts
+  var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
+  var REF_SOURCE_UPLOAD = "Upload";
 
   // frontend/normalization.ts
   var readProp = (raw, ...keys) => {
@@ -1001,6 +1024,24 @@
     frame: REF_FRAME_MIN,
     fromEnd: false
   });
+  var appendRefToClip = (clip, ref) => {
+    clip.refs.push(ref);
+    for (const stage of clip.stages) {
+      stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+    }
+  };
+  var removeRefAt = (clip, refIdx) => {
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+      return false;
+    }
+    clip.refs.splice(refIdx, 1);
+    for (const stage of clip.stages) {
+      if (refIdx < stage.refStrengths.length) {
+        stage.refStrengths.splice(refIdx, 1);
+      }
+    }
+    return true;
+  };
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
@@ -2086,15 +2127,14 @@
       );
       const left = keyframeLeftPercent(time, durationSeconds);
       const isEnd = ref.fromEnd === true;
+      const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
       const source = refSourceLabel(ref.source ?? "");
-      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""} · ${formatTimeLabel(time, unit, fps)} · drag to move, shift-click to toggle from-end`;
-      const kindClass = isEnd ? " vst-key-end" : " vst-key-start";
-      const label = `Keyframe ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
-      const image = ref.uploadedImage?.data;
-      const dotStyle = image ? ` style="background-image:url('${escapeAttr(mediaPreviewSrc(image))}')"` : "";
-      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" role="button" tabindex="0" aria-label="${escapeAttr(label)}"><span class="vst-key-dot"${dotStyle} aria-hidden="true"></span><button type="button" class="vst-key-del" data-vst-key-action="delete" tabindex="-1" title="Delete keyframe" aria-label="Delete ${escapeAttr(label)}">×</button></span>`;
+      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)} · drag to move, shift-click to toggle from-end`;
+      const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
+      const markAria = `Reference ${refIdx} marker (${source}${isEnd ? ", from end" : ""}) — drag to move, Enter toggles from end`;
+      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" role="button" tabindex="0" aria-label="${escapeAttr(markAria)}"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
     }).join("");
-    return `<div class="vst-keys" title="Keyframes">${pips}</div>`;
+    return `<div class="vst-keys" title="Reference markers">${pips}</div>`;
   };
   var renderBadges = (clip) => {
     const badges = [
@@ -2197,6 +2237,41 @@
     }).join("");
     return `<div class="vst-track-row vst-track-audio"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell">${segments}</div></div>`;
   };
+  var REF_EDGE_ALIGN_FRAMES = 3;
+  var renderReferencesTrackRow = (clips, layouts, fps, unit) => {
+    const lanes = layouts.map((l) => {
+      const clip = clips[l.index];
+      if (!clip) {
+        return "";
+      }
+      const laneWidth = Math.max(1, l.widthPx - 2);
+      const marks = (clip.refs ?? []).map((ref, refIdx) => {
+        const isEnd = ref.fromEnd === true;
+        const frame = Math.max(0, ref.frame ?? 0);
+        const isPrimary = frame === 1 && !isEnd;
+        const time = keyframeTimeSeconds(
+          ref.frame,
+          isEnd,
+          l.durationSeconds,
+          fps
+        );
+        const left = keyframeLeftPercent(time, l.durationSeconds);
+        const source = refSourceLabel(ref.source ?? "");
+        const image = ref.uploadedImage?.data;
+        const thumbStyle = image ? ` style="background-image:url('${escapeAttr(mediaPreviewSrc(image))}')"` : "";
+        const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
+        const thumbClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
+        const thumbInner = `<span class="vst-refs-ph">${escapeAttr(frameLabel)}</span>`;
+        const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
+        const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
+        const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move`;
+        const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
+        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${l.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbClass}"${thumbStyle}>${thumbInner}</span></div>`;
+      }).join("");
+      return `<div class="vst-refs-lane" data-vst-ref-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${laneWidth}px" title="Click to add a reference image at this frame">${marks}</div>`;
+    }).join("");
+    return `<div class="vst-track-row vst-track-refs"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-refs" aria-hidden="true">⧉</div><div class="vst-track-label"><strong>References</strong><small>image refs</small></div></div><div class="vst-track-cell">${lanes}</div></div>`;
+  };
   var renderTimeline = (body, clips, options) => {
     const fps = safeFps(options?.fps);
     const unit = options?.unit === "frames" ? "frames" : "seconds";
@@ -2218,7 +2293,9 @@
     const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clips.length ? rawSelected : null;
     const selHidden = selectedIndex === null ? " hidden" : "";
     const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
-    const header = `<div class="vst-topbar"><div class="vst-topbar-main"><span class="vst-title">Timeline</span><span class="vst-sub"><span class="vst-stat-num">${clips.length}</span> ${clipWord}</span></div><div class="vst-topbar-tools"><button type="button" class="vst-toggle vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="vst-toggle vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="vst-toggle vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="vst-toggle vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
+    const enabled = options?.enabled !== false;
+    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><input type="checkbox" class="vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><span class="vst-enable-label">Enable</span></label>`;
+    const header = `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clips.length}</span> ${clipWord}</span></div><div class="vst-topbar-tools"><button type="button" class="vst-toggle vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="vst-toggle vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="vst-toggle vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="vst-toggle vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
     const wireTopbar = () => {
       const wire = (selector, handler) => {
         if (!handler) {
@@ -2229,6 +2306,12 @@
           btn.addEventListener("click", () => handler());
         }
       };
+      const enableInput = body.querySelector("[data-vst-enable]");
+      if (enableInput && options?.onToggleEnabled) {
+        enableInput.addEventListener("change", () => {
+          options.onToggleEnabled?.(enableInput.checked);
+        });
+      }
       wire("[data-vst-unit-toggle]", options?.onToggleUnit);
       wire("[data-vst-zoom-in]", options?.onZoomIn);
       wire("[data-vst-zoom-out]", options?.onZoomOut);
@@ -2335,6 +2418,7 @@
       return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur}">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span><span class="vst-chip" title="${escapeAttr(stagesTitle)}">▤ ${l.stageCount}</span><span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip) + controls + rightGrip + `</div>`;
     }).join("");
     const audioRow = renderAudioTrackRow(clips, layouts);
+    const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
     const videoHead = `<div class="vst-track-head"><div class="vst-track-icon vst-track-icon-video" aria-hidden="true">▶</div><div class="vst-track-label"><strong>Video</strong><small>V1 · ${clips.length} ${clipWord}</small></div></div>`;
     const promptRow = renderPromptTrackRow(
       clips,
@@ -2343,7 +2427,7 @@
       `${options?.globalPrompt ?? ""}`
     );
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${ticks.join("")}</div></div>` + promptRow + `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}</div></div>` + audioRow + `</div></div>`;
+    body.innerHTML = `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${ticks.join("")}</div></div>` + promptRow + `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}</div></div>` + referencesRow + audioRow + `</div></div>`;
     wireTopbar();
     wireScroll();
   };
@@ -2354,7 +2438,6 @@
   var REGION_RESIZE_SELECTOR = ".vst-region-resize";
   var CLIP_SHIFT_SELECTOR = ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
   var KEY_SELECTOR = ".vst-key[data-ref-idx]";
-  var KEY_DELETE_SELECTOR = "[data-vst-key-action='delete']";
   var REGION_SELECTED_CLASS = "vst-region-selected";
   var DRAGGING_CLASS = "vst-dragging";
   var RESIZING_CLASS = "vst-resizing";
@@ -2443,18 +2526,6 @@
       }
       const target = event.target;
       if (!(target instanceof Element)) {
-        return;
-      }
-      const keyDeleteButton = target.closest(KEY_DELETE_SELECTOR);
-      if (keyDeleteButton) {
-        event.stopPropagation();
-        const pip = keyDeleteButton.closest(KEY_SELECTOR);
-        const keyRegion = pip?.closest(REGION_SELECTOR) ?? null;
-        const clipIdx = parseClipIdx2(keyRegion);
-        const refIdx = parseRefIdx(pip);
-        if (clipIdx !== null && refIdx !== null) {
-          applyDeleteKeyframe(clipIdx, refIdx);
-        }
         return;
       }
       const actionButton = target.closest(REGION_ACTION_SELECTOR);
@@ -2554,20 +2625,6 @@
       }
       saveClips(clips);
     };
-    const applyDeleteKeyframe = (clipIdx, refIdx) => {
-      const clips = getClips();
-      const clip = clips[clipIdx];
-      if (!clip || refIdx < 0 || refIdx >= clip.refs.length) {
-        return;
-      }
-      clip.refs.splice(refIdx, 1);
-      for (const stage of clip.stages) {
-        if (refIdx < stage.refStrengths.length) {
-          stage.refStrengths.splice(refIdx, 1);
-        }
-      }
-      saveClips(clips);
-    };
     const applyToggleKeyframeFromEnd = (clipIdx, refIdx, sourceJson) => {
       if (readVideoStagesSection() !== sourceJson) {
         return;
@@ -2600,9 +2657,6 @@
         return;
       }
       if (!(me.target instanceof Element)) {
-        return;
-      }
-      if (me.target.closest(KEY_DELETE_SELECTOR)) {
         return;
       }
       const pip = me.target.closest(KEY_SELECTOR);
@@ -2868,9 +2922,6 @@
       }
       const target = event.target;
       if (!(target instanceof Element)) {
-        return;
-      }
-      if (target.closest(KEY_DELETE_SELECTOR)) {
         return;
       }
       const pipEl = target.closest(KEY_SELECTOR);
@@ -3584,6 +3635,633 @@
     return { attach, dispose };
   };
 
+  // frontend/imageSource.ts
+  var buildImageSourceOptions = (currentValue = "") => {
+    const options = [
+      { value: REF_SOURCE_BASE, label: "Base Output" },
+      { value: REF_SOURCE_REFINER, label: "Refiner Output" },
+      { value: REF_SOURCE_UPLOAD, label: "Upload" }
+    ];
+    for (const editRef of getBase2EditStageRefs()) {
+      const editStage = parseBase2EditStageIndex(editRef);
+      options.push({
+        value: editRef,
+        label: `Base2Edit Edit ${editStage} Output`
+      });
+    }
+    const selected = `${currentValue || ""}`.trim();
+    if (selected && !options.some((option) => option.value === selected)) {
+      const isBase2Edit = parseBase2EditStageIndex(selected) != null;
+      options.unshift({
+        value: selected,
+        label: isBase2Edit ? `Missing Base2Edit ${selected}` : selected,
+        disabled: isBase2Edit
+      });
+    }
+    return options;
+  };
+  var resolveImageSourceValue = (currentValue, options) => {
+    const desired = `${currentValue || ""}`;
+    if (options.some((option) => option.value === desired)) {
+      return desired;
+    }
+    return REF_SOURCE_REFINER;
+  };
+
+  // frontend/timelineReferencesTrack.ts
+  var THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
+  var LANE_SELECTOR2 = ".vst-refs-lane[data-vst-ref-add]";
+  var EDITING_CLASS2 = "vst-refs-editing";
+  var DRAGGING_CLASS3 = "vst-refs-dragging";
+  var DRAG_THRESHOLD_PX3 = 5;
+  var currentFps2 = () => {
+    try {
+      const fps = getRootDefaults().fps;
+      return typeof fps === "number" && fps > 0 ? fps : 24;
+    } catch {
+      return 24;
+    }
+  };
+  var parseIntAttr2 = (el, name) => {
+    if (!el) {
+      return null;
+    }
+    const raw = el.getAttribute(name);
+    if (raw === null) {
+      return null;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  };
+  var draftFromRef = (clip, refIdx) => {
+    const ref = clip.refs?.[refIdx];
+    if (!ref) {
+      return null;
+    }
+    return {
+      source: `${ref.source ?? ""}`,
+      frame: ref.frame,
+      fromEnd: ref.fromEnd === true,
+      uploadFileName: ref.uploadFileName ?? null,
+      uploadedImage: ref.uploadedImage ?? null
+    };
+  };
+  var createTimelineReferencesTrack = () => {
+    let boundBody = null;
+    let activeWrap = null;
+    let editingAnchor = null;
+    let outsideMouseHandler = null;
+    let suppressClick = false;
+    let refDrag = null;
+    const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(
+      `.vst-region[data-clip-idx="${clipIdx}"] .vst-key[data-ref-idx="${refIdx}"]`
+    ) ?? null;
+    const positionRefMarker = (mark, arrow, frame, fromEnd, durationSeconds, fps) => {
+      const time = keyframeTimeSeconds(frame, fromEnd, durationSeconds, fps);
+      const leftPct = `${keyframeLeftPercent(time, durationSeconds)}%`;
+      mark.style.left = leftPct;
+      if (arrow) {
+        arrow.style.left = leftPct;
+      }
+      const ph = mark.querySelector(".vst-refs-ph");
+      if (ph) {
+        ph.textContent = `R ${fromEnd ? "-" : ""}${frame}`;
+      }
+    };
+    const isStale = (sourceJson) => readVideoStagesSection() !== sourceJson;
+    const closeEditor = () => {
+      if (outsideMouseHandler) {
+        document.removeEventListener(
+          "mousedown",
+          outsideMouseHandler,
+          true
+        );
+        outsideMouseHandler = null;
+      }
+      if (editingAnchor) {
+        editingAnchor.classList.remove(EDITING_CLASS2);
+        editingAnchor = null;
+      }
+      if (activeWrap) {
+        activeWrap.remove();
+        activeWrap = null;
+      }
+    };
+    const commit = (clipIdx, refIdx, draft) => {
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      const ref = clip?.refs?.[refIdx];
+      if (!clip || !ref) {
+        return;
+      }
+      const source = resolveImageSourceValue(
+        draft.source,
+        buildImageSourceOptions(draft.source)
+      );
+      const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+      ref.source = source;
+      ref.frame = clamp(Math.round(draft.frame), REF_FRAME_MIN, frameMax);
+      ref.fromEnd = draft.fromEnd;
+      if (source === REF_SOURCE_UPLOAD) {
+        ref.uploadedImage = draft.uploadedImage;
+        ref.uploadFileName = draft.uploadedImage?.fileName ?? draft.uploadFileName;
+      } else {
+        ref.uploadedImage = null;
+        ref.uploadFileName = null;
+      }
+      saveClips(clips);
+    };
+    const addRefAtFrame = (clipIdx, frame, sourceJson) => {
+      if (isStale(sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      if (!clip) {
+        return;
+      }
+      const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+      const ref = buildDefaultRef();
+      ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
+      appendRefToClip(clip, ref);
+      saveClips(clips);
+    };
+    const deleteRef = (clipIdx, refIdx, sourceJson) => {
+      if (isStale(sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      if (!clip || !removeRefAt(clip, refIdx)) {
+        return;
+      }
+      saveClips(clips);
+    };
+    const buildField = (label, control) => {
+      const row = document.createElement("div");
+      row.className = "vst-audio-field";
+      const text = document.createElement("span");
+      text.className = "vst-audio-field-label";
+      text.textContent = label;
+      row.append(text, control);
+      return row;
+    };
+    const buildCheckbox = (label, checked, onChange) => {
+      const row = document.createElement("label");
+      row.className = "vst-audio-field vst-audio-field-check";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = checked;
+      input.addEventListener("change", () => onChange(input.checked));
+      const text = document.createElement("span");
+      text.className = "vst-audio-field-label";
+      text.textContent = label;
+      row.append(input, text);
+      return { row, input };
+    };
+    const openEditor = (anchor, clipIdx, refIdx) => {
+      closeEditor();
+      const clip = getClips()[clipIdx];
+      if (!clip) {
+        return;
+      }
+      const draft = draftFromRef(clip, refIdx);
+      if (!draft) {
+        return;
+      }
+      const sourceJson = readVideoStagesSection();
+      const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+      const fps = currentFps2();
+      const anchorOriginalLeft = anchor.style.left;
+      const arrowOriginalLeft = findArrow(clipIdx, refIdx)?.style.left ?? "";
+      const originalLabel = anchor.querySelector(".vst-refs-ph")?.textContent ?? "";
+      const previewDraftPosition = () => {
+        positionRefMarker(
+          anchor,
+          findArrow(clipIdx, refIdx),
+          draft.frame,
+          draft.fromEnd,
+          clip.duration,
+          fps
+        );
+      };
+      const restorePreview = () => {
+        anchor.style.left = anchorOriginalLeft;
+        const arrow = findArrow(clipIdx, refIdx);
+        if (arrow) {
+          arrow.style.left = arrowOriginalLeft;
+        }
+        const ph = anchor.querySelector(".vst-refs-ph");
+        if (ph) {
+          ph.textContent = originalLabel;
+        }
+      };
+      const host = boundBody ?? document.body;
+      const hostRect = host.getBoundingClientRect();
+      const viewportW = window.innerWidth || document.documentElement.clientWidth;
+      const width = clamp(Math.round(hostRect.width - 32), 260, 420);
+      const left = clamp(
+        Math.round(hostRect.left + (hostRect.width - width) / 2),
+        8,
+        Math.max(8, viewportW - width - 8)
+      );
+      const wrap = document.createElement("div");
+      wrap.className = "vst-prompt-inspector vst-refs-inspector";
+      wrap.style.left = `${left}px`;
+      wrap.style.top = `${Math.round(Math.max(8, hostRect.top + 46))}px`;
+      wrap.style.width = `${width}px`;
+      const head = document.createElement("div");
+      head.className = "vst-prompt-inspector-head";
+      head.textContent = `Clip ${clipIdx} · reference ${refIdx}`;
+      const select = document.createElement("select");
+      select.className = "vst-audio-select";
+      const rebuildOptions = () => {
+        const options = buildImageSourceOptions(draft.source);
+        draft.source = resolveImageSourceValue(draft.source, options);
+        select.innerHTML = "";
+        for (const option of options) {
+          const elem = document.createElement("option");
+          elem.value = option.value;
+          elem.textContent = option.label;
+          elem.dataset.cleanname = option.label;
+          elem.disabled = option.disabled === true;
+          elem.selected = option.value === draft.source;
+          select.appendChild(elem);
+        }
+      };
+      rebuildOptions();
+      const sourceField = buildField("Image Source", select);
+      const preview = document.createElement("div");
+      preview.className = "vst-refs-thumb-preview";
+      const frameInput = document.createElement("input");
+      frameInput.type = "number";
+      frameInput.className = "vst-refs-num";
+      frameInput.min = `${REF_FRAME_MIN}`;
+      frameInput.max = `${frameMax}`;
+      frameInput.step = "1";
+      frameInput.value = `${draft.frame}`;
+      const applyFrameInput = (normalize) => {
+        const parsed = Number.parseInt(frameInput.value, 10);
+        draft.frame = clamp(
+          Number.isFinite(parsed) ? parsed : draft.frame,
+          REF_FRAME_MIN,
+          frameMax
+        );
+        if (normalize) {
+          frameInput.value = `${draft.frame}`;
+        }
+        previewDraftPosition();
+      };
+      frameInput.addEventListener("input", () => applyFrameInput(false));
+      frameInput.addEventListener("change", () => applyFrameInput(true));
+      const frameField = buildField(
+        `Attach at Frame (1–${frameMax})`,
+        frameInput
+      );
+      const fromEnd = buildCheckbox(
+        "Count from clip end",
+        draft.fromEnd,
+        (value) => {
+          draft.fromEnd = value;
+          previewDraftPosition();
+        }
+      );
+      const uploadRow = document.createElement("div");
+      uploadRow.className = "vst-audio-field vst-audio-upload";
+      const uploadLabel = document.createElement("span");
+      uploadLabel.className = "vst-audio-field-label";
+      uploadLabel.textContent = "Image Upload";
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "image/*";
+      const fileName = document.createElement("span");
+      fileName.className = "vst-audio-upload-name";
+      const clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "vst-audio-upload-clear";
+      clearBtn.textContent = "Clear";
+      const renderUploadState = () => {
+        const name = draft.uploadedImage?.fileName;
+        fileName.textContent = name ? name : "No file chosen";
+        clearBtn.hidden = !draft.uploadedImage;
+        const data = draft.uploadedImage?.data;
+        if (data) {
+          preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
+          preview.classList.add("vst-refs-thumb-preview-set");
+        } else {
+          preview.style.backgroundImage = "";
+          preview.classList.remove("vst-refs-thumb-preview-set");
+        }
+      };
+      fileInput.addEventListener("change", () => {
+        const file = fileInput.files?.[0];
+        if (!file) {
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = `${reader.result ?? ""}`;
+          if (!data) {
+            return;
+          }
+          draft.uploadedImage = { data, fileName: file.name };
+          renderUploadState();
+        };
+        reader.readAsDataURL(file);
+      });
+      clearBtn.addEventListener("click", () => {
+        draft.uploadedImage = null;
+        draft.uploadFileName = null;
+        fileInput.value = "";
+        renderUploadState();
+      });
+      uploadRow.append(uploadLabel, fileInput, fileName, clearBtn);
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "vst-refs-delete";
+      deleteBtn.textContent = "Delete reference";
+      const hint = document.createElement("div");
+      hint.className = "vst-prompt-inspector-hint";
+      hint.textContent = "Click away to apply · Esc to cancel";
+      wrap.append(
+        head,
+        sourceField,
+        preview,
+        frameField,
+        fromEnd.row,
+        uploadRow,
+        deleteBtn,
+        hint
+      );
+      const syncVisibility = () => {
+        const isUpload = draft.source === REF_SOURCE_UPLOAD;
+        uploadRow.hidden = !isUpload;
+        preview.hidden = !isUpload;
+        renderUploadState();
+      };
+      select.addEventListener("change", () => {
+        draft.source = select.value;
+        syncVisibility();
+      });
+      syncVisibility();
+      anchor.classList.add(EDITING_CLASS2);
+      editingAnchor = anchor;
+      let done = false;
+      const finish = (save) => {
+        if (done) {
+          return;
+        }
+        done = true;
+        const committed = save && !isStale(sourceJson);
+        closeEditor();
+        if (committed) {
+          commit(clipIdx, refIdx, draft);
+        } else {
+          restorePreview();
+        }
+      };
+      deleteBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (done) {
+          return;
+        }
+        done = true;
+        closeEditor();
+        deleteRef(clipIdx, refIdx, sourceJson);
+      });
+      wrap.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          finish(false);
+        } else if (event.key === "Enter" && !(event.target instanceof HTMLSelectElement)) {
+          event.preventDefault();
+          finish(true);
+        }
+        event.stopPropagation();
+      });
+      const onOutside = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        if (target.closest(".vst-refs-inspector") || target.closest(".sui-popover")) {
+          return;
+        }
+        finish(true);
+      };
+      outsideMouseHandler = onOutside;
+      document.addEventListener("mousedown", onOutside, true);
+      document.body.appendChild(wrap);
+      activeWrap = wrap;
+      select.focus();
+    };
+    const endRefDrag = (restore) => {
+      if (refDrag && restore) {
+        refDrag.mark.style.left = refDrag.originalLeft;
+        if (refDrag.arrow) {
+          refDrag.arrow.style.left = refDrag.arrowOriginalLeft;
+        }
+        const ph = refDrag.mark.querySelector(".vst-refs-ph");
+        if (ph) {
+          ph.textContent = refDrag.originalLabel;
+        }
+      }
+      refDrag = null;
+      (boundBody ?? document.body).classList.remove(DRAGGING_CLASS3);
+    };
+    const onBodyMouseDown = (event) => {
+      const me = event;
+      if (me.button !== 0 || !(me.target instanceof Element)) {
+        return;
+      }
+      const mark = me.target.closest(THUMB_SELECTOR);
+      if (!(mark instanceof HTMLElement)) {
+        return;
+      }
+      const lane = mark.closest(LANE_SELECTOR2);
+      const clipIdx = parseIntAttr2(mark, "data-clip-idx");
+      const refIdx = parseIntAttr2(mark, "data-ref-idx");
+      if (!(lane instanceof HTMLElement) || clipIdx === null || refIdx === null) {
+        return;
+      }
+      const clip = getClips()[clipIdx];
+      const ref = clip?.refs?.[refIdx];
+      if (!clip || !ref) {
+        return;
+      }
+      const arrow = findArrow(clipIdx, refIdx);
+      refDrag = {
+        clipIdx,
+        refIdx,
+        mark,
+        arrow,
+        lane,
+        startX: me.clientX,
+        originalLeft: mark.style.left,
+        arrowOriginalLeft: arrow?.style.left ?? "",
+        originalLabel: mark.querySelector(".vst-refs-ph")?.textContent ?? "",
+        durationSeconds: clip.duration,
+        fps: currentFps2(),
+        fromEnd: ref.fromEnd === true,
+        active: false,
+        sourceJson: readVideoStagesSection()
+      };
+      me.preventDefault();
+    };
+    const dragFrameAt = (clientX) => {
+      if (!refDrag) {
+        return REF_FRAME_MIN;
+      }
+      const rect = refDrag.lane.getBoundingClientRect();
+      return pxToFrame(
+        clientX - rect.left,
+        rect.width,
+        refDrag.durationSeconds,
+        refDrag.fps,
+        refDrag.fromEnd
+      );
+    };
+    const onDocMouseMove = (event) => {
+      if (!refDrag) {
+        return;
+      }
+      const me = event;
+      if (!refDrag.active) {
+        if (Math.abs(me.clientX - refDrag.startX) < DRAG_THRESHOLD_PX3) {
+          return;
+        }
+        refDrag.active = true;
+        closeEditor();
+        (boundBody ?? document.body).classList.add(DRAGGING_CLASS3);
+      }
+      positionRefMarker(
+        refDrag.mark,
+        refDrag.arrow,
+        dragFrameAt(me.clientX),
+        refDrag.fromEnd,
+        refDrag.durationSeconds,
+        refDrag.fps
+      );
+    };
+    const onDocMouseUp = (event) => {
+      if (!refDrag) {
+        return;
+      }
+      const drag = refDrag;
+      const newFrame = dragFrameAt(event.clientX);
+      if (!drag.active) {
+        endRefDrag(true);
+        return;
+      }
+      suppressClick = true;
+      const clips = getClips();
+      const ref = clips[drag.clipIdx]?.refs?.[drag.refIdx];
+      if (isStale(drag.sourceJson) || !ref || ref.frame === newFrame) {
+        endRefDrag(true);
+        return;
+      }
+      endRefDrag(false);
+      ref.frame = newFrame;
+      saveClips(clips);
+    };
+    const onDocKeyDown = (event) => {
+      if (event.key !== "Escape" || !refDrag) {
+        return;
+      }
+      if (refDrag.active) {
+        suppressClick = true;
+      }
+      endRefDrag(true);
+    };
+    const onBodyClick = (event) => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const thumb = event.target.closest(THUMB_SELECTOR);
+      if (thumb instanceof HTMLElement) {
+        const clipIdx2 = parseIntAttr2(thumb, "data-clip-idx");
+        const refIdx = parseIntAttr2(thumb, "data-ref-idx");
+        if (clipIdx2 !== null && refIdx !== null) {
+          openEditor(thumb, clipIdx2, refIdx);
+        }
+        return;
+      }
+      const lane = event.target.closest(LANE_SELECTOR2);
+      if (!(lane instanceof HTMLElement)) {
+        return;
+      }
+      const clipIdx = parseIntAttr2(lane, "data-clip-idx");
+      if (clipIdx === null) {
+        return;
+      }
+      const clip = getClips()[clipIdx];
+      if (!clip) {
+        return;
+      }
+      const rect = lane.getBoundingClientRect();
+      const frame = pxToFrame(
+        event.clientX - rect.left,
+        rect.width,
+        clip.duration,
+        currentFps2(),
+        false
+      );
+      addRefAtFrame(clipIdx, frame, readVideoStagesSection());
+    };
+    const onBodyKeyDown = (event) => {
+      const ke = event;
+      if (ke.key !== "Enter" && ke.key !== " ") {
+        return;
+      }
+      if (!(ke.target instanceof Element)) {
+        return;
+      }
+      const thumb = ke.target.closest(THUMB_SELECTOR);
+      if (!(thumb instanceof HTMLElement)) {
+        return;
+      }
+      const clipIdx = parseIntAttr2(thumb, "data-clip-idx");
+      const refIdx = parseIntAttr2(thumb, "data-ref-idx");
+      if (clipIdx === null || refIdx === null) {
+        return;
+      }
+      ke.preventDefault();
+      openEditor(thumb, clipIdx, refIdx);
+    };
+    const attach = (body) => {
+      if (boundBody === body) {
+        return;
+      }
+      dispose();
+      boundBody = body;
+      body.addEventListener("click", onBodyClick);
+      body.addEventListener("keydown", onBodyKeyDown);
+      body.addEventListener("mousedown", onBodyMouseDown);
+      document.addEventListener("mousemove", onDocMouseMove);
+      document.addEventListener("mouseup", onDocMouseUp);
+      document.addEventListener("keydown", onDocKeyDown);
+    };
+    const dispose = () => {
+      closeEditor();
+      endRefDrag(false);
+      if (boundBody) {
+        boundBody.removeEventListener("click", onBodyClick);
+        boundBody.removeEventListener("keydown", onBodyKeyDown);
+        boundBody.removeEventListener("mousedown", onBodyMouseDown);
+        boundBody = null;
+      }
+      document.removeEventListener("mousemove", onDocMouseMove);
+      document.removeEventListener("mouseup", onDocMouseUp);
+      document.removeEventListener("keydown", onDocKeyDown);
+      suppressClick = false;
+    };
+    return { attach, dispose };
+  };
+
   // frontend/videoStagesTimeline.ts
   var getFps = () => {
     try {
@@ -3596,6 +4274,7 @@
   var INPUT_SYNC_INTERVAL_MS = 200;
   var videoStagesTimeline = () => {
     let boundInput = null;
+    let boundToggle = null;
     let inputSyncInterval = null;
     let lastSeenValue = null;
     let unit = "seconds";
@@ -3603,6 +4282,7 @@
     const linking = createTimelineLinking();
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
+    const referencesTrack = createTimelineReferencesTrack();
     const history = createTimelineHistory({
       read: () => readVideoStagesSection(),
       write: (value) => writeVideoStagesSection(value)
@@ -3719,6 +4399,8 @@
           unit,
           pxPerSecond,
           selectedIndex: linking.getSelectedIndex(),
+          enabled: isVideoStagesEnabled(),
+          onToggleEnabled: setVideoStagesEnabled,
           onToggleUnit: toggleUnit,
           onAddClip: addClip,
           onZoomIn: zoomIn,
@@ -3752,6 +4434,20 @@
       input.addEventListener("input", onInputChanged);
       input.addEventListener("change", onInputChanged);
       boundInput = input;
+    };
+    const onEnabledToggled = () => {
+      refresh();
+    };
+    const bindToggleListener = () => {
+      const toggle = getGroupToggle();
+      if (!toggle || toggle === boundToggle) {
+        return;
+      }
+      if (boundToggle) {
+        boundToggle.removeEventListener("change", onEnabledToggled);
+      }
+      toggle.addEventListener("change", onEnabledToggled);
+      boundToggle = toggle;
     };
     const startInputSync = () => {
       if (inputSyncInterval) {
@@ -3791,10 +4487,12 @@
         linking.attach(body);
         promptTrack.attach(body);
         audioTrack.attach(body);
+        referencesTrack.attach(body);
         body.removeEventListener("click", onBodyClickSyncReadout);
         body.addEventListener("click", onBodyClickSyncReadout);
       }
       bindInputListener();
+      bindToggleListener();
       history.syncBaseline();
       document.removeEventListener("keydown", onKeydown);
       document.addEventListener("keydown", onKeydown);
@@ -3811,9 +4509,14 @@
         boundInput.removeEventListener("change", onInputChanged);
         boundInput = null;
       }
+      if (boundToggle) {
+        boundToggle.removeEventListener("change", onEnabledToggled);
+        boundToggle = null;
+      }
       linking.dispose();
       promptTrack.dispose();
       audioTrack.dispose();
+      referencesTrack.dispose();
       const body = document.getElementById(TIMELINE_BODY_ID);
       body?.removeEventListener("click", onBodyClickSyncReadout);
       document.removeEventListener("keydown", onKeydown);

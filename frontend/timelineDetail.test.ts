@@ -9,6 +9,7 @@ import {
     keyframeLeftPercent,
     keyframeTimeSeconds,
     refSourceLabel,
+    refSourceShortLabel,
     safeFps,
     shortModelName,
     truncate,
@@ -149,6 +150,28 @@ describe("refSourceLabel", () => {
     it("passes through known sources unchanged", () => {
         expect(refSourceLabel("Base")).toBe("Base");
         expect(refSourceLabel("Upload")).toBe("Upload");
+    });
+});
+
+describe("refSourceShortLabel", () => {
+    it("maps the known sources to compact codes", () => {
+        expect(refSourceShortLabel("Base")).toBe("B");
+        expect(refSourceShortLabel("Refiner")).toBe("R");
+        expect(refSourceShortLabel("Upload")).toBe("U");
+    });
+
+    it("defaults blank/empty to the Refiner code", () => {
+        expect(refSourceShortLabel("")).toBe("R");
+        expect(refSourceShortLabel("   ")).toBe("R");
+    });
+
+    it("codes a Base2Edit edit{N} source as E{N}", () => {
+        expect(refSourceShortLabel("edit0")).toBe("E0");
+        expect(refSourceShortLabel("edit12")).toBe("E12");
+    });
+
+    it("falls back to an upper-cased prefix for an unrecognized source", () => {
+        expect(refSourceShortLabel("weird")).toBe("WEI");
     });
 });
 

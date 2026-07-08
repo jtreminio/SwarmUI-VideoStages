@@ -268,3 +268,12 @@ export const isVideoStagesEnabled = (): boolean => {
     const toggler = getGroupToggle();
     return toggler ? toggler.checked : false;
 };
+
+export const setVideoStagesEnabled = (enabled: boolean): void => {
+    const toggler = getGroupToggle();
+    if (!toggler || toggler.checked === enabled) {
+        return;
+    }
+    toggler.checked = enabled;
+    triggerChangeFor(toggler);
+};

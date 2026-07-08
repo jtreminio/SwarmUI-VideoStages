@@ -2,7 +2,12 @@ import { parseBase2EditStageIndex } from "./constants";
 
 export { escapeAttr as escapeHtml } from "./renderUtils";
 
-import { REF_SOURCE_REFINER, type Stage } from "./types";
+import {
+    REF_SOURCE_BASE,
+    REF_SOURCE_REFINER,
+    REF_SOURCE_UPLOAD,
+    type Stage,
+} from "./types";
 
 export type TimelineUnit = "seconds" | "frames";
 
@@ -123,6 +128,27 @@ export const refSourceLabel = (source: string): string => {
         return `Base2Edit Edit ${editStage}`;
     }
     return value;
+};
+
+export const refSourceShortLabel = (source: string): string => {
+    const value = `${source ?? ""}`.trim();
+    if (!value) {
+        return "R";
+    }
+    const editStage = parseBase2EditStageIndex(value);
+    if (editStage != null) {
+        return `E${editStage}`;
+    }
+    if (value === REF_SOURCE_BASE) {
+        return "B";
+    }
+    if (value === REF_SOURCE_REFINER) {
+        return "R";
+    }
+    if (value === REF_SOURCE_UPLOAD) {
+        return "U";
+    }
+    return value.slice(0, 3).toUpperCase();
 };
 
 export interface Badge {

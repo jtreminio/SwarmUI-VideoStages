@@ -277,6 +277,26 @@ export const buildDefaultRef = (
     fromEnd: false,
 });
 
+export const appendRefToClip = (clip: Clip, ref: RefImage): void => {
+    clip.refs.push(ref);
+    for (const stage of clip.stages) {
+        stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+    }
+};
+
+export const removeRefAt = (clip: Clip, refIdx: number): boolean => {
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+        return false;
+    }
+    clip.refs.splice(refIdx, 1);
+    for (const stage of clip.stages) {
+        if (refIdx < stage.refStrengths.length) {
+            stage.refStrengths.splice(refIdx, 1);
+        }
+    }
+    return true;
+};
+
 export const buildDefaultClip = (
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
