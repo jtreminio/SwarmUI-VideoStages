@@ -616,36 +616,6 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_WanClip_TrimsRefsToTwoAndNormalizesFrameSemantics()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
-        JObject wanStage = MakeStage(models.VideoModel.Name);
-        wanStage["refStrengths"] = new JArray(0.4, 0.5, 0.6);
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip(
-                stages: [wanStage],
-                refs:
-                [
-                    MakeRef("Base", frame: 5, fromEnd: true),
-                    MakeRef("Refiner", frame: 9, fromEnd: false),
-                    MakeRef("Base", frame: 2),
-                ])));
-
-        WorkflowGenerator parser = BuildParser(json);
-        ClipSpec clip = VideoStagesSpecParser.Parse(parser).Clips.Single();
-
-        Assert.Equal(2, clip.ImageRefs.Count);
-        Assert.Equal(1, clip.ImageRefs[0].Frame);
-        Assert.False(clip.ImageRefs[0].FromEnd);
-        Assert.Equal(1, clip.ImageRefs[1].Frame);
-        Assert.True(clip.ImageRefs[1].FromEnd);
-
-        StageSpec stageSpec = Assert.Single(FlattenedActiveStages(parser));
-        Assert.Equal(2, stageSpec.ImageRefStrengths.Count);
-    }
-
-    [Fact]
     public void ParseConfig_WidthZero_FallsBackToGlobal()
     {
         JObject root = MakeRootConfig(

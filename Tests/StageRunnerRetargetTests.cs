@@ -86,7 +86,7 @@ public class StageRunnerRetargetTests
         generator.CurrentMedia.AttachedAudio = new WGNodeData(
             new JArray("201", 1), generator, WGNodeData.DT_LATENT_AUDIO, T2IModelClassSorter.CompatLtxv2);
 
-        StageRunner runner = new(generator, null, null, null);
+        StageRunner runner = new(generator, null, null);
         runner.RetargetExistingAnimationSaves(
             new JArray("202", 0),
             new JArray("210", 0),

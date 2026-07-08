@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -122,7 +121,7 @@ public static class Runner
             rootVideoStageResizer,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs);
-        StageRunner stageRunner = new(g, stageGuideMediaHelper, ltxManager, base2EditPublishedStageRefs);
+        StageRunner stageRunner = new(g, stageGuideMediaHelper, ltxManager);
         StageSequenceRunner stageSequenceRunner = new(
             g,
             stageRefStore,

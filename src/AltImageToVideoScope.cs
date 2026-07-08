@@ -16,50 +16,31 @@ internal static class AltImageToVideoScope
         {
             return;
         }
-        WorkflowGenerator.AltImageToVideoPreHandlers.Add(static g => Fire(g, isPre: true));
-        WorkflowGenerator.AltImageToVideoPostHandlers.Add(static g => Fire(g, isPre: false));
+        WorkflowGenerator.AltImageToVideoPostHandlers.Add(static g => Fire(g));
     }
-
-    public static IDisposable Pre(
-        WorkflowGenerator.ImageToVideoGenInfo expectedGenInfo,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> handler)
-        => Attach(expectedGenInfo, handler, isPre: true);
 
     public static IDisposable Post(
         WorkflowGenerator.ImageToVideoGenInfo expectedGenInfo,
         Action<WorkflowGenerator.ImageToVideoGenInfo> handler)
-        => Attach(expectedGenInfo, handler, isPre: false);
-
-    private static IDisposable Attach(
-        WorkflowGenerator.ImageToVideoGenInfo expectedGenInfo,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> handler,
-        bool isPre)
     {
         ArgumentNullException.ThrowIfNull(expectedGenInfo);
         ArgumentNullException.ThrowIfNull(handler);
         if (Volatile.Read(ref _registered) == 0)
         {
             throw new SwarmReadableErrorException(
-                "AltImageToVideoScope.RegisterDispatcher() must be called before Pre/Post.");
+                "AltImageToVideoScope.RegisterDispatcher() must be called before Post.");
         }
 
         Bucket bucket = _table.GetValue(expectedGenInfo, static _ => new Bucket());
         lock (bucket.Gate)
         {
-            if (isPre)
-            {
-                bucket.Pre = bucket.Pre.Add(handler);
-            }
-            else
-            {
-                bucket.Post = bucket.Post.Add(handler);
-            }
+            bucket.Post = bucket.Post.Add(handler);
         }
 
-        return new Detach(bucket, handler, isPre);
+        return new Detach(bucket, handler);
     }
 
-    private static void Fire(WorkflowGenerator.ImageToVideoGenInfo genInfo, bool isPre)
+    private static void Fire(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         if (genInfo is null || !_table.TryGetValue(genInfo, out Bucket bucket))
         {
@@ -69,7 +50,7 @@ internal static class AltImageToVideoScope
         ImmutableList<Action<WorkflowGenerator.ImageToVideoGenInfo>> snapshot;
         lock (bucket.Gate)
         {
-            snapshot = isPre ? bucket.Pre : bucket.Post;
+            snapshot = bucket.Post;
         }
 
         foreach (Action<WorkflowGenerator.ImageToVideoGenInfo> handler in snapshot)
@@ -81,11 +62,10 @@ internal static class AltImageToVideoScope
     private sealed class Bucket
     {
         public readonly object Gate = new();
-        public ImmutableList<Action<WorkflowGenerator.ImageToVideoGenInfo>> Pre = [];
         public ImmutableList<Action<WorkflowGenerator.ImageToVideoGenInfo>> Post = [];
     }
 
-    private sealed class Detach(Bucket bucket, Action<WorkflowGenerator.ImageToVideoGenInfo> handler, bool isPre)
+    private sealed class Detach(Bucket bucket, Action<WorkflowGenerator.ImageToVideoGenInfo> handler)
         : IDisposable
     {
         private int _disposed;
@@ -98,14 +78,7 @@ internal static class AltImageToVideoScope
             }
             lock (bucket.Gate)
             {
-                if (isPre)
-                {
-                    bucket.Pre = bucket.Pre.Remove(handler);
-                }
-                else
-                {
-                    bucket.Post = bucket.Post.Remove(handler);
-                }
+                bucket.Post = bucket.Post.Remove(handler);
             }
         }
     }

@@ -8,20 +8,17 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
 using VideoStages.LTX2;
-using VideoStages.WAN;
 
 namespace VideoStages;
 
 internal sealed record StageGenerationPlan(
     WorkflowGenerator.ImageToVideoGenInfo GenInfo,
-    Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent,
-    WanLatentReuse.Capture WanLatentReuse = null);
+    Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
 
 internal class StageRunner(
     WorkflowGenerator g,
     StageGuideMediaHelper stageGuideMediaHelper,
-    LtxManager ltxManager,
-    Base2EditPublishedStageRefs base2EditPublishedStageRefs)
+    LtxManager ltxManager)
 {
     public void RunStage(
         StageSpec stage,
@@ -78,7 +75,7 @@ internal class StageRunner(
         }
         else
         {
-            RunNativeStagePath(stageFrame, guideReference, refStore, clipContext);
+            RunNativeStagePath(stageFrame, guideReference);
         }
         CleanupReplacedTextToVideoRootStage(stageFrame.PriorOutputPath, stageFrame.ReplacesTextToVideoRoot);
     }
@@ -121,34 +118,17 @@ internal class StageRunner(
 
     private void RunNativeStagePath(
         StageFrame stageFrame,
-        StageRefStore.StageRef guideReference,
-        StageRefStore refStore,
-        ClipContext clipContext)
+        StageRefStore.StageRef guideReference)
     {
         StageSpec stage = stageFrame.Stage;
         WGNodeData guideRaw = stageGuideMediaHelper.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
-        WanStageReferenceHandler.WanGuideResolution wanRefs = WanStageReferenceHandler.TryResolveClipRefs(
-            g,
-            stageGuideMediaHelper,
-            base2EditPublishedStageRefs,
-            clipContext.Clip,
-            stage,
-            refStore,
-            stageFrame.PostVideoChain);
-        if (wanRefs.StartRaw is not null)
-        {
-            guideRaw = wanRefs.StartRaw;
-        }
 
         WGNodeData guideMedia = stageGuideMediaHelper.PrepareGuideMedia(
             guideRaw,
             stageFrame.SourceMedia,
             scaleToSourceSize: true);
-        WGNodeData wanEndPrepared = wanRefs.EndRaw is not null
-            ? stageGuideMediaHelper.PrepareGuideMedia(wanRefs.EndRaw, stageFrame.SourceMedia, scaleToSourceSize: false)
-            : null;
 
-        RunNativeStage(stage, stageFrame.Plan, stageFrame.SourceMedia, guideMedia, stageFrame.PriorOutputPath, wanEndPrepared, clipContext);
+        RunNativeStage(stage, stageFrame.Plan, stageFrame.SourceMedia, guideMedia, stageFrame.PriorOutputPath);
     }
 
     private void RunNativeStage(
@@ -156,9 +136,7 @@ internal class StageRunner(
         StageGenerationPlan generationPlan,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
-        JArray priorOutputPath,
-        WGNodeData wanEndPrepared,
-        ClipContext clipContext)
+        JArray priorOutputPath)
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
         g.CurrentMedia = guideMedia ?? sourceMedia;
@@ -166,212 +144,12 @@ internal class StageRunner(
         using IDisposable sourceLatentScope = generationPlan.ApplySourceVideoLatent is not null
             ? AltImageToVideoScope.Post(genInfo, generationPlan.ApplySourceVideoLatent)
             : null;
-        using IDisposable wanPreScope = AltImageToVideoScope.Pre(genInfo, currentGenInfo =>
-            ApplyWanStillImageMediaLenBypass(currentGenInfo, stage, sourceMedia, clipContext));
-        using IDisposable wanPostScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
-        {
-            CollapseWanStartImageScaleChain(currentGenInfo);
-            WanFirstLastFrameRewriter.TryRewriteToFirstLast(g, clipContext.Clip.ImageRefs, stage, currentGenInfo, wanEndPrepared);
-            ApplyConditioningHandoff(stage, currentGenInfo, clipContext);
-        });
 
         g.CreateImageToVideo(genInfo);
-        WanLatentReuse.ReapplyToSampler(g, generationPlan.WanLatentReuse);
-        PruneDiscardedSourceLatentChain(generationPlan.WanLatentReuse);
-        CollapseRedundantWanContinuationNodes(genInfo, sourceMedia, guideMedia);
-        ApplyContinuationEndStep(stage);
 
         g.CurrentVae = genInfo.Vae;
         StampCurrentMediaMetadata(sourceMedia, genInfo);
         RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
-    }
-
-    private void PruneDiscardedSourceLatentChain(WanLatentReuse.Capture capture)
-    {
-        if (string.IsNullOrEmpty(capture?.DiscardedSourceLatentNodeId))
-        {
-            return;
-        }
-
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        if (bridge.Graph.GetNode(capture.DiscardedSourceLatentNodeId) is null)
-        {
-            return;
-        }
-
-        HashSet<string> protectedNodes = [];
-        AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
-        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, capture.DiscardedSourceLatentNodeId, protectedNodes);
-    }
-
-    private void CollapseRedundantWanContinuationNodes(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData sourceMedia,
-        WGNodeData guideMedia)
-    {
-        if (!VideoStageModelCompat.IsWanVideoModel(genInfo.VideoModel)
-            || sourceMedia?.DataType != WGNodeData.DT_VIDEO
-            || guideMedia?.Path is not JArray { Count: 2 } guidePath)
-        {
-            return;
-        }
-
-        int? sourceWidth = sourceMedia.Width;
-        int? sourceHeight = sourceMedia.Height;
-        int? sourceFrames = sourceMedia.Frames;
-
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        INodeOutput source = bridge.ResolvePath(guidePath);
-        if (source is null)
-        {
-            return;
-        }
-
-        bool collapsedAny = true;
-        while (collapsedAny)
-        {
-            collapsedAny = false;
-            foreach ((ComfyNode consumerNode, INodeInput _) in bridge.Graph.FindInputsConnectedTo(source).ToList())
-            {
-                if (consumerNode is ImageScaleNode scale
-                    && IsIdentityImageScale(scale, sourceWidth, sourceHeight))
-                {
-                    CollapsePassthroughNode(bridge, scale, scale.Image.Connection, scale.IMAGE);
-                    collapsedAny = true;
-                    break;
-                }
-                if (consumerNode is ImageFromBatchNode batch
-                    && IsFullLengthImageFromBatch(batch, sourceFrames))
-                {
-                    CollapsePassthroughNode(bridge, batch, batch.Image.Connection, batch.IMAGE);
-                    collapsedAny = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    private static bool IsIdentityImageScale(ImageScaleNode scale, int? width, int? height)
-    {
-        return width.HasValue && height.HasValue
-            && scale.Width.LiteralAsInt() == width
-            && scale.Height.LiteralAsInt() == height;
-    }
-
-    private static bool IsFullLengthImageFromBatch(ImageFromBatchNode batch, int? sourceFrames)
-    {
-        return sourceFrames is int frames and > 1
-            && batch.BatchIndex.LiteralAsInt() == 0
-            && batch.Length.LiteralAsInt() is int length
-            && length >= frames;
-    }
-
-    private static void CollapsePassthroughNode(
-        WorkflowBridge bridge,
-        ComfyNode node,
-        INodeOutput upstream,
-        INodeOutput nodeOutput)
-    {
-        if (upstream is null)
-        {
-            return;
-        }
-        foreach ((ComfyNode consumerNode, INodeInput consumerInput) in bridge.Graph.FindInputsConnectedTo(nodeOutput).ToList())
-        {
-            consumerInput.ConnectToUntyped(upstream);
-            bridge.SyncNode(consumerNode);
-        }
-        bridge.RemoveNode(node);
-    }
-
-    private void ApplyConditioningHandoff(
-        StageSpec stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        ClipContext clipContext)
-    {
-        if (!ShouldReuseConditioningHandoff(stage, genInfo))
-        {
-            return;
-        }
-
-        int clipId = clipContext.Clip.Id;
-        if (clipContext.IsFirstStage(stage))
-        {
-            clipContext.LastConditioningHandoff = new ConditioningHandoff(
-                clipId,
-                CopyPath(genInfo.PosCond),
-                CopyPath(genInfo.NegCond));
-            return;
-        }
-
-        ConditioningHandoff handoff = clipContext.LastConditioningHandoff;
-        if (handoff is null
-            || handoff.ClipId != clipId
-            || handoff.Positive is null
-            || handoff.Negative is null)
-        {
-            return;
-        }
-
-        JArray stalePositive = CopyPath(genInfo.PosCond);
-        JArray staleNegative = CopyPath(genInfo.NegCond);
-        genInfo.PosCond = CopyPath(handoff.Positive);
-        genInfo.NegCond = CopyPath(handoff.Negative);
-        RemoveUnusedConditioningHandoff(stalePositive, staleNegative);
-    }
-
-    private static bool ShouldReuseConditioningHandoff(
-        StageSpec stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        return VideoStageModelCompat.SupportsWanFirstLastFrame(genInfo.VideoModel)
-            && genInfo.PosCond is { Count: 2 }
-            && genInfo.NegCond is { Count: 2 };
-    }
-
-    private void ApplyContinuationEndStep(StageSpec stage)
-    {
-        if (!stage.EndStep.HasValue || g.CurrentMedia?.Path is not JArray { Count: 2 } currentPath)
-        {
-            return;
-        }
-
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.NodeAt(currentPath) is not ComfyNode startNode)
-        {
-            return;
-        }
-        SwarmKSamplerNode samplerNode = startNode is SwarmKSamplerNode start
-            ? start
-            : bridge.Graph.FindNearestUpstream<SwarmKSamplerNode>(startNode);
-        if (samplerNode is null)
-        {
-            return;
-        }
-
-        int steps = Math.Max(1, samplerNode.Steps.LiteralAsInt() ?? stage.Steps);
-        int endStep = Math.Clamp(stage.EndStep.Value, 0, steps);
-        samplerNode.With(
-            EndAtStep: endStep,
-            ReturnWithLeftoverNoise: endStep < steps ? "enable" : "disable");
-        bridge.SyncNode(samplerNode);
-    }
-
-    private void RemoveUnusedConditioningHandoff(JArray stalePositive, JArray staleNegative)
-    {
-        if (stalePositive is null)
-        {
-            return;
-        }
-
-        HashSet<string> protectedNodes = [];
-        AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{stalePositive[0]}", protectedNodes);
-        if (staleNegative is not null && !JToken.DeepEquals(staleNegative, stalePositive))
-        {
-            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{staleNegative[0]}", protectedNodes);
-        }
     }
 
     private StageGenerationPlan BuildGenInfo(
@@ -393,14 +171,7 @@ internal class StageRunner(
         _ = g.NodeHelpers.Remove($"modelloader_{videoModel.Name}_image2video");
 
         bool sourceIsVideo = sourceMedia.DataType == WGNodeData.DT_VIDEO;
-        bool shouldUseLocalLtxv2Path = VideoStageModelCompat.IsLtxV2VideoModel(videoModel) && sourceIsVideo;
-        bool isWanStage = VideoStageModelCompat.IsWanVideoModel(videoModel);
         (int batchIndex, int batchLen) = sourceIsVideo ? (0, 1) : (-1, -1);
-
-        WanLatentReuse.Capture wanLatentReuse = new();
-        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent = sourceIsVideo && !shouldUseLocalLtxv2Path
-            ? BuildSourceVideoLatentApplier(stage, sourceMedia, isWanStage, wanLatentReuse)
-            : null;
 
         (string positivePrompt, string negativePrompt) = BuildClipPrompts(clip);
 
@@ -424,7 +195,7 @@ internal class StageRunner(
             ContextID = sectionId,
             VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
         };
-        return new StageGenerationPlan(genInfo, applySourceVideoLatent, wanLatentReuse);
+        return new StageGenerationPlan(genInfo, ApplySourceVideoLatent: null);
     }
 
     private int? ResolveFrames(WGNodeData sourceMedia, int sectionId, bool replaceTextToVideoRootStage = false)
@@ -442,37 +213,6 @@ internal class StageRunner(
             return textToVideoFrames;
         }
         return sourceMedia.Frames;
-    }
-
-private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentApplier(
-        StageSpec stage,
-        WGNodeData sourceMedia,
-        bool isWanStage,
-        WanLatentReuse.Capture wanLatentReuse)
-    {
-        return genInfo =>
-        {
-            if (!genInfo.Frames.HasValue)
-            {
-                return;
-            }
-            if (isWanStage && WanLatentReuse.TryResolveReusableLatent(g, sourceMedia, genInfo.Vae, out WGNodeData reusedLatent))
-            {
-                genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
-                g.CurrentMedia = reusedLatent;
-                wanLatentReuse.LatentPath = reusedLatent?.Path;
-                return;
-            }
-            ImageFromBatchNode fromBatch = AddImageFromBatch(sourceMedia.Path, batchIndex: 0, length: genInfo.Frames.Value);
-            genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
-            g.CurrentMedia = sourceMedia.WithPath(fromBatch.IMAGE);
-            g.CurrentMedia.Frames = Math.Min(genInfo.Frames.Value, g.CurrentMedia.Frames ?? int.MaxValue);
-            g.CurrentMedia = g.CurrentMedia.AsLatentImage(genInfo.Vae);
-            if (g.CurrentMedia?.Path is JArray { Count: 2 } discardedLatentPath)
-            {
-                wanLatentReuse.DiscardedSourceLatentNodeId = $"{discardedLatentPath[0]}";
-            }
-        };
     }
 
     private (string Positive, string Negative) BuildClipPrompts(ClipSpec clip)
@@ -543,66 +283,6 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
     private static string FormatLoraWeight(double weight) =>
         weight.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-    private ImageFromBatchNode AddImageFromBatch(JArray imagePath, int batchIndex, int length)
-    {
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        ImageFromBatchNode node = bridge.AddNode(new ImageFromBatchNode()).With(
-            BatchIndex: batchIndex,
-            Length: length);
-        node.Image.ConnectFromPath(bridge, imagePath);
-        return node;
-    }
-
-    private void CollapseWanStartImageScaleChain(WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        if (!VideoStageModelCompat.SupportsWanFirstLastFrame(genInfo.VideoModel)
-            || genInfo.PosCond is not { Count: >= 2 })
-        {
-            return;
-        }
-
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.NodeAt<WanImageToVideoNode>(genInfo.PosCond) is not WanImageToVideoNode wan
-            || wan.StartImage.Connection?.Node is not ImageScaleNode startScale
-            || startScale.Image.Connection?.Node is not ImageScaleNode upstreamScale)
-        {
-            return;
-        }
-
-        upstreamScale.With(
-            Width: startScale.Width.LiteralAsLong() ?? 0L,
-            Height: startScale.Height.LiteralAsLong() ?? 0L,
-            Crop: startScale.Crop.LiteralAsString() ?? "center",
-            UpscaleMethod: startScale.UpscaleMethod.LiteralAsString() ?? "lanczos");
-        wan.StartImage.ConnectTo(upstreamScale.IMAGE);
-        bridge.SyncNode(upstreamScale);
-        bridge.SyncNode(wan);
-
-        if (!bridge.Graph.FindInputsConnectedTo(startScale.IMAGE).Any())
-        {
-            bridge.RemoveNode(startScale);
-        }
-    }
-
-    private static void ApplyWanStillImageMediaLenBypass(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageSpec stage,
-        WGNodeData sourceMedia,
-        ClipContext clipContext)
-    {
-        WorkflowGenerator workflowGenerator = genInfo.Generator;
-        if (!VideoStageModelCompat.SupportsWanFirstLastFrame(genInfo.VideoModel)
-            || !clipContext.IsFirstStage(stage)
-            || sourceMedia.DataType == WGNodeData.DT_VIDEO
-            || workflowGenerator.CurrentMedia is null
-            || workflowGenerator.CurrentMedia.DataType == WGNodeData.DT_VIDEO)
-        {
-            return;
-        }
-
-        genInfo.HasFixedMediaLen = true;
-    }
 
     private void ApplyControlNetLora(ClipContext clipContext, WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
@@ -687,12 +367,6 @@ private Action<WorkflowGenerator.ImageToVideoGenInfo> BuildSourceVideoLatentAppl
 
         T2IModel stageVideoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId);
         bool isLtxv2Stage = VideoStageModelCompat.IsLtxV2VideoModel(stageVideoModel);
-        if (source.DataType == WGNodeData.DT_VIDEO && VideoStageModelCompat.IsWanVideoModel(stageVideoModel))
-        {
-            g.CurrentMedia = source;
-            return source;
-        }
-
         if (isLtxv2Stage && (stage.IsLatentModelUpscale || stage.IsLatentUpscale))
         {
             g.CurrentMedia = source;

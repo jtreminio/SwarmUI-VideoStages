@@ -837,72 +837,6 @@
   // frontend/types.ts
   var REF_SOURCE_REFINER = "Refiner";
 
-  // frontend/wanModel.ts
-  var WAN_COMPAT_CLASS_IDS = /* @__PURE__ */ new Set([
-    "wan-21",
-    "wan-21-14b",
-    "wan-21-1_3b",
-    "wan-22-5b"
-  ]);
-  var WAN_22_I2V_14B_MODEL_CLASS_ID = "wan-2_2-image2video-14b";
-  var getStableDiffusionModelClass = (modelValue) => {
-    if (typeof modelsHelpers === "undefined" || !modelsHelpers || typeof modelsHelpers.getDataFor !== "function") {
-      return void 0;
-    }
-    return modelsHelpers.getDataFor("Stable-Diffusion", modelValue)?.modelClass;
-  };
-  var getModelCompatClassId = (modelValue) => {
-    return getStableDiffusionModelClass(modelValue)?.compatClass?.id ?? null;
-  };
-  var getModelClassId = (modelValue) => {
-    return getStableDiffusionModelClass(modelValue)?.id ?? null;
-  };
-  var matchesKnownWanName = (modelValue) => {
-    const lower = modelValue.toLowerCase();
-    return lower.includes("wan-2_2-image2video-14b") || lower.includes("wan22") || lower.startsWith("wan-2_1-image2video") || lower.startsWith("wan-2_1-text2video") || lower.startsWith("wan-2_2-ti2v") || lower.startsWith("wan-2_1-flf2v") || lower.startsWith("wan-2_1-vace") || lower.includes("wan-21-14b") || lower.includes("wan-21-1_3b") || lower.includes("wan-22-5b");
-  };
-  var clipHasWanStage = (clip) => {
-    for (let i = 0; i < clip.stages.length; i++) {
-      const stage = clip.stages[i];
-      if (!stage.skipped && isWanVideoModelValue(stage.model)) {
-        return true;
-      }
-    }
-    return false;
-  };
-  var isWanVideoModelValue = (modelValue) => {
-    const trimmed = `${modelValue ?? ""}`.trim();
-    if (!trimmed) {
-      return false;
-    }
-    const compatClassId = getModelCompatClassId(trimmed);
-    if (compatClassId !== null && WAN_COMPAT_CLASS_IDS.has(compatClassId)) {
-      return true;
-    }
-    const modelClassId = getModelClassId(trimmed);
-    if (modelClassId === WAN_22_I2V_14B_MODEL_CLASS_ID) {
-      return true;
-    }
-    return matchesKnownWanName(trimmed);
-  };
-  var rawStageListContainsWanModel = (stagesRaw) => {
-    for (let i = 0; i < stagesRaw.length; i++) {
-      const raw = stagesRaw[i];
-      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-        continue;
-      }
-      const rec = raw;
-      if (rec.skipped) {
-        continue;
-      }
-      const m = `${rec.model ?? ""}`.trim();
-      if (m.length > 0 && isWanVideoModelValue(m)) {
-        return true;
-      }
-    }
-    return false;
-  };
-
   // frontend/normalization.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
     (value) => value.trim().toLowerCase().startsWith("latentmodel-")
@@ -1180,35 +1114,6 @@
     };
     return ref;
   };
-  var normalizeWanClipStructuralRefs = (clip) => {
-    if (!clipHasWanStage(clip)) {
-      return;
-    }
-    const wanStructuralRefMax = 2;
-    if (clip.refs.length > wanStructuralRefMax) {
-      clip.refs = clip.refs.slice(0, wanStructuralRefMax);
-      for (let s = 0; s < clip.stages.length; s++) {
-        clip.stages[s].refStrengths = clip.stages[s].refStrengths.slice(
-          0,
-          wanStructuralRefMax
-        );
-      }
-    }
-    if (clip.refs.length > 0) {
-      clip.refs[0] = {
-        ...clip.refs[0],
-        frame: REF_FRAME_MIN,
-        fromEnd: false
-      };
-    }
-    if (clip.refs.length > 1) {
-      clip.refs[1] = {
-        ...clip.refs[1],
-        frame: REF_FRAME_MIN,
-        fromEnd: true
-      };
-    }
-  };
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
@@ -1230,8 +1135,7 @@
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
     const refFrameMax = getReferenceFrameMax(getRootDefaults2, { duration });
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const refsSource = rawStageListContainsWanModel(stagesRaw) ? refsRaw.slice(0, 2) : refsRaw;
-    const refs = refsSource.map(
+    const refs = refsRaw.map(
       (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
     );
     const stages = [];
@@ -1272,7 +1176,6 @@
       refs,
       stages
     };
-    normalizeWanClipStructuralRefs(clip);
     return clip;
   };
 
@@ -2179,7 +2082,6 @@
           stage.refStrengths.splice(refIdx, 1);
         }
       }
-      normalizeWanClipStructuralRefs(clip);
       saveClips(clips);
     };
     const applyToggleKeyframeFromEnd = (clipIdx, refIdx, sourceJson) => {

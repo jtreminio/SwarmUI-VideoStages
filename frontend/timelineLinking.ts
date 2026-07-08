@@ -1,8 +1,5 @@
 import { clamp, REF_FRAME_MIN } from "./constants";
-import {
-    getReferenceFrameMax,
-    normalizeWanClipStructuralRefs,
-} from "./normalization";
+import { getReferenceFrameMax } from "./normalization";
 import { getClips, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { readVideoStagesSection } from "./swarmInputs";
@@ -317,7 +314,6 @@ export const createTimelineLinking = (): TimelineLinking => {
                 stage.refStrengths.splice(refIdx, 1);
             }
         }
-        normalizeWanClipStructuralRefs(clip);
         saveClips(clips);
     };
 

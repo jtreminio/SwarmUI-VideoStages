@@ -288,21 +288,14 @@ internal static class VideoStagesSpecParser
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
         List<StageSpec> stages = [];
         List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
-        bool clipHasWanModel = ClipRawStagesContainWanModel(rawStages, clipIndex);
-        int refLimit = clipHasWanModel ? Math.Min(2, rawRefs.Count) : rawRefs.Count;
         List<ImageRefSpec> refs = [];
-        for (int i = 0; i < refLimit; i++)
+        for (int i = 0; i < rawRefs.Count; i++)
         {
             ImageRefSpec parsedRef = ParseRef(rawRefs[i], clipIndex, i);
             if (parsedRef is not null)
             {
                 refs.Add(parsedRef);
             }
-        }
-
-        if (clipHasWanModel)
-        {
-            NormalizeWanClipRefSemantics(refs);
         }
 
         for (int i = 0; i < rawStages.Count; i++)
@@ -322,7 +315,6 @@ internal static class VideoStagesSpecParser
                 refineSkipStages);
             stages.Add(parsed);
         }
-        ApplyStageContinuationSamplingPlan(stages);
 
         double durationSeconds = Math.Max(0, duration);
         int? clipFrames = durationSeconds > 0
@@ -346,76 +338,6 @@ internal static class VideoStagesSpecParser
             NegativePrompt: ParsePromptField(clipObj, "NegativePrompt"),
             Loras: ParseLoras(clipObj)
         );
-    }
-
-    private static bool ClipRawStagesContainWanModel(List<JObject> rawStages, int clipIndex)
-    {
-        for (int i = 0; i < rawStages.Count; i++)
-        {
-            if (GetOptionalBool(rawStages[i], "Skipped", defaultValue: false))
-            {
-                continue;
-            }
-
-            string model = GetOptionalString(rawStages[i], "Model", defaultValue: null, $"Clip {clipIndex} stage {i}", allowEmpty: false);
-            if (VideoStageModelCompat.IsWanVideoModel(model))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static void ApplyStageContinuationSamplingPlan(List<StageSpec> stages)
-    {
-        for (int i = 0; i < stages.Count; i++)
-        {
-            StageSpec stage = stages[i];
-            if (!VideoStageModelCompat.IsWanVideoModel(stage.Model))
-            {
-                continue;
-            }
-
-            if (i + 1 < stages.Count)
-            {
-                StageSpec nextStage = stages[i + 1];
-                stages[i] = stage with
-                {
-                    EndStep = CalculateContinuationEndStep(stage.Steps, nextStage.Control)
-                };
-            }
-        }
-    }
-
-    private static int CalculateContinuationEndStep(int steps, double nextStageControl)
-    {
-        int clampedSteps = Math.Max(1, steps);
-        int endStep = (int)Math.Floor(clampedSteps * (1 - Math.Clamp(nextStageControl, 0.0, 1.0)));
-        return Math.Clamp(endStep, 0, clampedSteps);
-    }
-
-    private static void NormalizeWanClipRefSemantics(List<ImageRefSpec> refs)
-    {
-        if (refs.Count > 0)
-        {
-            ImageRefSpec first = refs[0];
-            refs[0] = first with
-            {
-                Frame = 1,
-                FromEnd = false
-            };
-        }
-
-        if (refs.Count > 1)
-        {
-            ImageRefSpec second = refs[1];
-            refs[1] = second with
-            {
-                Frame = 1,
-                FromEnd = true
-            };
-        }
     }
 
     private static ImageRefSpec ParseRef(JObject refObj, int clipIndex, int refIndex)

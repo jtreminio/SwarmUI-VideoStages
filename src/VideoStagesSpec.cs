@@ -21,7 +21,6 @@ public sealed record StageSpec(
     double? ControlNetStrength = null,
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
-    int? EndStep = null,
     IReadOnlyList<LoraRef> Loras = null
 )
 {

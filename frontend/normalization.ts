@@ -34,7 +34,6 @@ import {
     type UploadedAudio,
 } from "./types";
 import { utils } from "./utils";
-import { clipHasWanStage, rawStageListContainsWanModel } from "./wanModel";
 
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
@@ -430,36 +429,6 @@ export const normalizeRef = (
     return ref;
 };
 
-export const normalizeWanClipStructuralRefs = (clip: Clip): void => {
-    if (!clipHasWanStage(clip)) {
-        return;
-    }
-    const wanStructuralRefMax = 2;
-    if (clip.refs.length > wanStructuralRefMax) {
-        clip.refs = clip.refs.slice(0, wanStructuralRefMax);
-        for (let s = 0; s < clip.stages.length; s++) {
-            clip.stages[s].refStrengths = clip.stages[s].refStrengths.slice(
-                0,
-                wanStructuralRefMax,
-            );
-        }
-    }
-    if (clip.refs.length > 0) {
-        clip.refs[0] = {
-            ...clip.refs[0],
-            frame: REF_FRAME_MIN,
-            fromEnd: false,
-        };
-    }
-    if (clip.refs.length > 1) {
-        clip.refs[1] = {
-            ...clip.refs[1],
-            frame: REF_FRAME_MIN,
-            fromEnd: true,
-        };
-    }
-};
-
 export const normalizeClip = (
     rawClip: Record<string, unknown>,
     getRootDefaults: () => RootDefaults,
@@ -485,10 +454,7 @@ export const normalizeClip = (
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
     const refFrameMax = getReferenceFrameMax(getRootDefaults, { duration });
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const refsSource = rawStageListContainsWanModel(stagesRaw)
-        ? refsRaw.slice(0, 2)
-        : refsRaw;
-    const refs = refsSource.map((rawRef) =>
+    const refs = refsRaw.map((rawRef) =>
         normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
     );
 
@@ -537,6 +503,5 @@ export const normalizeClip = (
         refs,
         stages,
     };
-    normalizeWanClipStructuralRefs(clip);
     return clip;
 };
