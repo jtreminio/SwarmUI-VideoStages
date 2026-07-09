@@ -937,6 +937,18 @@
     }
     return modelValues[0] ?? "";
   };
+  var readInheritedDimsSignature = () => {
+    const width = trimDomValue(
+      firstPresentInput("input_width", "input_aspectratiowidth")
+    );
+    const height = trimDomValue(
+      firstPresentInput("input_height", "input_aspectratioheight")
+    );
+    const fps = trimDomValue(
+      firstPresentInput("input_videofps", "input_videoframespersecond")
+    );
+    return `${width}|${height}|${fps}`;
+  };
   var getRootDefaults = () => {
     let model = utils.getSelectElement("input_videomodel");
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
@@ -4372,6 +4384,7 @@
     let boundToggle = null;
     let inputSyncInterval = null;
     let lastSeenValue = null;
+    let lastDimsSignature = null;
     let unit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
     const linking = createTimelineLinking();
@@ -4487,6 +4500,7 @@
         return;
       }
       lastSeenValue = readVideoStagesSection();
+      lastDimsSignature = readInheritedDimsSignature();
       history.capture();
       try {
         const state = getState();
@@ -4556,8 +4570,9 @@
         return;
       }
       lastSeenValue = readVideoStagesSection();
+      lastDimsSignature = readInheritedDimsSignature();
       inputSyncInterval = setInterval(() => {
-        if (readVideoStagesSection() !== lastSeenValue) {
+        if (readVideoStagesSection() !== lastSeenValue || readInheritedDimsSignature() !== lastDimsSignature) {
           refresh();
         }
       }, INPUT_SYNC_INTERVAL_MS);

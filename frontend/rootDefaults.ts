@@ -34,6 +34,19 @@ export const getDefaultStageModel = (modelValues: string[]): string => {
     return modelValues[0] ?? "";
 };
 
+export const readInheritedDimsSignature = (): string => {
+    const width = trimDomValue(
+        firstPresentInput("input_width", "input_aspectratiowidth"),
+    );
+    const height = trimDomValue(
+        firstPresentInput("input_height", "input_aspectratioheight"),
+    );
+    const fps = trimDomValue(
+        firstPresentInput("input_videofps", "input_videoframespersecond"),
+    );
+    return `${width}|${height}|${fps}`;
+};
+
 export const getRootDefaults = (): RootDefaults => {
     let model = utils.getSelectElement("input_videomodel");
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {

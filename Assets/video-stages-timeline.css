@@ -180,6 +180,14 @@
 }
 .vst-toggle-unit {
     font-weight: 600;
+    display: inline-grid;
+    justify-items: center;
+}
+.vst-toggle-unit::after {
+    content: "Show seconds";
+    height: 0;
+    visibility: hidden;
+    overflow: hidden;
 }
 .vst-hist-btn {
     min-width: 26px;
@@ -1353,6 +1361,12 @@
 .vst-settings-dims {
     color: var(--text);
     font-weight: 600;
+    min-width: 9ch;
+    text-align: center;
+}
+.vst-settings-fps {
+    min-width: 6ch;
+    text-align: center;
 }
 .vst-settings-chip-sep {
     opacity: 0.55;

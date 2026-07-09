@@ -1,7 +1,11 @@
 import { injectTimelineTab, TIMELINE_BODY_ID } from "./bottomTimelineTab";
 import { buildDefaultClip } from "./normalization";
 import { getClips, getState, saveClips } from "./persistence";
-import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import {
+    getDefaultStageModel,
+    getRootDefaults,
+    readInheritedDimsSignature,
+} from "./rootDefaults";
 import {
     getGroupToggle,
     getPromptInput,
@@ -45,6 +49,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let boundToggle: HTMLInputElement | null = null;
     let inputSyncInterval: ReturnType<typeof setInterval> | null = null;
     let lastSeenValue: string | null = null;
+    let lastDimsSignature: string | null = null;
     let unit: TimelineUnit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
     const linking = createTimelineLinking();
@@ -172,6 +177,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             return;
         }
         lastSeenValue = readVideoStagesSection();
+        lastDimsSignature = readInheritedDimsSignature();
         history.capture();
         try {
             const state = getState();
@@ -246,8 +252,12 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             return;
         }
         lastSeenValue = readVideoStagesSection();
+        lastDimsSignature = readInheritedDimsSignature();
         inputSyncInterval = setInterval(() => {
-            if (readVideoStagesSection() !== lastSeenValue) {
+            if (
+                readVideoStagesSection() !== lastSeenValue ||
+                readInheritedDimsSignature() !== lastDimsSignature
+            ) {
                 refresh();
             }
         }, INPUT_SYNC_INTERVAL_MS);
