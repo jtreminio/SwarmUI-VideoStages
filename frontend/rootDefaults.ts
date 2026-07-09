@@ -1,8 +1,6 @@
 import { ROOT_DIMENSION_MIN } from "./constants";
 import {
     getDropdownOptions,
-    getRegisteredRootDimension,
-    getRegisteredRootFps,
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
@@ -67,11 +65,7 @@ export const getRootDefaults = (): RootDefaults => {
         "input_text2videoframes",
     );
 
-    const fps = Math.max(
-        1,
-        getRegisteredRootFps() ??
-            Math.round(utils.toNumber(fpsInput?.value, 24)),
-    );
+    const fps = Math.max(1, Math.round(utils.toNumber(fpsInput?.value, 24)));
     const frames = Math.max(
         1,
         Math.round(utils.toNumber(framesInput?.value, 24)),
@@ -88,18 +82,14 @@ export const getRootDefaults = (): RootDefaults => {
         schedulerLabels: scheduler.labels,
         upscaleMethodValues,
         upscaleMethodLabels,
-        width:
-            getRegisteredRootDimension("width") ??
-            Math.max(
-                ROOT_DIMENSION_MIN,
-                Math.round(utils.toNumber(widthInput?.value, 1024)),
-            ),
-        height:
-            getRegisteredRootDimension("height") ??
-            Math.max(
-                ROOT_DIMENSION_MIN,
-                Math.round(utils.toNumber(heightInput?.value, 1024)),
-            ),
+        width: Math.max(
+            ROOT_DIMENSION_MIN,
+            Math.round(utils.toNumber(widthInput?.value, 1024)),
+        ),
+        height: Math.max(
+            ROOT_DIMENSION_MIN,
+            Math.round(utils.toNumber(heightInput?.value, 1024)),
+        ),
         fps,
         frames,
         control: 0.5,

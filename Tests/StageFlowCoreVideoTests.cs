@@ -752,20 +752,18 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Root_stage_resolution_prefers_registered_root_params_over_json_dimensions()
+    public void Root_stage_resolution_uses_json_dimensions()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
         string stagesJson = MakeRootConfig(
-            width: 1024,
-            height: 576,
+            width: 1472,
+            height: 832,
             MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootWidth, 1472);
-        input.Set(VideoStagesExtension.RootHeight, 832);
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -821,8 +819,6 @@ public partial class StageFlowTests
             .ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootWidth, 1280);
-        input.Set(VideoStagesExtension.RootHeight, 1024);
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
@@ -1413,18 +1409,18 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        string stagesJson = new JArray(
+        // The native text-to-video chain is the pre-core media at 512x512; configuring different
+        // root dimensions (via the JSON) forces the root-stage resizer. It previously inserted an
+        // ImageScale node that detached CurrentMedia from the core decode output, so
+        // RetargetExistingAnimationSaves could not find the core save node and the whole core path
+        // survived next to a second VideoStages save.
+        string stagesJson = MakeRootConfig(
+            384,
+            512,
             MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 8)))
             .ToString();
 
         T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
-        // The native text-to-video chain is the pre-core media at 512x512; configuring different
-        // root dimensions forces the root-stage resizer. It previously inserted an ImageScale node
-        // that detached CurrentMedia from the core decode output, so RetargetExistingAnimationSaves
-        // could not find the core save node and the whole core path survived next to a second
-        // VideoStages save.
-        input.Set(VideoStagesExtension.RootWidth, 384);
-        input.Set(VideoStagesExtension.RootHeight, 512);
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
@@ -1454,6 +1450,7 @@ public partial class StageFlowTests
 
         string stagesJson = new JObject
         {
+            ["FPS"] = 24,
             ["Clips"] = new JArray(
                 new JObject
                 {
@@ -1464,7 +1461,6 @@ public partial class StageFlowTests
         }.ToString();
 
         T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
-        input.Set(VideoStagesExtension.RootFPS, 24);
 
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,

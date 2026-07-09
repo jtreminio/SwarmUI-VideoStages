@@ -1325,6 +1325,58 @@
     background: color-mix(in srgb, var(--red) 16%, var(--background));
 }
 
+/* --- Settings chip (topbar) + popover --- */
+.vst-settings-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0.1em 0.55em;
+    border-radius: 4px;
+    border: 1px solid var(--vst-hairline);
+    background: var(--vst-panel-2);
+    color: var(--text-soft);
+    font-size: var(--vst-font-xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color var(--vst-ease), color var(--vst-ease);
+}
+.vst-settings-chip:hover,
+.vst-settings-chip.vst-settings-editing {
+    border-color: var(--emphasis);
+    color: var(--emphasis);
+}
+.vst-settings-chip:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-settings-dims {
+    color: var(--text);
+    font-weight: 600;
+}
+.vst-settings-chip-sep {
+    opacity: 0.55;
+}
+
+.vst-settings-inspector {
+    gap: 8px;
+}
+.vst-settings-field.vst-audio-disabled {
+    opacity: 0.55;
+}
+.vst-settings-num {
+    width: 100%;
+}
+.vst-settings-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.vst-settings-badges .controlnet-friendly {
+    color: var(--emphasis);
+    font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .vst-timeline * {
         transition-duration: 0.01ms !important;

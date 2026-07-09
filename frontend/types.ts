@@ -35,6 +35,8 @@ export interface VideoStagesConfig {
     width: number;
     height: number;
     fps: number;
+    dimsExplicit: boolean;
+    fpsExplicit: boolean;
     clips: Clip[];
 }
 

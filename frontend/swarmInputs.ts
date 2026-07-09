@@ -1,8 +1,4 @@
-import {
-    parseBase2EditStageIndex,
-    ROOT_DIMENSION_MIN,
-    ROOT_FPS_MIN,
-} from "./constants";
+import { parseBase2EditStageIndex, ROOT_DIMENSION_MIN } from "./constants";
 import { utils } from "./utils";
 
 export const getClipsInput = ():
@@ -76,25 +72,6 @@ export const readGlobalPrompt = (): string => {
     return (value.slice(0, at) + value.slice(spanEnd)).trim();
 };
 
-export const ROOT_DIMENSION_WIDTH_INPUT_ID = "input_videostageswidth";
-export const ROOT_DIMENSION_HEIGHT_INPUT_ID = "input_videostagesheight";
-export const DIMENSIONS_PRESET_SELECT_ID = "input_videostagesdimensions";
-export const DIMENSIONS_PRESET_METADATA_INPUT_ID =
-    "input_videostagesdimensionsmetadata";
-export const ROOT_FPS_INPUT_ID = "input_videostagesfps";
-
-export const getRootDimensionParamInput = (
-    field: "width" | "height",
-): HTMLInputElement | null =>
-    utils.getInputElement(
-        field === "width"
-            ? ROOT_DIMENSION_WIDTH_INPUT_ID
-            : ROOT_DIMENSION_HEIGHT_INPUT_ID,
-    );
-
-export const getRootFpsParamInput = (): HTMLInputElement | null =>
-    utils.getInputElement(ROOT_FPS_INPUT_ID);
-
 export const getCoreDimensionInput = (
     field: "width" | "height",
 ): HTMLInputElement | null => {
@@ -108,26 +85,6 @@ export const getCoreDimensionInput = (
     );
 };
 
-export const getRegisteredRootDimension = (
-    field: "width" | "height",
-): number | null => {
-    const input = getRootDimensionParamInput(field);
-    if (!input) {
-        return null;
-    }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_DIMENSION_MIN ? value : null;
-};
-
-export const getRegisteredRootFps = (): number | null => {
-    const input = getRootFpsParamInput();
-    if (!input) {
-        return null;
-    }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_FPS_MIN ? value : null;
-};
-
 export const getCoreDimension = (field: "width" | "height"): number | null => {
     const input = getCoreDimensionInput(field);
     if (!input) {
@@ -135,30 +92,6 @@ export const getCoreDimension = (field: "width" | "height"): number | null => {
     }
     const value = Math.round(utils.toNumber(input.value, 0));
     return value >= ROOT_DIMENSION_MIN ? value : null;
-};
-
-export const seedRegisteredDimensionsFromCore = (
-    notifyDomChange = true,
-): void => {
-    const fields: Array<"width" | "height"> = ["width", "height"];
-    for (const field of fields) {
-        const ourInput = getRootDimensionParamInput(field);
-        if (!ourInput) {
-            continue;
-        }
-        const ourValue = Math.round(utils.toNumber(ourInput.value, 0));
-        if (ourValue >= ROOT_DIMENSION_MIN) {
-            continue;
-        }
-        const coreValue = getCoreDimension(field);
-        if (coreValue === null) {
-            continue;
-        }
-        ourInput.value = `${coreValue}`;
-        if (notifyDomChange) {
-            triggerChangeFor(ourInput);
-        }
-    }
 };
 
 export const getGroupToggle = (): HTMLInputElement | null =>

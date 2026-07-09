@@ -12,7 +12,7 @@ public partial class StageFlowTests
 {
     // The VideoStages config rides in the prompt as a <videostages> JSON section, which is always sent even
     // when the VideoStages param group is toggled off. Turning the group off makes SwarmUI omit the group's
-    // parameters (notably DimensionsPreset), and that absence must make the extension fully inert.
+    // parameters (notably the Enabled gate flag), and that absence must make the extension fully inert.
     [Fact]
     public void Section_present_but_group_toggle_off_does_not_activate_video_stages()
     {
@@ -31,10 +31,10 @@ public partial class StageFlowTests
             Assert.NotEmpty(enabledBridge.Graph.NodesOfType<LTXVConditioningNode>());
         }
 
-        // Group OFF: DimensionsPreset is absent, exactly as SwarmUI sends a toggled-off group. The identical
+        // Group OFF: the Enabled gate flag is absent, exactly as SwarmUI sends a toggled-off group. The identical
         // <videostages> section is still in the prompt, but no stages should be built.
         T2IParamInput disabled = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        disabled.Remove(VideoStagesExtension.DimensionsPreset);
+        disabled.Remove(VideoStagesExtension.Enabled);
         JObject disabledWorkflow = WorkflowTestHarness
             .GenerateWithStepsAndState(disabled, BuildNativeSteps(attachAudioToCurrentMedia: false))
             .Workflow;

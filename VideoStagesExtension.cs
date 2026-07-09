@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Utils;
@@ -11,10 +10,7 @@ namespace VideoStages;
 public class VideoStagesExtension : Extension
 {
     public static int SectionIdForStage(int stageIndex) => Constants.SectionID_VideoStages + 1 + stageIndex;
-    public static T2IRegisteredParam<string> DimensionsPreset;
-    public static T2IRegisteredParam<int> RootWidth;
-    public static T2IRegisteredParam<int> RootHeight;
-    public static T2IRegisteredParam<int> RootFPS;
+    public static T2IRegisteredParam<bool> Enabled;
     public static T2IRegisteredParam<Image> RefineSourceVideo;
     public static T2IRegisteredParam<int> RefineSkipStages;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
@@ -90,80 +86,14 @@ public class VideoStagesExtension : Extension
             OrderPriority: -2.9
         );
 
-        int orderPriority = 0;
-
-        DimensionsPreset = T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Video Stages Dimensions",
-            Description: Constants.DimensionsPresetDescription,
-            Default: Constants.DimensionsPresetCustomValue,
-            GetValues: _ => BuildDimensionsPresetDropdownEntries(),
-            VisibleNormally: true,
-            IsAdvanced: false,
-            Toggleable: false,
-            Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
-            FeatureFlag: Constants.ComfyUIFeatureFlag,
-            DoNotPreview: true,
-            HideFromMetadata: true
-        ));
-
-        RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages Width",
-            Description: Constants.RootDimensionsDescription,
-            Default: "1024",
-            Min: Constants.RootDimensionMin,
-            Max: Constants.RootDimensionMax,
-            ViewMin: Constants.RootDimensionMin,
-            ViewMax: 4096,
-            Step: 32,
-            ViewType: ParamViewType.POT_SLIDER,
-            DoNotPreview: true,
-            Toggleable: true,
-            Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
-
-        RootHeight = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages Height",
-            Description: Constants.RootDimensionsDescription,
-            Default: "1024",
-            Min: Constants.RootDimensionMin,
-            Max: Constants.RootDimensionMax,
-            ViewMin: Constants.RootDimensionMin,
-            ViewMax: 4096,
-            Step: 32,
-            ViewType: ParamViewType.POT_SLIDER,
-            DoNotPreview: true,
-            Toggleable: true,
-            Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
-
-        RootFPS = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages FPS",
-            Description: Constants.RootFPSDescription,
-            Default: "24",
-            Min: 4,
-            Max: 60,
-            ViewMin: 4,
-            ViewMax: 60,
-            Step: 4,
-            ViewType: ParamViewType.SLIDER,
-            DoNotPreview: true,
-            Toggleable: true,
-            Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
-
-        T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Video Stages Dimensions Metadata",
-            Description: "",
-            Default: DimensionsPresetMetadataJson,
+        Enabled = T2IParamTypes.Register<bool>(new T2IParamType(
+            Name: "Video Stages Enabled",
+            Description: "Internal gate flag for the VideoStages group.",
+            Default: "true",
             VisibleNormally: false,
+            Toggleable: false,
             DoNotPreview: true,
+            HideFromMetadata: true,
             Group: VideoStagesGroup,
             FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
@@ -199,21 +129,5 @@ public class VideoStagesExtension : Extension
         string nodeFolder = Path.GetFullPath(Path.Join(rootPath, "comfy_node"));
         ComfyUISelfStartBackend.CustomNodePaths.Add(nodeFolder);
         Logs.Init($"VideoStages: added {nodeFolder} to ComfyUI CustomNodePaths");
-    }
-
-    public static readonly string DimensionsPresetMetadataJson = JsonSerializer.Serialize(
-        Constants.DimensionsPresetMetadataTable,
-        new JsonSerializerOptions { WriteIndented = false });
-
-    public static List<string> BuildDimensionsPresetDropdownEntries()
-    {
-        List<string> list = [];
-        foreach (string key in Constants.DimensionsPresetOrderedKeys)
-        {
-            list.Add($"{key}///{key}");
-        }
-        list.Add($"{Constants.DimensionsPresetCustomValue}///Custom");
-
-        return list;
     }
 }

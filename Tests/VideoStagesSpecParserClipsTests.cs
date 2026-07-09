@@ -386,19 +386,17 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseConfig_RegisteredRootParams_OverrideJsonRootDimensions()
+    public void ParseConfig_JsonRootDimensions_AreAuthoritative()
     {
         string json = JsonConvert.SerializeObject(MakeRootConfig(
-            width: 1280,
-            height: 720,
+            width: 1536,
+            height: 864,
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
                     duration: 4.0)
             ]));
         T2IParamInput input = BuildInputWithJson(json);
-        input.Set(VideoStagesExtension.RootWidth, 1536);
-        input.Set(VideoStagesExtension.RootHeight, 864);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
         WorkflowGenerator parser = generator;
@@ -412,18 +410,19 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseConfig_RegisteredRootFps_OverridesCoreVideoFpsForClipDurationFrames()
+    public void ParseConfig_JsonRootFps_OverridesCoreVideoFpsForClipDurationFrames()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        JObject config = MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
                     duration: 4.0)
-            ]));
+            ]);
+        config["FPS"] = 32;
+        string json = JsonConvert.SerializeObject(config);
         T2IParamInput input = BuildInputWithJson(json);
-        input.Set(VideoStagesExtension.RootFPS, 32);
         input.Set(T2IParamTypes.VideoFPS, 24);
         WorkflowGenerator generator = new() { UserInput = input };
         WorkflowGenerator parser = generator;

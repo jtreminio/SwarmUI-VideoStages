@@ -1,5 +1,6 @@
 import { clipHueCss } from "./clipColor";
 import { clamp, mediaPreviewSrc } from "./constants";
+import { matchPresetKey } from "./dimensionPresets";
 import {
     audioSourceBadge,
     type Badge,
@@ -34,11 +35,16 @@ export interface RegionLayoutOptions {
 
 export interface RenderTimelineOptions {
     fps?: number;
+    width?: number;
+    height?: number;
+    dimsExplicit?: boolean;
+    fpsExplicit?: boolean;
     unit?: TimelineUnit;
     pxPerSecond?: number;
     selectedIndex?: number | null;
     enabled?: boolean;
     onToggleEnabled?: (enabled: boolean) => void;
+    onOpenSettings?: (anchor: HTMLElement) => void;
     onToggleUnit?: () => void;
     onAddClip?: () => void;
     onZoomIn?: () => void;
@@ -497,6 +503,29 @@ export const renderTimeline = (
         `<span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span>` +
         `<span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span>` +
         `</span>`;
+    const chipWidth = Math.max(0, Math.round(options?.width ?? 0));
+    const chipHeight = Math.max(0, Math.round(options?.height ?? 0));
+    const chipFps = fps;
+    const chipDimsExplicit = options?.dimsExplicit === true;
+    const chipFpsExplicit = options?.fpsExplicit === true;
+    const chipPresetKey =
+        chipDimsExplicit && chipWidth > 0 && chipHeight > 0
+            ? matchPresetKey(chipWidth, chipHeight)
+            : null;
+    const dimsSource = chipDimsExplicit
+        ? chipPresetKey
+            ? `${chipPresetKey} preset`
+            : "custom"
+        : "inherited from image resolution";
+    const fpsSource = chipFpsExplicit ? "custom" : "inherited from Video FPS";
+    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
+    const settingsChip =
+        `<button type="button" class="vst-settings-chip" data-vst-settings title="${escapeHtml(settingsTip)}" aria-label="${escapeHtml(settingsTip)}">` +
+        `<span class="vst-settings-dims">${chipWidth}×${chipHeight}</span>` +
+        `<span class="vst-settings-chip-sep" aria-hidden="true">·</span>` +
+        `<span class="vst-settings-fps">${chipFps} fps</span>` +
+        `</button>`;
+
     const enabled = options?.enabled !== false;
     const enableToggle =
         `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual.">` +
@@ -509,6 +538,7 @@ export const renderTimeline = (
         `<span class="vst-title">Timeline</span>` +
         enableToggle +
         `<span class="vst-sub"><span class="vst-stat-num">${clips.length}</span> ${clipWord}</span>` +
+        settingsChip +
         `</div>` +
         `<div class="vst-topbar-tools">` +
         `<button type="button" class="vst-toggle vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button>` +
@@ -546,6 +576,14 @@ export const renderTimeline = (
         if (enableInput && options?.onToggleEnabled) {
             enableInput.addEventListener("change", () => {
                 options.onToggleEnabled?.(enableInput.checked);
+            });
+        }
+        const settingsBtn = body.querySelector<HTMLElement>(
+            "[data-vst-settings]",
+        );
+        if (settingsBtn && options?.onOpenSettings) {
+            settingsBtn.addEventListener("click", () => {
+                options.onOpenSettings?.(settingsBtn);
             });
         }
         wire("[data-vst-unit-toggle]", options?.onToggleUnit);

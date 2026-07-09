@@ -13,8 +13,6 @@ import {
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     normalizeUploadFileName,
     REF_FRAME_MIN,
-    ROOT_DIMENSION_MIN,
-    ROOT_FPS_MIN,
     STAGE_CONTROLNET_STRENGTH_DEFAULT,
     STAGE_CONTROLNET_STRENGTH_MAX,
     STAGE_CONTROLNET_STRENGTH_MIN,
@@ -95,13 +93,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const normalizeExpanded = (raw: { expanded?: unknown }): boolean =>
     raw.expanded === undefined ? true : !!raw.expanded;
 
-const normalizeRootPositiveInt = (
-    value: unknown,
-    fallback: number,
-    min: number,
-): number =>
-    Math.max(min, Math.round(utils.toNumber(`${value ?? fallback}`, fallback)));
-
 const snapStrengthToStep = (
     value: unknown,
     fallback: number,
@@ -135,14 +126,6 @@ export const normalizeUploadedAudio = (
         ),
     };
 };
-
-export const normalizeRootDimension = (
-    value: unknown,
-    fallback: number,
-): number => normalizeRootPositiveInt(value, fallback, ROOT_DIMENSION_MIN);
-
-export const normalizeRootFps = (value: unknown, fallback: number): number =>
-    normalizeRootPositiveInt(value, fallback, ROOT_FPS_MIN);
 
 export const normalizeControlNetSource = (value: unknown): string => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();

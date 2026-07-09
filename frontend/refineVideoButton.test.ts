@@ -10,6 +10,8 @@ const makeConfig = (clips: Clip[]): VideoStagesConfig => ({
     width: 512,
     height: 512,
     fps: 24,
+    dimsExplicit: false,
+    fpsExplicit: false,
     clips,
 });
 

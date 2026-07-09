@@ -1,6 +1,6 @@
 import { injectTimelineTab, TIMELINE_BODY_ID } from "./bottomTimelineTab";
 import { buildDefaultClip } from "./normalization";
-import { getClips, saveClips } from "./persistence";
+import { getClips, getState, saveClips } from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import {
     getGroupToggle,
@@ -17,6 +17,7 @@ import { createTimelineHistory } from "./timelineHistory";
 import { createTimelineLinking } from "./timelineLinking";
 import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
+import { createTimelineSettings } from "./timelineSettings";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -28,14 +29,8 @@ import {
     zoomAnchorTime,
 } from "./timelineView";
 
-const getFps = (): number => {
-    try {
-        const fps = getRootDefaults().fps;
-        return typeof fps === "number" && fps > 0 ? fps : 24;
-    } catch {
-        return 24;
-    }
-};
+const safeStateFps = (fps: number): number =>
+    typeof fps === "number" && fps > 0 ? fps : 24;
 
 export interface VideoStagesTimeline {
     init(): void;
@@ -56,6 +51,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
     const referencesTrack = createTimelineReferencesTrack();
+    const settings = createTimelineSettings(() => refresh());
 
     const history = createTimelineHistory({
         read: () => readVideoStagesSection(),
@@ -178,14 +174,20 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         lastSeenValue = readVideoStagesSection();
         history.capture();
         try {
-            const clips = getClips();
+            const state = getState();
+            const clips = state.clips;
             renderTimeline(body, clips, {
-                fps: getFps(),
+                fps: safeStateFps(state.fps),
+                width: state.width,
+                height: state.height,
+                dimsExplicit: state.dimsExplicit,
+                fpsExplicit: state.fpsExplicit,
                 unit,
                 pxPerSecond,
                 selectedIndex: linking.getSelectedIndex(),
                 enabled: isVideoStagesEnabled(),
                 onToggleEnabled: setVideoStagesEnabled,
+                onOpenSettings: (anchor) => settings.open(anchor),
                 onToggleUnit: toggleUnit,
                 onAddClip: addClip,
                 onZoomIn: zoomIn,
@@ -313,6 +315,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         promptTrack.dispose();
         audioTrack.dispose();
         referencesTrack.dispose();
+        settings.dispose();
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);
         document.removeEventListener("keydown", onKeydown);

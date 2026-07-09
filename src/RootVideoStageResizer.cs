@@ -85,11 +85,6 @@ internal sealed class RootVideoStageResizer(
 
     internal bool TryGetRootStageResolution(out int width, out int height)
     {
-        if (TryGetRegisteredRootStageResolution(out width, out height))
-        {
-            return true;
-        }
-
         (int? rawJsonWidth, int? rawJsonHeight) = VideoStagesSpecParser.GetRawJsonTopLevelDimensions(g);
         if (TryPositiveDimensionPair(rawJsonWidth, rawJsonHeight, out width, out height))
         {
@@ -132,20 +127,6 @@ internal sealed class RootVideoStageResizer(
         {
             width = w.Value;
             height = h.Value;
-            return true;
-        }
-        width = 0;
-        height = 0;
-        return false;
-    }
-
-    private bool TryGetRegisteredRootStageResolution(out int width, out int height)
-    {
-        if (g.UserInput.TryGet(VideoStagesExtension.RootWidth, out width)
-            && g.UserInput.TryGet(VideoStagesExtension.RootHeight, out height)
-            && width >= Constants.RootDimensionMin
-            && height >= Constants.RootDimensionMin)
-        {
             return true;
         }
         width = 0;

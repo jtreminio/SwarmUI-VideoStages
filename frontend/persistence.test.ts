@@ -7,10 +7,17 @@ import {
 import {
     __resetPersistenceForTests,
     getClips,
+    getState,
     saveClips,
+    saveState,
     serializeClipsForStorage,
+    serializeStateForStorage,
 } from "./persistence";
-import { REF_SOURCE_BASE, type StoredClip } from "./types";
+import {
+    REF_SOURCE_BASE,
+    type StoredClip,
+    type VideoStagesConfig,
+} from "./types";
 
 describe("persistence", () => {
     describe("serializeClipsForStorage", () => {
@@ -114,6 +121,108 @@ describe("persistence", () => {
             // Exactly one section — the write replaces the old body rather than appending a second opener.
             expect(value.split("<videostages>").length - 1).toBe(1);
             expect(getClips().map((clip) => clip.duration)).toEqual([5, 6]);
+        });
+    });
+
+    describe("top-level width/height/fps round-trip", () => {
+        const promptEl = (): HTMLTextAreaElement =>
+            document.getElementById("input_prompt") as HTMLTextAreaElement;
+        const section = (): string => {
+            const value = promptEl().value;
+            const at = value.indexOf("<videostages>");
+            return value.slice(at + "<videostages>".length);
+        };
+        const baseState = (
+            overrides: Partial<VideoStagesConfig> = {},
+        ): VideoStagesConfig => ({
+            width: 1024,
+            height: 1024,
+            fps: 24,
+            dimsExplicit: false,
+            fpsExplicit: false,
+            clips: [minimalClip({ duration: 2 })],
+            ...overrides,
+        });
+
+        beforeEach(() => {
+            __resetPersistenceForTests();
+            const prompt = document.createElement("textarea");
+            prompt.id = "input_prompt";
+            prompt.value = "";
+            document.body.appendChild(prompt);
+        });
+
+        it("omits width/height/fps when they are inherited", () => {
+            const json = serializeStateForStorage(baseState());
+            const parsed = JSON.parse(json) as Record<string, unknown>;
+            expect("width" in parsed).toBe(false);
+            expect("height" in parsed).toBe(false);
+            expect("fps" in parsed).toBe(false);
+        });
+
+        it("includes width+height together only when dims are explicit", () => {
+            const json = serializeStateForStorage(
+                baseState({ width: 512, height: 768, dimsExplicit: true }),
+            );
+            const parsed = JSON.parse(json) as Record<string, unknown>;
+            expect(parsed.width).toBe(512);
+            expect(parsed.height).toBe(768);
+            expect("fps" in parsed).toBe(false);
+        });
+
+        it("includes fps only when fps is explicit", () => {
+            const json = serializeStateForStorage(
+                baseState({ fps: 30, fpsExplicit: true }),
+            );
+            const parsed = JSON.parse(json) as Record<string, unknown>;
+            expect(parsed.fps).toBe(30);
+            expect("width" in parsed).toBe(false);
+        });
+
+        it("round-trips explicit dims + fps through getState", () => {
+            saveState(
+                baseState({
+                    width: 640,
+                    height: 384,
+                    dimsExplicit: true,
+                    fps: 16,
+                    fpsExplicit: true,
+                }),
+            );
+            expect(section()).toContain('"width":640');
+            const state = getState();
+            expect(state.dimsExplicit).toBe(true);
+            expect(state.width).toBe(640);
+            expect(state.height).toBe(384);
+            expect(state.fpsExplicit).toBe(true);
+            expect(state.fps).toBe(16);
+        });
+
+        it("treats omitted keys as inherit, falling back to root defaults", () => {
+            saveState(baseState());
+            const state = getState();
+            expect(state.dimsExplicit).toBe(false);
+            expect(state.fpsExplicit).toBe(false);
+            // No core inputs mounted → getRootDefaults() defaults.
+            expect(state.width).toBe(1024);
+            expect(state.height).toBe(1024);
+            expect(state.fps).toBe(24);
+        });
+
+        it("treats out-of-range stored values as inherit", () => {
+            promptEl().value =
+                '<videostages>{"width":100,"height":100,"fps":0,"clips":[]}';
+            const state = getState();
+            expect(state.dimsExplicit).toBe(false);
+            expect(state.fpsExplicit).toBe(false);
+            expect(state.width).toBe(1024);
+        });
+
+        it("treats a lone width (no height) as inherit for dims", () => {
+            promptEl().value = '<videostages>{"width":512,"clips":[]}';
+            const state = getState();
+            expect(state.dimsExplicit).toBe(false);
+            expect(state.width).toBe(1024);
         });
     });
 });

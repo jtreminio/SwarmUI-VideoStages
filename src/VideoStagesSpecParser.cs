@@ -43,19 +43,8 @@ internal static class VideoStagesSpecParser
         return Math.Max(1, alignedFrames + 1);
     }
 
-    private static int? TryGetRegisteredRootDimension(WorkflowGenerator g, T2IRegisteredParam<int> param)
-    {
-        return g.UserInput.TryGet(param, out int value) && value >= Constants.RootDimensionMin
-            ? value
-            : null;
-    }
-
     private static int ResolveTopLevelWidth(WorkflowGenerator g, int? rawJsonWidth)
     {
-        if (TryGetRegisteredRootDimension(g, VideoStagesExtension.RootWidth) is int registered)
-        {
-            return registered;
-        }
         if (rawJsonWidth is > 0)
         {
             return rawJsonWidth.Value;
@@ -65,10 +54,6 @@ internal static class VideoStagesSpecParser
 
     private static int ResolveTopLevelHeight(WorkflowGenerator g, int? rawJsonHeight)
     {
-        if (TryGetRegisteredRootDimension(g, VideoStagesExtension.RootHeight) is int registered)
-        {
-            return registered;
-        }
         if (rawJsonHeight is > 0)
         {
             return rawJsonHeight.Value;
@@ -78,10 +63,6 @@ internal static class VideoStagesSpecParser
 
     private static int ResolveTopLevelFps(WorkflowGenerator g, int? rawJsonFps)
     {
-        if (g.UserInput.TryGet(VideoStagesExtension.RootFPS, out int rootFps) && rootFps > 0)
-        {
-            return rootFps;
-        }
         if (rawJsonFps is > 0)
         {
             return rawJsonFps.Value;

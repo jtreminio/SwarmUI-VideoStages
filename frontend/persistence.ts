@@ -1,4 +1,5 @@
 import { assignMissingHues } from "./clipColor";
+import { ROOT_DIMENSION_MIN, ROOT_FPS_MIN } from "./constants";
 import { videoStagesDebugLog } from "./debugLog";
 import { buildDefaultClip, normalizeClip } from "./normalization";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
@@ -9,11 +10,46 @@ import {
     writeVideoStagesSection,
 } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
+import { utils } from "./utils";
 
-type RootDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
+type InheritedDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
+type RootDims = Pick<
+    VideoStagesConfig,
+    "width" | "height" | "fps" | "dimsExplicit" | "fpsExplicit"
+>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
+
+const toIntOrNull = (value: unknown): number | null => {
+    if (value == null || value === "") {
+        return null;
+    }
+    const num = utils.toNumber(`${value}`, Number.NaN);
+    return Number.isFinite(num) ? Math.round(num) : null;
+};
+
+const resolveRootDims = (
+    inherited: InheritedDims,
+    stored: { width?: unknown; height?: unknown; fps?: unknown },
+): RootDims => {
+    const width = toIntOrNull(stored.width);
+    const height = toIntOrNull(stored.height);
+    const dimsExplicit =
+        width !== null &&
+        width >= ROOT_DIMENSION_MIN &&
+        height !== null &&
+        height >= ROOT_DIMENSION_MIN;
+    const fps = toIntOrNull(stored.fps);
+    const fpsExplicit = fps !== null && fps >= ROOT_FPS_MIN;
+    return {
+        width: dimsExplicit ? (width as number) : inherited.width,
+        height: dimsExplicit ? (height as number) : inherited.height,
+        fps: fpsExplicit ? (fps as number) : inherited.fps,
+        dimsExplicit,
+        fpsExplicit,
+    };
+};
 
 const rootConfig = (dims: RootDims, clips: Clip[]): VideoStagesConfig => ({
     ...dims,
@@ -69,11 +105,22 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
     );
 
 export const serializeStateForStorage = (
-    state: Pick<VideoStagesConfig, "clips">,
-): string =>
-    JSON.stringify({
-        clips: serializeClipsForStorage(state.clips),
-    });
+    state: Pick<
+        VideoStagesConfig,
+        "width" | "height" | "fps" | "dimsExplicit" | "fpsExplicit" | "clips"
+    >,
+): string => {
+    const out: Record<string, unknown> = {};
+    if (state.dimsExplicit) {
+        out.width = Math.round(state.width);
+        out.height = Math.round(state.height);
+    }
+    if (state.fpsExplicit) {
+        out.fps = Math.round(state.fps);
+    }
+    out.clips = serializeClipsForStorage(state.clips);
+    return JSON.stringify(out);
+};
 
 export interface PersistenceCallbacks {
     onAfterSerialize?: (serialized: string) => void;
@@ -91,15 +138,21 @@ export const __resetPersistenceForTests = (): void => {
 
 const parseSerializedState = (
     serialized: string,
-    fallbackDefaults: RootDims,
+    inherited: InheritedDims,
 ): VideoStagesConfig | null => {
     try {
         const parsed: unknown = JSON.parse(serialized);
         let clipsRaw: unknown[];
+        let stored: { width?: unknown; height?: unknown; fps?: unknown } = {};
         if (Array.isArray(parsed)) {
             clipsRaw = parsed;
-        } else if (isRecord(parsed) && Array.isArray(parsed.clips)) {
-            clipsRaw = parsed.clips;
+        } else if (isRecord(parsed)) {
+            clipsRaw = Array.isArray(parsed.clips) ? parsed.clips : [];
+            stored = {
+                width: parsed.width,
+                height: parsed.height,
+                fps: parsed.fps,
+            };
         } else {
             clipsRaw = [];
         }
@@ -111,7 +164,7 @@ const parseSerializedState = (
             ),
         );
         assignMissingHues(clips);
-        return rootConfig(fallbackDefaults, clips);
+        return rootConfig(resolveRootDims(inherited, stored), clips);
     } catch {
         return null;
     }
@@ -119,23 +172,28 @@ const parseSerializedState = (
 
 export const getState = (): VideoStagesConfig => {
     const defaults = getRootDefaults();
+    const inherited: InheritedDims = {
+        width: defaults.width,
+        height: defaults.height,
+        fps: defaults.fps,
+    };
     const serialized = readVideoStagesSection() || lastSerializedState;
     if (!serialized) {
-        return rootConfig(defaults, []);
+        return rootConfig(resolveRootDims(inherited, {}), []);
     }
 
-    let parsedState = parseSerializedState(serialized, defaults);
+    let parsedState = parseSerializedState(serialized, inherited);
     if (parsedState) {
         lastSerializedState = serialized;
         return parsedState;
     }
     if (serialized !== lastSerializedState && lastSerializedState) {
-        parsedState = parseSerializedState(lastSerializedState, defaults);
+        parsedState = parseSerializedState(lastSerializedState, inherited);
         if (parsedState) {
             return parsedState;
         }
     }
-    return rootConfig(defaults, []);
+    return rootConfig(resolveRootDims(inherited, {}), []);
 };
 
 export const saveState = (

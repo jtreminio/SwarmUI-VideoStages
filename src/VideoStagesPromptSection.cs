@@ -9,7 +9,7 @@ internal static class VideoStagesPromptSection
     private const string Opener = "<videostages>";
 
     private static bool IsGroupEnabled(WorkflowGenerator g) =>
-        g.UserInput.TryGetRaw(VideoStagesExtension.DimensionsPreset.Type, out _);
+        g.UserInput.TryGetRaw(VideoStagesExtension.Enabled.Type, out _);
 
     private static string OriginalPositivePrompt(WorkflowGenerator g)
     {
