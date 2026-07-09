@@ -4,7 +4,7 @@ This extension is in a subdirectory that is gitignored by the SwarmUI project. T
 
 # Javascript files
 
-Do NOT manually modify Assets/video-stages.js. All Javascript modifications should be applied to the Typescript files in frontend directory (or scripts). It is OK to modify the CSS file(s) within this project directly.
+`Assets/video-stages.js` (and its `.js.map`) is COMPILED BUILD OUTPUT — never read it and never modify it. Reading it wastes context and tells you nothing the sources don't. All Javascript modifications should be applied to the Typescript files in the frontend directory (or scripts), then rebuilt with `npm run build`. It is OK to modify the CSS file(s) within this project directly.
 
 # Run Tests
 
