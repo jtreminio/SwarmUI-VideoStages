@@ -372,6 +372,23 @@ describe("createTimelineReferencesTrack (per-ref image editor)", () => {
         expect(inspector()).toBeNull();
     });
 
+    it("deletes the reference (and its stage ref-strengths) via shift+click", () => {
+        const body = setup([
+            { duration: 5, refs: [{ source: "Refiner" }, { source: "Base" }] },
+        ]);
+        markEl(body, 0, 0).dispatchEvent(
+            new MouseEvent("click", { bubbles: true, shiftKey: true }),
+        );
+
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        const clips = savedClips(saveSpy);
+        expect(clips[0].refs).toHaveLength(1);
+        expect(clips[0].refs[0].source).toBe("Base");
+        // refStrengths stay index-aligned with refs.
+        expect(clips[0].stages[0].refStrengths).toHaveLength(1);
+        expect(inspector()).toBeNull();
+    });
+
     it("deletes the reference (and its stage ref-strengths) via the popover", () => {
         const body = setup([
             { duration: 5, refs: [{ source: "Refiner" }, { source: "Base" }] },

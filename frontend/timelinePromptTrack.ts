@@ -160,6 +160,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         initial: string,
         placeholder: string,
         commit: (value: string) => void,
+        onDelete: (() => void) | null = null,
     ): void => {
         closeEditor();
         const sourceJson = readVideoStagesSection();
@@ -188,12 +189,23 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         editor.value = initial;
         editor.placeholder = placeholder;
 
+        const deleteBtn = onDelete ? document.createElement("button") : null;
+        if (deleteBtn) {
+            deleteBtn.type = "button";
+            deleteBtn.className = "vst-refs-delete";
+            deleteBtn.textContent = "Delete prompt window";
+        }
+
         const hint = document.createElement("div");
         hint.className = "vst-prompt-inspector-hint";
         hint.textContent =
             "Enter to save · Shift+Enter for a new line · Esc to cancel";
 
-        wrap.append(head, editor, hint);
+        if (deleteBtn) {
+            wrap.append(head, editor, deleteBtn, hint);
+        } else {
+            wrap.append(head, editor, hint);
+        }
 
         anchor.classList.add("vst-prompt-editing");
         editingAnchor = anchor;
@@ -209,6 +221,19 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
                 commit(value);
             }
         };
+        if (deleteBtn && onDelete) {
+            deleteBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                if (done) {
+                    return;
+                }
+                done = true;
+                closeEditor();
+                if (!isStale(sourceJson)) {
+                    onDelete();
+                }
+            });
+        }
         editor.addEventListener("keydown", (event) => {
             if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -429,6 +454,10 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
             return;
         }
         if (me.target.closest(MINOR_ACTION_SELECTOR)) {
+            return;
+        }
+        if (me.shiftKey && me.target.closest(MINOR_SELECTOR)) {
+            me.preventDefault();
             return;
         }
         const edgeEl = me.target.closest(MINOR_EDGE_SELECTOR);
@@ -676,6 +705,10 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
             if (clipIdx === null || windowIdx === null) {
                 return;
             }
+            if ((event as MouseEvent).shiftKey) {
+                applyMinorAction(clipIdx, windowIdx, "delete");
+                return;
+            }
             const window = getClips()[clipIdx]?.promptWindows?.[windowIdx];
             if (!window) {
                 return;
@@ -686,6 +719,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
                 window.prompt,
                 "Minor prompt for this window…",
                 (value) => commitMinorPrompt(clipIdx, windowIdx, value),
+                () => applyMinorAction(clipIdx, windowIdx, "delete"),
             );
             return;
         }

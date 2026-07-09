@@ -288,12 +288,11 @@ export const renderPromptTrackRow = (
                 const label =
                     text === "" ? "(empty)" : truncatePrompt(text, 60);
                 return (
-                    `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeHtml(text || "(empty minor prompt)")}">` +
+                    `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeHtml(`${text || "(empty minor prompt)"} · Shift+click to delete`)}">` +
                     `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span>` +
                     `<span class="vst-minor-text">${escapeHtml(label)}</span>` +
                     `<span class="vst-minor-actions">` +
                     `<button type="button" class="vst-minor-act" data-vst-minor-action="skip" title="${w.skipped ? "Enable this minor prompt" : "Skip this minor prompt"}" aria-label="${w.skipped ? "Enable minor prompt" : "Skip minor prompt"}">${w.skipped ? "○" : "◉"}</button>` +
-                    `<button type="button" class="vst-minor-act" data-vst-minor-action="delete" title="Delete this minor prompt" aria-label="Delete minor prompt">×</button>` +
                     `</span>` +
                     `<span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span>` +
                     `</div>`
@@ -441,7 +440,7 @@ export const renderReferencesTrackRow = (
                     const title =
                         `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""}` +
                         ` · frame ${frame} · ${formatTimeLabel(time, unit, fps)}` +
-                        ` · click to edit, drag to move`;
+                        ` · click to edit, drag to move · Shift+click to delete`;
                     const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
                     return (
                         `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${l.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}">` +
@@ -701,7 +700,6 @@ export const renderTimeline = (
             const controls =
                 `<div class="vst-region-controls">` +
                 `<button type="button" class="vst-region-btn${l.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button>` +
-                `<button type="button" class="vst-region-btn vst-region-btn-delete" data-vst-region-action="delete" title="Delete clip" aria-label="Delete clip">✕</button>` +
                 `</div>`;
             const rightGrip = lengthDerived(clip)
                 ? ""
@@ -716,7 +714,7 @@ export const renderTimeline = (
                     : "Stages";
             const renderWidth = Math.max(1, l.widthPx - 2);
             return (
-                `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur}">` +
+                `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Shift+click to delete">` +
                 renderRegionThumb(clip) +
                 renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) +
                 `<div class="vst-region-head">` +

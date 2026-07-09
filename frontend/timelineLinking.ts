@@ -189,14 +189,16 @@ export const createTimelineLinking = (): TimelineLinking => {
             const action = actionButton.getAttribute("data-vst-region-action");
             if (action === "skip") {
                 applySkip(actionIdx);
-            } else if (action === "delete") {
-                applyDelete(actionIdx);
             }
             return;
         }
         const region = target.closest(REGION_SELECTOR);
         const idx = parseClipIdx(region);
         if (idx === null) {
+            return;
+        }
+        if ((event as MouseEvent).shiftKey) {
+            applyDelete(idx);
             return;
         }
         selectedIndex = idx;
@@ -365,6 +367,10 @@ export const createTimelineLinking = (): TimelineLinking => {
             return;
         }
         if (me.target.closest(REGION_ACTION_SELECTOR)) {
+            return;
+        }
+        if (me.shiftKey) {
+            me.preventDefault();
             return;
         }
         const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);

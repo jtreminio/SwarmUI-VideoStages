@@ -521,6 +521,10 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         if (!(mark instanceof HTMLElement)) {
             return;
         }
+        if (me.shiftKey) {
+            me.preventDefault();
+            return;
+        }
         const lane = mark.closest(LANE_SELECTOR);
         const clipIdx = parseIntAttr(mark, "data-clip-idx");
         const refIdx = parseIntAttr(mark, "data-ref-idx");
@@ -640,7 +644,11 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             const clipIdx = parseIntAttr(thumb, "data-clip-idx");
             const refIdx = parseIntAttr(thumb, "data-ref-idx");
             if (clipIdx !== null && refIdx !== null) {
-                openEditor(thumb, clipIdx, refIdx);
+                if ((event as MouseEvent).shiftKey) {
+                    deleteRef(clipIdx, refIdx, readVideoStagesSection());
+                } else {
+                    openEditor(thumb, clipIdx, refIdx);
+                }
             }
             return;
         }

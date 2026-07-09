@@ -2011,7 +2011,7 @@
         const skippedClass = w.skipped ? " vst-minor-skipped" : "";
         const text = `${w.prompt ?? ""}`.trim();
         const label = text === "" ? "(empty)" : truncatePrompt(text, 60);
-        return `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeAttr(text || "(empty minor prompt)")}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-actions"><button type="button" class="vst-minor-act" data-vst-minor-action="skip" title="${w.skipped ? "Enable this minor prompt" : "Skip this minor prompt"}" aria-label="${w.skipped ? "Enable minor prompt" : "Skip minor prompt"}">${w.skipped ? "○" : "◉"}</button><button type="button" class="vst-minor-act" data-vst-minor-action="delete" title="Delete this minor prompt" aria-label="Delete minor prompt">×</button></span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+        return `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeAttr(`${text || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-actions"><button type="button" class="vst-minor-act" data-vst-minor-action="skip" title="${w.skipped ? "Enable this minor prompt" : "Skip this minor prompt"}" aria-label="${w.skipped ? "Enable minor prompt" : "Skip minor prompt"}">${w.skipped ? "○" : "◉"}</button></span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
       }).join("");
       parts.push(
         `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="Click empty space to add a minor prompt">${minorSegs}</div>`
@@ -2090,7 +2090,7 @@
         const thumbInner = `<span class="vst-refs-ph">${escapeAttr(frameLabel)}</span>`;
         const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
         const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
-        const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move`;
+        const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete`;
         const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
         return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${l.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbClass}"${thumbStyle}>${thumbInner}</span></div>`;
       }).join("");
@@ -2251,7 +2251,7 @@
       );
       const skipTitle = l.skipped ? "Unskip clip" : "Skip clip";
       const skipGlyph = l.skipped ? "⟲" : "⊘";
-      const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${l.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button><button type="button" class="vst-region-btn vst-region-btn-delete" data-vst-region-action="delete" title="Delete clip" aria-label="Delete clip">✕</button></div>`;
+      const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${l.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button></div>`;
       const rightGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
       const hue = clipHueCss(clip.hue);
       const skippedStages = (clip.stages ?? []).filter(
@@ -2259,7 +2259,7 @@
       ).length;
       const stagesTitle = skippedStages > 0 ? `Stages: ${l.stageCount} (${skippedStages} skipped)` : "Stages";
       const renderWidth = Math.max(1, l.widthPx - 2);
-      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur}">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span><span class="vst-chip" title="${escapeAttr(stagesTitle)}">▤ ${l.stageCount}</span><span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip) + controls + rightGrip + `</div>`;
+      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Shift+click to delete">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span><span class="vst-chip" title="${escapeAttr(stagesTitle)}">▤ ${l.stageCount}</span><span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip) + controls + rightGrip + `</div>`;
     }).join("");
     const audioRow = renderAudioTrackRow(clips, layouts);
     const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
@@ -2383,14 +2383,16 @@
         const action = actionButton.getAttribute("data-vst-region-action");
         if (action === "skip") {
           applySkip(actionIdx);
-        } else if (action === "delete") {
-          applyDelete(actionIdx);
         }
         return;
       }
       const region = target.closest(REGION_SELECTOR);
       const idx = parseClipIdx2(region);
       if (idx === null) {
+        return;
+      }
+      if (event.shiftKey) {
+        applyDelete(idx);
         return;
       }
       selectedIndex = idx;
@@ -2535,6 +2537,10 @@
         return;
       }
       if (me.target.closest(REGION_ACTION_SELECTOR)) {
+        return;
+      }
+      if (me.shiftKey) {
+        me.preventDefault();
         return;
       }
       const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
@@ -2924,7 +2930,7 @@
         activeEditorWrap = null;
       }
     };
-    const openEditor = (anchor, label, initial, placeholder, commit) => {
+    const openEditor = (anchor, label, initial, placeholder, commit, onDelete = null) => {
       closeEditor();
       const sourceJson = readVideoStagesSection();
       const hostRect = (boundBody ?? document.body).getBoundingClientRect();
@@ -2947,10 +2953,20 @@
       editor.className = "vst-prompt-editor";
       editor.value = initial;
       editor.placeholder = placeholder;
+      const deleteBtn = onDelete ? document.createElement("button") : null;
+      if (deleteBtn) {
+        deleteBtn.type = "button";
+        deleteBtn.className = "vst-refs-delete";
+        deleteBtn.textContent = "Delete prompt window";
+      }
       const hint = document.createElement("div");
       hint.className = "vst-prompt-inspector-hint";
       hint.textContent = "Enter to save · Shift+Enter for a new line · Esc to cancel";
-      wrap.append(head, editor, hint);
+      if (deleteBtn) {
+        wrap.append(head, editor, deleteBtn, hint);
+      } else {
+        wrap.append(head, editor, hint);
+      }
       anchor.classList.add("vst-prompt-editing");
       editingAnchor = anchor;
       let done = false;
@@ -2965,6 +2981,19 @@
           commit(value);
         }
       };
+      if (deleteBtn && onDelete) {
+        deleteBtn.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (done) {
+            return;
+          }
+          done = true;
+          closeEditor();
+          if (!isStale(sourceJson)) {
+            onDelete();
+          }
+        });
+      }
       editor.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
@@ -3154,6 +3183,10 @@
         return;
       }
       if (me.target.closest(MINOR_ACTION_SELECTOR)) {
+        return;
+      }
+      if (me.shiftKey && me.target.closest(MINOR_SELECTOR)) {
+        me.preventDefault();
         return;
       }
       const edgeEl = me.target.closest(MINOR_EDGE_SELECTOR);
@@ -3389,6 +3422,10 @@
         if (clipIdx === null || windowIdx === null) {
           return;
         }
+        if (event.shiftKey) {
+          applyMinorAction(clipIdx, windowIdx, "delete");
+          return;
+        }
         const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
         if (!window2) {
           return;
@@ -3398,7 +3435,8 @@
           `Clip ${clipIdx} · relay window ${windowIdx + 1}`,
           window2.prompt,
           "Minor prompt for this window…",
-          (value) => commitMinorPrompt(clipIdx, windowIdx, value)
+          (value) => commitMinorPrompt(clipIdx, windowIdx, value),
+          () => applyMinorAction(clipIdx, windowIdx, "delete")
         );
         return;
       }
@@ -3922,6 +3960,10 @@
       if (!(mark instanceof HTMLElement)) {
         return;
       }
+      if (me.shiftKey) {
+        me.preventDefault();
+        return;
+      }
       const lane = mark.closest(LANE_SELECTOR2);
       const clipIdx = parseIntAttr2(mark, "data-clip-idx");
       const refIdx = parseIntAttr2(mark, "data-ref-idx");
@@ -4030,7 +4072,11 @@
         const clipIdx2 = parseIntAttr2(thumb, "data-clip-idx");
         const refIdx = parseIntAttr2(thumb, "data-ref-idx");
         if (clipIdx2 !== null && refIdx !== null) {
-          openEditor(thumb, clipIdx2, refIdx);
+          if (event.shiftKey) {
+            deleteRef(clipIdx2, refIdx, readVideoStagesSection());
+          } else {
+            openEditor(thumb, clipIdx2, refIdx);
+          }
         }
         return;
       }

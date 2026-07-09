@@ -72,7 +72,6 @@ const renderPromptTrack = (body: HTMLElement, clips: ClipFixture[]): void => {
                     `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left"></span>` +
                     `<span class="vst-minor-text"></span>` +
                     `<button type="button" data-vst-minor-action="skip"></button>` +
-                    `<button type="button" data-vst-minor-action="delete"></button>` +
                     `<span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right"></span>` +
                     `</div>`,
             )
@@ -136,12 +135,13 @@ const commitEditor = (value: string): void => {
     );
 };
 
-const mouse = (type: string, clientX: number): MouseEvent =>
+const mouse = (type: string, clientX: number, shiftKey = false): MouseEvent =>
     new MouseEvent(type, {
         bubbles: true,
         clientX,
         clientY: 56,
         button: 0,
+        shiftKey,
     });
 
 const savedClips = (
@@ -286,7 +286,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         expect(windows[0].duration).toBeCloseTo(3, 5); // end stays at 4s
     });
 
-    it("the delete button removes the window", () => {
+    it("shift+click removes the window", () => {
         const body = setup([
             {
                 duration: 10,
@@ -296,10 +296,9 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
                 ],
             },
         ]);
-        el(
-            body,
-            ".vst-minor-seg[data-window-idx='0'] [data-vst-minor-action='delete']",
-        ).dispatchEvent(mouse("click", 50));
+        el(body, ".vst-minor-seg[data-window-idx='0']").dispatchEvent(
+            mouse("click", 50, true),
+        );
 
         const windows = savedWindows(saveSpy);
         expect(windows).toHaveLength(1);
@@ -331,6 +330,46 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
 
         expect(savedWindows(saveSpy)[0].prompt).toBe("a red car");
         expect(document.querySelector(".vst-prompt-editor")).toBeNull();
+    });
+
+    it("deletes the window via the popover delete button", () => {
+        const body = setup([
+            {
+                duration: 10,
+                windows: [
+                    { start: 1, duration: 1 },
+                    { start: 4, duration: 1 },
+                ],
+            },
+        ]);
+        const seg = el(body, ".vst-minor-seg[data-window-idx='0']");
+        seg.dispatchEvent(mouse("mousedown", 50));
+        document.dispatchEvent(mouse("mouseup", 50)); // no movement → click opens editor
+        seg.dispatchEvent(mouse("click", 50));
+
+        const del = document.querySelector<HTMLButtonElement>(
+            ".vst-prompt-inspector .vst-refs-delete",
+        );
+        if (!del) {
+            throw new Error("delete button not found");
+        }
+        del.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const windows = savedWindows(saveSpy);
+        expect(windows).toHaveLength(1);
+        expect(windows[0].start).toBeCloseTo(4, 5);
+        expect(document.querySelector(".vst-prompt-inspector")).toBeNull();
+    });
+
+    it("does not render a delete button in the MAJOR prompt editor", () => {
+        const body = setup([{ duration: 10 }]);
+        el(body, ".vst-major-seg[data-clip-idx='0']").dispatchEvent(
+            mouse("click", 100),
+        );
+
+        expect(
+            document.querySelector(".vst-prompt-inspector .vst-refs-delete"),
+        ).toBeNull();
     });
 
     it("clicking the MAJOR segment edits the clip's own prompt", () => {

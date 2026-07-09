@@ -428,6 +428,7 @@
     position: absolute;
     top: var(--vst-refs-band);
     bottom: 10px;
+    user-select: none;
     border-radius: var(--vst-radius);
     border: 1.5px solid
         color-mix(in srgb, var(--clip-hue, var(--emphasis)) 45%, var(--light-border));
@@ -657,12 +658,6 @@
     border-color: color-mix(in srgb, var(--emphasis) 55%, transparent);
     background: color-mix(in srgb, var(--emphasis) 18%, var(--background));
 }
-.vst-region-btn-delete:hover {
-    border-color: var(--danger-button-border, var(--red));
-    color: var(--danger-button-foreground, var(--red));
-    background: color-mix(in srgb, var(--red) 16%, var(--background));
-}
-
 .vst-region-resize {
     position: absolute;
     top: 0;
@@ -916,6 +911,7 @@
     position: absolute;
     top: 2px;
     bottom: 2px;
+    user-select: none;
     border-radius: var(--vst-radius-sm);
     border: 1px solid
         color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
@@ -1231,6 +1227,7 @@
     transform: translateX(-50%);
     display: flex;
     cursor: grab;
+    user-select: none;
     z-index: 2;
 }
 .vst-refs-align-start {
@@ -1332,7 +1329,6 @@
     border-color: var(--red);
     background: color-mix(in srgb, var(--red) 16%, var(--background));
 }
-
 /* --- Settings chip (topbar) + popover --- */
 .vst-settings-chip {
     display: inline-flex;

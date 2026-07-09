@@ -115,7 +115,6 @@ const renderRegions = (body: HTMLElement, count: number): void => {
             `<div class="vst-region" data-clip-idx="${i}">` +
             `<span class="vst-region-name">Clip ${i}</span>` +
             `<button type="button" data-vst-region-action="skip"></button>` +
-            `<button type="button" data-vst-region-action="delete"></button>` +
             `<div class="vst-region-resize"></div>` +
             `</div>`,
     ).join("");
@@ -255,7 +254,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         );
     });
 
-    it("the delete button removes the clip via saveClips", () => {
+    it("shift+click removes the clip via saveClips", () => {
         clipsSection(durationClips([1, 2, 3]));
         const body = makeBody();
         renderRegions(body, 3);
@@ -264,11 +263,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         linking = createTimelineLinking();
         linking.attach(body);
 
-        region(body, 1)
-            .querySelector<HTMLButtonElement>(
-                "[data-vst-region-action='delete']",
-            )
-            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        region(body, 1).dispatchEvent(
+            new MouseEvent("click", { bubbles: true, shiftKey: true }),
+        );
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedClips(saveSpy).map((clip) => clip.duration)).toEqual([
