@@ -64,7 +64,6 @@ export interface PromptWindow {
     prompt: string;
     start: number;
     duration: number;
-    skipped: boolean;
 }
 
 export interface RefImage {
@@ -90,7 +89,6 @@ export interface Clip {
     reuseAudio: boolean;
     uploadedAudio: UploadedAudio | null;
     prompt: string;
-    negativePrompt: string;
     promptWindows: PromptWindow[];
     refs: RefImage[];
     stages: Stage[];
@@ -98,17 +96,11 @@ export interface Clip {
 
 export type StoredRefImage = Pick<
     RefImage,
-    | "expanded"
-    | "source"
-    | "uploadFileName"
-    | "uploadedImage"
-    | "frame"
-    | "fromEnd"
+    "source" | "uploadFileName" | "uploadedImage" | "frame" | "fromEnd"
 >;
 
 export type StoredStage = Pick<
     Stage,
-    | "expanded"
     | "skipped"
     | "control"
     | "controlNetStrength"
@@ -124,9 +116,7 @@ export type StoredStage = Pick<
 
 export type StoredClip = Pick<
     Clip,
-    | "expanded"
     | "skipped"
-    | "hue"
     | "duration"
     | "audioSource"
     | "controlNetSource"
@@ -136,10 +126,7 @@ export type StoredClip = Pick<
     | "clipLengthFromControlNet"
     | "reuseAudio"
     | "uploadedAudio"
-    | "prompt"
-    | "negativePrompt"
 > & {
-    promptWindows: PromptWindow[];
     refs: StoredRefImage[];
     stages: StoredStage[];
 };

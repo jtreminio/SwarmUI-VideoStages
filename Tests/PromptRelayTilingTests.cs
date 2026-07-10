@@ -6,13 +6,13 @@ namespace VideoStages.Tests;
 /// <summary>
 /// Unit tests for <see cref="LtxStageExecutor.TilePromptWindows"/> — the pure geometry that turns
 /// begin/end MINOR prompt windows into the Prompt Relay node's end-to-end <c>{prompt, seconds}</c>
-/// segment list. Gaps (and skipped/blank windows) become blank segments the node later fills with the
+/// segment list. Gaps (and blank windows) become blank segments the node later fills with the
 /// MAJOR/global prompt.
 /// </summary>
 public class PromptRelayTilingTests
 {
-    private static PromptWindowSpec Window(string prompt, double start, double duration, bool skipped = false) =>
-        new(prompt, start, duration, skipped);
+    private static PromptWindowSpec Window(string prompt, double start, double duration) =>
+        new(prompt, start, duration);
 
     [Fact]
     public void Empty_window_list_tiles_to_nothing()
@@ -68,16 +68,6 @@ public class PromptRelayTilingTests
     }
 
     [Fact]
-    public void A_lone_skipped_window_leaves_no_active_minor_so_no_tiling()
-    {
-        var tiled = LtxStageExecutor.TilePromptWindows(
-            [Window("skipped", start: 1, duration: 1, skipped: true)],
-            clipSeconds: 4);
-
-        Assert.Empty(tiled);
-    }
-
-    [Fact]
     public void A_lone_blank_window_leaves_no_active_minor_so_no_tiling()
     {
         var tiled = LtxStageExecutor.TilePromptWindows(
@@ -85,17 +75,6 @@ public class PromptRelayTilingTests
             clipSeconds: 4);
 
         Assert.Empty(tiled);
-    }
-
-    [Fact]
-    public void Skipped_window_is_a_gap_around_an_active_minor()
-    {
-        var tiled = LtxStageExecutor.TilePromptWindows(
-            [Window("skipped", start: 0, duration: 1, skipped: true), Window("live", start: 2, duration: 1)],
-            clipSeconds: 4);
-
-        // The skipped window contributes no segment; only "live" and the surrounding gaps tile.
-        Assert.Equal([("", 2.0), ("live", 1.0), ("", 1.0)], tiled);
     }
 
     [Fact]

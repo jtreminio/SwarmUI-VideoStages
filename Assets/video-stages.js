@@ -424,8 +424,7 @@
     return {
       prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
       start,
-      duration,
-      skipped: !!readProp(raw, "skipped", "Skipped")
+      duration
     };
   };
   var normalizePromptWindows = (rawClip) => {
@@ -588,7 +587,6 @@
       reuseAudio: false,
       uploadedAudio: null,
       prompt: "",
-      negativePrompt: "",
       promptWindows: [],
       refs,
       stages: [
@@ -792,7 +790,6 @@
       reuseAudio: !!rawClip.reuseAudio,
       uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
       prompt: `${readProp(rawClip, "prompt", "Prompt") ?? ""}`,
-      negativePrompt: `${readProp(rawClip, "negativePrompt", "NegativePrompt") ?? ""}`,
       promptWindows: normalizePromptWindows(rawClip),
       refs,
       stages
@@ -800,56 +797,229 @@
     return clip;
   };
 
+  // frontend/promptSegments.ts
+  var BOUNDARY_RE = /<videoclip(?=[>[])|<videostages\[/gi;
+  var TAG_RE = /^<videoclip(?:\[([^\]]*)\])?(?::([^>]*))?>$/i;
+  var INDEX_RE = /^\d+$/;
+  var FLOAT_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+  var preserved = {
+    owned: null,
+    clip: null,
+    window: null
+  };
+  var parseWindowValue = (value) => {
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.includes(",")) {
+      return null;
+    }
+    const dash = trimmed.indexOf("-");
+    if (dash <= 0 || dash >= trimmed.length - 1) {
+      return null;
+    }
+    const left = trimmed.slice(0, dash).trim();
+    const right = trimmed.slice(dash + 1).trim();
+    if (!FLOAT_RE.test(left) || !FLOAT_RE.test(right)) {
+      return null;
+    }
+    const start = Math.max(0, Number.parseFloat(left));
+    const end = Number.parseFloat(right);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      return null;
+    }
+    return { start, end };
+  };
+  var classify = (tagRaw) => {
+    const match = TAG_RE.exec(tagRaw);
+    if (!match) {
+      return preserved;
+    }
+    const bracket = match[1];
+    const value = match[2];
+    if (bracket === void 0) {
+      return preserved;
+    }
+    const tokens = bracket.split(",").map((token) => token.trim());
+    if (tokens.length !== 1 || !INDEX_RE.test(tokens[0])) {
+      return preserved;
+    }
+    const clip = Number.parseInt(tokens[0], 10);
+    if (value === void 0) {
+      return { owned: "section", clip, window: null };
+    }
+    const window2 = parseWindowValue(value);
+    if (window2) {
+      return { owned: "window", clip, window: window2 };
+    }
+    return preserved;
+  };
+  var tokenizePrompt = (prompt) => {
+    const text = prompt ?? "";
+    BOUNDARY_RE.lastIndex = 0;
+    const starts = [];
+    for (let match = BOUNDARY_RE.exec(text); match !== null; match = BOUNDARY_RE.exec(text)) {
+      starts.push(match.index);
+    }
+    if (starts.length === 0) {
+      return { leading: text, tags: [] };
+    }
+    const leading = text.slice(0, starts[0]);
+    const tags = [];
+    for (let i = 0; i < starts.length; i++) {
+      const start = starts[i];
+      const nextStart = i + 1 < starts.length ? starts[i + 1] : text.length;
+      const span = text.slice(start, nextStart);
+      const close = span.indexOf(">");
+      const tagRaw = close < 0 ? span : span.slice(0, close + 1);
+      const body = close < 0 ? "" : span.slice(close + 1);
+      tags.push({ tagRaw, body, ...classify(tagRaw) });
+    }
+    return { leading, tags };
+  };
+  var formatSeconds = (value) => Number.parseFloat(value.toFixed(3)).toString();
+  var authorClip = (index, clip) => {
+    if (!clip) {
+      return "";
+    }
+    const pieces = [];
+    const mainPrompt = (clip.prompt ?? "").trim();
+    if (mainPrompt) {
+      pieces.push(`<videoclip[${index}]>${mainPrompt}`);
+    }
+    const windows = [...clip.windows ?? []].filter((w) => w.duration > 0).sort((a, b) => a.start - b.start);
+    for (const win of windows) {
+      const start = Math.max(0, win.start);
+      const startText = formatSeconds(start);
+      const endText = formatSeconds(start + win.duration);
+      const winPrompt = (win.prompt ?? "").trim();
+      pieces.push(
+        `<videoclip[${index}]:${startText}-${endText}>${winPrompt}`
+      );
+    }
+    return pieces.join("\n");
+  };
+  var serializeClipPrompts = (prompt, clips) => {
+    const { leading, tags } = tokenizePrompt(prompt);
+    const blocks = [];
+    const leadTrimmed = leading.trimEnd();
+    if (leadTrimmed) {
+      blocks.push(leadTrimmed);
+    }
+    const emitted = /* @__PURE__ */ new Set();
+    const emitClip = (index) => {
+      if (emitted.has(index)) {
+        return;
+      }
+      emitted.add(index);
+      const block = authorClip(index, clips[index]);
+      if (block) {
+        blocks.push(block);
+      }
+    };
+    for (const tag of tags) {
+      if (tag.owned !== null) {
+        const index = tag.clip ?? -1;
+        if (index >= 0 && index < clips.length) {
+          emitClip(index);
+        }
+        continue;
+      }
+      const raw = (tag.tagRaw + tag.body).trimEnd();
+      if (raw) {
+        blocks.push(raw);
+      }
+    }
+    for (let index = 0; index < clips.length; index++) {
+      emitClip(index);
+    }
+    return blocks.join("\n");
+  };
+  var parseClipPrompts = (prompt) => {
+    const { tags } = tokenizePrompt(prompt);
+    const sections = /* @__PURE__ */ new Map();
+    const windows = /* @__PURE__ */ new Map();
+    for (const tag of tags) {
+      if (tag.owned === "section" && tag.clip !== null) {
+        if (!sections.has(tag.clip)) {
+          sections.set(tag.clip, tag.body.trim());
+        }
+      } else if (tag.owned === "window" && tag.clip !== null && tag.window) {
+        const list = windows.get(tag.clip) ?? [];
+        list.push({
+          start: Math.max(0, tag.window.start),
+          duration: tag.window.end - tag.window.start,
+          prompt: tag.body.trim()
+        });
+        windows.set(tag.clip, list);
+      }
+    }
+    for (const list of windows.values()) {
+      list.sort((a, b) => a.start - b.start);
+    }
+    return { sections, windows };
+  };
+  var extractGlobalPrompt = (prompt) => tokenizePrompt(prompt).leading.trim();
+
   // frontend/swarmInputs.ts
-  var VIDEOSTAGES_OPENER = "<videostages>";
+  var DATA_INPUT_ID = "input_videostages";
+  var warnedMissingDataInput = false;
   var getPromptInput = () => {
     const el = document.getElementById("input_prompt");
     return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el : null;
   };
-  var readVideoStagesSection = () => {
-    const value = getPromptInput()?.value ?? "";
-    const at = value.indexOf(VIDEOSTAGES_OPENER);
-    if (at < 0) {
-      return "";
+  var getDataInput = () => {
+    const el = document.getElementById(DATA_INPUT_ID);
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      return el;
     }
-    const rest = value.slice(at + VIDEOSTAGES_OPENER.length);
-    const stop = rest.indexOf("<");
-    return (stop < 0 ? rest : rest.slice(0, stop)).trim();
+    if (!warnedMissingDataInput) {
+      warnedMissingDataInput = true;
+      console.warn(
+        `VideoStages: Data param input not found (#${DATA_INPUT_ID}).`
+      );
+    }
+    return null;
   };
-  var writeVideoStagesSection = (json, notify = true) => {
-    const el = getPromptInput();
+  var readDataParam = () => getDataInput()?.value ?? "";
+  var writeDataParam = (json, notify = true) => {
+    const el = getDataInput();
     if (!el) {
       return;
     }
-    const escaped = json.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
-    const section = VIDEOSTAGES_OPENER + escaped;
-    const prompt = el.value ?? "";
-    const at = prompt.indexOf(VIDEOSTAGES_OPENER);
-    if (at < 0) {
-      const sep = prompt.length === 0 || prompt.endsWith("\n") ? "" : "\n";
-      el.value = prompt + sep + section;
-    } else {
-      const afterOpener = at + VIDEOSTAGES_OPENER.length;
-      const rest = prompt.slice(afterOpener);
-      const stop = rest.indexOf("<");
-      const spanEnd = stop < 0 ? prompt.length : afterOpener + stop;
-      el.value = prompt.slice(0, at) + section + prompt.slice(spanEnd);
-    }
+    el.value = json;
     if (notify) {
       triggerChangeFor(el);
     }
   };
-  var readGlobalPrompt = () => {
-    const value = getPromptInput()?.value ?? "";
-    const at = value.indexOf(VIDEOSTAGES_OPENER);
-    if (at < 0) {
-      return value.trim();
+  var readStateToken = () => `${readDataParam()}\0${getPromptInput()?.value ?? ""}`;
+  var writeClipPrompts = (clips, notify = true) => {
+    const el = getPromptInput();
+    if (!el) {
+      return;
     }
-    const afterOpener = at + VIDEOSTAGES_OPENER.length;
-    const rest = value.slice(afterOpener);
-    const stop = rest.indexOf("<");
-    const spanEnd = stop < 0 ? value.length : afterOpener + stop;
-    return (value.slice(0, at) + value.slice(spanEnd)).trim();
+    el.value = serializeClipPrompts(el.value ?? "", clips);
+    if (notify) {
+      triggerChangeFor(el);
+    }
+  };
+  var readGlobalPrompt = () => extractGlobalPrompt(getPromptInput()?.value ?? "");
+  var readCarrierSnapshot = () => JSON.stringify({
+    data: readDataParam(),
+    prompt: getPromptInput()?.value ?? ""
+  });
+  var restoreCarrierSnapshot = (snapshot) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(snapshot);
+    } catch {
+      return;
+    }
+    writeDataParam(typeof parsed.data === "string" ? parsed.data : "", false);
+    const el = getPromptInput();
+    if (!el) {
+      return;
+    }
+    el.value = typeof parsed.prompt === "string" ? parsed.prompt : "";
+    triggerChangeFor(el);
   };
   var getGroupToggle = () => utils.getInputElement("input_group_content_videostages_toggle");
   var getRootModelInput = () => utils.getInputElement("input_model");
@@ -1026,8 +1196,77 @@
     };
   };
 
-  // frontend/persistence.ts
+  // frontend/uiState.ts
+  var UI_STATE_KEY = "videostages_ui_state";
   var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var serializeUiState = (clips) => {
+    const state = {
+      clips: clips.map((clip) => ({
+        hue: typeof clip.hue === "number" ? clip.hue : null,
+        expanded: clip.expanded !== false,
+        stages: clip.stages.map((stage) => ({
+          expanded: stage.expanded !== false
+        })),
+        refs: clip.refs.map((ref) => ({
+          expanded: ref.expanded !== false
+        }))
+      }))
+    };
+    return JSON.stringify(state);
+  };
+  var applyUiStateFrom = (raw, clips) => {
+    if (!raw) {
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const storedClips = isRecord2(parsed) && Array.isArray(parsed.clips) ? parsed.clips : [];
+    for (let i = 0; i < clips.length; i++) {
+      const stored = storedClips[i];
+      if (!isRecord2(stored)) {
+        continue;
+      }
+      if (typeof stored.hue === "number" && Number.isFinite(stored.hue)) {
+        clips[i].hue = stored.hue;
+      }
+      if (typeof stored.expanded === "boolean") {
+        clips[i].expanded = stored.expanded;
+      }
+      const stages = Array.isArray(stored.stages) ? stored.stages : [];
+      for (let s = 0; s < clips[i].stages.length; s++) {
+        const storedStage = stages[s];
+        if (isRecord2(storedStage) && typeof storedStage.expanded === "boolean") {
+          clips[i].stages[s].expanded = storedStage.expanded;
+        }
+      }
+      const refs = Array.isArray(stored.refs) ? stored.refs : [];
+      for (let r = 0; r < clips[i].refs.length; r++) {
+        const storedRef = refs[r];
+        if (isRecord2(storedRef) && typeof storedRef.expanded === "boolean") {
+          clips[i].refs[r].expanded = storedRef.expanded;
+        }
+      }
+    }
+  };
+  var applyUiState = (clips) => {
+    try {
+      applyUiStateFrom(localStorage.getItem(UI_STATE_KEY), clips);
+    } catch {
+    }
+  };
+  var saveUiState = (clips) => {
+    try {
+      localStorage.setItem(UI_STATE_KEY, serializeUiState(clips));
+    } catch {
+    }
+  };
+
+  // frontend/persistence.ts
+  var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var toIntOrNull = (value) => {
     if (value == null || value === "") {
       return null;
@@ -1055,9 +1294,7 @@
   });
   var serializeClipsForStorage = (clips) => clips.map(
     (clip) => ({
-      expanded: clip.expanded,
       skipped: clip.skipped,
-      hue: clip.hue,
       duration: clip.duration,
       audioSource: clip.audioSource,
       controlNetSource: clip.controlNetSource,
@@ -1067,16 +1304,7 @@
       clipLengthFromControlNet: clip.clipLengthFromControlNet,
       reuseAudio: clip.reuseAudio,
       uploadedAudio: clip.uploadedAudio,
-      prompt: clip.prompt,
-      negativePrompt: clip.negativePrompt,
-      promptWindows: clip.promptWindows.map((window2) => ({
-        prompt: window2.prompt,
-        start: window2.start,
-        duration: window2.duration,
-        skipped: window2.skipped
-      })),
       refs: clip.refs.map((ref) => ({
-        expanded: ref.expanded,
         source: ref.source,
         uploadFileName: ref.uploadFileName,
         uploadedImage: ref.uploadedImage,
@@ -1084,7 +1312,6 @@
         fromEnd: ref.fromEnd
       })),
       stages: clip.stages.map((stage) => ({
-        expanded: stage.expanded,
         skipped: stage.skipped,
         control: stage.control,
         controlNetStrength: stage.controlNetStrength,
@@ -1112,6 +1339,21 @@
     return JSON.stringify(out);
   };
   var lastSerializedState = "";
+  var overlayPromptAndUiState = (clips) => {
+    const { sections, windows } = parseClipPrompts(
+      getPromptInput()?.value ?? ""
+    );
+    for (let i = 0; i < clips.length; i++) {
+      clips[i].prompt = sections.get(i) ?? "";
+      clips[i].promptWindows = (windows.get(i) ?? []).map((window2) => ({
+        prompt: window2.prompt,
+        start: window2.start,
+        duration: window2.duration
+      }));
+    }
+    applyUiState(clips);
+    assignMissingHues(clips);
+  };
   var parseSerializedState = (serialized, inherited) => {
     try {
       const parsed = JSON.parse(serialized);
@@ -1119,7 +1361,7 @@
       let stored = {};
       if (Array.isArray(parsed)) {
         clipsRaw = parsed;
-      } else if (isRecord2(parsed)) {
+      } else if (isRecord3(parsed)) {
         clipsRaw = Array.isArray(parsed.clips) ? parsed.clips : [];
         stored = {
           width: parsed.width,
@@ -1131,12 +1373,12 @@
       }
       const clips = clipsRaw.map(
         (el) => normalizeClip(
-          isRecord2(el) ? el : {},
+          isRecord3(el) ? el : {},
           getRootDefaults,
           getDefaultStageModel
         )
       );
-      assignMissingHues(clips);
+      overlayPromptAndUiState(clips);
       return rootConfig(resolveRootDims(inherited, stored), clips);
     } catch {
       return null;
@@ -1149,9 +1391,11 @@
       height: defaults.height,
       fps: defaults.fps
     };
-    const serialized = readVideoStagesSection() || lastSerializedState;
+    const serialized = readDataParam() || lastSerializedState;
     if (!serialized) {
-      return rootConfig(resolveRootDims(inherited, {}), []);
+      const clips = [];
+      overlayPromptAndUiState(clips);
+      return rootConfig(resolveRootDims(inherited, {}), clips);
     }
     let parsedState = parseSerializedState(serialized, inherited);
     if (parsedState) {
@@ -1171,7 +1415,15 @@
     const serialized = serializeStateForStorage(state);
     lastSerializedState = serialized;
     const willNotifyDom = options?.notifyDomChange !== false;
-    writeVideoStagesSection(serialized, willNotifyDom);
+    writeDataParam(serialized, willNotifyDom);
+    writeClipPrompts(
+      state.clips.map((clip) => ({
+        prompt: clip.prompt,
+        windows: clip.promptWindows
+      })),
+      willNotifyDom
+    );
+    saveUiState(state.clips);
     callbacks?.onAfterSerialize?.(serialized);
     videoStagesDebugLog("persistence", "saveState", {
       notifyDomChange: options?.notifyDomChange,
@@ -1217,7 +1469,7 @@
     let activeWrap = null;
     let editingAnchor = null;
     let outsideMouseHandler = null;
-    const isStale = (sourceJson) => readVideoStagesSection() !== sourceJson;
+    const isStale = (sourceJson) => readStateToken() !== sourceJson;
     const closeEditor = () => {
       if (outsideMouseHandler) {
         document.removeEventListener(
@@ -1294,7 +1546,7 @@
       if (!clip) {
         return;
       }
-      const sourceJson = readVideoStagesSection();
+      const sourceJson = readStateToken();
       const draft = draftFromClip(clip);
       const controlNetEnabled = `${clip.controlNetLora ?? ""}`.trim() !== "";
       const host = boundBody ?? document.body;
@@ -1978,7 +2230,7 @@
       endSec,
       leftPx: startSec * pxPerSecond,
       widthPx: Math.max(2, (endSec - startSec) * pxPerSecond),
-      active: !window2.skipped && `${window2.prompt ?? ""}`.trim() !== ""
+      active: `${window2.prompt ?? ""}`.trim() !== ""
     };
   };
   var PROMPT_PLACEHOLDER = "(no prompt)";
@@ -2008,10 +2260,9 @@
       );
       const minorSegs = windows.map((w, j) => {
         const g = promptWindowGeom(layout, w, pxPerSecond);
-        const skippedClass = w.skipped ? " vst-minor-skipped" : "";
         const text = `${w.prompt ?? ""}`.trim();
         const label = text === "" ? "(empty)" : truncatePrompt(text, 60);
-        return `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeAttr(`${text || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-actions"><button type="button" class="vst-minor-act" data-vst-minor-action="skip" title="${w.skipped ? "Enable this minor prompt" : "Skip this minor prompt"}" aria-label="${w.skipped ? "Enable minor prompt" : "Skip minor prompt"}">${w.skipped ? "○" : "◉"}</button></span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeAttr(`${text || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
       }).join("");
       parts.push(
         `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="Click empty space to add a minor prompt">${minorSegs}</div>`
@@ -2472,7 +2723,7 @@
       saveClips(clips);
     };
     const applyToggleKeyframeFromEnd = (clipIdx, refIdx, sourceJson) => {
-      if (readVideoStagesSection() !== sourceJson) {
+      if (readStateToken() !== sourceJson) {
         return;
       }
       const clips = getClips();
@@ -2531,7 +2782,7 @@
           fps: currentFps(),
           fromEnd: ref.fromEnd === true,
           shiftKey: me.shiftKey,
-          sourceJson: readVideoStagesSection()
+          sourceJson: readStateToken()
         };
         me.preventDefault();
         return;
@@ -2558,7 +2809,7 @@
           startLeftPx: rect.left,
           originalWidthPx: rect.width,
           active: false,
-          sourceJson: readVideoStagesSection()
+          sourceJson: readStateToken()
         };
         me.preventDefault();
         return;
@@ -2573,7 +2824,7 @@
         startX: me.clientX,
         startY: me.clientY,
         active: false,
-        sourceJson: readVideoStagesSection()
+        sourceJson: readStateToken()
       };
     };
     const onDocMouseMove = (body, event) => {
@@ -2663,7 +2914,7 @@
           }
           return;
         }
-        if (readVideoStagesSection() !== ks.sourceJson) {
+        if (readStateToken() !== ks.sourceJson) {
           return;
         }
         const newFrame = pxToFrame(
@@ -2691,7 +2942,7 @@
         }
         const width = me2.clientX - rs.startLeftPx;
         suppressClick = true;
-        if (readVideoStagesSection() !== rs.sourceJson) {
+        if (readStateToken() !== rs.sourceJson) {
           return;
         }
         const clips2 = getClips();
@@ -2734,7 +2985,7 @@
         markSelection(body);
         return;
       }
-      if (readVideoStagesSection() !== state.sourceJson) {
+      if (readStateToken() !== state.sourceJson) {
         return;
       }
       const clips = getClips();
@@ -2785,7 +3036,7 @@
       if (clipIdx === null || refIdx === null) {
         return;
       }
-      applyToggleKeyframeFromEnd(clipIdx, refIdx, readVideoStagesSection());
+      applyToggleKeyframeFromEnd(clipIdx, refIdx, readStateToken());
     };
     let bodyClickHandler = null;
     let bodyDownHandler = null;
@@ -2932,7 +3183,7 @@
     };
     const openEditor = (anchor, label, initial, placeholder, commit, onDelete = null) => {
       closeEditor();
-      const sourceJson = readVideoStagesSection();
+      const sourceJson = readStateToken();
       const hostRect = (boundBody ?? document.body).getBoundingClientRect();
       const viewportW = window.innerWidth || document.documentElement.clientWidth;
       const width = clamp(Math.round(hostRect.width - 32), 280, 560);
@@ -3024,7 +3275,7 @@
       editor.focus();
       editor.select();
     };
-    const isStale = (sourceJson) => readVideoStagesSection() !== sourceJson;
+    const isStale = (sourceJson) => readStateToken() !== sourceJson;
     const commitMajorPrompt = (clipIdx, text) => {
       const clips = getClips();
       const clip = clips[clipIdx];
@@ -3050,13 +3301,10 @@
       if (!clip || !window2) {
         return;
       }
-      if (action === "delete") {
-        clip.promptWindows.splice(windowIdx, 1);
-      } else if (action === "skip") {
-        window2.skipped = !window2.skipped;
-      } else {
+      if (action !== "delete") {
         return;
       }
+      clip.promptWindows.splice(windowIdx, 1);
       saveClips(clips);
     };
     const commitMove = (state, dxPx, pps) => {
@@ -3159,8 +3407,7 @@
       const window2 = {
         prompt: "",
         start: roundSeconds(start),
-        duration: roundSeconds(duration),
-        skipped: false
+        duration: roundSeconds(duration)
       };
       clip.promptWindows.push(window2);
       clip.promptWindows.sort((x, y) => x.start - y.start);
@@ -3214,7 +3461,7 @@
           originalLeft: seg2.style.left,
           originalWidth: seg2.style.width,
           active: false,
-          sourceJson: readVideoStagesSection()
+          sourceJson: readStateToken()
         };
         me.preventDefault();
         return;
@@ -3249,7 +3496,7 @@
           boundHi,
           originalLeft: seg.style.left,
           active: false,
-          sourceJson: readVideoStagesSection()
+          sourceJson: readStateToken()
         };
         me.preventDefault();
         return;
@@ -3277,7 +3524,7 @@
           clipDuration,
           ghost: null,
           active: false,
-          sourceJson: readVideoStagesSection()
+          sourceJson: readStateToken()
         };
         me.preventDefault();
       }
@@ -3610,7 +3857,7 @@
         ph.textContent = `R ${fromEnd ? "-" : ""}${frame}`;
       }
     };
-    const isStale = (sourceJson) => readVideoStagesSection() !== sourceJson;
+    const isStale = (sourceJson) => readStateToken() !== sourceJson;
     const closeEditor = () => {
       if (outsideMouseHandler) {
         document.removeEventListener(
@@ -3711,7 +3958,7 @@
       if (!draft) {
         return;
       }
-      const sourceJson = readVideoStagesSection();
+      const sourceJson = readStateToken();
       const frameMax = getReferenceFrameMax(getRootDefaults, clip);
       const fps = currentFps2();
       const anchorOriginalLeft = anchor.style.left;
@@ -3990,7 +4237,7 @@
         fps: currentFps2(),
         fromEnd: ref.fromEnd === true,
         active: false,
-        sourceJson: readVideoStagesSection()
+        sourceJson: readStateToken()
       };
       me.preventDefault();
     };
@@ -4073,7 +4320,7 @@
         const refIdx = parseIntAttr2(thumb, "data-ref-idx");
         if (clipIdx2 !== null && refIdx !== null) {
           if (event.shiftKey) {
-            deleteRef(clipIdx2, refIdx, readVideoStagesSection());
+            deleteRef(clipIdx2, refIdx, readStateToken());
           } else {
             openEditor(thumb, clipIdx2, refIdx);
           }
@@ -4100,7 +4347,7 @@
         currentFps2(),
         false
       );
-      addRefAtFrame(clipIdx, frame, readVideoStagesSection());
+      addRefAtFrame(clipIdx, frame, readStateToken());
     };
     const onBodyKeyDown = (event) => {
       const ke = event;
@@ -4439,8 +4686,8 @@
     const referencesTrack = createTimelineReferencesTrack();
     const settings = createTimelineSettings(() => refresh());
     const history = createTimelineHistory({
-      read: () => readVideoStagesSection(),
-      write: (value) => writeVideoStagesSection(value)
+      read: () => readCarrierSnapshot(),
+      write: (value) => restoreCarrierSnapshot(value)
     });
     const VIEW_STATE_KEY = "videostages.timeline.viewState";
     const loadViewState = () => {
@@ -4545,7 +4792,7 @@
       if (!body) {
         return;
       }
-      lastSeenValue = readVideoStagesSection();
+      lastSeenValue = readStateToken();
       lastDimsSignature = readInheritedDimsSignature();
       history.capture();
       try {
@@ -4580,7 +4827,7 @@
       }
     };
     const onInputChanged = () => {
-      if (readVideoStagesSection() !== lastSeenValue) {
+      if (readStateToken() !== lastSeenValue) {
         refresh();
       }
     };
@@ -4615,10 +4862,10 @@
       if (inputSyncInterval) {
         return;
       }
-      lastSeenValue = readVideoStagesSection();
+      lastSeenValue = readStateToken();
       lastDimsSignature = readInheritedDimsSignature();
       inputSyncInterval = setInterval(() => {
-        if (readVideoStagesSection() !== lastSeenValue || readInheritedDimsSignature() !== lastDimsSignature) {
+        if (readStateToken() !== lastSeenValue || readInheritedDimsSignature() !== lastDimsSignature) {
           refresh();
         }
       }, INPUT_SYNC_INTERVAL_MS);
@@ -4695,12 +4942,12 @@
       return;
     }
     promptTabComplete.registerPrefix(
-      "videostages",
-      "Configure all VideoStages settings as one JSON prompt section.",
+      "videoclip",
+      "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
       () => [
-        '\nUse "<videostages>{ ...JSON... }" to configure clips, stages, refs, audio, prompts and loras in one JSON blob.',
-        '\nExample: <videostages>{"clips":[{"prompt":"a red fox","stages":[{"model":"...","steps":30}]}]}',
-        '\nPer-clip "prompt" and per-clip / per-stage "loras" fold into this JSON — there is no more <videoclip> section.'
+        "\n<videoclip[0]>clip 0's prompt text — everything until the next <videoclip...> tag.",
+        "\n<videoclip[0]:1.5-4>a prompt window on clip 0 from 1.5s to 4s.",
+        "\nThe timeline owns these; structured config (stages, refs, audio) rides in the hidden Data param."
       ],
       true
     );

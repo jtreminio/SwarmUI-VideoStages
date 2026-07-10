@@ -1,18 +1,13 @@
 import { parseBase2EditStageIndex, ROOT_DIMENSION_MIN } from "./constants";
+import {
+    type ClipTextInput,
+    extractGlobalPrompt,
+    serializeClipPrompts,
+} from "./promptSegments";
 import { utils } from "./utils";
 
-export const getClipsInput = ():
-    | HTMLInputElement
-    | HTMLTextAreaElement
-    | null => {
-    const el = document.getElementById("input_videostages");
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        return el;
-    }
-    return null;
-};
-
-const VIDEOSTAGES_OPENER = "<videostages>";
+const DATA_INPUT_ID = "input_videostages";
+let warnedMissingDataInput = false;
 
 export const getPromptInput = ():
     | HTMLInputElement
@@ -24,52 +19,76 @@ export const getPromptInput = ():
         : null;
 };
 
-export const readVideoStagesSection = (): string => {
-    const value = getPromptInput()?.value ?? "";
-    const at = value.indexOf(VIDEOSTAGES_OPENER);
-    if (at < 0) {
-        return "";
+export const getDataInput = ():
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | null => {
+    const el = document.getElementById(DATA_INPUT_ID);
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        return el;
     }
-    const rest = value.slice(at + VIDEOSTAGES_OPENER.length);
-    const stop = rest.indexOf("<");
-    return (stop < 0 ? rest : rest.slice(0, stop)).trim();
+    if (!warnedMissingDataInput) {
+        warnedMissingDataInput = true;
+        console.warn(
+            `VideoStages: Data param input not found (#${DATA_INPUT_ID}).`,
+        );
+    }
+    return null;
 };
 
-export const writeVideoStagesSection = (json: string, notify = true): void => {
-    const el = getPromptInput();
+export const readDataParam = (): string => getDataInput()?.value ?? "";
+
+export const writeDataParam = (json: string, notify = true): void => {
+    const el = getDataInput();
     if (!el) {
         return;
     }
-    const escaped = json.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
-    const section = VIDEOSTAGES_OPENER + escaped;
-    const prompt = el.value ?? "";
-    const at = prompt.indexOf(VIDEOSTAGES_OPENER);
-    if (at < 0) {
-        const sep = prompt.length === 0 || prompt.endsWith("\n") ? "" : "\n";
-        el.value = prompt + sep + section;
-    } else {
-        const afterOpener = at + VIDEOSTAGES_OPENER.length;
-        const rest = prompt.slice(afterOpener);
-        const stop = rest.indexOf("<");
-        const spanEnd = stop < 0 ? prompt.length : afterOpener + stop;
-        el.value = prompt.slice(0, at) + section + prompt.slice(spanEnd);
-    }
+    el.value = json;
     if (notify) {
         triggerChangeFor(el);
     }
 };
 
-export const readGlobalPrompt = (): string => {
-    const value = getPromptInput()?.value ?? "";
-    const at = value.indexOf(VIDEOSTAGES_OPENER);
-    if (at < 0) {
-        return value.trim();
+export const readStateToken = (): string =>
+    `${readDataParam()}\x00${getPromptInput()?.value ?? ""}`;
+
+export const writeClipPrompts = (
+    clips: ClipTextInput[],
+    notify = true,
+): void => {
+    const el = getPromptInput();
+    if (!el) {
+        return;
     }
-    const afterOpener = at + VIDEOSTAGES_OPENER.length;
-    const rest = value.slice(afterOpener);
-    const stop = rest.indexOf("<");
-    const spanEnd = stop < 0 ? value.length : afterOpener + stop;
-    return (value.slice(0, at) + value.slice(spanEnd)).trim();
+    el.value = serializeClipPrompts(el.value ?? "", clips);
+    if (notify) {
+        triggerChangeFor(el);
+    }
+};
+
+export const readGlobalPrompt = (): string =>
+    extractGlobalPrompt(getPromptInput()?.value ?? "");
+
+export const readCarrierSnapshot = (): string =>
+    JSON.stringify({
+        data: readDataParam(),
+        prompt: getPromptInput()?.value ?? "",
+    });
+
+export const restoreCarrierSnapshot = (snapshot: string): void => {
+    let parsed: { data?: unknown; prompt?: unknown };
+    try {
+        parsed = JSON.parse(snapshot);
+    } catch {
+        return;
+    }
+    writeDataParam(typeof parsed.data === "string" ? parsed.data : "", false);
+    const el = getPromptInput();
+    if (!el) {
+        return;
+    }
+    el.value = typeof parsed.prompt === "string" ? parsed.prompt : "";
+    triggerChangeFor(el);
 };
 
 export const getCoreDimensionInput = (

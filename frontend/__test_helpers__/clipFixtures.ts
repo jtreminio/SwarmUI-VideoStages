@@ -45,7 +45,6 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     reuseAudio: false,
     uploadedAudio: null,
     prompt: "",
-    negativePrompt: "",
     promptWindows: [],
     refs: [],
     stages: [minimalStage()],

@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import * as persistence from "./persistence";
 import {
     createTimelineAudioTrack,
@@ -34,12 +35,8 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
 });
 
 const mountPrompt = (clips: ClipFixture[]): HTMLTextAreaElement => {
-    const json = JSON.stringify({ clips: clips.map(clipRecord) });
-    const input = document.createElement("textarea");
-    input.id = "input_prompt";
-    input.value = `<videostages>${json}`;
-    document.body.appendChild(input);
-    return input;
+    mountPromptBox("");
+    return mountVideoStagesData({ clips: clips.map(clipRecord) });
 };
 
 const makeBody = (): HTMLElement => {

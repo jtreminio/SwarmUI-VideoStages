@@ -6,7 +6,9 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { __resetPersistenceForTests } from "./persistence";
+import { clearUiStateForTests } from "./uiState";
 import {
     type VideoStagesTimeline,
     videoStagesTimeline,
@@ -35,16 +37,22 @@ const makeClipsJson = (count: number, duration = 2): string =>
         })),
     });
 
-// The config rides in the <videostages> section of the positive prompt, not a dedicated param.
-const section = (json: string): string => `<videostages>${json}`;
+// The structured config now rides in the hidden Data param (`#input_videostages`),
+// NOT in the positive prompt. The timeline binds change/input listeners to
+// `#input_prompt` and additionally polls the combined state token.
+let dataInput: HTMLTextAreaElement;
+let promptInput: HTMLTextAreaElement;
 
-const addPromptInput = (json: string): HTMLTextAreaElement => {
-    const input = document.createElement("textarea");
-    input.id = "input_prompt";
-    input.value = section(json);
-    document.body.appendChild(input);
-    return input;
+const mountState = (json: string): void => {
+    dataInput = mountVideoStagesData(json);
+    promptInput = mountPromptBox("");
 };
+/** Change the clip structure carried in the Data param. */
+const setClips = (json: string): void => {
+    dataInput.value = json;
+};
+/** Fire the DOM signal the timeline listens for (mirrors saveState → triggerChangeFor). */
+const notify = (): void => triggerChangeFor(promptInput);
 
 const regionCount = (): number =>
     document.querySelectorAll(`#${TIMELINE_BODY_ID} .vst-region`).length;
@@ -55,6 +63,7 @@ describe("videoStagesTimeline", () => {
     beforeEach(() => {
         jest.useFakeTimers();
         __resetPersistenceForTests();
+        clearUiStateForTests();
         // Zoom/unit persist to localStorage; clear so one test's zoom never leaks into the next.
         localStorage.clear();
         setupBottomBar();
@@ -68,7 +77,7 @@ describe("videoStagesTimeline", () => {
     });
 
     it("renders one region per clip on init", () => {
-        addPromptInput(makeClipsJson(1));
+        mountState(makeClipsJson(1));
 
         timeline = videoStagesTimeline();
         timeline.init();
@@ -77,55 +86,54 @@ describe("videoStagesTimeline", () => {
         expect(regionCount()).toBe(1);
     });
 
-    it("re-renders when the prompt section dispatches a change signal (triggerChangeFor)", () => {
-        const input = addPromptInput(makeClipsJson(1));
+    it("re-renders when the Data param dispatches a change signal (triggerChangeFor)", () => {
+        mountState(makeClipsJson(1));
 
         timeline = videoStagesTimeline();
         timeline.init();
         expect(regionCount()).toBe(1);
 
-        // Mirrors saveState() → triggerChangeFor(): "input" + "change" dispatched on #input_prompt.
-        input.value = section(makeClipsJson(2));
-        triggerChangeFor(input);
+        setClips(makeClipsJson(2));
+        notify();
 
         expect(regionCount()).toBe(2);
     });
 
     it("keeps refreshing after #input_prompt is replaced and init re-runs", () => {
-        const input = addPromptInput(makeClipsJson(1));
+        mountState(makeClipsJson(1));
 
         timeline = videoStagesTimeline();
         timeline.init();
         expect(regionCount()).toBe(1);
 
         // Simulate a PARAM-panel rebuild that swaps #input_prompt for a fresh element.
-        input.remove();
-        const replacement = addPromptInput(makeClipsJson(1));
+        promptInput.remove();
+        promptInput = mountPromptBox("");
         timeline.init(); // postParamBuildSteps re-runs init → re-bind to the new element.
         expect(regionCount()).toBe(1);
 
-        replacement.value = section(makeClipsJson(3));
-        triggerChangeFor(replacement);
+        setClips(makeClipsJson(3));
+        notify();
 
         expect(regionCount()).toBe(3);
     });
 
-    it("does not re-render when only surrounding prompt prose changes", () => {
-        const input = addPromptInput(makeClipsJson(2));
+    it("keeps the region count stable when only surrounding prompt prose changes", () => {
+        mountState(makeClipsJson(2));
 
         timeline = videoStagesTimeline();
         timeline.init();
         expect(regionCount()).toBe(2);
 
-        // Prepend prose before the section; the extracted section body is unchanged.
-        input.value = `a cinematic shot\n${section(makeClipsJson(2))}`;
-        triggerChangeFor(input);
+        // Editing global prose (no <videoclip> tags) does not change clip structure.
+        promptInput.value = "a cinematic shot";
+        triggerChangeFor(promptInput);
 
         expect(regionCount()).toBe(2);
     });
 
     it("toggles ruler/region labels between seconds and frames in-memory", () => {
-        addPromptInput(makeClipsJson(1, 2));
+        mountState(makeClipsJson(1, 2));
 
         timeline = videoStagesTimeline();
         timeline.init();
@@ -148,7 +156,7 @@ describe("videoStagesTimeline", () => {
     });
 
     it("applies slider zoom on change and stamps the new live zoom on the body", () => {
-        addPromptInput(makeClipsJson(1));
+        mountState(makeClipsJson(1));
         timeline = videoStagesTimeline();
         timeline.init();
         const body = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
@@ -171,12 +179,12 @@ describe("videoStagesTimeline", () => {
     });
 
     it("walks the input history end-to-end via the undo/redo toolbar buttons", () => {
-        const input = addPromptInput(makeClipsJson(1));
+        mountState(makeClipsJson(1));
         timeline = videoStagesTimeline();
         timeline.init();
 
-        input.value = section(makeClipsJson(2));
-        triggerChangeFor(input);
+        setClips(makeClipsJson(2));
+        notify();
         expect(regionCount()).toBe(2);
 
         const body = (): HTMLElement =>
@@ -189,7 +197,7 @@ describe("videoStagesTimeline", () => {
     });
 
     it("live-updates the readout's selected-clip segment on click-select without a re-render", async () => {
-        addPromptInput(makeClipsJson(2));
+        mountState(makeClipsJson(2));
         timeline = videoStagesTimeline();
         timeline.init();
         const body = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
@@ -207,15 +215,15 @@ describe("videoStagesTimeline", () => {
         expect(sel?.textContent).toBe("clip 1");
     });
 
-    it("polls for section drift as a fallback when no event fires", () => {
-        const input = addPromptInput(makeClipsJson(1));
+    it("polls for state drift as a fallback when no event fires", () => {
+        mountState(makeClipsJson(1));
 
         timeline = videoStagesTimeline();
         timeline.init();
         expect(regionCount()).toBe(1);
 
         // Value changes with no "input"/"change" event; the polling fallback catches it.
-        input.value = section(makeClipsJson(4));
+        setClips(makeClipsJson(4));
         jest.advanceTimersByTime(POLL_ADVANCE_MS);
 
         expect(regionCount()).toBe(4);

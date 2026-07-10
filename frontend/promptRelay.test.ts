@@ -11,7 +11,7 @@ describe("normalizePromptWindows", () => {
             promptWindows: [
                 { prompt: "late", start: 3, duration: 1 },
                 { Prompt: "zero", Start: 1, Duration: 0 },
-                { prompt: "early", start: 0, duration: 1, skipped: true },
+                { prompt: "early", start: 0, duration: 1 },
             ],
         });
         expect(windows).toHaveLength(2);
@@ -19,7 +19,6 @@ describe("normalizePromptWindows", () => {
             prompt: "early",
             start: 0,
             duration: 1,
-            skipped: true,
         });
         expect(windows[1].prompt).toBe("late");
     });
@@ -72,13 +71,13 @@ describe("renderPromptTrackRow", () => {
                 duration: 4,
                 prompt: "major",
                 promptWindows: [
-                    { prompt: "loud", start: 1, duration: 1, skipped: false },
-                    { prompt: "quiet", start: 2, duration: 1, skipped: true },
+                    { prompt: "loud", start: 1, duration: 1 },
+                    { prompt: "", start: 2, duration: 1 },
                 ],
             }),
         ]);
         expect((html.match(/data-vst-prompt="minor"/g) ?? []).length).toBe(2);
-        // Only the active (non-skipped) window disables the MAJOR prompt.
+        // Only a window that carries a prompt disables the MAJOR prompt.
         expect((html.match(/vst-major-off/g) ?? []).length).toBe(1);
     });
 
@@ -101,18 +100,18 @@ describe("readGlobalPrompt", () => {
         document.body.appendChild(input);
     };
 
-    it("strips the <videostages> section from the prompt", () => {
-        mountPrompt('a cinematic shot <videostages>{"clips":[]}');
+    it("returns only the text before the first <videoclip> tag", () => {
+        mountPrompt("a cinematic shot <videoclip[0]>a red fox");
         expect(readGlobalPrompt()).toBe("a cinematic shot");
     });
 
-    it("returns the whole prompt when there is no section", () => {
-        mountPrompt("just a prompt");
-        expect(readGlobalPrompt()).toBe("just a prompt");
+    it("returns the whole prompt when there are no videoclip tags", () => {
+        mountPrompt("just a prompt <lora:foo>");
+        expect(readGlobalPrompt()).toBe("just a prompt <lora:foo>");
     });
 
-    it("strips a section at the start, keeping the following tag text", () => {
-        mountPrompt("<videostages>{}<lora:foo>");
-        expect(readGlobalPrompt()).toBe("<lora:foo>");
+    it("stops at a <videostages[...]> override tag too", () => {
+        mountPrompt("lead words <videostages[width]:512>");
+        expect(readGlobalPrompt()).toBe("lead words");
     });
 });

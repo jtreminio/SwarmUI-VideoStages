@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "@jest/globals";
+import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { __resetPersistenceForTests, getState } from "./persistence";
-import { readVideoStagesSection } from "./swarmInputs";
+import { readDataParam } from "./swarmInputs";
 import {
     createTimelineSettings,
     type TimelineSettings,
@@ -8,11 +9,8 @@ import {
 import { renderTimeline } from "./timelineView";
 
 const addPromptInput = (json = '{"clips":[]}'): HTMLTextAreaElement => {
-    const input = document.createElement("textarea");
-    input.id = "input_prompt";
-    input.value = `<videostages>${json}`;
-    document.body.appendChild(input);
-    return input;
+    mountPromptBox("");
+    return mountVideoStagesData(json);
 };
 
 const mountInput = (id: string, value: string): void => {
@@ -23,7 +21,7 @@ const mountInput = (id: string, value: string): void => {
 };
 
 const parseSection = (): Record<string, unknown> =>
-    JSON.parse(readVideoStagesSection()) as Record<string, unknown>;
+    JSON.parse(readDataParam()) as Record<string, unknown>;
 
 describe("timelineSettings", () => {
     let body: HTMLElement;

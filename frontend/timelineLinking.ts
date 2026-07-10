@@ -2,7 +2,7 @@ import { clamp, REF_FRAME_MIN } from "./constants";
 import { getReferenceFrameMax } from "./normalization";
 import { getClips, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
-import { readVideoStagesSection } from "./swarmInputs";
+import { readStateToken } from "./swarmInputs";
 import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
 import {
     applyClipDurationResize,
@@ -296,7 +296,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         refIdx: number,
         sourceJson: string,
     ): void => {
-        if (readVideoStagesSection() !== sourceJson) {
+        if (readStateToken() !== sourceJson) {
             return;
         }
         const clips = getClips();
@@ -361,7 +361,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                 fps: currentFps(),
                 fromEnd: ref.fromEnd === true,
                 shiftKey: me.shiftKey,
-                sourceJson: readVideoStagesSection(),
+                sourceJson: readStateToken(),
             };
             me.preventDefault();
             return;
@@ -388,7 +388,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                 startLeftPx: rect.left,
                 originalWidthPx: rect.width,
                 active: false,
-                sourceJson: readVideoStagesSection(),
+                sourceJson: readStateToken(),
             };
             me.preventDefault();
             return;
@@ -403,7 +403,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             startX: me.clientX,
             startY: me.clientY,
             active: false,
-            sourceJson: readVideoStagesSection(),
+            sourceJson: readStateToken(),
         };
     };
 
@@ -501,7 +501,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                 }
                 return;
             }
-            if (readVideoStagesSection() !== ks.sourceJson) {
+            if (readStateToken() !== ks.sourceJson) {
                 return;
             }
             const newFrame = pxToFrame(
@@ -529,7 +529,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             }
             const width = me.clientX - rs.startLeftPx;
             suppressClick = true;
-            if (readVideoStagesSection() !== rs.sourceJson) {
+            if (readStateToken() !== rs.sourceJson) {
                 return;
             }
             const clips = getClips();
@@ -577,7 +577,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             markSelection(body);
             return;
         }
-        if (readVideoStagesSection() !== state.sourceJson) {
+        if (readStateToken() !== state.sourceJson) {
             return;
         }
         const clips = getClips();
@@ -630,7 +630,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         if (clipIdx === null || refIdx === null) {
             return;
         }
-        applyToggleKeyframeFromEnd(clipIdx, refIdx, readVideoStagesSection());
+        applyToggleKeyframeFromEnd(clipIdx, refIdx, readStateToken());
     };
 
     let bodyClickHandler: ((e: Event) => void) | null = null;

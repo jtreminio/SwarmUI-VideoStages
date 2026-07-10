@@ -226,7 +226,7 @@ export const promptWindowGeom = (
         endSec,
         leftPx: startSec * pxPerSecond,
         widthPx: Math.max(2, (endSec - startSec) * pxPerSecond),
-        active: !window.skipped && `${window.prompt ?? ""}`.trim() !== "",
+        active: `${window.prompt ?? ""}`.trim() !== "",
     };
 };
 
@@ -283,17 +283,13 @@ export const renderPromptTrackRow = (
         const minorSegs = windows
             .map((w, j) => {
                 const g = promptWindowGeom(layout, w, pxPerSecond);
-                const skippedClass = w.skipped ? " vst-minor-skipped" : "";
                 const text = `${w.prompt ?? ""}`.trim();
                 const label =
                     text === "" ? "(empty)" : truncatePrompt(text, 60);
                 return (
-                    `<div class="vst-minor-seg${skippedClass}" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeHtml(`${text || "(empty minor prompt)"} · Shift+click to delete`)}">` +
+                    `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeHtml(`${text || "(empty minor prompt)"} · Shift+click to delete`)}">` +
                     `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span>` +
                     `<span class="vst-minor-text">${escapeHtml(label)}</span>` +
-                    `<span class="vst-minor-actions">` +
-                    `<button type="button" class="vst-minor-act" data-vst-minor-action="skip" title="${w.skipped ? "Enable this minor prompt" : "Skip this minor prompt"}" aria-label="${w.skipped ? "Enable minor prompt" : "Skip minor prompt"}">${w.skipped ? "○" : "◉"}</button>` +
-                    `</span>` +
                     `<span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span>` +
                     `</div>`
                 );

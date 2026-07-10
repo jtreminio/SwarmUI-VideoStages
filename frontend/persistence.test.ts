@@ -4,6 +4,7 @@ import {
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
+import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import {
     __resetPersistenceForTests,
     getClips,
@@ -18,16 +19,23 @@ import {
     type StoredClip,
     type VideoStagesConfig,
 } from "./types";
+import { clearUiStateForTests } from "./uiState";
+
+const dataInput = (): HTMLTextAreaElement =>
+    document.getElementById("input_videostages") as HTMLTextAreaElement;
+const promptEl = (): HTMLTextAreaElement =>
+    document.getElementById("input_prompt") as HTMLTextAreaElement;
 
 describe("persistence", () => {
     describe("serializeClipsForStorage", () => {
-        it("serializes only persisted clip, ref, and stage fields for storage", () => {
+        it("serializes only structural clip, ref, and stage fields (no UI/prompt fields)", () => {
             const clips = [
                 minimalClip({
                     duration: 3,
                     controlNetSource: "ControlNet 2",
                     controlNetLora: "ltx-ic-lora.safetensors",
                     clipLengthFromControlNet: true,
+                    prompt: "should not be serialized",
                     refs: [minimalRef({ frame: 2, fromEnd: true })],
                     stages: [
                         minimalStage({
@@ -39,9 +47,7 @@ describe("persistence", () => {
             ];
             const expected: StoredClip[] = [
                 {
-                    expanded: true,
                     skipped: false,
-                    hue: 210,
                     duration: 3,
                     audioSource: "Native",
                     controlNetSource: "ControlNet 2",
@@ -51,12 +57,8 @@ describe("persistence", () => {
                     clipLengthFromControlNet: true,
                     reuseAudio: false,
                     uploadedAudio: null,
-                    prompt: "",
-                    negativePrompt: "",
-                    promptWindows: [],
                     refs: [
                         {
-                            expanded: true,
                             source: REF_SOURCE_BASE,
                             uploadFileName: null,
                             uploadedImage: null,
@@ -66,7 +68,6 @@ describe("persistence", () => {
                     ],
                     stages: [
                         {
-                            expanded: true,
                             skipped: false,
                             control: 1,
                             controlNetStrength: 0.7,
@@ -82,56 +83,79 @@ describe("persistence", () => {
                     ],
                 },
             ];
-            expect(serializeClipsForStorage(clips)).toEqual(expected);
+            const serialized = serializeClipsForStorage(clips);
+            expect(serialized).toEqual(expected);
+            expect(JSON.stringify(serialized)).not.toContain("prompt");
+            expect(JSON.stringify(serialized)).not.toContain("hue");
         });
     });
 
-    describe("round-trips through the <videostages> section of #input_prompt", () => {
-        const promptEl = (): HTMLTextAreaElement =>
-            document.getElementById("input_prompt") as HTMLTextAreaElement;
-
+    describe("round-trips through the Data param + prompt box", () => {
         beforeEach(() => {
             __resetPersistenceForTests();
-            const prompt = document.createElement("textarea");
-            prompt.id = "input_prompt";
-            prompt.value = "a cinematic shot";
-            document.body.appendChild(prompt);
+            clearUiStateForTests();
+            document.body.innerHTML = "";
+            mountVideoStagesData({ clips: [] });
+            mountPromptBox("a cinematic shot");
         });
 
-        it("writes the config into the section, preserving surrounding prompt text, and reads it back", () => {
+        it("writes structure to the Data param and prompt text to the prompt box", () => {
             saveClips([
-                minimalClip({ duration: 3 }),
-                minimalClip({ duration: 4 }),
+                minimalClip({ duration: 3, prompt: "a red fox" }),
+                minimalClip({ duration: 4, prompt: "a bear" }),
             ]);
+
+            const stored = JSON.parse(dataInput().value) as {
+                clips: { duration: number }[];
+            };
+            expect(stored.clips.map((c) => c.duration)).toEqual([3, 4]);
+            expect(dataInput().value).not.toContain("\\u003c");
 
             expect(promptEl().value.startsWith("a cinematic shot")).toBe(true);
-            expect(promptEl().value).toContain("<videostages>");
+            expect(promptEl().value).toContain("<videoclip[0]>a red fox");
+            expect(promptEl().value).toContain("<videoclip[1]>a bear");
+            expect(promptEl().value).not.toContain("<videostages>");
+
             expect(getClips().map((clip) => clip.duration)).toEqual([3, 4]);
+            expect(getClips().map((clip) => clip.prompt)).toEqual([
+                "a red fox",
+                "a bear",
+            ]);
         });
 
-        it("replaces only the section body on a subsequent save, leaving prose intact", () => {
-            saveClips([minimalClip({ duration: 2 })]);
+        it("round-trips a prompt window (seconds) through the prompt box", () => {
             saveClips([
-                minimalClip({ duration: 5 }),
-                minimalClip({ duration: 6 }),
+                minimalClip({
+                    duration: 5,
+                    prompt: "base",
+                    promptWindows: [{ start: 1, duration: 2, prompt: "gust" }],
+                }),
             ]);
+            expect(promptEl().value).toContain("<videoclip[0]:1-3>gust");
 
+            const windows = getClips()[0].promptWindows;
+            expect(windows).toEqual([
+                { start: 1, duration: 2, prompt: "gust" },
+            ]);
+        });
+
+        it("does not duplicate <videoclip> sections on a subsequent save", () => {
+            saveClips([minimalClip({ duration: 2, prompt: "one" })]);
+            saveClips([
+                minimalClip({ duration: 5, prompt: "five" }),
+                minimalClip({ duration: 6, prompt: "six" }),
+            ]);
             const value = promptEl().value;
             expect(value.startsWith("a cinematic shot")).toBe(true);
-            // Exactly one section — the write replaces the old body rather than appending a second opener.
-            expect(value.split("<videostages>").length - 1).toBe(1);
-            expect(getClips().map((clip) => clip.duration)).toEqual([5, 6]);
+            expect(value.split("<videoclip[0]>").length - 1).toBe(1);
+            expect(getClips().map((clip) => clip.prompt)).toEqual([
+                "five",
+                "six",
+            ]);
         });
     });
 
     describe("top-level width/height/fps round-trip", () => {
-        const promptEl = (): HTMLTextAreaElement =>
-            document.getElementById("input_prompt") as HTMLTextAreaElement;
-        const section = (): string => {
-            const value = promptEl().value;
-            const at = value.indexOf("<videostages>");
-            return value.slice(at + "<videostages>".length);
-        };
         const baseState = (
             overrides: Partial<VideoStagesConfig> = {},
         ): VideoStagesConfig => ({
@@ -146,10 +170,10 @@ describe("persistence", () => {
 
         beforeEach(() => {
             __resetPersistenceForTests();
-            const prompt = document.createElement("textarea");
-            prompt.id = "input_prompt";
-            prompt.value = "";
-            document.body.appendChild(prompt);
+            clearUiStateForTests();
+            document.body.innerHTML = "";
+            mountVideoStagesData({ clips: [] });
+            mountPromptBox("");
         });
 
         it("omits width/height/fps when they are inherited", () => {
@@ -189,7 +213,7 @@ describe("persistence", () => {
                     fpsExplicit: true,
                 }),
             );
-            expect(section()).toContain('"width":640');
+            expect(dataInput().value).toContain('"width":640');
             const state = getState();
             expect(state.dimsExplicit).toBe(true);
             expect(state.width).toBe(640);
@@ -203,15 +227,13 @@ describe("persistence", () => {
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
             expect(state.fpsExplicit).toBe(false);
-            // No core inputs mounted → getRootDefaults() defaults.
             expect(state.width).toBe(1024);
             expect(state.height).toBe(1024);
             expect(state.fps).toBe(24);
         });
 
         it("treats out-of-range stored values as inherit", () => {
-            promptEl().value =
-                '<videostages>{"width":100,"height":100,"fps":0,"clips":[]}';
+            dataInput().value = '{"width":100,"height":100,"fps":0,"clips":[]}';
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
             expect(state.fpsExplicit).toBe(false);
@@ -219,7 +241,7 @@ describe("persistence", () => {
         });
 
         it("treats a lone width (no height) as inherit for dims", () => {
-            promptEl().value = '<videostages>{"width":512,"clips":[]}';
+            dataInput().value = '{"width":512,"clips":[]}';
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
             expect(state.width).toBe(1024);

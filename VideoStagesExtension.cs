@@ -10,14 +10,20 @@ namespace VideoStages;
 public class VideoStagesExtension : Extension
 {
     public static int SectionIdForStage(int stageIndex) => Constants.SectionID_VideoStages + 1 + stageIndex;
+    public static int SectionIdForClip(int clipIndex) => Constants.SectionID_VideoClip + 1 + clipIndex;
     public static T2IRegisteredParam<bool> Enabled;
+    public static T2IRegisteredParam<string> Data;
     public static T2IRegisteredParam<Image> RefineSourceVideo;
     public static T2IRegisteredParam<int> RefineSkipStages;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
 
     public override void OnPreInit()
     {
-        PromptRegion.RegisterCustomPrefix(VideoStagesPromptSection.Prefix);
+        PromptRegion.RegisterCustomPrefix("videoclip");
+        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = PromptParser.ProcessVideoClipTag;
+        T2IPromptHandling.PromptTagBasicProcessors["videostages"] = PromptParser.ProcessVideoStagesTag;
+        T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (_, _) => "<break>";
+        T2IPromptHandling.PromptTagLengthEstimators["videostages"] = (_, _) => "";
         StyleSheetFiles.Add("Assets/video-stages.css");
         StyleSheetFiles.Add("Assets/video-stages-timeline.css");
         ScriptFiles.Add("Assets/video-stages.js");
@@ -96,6 +102,17 @@ public class VideoStagesExtension : Extension
             HideFromMetadata: true,
             Group: VideoStagesGroup,
             FeatureFlag: Constants.ComfyUIFeatureFlag
+        ));
+
+        Data = T2IParamTypes.Register<string>(new T2IParamType(
+            Name: "Video Stages",
+            Description: "Internal",
+            Default: "",
+            VisibleNormally: false,
+            DoNotPreview: true,
+            Group: VideoStagesGroup,
+            FeatureFlag: Constants.ComfyUIFeatureFlag,
+            MetadataFormat: MetadataSanitizer.StripUploadDataFromJsonParameter
         ));
 
         RefineSourceVideo = T2IParamTypes.Register<Image>(new T2IParamType(

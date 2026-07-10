@@ -2,14 +2,18 @@ import { assignMissingHues } from "./clipColor";
 import { ROOT_DIMENSION_MIN, ROOT_FPS_MIN } from "./constants";
 import { videoStagesDebugLog } from "./debugLog";
 import { buildDefaultClip, normalizeClip } from "./normalization";
+import { parseClipPrompts } from "./promptSegments";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import {
+    getPromptInput,
     isImageToVideoWorkflow,
     isVideoStagesEnabled,
-    readVideoStagesSection,
-    writeVideoStagesSection,
+    readDataParam,
+    writeClipPrompts,
+    writeDataParam,
 } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
+import { applyUiState, saveUiState } from "./uiState";
 import { utils } from "./utils";
 
 type InheritedDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
@@ -59,9 +63,7 @@ const rootConfig = (dims: RootDims, clips: Clip[]): VideoStagesConfig => ({
 export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
     clips.map(
         (clip): StoredClip => ({
-            expanded: clip.expanded,
             skipped: clip.skipped,
-            hue: clip.hue,
             duration: clip.duration,
             audioSource: clip.audioSource,
             controlNetSource: clip.controlNetSource,
@@ -71,16 +73,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
             clipLengthFromControlNet: clip.clipLengthFromControlNet,
             reuseAudio: clip.reuseAudio,
             uploadedAudio: clip.uploadedAudio,
-            prompt: clip.prompt,
-            negativePrompt: clip.negativePrompt,
-            promptWindows: clip.promptWindows.map((window) => ({
-                prompt: window.prompt,
-                start: window.start,
-                duration: window.duration,
-                skipped: window.skipped,
-            })),
             refs: clip.refs.map((ref) => ({
-                expanded: ref.expanded,
                 source: ref.source,
                 uploadFileName: ref.uploadFileName,
                 uploadedImage: ref.uploadedImage,
@@ -88,7 +81,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
                 fromEnd: ref.fromEnd,
             })),
             stages: clip.stages.map((stage) => ({
-                expanded: stage.expanded,
                 skipped: stage.skipped,
                 control: stage.control,
                 controlNetStrength: stage.controlNetStrength,
@@ -136,6 +128,22 @@ export const __resetPersistenceForTests = (): void => {
     lastSerializedState = "";
 };
 
+const overlayPromptAndUiState = (clips: Clip[]): void => {
+    const { sections, windows } = parseClipPrompts(
+        getPromptInput()?.value ?? "",
+    );
+    for (let i = 0; i < clips.length; i++) {
+        clips[i].prompt = sections.get(i) ?? "";
+        clips[i].promptWindows = (windows.get(i) ?? []).map((window) => ({
+            prompt: window.prompt,
+            start: window.start,
+            duration: window.duration,
+        }));
+    }
+    applyUiState(clips);
+    assignMissingHues(clips);
+};
+
 const parseSerializedState = (
     serialized: string,
     inherited: InheritedDims,
@@ -163,7 +171,7 @@ const parseSerializedState = (
                 getDefaultStageModel,
             ),
         );
-        assignMissingHues(clips);
+        overlayPromptAndUiState(clips);
         return rootConfig(resolveRootDims(inherited, stored), clips);
     } catch {
         return null;
@@ -177,9 +185,11 @@ export const getState = (): VideoStagesConfig => {
         height: defaults.height,
         fps: defaults.fps,
     };
-    const serialized = readVideoStagesSection() || lastSerializedState;
+    const serialized = readDataParam() || lastSerializedState;
     if (!serialized) {
-        return rootConfig(resolveRootDims(inherited, {}), []);
+        const clips: Clip[] = [];
+        overlayPromptAndUiState(clips);
+        return rootConfig(resolveRootDims(inherited, {}), clips);
     }
 
     let parsedState = parseSerializedState(serialized, inherited);
@@ -205,7 +215,15 @@ export const saveState = (
     const serialized = serializeStateForStorage(state);
     lastSerializedState = serialized;
     const willNotifyDom = options?.notifyDomChange !== false;
-    writeVideoStagesSection(serialized, willNotifyDom);
+    writeDataParam(serialized, willNotifyDom);
+    writeClipPrompts(
+        state.clips.map((clip) => ({
+            prompt: clip.prompt,
+            windows: clip.promptWindows,
+        })),
+        willNotifyDom,
+    );
+    saveUiState(state.clips);
     callbacks?.onAfterSerialize?.(serialized);
     videoStagesDebugLog("persistence", "saveState", {
         notifyDomChange: options?.notifyDomChange,

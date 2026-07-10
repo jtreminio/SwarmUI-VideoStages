@@ -8,7 +8,7 @@ import {
 } from "./audioSource";
 import { clamp } from "./constants";
 import { getClips, saveClips } from "./persistence";
-import { readVideoStagesSection } from "./swarmInputs";
+import { readStateToken } from "./swarmInputs";
 import type { Clip, UploadedAudio } from "./types";
 
 const CLIP_SELECTOR = '.vst-audio-clip[data-vst-audio="clip"]';
@@ -56,7 +56,7 @@ export const createTimelineAudioTrack = (): TimelineAudioTrack => {
     let outsideMouseHandler: ((event: MouseEvent) => void) | null = null;
 
     const isStale = (sourceJson: string): boolean =>
-        readVideoStagesSection() !== sourceJson;
+        readStateToken() !== sourceJson;
 
     const closeEditor = (): void => {
         if (outsideMouseHandler) {
@@ -147,7 +147,7 @@ export const createTimelineAudioTrack = (): TimelineAudioTrack => {
         if (!clip) {
             return;
         }
-        const sourceJson = readVideoStagesSection();
+        const sourceJson = readStateToken();
         const draft = draftFromClip(clip);
         const controlNetEnabled = `${clip.controlNetLora ?? ""}`.trim() !== "";
 

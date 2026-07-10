@@ -183,7 +183,7 @@ internal sealed class LtxStageExecutor(
         double total = clipSeconds > 0 ? clipSeconds : 0;
 
         List<PromptWindowSpec> active = [.. windows
-            .Where(w => !w.Skipped && !string.IsNullOrWhiteSpace(w.Prompt) && w.Duration > 0)
+            .Where(w => !string.IsNullOrWhiteSpace(w.Prompt) && w.Duration > 0)
             .OrderBy(w => w.Start)];
         if (active.Count == 0)
         {

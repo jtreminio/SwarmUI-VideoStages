@@ -11,7 +11,7 @@ import {
 } from "./normalization";
 import { getClips, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
-import { readVideoStagesSection } from "./swarmInputs";
+import { readStateToken } from "./swarmInputs";
 import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
 import { type Clip, REF_SOURCE_UPLOAD, type UploadedAudio } from "./types";
@@ -119,7 +119,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
     };
 
     const isStale = (sourceJson: string): boolean =>
-        readVideoStagesSection() !== sourceJson;
+        readStateToken() !== sourceJson;
 
     const closeEditor = (): void => {
         if (outsideMouseHandler) {
@@ -244,7 +244,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         if (!draft) {
             return;
         }
-        const sourceJson = readVideoStagesSection();
+        const sourceJson = readStateToken();
         const frameMax = getReferenceFrameMax(getRootDefaults, clip);
 
         const fps = currentFps();
@@ -557,7 +557,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             fps: currentFps(),
             fromEnd: ref.fromEnd === true,
             active: false,
-            sourceJson: readVideoStagesSection(),
+            sourceJson: readStateToken(),
         };
         me.preventDefault();
     };
@@ -645,7 +645,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             const refIdx = parseIntAttr(thumb, "data-ref-idx");
             if (clipIdx !== null && refIdx !== null) {
                 if ((event as MouseEvent).shiftKey) {
-                    deleteRef(clipIdx, refIdx, readVideoStagesSection());
+                    deleteRef(clipIdx, refIdx, readStateToken());
                 } else {
                     openEditor(thumb, clipIdx, refIdx);
                 }
@@ -672,7 +672,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             currentFps(),
             false,
         );
-        addRefAtFrame(clipIdx, frame, readVideoStagesSection());
+        addRefAtFrame(clipIdx, frame, readStateToken());
     };
 
     const onBodyKeyDown = (event: Event): void => {

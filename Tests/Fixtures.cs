@@ -88,14 +88,11 @@ internal static class Fixtures
     public static void SetVideoStagesConfig(T2IParamInput input, string json)
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
-        string existing = input.Get(T2IParamTypes.Prompt, "");
-        string section = WrapVideoStagesSection(json);
-        input.Set(T2IParamTypes.Prompt, string.IsNullOrEmpty(existing) ? section : $"{existing} {section}");
+        // Config JSON now rides the hidden "Video Stages Data" param, not an inline
+        // <videostages>{json} prompt carrier (that carrier was removed).
+        input.Set(VideoStagesExtension.Data, json ?? "");
         input.Set(VideoStagesExtension.Enabled, true);
     }
-
-    public static string WrapVideoStagesSection(string json) =>
-        $"<videostages>{json.Replace("<", "\\u003c").Replace(">", "\\u003e")}";
 
     public static T2IParamInput BuildNativeInput(
         T2IModel baseModel,

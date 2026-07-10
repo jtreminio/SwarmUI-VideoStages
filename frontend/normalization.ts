@@ -61,7 +61,6 @@ const normalizePromptWindow = (
         prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
         start,
         duration,
-        skipped: !!readProp(raw, "skipped", "Skipped"),
     };
 };
 
@@ -304,7 +303,6 @@ export const buildDefaultClip = (
         reuseAudio: false,
         uploadedAudio: null,
         prompt: "",
-        negativePrompt: "",
         promptWindows: [],
         refs,
         stages: [
@@ -552,7 +550,6 @@ export const normalizeClip = (
         reuseAudio: !!rawClip.reuseAudio,
         uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
         prompt: `${readProp(rawClip, "prompt", "Prompt") ?? ""}`,
-        negativePrompt: `${readProp(rawClip, "negativePrompt", "NegativePrompt") ?? ""}`,
         promptWindows: normalizePromptWindows(rawClip),
         refs,
         stages,

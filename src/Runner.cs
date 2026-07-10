@@ -168,7 +168,7 @@ public static class Runner
         return new RootVideoStageResizer(g, rootVideoStageHandoff);
     }
 
-    private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsPresent(g);
+    private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsActive(g);
 
     private static bool HasConfiguredStages(WorkflowGenerator g)
     {

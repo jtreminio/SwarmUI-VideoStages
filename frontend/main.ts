@@ -10,12 +10,12 @@ const registerVideoStagesPromptPrefix = (): void => {
     }
 
     promptTabComplete.registerPrefix(
-        "videostages",
-        "Configure all VideoStages settings as one JSON prompt section.",
+        "videoclip",
+        "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
         () => [
-            '\nUse "<videostages>{ ...JSON... }" to configure clips, stages, refs, audio, prompts and loras in one JSON blob.',
-            '\nExample: <videostages>{"clips":[{"prompt":"a red fox","stages":[{"model":"...","steps":30}]}]}',
-            '\nPer-clip "prompt" and per-clip / per-stage "loras" fold into this JSON — there is no more <videoclip> section.',
+            "\n<videoclip[0]>clip 0's prompt text — everything until the next <videoclip...> tag.",
+            "\n<videoclip[0]:1.5-4>a prompt window on clip 0 from 1.5s to 4s.",
+            "\nThe timeline owns these; structured config (stages, refs, audio) rides in the hidden Data param.",
         ],
         true,
     );

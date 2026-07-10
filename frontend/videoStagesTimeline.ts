@@ -10,10 +10,11 @@ import {
     getGroupToggle,
     getPromptInput,
     isVideoStagesEnabled,
+    readCarrierSnapshot,
     readGlobalPrompt,
-    readVideoStagesSection,
+    readStateToken,
+    restoreCarrierSnapshot,
     setVideoStagesEnabled,
-    writeVideoStagesSection,
 } from "./swarmInputs";
 import { createTimelineAudioTrack } from "./timelineAudioTrack";
 import type { TimelineUnit } from "./timelineDetail";
@@ -59,8 +60,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const settings = createTimelineSettings(() => refresh());
 
     const history = createTimelineHistory({
-        read: () => readVideoStagesSection(),
-        write: (value) => writeVideoStagesSection(value),
+        read: () => readCarrierSnapshot(),
+        write: (value) => restoreCarrierSnapshot(value),
     });
 
     const VIEW_STATE_KEY = "videostages.timeline.viewState";
@@ -176,7 +177,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (!body) {
             return;
         }
-        lastSeenValue = readVideoStagesSection();
+        lastSeenValue = readStateToken();
         lastDimsSignature = readInheritedDimsSignature();
         history.capture();
         try {
@@ -212,7 +213,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     };
 
     const onInputChanged = (): void => {
-        if (readVideoStagesSection() !== lastSeenValue) {
+        if (readStateToken() !== lastSeenValue) {
             refresh();
         }
     };
@@ -251,11 +252,11 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (inputSyncInterval) {
             return;
         }
-        lastSeenValue = readVideoStagesSection();
+        lastSeenValue = readStateToken();
         lastDimsSignature = readInheritedDimsSignature();
         inputSyncInterval = setInterval(() => {
             if (
-                readVideoStagesSection() !== lastSeenValue ||
+                readStateToken() !== lastSeenValue ||
                 readInheritedDimsSignature() !== lastDimsSignature
             ) {
                 refresh();

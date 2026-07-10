@@ -22,10 +22,12 @@ public partial class StageFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10));
-        clip["Prompt"] = "clip-zero words";
         string stagesJson = new JArray(clip).ToString();
 
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: "global-only words");
+        // Clip prompt now rides a <videoclip[0]> tag, not a JSON "Prompt" field.
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel, models.VideoModel, stagesJson,
+            prompt: "global-only words <videoclip[0]>clip-zero words");
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -63,18 +65,19 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Stage_prompt_is_ignored_and_clip_prompt_is_used()
+    public void Stage_section_concatenates_with_matching_clip_section()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
 
-        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
-        stage["Prompt"] = "stage-zero words";
-        JObject clip = MakeClip(stage);
-        clip["Prompt"] = "clip-zero words";
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         string stagesJson = new JArray(clip).ToString();
 
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: "global-only words");
+        // ExtractPrompt concatenates every section matching this stage: the clip-level <videoclip[0]> section
+        // and the stage-specific <videoclip[0,0]> section both apply; the un-sectioned global text does not.
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel, models.VideoModel, stagesJson,
+            prompt: "global-only words <videoclip[0]>clip-zero words <videoclip[0,0]>stage-zero words");
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -83,8 +86,8 @@ public partial class StageFlowTests
             .Where(text => !string.IsNullOrWhiteSpace(text))
             .ToList();
 
+        Assert.Contains(conditioningTexts, text => text.Contains("stage-zero words"));
         Assert.Contains(conditioningTexts, text => text.Contains("clip-zero words"));
-        Assert.DoesNotContain(conditioningTexts, text => text.Contains("stage-zero words"));
         Assert.DoesNotContain(conditioningTexts, text => text.Contains("global-only words"));
     }
 
@@ -95,10 +98,11 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["Prompt"] = "clip-zero words";
         string stagesJson = new JArray(clip).ToString();
 
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: "global-only words");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel, models.VideoModel, stagesJson,
+            prompt: "global-only words <videoclip[0]>clip-zero words");
         (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false));

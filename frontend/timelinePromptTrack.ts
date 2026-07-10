@@ -4,7 +4,7 @@ import {
     PROMPT_WINDOW_MIN_DURATION,
 } from "./constants";
 import { getClips, saveClips } from "./persistence";
-import { readVideoStagesSection } from "./swarmInputs";
+import { readStateToken } from "./swarmInputs";
 import { livePxPerSecond } from "./timelineLinking";
 import type { Clip, PromptWindow } from "./types";
 
@@ -163,7 +163,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         onDelete: (() => void) | null = null,
     ): void => {
         closeEditor();
-        const sourceJson = readVideoStagesSection();
+        const sourceJson = readStateToken();
         const hostRect = (boundBody ?? document.body).getBoundingClientRect();
         const viewportW =
             window.innerWidth || document.documentElement.clientWidth;
@@ -270,7 +270,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
     };
 
     const isStale = (sourceJson: string): boolean =>
-        readVideoStagesSection() !== sourceJson;
+        readStateToken() !== sourceJson;
 
     const commitMajorPrompt = (clipIdx: number, text: string): void => {
         const clips = getClips();
@@ -307,13 +307,10 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         if (!clip || !window) {
             return;
         }
-        if (action === "delete") {
-            clip.promptWindows.splice(windowIdx, 1);
-        } else if (action === "skip") {
-            window.skipped = !window.skipped;
-        } else {
+        if (action !== "delete") {
             return;
         }
+        clip.promptWindows.splice(windowIdx, 1);
         saveClips(clips);
     };
 
@@ -424,7 +421,6 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
             prompt: "",
             start: roundSeconds(start),
             duration: roundSeconds(duration),
-            skipped: false,
         };
         clip.promptWindows.push(window);
         clip.promptWindows.sort((x, y) => x.start - y.start);
@@ -492,7 +488,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
                 originalLeft: seg.style.left,
                 originalWidth: seg.style.width,
                 active: false,
-                sourceJson: readVideoStagesSection(),
+                sourceJson: readStateToken(),
             };
             me.preventDefault();
             return;
@@ -527,7 +523,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
                 boundHi,
                 originalLeft: seg.style.left,
                 active: false,
-                sourceJson: readVideoStagesSection(),
+                sourceJson: readStateToken(),
             };
             me.preventDefault();
             return;
@@ -555,7 +551,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
                 clipDuration,
                 ghost: null,
                 active: false,
-                sourceJson: readVideoStagesSection(),
+                sourceJson: readStateToken(),
             };
             me.preventDefault();
         }

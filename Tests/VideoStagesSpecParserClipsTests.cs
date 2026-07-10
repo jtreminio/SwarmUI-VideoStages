@@ -1,3 +1,4 @@
+using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -87,23 +88,26 @@ public class VideoStagesSpecParserClipsTests
         return new() { UserInput = input };
     }
 
+    // Prose and prompt windows now arrive via <videoclip...> prompt tags. This sets the prompt and
+    // runs the late special logic so the authoring tags are normalized into markers the parser reads.
+    private static WorkflowGenerator BuildParser(string json, string prompt)
+    {
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(T2IParamTypes.Prompt, prompt);
+        input.ApplyLateSpecialLogic();
+        return new() { UserInput = input };
+    }
+
+    // A clip-level prompt window authoring tag: <videoclip[clip]:start-end>text (seconds).
+    private static string ClipWindowTag(string prompt, double start, double duration, int clip = 0)
+    {
+        string s = start.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        string e = (start + duration).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return $"<videoclip[{clip}]:{s}-{e}>{prompt}";
+    }
+
     private static List<StageSpec> FlattenedActiveStages(WorkflowGenerator parser) =>
         [.. VideoStagesSpecParser.Parse(parser).Clips.SelectMany(c => c.Stages)];
-
-    private static JObject MakePromptWindow(string prompt, double start, double duration, bool? skipped = null)
-    {
-        JObject window = new()
-        {
-            ["Prompt"] = prompt,
-            ["Start"] = start,
-            ["Duration"] = duration,
-        };
-        if (skipped is not null)
-        {
-            window["Skipped"] = skipped.Value;
-        }
-        return window;
-    }
 
     private static ClipSpec ParseSingleClip(JObject clip)
     {
@@ -112,33 +116,37 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_PromptWindows_ParsesStartDurationAndSkipped()
+    public void ParseClips_PromptWindows_ParsesStartAndDuration()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 4.0);
-        clip["PromptWindows"] = new JArray(
-            MakePromptWindow("a red car", start: 0.5, duration: 1.0),
-            MakePromptWindow("a blue boat", start: 2.0, duration: 1.0, skipped: true));
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        string prompt =
+            ClipWindowTag("a red car", start: 0.5, duration: 1.0)
+            + " " + ClipWindowTag("a blue boat", start: 2.0, duration: 1.0);
 
-        ClipSpec parsed = ParseSingleClip(clip);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json, prompt)).Clips);
 
         Assert.Equal(2, parsed.PromptWindows.Count);
         Assert.Equal("a red car", parsed.PromptWindows[0].Prompt);
         Assert.Equal(0.5, parsed.PromptWindows[0].Start);
         Assert.Equal(1.0, parsed.PromptWindows[0].Duration);
-        Assert.False(parsed.PromptWindows[0].Skipped);
-        Assert.True(parsed.PromptWindows[1].Skipped);
+        Assert.Equal("a blue boat", parsed.PromptWindows[1].Prompt);
+        Assert.Equal(2.0, parsed.PromptWindows[1].Start);
     }
 
     [Fact]
     public void ParseClips_PromptWindows_SortsByStartAndDropsNonPositiveDuration()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 4.0);
-        clip["PromptWindows"] = new JArray(
-            MakePromptWindow("late", start: 3.0, duration: 0.5),
-            MakePromptWindow("zero", start: 1.0, duration: 0.0),
-            MakePromptWindow("early", start: 0.0, duration: 0.5));
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        // The middle tag has end == start (0 duration): not a valid window, so its marker is dropped.
+        // It carries no trailing prose so nothing bleeds into a neighboring window's text.
+        string prompt =
+            ClipWindowTag("late", start: 3.0, duration: 0.5)
+            + " <videoclip[0]:1-1> "
+            + ClipWindowTag("early", start: 0.0, duration: 0.5);
 
-        ClipSpec parsed = ParseSingleClip(clip);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json, prompt)).Clips);
 
         Assert.Equal(2, parsed.PromptWindows.Count);
         Assert.Equal("early", parsed.PromptWindows[0].Prompt);
@@ -150,6 +158,128 @@ public class VideoStagesSpecParserClipsTests
     {
         ClipSpec parsed = ParseSingleClip(MakeClip(stages: [MakeStage("model-a")], duration: 4.0));
         Assert.Empty(parsed.PromptWindows);
+    }
+
+    [Fact]
+    public void ParseClips_StageScopedWindow_IsInvalidAndIgnored()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")], duration: 8.0);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        // Windows are clip-level only; the [0,1] range tag is invalid and produces no window.
+        string prompt =
+            ClipWindowTag("clip wide", start: 4.0, duration: 1.0)
+            + " <videoclip[0,1]:0-1>stage one";
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json, prompt)).Clips);
+
+        PromptWindowSpec clipWindow = Assert.Single(parsed.PromptWindows);
+        Assert.Equal("clip wide", clipWindow.Prompt);
+    }
+
+    [Fact]
+    public void ParseClips_ClipWindows_TileSortedByStart()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 8.0);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        // Two clip-level windows authored out of order; the executor tiles them sorted by start.
+        string prompt =
+            ClipWindowTag("clip late", start: 4.0, duration: 1.0)
+            + " " + ClipWindowTag("clip early", start: 0.0, duration: 1.0);
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json, prompt)).Clips);
+
+        List<(string Prompt, double Seconds)> tiled =
+            VideoStages.LTX2.LtxStageExecutor.TilePromptWindows(parsed.PromptWindows, clipSeconds: 8.0);
+
+        Assert.Equal("clip early", tiled[0].Prompt);
+        Assert.Contains(tiled, segment => segment.Prompt == "clip late");
+        Assert.True(
+            tiled.FindIndex(s => s.Prompt == "clip early") < tiled.FindIndex(s => s.Prompt == "clip late"),
+            "Clip windows must tile sorted by start (early before late).");
+    }
+
+    [Fact]
+    public void ParseClips_ScalarOverride_MutatesClipField()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(
+            VideoStagesSpecParser.Parse(BuildParser(json, "<videoclip[0,audiosource]:CustomAudio>")).Clips);
+
+        Assert.Equal("CustomAudio", parsed.AudioSource);
+    }
+
+    [Fact]
+    public void ParseClips_StageScalarOverride_MutatesStageField()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a", steps: 8)], duration: 3.0);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(
+            VideoStagesSpecParser.Parse(BuildParser(json, "<videoclip[0,0,steps]:20>")).Clips);
+
+        Assert.Equal(20, parsed.Stages[0].Steps);
+    }
+
+    [Fact]
+    public void ParseClips_NumericOverrides_AreCultureInvariant()
+    {
+        // Override VALUES are always invariant (the tag/JSON grammar is invariant). On a comma-decimal locale
+        // a culture-sensitive re-parse of "5.5" yields 55 (AllowThousands treats '.' as a group separator),
+        // silently 10x-corrupting duration/cfgscale/etc. This locks in the invariant round-trip.
+        CultureInfo originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo german = CultureInfo.GetCultureInfo("de-DE");
+            CultureInfo.CurrentCulture = german;
+            CultureInfo.CurrentUICulture = german;
+
+            JObject clip = MakeClip(stages: [MakeStage("model-a", cfg: 1)], duration: 3.0);
+            string json = JsonConvert.SerializeObject(new JArray(clip));
+            string prompt = "<videoclip[0,duration]:5.5> <videoclip[0,0,cfgscale]:5.5>";
+
+            VideoStagesSpec spec = VideoStagesSpecParser.Parse(BuildParser(json, prompt));
+            ClipSpec parsed = Assert.Single(spec.Clips);
+
+            // Stage double override read as 5.5, not 55.
+            Assert.Equal(5.5, parsed.Stages[0].CfgScale);
+            // Clip duration 5.5s @ 24fps -> aligned frame count of 137 (55s would be ~1321 frames).
+            Assert.Equal(137, parsed.Frames);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.CurrentUICulture = originalUiCulture;
+        }
+    }
+
+    [Fact]
+    public void ParseClips_UnknownOverrideField_IsIgnoredWithoutThrowing()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(
+            VideoStagesSpecParser.Parse(BuildParser(json, "<videoclip[0,bogusfield]:whatever>")).Clips);
+
+        // Parse still succeeds; the unknown field left the clip untouched.
+        Assert.Equal(Constants.AudioSourceNative, parsed.AudioSource);
+    }
+
+    [Fact]
+    public void ParseClips_OutOfRangeOverrideIndex_IsIgnoredWithoutThrowing()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        // Clip 5 and stage 5 do not exist; both overrides are silently dropped.
+        IReadOnlyList<ClipSpec> clips = VideoStagesSpecParser.Parse(
+            BuildParser(json, "<videoclip[5,audiosource]:X> <videoclip[0,5,steps]:99>")).Clips;
+
+        ClipSpec parsed = Assert.Single(clips);
+        Assert.Equal(Constants.AudioSourceNative, parsed.AudioSource);
     }
 
 

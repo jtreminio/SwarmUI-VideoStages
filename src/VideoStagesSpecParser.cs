@@ -1,3 +1,4 @@
+using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -30,6 +31,10 @@ internal static class VideoStagesSpecParser
     public static (int? Width, int? Height) GetRawJsonTopLevelDimensions(WorkflowGenerator g)
     {
         (int? w, int? h, _, _) = GetJsonTopLevelConfig(g);
+        if (VideoStagesPromptSection.IsActive(g))
+        {
+            (w, h, _) = ApplyTopLevelOverrides(ParseTags(g), w, h, null);
+        }
         return (w, h);
     }
 
@@ -110,6 +115,11 @@ internal static class VideoStagesSpecParser
     public static VideoStagesSpec Parse(WorkflowGenerator g)
     {
         (int? rawWidth, int? rawHeight, int? rawFps, List<JObject> rawEntries) = GetJsonTopLevelConfig(g);
+        PromptParser.VideoStageTagData tags = VideoStagesPromptSection.IsActive(g)
+            ? ParseTags(g)
+            : new PromptParser.VideoStageTagData();
+        (rawWidth, rawHeight, rawFps) = ApplyTopLevelOverrides(tags, rawWidth, rawHeight, rawFps);
+        ApplyClipAndStageOverrides(rawEntries, tags);
         int width = ResolveTopLevelWidth(g, rawWidth);
         int height = ResolveTopLevelHeight(g, rawHeight);
         int fps = ResolveTopLevelFps(g, rawFps);
@@ -141,7 +151,7 @@ internal static class VideoStagesSpecParser
             {
                 continue;
             }
-            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo, fps, refineMode, refineSkipStages);
+            ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo, fps, refineMode, refineSkipStages, tags);
             if (clip.Stages.Count == 0)
             {
                 continue;
@@ -168,6 +178,156 @@ internal static class VideoStagesSpecParser
             });
         }
         return new VideoStagesSpec(width, height, fps, isTextToVideo, parsed);
+    }
+
+    private static PromptParser.VideoStageTagData ParseTags(WorkflowGenerator g) =>
+        PromptParser.ExtractTagData(g.UserInput.Get(T2IParamTypes.Prompt, ""), g.UserInput);
+
+    private enum OverrideKind { String, Int, Double, Bool }
+
+    private static readonly Dictionary<string, (string Canonical, OverrideKind Kind)> ClipOverrideFields =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["duration"] = ("Duration", OverrideKind.Double),
+            ["audiosource"] = ("AudioSource", OverrideKind.String),
+            ["controlnetsource"] = ("ControlNetSource", OverrideKind.String),
+            ["controlnetlora"] = ("ControlNetLora", OverrideKind.String),
+            ["saveaudiotrack"] = ("SaveAudioTrack", OverrideKind.Bool),
+            ["cliplengthfromaudio"] = ("ClipLengthFromAudio", OverrideKind.Bool),
+            ["cliplengthfromcontrolnet"] = ("ClipLengthFromControlNet", OverrideKind.Bool),
+            ["reuseaudio"] = ("ReuseAudio", OverrideKind.Bool),
+            ["skipped"] = ("Skipped", OverrideKind.Bool),
+        };
+
+    private static readonly Dictionary<string, (string Canonical, OverrideKind Kind)> StageOverrideFields =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["model"] = ("Model", OverrideKind.String),
+            ["steps"] = ("Steps", OverrideKind.Int),
+            ["cfgscale"] = ("CfgScale", OverrideKind.Double),
+            ["control"] = ("Control", OverrideKind.Double),
+            ["upscale"] = ("Upscale", OverrideKind.Double),
+            ["upscalemethod"] = ("UpscaleMethod", OverrideKind.String),
+            ["sampler"] = ("Sampler", OverrideKind.String),
+            ["scheduler"] = ("Scheduler", OverrideKind.String),
+            ["imagereference"] = ("ImageReference", OverrideKind.String),
+            ["controlnetstrength"] = ("ControlNetStrength", OverrideKind.Double),
+            ["skipped"] = ("Skipped", OverrideKind.Bool),
+        };
+
+    private static (int? Width, int? Height, int? FPS) ApplyTopLevelOverrides(
+        PromptParser.VideoStageTagData tags, int? width, int? height, int? fps)
+    {
+        foreach ((string field, string value) in tags.TopLevelOverrides)
+        {
+            if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed <= 0)
+            {
+                Logs.Warning($"VideoStages: ignoring invalid top-level override '{field}' = '{value}'.");
+                continue;
+            }
+            if (string.Equals(field, "width", StringComparison.OrdinalIgnoreCase)) { width = parsed; }
+            else if (string.Equals(field, "height", StringComparison.OrdinalIgnoreCase)) { height = parsed; }
+            else if (string.Equals(field, "fps", StringComparison.OrdinalIgnoreCase)) { fps = parsed; }
+        }
+        return (width, height, fps);
+    }
+
+    private static void ApplyClipAndStageOverrides(List<JObject> rawEntries, PromptParser.VideoStageTagData tags)
+    {
+        foreach ((int clipIndex, List<(string Field, string Value)> overrides) in tags.ClipOverrides)
+        {
+            if (clipIndex < 0 || clipIndex >= rawEntries.Count)
+            {
+                Logs.Warning($"VideoStages: clip override targets out-of-range clip {clipIndex}; ignoring.");
+                continue;
+            }
+            foreach ((string field, string value) in overrides)
+            {
+                ApplyScalarOverride(rawEntries[clipIndex], field, value, ClipOverrideFields, $"clip {clipIndex}");
+            }
+        }
+        foreach (((int clipIndex, int stageIndex), List<(string Field, string Value)> overrides) in tags.StageOverrides)
+        {
+            if (clipIndex < 0 || clipIndex >= rawEntries.Count)
+            {
+                Logs.Warning($"VideoStages: stage override targets out-of-range clip {clipIndex}; ignoring.");
+                continue;
+            }
+            JObject stageObj = GetStageObject(rawEntries[clipIndex], stageIndex);
+            if (stageObj is null)
+            {
+                Logs.Warning($"VideoStages: stage override targets out-of-range stage {stageIndex} on clip {clipIndex}; ignoring.");
+                continue;
+            }
+            foreach ((string field, string value) in overrides)
+            {
+                ApplyScalarOverride(stageObj, field, value, StageOverrideFields, $"clip {clipIndex} stage {stageIndex}");
+            }
+        }
+    }
+
+    private static void ApplyScalarOverride(
+        JObject target,
+        string field,
+        string value,
+        Dictionary<string, (string Canonical, OverrideKind Kind)> allowed,
+        string location)
+    {
+        if (!allowed.TryGetValue(field?.Trim() ?? "", out (string Canonical, OverrideKind Kind) spec))
+        {
+            Logs.Warning($"VideoStages: ignoring unknown or non-overridable {location} field '{field}'.");
+            return;
+        }
+        string trimmed = value?.Trim() ?? "";
+        JToken parsedToken;
+        switch (spec.Kind)
+        {
+            case OverrideKind.Int:
+                if (!int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out int intValue))
+                {
+                    Logs.Warning($"VideoStages: ignoring {location} override '{spec.Canonical}' with invalid value '{value}'.");
+                    return;
+                }
+                parsedToken = intValue;
+                break;
+            case OverrideKind.Double:
+                if (!double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out double doubleValue))
+                {
+                    Logs.Warning($"VideoStages: ignoring {location} override '{spec.Canonical}' with invalid value '{value}'.");
+                    return;
+                }
+                parsedToken = doubleValue;
+                break;
+            case OverrideKind.Bool:
+                if (!bool.TryParse(trimmed, out bool boolValue))
+                {
+                    Logs.Warning($"VideoStages: ignoring {location} override '{spec.Canonical}' with invalid value '{value}'.");
+                    return;
+                }
+                parsedToken = boolValue;
+                break;
+            default:
+                parsedToken = trimmed;
+                break;
+        }
+        foreach (JProperty existing in target.Properties().Where(p => StringUtils.Equals(p.Name, spec.Canonical)).ToList())
+        {
+            existing.Remove();
+        }
+        target[spec.Canonical] = parsedToken;
+    }
+
+    private static JObject GetStageObject(JObject clipObj, int stageIndex)
+    {
+        foreach (JProperty property in clipObj.Properties())
+        {
+            if (StringUtils.Equals(property.Name, "Stages") && property.Value is JArray array)
+            {
+                List<JObject> stages = [.. array.OfType<JObject>()];
+                return stageIndex >= 0 && stageIndex < stages.Count ? stages[stageIndex] : null;
+            }
+        }
+        return null;
     }
 
     private static AudioFile MaterializeUploadedAudio(WorkflowGenerator g, UploadedAudioSpec spec)
@@ -246,7 +406,8 @@ internal static class VideoStagesSpecParser
         bool isTextToVideoRootWorkflow,
         int fps,
         bool refineMode,
-        int refineSkipStages)
+        int refineSkipStages,
+        PromptParser.VideoStageTagData tags)
     {
         double duration = GetOptionalDouble(clipObj, "Duration", defaultValue: 0, $"Clip {clipIndex}");
         string audioSource = GetString(clipObj, "AudioSource");
@@ -315,48 +476,13 @@ internal static class VideoStagesSpecParser
             UploadedAudio: uploadedAudio,
             ImageRefs: refs,
             Stages: stages,
-            Prompt: ParsePromptField(clipObj, "Prompt"),
-            NegativePrompt: ParsePromptField(clipObj, "NegativePrompt"),
             Loras: ParseLoras(clipObj),
-            PromptWindows: ParsePromptWindows(clipObj, clipIndex)
+            PromptWindows: SortWindows(tags.ClipWindows.GetValueOrDefault(clipIndex))
         );
     }
 
-    private static IReadOnlyList<PromptWindowSpec> ParsePromptWindows(JObject clipObj, int clipIndex)
-    {
-        List<JObject> rawWindows = GetObjectArray(clipObj, "PromptWindows");
-        if (rawWindows.Count == 0)
-        {
-            return [];
-        }
-
-        List<(PromptWindowSpec Window, double SortKey, int Seen)> collected = [];
-        for (int i = 0; i < rawWindows.Count; i++)
-        {
-            JObject entry = rawWindows[i];
-            string prompt = GetString(entry, "Prompt") ?? GetString(entry, "Text");
-            prompt = prompt?.Trim() ?? "";
-
-            double duration = GetOptionalDouble(entry, "Duration", 0, $"Clip {clipIndex} PromptWindow {i}");
-            if (duration <= 0)
-            {
-                continue;
-            }
-
-            double start = Math.Max(0, GetOptionalDouble(entry, "Start", 0, $"Clip {clipIndex} PromptWindow {i}"));
-            bool skipped = GetOptionalBool(entry, "Skipped", defaultValue: false);
-
-            collected.Add((new PromptWindowSpec(prompt, start, duration, skipped), start, i));
-        }
-
-        collected.Sort((a, b) =>
-        {
-            int keyCompare = a.SortKey.CompareTo(b.SortKey);
-            return keyCompare != 0 ? keyCompare : a.Seen.CompareTo(b.Seen);
-        });
-
-        return [.. collected.Select(entry => entry.Window)];
-    }
+    private static IReadOnlyList<PromptWindowSpec> SortWindows(List<PromptWindowSpec> windows) =>
+        windows is not { Count: > 0 } ? [] : [.. windows.OrderBy(w => w.Start)];
 
     private static ImageRefSpec ParseRef(JObject refObj, int clipIndex, int refIndex)
     {
@@ -413,12 +539,21 @@ internal static class VideoStagesSpecParser
 
     private static int? GetOptionalNullableInt(JObject obj, string key)
     {
-        string raw = GetString(obj, key);
+        JToken token = GetToken(obj, key);
+        if (token is null || token.Type == JTokenType.Null)
+        {
+            return null;
+        }
+        if (token.Type == JTokenType.Integer)
+        {
+            return token.Value<int>();
+        }
+        string raw = $"{token}";
         if (string.IsNullOrWhiteSpace(raw))
         {
             return null;
         }
-        return int.TryParse(raw.Trim(), out int value) ? value : null;
+        return int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : null;
     }
 
     private static List<JObject> GetObjectArray(JObject obj, string key)
@@ -469,7 +604,7 @@ internal static class VideoStagesSpecParser
 
     private static (int? Width, int? Height, int? FPS, List<JObject> Entries) GetJsonTopLevelConfig(WorkflowGenerator g)
     {
-        string json = VideoStagesPromptSection.ExtractJson(g);
+        string json = VideoStagesPromptSection.IsActive(g) ? VideoStagesPromptSection.GetDataJson(g) : null;
         if (string.IsNullOrWhiteSpace(json))
         {
             return (null, null, null, []);
@@ -629,7 +764,7 @@ internal static class VideoStagesSpecParser
                     strengths.Add(ClampRefStrength(entry.Value<double>()));
                 }
                 else if (entry.Type == JTokenType.String
-                    && double.TryParse($"{entry}".Trim(), out double parsed))
+                    && double.TryParse($"{entry}".Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
                 {
                     strengths.Add(ClampRefStrength(parsed));
                 }
@@ -657,12 +792,6 @@ internal static class VideoStagesSpecParser
             return Constants.DefaultStageRefStrength;
         }
         return Math.Clamp(value, 0.0, 1.0);
-    }
-
-    private static string ParsePromptField(JObject obj, string key)
-    {
-        string value = GetString(obj, key);
-        return string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
     }
 
     private static IReadOnlyList<LoraRef> ParseLoras(JObject obj)
@@ -798,12 +927,21 @@ internal static class VideoStagesSpecParser
 
     private static int GetOptionalInt(JObject obj, string key, int defaultValue, string locationPrefix)
     {
-        string raw = GetString(obj, key);
+        JToken token = GetToken(obj, key);
+        if (token is null || token.Type == JTokenType.Null)
+        {
+            return defaultValue;
+        }
+        if (token.Type == JTokenType.Integer)
+        {
+            return token.Value<int>();
+        }
+        string raw = $"{token}";
         if (string.IsNullOrWhiteSpace(raw))
         {
             return defaultValue;
         }
-        if (!int.TryParse(raw.Trim(), out int value))
+        if (!int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
         {
             Logs.Warning(
                 $"VideoStages: {locationPrefix} has invalid integer field '{key}' value '{raw}'. "
@@ -815,12 +953,21 @@ internal static class VideoStagesSpecParser
 
     private static double GetOptionalDouble(JObject obj, string key, double defaultValue, string locationPrefix)
     {
-        string raw = GetString(obj, key);
+        JToken token = GetToken(obj, key);
+        if (token is null || token.Type == JTokenType.Null)
+        {
+            return defaultValue;
+        }
+        if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
+        {
+            return token.Value<double>();
+        }
+        string raw = $"{token}";
         if (string.IsNullOrWhiteSpace(raw))
         {
             return defaultValue;
         }
-        if (!double.TryParse(raw.Trim(), out double value))
+        if (!double.TryParse(raw.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
         {
             Logs.Warning(
                 $"VideoStages: {locationPrefix} has invalid numeric field '{key}' value '{raw}'. "
@@ -828,6 +975,18 @@ internal static class VideoStagesSpecParser
             return defaultValue;
         }
         return value;
+    }
+
+    private static JToken GetToken(JObject obj, string key)
+    {
+        foreach (JProperty property in obj.Properties())
+        {
+            if (StringUtils.Equals(property.Name, key))
+            {
+                return property.Value;
+            }
+        }
+        return null;
     }
 
     private static string GetString(JObject obj, string key)

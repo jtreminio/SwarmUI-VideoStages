@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import * as persistence from "./persistence";
 import {
     createTimelineLinking,
@@ -79,16 +80,12 @@ describe("livePxPerSecond", () => {
     });
 });
 
-// The config rides in the <videostages> section of the positive prompt.
+// The config rides in the hidden VideoStages Data param.
 const clipsSection = (
     clips: Array<Record<string, unknown>>,
 ): HTMLTextAreaElement => {
-    const json = JSON.stringify({ clips });
-    const input = document.createElement("textarea");
-    input.id = "input_prompt";
-    input.value = `<videostages>${json}`;
-    document.body.appendChild(input);
-    return input;
+    mountPromptBox("");
+    return mountVideoStagesData({ clips });
 };
 
 const durationClips = (durations: number[]): Array<Record<string, unknown>> =>

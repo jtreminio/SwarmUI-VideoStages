@@ -34,6 +34,7 @@ internal class StageRunner(
         }
 
         ClipSpec clip = clipContext.Clip;
+        using ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(g.UserInput, clip.Id, sectionId);
         using ParamSnapshot loraScope = ApplyStageLoras(g.UserInput, clip, stage);
 
         StageFrame stageFrame = PrepareStage(stage, sectionId, clipContext);
@@ -173,7 +174,7 @@ internal class StageRunner(
         bool sourceIsVideo = sourceMedia.DataType == WGNodeData.DT_VIDEO;
         (int batchIndex, int batchLen) = sourceIsVideo ? (0, 1) : (-1, -1);
 
-        (string positivePrompt, string negativePrompt) = BuildClipPrompts(clip);
+        (string positivePrompt, string negativePrompt) = BuildClipPrompts(clip, stage);
 
         WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
         {
@@ -215,25 +216,15 @@ internal class StageRunner(
         return sourceMedia.Frames;
     }
 
-    private (string Positive, string Negative) BuildClipPrompts(ClipSpec clip)
+    private (string Positive, string Negative) BuildClipPrompts(ClipSpec clip, StageSpec stage)
     {
-        string globalPositive = VideoStagesPromptSection.StripSection(g.UserInput.Get(T2IParamTypes.Prompt, ""));
-        string globalNegative = VideoStagesPromptSection.StripSection(g.UserInput.Get(T2IParamTypes.NegativePrompt, ""));
+        string positive = g.UserInput.Get(T2IParamTypes.Prompt, "");
+        string negative = g.UserInput.Get(T2IParamTypes.NegativePrompt, "");
+        string originalPositive = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.Prompt.Type.ID, positive);
+        string originalNegative = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.NegativePrompt.Type.ID, negative);
         return (
-            FirstNonBlank(clip.Prompt, globalPositive),
-            FirstNonBlank(clip.NegativePrompt, globalNegative));
-    }
-
-    private static string FirstNonBlank(params string[] values)
-    {
-        foreach (string value in values)
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-        return "";
+            PromptParser.ExtractPrompt(positive, originalPositive, clip.Id, stage.Id, stage.ClipStageIndex),
+            PromptParser.ExtractPrompt(negative, originalNegative, clip.Id, stage.Id, stage.ClipStageIndex));
     }
 
     private static ParamSnapshot ApplyStageLoras(T2IParamInput input, ClipSpec clip, StageSpec stage)

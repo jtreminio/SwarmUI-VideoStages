@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import * as persistence from "./persistence";
 import {
     createTimelinePromptTrack,
@@ -19,32 +20,34 @@ interface WindowFixture {
     prompt?: string;
     start: number;
     duration: number;
-    skipped?: boolean;
 }
 interface ClipFixture {
     duration: number;
     windows?: WindowFixture[];
 }
 
+// Structural fields ride in the Data param; prompt windows ride in the prompt
+// box as <videoclip[N]:S-E> tags (S,E in seconds).
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     stages: [{}],
     refs: [],
-    promptWindows: (clip.windows ?? []).map((w) => ({
-        prompt: w.prompt ?? "",
-        start: w.start,
-        duration: w.duration,
-        skipped: w.skipped ?? false,
-    })),
 });
 
+const promptText = (clips: ClipFixture[]): string => {
+    const tags: string[] = [];
+    clips.forEach((clip, i) => {
+        for (const w of clip.windows ?? []) {
+            const end = w.start + w.duration;
+            tags.push(`<videoclip[${i}]:${w.start}-${end}>${w.prompt ?? ""}`);
+        }
+    });
+    return tags.join("\n");
+};
+
 const mountPrompt = (clips: ClipFixture[]): HTMLTextAreaElement => {
-    const json = JSON.stringify({ clips: clips.map(clipRecord) });
-    const input = document.createElement("textarea");
-    input.id = "input_prompt";
-    input.value = `<videostages>${json}`;
-    document.body.appendChild(input);
-    return input;
+    mountVideoStagesData({ clips: clips.map(clipRecord) });
+    return mountPromptBox(promptText(clips));
 };
 
 const makeBody = (): HTMLElement => {
@@ -71,7 +74,6 @@ const renderPromptTrack = (body: HTMLElement, clips: ClipFixture[]): void => {
                     `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${w.start * PPS}px;width:${w.duration * PPS}px">` +
                     `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left"></span>` +
                     `<span class="vst-minor-text"></span>` +
-                    `<button type="button" data-vst-minor-action="skip"></button>` +
                     `<span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right"></span>` +
                     `</div>`,
             )
@@ -303,18 +305,6 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         const windows = savedWindows(saveSpy);
         expect(windows).toHaveLength(1);
         expect(windows[0].start).toBeCloseTo(4, 5);
-    });
-
-    it("the skip button toggles the window's skipped flag", () => {
-        const body = setup([
-            { duration: 10, windows: [{ start: 1, duration: 1 }] },
-        ]);
-        el(
-            body,
-            ".vst-minor-seg[data-window-idx='0'] [data-vst-minor-action='skip']",
-        ).dispatchEvent(mouse("click", 50));
-
-        expect(savedWindows(saveSpy)[0].skipped).toBe(true);
     });
 
     it("clicking a minor segment opens an editor that commits the prompt on Enter", () => {
