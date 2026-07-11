@@ -12,6 +12,7 @@ import {
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import * as persistence from "./persistence";
+import { createTimelineLinking } from "./timelineLinking";
 import {
     createTimelineStagesEditor,
     type TimelineStagesEditor,
@@ -23,21 +24,30 @@ interface StageFixture {
     model?: string;
     skipped?: boolean;
     loras?: { name: string; weight: number }[];
+    upscale?: number;
+    control?: number;
+    steps?: number;
 }
 
 interface ClipFixture {
     duration: number;
     stages: StageFixture[];
     refs?: { source: string; frame: number }[];
+    audioSource?: string;
+    clipLengthFromAudio?: boolean;
 }
 
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
-    audioSource: "Native",
+    audioSource: clip.audioSource ?? "Native",
+    clipLengthFromAudio: clip.clipLengthFromAudio ?? false,
     stages: clip.stages.map((s) => ({
         model: s.model ?? "model-a.safetensors",
         skipped: s.skipped ?? false,
         loras: s.loras ?? [],
+        upscale: s.upscale,
+        control: s.control,
+        steps: s.steps,
     })),
     refs: clip.refs ?? [],
     promptWindows: [],
@@ -63,10 +73,8 @@ const makeBody = (): HTMLElement => {
     return body;
 };
 
-const stageInspector = (): HTMLElement | null =>
-    document.querySelector<HTMLElement>(".vst-stage-inspector");
-const modelInspector = (): HTMLElement | null =>
-    document.querySelector<HTMLElement>(".vst-stage-model-inspector");
+const clipInspector = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>(".vst-clip-inspector");
 
 const fieldLabels = (root: HTMLElement): string[] =>
     Array.from(
@@ -105,8 +113,48 @@ const fieldByLabel = (root: HTMLElement, label: string): HTMLElement => {
     return row;
 };
 
+const checkboxByLabel = (
+    root: HTMLElement,
+    label: string,
+): HTMLInputElement => {
+    const rows = Array.from(
+        root.querySelectorAll<HTMLElement>(".vst-audio-field-check"),
+    );
+    const row = rows.find(
+        (r) => r.querySelector(".vst-audio-field-label")?.textContent === label,
+    );
+    const input = row?.querySelector<HTMLInputElement>("input[type=checkbox]");
+    if (!input) {
+        throw new Error(`checkbox not found: ${label}`);
+    }
+    return input;
+};
+
+const stageTabs = (root: HTMLElement): HTMLElement[] =>
+    Array.from(
+        root.querySelectorAll<HTMLElement>(
+            ".vst-stage-tab:not(.vst-stage-tab-add)",
+        ),
+    );
+
+const activeTabLabel = (root: HTMLElement): string | undefined =>
+    root.querySelector<HTMLElement>(".vst-stage-tab-active")?.textContent ??
+    undefined;
+
+const clickTab = (root: HTMLElement, idx: number): void => {
+    stageTabs(root)[idx].dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+    );
+};
+
 const clickAway = (): void => {
     document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+};
+
+const escapeInspector = (insp: HTMLElement): void => {
+    insp.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
 };
 
 const savedClips = (
@@ -161,112 +209,235 @@ describe("createTimelineStagesEditor", () => {
         );
     };
 
-    it("opens the stage editor when a stage chip is clicked", () => {
-        const body = setup([{ duration: 4, stages: [{}] }]);
-        expect(stageInspector()).toBeNull();
-        clickStageChip(body, 0, 0);
-        const insp = stageInspector();
+    it("opens the unified clip inspector on the clicked stage's tab", () => {
+        const body = setup([{ duration: 4, stages: [{}, {}] }]);
+        expect(clipInspector()).toBeNull();
+        clickStageChip(body, 0, 1);
+        const insp = clipInspector();
         expect(insp).not.toBeNull();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
         expect(
-            insp?.querySelector(".vst-prompt-inspector-head")?.textContent,
-        ).toBe("Stage 0 · full gen");
+            insp.querySelector(".vst-prompt-inspector-head")?.textContent,
+        ).toBe("Clip 0 · 4s");
+        expect(activeTabLabel(insp)).toBe("S1");
+        // Clip-level fields are present.
+        const labels = fieldLabels(insp);
+        expect(labels).toContain("Skip this clip");
+        expect(labels).toContain("Duration (s)");
     });
 
-    it("shows Control/Upscale only for refine stages (index >= 1)", () => {
+    it("fires onClipOpen on a plain region click, but not on shift+click or after a drag", () => {
+        const body = setup([{ duration: 4, stages: [{}] }]);
+        const onClipOpen = jest.fn();
+        const linking = createTimelineLinking({ onClipOpen });
+        linking.attach(body);
+        const region = body.querySelector<HTMLElement>(
+            ".vst-region[data-clip-idx='0']",
+        );
+        if (!region) {
+            throw new Error("region missing");
+        }
+
+        region.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(onClipOpen).toHaveBeenCalledTimes(1);
+        expect(onClipOpen).toHaveBeenCalledWith(0, region);
+
+        onClipOpen.mockClear();
+        region.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, shiftKey: true }),
+        );
+        expect(onClipOpen).not.toHaveBeenCalled();
+
+        // A drag (mousedown → move past threshold → mouseup) suppresses the
+        // trailing click, so onClipOpen must not fire.
+        onClipOpen.mockClear();
+        region.dispatchEvent(
+            new MouseEvent("mousedown", { bubbles: true, clientX: 0 }),
+        );
+        document.dispatchEvent(
+            new MouseEvent("mousemove", { bubbles: true, clientX: 80 }),
+        );
+        document.dispatchEvent(
+            new MouseEvent("mouseup", { bubbles: true, clientX: 80 }),
+        );
+        region.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(onClipOpen).not.toHaveBeenCalled();
+
+        linking.dispose();
+    });
+
+    it("preserves edits made on another tab when switching tabs", () => {
         const body = setup([{ duration: 4, stages: [{}, {}] }]);
-
-        clickStageChip(body, 0, 0);
-        const stage0 = stageInspector();
-        if (!stage0) {
-            throw new Error("stage 0 inspector missing");
-        }
-        const labels0 = fieldLabels(stage0);
-        expect(labels0).not.toContain("Control (regen strength)");
-        expect(labels0).not.toContain("Upscale");
-        expect(
-            stage0.querySelector(".vst-prompt-inspector-head")?.textContent,
-        ).toBe("Stage 0 · full gen");
-        // Close before opening the next one.
-        clickAway();
-
         clickStageChip(body, 0, 1);
-        const stage1 = stageInspector();
-        if (!stage1) {
-            throw new Error("stage 1 inspector missing");
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
         }
-        const labels1 = fieldLabels(stage1);
-        expect(labels1).toContain("Control (regen strength)");
+        // Edit stage 1's steps.
+        const steps1 = sliderNumberByLabel(insp, "Steps");
+        steps1.value = "17";
+        steps1.dispatchEvent(new Event("input", { bubbles: true }));
+
+        // Switch to stage 0 and edit its steps.
+        clickTab(insp, 0);
+        const steps0 = sliderNumberByLabel(insp, "Steps");
+        steps0.value = "9";
+        steps0.dispatchEvent(new Event("input", { bubbles: true }));
+
+        // Switch back to stage 1: its edit survived.
+        clickTab(insp, 1);
+        expect(sliderNumberByLabel(insp, "Steps").value).toBe("17");
+
+        clickAway();
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        const clips = savedClips(saveSpy);
+        expect(clips[0].stages[0].steps).toBe(9);
+        expect(clips[0].stages[1].steps).toBe(17);
+    });
+
+    it("labels the regen field exactly 'Control' and only on refine tabs", () => {
+        const body = setup([{ duration: 4, stages: [{}, {}] }]);
+        clickStageChip(body, 0, 0);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        const labels0 = fieldLabels(insp);
+        expect(labels0).not.toContain("Control");
+        expect(labels0).not.toContain("Control (regen strength)");
+
+        clickTab(insp, 1);
+        const labels1 = fieldLabels(insp);
+        expect(labels1).toContain("Control");
+        expect(labels1).not.toContain("Control (regen strength)");
         expect(labels1).toContain("Upscale");
         expect(labels1).toContain("Upscale Method");
-        expect(
-            stage1.querySelector(".vst-prompt-inspector-head")?.textContent,
-        ).toBe("Stage 1 · refine");
     });
 
-    it("shift+click deletes a stage only when more than one remains", () => {
-        // Single stage: guarded, no delete.
-        const oneBody = setup([{ duration: 4, stages: [{}] }]);
-        clickStageChip(oneBody, 0, 0, true);
-        expect(saveSpy).not.toHaveBeenCalled();
-        track?.dispose();
-        document.body.innerHTML = "";
-        saveSpy.mockClear();
+    it("disables Upscale Method at 1× and enables it once Upscale rises above 1", () => {
+        const body = setup([{ duration: 4, stages: [{}, { upscale: 1 }] }]);
+        clickStageChip(body, 0, 1);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        const methodField = fieldByLabel(insp, "Upscale Method");
+        const select = methodField.querySelector<HTMLSelectElement>("select");
+        if (!select) {
+            throw new Error("method select missing");
+        }
+        expect(select.disabled).toBe(true);
+        expect(methodField.classList.contains("vst-field-disabled")).toBe(true);
 
-        // Two stages: shift+click removes the targeted one.
-        const twoBody = setup([{ duration: 4, stages: [{}, {}] }]);
-        clickStageChip(twoBody, 0, 1, true);
-        expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
+        const upscale = sliderNumberByLabel(insp, "Upscale");
+        upscale.value = "2";
+        upscale.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(select.disabled).toBe(false);
+        expect(methodField.classList.contains("vst-field-disabled")).toBe(
+            false,
+        );
     });
 
-    it("the Delete stage button is present only when more than one stage exists", () => {
-        const oneBody = setup([{ duration: 4, stages: [{}] }]);
-        clickStageChip(oneBody, 0, 0);
-        expect(stageInspector()?.querySelector(".vst-refs-delete")).toBeNull();
-        track?.dispose();
-        document.body.innerHTML = "";
+    it("mutes the stage panel while Skip this stage is checked and persists the skip", () => {
+        const body = setup([{ duration: 4, stages: [{}, {}] }]);
+        clickStageChip(body, 0, 1);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        const fields = insp.querySelector<HTMLElement>(".vst-stage-fields");
+        if (!fields) {
+            throw new Error("stage fields missing");
+        }
+        expect(fields.classList.contains("vst-stage-fields-muted")).toBe(false);
 
-        const twoBody = setup([{ duration: 4, stages: [{}, {}] }]);
-        clickStageChip(twoBody, 0, 1);
-        expect(
-            stageInspector()?.querySelector(".vst-refs-delete"),
-        ).not.toBeNull();
+        const skip = checkboxByLabel(insp, "Skip this stage");
+        skip.checked = true;
+        skip.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(fields.classList.contains("vst-stage-fields-muted")).toBe(true);
+
+        clickAway();
+        expect(savedClips(saveSpy)[0].stages[1].skipped).toBe(true);
+
+        // The timeline chip shows the muted (skipped) treatment.
+        renderTimeline(body, savedClips(saveSpy));
+        const chip = body.querySelector<HTMLElement>(
+            "[data-vst-stage][data-clip-idx='0'][data-stage-idx='1']",
+        );
+        expect(chip?.classList.contains("vst-stage-chip-skipped")).toBe(true);
+        expect(chip?.textContent).toBe("⊘ S1");
     });
 
-    it("adds a refine stage from the + chip and opens its editor", () => {
+    it("adds a stage via the + tab but only commits it on apply", () => {
         const body = setup([{ duration: 4, stages: [{}] }]);
-        const add = body.querySelector<HTMLElement>("[data-vst-stage-add]");
-        add?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        clickStageChip(body, 0, 0);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        insp.querySelector<HTMLElement>(".vst-stage-tab-add")?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true }),
+        );
+        expect(stageTabs(insp)).toHaveLength(2);
+        expect(activeTabLabel(insp)).toBe("S1");
+        // Nothing committed yet.
+        expect(saveSpy).not.toHaveBeenCalled();
+
+        clickAway();
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedClips(saveSpy)[0].stages).toHaveLength(2);
     });
 
-    it("opens the model popover and updates stage 0's model on change", () => {
+    it("discards an in-popover stage add on Escape", () => {
+        const body = setup([{ duration: 4, stages: [{}] }]);
+        clickStageChip(body, 0, 0);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        insp.querySelector<HTMLElement>(".vst-stage-tab-add")?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true }),
+        );
+        expect(stageTabs(insp)).toHaveLength(2);
+        escapeInspector(insp);
+        expect(clipInspector()).toBeNull();
+        expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it("deletes a stage in-panel but only commits it on apply", () => {
+        const body = setup([{ duration: 4, stages: [{}, {}] }]);
+        clickStageChip(body, 0, 1);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        insp.querySelector<HTMLElement>(".vst-refs-delete")?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true }),
+        );
+        expect(stageTabs(insp)).toHaveLength(1);
+        expect(saveSpy).not.toHaveBeenCalled();
+
+        clickAway();
+        expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
+    });
+
+    it("hides the Delete stage button when only one stage remains", () => {
+        const body = setup([{ duration: 4, stages: [{}] }]);
+        clickStageChip(body, 0, 0);
+        expect(clipInspector()?.querySelector(".vst-refs-delete")).toBeNull();
+    });
+
+    it("opens on Stage 0 with the model select focused from the model badge", () => {
         const body = setup([{ duration: 4, stages: [{}] }]);
         const badge = body.querySelector<HTMLElement>("[data-vst-model]");
         badge?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        const insp = modelInspector();
-        expect(insp).not.toBeNull();
-        const select = insp?.querySelector<HTMLSelectElement>("select");
-        if (!select) {
-            throw new Error("model select missing");
-        }
-        select.value = "model-b.safetensors";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-        expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages[0].model).toBe(
-            "model-b.safetensors",
-        );
-        expect(modelInspector()).toBeNull();
-    });
-
-    it("commits a model change made in the stage editor on click-away", () => {
-        const body = setup([{ duration: 4, stages: [{}] }]);
-        clickStageChip(body, 0, 0);
-        const insp = stageInspector();
+        const insp = clipInspector();
         if (!insp) {
-            throw new Error("stage inspector missing");
+            throw new Error("inspector missing");
         }
+        expect(activeTabLabel(insp)).toBe("S0");
         const select = fieldByLabel(
             insp,
             "Model",
@@ -274,6 +445,8 @@ describe("createTimelineStagesEditor", () => {
         if (!select) {
             throw new Error("model select missing");
         }
+        expect(document.activeElement).toBe(select);
+
         select.value = "model-b.safetensors";
         select.dispatchEvent(new Event("change", { bubbles: true }));
         clickAway();
@@ -283,15 +456,74 @@ describe("createTimelineStagesEditor", () => {
         );
     });
 
+    it("commits a clip Duration edit through applyClipDurationResize", () => {
+        const body = setup([{ duration: 4, stages: [{}] }]);
+        clickStageChip(body, 0, 0);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        const dur = fieldByLabel(
+            insp,
+            "Duration (s)",
+        ).querySelector<HTMLInputElement>("input");
+        if (!dur) {
+            throw new Error("duration input missing");
+        }
+        dur.value = "6";
+        dur.dispatchEvent(new Event("input", { bubbles: true }));
+        clickAway();
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        expect(savedClips(saveSpy)[0].duration).toBe(6);
+    });
+
+    it("disables the Duration field when clip length is derived from audio", () => {
+        const body = setup([
+            {
+                duration: 4,
+                audioSource: "Upload",
+                clipLengthFromAudio: true,
+                stages: [{}],
+            },
+        ]);
+        clickStageChip(body, 0, 0);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        const field = fieldByLabel(insp, "Duration (s)");
+        expect(field.querySelector<HTMLInputElement>("input")?.disabled).toBe(
+            true,
+        );
+        expect(field.classList.contains("vst-field-disabled")).toBe(true);
+    });
+
+    it("does not save when the state token changed while the inspector was open", () => {
+        const body = setup([{ duration: 4, stages: [{}] }]);
+        clickStageChip(body, 0, 0);
+        const insp = clipInspector();
+        if (!insp) {
+            throw new Error("inspector missing");
+        }
+        const steps = sliderNumberByLabel(insp, "Steps");
+        steps.value = "12";
+        steps.dispatchEvent(new Event("input", { bubbles: true }));
+        // Something else mutates the carrier: the token is now stale.
+        mountPromptBox("changed by someone else");
+        clickAway();
+        expect(saveSpy).not.toHaveBeenCalled();
+    });
+
     it("adds and persists a LoRA row", () => {
         const body = setup([{ duration: 4, stages: [{}] }]);
         clickStageChip(body, 0, 0);
-        const insp = stageInspector();
+        const insp = clipInspector();
         if (!insp) {
-            throw new Error("stage inspector missing");
+            throw new Error("inspector missing");
         }
-        const addLora = insp.querySelector<HTMLElement>(".vst-stage-lora-add");
-        addLora?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        insp.querySelector<HTMLElement>(".vst-stage-lora-add")?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true }),
+        );
         expect(insp.querySelectorAll(".vst-stage-lora-row")).toHaveLength(1);
         clickAway();
         expect(saveSpy).toHaveBeenCalledTimes(1);
@@ -300,57 +532,21 @@ describe("createTimelineStagesEditor", () => {
         ]);
     });
 
-    it("shows a muted hint when no LoRAs are available", () => {
-        const body = setup([{ duration: 4, stages: [{}] }], []);
-        clickStageChip(body, 0, 0);
-        const insp = stageInspector();
-        expect(insp?.querySelector(".vst-stage-lora-add")).toBeNull();
-        expect(insp?.textContent).toContain("(no LoRAs available)");
-    });
-
-    it("renders numeric fields as native Swarm slider widgets", () => {
-        const body = setup([{ duration: 4, stages: [{}] }]);
-        clickStageChip(body, 0, 0);
-        const insp = stageInspector();
-        if (!insp) {
-            throw new Error("stage inspector missing");
-        }
-        // Steps/CFG became slider boxes; selects are still plain rows.
-        expect(
-            insp.querySelectorAll(".vst-stage-slider .auto-slider-box"),
-        ).not.toHaveLength(0);
-        expect(sliderNumberByLabel(insp, "Steps")).toBeInstanceOf(
-            HTMLInputElement,
-        );
-        expect(
-            fieldByLabel(insp, "Model").querySelector("select"),
-        ).not.toBeNull();
-    });
-
-    it("commits a slider number edit to the saved stage on click-away", () => {
-        const body = setup([{ duration: 4, stages: [{}] }]);
-        clickStageChip(body, 0, 0);
-        const insp = stageInspector();
-        if (!insp) {
-            throw new Error("stage inspector missing");
-        }
-        const steps = sliderNumberByLabel(insp, "Steps");
-        steps.value = "12";
-        steps.dispatchEvent(new Event("input", { bubbles: true }));
-        clickAway();
+    it("shift+click on a stage chip deletes the stage without touching the clip", () => {
+        const body = setup([{ duration: 4, stages: [{}, {}] }]);
+        clickStageChip(body, 0, 1, true);
+        expect(clipInspector()).toBeNull();
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages[0].steps).toBe(12);
+        expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
     });
 
     it("keeps the editor open for keys inside a .sui-popover but Escape elsewhere cancels", () => {
         const body = setup([{ duration: 4, stages: [{}] }]);
         clickStageChip(body, 0, 0);
-        const insp = stageInspector();
+        const insp = clipInspector();
         if (!insp) {
-            throw new Error("stage inspector missing");
+            throw new Error("inspector missing");
         }
-        // A key event originating inside the native dropdown popover must not
-        // dismiss the whole inspector.
         const popover = document.createElement("div");
         popover.className = "sui-popover";
         const search = document.createElement("input");
@@ -359,76 +555,11 @@ describe("createTimelineStagesEditor", () => {
         search.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
         );
-        expect(stageInspector()).not.toBeNull();
+        expect(clipInspector()).not.toBeNull();
         expect(saveSpy).not.toHaveBeenCalled();
 
-        // Escape elsewhere in the wrap still cancels (no save).
-        insp.dispatchEvent(
-            new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-        );
-        expect(stageInspector()).toBeNull();
+        escapeInspector(insp);
+        expect(clipInspector()).toBeNull();
         expect(saveSpy).not.toHaveBeenCalled();
-    });
-
-    it("clamps a bottom-docked popover to stay within the viewport", () => {
-        const body = setup([{ duration: 4, stages: [{}] }]);
-        // Simulate a bottom-docked timeline: the body sits low in a short
-        // viewport, and the popover is taller than the space below its anchor.
-        Object.defineProperty(window, "innerHeight", {
-            configurable: true,
-            value: 600,
-        });
-        body.getBoundingClientRect = () =>
-            ({
-                top: 500,
-                left: 0,
-                width: 400,
-                height: 100,
-                right: 400,
-                bottom: 600,
-            }) as DOMRect;
-        const heightDesc = Object.getOwnPropertyDescriptor(
-            HTMLElement.prototype,
-            "offsetHeight",
-        );
-        Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
-            configurable: true,
-            get() {
-                return 400;
-            },
-        });
-        try {
-            clickStageChip(body, 0, 0);
-            const insp = stageInspector();
-            if (!insp) {
-                throw new Error("stage inspector missing");
-            }
-            const top = Number.parseFloat(insp.style.top);
-            // Without clamping, top would be 546 (500 + 46) and bottom 946.
-            expect(top).toBeLessThanOrEqual(600 - 400 - 8);
-            expect(top + 400).toBeLessThanOrEqual(600 - 8);
-            expect(insp.style.maxHeight).not.toBe("");
-        } finally {
-            if (heightDesc) {
-                Object.defineProperty(
-                    HTMLElement.prototype,
-                    "offsetHeight",
-                    heightDesc,
-                );
-            } else {
-                delete (
-                    HTMLElement.prototype as unknown as Record<string, unknown>
-                ).offsetHeight;
-            }
-        }
-    });
-
-    it("does not select or delete the clip when a stage chip is shift+clicked", () => {
-        // The editor must swallow the event before the region handler runs.
-        const body = setup([{ duration: 4, stages: [{}, {}] }]);
-        clickStageChip(body, 0, 1, true);
-        // Only the stage was removed; the clip itself remains.
-        expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
-        expect(saveSpy.mock.calls).toHaveLength(1);
     });
 });

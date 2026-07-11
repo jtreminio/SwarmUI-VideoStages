@@ -54,11 +54,13 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let lastDimsSignature: string | null = null;
     let unit: TimelineUnit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
-    const linking = createTimelineLinking();
+    const stagesEditor = createTimelineStagesEditor();
+    const linking = createTimelineLinking({
+        onClipOpen: (idx, region) => stagesEditor.openClipEditor(region, idx),
+    });
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
     const referencesTrack = createTimelineReferencesTrack();
-    const stagesEditor = createTimelineStagesEditor();
     const settings = createTimelineSettings(() => refresh());
 
     const history = createTimelineHistory({

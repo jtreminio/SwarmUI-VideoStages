@@ -1,4 +1,6 @@
 import {
+    CLIP_DURATION_MAX,
+    CLIP_DURATION_MIN,
     clamp,
     STAGE_CONTROLNET_STRENGTH_MAX,
     STAGE_CONTROLNET_STRENGTH_MIN,
@@ -11,8 +13,13 @@ import { buildDefaultStage } from "./normalization";
 import { getClips, saveClips } from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { readStateToken } from "./swarmInputs";
-import { refSourceLabel } from "./timelineDetail";
-import type { RootDefaults, Stage, StageLora } from "./types";
+import {
+    refSourceLabel,
+    stageChipLabel,
+    stageChipTitle,
+} from "./timelineDetail";
+import { applyClipDurationResize } from "./timelineEdit";
+import type { RefImage, RootDefaults, Stage, StageLora } from "./types";
 
 const STAGE_SELECTOR = "[data-vst-stage]";
 const STAGE_ADD_SELECTOR = "[data-vst-stage-add]";
@@ -21,11 +28,23 @@ const INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${STAGE_ADD_SELECTOR}, ${MODEL_
 const EDITING_CLASS = "vst-stage-editing";
 const LORA_WEIGHT_STEP = 0.05;
 const LORA_WEIGHT_DEFAULT = 1;
+const DURATION_STEP = 0.1;
+const UPSCALE_EPSILON = 1e-6;
 
 let sliderSeq = 0;
 
+export interface ClipEditorOptions {
+    stageIdx?: number;
+    focusModel?: boolean;
+}
+
 export interface TimelineStagesEditor {
     attach(body: HTMLElement): void;
+    openClipEditor(
+        anchor: HTMLElement | null,
+        clipIdx: number,
+        opts?: ClipEditorOptions,
+    ): void;
     dispose(): void;
 }
 
@@ -42,6 +61,16 @@ interface StageDraft {
     controlNetStrength: number;
     refStrengths: number[];
     loras: StageLora[];
+}
+
+interface ClipStageDraft extends StageDraft {
+    originalIdx: number | null;
+}
+
+interface ClipDraft {
+    clipSkipped: boolean;
+    duration: number;
+    stages: ClipStageDraft[];
 }
 
 const parseIntAttr = (el: Element | null, name: string): number | null => {
@@ -74,6 +103,25 @@ const draftFromStage = (stage: Stage): StageDraft => ({
     })),
 });
 
+const stageFromDraft = (draft: ClipStageDraft): Stage => ({
+    expanded: true,
+    skipped: draft.skipped,
+    control: draft.control,
+    controlNetStrength: draft.controlNetStrength,
+    refStrengths: draft.refStrengths.slice(),
+    upscale: draft.upscale,
+    upscaleMethod: draft.upscaleMethod,
+    model: draft.model,
+    steps: draft.steps,
+    cfgScale: draft.cfgScale,
+    sampler: draft.sampler,
+    scheduler: draft.scheduler,
+    loras: draft.loras.map((lora) => ({
+        name: lora.name,
+        weight: lora.weight,
+    })),
+});
+
 export const createTimelineStagesEditor = (): TimelineStagesEditor => {
     let boundBody: HTMLElement | null = null;
     let activeWrap: HTMLElement | null = null;
@@ -101,14 +149,6 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
             activeWrap = null;
         }
     };
-
-    const findStageChip = (
-        clipIdx: number,
-        stageIdx: number,
-    ): HTMLElement | null =>
-        boundBody?.querySelector<HTMLElement>(
-            `${STAGE_SELECTOR}[data-clip-idx="${clipIdx}"][data-stage-idx="${stageIdx}"]`,
-        ) ?? null;
 
     const buildField = (
         label: string,
@@ -267,7 +307,10 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
         const hostRect = host.getBoundingClientRect();
         const viewportW =
             window.innerWidth || document.documentElement.clientWidth;
-        const width = clamp(Math.round(hostRect.width - 32), 260, 420);
+        const isClip = extraClass.split(/\s+/).includes("vst-clip-inspector");
+        const width = isClip
+            ? clamp(Math.round(hostRect.width - 32), 480, 680)
+            : clamp(Math.round(hostRect.width - 32), 260, 420);
         const left = clamp(
             Math.round(hostRect.left + (hostRect.width - width) / 2),
             8,
@@ -343,66 +386,8 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
         document.addEventListener("mousedown", onOutside, true);
     };
 
-    const openModelEditor = (anchor: HTMLElement, clipIdx: number): void => {
-        const clip = getClips()[clipIdx];
-        const stage0 = clip?.stages?.[0];
-        if (!clip || !stage0) {
-            return;
-        }
-        const sourceJson = readStateToken();
-        const defaults = getRootDefaults();
-        const wrap = mountInspector(anchor, "vst-stage-model-inspector");
-
-        const head = document.createElement("div");
-        head.className = "vst-prompt-inspector-head";
-        head.textContent = `Clip ${clipIdx} · model`;
-
-        let selected = `${stage0.model ?? ""}`;
-        const select = buildSelect(
-            defaults.modelValues,
-            defaults.modelLabels,
-            selected,
-            (value) => {
-                selected = value;
-                finish(true);
-            },
-        );
-        const field = buildField("Model", select, "(applies to Stage 0)");
-
-        const hint = document.createElement("div");
-        hint.className = "vst-prompt-inspector-hint";
-        hint.textContent = "Pick a model to apply · Esc to cancel";
-
-        wrap.append(head, field, hint);
-
-        let done = false;
-        const finish = (save: boolean): void => {
-            if (done) {
-                return;
-            }
-            done = true;
-            closeEditor();
-            if (!save || isStale(sourceJson)) {
-                return;
-            }
-            const clips = getClips();
-            const target = clips[clipIdx]?.stages?.[0];
-            if (!target || target.model === selected) {
-                return;
-            }
-            target.model = selected;
-            saveClips(clips);
-        };
-
-        wireDismiss(wrap, ".vst-stage-model-inspector", finish);
-        document.body.appendChild(wrap);
-        clampInspectorToViewport(wrap);
-        activeWrap = wrap;
-        select.focus();
-    };
-
     const buildLoraSection = (
-        draft: StageDraft,
+        draft: ClipStageDraft,
         defaults: RootDefaults,
     ): HTMLElement => {
         const section = document.createElement("div");
@@ -478,188 +463,378 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
         return section;
     };
 
-    const openStageEditor = (
+    const openClipEditor = (
         anchor: HTMLElement | null,
         clipIdx: number,
-        stageIdx: number,
+        opts?: ClipEditorOptions,
     ): void => {
         const clip = getClips()[clipIdx];
-        const stage = clip?.stages?.[stageIdx];
-        if (!clip || !stage) {
+        if (!clip?.stages || clip.stages.length === 0) {
             return;
         }
         const sourceJson = readStateToken();
         const defaults = getRootDefaults();
-        const draft = draftFromStage(stage);
-        const isRefine = stageIdx >= 1;
-        const canDelete = clip.stages.length > 1;
+        const refs: RefImage[] = clip.refs.slice();
+        const lengthDerived =
+            clip.clipLengthFromAudio === true ||
+            clip.clipLengthFromControlNet === true;
 
-        const wrap = mountInspector(anchor, "vst-stage-inspector");
+        const draft: ClipDraft = {
+            clipSkipped: clip.skipped === true,
+            duration: clip.duration,
+            stages: clip.stages.map((stage, idx) => ({
+                originalIdx: idx,
+                ...draftFromStage(stage),
+            })),
+        };
+
+        let activeStageIdx = clamp(
+            opts?.stageIdx ?? 0,
+            0,
+            draft.stages.length - 1,
+        );
+        const focusModel = opts?.focusModel === true;
+
+        const wrap = mountInspector(anchor, "vst-clip-inspector");
 
         const head = document.createElement("div");
         head.className = "vst-prompt-inspector-head";
-        head.textContent = `Stage ${stageIdx} · ${isRefine ? "refine" : "full gen"}`;
+        const syncHead = (): void => {
+            head.textContent = `Clip ${clipIdx} · ${draft.duration}s`;
+        };
+        syncHead();
         wrap.appendChild(head);
 
-        wrap.appendChild(
-            buildCheckbox("Skip this stage", draft.skipped, (value) => {
-                draft.skipped = value;
+        const clipSection = document.createElement("div");
+        clipSection.className = "vst-clip-section";
+        clipSection.appendChild(
+            buildCheckbox("Skip this clip", draft.clipSkipped, (value) => {
+                draft.clipSkipped = value;
             }),
         );
+        const durationInput = buildNumber(
+            draft.duration,
+            CLIP_DURATION_MIN,
+            CLIP_DURATION_MAX,
+            DURATION_STEP,
+            (value) => {
+                draft.duration = value;
+                syncHead();
+            },
+        );
+        const durationField = buildField(
+            "Duration (s)",
+            durationInput,
+            lengthDerived
+                ? "(derived from audio/ControlNet source)"
+                : undefined,
+        );
+        if (lengthDerived) {
+            durationInput.disabled = true;
+            durationField.classList.add("vst-field-disabled");
+        }
+        clipSection.appendChild(durationField);
+        wrap.appendChild(clipSection);
 
-        wrap.appendChild(
-            buildField(
+        const divider = document.createElement("div");
+        divider.className = "vst-clip-divider";
+        wrap.appendChild(divider);
+
+        const tabs = document.createElement("div");
+        tabs.className = "vst-stage-tabs";
+        wrap.appendChild(tabs);
+
+        const panelHost = document.createElement("div");
+        panelHost.className = "vst-stage-panel";
+        wrap.appendChild(panelHost);
+
+        const hint = document.createElement("div");
+        hint.className = "vst-prompt-inspector-hint";
+        hint.textContent = "Click away to apply · Esc to cancel";
+        wrap.appendChild(hint);
+
+        let done = false;
+
+        const setActive = (idx: number): void => {
+            activeStageIdx = clamp(idx, 0, draft.stages.length - 1);
+            renderTabs();
+            renderPanel();
+        };
+
+        const addDraftStage = (): void => {
+            const last = draft.stages[draft.stages.length - 1] ?? null;
+            const previous = last ? stageFromDraft(last) : null;
+            const created = buildDefaultStage(
+                getRootDefaults,
+                getDefaultStageModel,
+                previous,
+                refs.length,
+            );
+            draft.stages.push({
+                originalIdx: null,
+                ...draftFromStage(created),
+            });
+            setActive(draft.stages.length - 1);
+        };
+
+        const deleteDraftStage = (idx: number): void => {
+            if (draft.stages.length <= 1) {
+                return;
+            }
+            draft.stages.splice(idx, 1);
+            setActive(Math.max(0, idx - 1));
+        };
+
+        const renderTabs = (): void => {
+            tabs.innerHTML = "";
+            draft.stages.forEach((sd, idx) => {
+                const tab = document.createElement("button");
+                tab.type = "button";
+                tab.className = "vst-chip vst-stage-tab";
+                if (idx === activeStageIdx) {
+                    tab.classList.add("vst-stage-tab-active");
+                }
+                if (sd.skipped) {
+                    tab.classList.add("vst-stage-tab-skipped");
+                }
+                tab.textContent = stageChipLabel(idx);
+                tab.title = stageChipTitle(stageFromDraft(sd), idx);
+                tab.addEventListener("click", () => setActive(idx));
+                tabs.appendChild(tab);
+            });
+            const addTab = document.createElement("button");
+            addTab.type = "button";
+            addTab.className = "vst-chip vst-stage-tab vst-stage-tab-add";
+            addTab.textContent = "+";
+            addTab.title = "Add a refine stage";
+            addTab.addEventListener("click", () => addDraftStage());
+            tabs.appendChild(addTab);
+        };
+
+        const buildStagePanel = (
+            sd: ClipStageDraft,
+            draftIdx: number,
+        ): HTMLElement => {
+            const panel = document.createElement("div");
+            panel.className = "vst-stage-panel-inner";
+            const isRefine = draftIdx >= 1;
+
+            const fieldsWrap = document.createElement("div");
+            fieldsWrap.className = "vst-stage-fields";
+            const applyMute = (): void => {
+                fieldsWrap.classList.toggle(
+                    "vst-stage-fields-muted",
+                    sd.skipped,
+                );
+            };
+            panel.appendChild(
+                buildCheckbox("Skip this stage", sd.skipped, (value) => {
+                    sd.skipped = value;
+                    applyMute();
+                    renderTabs();
+                }),
+            );
+            panel.appendChild(fieldsWrap);
+            applyMute();
+
+            const modelField = buildField(
                 "Model",
                 buildSelect(
                     defaults.modelValues,
                     defaults.modelLabels,
-                    draft.model,
+                    sd.model,
                     (value) => {
-                        draft.model = value;
-                    },
-                ),
-            ),
-        );
-
-        wrap.appendChild(
-            buildSlider(
-                "Steps",
-                draft.steps,
-                defaults.stepsMin,
-                defaults.stepsMax,
-                defaults.stepsStep,
-                (value) => {
-                    draft.steps = Math.round(value);
-                },
-            ),
-        );
-        wrap.appendChild(
-            buildSlider(
-                "CFG Scale",
-                draft.cfgScale,
-                defaults.cfgScaleMin,
-                defaults.cfgScaleMax,
-                defaults.cfgScaleStep,
-                (value) => {
-                    draft.cfgScale = value;
-                },
-            ),
-        );
-
-        if (isRefine) {
-            wrap.appendChild(
-                buildSlider(
-                    "Control (regen strength)",
-                    draft.control,
-                    defaults.controlMin,
-                    defaults.controlMax,
-                    defaults.controlStep,
-                    (value) => {
-                        draft.control = value;
+                        sd.model = value;
                     },
                 ),
             );
-            wrap.appendChild(
+            modelField.classList.add("vst-span-2");
+            fieldsWrap.appendChild(modelField);
+
+            fieldsWrap.appendChild(
                 buildSlider(
-                    "Upscale",
-                    draft.upscale,
-                    defaults.upscaleMin,
-                    defaults.upscaleMax,
-                    defaults.upscaleStep,
+                    "Steps",
+                    sd.steps,
+                    defaults.stepsMin,
+                    defaults.stepsMax,
+                    defaults.stepsStep,
                     (value) => {
-                        draft.upscale = value;
+                        sd.steps = Math.round(value);
                     },
                 ),
             );
-            wrap.appendChild(
-                buildField(
-                    "Upscale Method",
-                    buildSelect(
-                        defaults.upscaleMethodValues,
-                        defaults.upscaleMethodLabels,
-                        draft.upscaleMethod,
+            fieldsWrap.appendChild(
+                buildSlider(
+                    "CFG Scale",
+                    sd.cfgScale,
+                    defaults.cfgScaleMin,
+                    defaults.cfgScaleMax,
+                    defaults.cfgScaleStep,
+                    (value) => {
+                        sd.cfgScale = value;
+                    },
+                ),
+            );
+
+            if (isRefine) {
+                fieldsWrap.appendChild(
+                    buildSlider(
+                        "Control",
+                        sd.control,
+                        defaults.controlMin,
+                        defaults.controlMax,
+                        defaults.controlStep,
                         (value) => {
-                            draft.upscaleMethod = value;
+                            sd.control = value;
+                        },
+                        {
+                            title: "Regen strength — higher = more of the stage is re-generated",
+                        },
+                    ),
+                );
+                const methodSelect = buildSelect(
+                    defaults.upscaleMethodValues,
+                    defaults.upscaleMethodLabels,
+                    sd.upscaleMethod,
+                    (value) => {
+                        sd.upscaleMethod = value;
+                    },
+                );
+                const methodField = buildField("Upscale Method", methodSelect);
+                methodField.classList.add("vst-span-2");
+                const syncMethod = (): void => {
+                    const disabled = Math.abs(sd.upscale - 1) < UPSCALE_EPSILON;
+                    methodSelect.disabled = disabled;
+                    methodField.classList.toggle(
+                        "vst-field-disabled",
+                        disabled,
+                    );
+                    methodField.title = disabled
+                        ? "Set Upscale above 1× to choose a method"
+                        : "";
+                };
+                fieldsWrap.appendChild(
+                    buildSlider(
+                        "Upscale",
+                        sd.upscale,
+                        defaults.upscaleMin,
+                        defaults.upscaleMax,
+                        defaults.upscaleStep,
+                        (value) => {
+                            sd.upscale = value;
+                            syncMethod();
+                        },
+                    ),
+                );
+                fieldsWrap.appendChild(methodField);
+                syncMethod();
+            }
+
+            fieldsWrap.appendChild(
+                buildField(
+                    "Sampler",
+                    buildSelect(
+                        defaults.samplerValues,
+                        defaults.samplerLabels,
+                        sd.sampler,
+                        (value) => {
+                            sd.sampler = value;
                         },
                     ),
                 ),
             );
-        }
-
-        wrap.appendChild(
-            buildField(
-                "Sampler",
-                buildSelect(
-                    defaults.samplerValues,
-                    defaults.samplerLabels,
-                    draft.sampler,
-                    (value) => {
-                        draft.sampler = value;
-                    },
+            fieldsWrap.appendChild(
+                buildField(
+                    "Scheduler",
+                    buildSelect(
+                        defaults.schedulerValues,
+                        defaults.schedulerLabels,
+                        sd.scheduler,
+                        (value) => {
+                            sd.scheduler = value;
+                        },
+                    ),
                 ),
-            ),
-        );
-        wrap.appendChild(
-            buildField(
-                "Scheduler",
-                buildSelect(
-                    defaults.schedulerValues,
-                    defaults.schedulerLabels,
-                    draft.scheduler,
-                    (value) => {
-                        draft.scheduler = value;
-                    },
-                ),
-            ),
-        );
+            );
 
-        wrap.appendChild(buildLoraSection(draft, defaults));
+            const loraSection = buildLoraSection(sd, defaults);
+            loraSection.classList.add("vst-span-2");
+            fieldsWrap.appendChild(loraSection);
 
-        if (clip.refs.length > 0) {
-            const refsSection = document.createElement("div");
-            refsSection.className = "vst-audio-field vst-stage-refs";
-            const refsLabel = document.createElement("span");
-            refsLabel.className = "vst-audio-field-label";
-            refsLabel.textContent = "Reference Strengths";
-            refsSection.appendChild(refsLabel);
-            clip.refs.forEach((ref, refIdx) => {
-                if (refIdx >= draft.refStrengths.length) {
-                    draft.refStrengths[refIdx] = STAGE_REF_STRENGTH_MAX;
-                }
-                const slider = buildSlider(
-                    `R${refIdx}`,
-                    draft.refStrengths[refIdx],
-                    STAGE_REF_STRENGTH_MIN,
-                    STAGE_REF_STRENGTH_MAX,
-                    STAGE_REF_STRENGTH_STEP,
-                    (value) => {
-                        draft.refStrengths[refIdx] = value;
-                    },
-                    {
-                        title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`,
-                    },
-                );
-                slider.classList.add("vst-stage-ref-slider");
-                refsSection.appendChild(slider);
-            });
-            wrap.appendChild(refsSection);
-        }
+            if (refs.length > 0) {
+                const refsSection = document.createElement("div");
+                refsSection.className =
+                    "vst-audio-field vst-stage-refs vst-span-2";
+                const refsLabel = document.createElement("span");
+                refsLabel.className = "vst-audio-field-label";
+                refsLabel.textContent = "Reference Strengths";
+                refsSection.appendChild(refsLabel);
+                refs.forEach((ref, refIdx) => {
+                    if (refIdx >= sd.refStrengths.length) {
+                        sd.refStrengths[refIdx] = STAGE_REF_STRENGTH_MAX;
+                    }
+                    const slider = buildSlider(
+                        `R${refIdx}`,
+                        sd.refStrengths[refIdx],
+                        STAGE_REF_STRENGTH_MIN,
+                        STAGE_REF_STRENGTH_MAX,
+                        STAGE_REF_STRENGTH_STEP,
+                        (value) => {
+                            sd.refStrengths[refIdx] = value;
+                        },
+                        {
+                            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`,
+                        },
+                    );
+                    slider.classList.add("vst-stage-ref-slider");
+                    refsSection.appendChild(slider);
+                });
+                fieldsWrap.appendChild(refsSection);
+            }
 
-        wrap.appendChild(
-            buildSlider(
+            const controlNetSlider = buildSlider(
                 "ControlNet Strength",
-                draft.controlNetStrength,
+                sd.controlNetStrength,
                 STAGE_CONTROLNET_STRENGTH_MIN,
                 STAGE_CONTROLNET_STRENGTH_MAX,
                 STAGE_CONTROLNET_STRENGTH_STEP,
                 (value) => {
-                    draft.controlNetStrength = value;
+                    sd.controlNetStrength = value;
                 },
                 { hint: "Only applies when a ControlNet source is set" },
-            ),
-        );
+            );
+            controlNetSlider.classList.add("vst-span-2");
+            fieldsWrap.appendChild(controlNetSlider);
 
-        let done = false;
+            if (draft.stages.length > 1) {
+                const deleteBtn = document.createElement("button");
+                deleteBtn.type = "button";
+                deleteBtn.className = "vst-refs-delete";
+                deleteBtn.textContent = "Delete stage";
+                deleteBtn.addEventListener("click", (event) => {
+                    event.preventDefault();
+                    deleteDraftStage(draftIdx);
+                });
+                panel.appendChild(deleteBtn);
+            }
+
+            return panel;
+        };
+
+        const renderPanel = (): void => {
+            panelHost.innerHTML = "";
+            const sd = draft.stages[activeStageIdx];
+            if (!sd) {
+                return;
+            }
+            const panel = buildStagePanel(sd, activeStageIdx);
+            panelHost.appendChild(panel);
+            enableSlidersIn(panel);
+            if (wrap.isConnected) {
+                clampInspectorToViewport(wrap);
+            }
+        };
+
         const finish = (save: boolean): void => {
             if (done) {
                 return;
@@ -670,64 +845,79 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
                 return;
             }
             const clips = getClips();
-            const target = clips[clipIdx]?.stages?.[stageIdx];
+            const target = clips[clipIdx];
             if (!target) {
                 return;
             }
-            target.model = draft.model;
-            target.steps = draft.steps;
-            target.cfgScale = draft.cfgScale;
-            target.sampler = draft.sampler;
-            target.scheduler = draft.scheduler;
-            target.skipped = draft.skipped;
-            target.controlNetStrength = draft.controlNetStrength;
-            target.refStrengths = draft.refStrengths.slice(
-                0,
-                clips[clipIdx].refs.length,
-            );
-            target.loras = draft.loras
-                .filter((lora) => `${lora.name ?? ""}`.trim() !== "")
-                .map((lora) => ({
-                    name: lora.name,
-                    weight: Number.isFinite(lora.weight) ? lora.weight : 1,
-                }));
-            if (isRefine) {
-                target.control = draft.control;
-                target.upscale = draft.upscale;
-                target.upscaleMethod = draft.upscaleMethod;
+            target.skipped = draft.clipSkipped;
+            if (!lengthDerived && draft.duration !== target.duration) {
+                applyClipDurationResize(
+                    target,
+                    draft.duration,
+                    getRootDefaults,
+                );
             }
+            const originalStages = target.stages.slice();
+            const newStages: Stage[] = [];
+            draft.stages.forEach((sd, idx) => {
+                let stage: Stage;
+                if (sd.originalIdx !== null && originalStages[sd.originalIdx]) {
+                    stage = originalStages[sd.originalIdx];
+                } else {
+                    stage = buildDefaultStage(
+                        getRootDefaults,
+                        getDefaultStageModel,
+                        newStages[newStages.length - 1] ?? null,
+                        target.refs.length,
+                    );
+                }
+                stage.model = sd.model;
+                stage.steps = sd.steps;
+                stage.cfgScale = sd.cfgScale;
+                stage.sampler = sd.sampler;
+                stage.scheduler = sd.scheduler;
+                stage.skipped = sd.skipped;
+                stage.controlNetStrength = sd.controlNetStrength;
+                stage.refStrengths = sd.refStrengths.slice(
+                    0,
+                    target.refs.length,
+                );
+                stage.loras = sd.loras
+                    .filter((lora) => `${lora.name ?? ""}`.trim() !== "")
+                    .map((lora) => ({
+                        name: lora.name,
+                        weight: Number.isFinite(lora.weight) ? lora.weight : 1,
+                    }));
+                if (idx >= 1) {
+                    stage.control = sd.control;
+                    stage.upscale = sd.upscale;
+                    stage.upscaleMethod = sd.upscaleMethod;
+                }
+                newStages.push(stage);
+            });
+            target.stages = newStages;
             saveClips(clips);
         };
 
-        if (canDelete) {
-            const deleteBtn = document.createElement("button");
-            deleteBtn.type = "button";
-            deleteBtn.className = "vst-refs-delete";
-            deleteBtn.textContent = "Delete stage";
-            deleteBtn.addEventListener("click", (event) => {
-                event.preventDefault();
-                if (done) {
-                    return;
-                }
-                done = true;
-                closeEditor();
-                deleteStage(clipIdx, stageIdx, sourceJson);
-            });
-            wrap.appendChild(deleteBtn);
-        }
+        renderTabs();
+        renderPanel();
 
-        const hint = document.createElement("div");
-        hint.className = "vst-prompt-inspector-hint";
-        hint.textContent = "Click away to apply · Esc to cancel";
-        wrap.appendChild(hint);
-
-        wireDismiss(wrap, ".vst-stage-inspector", finish);
+        wireDismiss(wrap, ".vst-clip-inspector", finish);
         document.body.appendChild(wrap);
-        enableSlidersIn(wrap);
         clampInspectorToViewport(wrap);
         activeWrap = wrap;
-        const firstSelect = wrap.querySelector<HTMLSelectElement>("select");
-        firstSelect?.focus();
+
+        if (focusModel) {
+            const modelSelect = panelHost.querySelector<HTMLSelectElement>(
+                ".vst-audio-field select",
+            );
+            modelSelect?.focus();
+        } else {
+            const first = panelHost.querySelector<
+                HTMLSelectElement | HTMLInputElement
+            >("select, input");
+            first?.focus();
+        }
     };
 
     const addStage = (clipIdx: number, sourceJson: string): void => {
@@ -750,7 +940,11 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
         );
         const newIdx = clip.stages.length - 1;
         saveClips(clips);
-        openStageEditor(findStageChip(clipIdx, newIdx), clipIdx, newIdx);
+        const region =
+            boundBody?.querySelector<HTMLElement>(
+                `.vst-region[data-clip-idx="${clipIdx}"]`,
+            ) ?? null;
+        openClipEditor(region, clipIdx, { stageIdx: newIdx });
     };
 
     const deleteStage = (
@@ -792,7 +986,7 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
             if (shiftKey) {
                 deleteStage(clipIdx, stageIdx, readStateToken());
             } else {
-                openStageEditor(stageChip, clipIdx, stageIdx);
+                openClipEditor(stageChip, clipIdx, { stageIdx });
             }
             return;
         }
@@ -800,7 +994,10 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
         if (modelBadge instanceof HTMLElement) {
             const clipIdx = parseIntAttr(modelBadge, "data-clip-idx");
             if (clipIdx !== null) {
-                openModelEditor(modelBadge, clipIdx);
+                openClipEditor(modelBadge, clipIdx, {
+                    stageIdx: 0,
+                    focusModel: true,
+                });
             }
         }
     };
@@ -865,5 +1062,5 @@ export const createTimelineStagesEditor = (): TimelineStagesEditor => {
         }
     };
 
-    return { attach, dispose };
+    return { attach, openClipEditor, dispose };
 };

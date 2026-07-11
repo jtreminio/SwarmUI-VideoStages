@@ -115,7 +115,13 @@ export interface TimelineLinking {
     dispose(): void;
 }
 
-export const createTimelineLinking = (): TimelineLinking => {
+export interface TimelineLinkingOptions {
+    onClipOpen?: (clipIdx: number, region: HTMLElement) => void;
+}
+
+export const createTimelineLinking = (
+    options?: TimelineLinkingOptions,
+): TimelineLinking => {
     let attachedBody: HTMLElement | null = null;
     let selectedIndex: number | null = null;
 
@@ -203,6 +209,9 @@ export const createTimelineLinking = (): TimelineLinking => {
         }
         selectedIndex = idx;
         markSelection(body);
+        if (region instanceof HTMLElement) {
+            options?.onClipOpen?.(idx, region);
+        }
     };
 
     const readRegions = (

@@ -213,13 +213,13 @@ const renderStageChips = (clip: Clip, clipIdx: number): string => {
     const stages = clip.stages ?? [];
     const chips = stages
         .map((stage, stageIdx) => {
-            const skippedClass = stage?.skipped
-                ? " vst-stage-chip-skipped"
-                : "";
-            const title = `${stageChipTitle(stage, stageIdx)} · click to edit · Shift+click to delete`;
+            const skipped = stage?.skipped === true;
+            const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
+            const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
+            const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
             return (
                 `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeHtml(title)}">` +
-                `${escapeHtml(stageChipLabel(stageIdx))}</span>`
+                `${escapeHtml(label)}</span>`
             );
         })
         .join("");
@@ -728,7 +728,7 @@ export const renderTimeline = (
             const hue = clipHueCss(clip.hue);
             const renderWidth = Math.max(1, l.widthPx - 2);
             return (
-                `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Shift+click to delete">` +
+                `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +
                 renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) +
                 `<div class="vst-region-head">` +

@@ -500,13 +500,14 @@ describe("renderTimeline (DOM)", () => {
         expect(chips).toHaveLength(4);
         expect(chips.slice(0, 3).map((c) => c.textContent)).toEqual([
             "S0",
-            "S1",
+            "⊘ S1",
             "S2",
         ]);
         // The skipped stage (index 1) carries the skipped modifier.
         expect(chips[1].classList.contains("vst-stage-chip-skipped")).toBe(
             true,
         );
+        expect(chips[1].getAttribute("title")).toContain("(skipped)");
         expect(chips[0].classList.contains("vst-stage-chip-skipped")).toBe(
             false,
         );
