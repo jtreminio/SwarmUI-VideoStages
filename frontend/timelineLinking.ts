@@ -266,11 +266,13 @@ export const createTimelineLinking = (
         body.classList.remove(DRAGGING_CLASS);
     };
 
-    const endResize = (body: HTMLElement): void => {
-        if (resizeState) {
-            resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
+    const endResize = (body: HTMLElement, keepPreview = false): void => {
+        if (!keepPreview) {
+            if (resizeState) {
+                resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
+            }
+            clearClipShifts(body);
         }
-        clearClipShifts(body);
         resizeState = null;
         body.classList.remove(RESIZING_CLASS);
     };
@@ -323,8 +325,8 @@ export const createTimelineLinking = (
         saveClips(clips);
     };
 
-    const endKeyframe = (body: HTMLElement): void => {
-        if (keyframeState) {
+    const endKeyframe = (body: HTMLElement, keepPreview = false): void => {
+        if (!keepPreview && keyframeState) {
             keyframeState.el.style.left = keyframeState.originalLeft;
         }
         keyframeState = null;
@@ -498,9 +500,9 @@ export const createTimelineLinking = (
             const ks = keyframeState;
             const kme = event as MouseEvent;
             const rect = ks.regionEl.getBoundingClientRect();
-            endKeyframe(body);
             suppressClick = true;
             if (!ks.active) {
+                endKeyframe(body);
                 if (ks.shiftKey) {
                     applyToggleKeyframeFromEnd(
                         ks.clipIdx,
@@ -510,62 +512,63 @@ export const createTimelineLinking = (
                 }
                 return;
             }
-            if (readStateToken() !== ks.sourceJson) {
-                return;
+            let committed = false;
+            if (readStateToken() === ks.sourceJson) {
+                const newFrame = pxToFrame(
+                    kme.clientX - rect.left,
+                    rect.width,
+                    ks.durationSeconds,
+                    ks.fps,
+                    ks.fromEnd,
+                );
+                const clips = getClips();
+                const ref = clips[ks.clipIdx]?.refs?.[ks.refIdx];
+                if (ref && ref.frame !== newFrame) {
+                    ref.frame = newFrame;
+                    saveClips(clips);
+                    committed = true;
+                }
             }
-            const newFrame = pxToFrame(
-                kme.clientX - rect.left,
-                rect.width,
-                ks.durationSeconds,
-                ks.fps,
-                ks.fromEnd,
-            );
-            const clips = getClips();
-            const ref = clips[ks.clipIdx]?.refs?.[ks.refIdx];
-            if (!ref || ref.frame === newFrame) {
-                return;
-            }
-            ref.frame = newFrame;
-            saveClips(clips);
+            endKeyframe(body, committed);
             return;
         }
         if (resizeState) {
             const rs = resizeState;
             const me = event as MouseEvent;
-            endResize(body);
             if (!rs.active) {
+                endResize(body);
                 return;
             }
             const width = me.clientX - rs.startLeftPx;
             suppressClick = true;
-            if (readStateToken() !== rs.sourceJson) {
-                return;
+            let committed = false;
+            if (readStateToken() === rs.sourceJson) {
+                const clips = getClips();
+                if (
+                    rs.idx >= 0 &&
+                    rs.idx < clips.length &&
+                    !clips[rs.idx].clipLengthFromAudio &&
+                    !clips[rs.idx].clipLengthFromControlNet
+                ) {
+                    const newDuration = pxToDuration(
+                        width,
+                        livePxPerSecond(body),
+                        currentFps(),
+                    );
+                    if (
+                        applyClipDurationResize(
+                            clips[rs.idx],
+                            newDuration,
+                            getRootDefaults,
+                        )
+                    ) {
+                        selectedIndex = rs.idx;
+                        saveClips(clips);
+                        committed = true;
+                    }
+                }
             }
-            const clips = getClips();
-            if (rs.idx < 0 || rs.idx >= clips.length) {
-                return;
-            }
-            if (
-                clips[rs.idx].clipLengthFromAudio ||
-                clips[rs.idx].clipLengthFromControlNet
-            ) {
-                return;
-            }
-            const newDuration = pxToDuration(
-                width,
-                livePxPerSecond(body),
-                currentFps(),
-            );
-            if (
-                applyClipDurationResize(
-                    clips[rs.idx],
-                    newDuration,
-                    getRootDefaults,
-                )
-            ) {
-                selectedIndex = rs.idx;
-                saveClips(clips);
-            }
+            endResize(body, committed);
             return;
         }
         const state = dragState;

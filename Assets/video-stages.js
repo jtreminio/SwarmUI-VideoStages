@@ -2758,11 +2758,13 @@
       removeDropIndicator();
       body.classList.remove(DRAGGING_CLASS);
     };
-    const endResize = (body) => {
-      if (resizeState) {
-        resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
+    const endResize = (body, keepPreview = false) => {
+      if (!keepPreview) {
+        if (resizeState) {
+          resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
+        }
+        clearClipShifts(body);
       }
-      clearClipShifts(body);
       resizeState = null;
       body.classList.remove(RESIZING_CLASS);
     };
@@ -2807,8 +2809,8 @@
       );
       saveClips(clips);
     };
-    const endKeyframe = (body) => {
-      if (keyframeState) {
+    const endKeyframe = (body, keepPreview = false) => {
+      if (!keepPreview && keyframeState) {
         keyframeState.el.style.left = keyframeState.originalLeft;
       }
       keyframeState = null;
@@ -2969,9 +2971,9 @@
         const ks = keyframeState;
         const kme = event;
         const rect = ks.regionEl.getBoundingClientRect();
-        endKeyframe(body);
         suppressClick = true;
         if (!ks.active) {
+          endKeyframe(body);
           if (ks.shiftKey) {
             applyToggleKeyframeFromEnd(
               ks.clipIdx,
@@ -2981,57 +2983,56 @@
           }
           return;
         }
-        if (readStateToken() !== ks.sourceJson) {
-          return;
+        let committed = false;
+        if (readStateToken() === ks.sourceJson) {
+          const newFrame = pxToFrame(
+            kme.clientX - rect.left,
+            rect.width,
+            ks.durationSeconds,
+            ks.fps,
+            ks.fromEnd
+          );
+          const clips2 = getClips();
+          const ref = clips2[ks.clipIdx]?.refs?.[ks.refIdx];
+          if (ref && ref.frame !== newFrame) {
+            ref.frame = newFrame;
+            saveClips(clips2);
+            committed = true;
+          }
         }
-        const newFrame = pxToFrame(
-          kme.clientX - rect.left,
-          rect.width,
-          ks.durationSeconds,
-          ks.fps,
-          ks.fromEnd
-        );
-        const clips2 = getClips();
-        const ref = clips2[ks.clipIdx]?.refs?.[ks.refIdx];
-        if (!ref || ref.frame === newFrame) {
-          return;
-        }
-        ref.frame = newFrame;
-        saveClips(clips2);
+        endKeyframe(body, committed);
         return;
       }
       if (resizeState) {
         const rs = resizeState;
         const me2 = event;
-        endResize(body);
         if (!rs.active) {
+          endResize(body);
           return;
         }
         const width = me2.clientX - rs.startLeftPx;
         suppressClick = true;
-        if (readStateToken() !== rs.sourceJson) {
-          return;
+        let committed = false;
+        if (readStateToken() === rs.sourceJson) {
+          const clips2 = getClips();
+          if (rs.idx >= 0 && rs.idx < clips2.length && !clips2[rs.idx].clipLengthFromAudio && !clips2[rs.idx].clipLengthFromControlNet) {
+            const newDuration = pxToDuration(
+              width,
+              livePxPerSecond(body),
+              currentFps()
+            );
+            if (applyClipDurationResize(
+              clips2[rs.idx],
+              newDuration,
+              getRootDefaults
+            )) {
+              selectedIndex = rs.idx;
+              saveClips(clips2);
+              committed = true;
+            }
+          }
         }
-        const clips2 = getClips();
-        if (rs.idx < 0 || rs.idx >= clips2.length) {
-          return;
-        }
-        if (clips2[rs.idx].clipLengthFromAudio || clips2[rs.idx].clipLengthFromControlNet) {
-          return;
-        }
-        const newDuration = pxToDuration(
-          width,
-          livePxPerSecond(body),
-          currentFps()
-        );
-        if (applyClipDurationResize(
-          clips2[rs.idx],
-          newDuration,
-          getRootDefaults
-        )) {
-          selectedIndex = rs.idx;
-          saveClips(clips2);
-        }
+        endResize(body, committed);
         return;
       }
       const state = dragState;
