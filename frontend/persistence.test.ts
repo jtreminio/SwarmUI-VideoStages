@@ -41,6 +41,9 @@ describe("persistence", () => {
                         minimalStage({
                             controlNetStrength: 0.7,
                             refStrengths: [0.8],
+                            loras: [
+                                { name: "detail.safetensors", weight: 0.6 },
+                            ],
                         }),
                     ],
                 }),
@@ -79,6 +82,9 @@ describe("persistence", () => {
                             cfgScale: 1,
                             sampler: "euler",
                             scheduler: "normal",
+                            loras: [
+                                { name: "detail.safetensors", weight: 0.6 },
+                            ],
                         },
                     ],
                 },

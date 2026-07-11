@@ -23,6 +23,7 @@ import { createTimelineLinking } from "./timelineLinking";
 import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
 import { createTimelineSettings } from "./timelineSettings";
+import { createTimelineStagesEditor } from "./timelineStagesEditor";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -57,6 +58,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
     const referencesTrack = createTimelineReferencesTrack();
+    const stagesEditor = createTimelineStagesEditor();
     const settings = createTimelineSettings(() => refresh());
 
     const history = createTimelineHistory({
@@ -296,6 +298,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             promptTrack.attach(body);
             audioTrack.attach(body);
             referencesTrack.attach(body);
+            stagesEditor.attach(body);
             body.removeEventListener("click", onBodyClickSyncReadout);
             body.addEventListener("click", onBodyClickSyncReadout);
         }
@@ -326,6 +329,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         promptTrack.dispose();
         audioTrack.dispose();
         referencesTrack.dispose();
+        stagesEditor.dispose();
         settings.dispose();
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);

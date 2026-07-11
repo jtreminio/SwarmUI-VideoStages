@@ -18,6 +18,7 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     cfgScale: 1,
     sampler: "euler",
     scheduler: "normal",
+    loras: [],
     ...overrides,
 });
 

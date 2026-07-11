@@ -3,9 +3,11 @@ import {
     appendRefToClip,
     buildDefaultClip,
     buildDefaultRef,
+    buildDefaultStage,
     normalizeClip,
     normalizeRef,
     normalizeStage,
+    normalizeStageLoras,
     normalizeStageRefStrengthValue,
     readRawStageProp,
     readRawStageString,
@@ -373,5 +375,89 @@ describe("appendRefToClip / removeRefAt", () => {
         expect(removeRefAt(clip, -1)).toBe(false);
         expect(clip.refs).toHaveLength(1);
         expect(clip.stages[0].refStrengths).toHaveLength(1);
+    });
+});
+
+describe("stage loras", () => {
+    it("normalizeStageLoras parses tolerant entries and drops invalid ones", () => {
+        expect(
+            normalizeStageLoras([
+                { name: "a.safetensors", weight: 0.5 },
+                { Name: "b.safetensors", Weight: "1.25" },
+                { name: "  ", weight: 1 },
+                { name: "c.safetensors" },
+                { weight: 2 },
+                "nope",
+            ]),
+        ).toEqual([
+            { name: "a.safetensors", weight: 0.5 },
+            { name: "b.safetensors", weight: 1.25 },
+            { name: "c.safetensors", weight: 1 },
+        ]);
+        expect(normalizeStageLoras(undefined)).toEqual([]);
+        expect(normalizeStageLoras("x")).toEqual([]);
+    });
+
+    it("normalizeStage reads loras (camel or Pascal) into the stage", () => {
+        const stage = normalizeStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            { ...minimalStageRaw, Loras: [{ Name: "l.safetensors" }] },
+            null,
+            0,
+            0,
+        );
+        expect(stage.loras).toEqual([{ name: "l.safetensors", weight: 1 }]);
+    });
+
+    it("buildDefaultStage inherits (deep-copies) the previous stage's loras", () => {
+        const first = normalizeStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            {
+                ...minimalStageRaw,
+                loras: [{ name: "x.safetensors", weight: 0.7 }],
+            },
+            null,
+            0,
+            0,
+        );
+        const next = buildDefaultStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            first,
+            0,
+        );
+        expect(next.loras).toEqual([{ name: "x.safetensors", weight: 0.7 }]);
+        // Deep copy: mutating the child must not touch the parent.
+        next.loras[0].weight = 0.1;
+        expect(first.loras[0].weight).toBe(0.7);
+    });
+
+    it("normalizeClip round-trips loras across a multi-stage clip", () => {
+        const clip = normalizeClip(
+            {
+                duration: 2,
+                refs: [],
+                stages: [
+                    {
+                        model: "ltx",
+                        loras: [{ name: "base.safetensors", weight: 1 }],
+                    },
+                    {
+                        model: "ltx",
+                        loras: [{ name: "refine.safetensors", weight: 0.4 }],
+                    },
+                ],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.stages[0].loras).toEqual([
+            { name: "base.safetensors", weight: 1 },
+        ]);
+        expect(clip.stages[1].loras).toEqual([
+            { name: "refine.safetensors", weight: 0.4 },
+        ]);
     });
 });

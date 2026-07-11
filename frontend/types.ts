@@ -45,6 +45,11 @@ export interface UploadedAudio {
     fileName: string | null;
 }
 
+export interface StageLora {
+    name: string;
+    weight: number;
+}
+
 export interface Stage {
     expanded: boolean;
     skipped: boolean;
@@ -58,6 +63,7 @@ export interface Stage {
     cfgScale: number;
     sampler: string;
     scheduler: string;
+    loras: StageLora[];
 }
 
 export interface PromptWindow {
@@ -112,6 +118,7 @@ export type StoredStage = Pick<
     | "cfgScale"
     | "sampler"
     | "scheduler"
+    | "loras"
 >;
 
 export type StoredClip = Pick<

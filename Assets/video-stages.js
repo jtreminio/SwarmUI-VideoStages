@@ -524,6 +524,26 @@
     const s = `${v}`.trim();
     return s.length > 0 ? s : void 0;
   };
+  var normalizeStageLoras = (raw) => {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    const out = [];
+    for (const entry of raw) {
+      if (!isRecord(entry)) {
+        continue;
+      }
+      const name = `${readRawStageProp(entry, "name", "Name") ?? ""}`.trim();
+      if (!name) {
+        continue;
+      }
+      const weightRaw = readRawStageProp(entry, "weight", "Weight");
+      const weight = utils.toNumber(`${weightRaw ?? 1}`, 1);
+      out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
+    }
+    return out;
+  };
+  var cloneStageLoras = (loras) => loras.map((lora) => ({ name: lora.name, weight: lora.weight }));
   var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount) => {
     const defaults = getRootDefaults2();
     return {
@@ -538,7 +558,8 @@
       steps: previousStage ? previousStage.steps : defaults.steps,
       cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
       sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
-      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
+      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal",
+      loras: previousStage ? cloneStageLoras(previousStage.loras) : []
     };
   };
   var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
@@ -698,7 +719,10 @@
         defaults.cfgScaleMax
       ),
       sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
-      scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler
+      scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
+      loras: normalizeStageLoras(
+        readRawStageProp(rawStage, "loras", "Loras")
+      )
     };
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
       stage.upscaleMethod = stageIndexInClip === 0 ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
@@ -1322,7 +1346,11 @@
         steps: stage.steps,
         cfgScale: stage.cfgScale,
         sampler: stage.sampler,
-        scheduler: stage.scheduler
+        scheduler: stage.scheduler,
+        loras: stage.loras.map((lora) => ({
+          name: lora.name,
+          weight: lora.weight
+        }))
       }))
     })
   );
@@ -1922,6 +1950,28 @@
     }
     return { label: value, title: `Audio source: ${value}` };
   };
+  var shortModelName = (model) => {
+    const raw = `${model ?? ""}`.trim();
+    if (!raw) {
+      return "(default)";
+    }
+    const segment = raw.split(/[\\/]/).pop() ?? raw;
+    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
+  };
+  var stageChipLabel = (index) => `S${index}`;
+  var stageChipTitle = (stage, index) => {
+    const parts = [
+      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
+      `model: ${shortModelName(stage?.model ?? "")}`,
+      `steps: ${stage?.steps ?? "?"}`,
+      `cfg: ${stage?.cfgScale ?? "?"}`,
+      `control: ${stage?.control ?? "?"}`
+    ];
+    if (stage?.skipped) {
+      parts.push("skipped");
+    }
+    return parts.join(" · ");
+  };
 
   // frontend/timelineEdit.ts
   var pxToDuration = (px, pxPerSecond, fps) => {
@@ -2180,7 +2230,6 @@
     }
     return layouts;
   };
-  var badgeHtml = (badge, extraClass = "") => `<span class="vst-badge${extraClass}" title="${escapeAttr(badge.title)}">${escapeAttr(badge.label)}</span>`;
   var renderRegionThumb = (clip) => {
     for (const ref of clip.refs ?? []) {
       const value = ref.uploadedImage?.data;
@@ -2214,11 +2263,27 @@
     }).join("");
     return `<div class="vst-keys" title="Reference markers">${pips}</div>`;
   };
-  var renderBadges = (clip) => {
-    const badges = [
-      badgeHtml(audioSourceBadge(clip.audioSource ?? ""), " vst-badge-audio")
-    ];
-    return `<div class="vst-badges">${badges.join("")}</div>`;
+  var renderBadges = (clip, clipIdx) => {
+    const stage0 = (clip.stages ?? [])[0];
+    if (!stage0) {
+      return `<div class="vst-badges"></div>`;
+    }
+    const model = stage0.model ?? "";
+    const short = shortModelName(model);
+    const full = `${model}`.trim() || "(default)";
+    const title = `Clip model: ${full} — click to change (applies to Stage 0)`;
+    const badge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${escapeAttr(short)}</span>`;
+    return `<div class="vst-badges">${badge}</div>`;
+  };
+  var renderStageChips = (clip, clipIdx) => {
+    const stages = clip.stages ?? [];
+    const chips = stages.map((stage, stageIdx) => {
+      const skippedClass = stage?.skipped ? " vst-stage-chip-skipped" : "";
+      const title = `${stageChipTitle(stage, stageIdx)} · click to edit · Shift+click to delete`;
+      return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(stageChipLabel(stageIdx))}</span>`;
+    }).join("");
+    const addChip = `<span class="vst-chip vst-stage-chip vst-stage-chip-add" data-vst-stage-add data-clip-idx="${clipIdx}" role="button" tabindex="0" title="Add a refine stage">+</span>`;
+    return chips + addChip;
   };
   var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
   var promptWindowGeom = (layout, window2, pxPerSecond) => {
@@ -2505,12 +2570,8 @@
       const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${l.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button></div>`;
       const rightGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
       const hue = clipHueCss(clip.hue);
-      const skippedStages = (clip.stages ?? []).filter(
-        (stage) => stage?.skipped
-      ).length;
-      const stagesTitle = skippedStages > 0 ? `Stages: ${l.stageCount} (${skippedStages} skipped)` : "Stages";
       const renderWidth = Math.max(1, l.widthPx - 2);
-      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Shift+click to delete">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span><span class="vst-chip" title="${escapeAttr(stagesTitle)}">▤ ${l.stageCount}</span><span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip) + controls + rightGrip + `</div>`;
+      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Shift+click to delete">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span>` + renderStageChips(clip, l.index) + `<span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip, l.index) + controls + rightGrip + `</div>`;
     }).join("");
     const audioRow = renderAudioTrackRow(clips, layouts);
     const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
@@ -4669,6 +4730,717 @@
     return { open, close, dispose };
   };
 
+  // frontend/timelineStagesEditor.ts
+  var STAGE_SELECTOR = "[data-vst-stage]";
+  var STAGE_ADD_SELECTOR = "[data-vst-stage-add]";
+  var MODEL_SELECTOR = "[data-vst-model]";
+  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${STAGE_ADD_SELECTOR}, ${MODEL_SELECTOR}`;
+  var EDITING_CLASS3 = "vst-stage-editing";
+  var LORA_WEIGHT_STEP = 0.05;
+  var LORA_WEIGHT_DEFAULT = 1;
+  var sliderSeq = 0;
+  var parseIntAttr3 = (el, name) => {
+    if (!el) {
+      return null;
+    }
+    const raw = el.getAttribute(name);
+    if (raw === null) {
+      return null;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  };
+  var draftFromStage = (stage) => ({
+    model: `${stage.model ?? ""}`,
+    steps: stage.steps,
+    cfgScale: stage.cfgScale,
+    control: stage.control,
+    upscale: stage.upscale,
+    upscaleMethod: `${stage.upscaleMethod ?? ""}`,
+    sampler: `${stage.sampler ?? ""}`,
+    scheduler: `${stage.scheduler ?? ""}`,
+    skipped: stage.skipped === true,
+    controlNetStrength: stage.controlNetStrength,
+    refStrengths: (stage.refStrengths ?? []).slice(),
+    loras: (stage.loras ?? []).map((lora) => ({
+      name: lora.name,
+      weight: lora.weight
+    }))
+  });
+  var createTimelineStagesEditor = () => {
+    let boundBody = null;
+    let activeWrap = null;
+    let editingAnchor = null;
+    let outsideMouseHandler = null;
+    const isStale = (sourceJson) => readStateToken() !== sourceJson;
+    const closeEditor = () => {
+      if (outsideMouseHandler) {
+        document.removeEventListener(
+          "mousedown",
+          outsideMouseHandler,
+          true
+        );
+        outsideMouseHandler = null;
+      }
+      if (editingAnchor) {
+        editingAnchor.classList.remove(EDITING_CLASS3);
+        editingAnchor = null;
+      }
+      if (activeWrap) {
+        activeWrap.remove();
+        activeWrap = null;
+      }
+    };
+    const findStageChip = (clipIdx, stageIdx) => boundBody?.querySelector(
+      `${STAGE_SELECTOR}[data-clip-idx="${clipIdx}"][data-stage-idx="${stageIdx}"]`
+    ) ?? null;
+    const buildField = (label, control, hint) => {
+      const row = document.createElement("div");
+      row.className = "vst-audio-field";
+      const text = document.createElement("span");
+      text.className = "vst-audio-field-label";
+      text.textContent = label;
+      row.append(text, control);
+      if (hint) {
+        const small = document.createElement("small");
+        small.className = "vst-audio-field-hint";
+        small.textContent = hint;
+        row.appendChild(small);
+      }
+      return row;
+    };
+    const buildSelect = (values, labels, selected, onChange) => {
+      const select = document.createElement("select");
+      select.className = "vst-audio-select";
+      for (let i = 0; i < values.length; i++) {
+        const opt = document.createElement("option");
+        opt.value = values[i];
+        opt.textContent = labels[i] ?? values[i];
+        opt.dataset.cleanname = labels[i] ?? values[i];
+        opt.selected = values[i] === selected;
+        select.appendChild(opt);
+      }
+      select.addEventListener("change", () => onChange(select.value));
+      return select;
+    };
+    const buildNumber = (value, min, max, step, onChange) => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.className = "vst-refs-num";
+      input.min = `${min}`;
+      input.max = `${max}`;
+      input.step = `${step}`;
+      input.value = `${value}`;
+      const apply = (normalize) => {
+        const parsed = Number.parseFloat(input.value);
+        const next = clamp(
+          Number.isFinite(parsed) ? parsed : value,
+          min,
+          max
+        );
+        onChange(next);
+        if (normalize) {
+          input.value = `${next}`;
+        }
+      };
+      input.addEventListener("input", () => apply(false));
+      input.addEventListener("change", () => apply(true));
+      return input;
+    };
+    const buildSlider = (label, value, min, max, step, onChange, opts) => {
+      const holder = document.createElement("div");
+      holder.className = "vst-stage-slider";
+      const id = `vst_stage_slider_${++sliderSeq}`;
+      holder.innerHTML = makeSliderInput(
+        null,
+        id,
+        "",
+        label,
+        "",
+        value,
+        min,
+        max,
+        min,
+        max,
+        step,
+        false,
+        false,
+        false
+      );
+      const number = holder.querySelector(
+        "input.auto-slider-number"
+      );
+      if (number) {
+        const apply = (normalize) => {
+          const parsed = Number.parseFloat(number.value);
+          const next = clamp(
+            Number.isFinite(parsed) ? parsed : value,
+            min,
+            max
+          );
+          onChange(next);
+          if (normalize) {
+            number.value = `${next}`;
+          }
+        };
+        number.addEventListener("input", () => apply(false));
+        number.addEventListener("change", () => apply(true));
+      }
+      if (opts?.title) {
+        holder.title = opts.title;
+      }
+      if (opts?.hint) {
+        const small = document.createElement("small");
+        small.className = "vst-audio-field-hint";
+        small.textContent = opts.hint;
+        holder.appendChild(small);
+      }
+      return holder;
+    };
+    const buildCheckbox = (label, checked, onChange) => {
+      const row = document.createElement("label");
+      row.className = "vst-audio-field vst-audio-field-check";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = checked;
+      input.addEventListener("change", () => onChange(input.checked));
+      const text = document.createElement("span");
+      text.className = "vst-audio-field-label";
+      text.textContent = label;
+      row.append(input, text);
+      return row;
+    };
+    const mountInspector = (anchor, extraClass) => {
+      closeEditor();
+      const host = boundBody ?? document.body;
+      const hostRect = host.getBoundingClientRect();
+      const viewportW = window.innerWidth || document.documentElement.clientWidth;
+      const width = clamp(Math.round(hostRect.width - 32), 260, 420);
+      const left = clamp(
+        Math.round(hostRect.left + (hostRect.width - width) / 2),
+        8,
+        Math.max(8, viewportW - width - 8)
+      );
+      const wrap = document.createElement("div");
+      wrap.className = `vst-prompt-inspector ${extraClass}`;
+      wrap.style.left = `${left}px`;
+      wrap.style.top = `${Math.round(Math.max(8, hostRect.top + 46))}px`;
+      wrap.style.width = `${width}px`;
+      if (anchor) {
+        anchor.classList.add(EDITING_CLASS3);
+        editingAnchor = anchor;
+      }
+      return wrap;
+    };
+    const clampInspectorToViewport = (wrap) => {
+      const viewportH = window.innerHeight || document.documentElement.clientHeight;
+      wrap.style.maxHeight = `${Math.min(Math.round(viewportH * 0.78), viewportH - 16)}px`;
+      const height = wrap.offsetHeight;
+      const currentTop = Number.parseFloat(wrap.style.top) || 0;
+      const newTop = clamp(
+        currentTop,
+        8,
+        Math.max(8, viewportH - height - 8)
+      );
+      wrap.style.top = `${newTop}px`;
+      if (newTop + height > viewportH - 8) {
+        wrap.style.maxHeight = `${Math.max(64, viewportH - newTop - 8)}px`;
+      }
+    };
+    const wireDismiss = (wrap, inspectorSelector, finish) => {
+      wrap.addEventListener("keydown", (event) => {
+        if (event.target instanceof Element && event.target.closest(".sui-popover")) {
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          finish(false);
+        } else if (event.key === "Enter" && !(event.target instanceof HTMLSelectElement)) {
+          event.preventDefault();
+          finish(true);
+        }
+        event.stopPropagation();
+      });
+      const onOutside = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        if (target.closest(inspectorSelector) || target.closest(".sui-popover")) {
+          return;
+        }
+        finish(true);
+      };
+      outsideMouseHandler = onOutside;
+      document.addEventListener("mousedown", onOutside, true);
+    };
+    const openModelEditor = (anchor, clipIdx) => {
+      const clip = getClips()[clipIdx];
+      const stage0 = clip?.stages?.[0];
+      if (!clip || !stage0) {
+        return;
+      }
+      const sourceJson = readStateToken();
+      const defaults = getRootDefaults();
+      const wrap = mountInspector(anchor, "vst-stage-model-inspector");
+      const head = document.createElement("div");
+      head.className = "vst-prompt-inspector-head";
+      head.textContent = `Clip ${clipIdx} · model`;
+      let selected = `${stage0.model ?? ""}`;
+      const select = buildSelect(
+        defaults.modelValues,
+        defaults.modelLabels,
+        selected,
+        (value) => {
+          selected = value;
+          finish(true);
+        }
+      );
+      const field = buildField("Model", select, "(applies to Stage 0)");
+      const hint = document.createElement("div");
+      hint.className = "vst-prompt-inspector-hint";
+      hint.textContent = "Pick a model to apply · Esc to cancel";
+      wrap.append(head, field, hint);
+      let done = false;
+      const finish = (save) => {
+        if (done) {
+          return;
+        }
+        done = true;
+        closeEditor();
+        if (!save || isStale(sourceJson)) {
+          return;
+        }
+        const clips = getClips();
+        const target = clips[clipIdx]?.stages?.[0];
+        if (!target || target.model === selected) {
+          return;
+        }
+        target.model = selected;
+        saveClips(clips);
+      };
+      wireDismiss(wrap, ".vst-stage-model-inspector", finish);
+      document.body.appendChild(wrap);
+      clampInspectorToViewport(wrap);
+      activeWrap = wrap;
+      select.focus();
+    };
+    const buildLoraSection = (draft, defaults) => {
+      const section = document.createElement("div");
+      section.className = "vst-audio-field vst-stage-loras";
+      const label = document.createElement("span");
+      label.className = "vst-audio-field-label";
+      label.textContent = "LoRAs";
+      section.appendChild(label);
+      if (defaults.loraValues.length === 0) {
+        const empty = document.createElement("small");
+        empty.className = "vst-audio-field-hint";
+        empty.textContent = "(no LoRAs available)";
+        section.appendChild(empty);
+        return section;
+      }
+      const list = document.createElement("div");
+      list.className = "vst-stage-lora-list";
+      section.appendChild(list);
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "vst-stage-lora-add";
+      addBtn.textContent = "+ Add LoRA";
+      section.appendChild(addBtn);
+      const renderRows = () => {
+        list.innerHTML = "";
+        draft.loras.forEach((lora, index) => {
+          const row = document.createElement("div");
+          row.className = "vst-stage-lora-row";
+          const select = buildSelect(
+            defaults.loraValues,
+            defaults.loraLabels,
+            lora.name,
+            (value) => {
+              draft.loras[index].name = value;
+            }
+          );
+          const weight = buildNumber(
+            lora.weight,
+            -10,
+            10,
+            LORA_WEIGHT_STEP,
+            (value) => {
+              draft.loras[index].weight = value;
+            }
+          );
+          weight.classList.add("vst-stage-lora-weight");
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "vst-stage-lora-remove";
+          remove.textContent = "×";
+          remove.title = "Remove this LoRA";
+          remove.addEventListener("click", () => {
+            draft.loras.splice(index, 1);
+            renderRows();
+          });
+          row.append(select, weight, remove);
+          list.appendChild(row);
+        });
+      };
+      addBtn.addEventListener("click", () => {
+        draft.loras.push({
+          name: defaults.loraValues[0] ?? "",
+          weight: LORA_WEIGHT_DEFAULT
+        });
+        renderRows();
+      });
+      renderRows();
+      return section;
+    };
+    const openStageEditor = (anchor, clipIdx, stageIdx) => {
+      const clip = getClips()[clipIdx];
+      const stage = clip?.stages?.[stageIdx];
+      if (!clip || !stage) {
+        return;
+      }
+      const sourceJson = readStateToken();
+      const defaults = getRootDefaults();
+      const draft = draftFromStage(stage);
+      const isRefine = stageIdx >= 1;
+      const canDelete = clip.stages.length > 1;
+      const wrap = mountInspector(anchor, "vst-stage-inspector");
+      const head = document.createElement("div");
+      head.className = "vst-prompt-inspector-head";
+      head.textContent = `Stage ${stageIdx} · ${isRefine ? "refine" : "full gen"}`;
+      wrap.appendChild(head);
+      wrap.appendChild(
+        buildCheckbox("Skip this stage", draft.skipped, (value) => {
+          draft.skipped = value;
+        })
+      );
+      wrap.appendChild(
+        buildField(
+          "Model",
+          buildSelect(
+            defaults.modelValues,
+            defaults.modelLabels,
+            draft.model,
+            (value) => {
+              draft.model = value;
+            }
+          )
+        )
+      );
+      wrap.appendChild(
+        buildSlider(
+          "Steps",
+          draft.steps,
+          defaults.stepsMin,
+          defaults.stepsMax,
+          defaults.stepsStep,
+          (value) => {
+            draft.steps = Math.round(value);
+          }
+        )
+      );
+      wrap.appendChild(
+        buildSlider(
+          "CFG Scale",
+          draft.cfgScale,
+          defaults.cfgScaleMin,
+          defaults.cfgScaleMax,
+          defaults.cfgScaleStep,
+          (value) => {
+            draft.cfgScale = value;
+          }
+        )
+      );
+      if (isRefine) {
+        wrap.appendChild(
+          buildSlider(
+            "Control (regen strength)",
+            draft.control,
+            defaults.controlMin,
+            defaults.controlMax,
+            defaults.controlStep,
+            (value) => {
+              draft.control = value;
+            }
+          )
+        );
+        wrap.appendChild(
+          buildSlider(
+            "Upscale",
+            draft.upscale,
+            defaults.upscaleMin,
+            defaults.upscaleMax,
+            defaults.upscaleStep,
+            (value) => {
+              draft.upscale = value;
+            }
+          )
+        );
+        wrap.appendChild(
+          buildField(
+            "Upscale Method",
+            buildSelect(
+              defaults.upscaleMethodValues,
+              defaults.upscaleMethodLabels,
+              draft.upscaleMethod,
+              (value) => {
+                draft.upscaleMethod = value;
+              }
+            )
+          )
+        );
+      }
+      wrap.appendChild(
+        buildField(
+          "Sampler",
+          buildSelect(
+            defaults.samplerValues,
+            defaults.samplerLabels,
+            draft.sampler,
+            (value) => {
+              draft.sampler = value;
+            }
+          )
+        )
+      );
+      wrap.appendChild(
+        buildField(
+          "Scheduler",
+          buildSelect(
+            defaults.schedulerValues,
+            defaults.schedulerLabels,
+            draft.scheduler,
+            (value) => {
+              draft.scheduler = value;
+            }
+          )
+        )
+      );
+      wrap.appendChild(buildLoraSection(draft, defaults));
+      if (clip.refs.length > 0) {
+        const refsSection = document.createElement("div");
+        refsSection.className = "vst-audio-field vst-stage-refs";
+        const refsLabel = document.createElement("span");
+        refsLabel.className = "vst-audio-field-label";
+        refsLabel.textContent = "Reference Strengths";
+        refsSection.appendChild(refsLabel);
+        clip.refs.forEach((ref, refIdx) => {
+          if (refIdx >= draft.refStrengths.length) {
+            draft.refStrengths[refIdx] = STAGE_REF_STRENGTH_MAX;
+          }
+          const slider = buildSlider(
+            `R${refIdx}`,
+            draft.refStrengths[refIdx],
+            STAGE_REF_STRENGTH_MIN,
+            STAGE_REF_STRENGTH_MAX,
+            STAGE_REF_STRENGTH_STEP,
+            (value) => {
+              draft.refStrengths[refIdx] = value;
+            },
+            {
+              title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
+            }
+          );
+          slider.classList.add("vst-stage-ref-slider");
+          refsSection.appendChild(slider);
+        });
+        wrap.appendChild(refsSection);
+      }
+      wrap.appendChild(
+        buildSlider(
+          "ControlNet Strength",
+          draft.controlNetStrength,
+          STAGE_CONTROLNET_STRENGTH_MIN,
+          STAGE_CONTROLNET_STRENGTH_MAX,
+          STAGE_CONTROLNET_STRENGTH_STEP,
+          (value) => {
+            draft.controlNetStrength = value;
+          },
+          { hint: "Only applies when a ControlNet source is set" }
+        )
+      );
+      let done = false;
+      const finish = (save) => {
+        if (done) {
+          return;
+        }
+        done = true;
+        closeEditor();
+        if (!save || isStale(sourceJson)) {
+          return;
+        }
+        const clips = getClips();
+        const target = clips[clipIdx]?.stages?.[stageIdx];
+        if (!target) {
+          return;
+        }
+        target.model = draft.model;
+        target.steps = draft.steps;
+        target.cfgScale = draft.cfgScale;
+        target.sampler = draft.sampler;
+        target.scheduler = draft.scheduler;
+        target.skipped = draft.skipped;
+        target.controlNetStrength = draft.controlNetStrength;
+        target.refStrengths = draft.refStrengths.slice(
+          0,
+          clips[clipIdx].refs.length
+        );
+        target.loras = draft.loras.filter((lora) => `${lora.name ?? ""}`.trim() !== "").map((lora) => ({
+          name: lora.name,
+          weight: Number.isFinite(lora.weight) ? lora.weight : 1
+        }));
+        if (isRefine) {
+          target.control = draft.control;
+          target.upscale = draft.upscale;
+          target.upscaleMethod = draft.upscaleMethod;
+        }
+        saveClips(clips);
+      };
+      if (canDelete) {
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "vst-refs-delete";
+        deleteBtn.textContent = "Delete stage";
+        deleteBtn.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (done) {
+            return;
+          }
+          done = true;
+          closeEditor();
+          deleteStage(clipIdx, stageIdx, sourceJson);
+        });
+        wrap.appendChild(deleteBtn);
+      }
+      const hint = document.createElement("div");
+      hint.className = "vst-prompt-inspector-hint";
+      hint.textContent = "Click away to apply · Esc to cancel";
+      wrap.appendChild(hint);
+      wireDismiss(wrap, ".vst-stage-inspector", finish);
+      document.body.appendChild(wrap);
+      enableSlidersIn(wrap);
+      clampInspectorToViewport(wrap);
+      activeWrap = wrap;
+      const firstSelect = wrap.querySelector("select");
+      firstSelect?.focus();
+    };
+    const addStage = (clipIdx, sourceJson) => {
+      if (isStale(sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      if (!clip) {
+        return;
+      }
+      const last = clip.stages[clip.stages.length - 1] ?? null;
+      clip.stages.push(
+        buildDefaultStage(
+          getRootDefaults,
+          getDefaultStageModel,
+          last,
+          clip.refs.length
+        )
+      );
+      const newIdx = clip.stages.length - 1;
+      saveClips(clips);
+      openStageEditor(findStageChip(clipIdx, newIdx), clipIdx, newIdx);
+    };
+    const deleteStage = (clipIdx, stageIdx, sourceJson) => {
+      if (isStale(sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      if (!clip || clip.stages.length <= 1) {
+        return;
+      }
+      if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+        return;
+      }
+      clip.stages.splice(stageIdx, 1);
+      saveClips(clips);
+    };
+    const handleActivation = (target, shiftKey) => {
+      const addChip = target.closest(STAGE_ADD_SELECTOR);
+      if (addChip instanceof HTMLElement) {
+        const clipIdx = parseIntAttr3(addChip, "data-clip-idx");
+        if (clipIdx !== null) {
+          addStage(clipIdx, readStateToken());
+        }
+        return;
+      }
+      const stageChip = target.closest(STAGE_SELECTOR);
+      if (stageChip instanceof HTMLElement) {
+        const clipIdx = parseIntAttr3(stageChip, "data-clip-idx");
+        const stageIdx = parseIntAttr3(stageChip, "data-stage-idx");
+        if (clipIdx === null || stageIdx === null) {
+          return;
+        }
+        if (shiftKey) {
+          deleteStage(clipIdx, stageIdx, readStateToken());
+        } else {
+          openStageEditor(stageChip, clipIdx, stageIdx);
+        }
+        return;
+      }
+      const modelBadge = target.closest(MODEL_SELECTOR);
+      if (modelBadge instanceof HTMLElement) {
+        const clipIdx = parseIntAttr3(modelBadge, "data-clip-idx");
+        if (clipIdx !== null) {
+          openModelEditor(modelBadge, clipIdx);
+        }
+      }
+    };
+    const onMouseDownCapture = (event) => {
+      if (event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR)) {
+        event.stopPropagation();
+      }
+    };
+    const onClickCapture = (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
+        return;
+      }
+      event.stopPropagation();
+      handleActivation(event.target, event.shiftKey);
+    };
+    const onKeyDownCapture = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      handleActivation(event.target, event.shiftKey);
+    };
+    const attach = (body) => {
+      if (boundBody === body) {
+        return;
+      }
+      dispose();
+      boundBody = body;
+      body.addEventListener("mousedown", onMouseDownCapture, true);
+      body.addEventListener("click", onClickCapture, true);
+      body.addEventListener("keydown", onKeyDownCapture, true);
+    };
+    const dispose = () => {
+      closeEditor();
+      if (boundBody) {
+        boundBody.removeEventListener(
+          "mousedown",
+          onMouseDownCapture,
+          true
+        );
+        boundBody.removeEventListener("click", onClickCapture, true);
+        boundBody.removeEventListener("keydown", onKeyDownCapture, true);
+        boundBody = null;
+      }
+    };
+    return { attach, dispose };
+  };
+
   // frontend/videoStagesTimeline.ts
   var safeStateFps = (fps) => typeof fps === "number" && fps > 0 ? fps : 24;
   var INPUT_SYNC_INTERVAL_MS = 200;
@@ -4684,6 +5456,7 @@
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
     const referencesTrack = createTimelineReferencesTrack();
+    const stagesEditor = createTimelineStagesEditor();
     const settings = createTimelineSettings(() => refresh());
     const history = createTimelineHistory({
       read: () => readCarrierSnapshot(),
@@ -4898,6 +5671,7 @@
         promptTrack.attach(body);
         audioTrack.attach(body);
         referencesTrack.attach(body);
+        stagesEditor.attach(body);
         body.removeEventListener("click", onBodyClickSyncReadout);
         body.addEventListener("click", onBodyClickSyncReadout);
       }
@@ -4927,6 +5701,7 @@
       promptTrack.dispose();
       audioTrack.dispose();
       referencesTrack.dispose();
+      stagesEditor.dispose();
       settings.dispose();
       const body = document.getElementById(TIMELINE_BODY_ID);
       body?.removeEventListener("click", onBodyClickSyncReadout);

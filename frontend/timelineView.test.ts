@@ -184,10 +184,27 @@ describe("renderTimeline (DOM)", () => {
         const clip = makeClip(2, 0, 0);
         expect(() => renderTimeline(body, [clip])).not.toThrow();
         expect(body.querySelector(".vst-keys")).toBeNull();
-        expect(body.querySelector(".vst-badge-audio")?.textContent).toBe(
-            "Native",
-        );
+        // The audio badge was dropped (redundant with the Audio track).
+        expect(body.querySelector(".vst-badge-audio")).toBeNull();
+        // A clip with no stages has no model badge.
+        expect(body.querySelector(".vst-badge-model")).toBeNull();
         expect(body.querySelector(".vst-badge-lora")).toBeNull();
+    });
+
+    it("renders a model badge (stage 0's model) at the clip bottom-left", () => {
+        const clip = {
+            duration: 2,
+            refs: [],
+            stages: [{ model: "path/to/wan-2.2.safetensors" }],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const badge = body.querySelector<HTMLElement>(".vst-badge-model");
+        expect(badge).not.toBeNull();
+        expect(badge?.textContent).toBe("wan-2.2");
+        expect(badge?.getAttribute("data-clip-idx")).toBe("0");
+        expect(badge?.getAttribute("title")).toContain(
+            "path/to/wan-2.2.safetensors",
+        );
     });
 
     it("omits the resize grip for a clip whose length is derived from audio/ControlNet", () => {
@@ -469,16 +486,40 @@ describe("renderTimeline (DOM)", () => {
         expect(waves[1].querySelectorAll("span")).toHaveLength(400);
     });
 
-    it("surfaces skipped-stage counts in the stage chip tooltip", () => {
+    it("renders one editable chip per stage plus an add chip", () => {
         const clip = {
             duration: 2,
             refs: [],
             stages: [{}, { skipped: true }, {}],
         } as unknown as Clip;
         renderTimeline(body, [clip]);
-        const chip = body.querySelector(".vst-chip");
-        expect(chip?.getAttribute("title")).toBe("Stages: 3 (1 skipped)");
-        expect(chip?.textContent).toBe("▤ 3");
+        const chips = Array.from(
+            body.querySelectorAll<HTMLElement>(".vst-stage-chip"),
+        );
+        // 3 stage chips + 1 add chip.
+        expect(chips).toHaveLength(4);
+        expect(chips.slice(0, 3).map((c) => c.textContent)).toEqual([
+            "S0",
+            "S1",
+            "S2",
+        ]);
+        // The skipped stage (index 1) carries the skipped modifier.
+        expect(chips[1].classList.contains("vst-stage-chip-skipped")).toBe(
+            true,
+        );
+        expect(chips[0].classList.contains("vst-stage-chip-skipped")).toBe(
+            false,
+        );
+        // Stage chips carry edit + delete affordances in the tooltip.
+        expect(chips[0].getAttribute("title")).toContain("click to edit");
+        expect(chips[0].getAttribute("title")).toContain(
+            "Shift+click to delete",
+        );
+        // The add chip is last and marked as such.
+        const add = chips[3];
+        expect(add.classList.contains("vst-stage-chip-add")).toBe(true);
+        expect(add.hasAttribute("data-vst-stage-add")).toBe(true);
+        expect(add.textContent).toBe("+");
     });
 
     it("draws a bare arrow marker on the clip and shows the ref image on the References-track thumbnail", () => {

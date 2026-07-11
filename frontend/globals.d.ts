@@ -31,7 +31,7 @@ declare function makeNumberInput(
     popover_button?: boolean,
 ): string;
 declare function makeSliderInput(
-    featureid: string,
+    featureid: string | null,
     id: string,
     paramid: string,
     name: string,

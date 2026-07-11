@@ -546,6 +546,32 @@
     letter-spacing: 0.06em;
     font-weight: 600;
 }
+.vst-stage-chip {
+    cursor: pointer;
+    transition: border-color var(--vst-ease), background var(--vst-ease),
+        filter var(--vst-ease);
+}
+.vst-stage-chip:hover,
+.vst-stage-chip:focus-visible {
+    outline: none;
+    border-color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 16%, var(--background));
+    filter: brightness(1.05);
+}
+.vst-stage-chip.vst-stage-editing {
+    border-color: var(--emphasis);
+    box-shadow: 0 0 0 1px var(--emphasis);
+}
+.vst-stage-chip-skipped {
+    opacity: 0.6;
+    text-decoration: line-through;
+    border-style: dashed;
+}
+.vst-stage-chip-add {
+    font-weight: 700;
+    color: color-mix(in srgb, var(--emphasis) 80%, var(--text));
+    border-style: dashed;
+}
 .vst-region-dur {
     margin-left: auto;
     flex: none;
@@ -586,12 +612,25 @@
     line-height: 1;
     opacity: 0.9;
 }
-.vst-badge-audio {
-    border-color: color-mix(in srgb, var(--green) 45%, var(--light-border));
+.vst-badge-model {
+    cursor: pointer;
+    max-width: 100%;
+    border-color: color-mix(in srgb, var(--emphasis) 40%, var(--light-border));
+    transition: border-color var(--vst-ease), filter var(--vst-ease);
 }
-.vst-badge-audio::before {
-    content: "♪";
-    color: color-mix(in srgb, var(--green) 70%, var(--text));
+.vst-badge-model::before {
+    content: "♦";
+    color: color-mix(in srgb, var(--emphasis) 75%, var(--text));
+}
+.vst-badge-model:hover,
+.vst-badge-model:focus-visible {
+    outline: none;
+    border-color: var(--emphasis);
+    filter: brightness(1.08);
+}
+.vst-badge-model.vst-stage-editing {
+    border-color: var(--emphasis);
+    box-shadow: 0 0 0 1px var(--emphasis);
 }
 .vst-badge-lora {
     border-color: color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
@@ -1014,6 +1053,7 @@
     background: var(--background-panel, var(--vst-panel));
     box-shadow: 0 10px 34px color-mix(in srgb, var(--shadow) 62%, transparent),
         0 0 0 1px var(--vst-hairline);
+    overflow-y: auto;
 }
 .vst-prompt-inspector-head {
     font-family: var(--vst-mono);
@@ -1026,6 +1066,57 @@
 .vst-prompt-inspector-hint {
     font-size: var(--vst-font-3xs);
     color: var(--text-soft);
+}
+.vst-prompt-inspector .sui-popover {
+    z-index: 100001;
+}
+
+.vst-stage-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.vst-prompt-inspector .vst-stage-slider .auto-slider-box {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+.vst-prompt-inspector .vst-stage-slider .auto-input-name {
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+}
+.vst-prompt-inspector .vst-stage-slider label {
+    display: block;
+    margin: 0;
+}
+.vst-prompt-inspector .vst-stage-slider .auto-slider-number {
+    float: right;
+    width: 3.5rem;
+    text-align: right;
+    color: var(--text);
+    font-size: var(--vst-font-xs);
+}
+.vst-prompt-inspector .vst-stage-slider .auto-slider-range-wrapper {
+    width: 100%;
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+.vst-prompt-inspector .vst-stage-slider .auto-slider-range {
+    width: 100%;
+}
+.vst-prompt-inspector .vst-stage-slider .vst-audio-field-hint {
+    display: block;
+    margin-top: 2px;
+}
+.vst-stage-refs .vst-stage-ref-slider {
+    gap: 1px;
+}
+.vst-stage-refs .vst-stage-ref-slider .auto-slider-range-wrapper {
+    margin-top: 6px;
+    margin-bottom: 2px;
 }
 .vst-prompt-editor {
     width: 100%;
@@ -1328,6 +1419,83 @@
 .vst-refs-delete:hover {
     border-color: var(--red);
     background: color-mix(in srgb, var(--red) 16%, var(--background));
+}
+
+/* ── Stage editor popover ── */
+.vst-stage-inspector {
+    gap: 8px;
+    max-height: 78vh;
+    overflow-y: auto;
+}
+.vst-stage-model-inspector {
+    gap: 8px;
+}
+.vst-stage-loras,
+.vst-stage-refs {
+    gap: 5px;
+}
+.vst-stage-lora-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.vst-stage-lora-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.vst-stage-lora-row .vst-audio-select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.vst-stage-lora-weight {
+    flex: 0 0 68px;
+    width: 68px;
+}
+.vst-stage-lora-remove {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid color-mix(in srgb, var(--red) 40%, var(--light-border));
+    background: transparent;
+    color: color-mix(in srgb, var(--red) 85%, var(--text));
+    font-size: var(--vst-font-sm);
+    line-height: 1;
+    cursor: pointer;
+}
+.vst-stage-lora-remove:hover {
+    border-color: var(--red);
+    background: color-mix(in srgb, var(--red) 16%, var(--background));
+}
+.vst-stage-lora-add {
+    align-self: flex-start;
+    padding: 3px 10px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: var(--vst-font-3xs);
+    cursor: pointer;
+}
+.vst-stage-lora-add:hover {
+    color: var(--text);
+    border-color: var(--emphasis);
+}
+.vst-stage-ref-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.vst-stage-ref-label {
+    flex: 0 0 34px;
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+}
+.vst-stage-ref-row .vst-refs-num {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 /* --- Settings chip (topbar) + popover --- */
 .vst-settings-chip {

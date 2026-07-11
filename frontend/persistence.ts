@@ -92,6 +92,10 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
                 cfgScale: stage.cfgScale,
                 sampler: stage.sampler,
                 scheduler: stage.scheduler,
+                loras: stage.loras.map((lora) => ({
+                    name: lora.name,
+                    weight: lora.weight,
+                })),
             })),
         }),
     );

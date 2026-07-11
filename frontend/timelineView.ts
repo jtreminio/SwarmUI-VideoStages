@@ -3,7 +3,6 @@ import { clamp, mediaPreviewSrc } from "./constants";
 import { matchPresetKey } from "./dimensionPresets";
 import {
     audioSourceBadge,
-    type Badge,
     chooseRulerStepSeconds,
     computeRulerTicks,
     escapeHtml,
@@ -13,6 +12,9 @@ import {
     keyframeTimeSeconds,
     refSourceLabel,
     safeFps,
+    shortModelName,
+    stageChipLabel,
+    stageChipTitle,
     type TimelineUnit,
 } from "./timelineDetail";
 import type { Clip, PromptWindow, RefImage } from "./types";
@@ -143,9 +145,6 @@ export const computeRegionLayout = (
     return layouts;
 };
 
-const badgeHtml = (badge: Badge, extraClass = ""): string =>
-    `<span class="vst-badge${extraClass}" title="${escapeHtml(badge.title)}">${escapeHtml(badge.label)}</span>`;
-
 const renderRegionThumb = (clip: Clip): string => {
     for (const ref of clip.refs ?? []) {
         const value = ref.uploadedImage?.data;
@@ -195,11 +194,37 @@ const renderKeyframes = (
     return `<div class="vst-keys" title="Reference markers">${pips}</div>`;
 };
 
-const renderBadges = (clip: Clip): string => {
-    const badges: string[] = [
-        badgeHtml(audioSourceBadge(clip.audioSource ?? ""), " vst-badge-audio"),
-    ];
-    return `<div class="vst-badges">${badges.join("")}</div>`;
+const renderBadges = (clip: Clip, clipIdx: number): string => {
+    const stage0 = (clip.stages ?? [])[0];
+    if (!stage0) {
+        return `<div class="vst-badges"></div>`;
+    }
+    const model = stage0.model ?? "";
+    const short = shortModelName(model);
+    const full = `${model}`.trim() || "(default)";
+    const title = `Clip model: ${full} — click to change (applies to Stage 0)`;
+    const badge =
+        `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">` +
+        `${escapeHtml(short)}</span>`;
+    return `<div class="vst-badges">${badge}</div>`;
+};
+
+const renderStageChips = (clip: Clip, clipIdx: number): string => {
+    const stages = clip.stages ?? [];
+    const chips = stages
+        .map((stage, stageIdx) => {
+            const skippedClass = stage?.skipped
+                ? " vst-stage-chip-skipped"
+                : "";
+            const title = `${stageChipTitle(stage, stageIdx)} · click to edit · Shift+click to delete`;
+            return (
+                `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeHtml(title)}">` +
+                `${escapeHtml(stageChipLabel(stageIdx))}</span>`
+            );
+        })
+        .join("");
+    const addChip = `<span class="vst-chip vst-stage-chip vst-stage-chip-add" data-vst-stage-add data-clip-idx="${clipIdx}" role="button" tabindex="0" title="Add a refine stage">+</span>`;
+    return chips + addChip;
 };
 
 const lengthDerived = (clip: Clip): boolean =>
@@ -701,13 +726,6 @@ export const renderTimeline = (
                 ? ""
                 : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
             const hue = clipHueCss(clip.hue);
-            const skippedStages = (clip.stages ?? []).filter(
-                (stage) => stage?.skipped,
-            ).length;
-            const stagesTitle =
-                skippedStages > 0
-                    ? `Stages: ${l.stageCount} (${skippedStages} skipped)`
-                    : "Stages";
             const renderWidth = Math.max(1, l.widthPx - 2);
             return (
                 `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Shift+click to delete">` +
@@ -715,12 +733,12 @@ export const renderTimeline = (
                 renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) +
                 `<div class="vst-region-head">` +
                 `<span class="vst-region-name">Clip ${l.index}</span>` +
-                `<span class="vst-chip" title="${escapeHtml(stagesTitle)}">▤ ${l.stageCount}</span>` +
+                renderStageChips(clip, l.index) +
                 `<span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` +
                 skipChip +
                 `<span class="vst-region-dur">${dur}</span>` +
                 `</div>` +
-                renderBadges(clip) +
+                renderBadges(clip, l.index) +
                 controls +
                 rightGrip +
                 `</div>`

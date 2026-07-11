@@ -30,6 +30,7 @@ import {
     type RefImage,
     type RootDefaults,
     type Stage,
+    type StageLora,
     type UploadedAudio,
 } from "./types";
 import { utils } from "./utils";
@@ -215,6 +216,29 @@ export const readRawStageString = (
     return s.length > 0 ? s : undefined;
 };
 
+export const normalizeStageLoras = (raw: unknown): StageLora[] => {
+    if (!Array.isArray(raw)) {
+        return [];
+    }
+    const out: StageLora[] = [];
+    for (const entry of raw) {
+        if (!isRecord(entry)) {
+            continue;
+        }
+        const name = `${readRawStageProp(entry, "name", "Name") ?? ""}`.trim();
+        if (!name) {
+            continue;
+        }
+        const weightRaw = readRawStageProp(entry, "weight", "Weight");
+        const weight = utils.toNumber(`${weightRaw ?? 1}`, 1);
+        out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
+    }
+    return out;
+};
+
+const cloneStageLoras = (loras: StageLora[]): StageLora[] =>
+    loras.map((lora) => ({ name: lora.name, weight: lora.weight }));
+
 export const buildDefaultStage = (
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
@@ -245,6 +269,7 @@ export const buildDefaultStage = (
         scheduler: previousStage
             ? previousStage.scheduler
             : (defaults.schedulerValues[0] ?? "normal"),
+        loras: previousStage ? cloneStageLoras(previousStage.loras) : [],
     };
 };
 
@@ -432,6 +457,9 @@ export const normalizeStage = (
         sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
         scheduler:
             `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
+        loras: normalizeStageLoras(
+            readRawStageProp(rawStage, "loras", "Loras"),
+        ),
     };
 
     if (
