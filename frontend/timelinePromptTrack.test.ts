@@ -13,6 +13,7 @@ import {
     type TimelinePromptTrack,
 } from "./timelinePromptTrack";
 import type { Clip, PromptWindow } from "./types";
+import { getSelection, resetSelectionForTests } from "./uiState";
 
 const PPS = 44;
 
@@ -120,23 +121,6 @@ const el = (body: HTMLElement, selector: string): HTMLElement => {
     return found;
 };
 
-const requireEditor = (): HTMLTextAreaElement => {
-    const editor =
-        document.querySelector<HTMLTextAreaElement>(".vst-prompt-editor");
-    if (!editor) {
-        throw new Error("prompt editor not open");
-    }
-    return editor;
-};
-
-const commitEditor = (value: string): void => {
-    const editor = requireEditor();
-    editor.value = value;
-    editor.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-    );
-};
-
 const mouse = (type: string, clientX: number, shiftKey = false): MouseEvent =>
     new MouseEvent(type, {
         bubbles: true,
@@ -160,6 +144,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
     beforeEach(() => {
+        resetSelectionForTests();
         saveSpy = jest
             .spyOn(persistence, "saveClips")
             .mockImplementation(() => {});
@@ -169,6 +154,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         track?.dispose();
         track = null;
         jest.restoreAllMocks();
+        resetSelectionForTests();
         document.body.innerHTML = "";
     });
 
@@ -307,7 +293,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         expect(windows[0].start).toBeCloseTo(4, 5);
     });
 
-    it("clicking a minor segment opens an editor that commits the prompt on Enter", () => {
+    it("clicking a minor segment selects its relay window", () => {
         const body = setup([
             { duration: 10, windows: [{ start: 1, duration: 2 }] },
         ]);
@@ -316,61 +302,22 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         document.dispatchEvent(mouse("mouseup", 100)); // no movement
         seg.dispatchEvent(mouse("click", 100));
 
-        commitEditor("a red car");
-
-        expect(savedWindows(saveSpy)[0].prompt).toBe("a red car");
-        expect(document.querySelector(".vst-prompt-editor")).toBeNull();
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: 0,
+        });
+        expect(saveSpy).not.toHaveBeenCalled();
     });
 
-    it("deletes the window via the popover delete button", () => {
-        const body = setup([
-            {
-                duration: 10,
-                windows: [
-                    { start: 1, duration: 1 },
-                    { start: 4, duration: 1 },
-                ],
-            },
-        ]);
-        const seg = el(body, ".vst-minor-seg[data-window-idx='0']");
-        seg.dispatchEvent(mouse("mousedown", 50));
-        document.dispatchEvent(mouse("mouseup", 50)); // no movement → click opens editor
-        seg.dispatchEvent(mouse("click", 50));
-
-        const del = document.querySelector<HTMLButtonElement>(
-            ".vst-prompt-inspector .vst-refs-delete",
-        );
-        if (!del) {
-            throw new Error("delete button not found");
-        }
-        del.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-        const windows = savedWindows(saveSpy);
-        expect(windows).toHaveLength(1);
-        expect(windows[0].start).toBeCloseTo(4, 5);
-        expect(document.querySelector(".vst-prompt-inspector")).toBeNull();
-    });
-
-    it("does not render a delete button in the MAJOR prompt editor", () => {
+    it("clicking the MAJOR segment selects the clip's prompt", () => {
         const body = setup([{ duration: 10 }]);
         el(body, ".vst-major-seg[data-clip-idx='0']").dispatchEvent(
             mouse("click", 100),
         );
 
-        expect(
-            document.querySelector(".vst-prompt-inspector .vst-refs-delete"),
-        ).toBeNull();
-    });
-
-    it("clicking the MAJOR segment edits the clip's own prompt", () => {
-        const body = setup([{ duration: 10 }]);
-        el(body, ".vst-major-seg[data-clip-idx='0']").dispatchEvent(
-            mouse("click", 100),
-        );
-
-        commitEditor("a wide landscape");
-
-        expect(savedClips(saveSpy)[0].prompt).toBe("a wide landscape");
+        expect(getSelection()).toEqual({ kind: "prompt-major", clipIdx: 0 });
+        expect(saveSpy).not.toHaveBeenCalled();
     });
 
     it("adding into a gap between two windows clamps to the free interval", () => {

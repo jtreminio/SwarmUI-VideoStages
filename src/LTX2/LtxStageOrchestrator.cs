@@ -34,6 +34,17 @@ internal sealed class LtxStageOrchestrator(
             sourceMedia);
         ResolvedClipRef primaryGuideClipRef = LtxClipRefResolver.ExtractPrimaryGuideClipRef(clipRefs);
         clipRefs = LtxClipRefResolver.RemovePrimaryGuideClipRef(clipRefs, primaryGuideClipRef);
+        if (stageFrame.ClipContext.ContinuityFrame is WGNodeData continuityFrame
+            && stageFrame.ClipContext.IsFirstStage(stage))
+        {
+            // "continue" boundary: generate this clip from the previous clip's final frame. The sequence
+            // runner only arms ContinuityFrame when the clip has no explicit first-frame ref, so this can
+            // only ever displace the implicit image-to-video default ref.
+            primaryGuideClipRef = new ResolvedClipRef(
+                continuityFrame,
+                new ImageRefSpec("Continue", Frame: 1, FromEnd: false, UploadFileName: null),
+                Strength: 1.0);
+        }
         double guideMergeStrength = primaryGuideClipRef?.Strength ?? 1.0;
 
         bool replacesTextToVideoRoot = rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);

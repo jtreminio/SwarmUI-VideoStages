@@ -17,6 +17,7 @@ import {
     moveItem,
 } from "./timelineReorder";
 import { DEFAULT_PX_PER_SECOND } from "./timelineView";
+import { getSelectedClipIndex, getSelection, setSelection } from "./uiState";
 
 const REGION_SELECTOR = ".vst-region[data-clip-idx]";
 const REGION_ACTION_SELECTOR = "[data-vst-region-action]";
@@ -115,15 +116,24 @@ export interface TimelineLinking {
     dispose(): void;
 }
 
-export interface TimelineLinkingOptions {
-    onClipOpen?: (clipIdx: number, region: HTMLElement) => void;
-}
-
-export const createTimelineLinking = (
-    options?: TimelineLinkingOptions,
-): TimelineLinking => {
+export const createTimelineLinking = (): TimelineLinking => {
     let attachedBody: HTMLElement | null = null;
-    let selectedIndex: number | null = null;
+
+    // The clip index for the currently selected clip (any clip-bound
+    // selection kind), or null. Backed by the shared uiState selection.
+    const selectedClip = (): number | null => getSelectedClipIndex();
+
+    // Stage index to keep when re-selecting a clip we already have open.
+    const stageForClip = (clipIdx: number): number => {
+        const sel = getSelection();
+        return sel.kind === "clip" && sel.clipIdx === clipIdx
+            ? sel.stageIdx
+            : 0;
+    };
+
+    const selectClip = (clipIdx: number, stageIdx: number): void => {
+        setSelection({ kind: "clip", clipIdx, stageIdx });
+    };
 
     let dragState: {
         sourceIdx: number;
@@ -169,10 +179,11 @@ export const createTimelineLinking = (
         )) {
             region.classList.remove(REGION_SELECTED_CLASS);
         }
-        if (selectedIndex === null) {
+        const idx = selectedClip();
+        if (idx === null) {
             return;
         }
-        findRegion(body, selectedIndex)?.classList.add(REGION_SELECTED_CLASS);
+        findRegion(body, idx)?.classList.add(REGION_SELECTED_CLASS);
     };
 
     const onRegionClick = (body: HTMLElement, event: Event): void => {
@@ -207,11 +218,8 @@ export const createTimelineLinking = (
             applyDelete(idx);
             return;
         }
-        selectedIndex = idx;
+        selectClip(idx, 0);
         markSelection(body);
-        if (region instanceof HTMLElement) {
-            options?.onClipOpen?.(idx, region);
-        }
     };
 
     const readRegions = (
@@ -292,11 +300,12 @@ export const createTimelineLinking = (
             return;
         }
         clips.splice(idx, 1);
-        if (selectedIndex !== null) {
-            if (selectedIndex === idx) {
-                selectedIndex = null;
-            } else if (selectedIndex > idx) {
-                selectedIndex -= 1;
+        const sel = getSelection();
+        if (sel.kind === "clip") {
+            if (sel.clipIdx === idx) {
+                setSelection({ kind: "none" });
+            } else if (sel.clipIdx > idx) {
+                setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
             }
         }
         saveClips(clips);
@@ -562,7 +571,7 @@ export const createTimelineLinking = (
                             getRootDefaults,
                         )
                     ) {
-                        selectedIndex = rs.idx;
+                        selectClip(rs.idx, stageForClip(rs.idx));
                         saveClips(clips);
                         committed = true;
                     }
@@ -585,7 +594,7 @@ export const createTimelineLinking = (
         const gap = computeDropIndex(me.clientX, rects);
         const from = state.sourceIdx;
         if (isNoOpMove(from, gap)) {
-            selectedIndex = from;
+            selectClip(from, stageForClip(from));
             markSelection(body);
             return;
         }
@@ -596,7 +605,8 @@ export const createTimelineLinking = (
         if (from < 0 || from >= clips.length) {
             return;
         }
-        selectedIndex = finalIndexAfterMove(from, gap);
+        const destIdx = finalIndexAfterMove(from, gap);
+        selectClip(destIdx, stageForClip(from));
         saveClips(moveItem(clips, from, gap));
     };
 
@@ -675,7 +685,10 @@ export const createTimelineLinking = (
     };
 
     const reapplySelection = (body: HTMLElement, clipCount: number): void => {
-        selectedIndex = resolveSelectedIndex(selectedIndex, clipCount);
+        const idx = selectedClip();
+        if (idx !== null && resolveSelectedIndex(idx, clipCount) === null) {
+            setSelection({ kind: "none" });
+        }
         markSelection(body);
     };
 
@@ -716,7 +729,7 @@ export const createTimelineLinking = (
         suppressClick = false;
     };
 
-    const getSelectedIndex = (): number | null => selectedIndex;
+    const getSelectedIndex = (): number | null => selectedClip();
 
     return { attach, reapplySelection, getSelectedIndex, dispose };
 };

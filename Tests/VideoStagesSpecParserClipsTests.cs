@@ -1008,4 +1008,219 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(1.0, spec.Clips[0].Stages[0].Control);
         Assert.Equal(1.0, spec.Clips[0].Stages[1].Control);
     }
+
+    [Theory]
+    [InlineData("cut", "cut")]
+    [InlineData("continue", "continue")]
+    [InlineData("crossfade", "crossfade")]
+    [InlineData("Crossfade", "crossfade")]
+    [InlineData("  CONTINUE ", "continue")]
+    [InlineData("wipe", "cut")]
+    [InlineData("", "cut")]
+    public void ParseClips_BoundaryOut_NormalizesWithUnknownFallingBackToCut(string raw, string expected)
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["BoundaryOut"] = raw;
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        WorkflowGenerator parser = BuildParser(json);
+
+        ClipSpec parsed = VideoStagesSpecParser.Parse(parser).Clips.Single();
+
+        Assert.Equal(expected, parsed.BoundaryOut);
+    }
+
+    [Fact]
+    public void ParseClips_BoundaryOut_DefaultsCutWhenAbsent_BackCompat()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        WorkflowGenerator parser = BuildParser(json);
+
+        ClipSpec parsed = VideoStagesSpecParser.Parse(parser).Clips.Single();
+
+        Assert.Equal(Constants.BoundaryOutCut, parsed.BoundaryOut);
+    }
+
+    // No VideoFPS param and no top-level JSON FPS => the parser falls back to 24 fps, so seconds map to
+    // frames at 24×.
+    private static WorkflowGenerator BuildRefineParser(string json)
+    {
+        T2IParamInput input = BuildInputWithJson(json);
+        input.Set(VideoStagesExtension.RefineSourceVideo, new Image([0xDE, 0xAD, 0xBE, 0xEF], MediaType.VideoMp4));
+        input.Set(VideoStagesExtension.RefineSkipStages, 0);
+        return new() { UserInput = input };
+    }
+
+    private static JObject MakeRetake(double startSeconds, double lengthSeconds, double? strength = null)
+    {
+        JObject retake = new()
+        {
+            ["StartSeconds"] = startSeconds,
+            ["LengthSeconds"] = lengthSeconds,
+        };
+        if (strength is not null)
+        {
+            retake["Strength"] = strength.Value;
+        }
+        return retake;
+    }
+
+    [Fact]
+    public void ParseClips_Retake_ConvertsSecondsToFramesAtFpsAndAttachesToLastStage()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]);
+        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0, strength: 0.6);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+
+        Assert.Null(parsed.Stages[0].RetakeWindow);
+        RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
+        Assert.NotNull(retake);
+        Assert.Equal(24, retake.StartFrame);
+        Assert.Equal(48, retake.LengthFrames);
+        Assert.Equal(0.6, retake.Strength, 6);
+    }
+
+    [Fact]
+    public void ParseClips_Retake_DefaultsStrengthToOneWhenAbsent()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["Retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+
+        RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
+        Assert.NotNull(retake);
+        Assert.Equal(0, retake.StartFrame);
+        Assert.Equal(24, retake.LengthFrames);
+        Assert.Equal(1.0, retake.Strength, 6);
+    }
+
+    [Fact]
+    public void ParseClips_Retake_ClampsStrengthToUnitRange()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["Retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0, strength: 5.0);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+
+        Assert.Equal(1.0, parsed.Stages[^1].RetakeWindow.Strength, 6);
+    }
+
+    [Fact]
+    public void ParseClips_Retake_NullWhenNotRefineMode()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        // BuildParser does NOT set a refine-source video, so retake never activates.
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
+
+        Assert.All(parsed.Stages, stage => Assert.Null(stage.RetakeWindow));
+    }
+
+    [Theory]
+    [InlineData(0.0, 0.0)]   // zero length
+    [InlineData(1.0, -1.0)]  // negative length
+    [InlineData(-1.0, 2.0)]  // negative start
+    public void ParseClips_Retake_NullWhenInvalidWindow(double startSeconds, double lengthSeconds)
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["Retake"] = MakeRetake(startSeconds, lengthSeconds);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+
+        Assert.All(parsed.Stages, stage => Assert.Null(stage.RetakeWindow));
+    }
+
+    [Fact]
+    public void ParseClips_Retake_NullWhenSubFrameLengthRoundsToZero()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        // 0.01s at 24 fps => round(0.24) = 0 frames => disabled.
+        clip["Retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 0.01);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+
+        Assert.Null(parsed.Stages[^1].RetakeWindow);
+    }
+
+    [Fact]
+    public void ParseClips_Retake_AbsentLeavesStagesUntouched()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+
+        Assert.Null(parsed.Stages[^1].RetakeWindow);
+    }
+
+    private static JObject MakeAudioSegment(
+        double startSeconds,
+        double trimStartSeconds,
+        double lengthSeconds,
+        JObject source = null)
+    {
+        JObject seg = new()
+        {
+            ["StartSeconds"] = startSeconds,
+            ["TrimStartSeconds"] = trimStartSeconds,
+            ["LengthSeconds"] = lengthSeconds,
+        };
+        if (source is not null)
+        {
+            seg["Source"] = source;
+        }
+        return seg;
+    }
+
+    [Fact]
+    public void ParseClips_AudioSegments_AbsentIsEmpty()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        ClipSpec parsed = ParseSingleClip(clip);
+        Assert.Empty(parsed.AudioSegments);
+    }
+
+    [Fact]
+    public void ParseClips_AudioSegments_ParsesClampsSortsAndRounds()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 10.0);
+        clip["AudioSegments"] = new JArray(
+            MakeAudioSegment(4.0, 0.0, 1.0, MakeUploadedAudio()),
+            // Length overruns the clip -> clamped to (10 - 8) = 2.
+            MakeAudioSegment(8.0, 0.5, 5.0, MakeUploadedAudio()),
+            MakeAudioSegment(1.0, 0.0, 2.0, MakeUploadedAudio()));
+
+        ClipSpec parsed = ParseSingleClip(clip);
+
+        Assert.Equal(3, parsed.AudioSegments.Count);
+        // Sorted by start.
+        Assert.Equal(new[] { 1.0, 4.0, 8.0 }, parsed.AudioSegments.Select(s => s.StartSeconds));
+        Assert.Equal(2.0, parsed.AudioSegments[2].LengthSeconds);
+        Assert.All(parsed.AudioSegments, s => Assert.NotNull(s.Source));
+    }
+
+    [Fact]
+    public void ParseClips_AudioSegments_DropsSourcelessAndInvalidLength()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 10.0);
+        clip["AudioSegments"] = new JArray(
+            MakeAudioSegment(1.0, 0.0, 2.0, MakeUploadedAudio()),
+            MakeAudioSegment(2.0, 0.0, 2.0), // no source -> dropped
+            MakeAudioSegment(3.0, 0.0, 0.0, MakeUploadedAudio())); // non-positive length -> dropped
+
+        ClipSpec parsed = ParseSingleClip(clip);
+
+        AudioSegmentSpec only = Assert.Single(parsed.AudioSegments);
+        Assert.Equal(1.0, only.StartSeconds);
+        Assert.Equal(2.0, only.LengthSeconds);
+    }
 }

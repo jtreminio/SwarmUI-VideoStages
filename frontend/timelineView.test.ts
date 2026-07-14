@@ -6,12 +6,23 @@ import {
     DEFAULT_PX_PER_SECOND,
     MAX_PX_PER_SECOND,
     MIN_PX_PER_SECOND,
+    renderBoundarySeams,
     renderTimeline,
     waveBarHeights,
     zoomAnchorScrollLeft,
     zoomAnchorTime,
 } from "./timelineView";
-import type { Clip } from "./types";
+import type { BoundaryOut, Clip } from "./types";
+
+const boundaryClip = (boundaryOut: BoundaryOut = "cut"): Clip =>
+    ({
+        duration: 2,
+        skipped: false,
+        hue: 210,
+        boundaryOut,
+        stages: [],
+        refs: [],
+    }) as unknown as Clip;
 
 const makeClip = (
     duration: number,
@@ -158,6 +169,60 @@ describe("computeRegionLayout", () => {
     });
 });
 
+describe("renderBoundarySeams", () => {
+    const layoutFor = (clips: Clip[]) =>
+        computeRegionLayout(clips, { pxPerSecond: 10, minWidthPx: 0 });
+
+    it("renders one chip per interior seam and none after the last clip", () => {
+        const clips = [boundaryClip(), boundaryClip(), boundaryClip()];
+        const host = document.createElement("div");
+        host.innerHTML = renderBoundarySeams(clips, layoutFor(clips));
+        const chips = host.querySelectorAll("[data-vst-boundary-cycle]");
+        expect(chips).toHaveLength(2);
+        expect(chips[0].getAttribute("data-left-clip-idx")).toBe("0");
+        expect(chips[1].getAttribute("data-left-clip-idx")).toBe("1");
+    });
+
+    it("emits nothing for a single clip", () => {
+        const clips = [boundaryClip()];
+        expect(renderBoundarySeams(clips, layoutFor(clips))).toBe("");
+    });
+
+    it("uses the per-mode glyph for each clip's outgoing boundary", () => {
+        const clips = [
+            boundaryClip("continue"),
+            boundaryClip("crossfade"),
+            boundaryClip("cut"),
+        ];
+        const host = document.createElement("div");
+        host.innerHTML = renderBoundarySeams(clips, layoutFor(clips));
+        const chips = Array.from(
+            host.querySelectorAll<HTMLElement>("[data-vst-boundary-cycle]"),
+        );
+        expect(chips[0].querySelector(".vst-boundary-glyph")?.textContent).toBe(
+            "→",
+        );
+        expect(chips[0].classList.contains("vst-boundary-continue")).toBe(true);
+        expect(chips[1].querySelector(".vst-boundary-glyph")?.textContent).toBe(
+            "⤬",
+        );
+        expect(chips[1].classList.contains("vst-boundary-crossfade")).toBe(
+            true,
+        );
+    });
+
+    it("positions each seam chip at the following clip's start", () => {
+        const clips = [boundaryClip(), boundaryClip()];
+        const layouts = layoutFor(clips);
+        const host = document.createElement("div");
+        host.innerHTML = renderBoundarySeams(clips, layouts);
+        const chip = host.querySelector<HTMLElement>(
+            "[data-vst-boundary-cycle]",
+        );
+        expect(chip?.style.left).toBe(`${layouts[1].startPx}px`);
+    });
+});
+
 describe("renderTimeline (DOM)", () => {
     let body: HTMLElement;
 
@@ -247,9 +312,15 @@ describe("renderTimeline (DOM)", () => {
         renderTimeline(body, [clip]);
         const thumb = body.querySelector<HTMLElement>(".vst-region-thumb");
         expect(thumb).not.toBeNull();
-        expect(thumb?.style.backgroundImage).toContain(
+        // Single ref -> one-cell filmstrip aligned left.
+        expect(thumb?.dataset.cells).toBe("1");
+        const start = body.querySelector<HTMLElement>(
+            ".vst-region-thumb-start",
+        );
+        expect(start?.style.backgroundImage).toContain(
             "data:image/png;base64,QQ==",
         );
+        expect(body.querySelector(".vst-region-thumb-end")).toBeNull();
     });
 
     it("renders a thumbnail from an inputs/ path (re-edited media, served via View)", () => {
@@ -261,16 +332,113 @@ describe("renderTimeline (DOM)", () => {
             ],
         } as unknown as Clip;
         renderTimeline(body, [clip]);
-        const thumb = body.querySelector<HTMLElement>(".vst-region-thumb");
+        const start = body.querySelector<HTMLElement>(
+            ".vst-region-thumb-start",
+        );
         // getImageOutPrefix is absent in tests, so the src is the root-relative path.
-        expect(thumb?.style.backgroundImage).toContain(
+        expect(start?.style.backgroundImage).toContain(
             "inputs/VideoStages/abc123.png",
         );
+    });
+
+    it("renders a 2-cell filmstrip with an end cell for a from-end ref", () => {
+        const clip = {
+            duration: 2,
+            stages: [{}],
+            refs: [
+                {
+                    frame: 1,
+                    fromEnd: false,
+                    uploadedImage: { data: "data:image/png;base64,AA==" },
+                },
+                {
+                    frame: 1,
+                    fromEnd: true,
+                    uploadedImage: { data: "data:image/png;base64,BB==" },
+                },
+            ],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const thumb = body.querySelector<HTMLElement>(".vst-region-thumb");
+        expect(thumb?.dataset.cells).toBe("2");
+        expect(
+            body.querySelector<HTMLElement>(".vst-region-thumb-start")?.style
+                .backgroundImage,
+        ).toContain("AA==");
+        const end = body.querySelector<HTMLElement>(".vst-region-thumb-end");
+        expect(end?.style.backgroundImage).toContain("BB==");
+    });
+
+    it("uses the highest-frame ref as the end cell when it differs from the earliest", () => {
+        const clip = {
+            duration: 2,
+            stages: [{}],
+            refs: [
+                {
+                    frame: 40,
+                    fromEnd: false,
+                    uploadedImage: { data: "data:image/png;base64,HI==" },
+                },
+                {
+                    frame: 1,
+                    fromEnd: false,
+                    uploadedImage: { data: "data:image/png;base64,LO==" },
+                },
+            ],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        expect(
+            body.querySelector<HTMLElement>(".vst-region-thumb-start")?.style
+                .backgroundImage,
+        ).toContain("LO==");
+        expect(
+            body.querySelector<HTMLElement>(".vst-region-thumb-end")?.style
+                .backgroundImage,
+        ).toContain("HI==");
+    });
+
+    it("thumbnail layer has no pointer events (never intercepts region gestures)", () => {
+        const clip = {
+            duration: 2,
+            stages: [{}],
+            refs: [{ uploadedImage: { data: "data:image/png;base64,QQ==" } }],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const thumb = body.querySelector<HTMLElement>(".vst-region-thumb");
+        // The class carries `pointer-events: none` in CSS; assert it is applied
+        // and is not inside any interactive wrapper of its own.
+        expect(thumb?.getAttribute("aria-hidden")).toBe("true");
+        expect(thumb?.classList.contains("vst-region-thumb")).toBe(true);
     });
 
     it("renders no thumbnail when no ref has an uploaded image", () => {
         renderTimeline(body, [makeClip(2, 1, 0)]);
         expect(body.querySelector(".vst-region-thumb")).toBeNull();
+    });
+
+    it("renders a hatched retake overlay with a range label when the clip has a retake", () => {
+        const clip = {
+            duration: 10,
+            stages: [{}],
+            refs: [],
+            retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const overlay = body.querySelector<HTMLElement>(
+            ".vst-retake[data-clip-idx='0']",
+        );
+        expect(overlay).not.toBeNull();
+        expect(overlay?.style.left).toBe("20%");
+        expect(overlay?.style.width).toBe("30%");
+        expect(overlay?.querySelector(".vst-retake-label")?.textContent).toBe(
+            "RETAKE 2–5 s",
+        );
+        expect(body.querySelectorAll("[data-vst-retake-edge]")).toHaveLength(2);
+    });
+
+    it("renders no retake overlay when the clip has none", () => {
+        renderTimeline(body, [makeClip(2, 1, 0)]);
+        expect(body.querySelector(".vst-retake")).toBeNull();
     });
 
     it("wires the + Clip affordance in both the topbar and the empty state", () => {

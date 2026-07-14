@@ -1,3 +1,7 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
@@ -63,11 +67,14 @@ internal sealed class StageSequenceRunner(
 
             int totalStageCount = TotalStageCount(clips);
             VideoStagesSpec spec = g.GetVideoStagesSpec();
-            bool isFirstClip = true;
+            List<string> effectiveBoundaryOuts = [.. clips.Select(clip => clip.BoundaryOut)];
+            ClipSpec previousClip = null;
+            WGNodeData previousClipOutput = null;
+            int clipIndex = 0;
             foreach (ClipSpec clip in clips)
             {
                 ClipContext clipContext = new(clip, spec.Width, spec.Height, rootSourceMedia, rootSourceVae);
-                if (parallelMultiClip && !isFirstClip)
+                if (parallelMultiClip && previousClip is not null)
                 {
                     if (clipContext.SourceMedia is null)
                     {
@@ -82,8 +89,16 @@ internal sealed class StageSequenceRunner(
                     {
                         g.CurrentVae = clipContext.SourceVae.Duplicate();
                     }
+
+                    if (StringUtils.Equals(previousClip.BoundaryOut, Constants.BoundaryOutContinue))
+                    {
+                        clipContext.ContinuityFrame = TryBuildContinuityFrame(previousClip, previousClipOutput, clip);
+                        if (clipContext.ContinuityFrame is null)
+                        {
+                            effectiveBoundaryOuts[clipIndex - 1] = Constants.BoundaryOutCut;
+                        }
+                    }
                 }
-                isFirstClip = false;
 
                 StageSpec firstStage = clip.Stages[0];
                 ApplyControlNetClipLengthIfApplicable(clip, firstStage);
@@ -120,12 +135,18 @@ internal sealed class StageSequenceRunner(
                 if (parallelMultiClip)
                 {
                     clipParallelOutputs.Add(g.CurrentMedia.Duplicate());
+                    previousClipOutput = clipParallelOutputs[^1];
                 }
+                previousClip = clip;
+                clipIndex++;
             }
 
             if (parallelMultiClip && clipParallelOutputs.Count > 1)
             {
-                multiClipParallelMerger.Apply(clipParallelOutputs, rootSourceMedia);
+                // clips and clipParallelOutputs are index-aligned (one output per active clip), so BoundaryOut
+                // zips by index. "continue" entries survive only where continuity conditioning was actually
+                // armed above (else the boundary was degraded to "cut").
+                multiClipParallelMerger.Apply(clipParallelOutputs, rootSourceMedia, effectiveBoundaryOuts);
             }
         }
         finally
@@ -140,6 +161,53 @@ internal sealed class StageSequenceRunner(
                 g.UserInput.SectionParamOverrides.Remove(sectionId);
             }
         }
+    }
+
+    /// <summary>
+    /// Arms generation-time continuity for a "continue" boundary: extracts the previous clip's final
+    /// rendered frame so the next clip's first stage can use it as a first-frame guide. Returns null
+    /// (degrading the boundary to a cut) when the next clip can't consume it — a non-LTX-2 first stage,
+    /// an explicit user first-frame ref, or an unknown previous frame count.
+    /// </summary>
+    private WGNodeData TryBuildContinuityFrame(ClipSpec previousClip, WGNodeData previousOutput, ClipSpec clip)
+    {
+        if (clip.Stages.Count == 0 || !VideoStageModelCompat.IsLtxV2VideoModel(clip.Stages[0].Model))
+        {
+            Logs.Warning(
+                $"VideoStages: Clip {previousClip.Id} boundary 'continue' needs the next clip's first stage "
+                + "on an LTX-2 model; treating the boundary as a cut.");
+            return null;
+        }
+        foreach (ImageRefSpec reference in clip.ImageRefs)
+        {
+            if (!reference.FromEnd && reference.Frame == 1)
+            {
+                Logs.Warning(
+                    $"VideoStages: Clip {clip.Id} has an explicit first-frame reference, which overrides the "
+                    + $"incoming 'continue' boundary from clip {previousClip.Id}; treating the boundary as a cut.");
+                return null;
+            }
+        }
+        int? frames = previousOutput?.Frames ?? previousClip.Frames;
+        if (previousOutput?.Path is not JArray previousOutputPath || frames is not int lastFrameCount || lastFrameCount <= 0)
+        {
+            Logs.Warning(
+                $"VideoStages: Clip {previousClip.Id} boundary 'continue' needs a known frame count for the "
+                + "previous clip's output; treating the boundary as a cut.");
+            return null;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        ImageFromBatchNode lastFrame = bridge.AddNode(new ImageFromBatchNode().With(
+            BatchIndex: lastFrameCount - 1,
+            Length: 1));
+        lastFrame.Image.TryConnectFromPath(bridge, previousOutputPath);
+        return new WGNodeData(WorkflowBridge.ToPath(lastFrame.IMAGE), g, WGNodeData.DT_IMAGE, previousOutput.Compat)
+        {
+            Width = previousOutput.Width,
+            Height = previousOutput.Height,
+            Frames = 1
+        };
     }
 
     private static int TotalStageCount(IReadOnlyList<ClipSpec> clips)
@@ -170,7 +238,15 @@ internal sealed class StageSequenceRunner(
             context.UploadedAudios,
             suppressNative,
             ClipAudioWorkflowHelper.ClipAudioSourceNormalization.StageSpec);
-        currentMedia.AttachedAudio = clipAudio;
+        // Overlay any per-clip audio segments onto the resolved base audio, BEFORE the cross-clip merge so
+        // boundary trims apply to the combined result. Generation-time audio conditioning still uses the
+        // pure base audio (segments are post-hoc overlay pieces, not a generation driver).
+        int? clipFps = g.CurrentMedia?.GetRawFPS();
+        double clipDurationSeconds = clip.Frames is int f && clipFps is int fps && fps > 0
+            ? (double)f / fps
+            : 0;
+        WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(clip, clipAudio, clipDurationSeconds);
+        currentMedia.AttachedAudio = combinedAudio;
         g.CurrentMedia = currentMedia;
         if (context.RootStageHandoff
             && ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(

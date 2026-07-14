@@ -4,8 +4,10 @@ import {
     buildDefaultClip,
     buildDefaultRef,
     buildDefaultStage,
+    normalizeAudioSegments,
     normalizeClip,
     normalizeRef,
+    normalizeRetake,
     normalizeStage,
     normalizeStageLoras,
     normalizeStageRefStrengthValue,
@@ -100,6 +102,39 @@ describe("normalization", () => {
         expect(normalizeStageRefStrengthValue(0)).toBe(0);
         expect(normalizeStageRefStrengthValue("0")).toBe(0);
         expect(normalizeStageRefStrengthValue(-0.5)).toBe(0);
+    });
+
+    it("normalizeClip defaults boundaryOut to cut when absent", () => {
+        const clip = normalizeClip(
+            { stages: [{ model: "ltx" }] },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.boundaryOut).toBe("cut");
+    });
+
+    it.each([
+        ["continue", "continue"],
+        ["crossfade", "crossfade"],
+        ["Crossfade", "crossfade"],
+        ["  CONTINUE ", "continue"],
+        ["wipe", "cut"],
+    ])("normalizeClip normalizes boundaryOut %s -> %s", (raw, expected) => {
+        const clip = normalizeClip(
+            { stages: [{ model: "ltx" }], boundaryOut: raw },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.boundaryOut).toBe(expected);
+    });
+
+    it("normalizeClip reads a PascalCase BoundaryOut key", () => {
+        const clip = normalizeClip(
+            { stages: [{ model: "ltx" }], BoundaryOut: "continue" },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.boundaryOut).toBe("continue");
     });
 
     it("normalizeClip pads refStrengths for each stage from raw", () => {
@@ -459,5 +494,195 @@ describe("stage loras", () => {
         expect(clip.stages[1].loras).toEqual([
             { name: "refine.safetensors", weight: 0.4 },
         ]);
+    });
+
+    describe("normalizeRetake", () => {
+        it("keeps a valid window and defaults strength to 1", () => {
+            expect(
+                normalizeRetake({ startSeconds: 1, lengthSeconds: 2 }, 10),
+            ).toEqual({ startSeconds: 1, lengthSeconds: 2, strength: 1 });
+        });
+
+        it("reads PascalCase keys and clamps strength to [0, 1]", () => {
+            expect(
+                normalizeRetake(
+                    { StartSeconds: 0, LengthSeconds: 1, Strength: 5 },
+                    10,
+                ),
+            ).toEqual({ startSeconds: 0, lengthSeconds: 1, strength: 1 });
+            expect(
+                normalizeRetake(
+                    { startSeconds: 0, lengthSeconds: 1, strength: -3 },
+                    10,
+                )?.strength,
+            ).toBe(0);
+        });
+
+        it("clamps length so the window fits inside the clip", () => {
+            expect(
+                normalizeRetake({ startSeconds: 8, lengthSeconds: 5 }, 10),
+            ).toEqual({ startSeconds: 8, lengthSeconds: 2, strength: 1 });
+        });
+
+        it("clamps an over-far start to leave room for the minimum window", () => {
+            const r = normalizeRetake(
+                { startSeconds: 100, lengthSeconds: 2 },
+                10,
+            );
+            expect(r?.startSeconds).toBeCloseTo(9.9, 5);
+            expect(r?.lengthSeconds).toBeCloseTo(0.1, 5);
+        });
+
+        it("returns null for absent, non-object, or non-positive length", () => {
+            expect(normalizeRetake(undefined, 10)).toBeNull();
+            expect(normalizeRetake(null, 10)).toBeNull();
+            expect(normalizeRetake("nope", 10)).toBeNull();
+            expect(
+                normalizeRetake({ startSeconds: 1, lengthSeconds: 0 }, 10),
+            ).toBeNull();
+            expect(
+                normalizeRetake({ startSeconds: 1, lengthSeconds: -2 }, 10),
+            ).toBeNull();
+        });
+    });
+
+    describe("normalizeAudioSegments", () => {
+        const src = { data: "data:audio/wav;base64,QUJD", fileName: "a.wav" };
+
+        it("keeps a valid segment, clamps inside the clip, and rounds", () => {
+            expect(
+                normalizeAudioSegments(
+                    [
+                        {
+                            source: src,
+                            startSeconds: 2,
+                            trimStartSeconds: 1,
+                            lengthSeconds: 3,
+                        },
+                    ],
+                    10,
+                ),
+            ).toEqual([
+                {
+                    source: src,
+                    startSeconds: 2,
+                    trimStartSeconds: 1,
+                    lengthSeconds: 3,
+                },
+            ]);
+        });
+
+        it("reads PascalCase keys and clamps length to fit the clip", () => {
+            expect(
+                normalizeAudioSegments(
+                    [
+                        {
+                            Source: src,
+                            StartSeconds: 8,
+                            TrimStartSeconds: 0,
+                            LengthSeconds: 5,
+                        },
+                    ],
+                    10,
+                ),
+            ).toEqual([
+                {
+                    source: src,
+                    startSeconds: 8,
+                    trimStartSeconds: 0,
+                    lengthSeconds: 2,
+                },
+            ]);
+        });
+
+        it("sorts by start, keeps sourceless entries, and drops non-positive length", () => {
+            const result = normalizeAudioSegments(
+                [
+                    {
+                        source: src,
+                        startSeconds: 4,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 1,
+                    },
+                    { startSeconds: 2, lengthSeconds: 1 }, // no source -> kept (source null)
+                    {
+                        source: src,
+                        startSeconds: 1,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 0,
+                    }, // zero length -> dropped
+                    {
+                        source: src,
+                        startSeconds: 1,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 2,
+                    },
+                ],
+                10,
+            );
+            expect(result.map((s) => s.startSeconds)).toEqual([1, 2, 4]);
+            expect(result.map((s) => s.source)).toEqual([src, null, src]);
+        });
+
+        it("returns [] for absent or non-array input", () => {
+            expect(normalizeAudioSegments(undefined, 10)).toEqual([]);
+            expect(normalizeAudioSegments(null, 10)).toEqual([]);
+            expect(normalizeAudioSegments({}, 10)).toEqual([]);
+        });
+    });
+
+    it("normalizeClip carries embedded audio segments and defaults to [] when absent", () => {
+        const withSegments = normalizeClip(
+            {
+                duration: 5,
+                stages: [minimalStageRaw],
+                audioSegments: [
+                    {
+                        source: {
+                            data: "data:audio/wav;base64,QUJD",
+                            fileName: "a.wav",
+                        },
+                        startSeconds: 1,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 2,
+                    },
+                ],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(withSegments.audioSegments).toHaveLength(1);
+        expect(withSegments.audioSegments[0].startSeconds).toBe(1);
+
+        const withoutSegments = normalizeClip(
+            { duration: 5, stages: [minimalStageRaw] },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(withoutSegments.audioSegments).toEqual([]);
+    });
+
+    it("normalizeClip carries an embedded retake and defaults to null when absent", () => {
+        const withRetake = normalizeClip(
+            {
+                duration: 5,
+                stages: [minimalStageRaw],
+                retake: { startSeconds: 1, lengthSeconds: 2, strength: 0.5 },
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(withRetake.retake).toEqual({
+            startSeconds: 1,
+            lengthSeconds: 2,
+            strength: 0.5,
+        });
+
+        const withoutRetake = normalizeClip(
+            { duration: 5, stages: [minimalStageRaw] },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(withoutRetake.retake).toBeNull();
     });
 });

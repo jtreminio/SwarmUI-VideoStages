@@ -6,6 +6,7 @@ import {
 } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import {
+    AUDIO_SEGMENT_MIN_LENGTH,
     CLIP_DURATION_MIN,
     CONTROLNET_SOURCE_OPTIONS,
     clamp,
@@ -13,6 +14,10 @@ import {
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     normalizeUploadFileName,
     REF_FRAME_MIN,
+    RETAKE_MIN_DURATION,
+    RETAKE_STRENGTH_DEFAULT,
+    RETAKE_STRENGTH_MAX,
+    RETAKE_STRENGTH_MIN,
     STAGE_CONTROLNET_STRENGTH_DEFAULT,
     STAGE_CONTROLNET_STRENGTH_MAX,
     STAGE_CONTROLNET_STRENGTH_MIN,
@@ -24,10 +29,13 @@ import {
 } from "./constants";
 import { framesForClip, snapDurationToFps } from "./renderUtils";
 import {
+    type AudioSegment,
+    type BoundaryOut,
     type Clip,
     type PromptWindow,
     REF_SOURCE_REFINER,
     type RefImage,
+    type Retake,
     type RootDefaults,
     type Stage,
     type StageLora,
@@ -78,6 +86,62 @@ export const normalizePromptWindows = (
         .sort((a, b) => a.start - b.start);
 };
 
+/**
+ * Normalizes an optional per-clip retake window against the clip duration.
+ * Returns null when absent or invalid (non-positive length, or a window that
+ * cannot fit inside the clip). Start is clamped to >= 0 and start+length is
+ * clamped to the clip duration; strength is clamped to [0, 1] (default 1).
+ */
+export const normalizeRetake = (
+    value: unknown,
+    clipDuration: number,
+): Retake | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+    const startRaw = Math.max(
+        0,
+        utils.toNumber(
+            `${readProp(value, "startSeconds", "StartSeconds") ?? 0}`,
+            0,
+        ),
+    );
+    const lengthRaw = utils.toNumber(
+        `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
+        0,
+    );
+    if (!(lengthRaw > 0)) {
+        return null;
+    }
+    const maxStart = Math.max(0, clipDuration - RETAKE_MIN_DURATION);
+    const startSeconds = clamp(startRaw, 0, maxStart);
+    const lengthSeconds = clamp(
+        lengthRaw,
+        RETAKE_MIN_DURATION,
+        Math.max(RETAKE_MIN_DURATION, clipDuration - startSeconds),
+    );
+    if (!(lengthSeconds > 0)) {
+        return null;
+    }
+    const strengthRaw = readProp(value, "strength", "Strength");
+    const strength =
+        strengthRaw == null
+            ? RETAKE_STRENGTH_DEFAULT
+            : clamp(
+                  utils.toNumber(`${strengthRaw}`, RETAKE_STRENGTH_DEFAULT),
+                  RETAKE_STRENGTH_MIN,
+                  RETAKE_STRENGTH_MAX,
+              );
+    return {
+        startSeconds: roundRetakeSeconds(startSeconds),
+        lengthSeconds: roundRetakeSeconds(lengthSeconds),
+        strength,
+    };
+};
+
+const roundRetakeSeconds = (seconds: number): number =>
+    Math.round(seconds * 10) / 10;
+
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
 ): string =>
@@ -125,6 +189,82 @@ export const normalizeUploadedAudio = (
             value.fileName == null ? null : `${value.fileName}`,
         ),
     };
+};
+
+const roundSegmentSeconds = (seconds: number): number =>
+    Math.round(seconds * 10) / 10;
+
+const normalizeAudioSegment = (
+    value: unknown,
+    clipDuration: number,
+): AudioSegment | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+    // A sourceless segment is kept in the working state so the "+ Add segment"
+    // flow can create it and then prompt for the upload; the backend parser
+    // drops segments with no source at generation time.
+    const source = normalizeUploadedAudio(readProp(value, "source", "Source"));
+    const startRaw = Math.max(
+        0,
+        utils.toNumber(
+            `${readProp(value, "startSeconds", "StartSeconds") ?? 0}`,
+            0,
+        ),
+    );
+    const trimStartRaw = Math.max(
+        0,
+        utils.toNumber(
+            `${readProp(value, "trimStartSeconds", "TrimStartSeconds") ?? 0}`,
+            0,
+        ),
+    );
+    const lengthRaw = utils.toNumber(
+        `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
+        0,
+    );
+    if (!(lengthRaw > 0)) {
+        return null;
+    }
+    const maxStart = Math.max(0, clipDuration - AUDIO_SEGMENT_MIN_LENGTH);
+    const startSeconds = clamp(startRaw, 0, maxStart);
+    const lengthSeconds = clamp(
+        lengthRaw,
+        AUDIO_SEGMENT_MIN_LENGTH,
+        Math.max(AUDIO_SEGMENT_MIN_LENGTH, clipDuration - startSeconds),
+    );
+    if (!(lengthSeconds > 0)) {
+        return null;
+    }
+    return {
+        source,
+        startSeconds: roundSegmentSeconds(startSeconds),
+        trimStartSeconds: roundSegmentSeconds(trimStartRaw),
+        lengthSeconds: roundSegmentSeconds(lengthSeconds),
+    };
+};
+
+/**
+ * Normalizes the optional per-clip audio segment list against the clip
+ * duration: drops entries with no upload source or non-positive length, clamps
+ * each inside the clip, and sorts by start time. Returns [] when absent.
+ */
+export const normalizeAudioSegments = (
+    value: unknown,
+    clipDuration: number,
+): AudioSegment[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value
+        .map((raw) => normalizeAudioSegment(raw, clipDuration))
+        .filter((seg): seg is AudioSegment => seg !== null)
+        .sort((a, b) => a.startSeconds - b.startSeconds);
+};
+
+export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "continue" || raw === "crossfade" ? raw : "cut";
 };
 
 export const normalizeControlNetSource = (value: unknown): string => {
@@ -315,6 +455,7 @@ export const buildDefaultClip = (
         expanded: true,
         skipped: false,
         hue: UNASSIGNED_HUE,
+        boundaryOut: "cut",
         duration: snapDurationToFps(
             Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
             defaults.fps,
@@ -327,8 +468,10 @@ export const buildDefaultClip = (
         clipLengthFromControlNet: false,
         reuseAudio: false,
         uploadedAudio: null,
+        audioSegments: [],
         prompt: "",
         promptWindows: [],
+        retake: null,
         refs,
         stages: [
             {
@@ -566,6 +709,9 @@ export const normalizeClip = (
         expanded: normalizeExpanded(rawClip),
         skipped: !!rawClip.skipped,
         hue: normalizeStoredHue(rawClip.hue),
+        boundaryOut: normalizeBoundaryOut(
+            rawClip.boundaryOut ?? rawClip.BoundaryOut,
+        ),
         duration,
         audioSource,
         controlNetSource: normalizeControlNetSource(
@@ -577,8 +723,16 @@ export const normalizeClip = (
         clipLengthFromControlNet,
         reuseAudio: !!rawClip.reuseAudio,
         uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
+        audioSegments: normalizeAudioSegments(
+            readProp(rawClip, "audioSegments", "AudioSegments"),
+            duration,
+        ),
         prompt: `${readProp(rawClip, "prompt", "Prompt") ?? ""}`,
         promptWindows: normalizePromptWindows(rawClip),
+        retake: normalizeRetake(
+            readProp(rawClip, "retake", "Retake"),
+            duration,
+        ),
         refs,
         stages,
     };

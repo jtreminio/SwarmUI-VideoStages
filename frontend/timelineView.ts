@@ -17,7 +17,7 @@ import {
     stageChipTitle,
     type TimelineUnit,
 } from "./timelineDetail";
-import type { Clip, PromptWindow, RefImage } from "./types";
+import type { BoundaryOut, Clip, PromptWindow, RefImage } from "./types";
 
 export interface RegionLayout {
     index: number;
@@ -43,6 +43,7 @@ export interface RenderTimelineOptions {
     fpsExplicit?: boolean;
     unit?: TimelineUnit;
     pxPerSecond?: number;
+    playheadSeconds?: number;
     selectedIndex?: number | null;
     enabled?: boolean;
     onToggleEnabled?: (enabled: boolean) => void;
@@ -116,6 +117,64 @@ export const computeFitPxPerSecond = (
     return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
 };
 
+/** Snap a seconds value to the nearest whole frame at the given fps. */
+export const snapSecondsToFrame = (seconds: number, fps: number): number => {
+    if (!Number.isFinite(seconds)) {
+        return 0;
+    }
+    if (!Number.isFinite(fps) || fps <= 0) {
+        return Math.max(0, seconds);
+    }
+    return Math.round(seconds * fps) / fps;
+};
+
+/**
+ * Clamp a playhead position to [0, total] and snap it to the frame grid. Kept
+ * pure so both the renderer and the scrub gesture resolve positions identically.
+ */
+export const resolvePlayheadSeconds = (
+    seconds: number,
+    totalSeconds: number,
+    fps: number,
+): number => {
+    const total = Math.max(0, Number.isFinite(totalSeconds) ? totalSeconds : 0);
+    const base = Number.isFinite(seconds)
+        ? Math.max(0, Math.min(total, seconds))
+        : 0;
+    const snapped = snapSecondsToFrame(base, fps);
+    return Math.max(0, Math.min(total, snapped));
+};
+
+/**
+ * Index of the clip under a playhead position. A position exactly on a seam
+ * belongs to the right/starting clip (the greatest start ≤ seconds). Returns
+ * null when there are no clips.
+ */
+export const clipIndexAtSeconds = (
+    layouts: RegionLayout[],
+    seconds: number,
+): number | null => {
+    if (layouts.length === 0) {
+        return null;
+    }
+    let idx = 0;
+    for (let i = 0; i < layouts.length; i++) {
+        if (seconds >= layouts[i].startSeconds - 1e-9) {
+            idx = i;
+        } else {
+            break;
+        }
+    }
+    return idx;
+};
+
+/** Toolbar readout for the playhead, e.g. "▸ 3.2s · f77". */
+export const formatPlayheadReadout = (seconds: number, fps: number): string => {
+    const s = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+    const useFps = Number.isFinite(fps) && fps > 0 ? fps : 24;
+    return `▸ ${s.toFixed(1)}s · f${Math.round(s * useFps)}`;
+};
+
 export const computeRegionLayout = (
     clips: Clip[],
     options?: RegionLayoutOptions,
@@ -145,15 +204,82 @@ export const computeRegionLayout = (
     return layouts;
 };
 
+const refFrame = (ref: RefImage): number => Math.max(0, ref.frame ?? 0);
+
+/**
+ * Ambient 2-cell filmstrip drawn behind the region content: the earliest ref
+ * (lowest frame, not from-end) as a left cell, and — when a distinct end ref
+ * exists (a from-end ref, or the highest-frame ref if it differs) — a right
+ * cell. Low opacity, pointer-events none; sits behind all region chrome. Clips
+ * with no ref images render nothing.
+ */
 const renderRegionThumb = (clip: Clip): string => {
-    for (const ref of clip.refs ?? []) {
-        const value = ref.uploadedImage?.data;
-        if (value) {
-            const src = mediaPreviewSrc(value);
-            return `<div class="vst-region-thumb" style="background-image:url('${escapeHtml(src)}')" aria-hidden="true"></div>`;
+    const withImage = (clip.refs ?? []).filter(
+        (ref) => !!ref.uploadedImage?.data,
+    );
+    if (withImage.length === 0) {
+        return "";
+    }
+    const startPool = withImage.filter((ref) => ref.fromEnd !== true);
+    const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
+        (best, ref) => (refFrame(ref) < refFrame(best) ? ref : best),
+    );
+    let endRef: RefImage | null =
+        withImage.find((ref) => ref.fromEnd === true) ?? null;
+    if (!endRef) {
+        const highest = withImage.reduce((best, ref) =>
+            refFrame(ref) > refFrame(best) ? ref : best,
+        );
+        if (highest !== startRef) {
+            endRef = highest;
         }
     }
-    return "";
+    const cell = (ref: RefImage, side: "start" | "end"): string => {
+        const src = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
+        return `<div class="vst-region-thumb-cell vst-region-thumb-${side}" style="background-image:url('${escapeHtml(src)}')"></div>`;
+    };
+    const cells = cell(startRef, "start") + (endRef ? cell(endRef, "end") : "");
+    const cellCount = endRef ? 2 : 1;
+    return `<div class="vst-region-thumb" data-cells="${cellCount}" aria-hidden="true">${cells}</div>`;
+};
+
+const roundRetakeLabel = (seconds: number): number =>
+    Math.round(seconds * 10) / 10;
+
+/**
+ * Hatched retake range overlaid on the clip region: draggable body (move),
+ * left/right resize grips, click to select, shift+click to delete. Positioned
+ * as a percentage of the clip duration so it tracks the region width.
+ */
+const renderRetakeOverlay = (
+    clip: Clip,
+    clipIdx: number,
+    durationSeconds: number,
+): string => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+        return "";
+    }
+    const start = clamp(retake.startSeconds, 0, durationSeconds);
+    const end = clamp(
+        retake.startSeconds + retake.lengthSeconds,
+        start,
+        durationSeconds,
+    );
+    if (end <= start) {
+        return "";
+    }
+    const leftPct = (start / durationSeconds) * 100;
+    const widthPct = ((end - start) / durationSeconds) * 100;
+    const label = `RETAKE ${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
+    const title = `${label} · drag to move/resize · Shift+click to delete`;
+    return (
+        `<div class="vst-retake" data-vst-retake data-clip-idx="${clipIdx}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}">` +
+        `<span class="vst-retake-resize vst-retake-resize-l" data-vst-retake-edge="left" aria-hidden="true"></span>` +
+        `<span class="vst-retake-label">${escapeHtml(label)}</span>` +
+        `<span class="vst-retake-resize vst-retake-resize-r" data-vst-retake-edge="right" aria-hidden="true"></span>` +
+        `</div>`
+    );
 };
 
 const renderKeyframes = (
@@ -229,6 +355,49 @@ const renderStageChips = (clip: Clip, clipIdx: number): string => {
 
 const lengthDerived = (clip: Clip): boolean =>
     clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+
+// Per-boundary glyphs/labels. The word label lives in the title/aria, not the chip face, so it never
+// overflows under overflow:hidden.
+export const BOUNDARY_GLYPH: Record<BoundaryOut, string> = {
+    cut: "│",
+    continue: "→",
+    crossfade: "⤬",
+};
+export const BOUNDARY_LABEL: Record<BoundaryOut, string> = {
+    cut: "Cut",
+    continue: "Continue",
+    crossfade: "Crossfade",
+};
+
+/**
+ * Chips sitting on each interior seam (between clip N and N+1) that cycle clip N's outgoing boundary
+ * (cut → continue → crossfade) and select the boundary for the detail strip. Omitted after the final
+ * clip (no following clip). `data-vst-boundary-cycle` + `data-left-clip-idx` drive timelineBoundaryTrack.
+ */
+export const renderBoundarySeams = (
+    clips: Clip[],
+    layouts: RegionLayout[],
+): string => {
+    const seams: string[] = [];
+    for (let i = 1; i < layouts.length; i++) {
+        const leftClipIdx = i - 1;
+        const clip = clips[leftClipIdx];
+        if (!clip) {
+            continue;
+        }
+        const value: BoundaryOut = clip.boundaryOut ?? "cut";
+        const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
+        const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
+        const title = `Boundary clip ${leftClipIdx} → ${i}: ${label}. Click to cycle (cut → continue → crossfade).`;
+        const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}. Click to cycle and edit.`;
+        seams.push(
+            `<button type="button" class="vst-boundary-chip vst-boundary-${value}" data-vst-boundary-cycle data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
+                `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
+                `</button>`,
+        );
+    }
+    return seams.join("");
+};
 
 export interface PromptWindowGeom {
     startSec: number;
@@ -357,6 +526,48 @@ const audioFlagChips = (clip: Clip): string => {
         : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
 };
 
+/**
+ * Overlay audio-segment spans drawn inside a clip's audio cell: draggable body
+ * (move), left/right resize grips, click to select, shift+click to delete.
+ * Positioned as a percentage of the clip duration so they track the cell width.
+ */
+const renderAudioSegments = (
+    clip: Clip,
+    clipIdx: number,
+    durationSeconds: number,
+): string => {
+    const segments = clip.audioSegments ?? [];
+    if (segments.length === 0 || durationSeconds <= 0) {
+        return "";
+    }
+    return segments
+        .map((seg, segIdx) => {
+            const start = clamp(seg.startSeconds, 0, durationSeconds);
+            const end = clamp(
+                seg.startSeconds + seg.lengthSeconds,
+                start,
+                durationSeconds,
+            );
+            if (end <= start) {
+                return "";
+            }
+            const leftPct = (start / durationSeconds) * 100;
+            const widthPct = ((end - start) / durationSeconds) * 100;
+            const name = seg.source?.fileName;
+            const labelText = name ? name : "audio segment";
+            const label = `${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
+            const title = `${labelText} · ${label} · drag to move/resize · Shift+click to delete`;
+            return (
+                `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="Edit audio segment ${segIdx} for clip ${clipIdx}">` +
+                `<span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left" aria-hidden="true"></span>` +
+                `<span class="vst-audio-seg-label">${escapeHtml(labelText)}</span>` +
+                `<span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right" aria-hidden="true"></span>` +
+                `</div>`
+            );
+        })
+        .join("");
+};
+
 export const renderAudioTrackRow = (
     clips: Clip[],
     layouts: RegionLayout[],
@@ -398,6 +609,7 @@ export const renderAudioTrackRow = (
                 `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +
                 audioFlagChips(clip) +
                 body +
+                renderAudioSegments(clip, l.index, clip.duration || 0) +
                 `</div>`
             );
         })
@@ -496,9 +708,16 @@ export const renderTimeline = (
         options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND,
     );
     body.dataset.vstPps = String(pxPerSecond);
+    body.dataset.vstFps = String(fps);
 
     const layouts = computeRegionLayout(clips, { pxPerSecond });
     const totalSeconds = layouts.reduce((sum, l) => sum + l.durationSeconds, 0);
+    const headSeconds = resolvePlayheadSeconds(
+        options?.playheadSeconds ?? 0,
+        totalSeconds,
+        fps,
+    );
+    const headClipIdx = clipIndexAtSeconds(layouts, headSeconds);
     const totalPx = layouts.reduce(
         (max, l) => Math.max(max, l.startPx + l.widthPx),
         0,
@@ -520,6 +739,8 @@ export const renderTimeline = (
     const readout =
         `<span class="vst-readout" data-vst-readout>` +
         `<span title="Sequence total">${totalLabel} total</span>` +
+        `<span class="vst-dot" aria-hidden="true">·</span>` +
+        `<span class="vst-readout-head" data-vst-readout-head title="Playhead position (seconds · frame)">${escapeHtml(formatPlayheadReadout(headSeconds, fps))}</span>` +
         `<span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span>` +
         `<span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span>` +
         `</span>`;
@@ -710,6 +931,8 @@ export const renderTimeline = (
             const clip = clips[l.index];
             const skipClass = l.skipped ? " vst-region-skipped" : "";
             const tinyClass = l.widthPx <= 12 ? " vst-region-tiny" : "";
+            const underHeadClass =
+                l.index === headClipIdx ? " vst-under-head" : "";
             const skipChip = l.skipped
                 ? `<span class="vst-chip vst-chip-skip">skipped</span>`
                 : "";
@@ -728,9 +951,10 @@ export const renderTimeline = (
             const hue = clipHueCss(clip.hue);
             const renderWidth = Math.max(1, l.widthPx - 2);
             return (
-                `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` +
+                `<div class="vst-region${skipClass}${tinyClass}${underHeadClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +
                 renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) +
+                renderRetakeOverlay(clip, l.index, l.durationSeconds) +
                 `<div class="vst-region-head">` +
                 `<span class="vst-region-name">Clip ${l.index}</span>` +
                 renderStageChips(clip, l.index) +
@@ -763,16 +987,25 @@ export const renderTimeline = (
     );
 
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
+    const playheadRulerPx = headSeconds * pxPerSecond;
+    const playheadPlanePx = TRACK_HEADER_W_PX + playheadRulerPx;
+    const playheadHandle = `<span class="vst-playhead-handle" data-vst-playhead-handle style="left:${playheadRulerPx}px" title="Playhead — drag to scrub" aria-hidden="true"></span>`;
+    const playheadLine =
+        `<div class="vst-playhead" data-vst-playhead style="left:${playheadPlanePx}px" aria-hidden="true">` +
+        `<div class="vst-playhead-hit" data-vst-playhead-hit></div>` +
+        `<div class="vst-playhead-line"></div>` +
+        `</div>`;
     body.innerHTML =
         `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +
         `<div class="vst-ruler-row">` +
         `<div class="vst-corner">Timeline</div>` +
-        `<div class="vst-ruler">${ticks.join("")}</div>` +
+        `<div class="vst-ruler">${ticks.join("")}${playheadHandle}</div>` +
         `</div>` +
         promptRow +
-        `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}</div></div>` +
+        `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}${renderBoundarySeams(clips, layouts)}</div></div>` +
         referencesRow +
         audioRow +
+        playheadLine +
         `</div></div>`;
     wireTopbar();
     wireScroll();

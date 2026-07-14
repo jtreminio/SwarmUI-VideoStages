@@ -196,6 +196,7 @@ internal static class VideoStagesSpecParser
             ["cliplengthfromaudio"] = ("ClipLengthFromAudio", OverrideKind.Bool),
             ["cliplengthfromcontrolnet"] = ("ClipLengthFromControlNet", OverrideKind.Bool),
             ["reuseaudio"] = ("ReuseAudio", OverrideKind.Bool),
+            ["boundaryout"] = ("BoundaryOut", OverrideKind.String),
             ["skipped"] = ("Skipped", OverrideKind.Bool),
         };
 
@@ -330,7 +331,7 @@ internal static class VideoStagesSpecParser
         return null;
     }
 
-    private static AudioFile MaterializeUploadedAudio(WorkflowGenerator g, UploadedAudioSpec spec)
+    internal static AudioFile MaterializeUploadedAudio(WorkflowGenerator g, UploadedAudioSpec spec)
     {
         if (spec is null || string.IsNullOrWhiteSpace(spec.Data))
         {
@@ -399,6 +400,92 @@ internal static class VideoStagesSpecParser
         return g.UserInput.TryGet(VideoStagesExtension.RefineSkipStages, out int value) ? value : 1;
     }
 
+    /// <summary>
+    /// Reads the optional per-clip <c>Retake</c> object (seconds-based, matching every other timeline
+    /// field) and converts it to a frame-based <see cref="RetakeWindowSpec"/> at the timeline fps.
+    /// Returns <c>null</c> when absent, malformed, or resolving to a non-positive length — that is the
+    /// enable gate (a zero-length retake regenerates nothing).
+    /// </summary>
+    private static RetakeWindowSpec ResolveClipRetakeWindow(JObject clipObj, int fps, int clipIndex)
+    {
+        JObject retakeObj = GetObject(clipObj, "Retake");
+        if (retakeObj is null || fps <= 0)
+        {
+            return null;
+        }
+        string location = $"Clip {clipIndex} Retake";
+        double startSeconds = GetOptionalDouble(retakeObj, "StartSeconds", 0, location);
+        double lengthSeconds = GetOptionalDouble(retakeObj, "LengthSeconds", 0, location);
+        if (double.IsNaN(startSeconds) || double.IsNaN(lengthSeconds)
+            || double.IsInfinity(startSeconds) || double.IsInfinity(lengthSeconds)
+            || startSeconds < 0 || lengthSeconds <= 0)
+        {
+            return null;
+        }
+        int startFrame = (int)Math.Round(startSeconds * fps);
+        int lengthFrames = (int)Math.Round(lengthSeconds * fps);
+        if (startFrame < 0 || lengthFrames <= 0)
+        {
+            return null;
+        }
+        double strength = GetOptionalDouble(retakeObj, "Strength", 1.0, location);
+        strength = double.IsNaN(strength) || double.IsInfinity(strength)
+            ? 1.0
+            : Math.Clamp(strength, 0.0, 1.0);
+        return new RetakeWindowSpec(startFrame, lengthFrames, strength);
+    }
+
+    private const double AudioSegmentMinLength = 0.1;
+
+    /// <summary>
+    /// Reads the optional per-clip <c>AudioSegments</c> array (seconds-based overlay pieces). Each entry
+    /// needs an embedded upload <c>Source</c> and a positive length; entries are clamped inside the clip
+    /// duration and sorted by start. Invalid entries are dropped. Returns an empty list when absent.
+    /// </summary>
+    private static IReadOnlyList<AudioSegmentSpec> ParseAudioSegments(JObject clipObj, double clipDurationSeconds)
+    {
+        List<JObject> raw = GetObjectArray(clipObj, "AudioSegments");
+        if (raw.Count == 0)
+        {
+            return [];
+        }
+        List<AudioSegmentSpec> segments = [];
+        foreach (JObject segObj in raw)
+        {
+            UploadedAudioSpec source = GetEmbeddedUploadSpec(segObj, "Source");
+            if (source is null)
+            {
+                continue;
+            }
+            double start = GetOptionalDouble(segObj, "StartSeconds", 0, "Clip AudioSegment");
+            double trim = GetOptionalDouble(segObj, "TrimStartSeconds", 0, "Clip AudioSegment");
+            double length = GetOptionalDouble(segObj, "LengthSeconds", 0, "Clip AudioSegment");
+            if (!IsFinite(start) || !IsFinite(trim) || !IsFinite(length) || length <= 0)
+            {
+                continue;
+            }
+            start = Math.Max(0, start);
+            trim = Math.Max(0, trim);
+            if (clipDurationSeconds > 0)
+            {
+                double maxStart = Math.Max(0, clipDurationSeconds - AudioSegmentMinLength);
+                start = Math.Min(start, maxStart);
+                length = Math.Clamp(length, AudioSegmentMinLength, Math.Max(AudioSegmentMinLength, clipDurationSeconds - start));
+            }
+            segments.Add(new AudioSegmentSpec(
+                Source: source,
+                StartSeconds: RoundTenth(start),
+                TrimStartSeconds: RoundTenth(trim),
+                LengthSeconds: RoundTenth(length)));
+        }
+        segments.Sort((a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
+        return segments;
+    }
+
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    private static double RoundTenth(double value) => Math.Round(value * 10) / 10;
+
     private static ClipSpec ParseClip(
         JObject clipObj,
         int clipIndex,
@@ -425,7 +512,9 @@ internal static class VideoStagesSpecParser
         bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
         string controlNetSource = NormalizeControlNetSource(GetString(clipObj, "ControlNetSource"));
         string controlNetLora = NormalizeControlNetLora(GetString(clipObj, "ControlNetLora"));
+        string boundaryOut = NormalizeBoundaryOut(GetString(clipObj, "BoundaryOut"));
         UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, "UploadedAudio");
+        IReadOnlyList<AudioSegmentSpec> audioSegments = ParseAudioSegments(clipObj, Math.Max(0, duration));
 
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
         List<StageSpec> stages = [];
@@ -458,6 +547,17 @@ internal static class VideoStagesSpecParser
             stages.Add(parsed);
         }
 
+        // Retake only applies when refining a base video (it reuses the refine-source base). Carry the
+        // window on the LAST active stage — the one that re-renders — so earlier skip-range passthrough
+        // stages stay untouched. Only the LTX local path reads it; other models ignore it.
+        RetakeWindowSpec retakeWindow = refineMode
+            ? ResolveClipRetakeWindow(clipObj, fps, clipIndex)
+            : null;
+        if (retakeWindow is not null && stages.Count > 0)
+        {
+            stages[^1] = stages[^1] with { RetakeWindow = retakeWindow };
+        }
+
         double durationSeconds = Math.Max(0, duration);
         int? clipFrames = durationSeconds > 0
             ? CalculateAlignedFrameCount(durationSeconds, fps)
@@ -476,9 +576,29 @@ internal static class VideoStagesSpecParser
             UploadedAudio: uploadedAudio,
             ImageRefs: refs,
             Stages: stages,
+            AudioSegments: audioSegments,
             Loras: ParseLoras(clipObj),
-            PromptWindows: SortWindows(tags.ClipWindows.GetValueOrDefault(clipIndex))
+            PromptWindows: SortWindows(tags.ClipWindows.GetValueOrDefault(clipIndex)),
+            BoundaryOut: boundaryOut
         );
+    }
+
+    private static string NormalizeBoundaryOut(string raw)
+    {
+        string compact = StringUtils.Compact(raw);
+        if (compact.Length == 0)
+        {
+            return Constants.BoundaryOutCut;
+        }
+        if (StringUtils.Equals(compact, Constants.BoundaryOutContinue))
+        {
+            return Constants.BoundaryOutContinue;
+        }
+        if (StringUtils.Equals(compact, Constants.BoundaryOutCrossfade))
+        {
+            return Constants.BoundaryOutCrossfade;
+        }
+        return Constants.BoundaryOutCut;
     }
 
     private static IReadOnlyList<PromptWindowSpec> SortWindows(List<PromptWindowSpec> windows) =>

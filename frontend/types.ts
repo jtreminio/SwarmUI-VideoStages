@@ -50,6 +50,21 @@ export interface StageLora {
     weight: number;
 }
 
+/**
+ * One overlay audio piece placed on a clip's audio lane, in addition to the
+ * clip's base audio source. `source` is an uploaded audio blob (data URI +
+ * fileName). `startSeconds` is where the piece begins inside the clip;
+ * `trimStartSeconds` is how far into the source file playback starts; and
+ * `lengthSeconds` is how long the piece plays. All seconds, 0.1 step, clamped
+ * inside the clip. Backend mixes each segment additively over the base audio.
+ */
+export interface AudioSegment {
+    source: UploadedAudio | null;
+    startSeconds: number;
+    trimStartSeconds: number;
+    lengthSeconds: number;
+}
+
 export interface Stage {
     expanded: boolean;
     skipped: boolean;
@@ -72,6 +87,17 @@ export interface PromptWindow {
     duration: number;
 }
 
+/**
+ * Optional per-clip retake window (seconds). Regenerates only frames inside
+ * [startSeconds, startSeconds + lengthSeconds) of a refined base video while the
+ * rest stay locked; `strength` is the per-frame noise-mask value inside it.
+ */
+export interface Retake {
+    startSeconds: number;
+    lengthSeconds: number;
+    strength: number;
+}
+
 export interface RefImage {
     expanded: boolean;
     source: string;
@@ -81,10 +107,13 @@ export interface RefImage {
     fromEnd: boolean;
 }
 
+export type BoundaryOut = "cut" | "continue" | "crossfade";
+
 export interface Clip {
     expanded: boolean;
     skipped: boolean;
     hue: number;
+    boundaryOut: BoundaryOut;
     duration: number;
     audioSource: string;
     controlNetSource: string;
@@ -94,8 +123,10 @@ export interface Clip {
     clipLengthFromControlNet: boolean;
     reuseAudio: boolean;
     uploadedAudio: UploadedAudio | null;
+    audioSegments: AudioSegment[];
     prompt: string;
     promptWindows: PromptWindow[];
+    retake: Retake | null;
     refs: RefImage[];
     stages: Stage[];
 }
@@ -124,6 +155,7 @@ export type StoredStage = Pick<
 export type StoredClip = Pick<
     Clip,
     | "skipped"
+    | "boundaryOut"
     | "duration"
     | "audioSource"
     | "controlNetSource"
@@ -133,6 +165,8 @@ export type StoredClip = Pick<
     | "clipLengthFromControlNet"
     | "reuseAudio"
     | "uploadedAudio"
+    | "audioSegments"
+    | "retake"
 > & {
     refs: StoredRefImage[];
     stages: StoredStage[];
@@ -147,3 +181,18 @@ export interface ImageSourceOption {
     label: string;
     disabled?: boolean;
 }
+
+/**
+ * Selection-driven state for the bottom detail strip. Phase 1 only produces
+ * `none` and `clip`; the other kinds exist for the Phase 2 editors.
+ */
+export type TimelineSelection =
+    | { kind: "none" }
+    | { kind: "clip"; clipIdx: number; stageIdx: number }
+    | { kind: "ref"; clipIdx: number; refIdx: number }
+    | { kind: "audio"; clipIdx: number }
+    | { kind: "audio-segment"; clipIdx: number; segIdx: number }
+    | { kind: "prompt-major"; clipIdx: number }
+    | { kind: "prompt-minor"; clipIdx: number; windowIdx: number }
+    | { kind: "retake"; clipIdx: number }
+    | { kind: "boundary"; leftClipIdx: number };

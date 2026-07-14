@@ -7,6 +7,7 @@ import { getClips, saveClips } from "./persistence";
 import { readStateToken } from "./swarmInputs";
 import { livePxPerSecond } from "./timelineLinking";
 import type { Clip, PromptWindow } from "./types";
+import { setSelection } from "./uiState";
 
 const MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
 const MINOR_SELECTOR = ".vst-minor-seg[data-clip-idx]";
@@ -130,171 +131,10 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
     let resizeState: ResizeState | null = null;
     let createState: CreateState | null = null;
     let suppressClick = false;
-    let activeEditorWrap: HTMLElement | null = null;
-    let editingAnchor: HTMLElement | null = null;
-    let outsideMouseHandler: ((event: MouseEvent) => void) | null = null;
     let boundBody: HTMLElement | null = null;
-
-    const closeEditor = (): void => {
-        if (outsideMouseHandler) {
-            document.removeEventListener(
-                "mousedown",
-                outsideMouseHandler,
-                true,
-            );
-            outsideMouseHandler = null;
-        }
-        if (editingAnchor) {
-            editingAnchor.classList.remove("vst-prompt-editing");
-            editingAnchor = null;
-        }
-        if (activeEditorWrap) {
-            activeEditorWrap.remove();
-            activeEditorWrap = null;
-        }
-    };
-
-    const openEditor = (
-        anchor: HTMLElement,
-        label: string,
-        initial: string,
-        placeholder: string,
-        commit: (value: string) => void,
-        onDelete: (() => void) | null = null,
-    ): void => {
-        closeEditor();
-        const sourceJson = readStateToken();
-        const hostRect = (boundBody ?? document.body).getBoundingClientRect();
-        const viewportW =
-            window.innerWidth || document.documentElement.clientWidth;
-        const width = clamp(Math.round(hostRect.width - 32), 280, 560);
-        const left = clamp(
-            Math.round(hostRect.left + (hostRect.width - width) / 2),
-            8,
-            Math.max(8, viewportW - width - 8),
-        );
-
-        const wrap = document.createElement("div");
-        wrap.className = "vst-prompt-inspector";
-        wrap.style.left = `${left}px`;
-        wrap.style.top = `${Math.round(Math.max(8, hostRect.top + 46))}px`;
-        wrap.style.width = `${width}px`;
-
-        const head = document.createElement("div");
-        head.className = "vst-prompt-inspector-head";
-        head.textContent = label;
-
-        const editor = document.createElement("textarea");
-        editor.className = "vst-prompt-editor";
-        editor.value = initial;
-        editor.placeholder = placeholder;
-
-        const deleteBtn = onDelete ? document.createElement("button") : null;
-        if (deleteBtn) {
-            deleteBtn.type = "button";
-            deleteBtn.className = "vst-refs-delete";
-            deleteBtn.textContent = "Delete prompt window";
-        }
-
-        const hint = document.createElement("div");
-        hint.className = "vst-prompt-inspector-hint";
-        hint.textContent =
-            "Enter to save · Shift+Enter for a new line · Esc to cancel";
-
-        if (deleteBtn) {
-            wrap.append(head, editor, deleteBtn, hint);
-        } else {
-            wrap.append(head, editor, hint);
-        }
-
-        anchor.classList.add("vst-prompt-editing");
-        editingAnchor = anchor;
-        let done = false;
-        const finish = (save: boolean): void => {
-            if (done) {
-                return;
-            }
-            done = true;
-            const value = editor.value;
-            closeEditor();
-            if (save && !isStale(sourceJson)) {
-                commit(value);
-            }
-        };
-        if (deleteBtn && onDelete) {
-            deleteBtn.addEventListener("click", (event) => {
-                event.preventDefault();
-                if (done) {
-                    return;
-                }
-                done = true;
-                closeEditor();
-                if (!isStale(sourceJson)) {
-                    onDelete();
-                }
-            });
-        }
-        editor.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                finish(true);
-            } else if (event.key === "Escape") {
-                event.preventDefault();
-                finish(false);
-            }
-            event.stopPropagation();
-        });
-        const onOutside = (event: MouseEvent): void => {
-            const target = event.target;
-            if (!(target instanceof Element)) {
-                return;
-            }
-            if (
-                target.closest(".vst-prompt-inspector") ||
-                target.closest(".sui-popover")
-            ) {
-                return;
-            }
-            finish(true);
-        };
-        outsideMouseHandler = onOutside;
-        document.addEventListener("mousedown", onOutside, true);
-
-        document.body.appendChild(wrap);
-        activeEditorWrap = wrap;
-        if (typeof textPromptAddKeydownHandler === "function") {
-            textPromptAddKeydownHandler(editor);
-        }
-        editor.focus();
-        editor.select();
-    };
 
     const isStale = (sourceJson: string): boolean =>
         readStateToken() !== sourceJson;
-
-    const commitMajorPrompt = (clipIdx: number, text: string): void => {
-        const clips = getClips();
-        const clip = clips[clipIdx];
-        if (!clip) {
-            return;
-        }
-        clip.prompt = text.trim();
-        saveClips(clips);
-    };
-
-    const commitMinorPrompt = (
-        clipIdx: number,
-        windowIdx: number,
-        text: string,
-    ): void => {
-        const clips = getClips();
-        const window = clips[clipIdx]?.promptWindows?.[windowIdx];
-        if (!window) {
-            return;
-        }
-        window.prompt = text.trim();
-        saveClips(clips);
-    };
 
     const applyMinorAction = (
         clipIdx: number,
@@ -709,14 +549,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
             if (!window) {
                 return;
             }
-            openEditor(
-                minor,
-                `Clip ${clipIdx} · relay window ${windowIdx + 1}`,
-                window.prompt,
-                "Minor prompt for this window…",
-                (value) => commitMinorPrompt(clipIdx, windowIdx, value),
-                () => applyMinorAction(clipIdx, windowIdx, "delete"),
-            );
+            setSelection({ kind: "prompt-minor", clipIdx, windowIdx });
             return;
         }
         const major = event.target.closest(MAJOR_SELECTOR);
@@ -725,17 +558,10 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
             if (clipIdx === null) {
                 return;
             }
-            const clip = getClips()[clipIdx];
-            if (!clip) {
+            if (!getClips()[clipIdx]) {
                 return;
             }
-            openEditor(
-                major,
-                `Clip ${clipIdx} · major prompt`,
-                clip.prompt,
-                "Clip prompt (blank inherits the global prompt)…",
-                (value) => commitMajorPrompt(clipIdx, value),
-            );
+            setSelection({ kind: "prompt-major", clipIdx });
         }
     };
 
@@ -775,7 +601,6 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
     };
 
     const dispose = (): void => {
-        closeEditor();
         if (boundBody) {
             boundBody.removeEventListener("mousedown", onBodyMouseDown);
             boundBody.removeEventListener("click", onBodyClick);

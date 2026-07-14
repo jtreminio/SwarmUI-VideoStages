@@ -303,6 +303,14 @@ internal sealed class LtxStageExecutor(
         StageSpec stage = stageFrame.Stage;
         ClipSpec clip = stageFrame.ClipContext.Clip;
         genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
+        // The per-frame noise mask (not StartStep) gates what regenerates, so the whole latent must
+        // stay denoise-capable from step 0.
+        bool retakeActive = stage.RetakeWindow is not null
+            && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model);
+        if (retakeActive)
+        {
+            genInfo.StartStep = 0;
+        }
         JArray controlNetLengthFrames = TryResolveControlNetLengthFrames(clip);
 
         if (rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage))
@@ -352,6 +360,7 @@ internal sealed class LtxStageExecutor(
             reusedLatent.Frames = matchAudioLength || !genInfo.Frames.HasValue
                 ? null
                 : Math.Min(genInfo.Frames.Value, reusedLatent.Frames ?? int.MaxValue);
+            reusedLatent = ApplyRetakeMaskIfActive(reusedLatent, genInfo, stage, retakeActive);
             return EnsureHasAudioWithLtxFps(reusedLatent, genInfo, sourceMedia);
         }
 
@@ -385,7 +394,21 @@ internal sealed class LtxStageExecutor(
                 : null;
         }
         WGNodeData encodedLatent = stageVideoInput.AsLatentImage(genInfo.Vae);
+        encodedLatent = ApplyRetakeMaskIfActive(encodedLatent, genInfo, stage, retakeActive);
         return EnsureHasAudioWithLtxFps(encodedLatent, genInfo, sourceMedia);
+    }
+
+    private WGNodeData ApplyRetakeMaskIfActive(
+        WGNodeData encodedLatent,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageSpec stage,
+        bool retakeActive)
+    {
+        if (!retakeActive || stage.RetakeWindow is null)
+        {
+            return encodedLatent;
+        }
+        return new LtxVideoRetakeMasker(g).Apply(encodedLatent, genInfo, stage.RetakeWindow);
     }
 
     private static bool IsPixelOrModelUpscaleStage(StageSpec stage)
@@ -866,6 +889,9 @@ internal sealed class LtxStageExecutor(
 
         g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
         LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
+        // Windows the AUDIO channel so preserved-frame audio stays locked while the retake range regenerates.
+        // No-op for plain clips with no retake window.
+        new LtxAudioWindowMasker(g).Apply(genInfo, stageFrame);
         string samplerNode = g.CreateKSampler(
             genInfo.Model.Path,
             genInfo.PosCond,

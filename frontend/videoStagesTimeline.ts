@@ -16,14 +16,18 @@ import {
     restoreCarrierSnapshot,
     setVideoStagesEnabled,
 } from "./swarmInputs";
+import { createTimelineAudioSegmentTrack } from "./timelineAudioSegmentTrack";
 import { createTimelineAudioTrack } from "./timelineAudioTrack";
+import { createTimelineBoundaryTrack } from "./timelineBoundaryTrack";
 import type { TimelineUnit } from "./timelineDetail";
+import { createTimelineDetailStrip } from "./timelineDetailStrip";
 import { createTimelineHistory } from "./timelineHistory";
 import { createTimelineLinking } from "./timelineLinking";
+import { createTimelinePlayhead } from "./timelinePlayhead";
 import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
-import { createTimelineSettings } from "./timelineSettings";
-import { createTimelineStagesEditor } from "./timelineStagesEditor";
+import { createTimelineRetakeTrack } from "./timelineRetakeTrack";
+import { applySelectionHighlight } from "./timelineSelectionView";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -34,6 +38,7 @@ import {
     zoomAnchorScrollLeft,
     zoomAnchorTime,
 } from "./timelineView";
+import { setSelection, subscribeSelection } from "./uiState";
 
 const safeStateFps = (fps: number): number =>
     typeof fps === "number" && fps > 0 ? fps : 24;
@@ -54,14 +59,40 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let lastDimsSignature: string | null = null;
     let unit: TimelineUnit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
-    const stagesEditor = createTimelineStagesEditor();
-    const linking = createTimelineLinking({
-        onClipOpen: (idx, region) => stagesEditor.openClipEditor(region, idx),
+    let playheadSeconds = 0;
+    let stripCollapsed = false;
+    let selectionUnsub: (() => void) | null = null;
+    const detailStrip = createTimelineDetailStrip({
+        isCollapsed: () => stripCollapsed,
+        setCollapsed: (collapsed) => {
+            stripCollapsed = collapsed;
+            saveViewState();
+        },
+        refresh: () => refresh(),
     });
+    const linking = createTimelineLinking();
+    const playhead = createTimelinePlayhead({
+        setSeconds: (seconds) => {
+            playheadSeconds = seconds;
+            saveViewState();
+            refresh();
+        },
+    });
+    const retakeTrack = createTimelineRetakeTrack();
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
+    const audioSegmentTrack = createTimelineAudioSegmentTrack();
+    const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack();
-    const settings = createTimelineSettings(() => refresh());
+
+    // Open the timeline settings panel (docked in the detail strip) from the
+    // topbar dims/fps chip: select "nothing" and force the strip open.
+    const openSettings = (): void => {
+        stripCollapsed = false;
+        saveViewState();
+        setSelection({ kind: "none" });
+        detailStrip.render();
+    };
 
     const history = createTimelineHistory({
         read: () => readCarrierSnapshot(),
@@ -78,6 +109,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             const parsed = JSON.parse(raw) as {
                 pxPerSecond?: unknown;
                 unit?: unknown;
+                playheadSeconds?: unknown;
+                stripCollapsed?: unknown;
             };
             if (typeof parsed.pxPerSecond === "number") {
                 pxPerSecond = clampPxPerSecond(parsed.pxPerSecond);
@@ -85,13 +118,28 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             if (parsed.unit === "frames" || parsed.unit === "seconds") {
                 unit = parsed.unit;
             }
+            if (
+                typeof parsed.playheadSeconds === "number" &&
+                Number.isFinite(parsed.playheadSeconds) &&
+                parsed.playheadSeconds >= 0
+            ) {
+                playheadSeconds = parsed.playheadSeconds;
+            }
+            if (typeof parsed.stripCollapsed === "boolean") {
+                stripCollapsed = parsed.stripCollapsed;
+            }
         } catch {}
     };
     const saveViewState = (): void => {
         try {
             localStorage.setItem(
                 VIEW_STATE_KEY,
-                JSON.stringify({ pxPerSecond, unit }),
+                JSON.stringify({
+                    pxPerSecond,
+                    unit,
+                    playheadSeconds,
+                    stripCollapsed,
+                }),
             );
         } catch {}
     };
@@ -195,10 +243,11 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 fpsExplicit: state.fpsExplicit,
                 unit,
                 pxPerSecond,
+                playheadSeconds,
                 selectedIndex: linking.getSelectedIndex(),
                 enabled: isVideoStagesEnabled(),
                 onToggleEnabled: setVideoStagesEnabled,
-                onOpenSettings: (anchor) => settings.open(anchor),
+                onOpenSettings: () => openSettings(),
                 onToggleUnit: toggleUnit,
                 onAddClip: addClip,
                 onZoomIn: zoomIn,
@@ -211,6 +260,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 globalPrompt: readGlobalPrompt(),
             });
             linking.reapplySelection(body, clips.length);
+            detailStrip.render();
+            applySelectionHighlight(body);
         } catch (error) {
             console.warn("VideoStages: timeline render failed", error);
         }
@@ -296,14 +347,30 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         injectTimelineTab();
         const body = document.getElementById(TIMELINE_BODY_ID);
         if (body) {
+            // Attach before linking so retake-overlay gestures win the region's drag/click.
+            retakeTrack.attach(body);
+            // Attach before the audio track (and linking) so a segment gesture
+            // wins over the audio-clip select and the region drag.
+            audioSegmentTrack.attach(body);
+            // Attach before linking so a ruler/hit-area press starts scrubbing
+            // instead of a region drag.
+            playhead.attach(body);
             linking.attach(body);
             promptTrack.attach(body);
             audioTrack.attach(body);
+            boundaryTrack.attach(body);
             referencesTrack.attach(body);
-            stagesEditor.attach(body);
+            detailStrip.attach(body);
             body.removeEventListener("click", onBodyClickSyncReadout);
             body.addEventListener("click", onBodyClickSyncReadout);
         }
+        selectionUnsub?.();
+        selectionUnsub = subscribeSelection(() => {
+            const el = document.getElementById(TIMELINE_BODY_ID);
+            if (el) {
+                applySelectionHighlight(el);
+            }
+        });
         bindInputListener();
         bindToggleListener();
         history.syncBaseline();
@@ -327,12 +394,17 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             boundToggle.removeEventListener("change", onEnabledToggled);
             boundToggle = null;
         }
+        retakeTrack.dispose();
+        audioSegmentTrack.dispose();
+        playhead.dispose();
         linking.dispose();
         promptTrack.dispose();
         audioTrack.dispose();
+        boundaryTrack.dispose();
         referencesTrack.dispose();
-        stagesEditor.dispose();
-        settings.dispose();
+        detailStrip.dispose();
+        selectionUnsub?.();
+        selectionUnsub = null;
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);
         document.removeEventListener("keydown", onKeydown);

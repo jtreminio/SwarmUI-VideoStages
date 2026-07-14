@@ -215,6 +215,42 @@ describe("videoStagesTimeline", () => {
         expect(sel?.textContent).toBe("clip 1");
     });
 
+    it("persists the scrubbed playhead in view state and restores it on re-init", () => {
+        mountState(makeClipsJson(2, 2)); // two 2s clips -> 4s total
+        timeline = videoStagesTimeline();
+        timeline.init();
+        const body = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
+        const scroll = body.querySelector<HTMLElement>(".vst-scroll");
+        if (scroll) {
+            scroll.getBoundingClientRect = () =>
+                ({ left: 0, top: 0, right: 0, bottom: 0 }) as DOMRect;
+        }
+
+        // Scrub the ruler to 1s (168px header + 1s * 44px/s).
+        const ruler = body.querySelector<HTMLElement>(".vst-ruler");
+        ruler?.dispatchEvent(
+            new MouseEvent("mousedown", { bubbles: true, clientX: 212 }),
+        );
+        document.dispatchEvent(new MouseEvent("mouseup", { clientX: 212 }));
+
+        const stored = JSON.parse(
+            localStorage.getItem("videostages.timeline.viewState") ?? "{}",
+        );
+        expect(stored.playheadSeconds).toBeCloseTo(1, 5);
+
+        // Re-init a fresh controller: it reloads the persisted playhead.
+        timeline.dispose();
+        timeline = videoStagesTimeline();
+        timeline.init();
+        const body2 = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
+        expect(
+            body2.querySelector<HTMLElement>("[data-vst-playhead]")?.style.left,
+        ).toBe("212px");
+        expect(
+            body2.querySelector("[data-vst-readout-head]")?.textContent,
+        ).toBe("▸ 1.0s · f24");
+    });
+
     it("polls for state drift as a fallback when no event fires", () => {
         mountState(makeClipsJson(1));
 

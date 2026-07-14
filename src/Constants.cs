@@ -31,4 +31,13 @@ public static class Constants
     public const string ControlNetSourceOne = "ControlNet 1";
     public const string ControlNetSourceTwo = "ControlNet 2";
     public const string ControlNetSourceThree = "ControlNet 3";
+
+    // Outgoing boundary between clip N and N+1; mirrors the frontend BoundaryOut union.
+    // "continue" = generation-time continuity: the next clip is generated from this clip's final frame
+    // (first-frame guide at strength 1) and the merge collapses the duplicated seam frame via a 1-frame
+    // overlap. Degrades to "cut" when the next clip can't consume it (non-LTX-2 first stage, explicit
+    // first-frame ref, or unknown frame count).
+    public const string BoundaryOutCut = "cut";
+    public const string BoundaryOutContinue = "continue";
+    public const string BoundaryOutCrossfade = "crossfade";
 }

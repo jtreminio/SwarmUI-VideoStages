@@ -18,6 +18,7 @@ import {
 } from "./timelineLinking";
 import { DEFAULT_PX_PER_SECOND } from "./timelineView";
 import type { Clip } from "./types";
+import { resetSelectionForTests } from "./uiState";
 
 describe("resolveSelectedIndex", () => {
     it("keeps a valid in-range index", () => {
@@ -170,6 +171,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
     let linking: TimelineLinking | null = null;
 
     beforeEach(() => {
+        resetSelectionForTests();
         persistence.__resetPersistenceForTests();
     });
 
@@ -358,6 +360,7 @@ describe("createTimelineLinking keyframe editing (DOM)", () => {
     };
 
     beforeEach(() => {
+        resetSelectionForTests();
         persistence.__resetPersistenceForTests();
     });
 

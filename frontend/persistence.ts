@@ -64,6 +64,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
     clips.map(
         (clip): StoredClip => ({
             skipped: clip.skipped,
+            boundaryOut: clip.boundaryOut,
             duration: clip.duration,
             audioSource: clip.audioSource,
             controlNetSource: clip.controlNetSource,
@@ -73,6 +74,19 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
             clipLengthFromControlNet: clip.clipLengthFromControlNet,
             reuseAudio: clip.reuseAudio,
             uploadedAudio: clip.uploadedAudio,
+            audioSegments: clip.audioSegments.map((seg) => ({
+                source: seg.source,
+                startSeconds: seg.startSeconds,
+                trimStartSeconds: seg.trimStartSeconds,
+                lengthSeconds: seg.lengthSeconds,
+            })),
+            retake: clip.retake
+                ? {
+                      startSeconds: clip.retake.startSeconds,
+                      lengthSeconds: clip.retake.lengthSeconds,
+                      strength: clip.retake.strength,
+                  }
+                : null,
             refs: clip.refs.map((ref) => ({
                 source: ref.source,
                 uploadFileName: ref.uploadFileName,

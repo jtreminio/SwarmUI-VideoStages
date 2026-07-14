@@ -22,6 +22,10 @@ internal sealed class ClipContext
     public WGNodeData SourceVae { get; }
     public ClipAudioState AudioReuse { get; } = new();
 
+    // Set when the previous clip's outgoing boundary is "continue": the previous clip's final rendered
+    // frame, used as this clip's first-frame guide so generation picks up where the prior clip ended.
+    public WGNodeData ContinuityFrame { get; set; }
+
     public bool IsFirstStage(StageSpec stage) =>
         Clip.Stages.Count > 0 && Clip.Stages[0].Id == stage.Id;
 }

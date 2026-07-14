@@ -51,6 +51,7 @@ describe("persistence", () => {
             const expected: StoredClip[] = [
                 {
                     skipped: false,
+                    boundaryOut: "cut",
                     duration: 3,
                     audioSource: "Native",
                     controlNetSource: "ControlNet 2",
@@ -60,6 +61,8 @@ describe("persistence", () => {
                     clipLengthFromControlNet: true,
                     reuseAudio: false,
                     uploadedAudio: null,
+                    audioSegments: [],
+                    retake: null,
                     refs: [
                         {
                             source: REF_SOURCE_BASE,
@@ -127,6 +130,59 @@ describe("persistence", () => {
                 "a red fox",
                 "a bear",
             ]);
+        });
+
+        it("round-trips per-clip boundaryOut through the Data param", () => {
+            saveClips([
+                minimalClip({ duration: 3, boundaryOut: "crossfade" }),
+                minimalClip({ duration: 4, boundaryOut: "continue" }),
+            ]);
+            const stored = JSON.parse(dataInput().value) as {
+                clips: { boundaryOut: string }[];
+            };
+            expect(stored.clips.map((c) => c.boundaryOut)).toEqual([
+                "crossfade",
+                "continue",
+            ]);
+            expect(getClips().map((clip) => clip.boundaryOut)).toEqual([
+                "crossfade",
+                "continue",
+            ]);
+        });
+
+        it("round-trips a per-clip retake through the Data param", () => {
+            saveClips([
+                minimalClip({
+                    duration: 10,
+                    retake: {
+                        startSeconds: 2,
+                        lengthSeconds: 3,
+                        strength: 0.6,
+                    },
+                }),
+            ]);
+            const stored = JSON.parse(dataInput().value) as {
+                clips: { retake: unknown }[];
+            };
+            expect(stored.clips[0].retake).toEqual({
+                startSeconds: 2,
+                lengthSeconds: 3,
+                strength: 0.6,
+            });
+            expect(getClips()[0].retake).toEqual({
+                startSeconds: 2,
+                lengthSeconds: 3,
+                strength: 0.6,
+            });
+        });
+
+        it("serializes an absent retake as null and re-parses it as null", () => {
+            saveClips([minimalClip({ duration: 4 })]);
+            const stored = JSON.parse(dataInput().value) as {
+                clips: { retake: unknown }[];
+            };
+            expect(stored.clips[0].retake).toBeNull();
+            expect(getClips()[0].retake).toBeNull();
         });
 
         it("round-trips a prompt window (seconds) through the prompt box", () => {
