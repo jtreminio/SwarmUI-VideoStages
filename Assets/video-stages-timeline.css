@@ -266,6 +266,9 @@
 
 .vst-scroll {
     flex: 1 1 auto;
+    /* Floor so the detail strip below can never crush the tracks to zero
+       (ruler 26px + prompt lane 72px + ~100px of video lane). */
+    min-height: 200px;
     overflow: auto;
     background: var(--vst-bed);
     scrollbar-width: thin;
@@ -1342,10 +1345,10 @@
     display: block;
     margin-top: 2px;
 }
-.vst-stage-refs .vst-stage-ref-slider {
+.vst-stage-ref-slider {
     gap: 1px;
 }
-.vst-stage-refs .vst-stage-ref-slider .auto-slider-range-wrapper {
+.vst-detail .vst-stage-ref-slider .auto-slider-range-wrapper {
     margin-top: 6px;
     margin-bottom: 2px;
 }
@@ -1646,8 +1649,7 @@
     background: color-mix(in srgb, var(--red) 16%, var(--background));
 }
 
-.vst-stage-loras,
-.vst-stage-refs {
+.vst-stage-loras {
     gap: 5px;
 }
 .vst-stage-lora-list {
@@ -1754,6 +1756,20 @@
 .vst-settings-num {
     width: 100%;
 }
+.vst-settings-dims {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.vst-settings-dims .vst-settings-num {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.vst-settings-dims-sep {
+    flex: none;
+    color: var(--text-soft);
+}
 .vst-settings-badges {
     display: flex;
     flex-wrap: wrap;
@@ -1776,10 +1792,14 @@
    below the tracks (clip/stage, ref, audio, prompt, settings).
    ============================================================ */
 .vst-detail {
-    flex: none;
+    /* Grow to content but yield to the cap; the px ceiling holds even if the
+       % can't resolve (ancestor chain has definite height: .vst-timeline is
+       height:100% inside a 100%-tall tab content elem). */
+    flex: 0 1 auto;
     display: flex;
     flex-direction: column;
     min-height: 210px;
+    max-height: min(420px, 48%);
     border-top: 2px solid var(--emphasis);
     background: var(--vst-panel);
     overflow: hidden;
@@ -1837,16 +1857,54 @@
     min-height: 0;
     overflow: hidden;
 }
-/* Single-column editors (ref / audio / prompt / settings). */
+/* Form editors (ref / audio / prompt / settings). Fields flow horizontally
+   across the full strip width instead of stacking in a narrow column. */
 .vst-detail-form-body {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+    flex-flow: row wrap;
+    align-items: flex-start;
+    align-content: flex-start;
+    gap: 8px 20px;
     padding: 12px 16px;
-    max-width: 520px;
     overflow-y: auto;
 }
+/* Each field claims a comfortable min width, grows to fill, but is capped so
+   controls don't stretch absurdly wide on a ~1900px strip. */
+.vst-detail-form-body > .vst-audio-field {
+    flex: 1 1 280px;
+    max-width: 420px;
+}
+/* Label-left, two-column rows — scoped to form editors so the shared
+   .vst-audio-field class stays label-above elsewhere (stage grid, LoRA rows).
+   Checkboxes (label-beside-box) and multi-part upload rows are excluded. */
+.vst-detail-form-body
+    > .vst-audio-field:not(.vst-audio-field-check):not(.vst-audio-upload) {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    align-items: center;
+    gap: 3px 10px;
+}
+/* Hints (a third child) should sit under the control, not in the label gutter. */
+.vst-detail-form-body
+    > .vst-audio-field:not(.vst-audio-field-check):not(.vst-audio-upload)
+    > .vst-audio-field-hint {
+    grid-column: 2;
+}
+/* Non-field blocks (notes, delete buttons, badges, previews) break the wrap
+   flow onto their own line rather than sitting inline beside a field. */
+.vst-detail-form-body > .vst-detail-note,
+.vst-detail-form-body > .vst-detail-delete,
+.vst-detail-form-body > .vst-detail-add-segment,
+.vst-detail-form-body > .vst-settings-badges,
+.vst-detail-form-body > .vst-boundary-info,
+.vst-detail-form-body > .vst-boundary-note,
+.vst-detail-form-body > .vst-refs-thumb-preview {
+    flex: 0 0 100%;
+}
 .vst-detail-prompt-body {
+    flex-direction: column;
+    flex-wrap: nowrap;
+}
+.vst-detail-prompt-body > .vst-audio-field {
     max-width: none;
 }
 .vst-detail-prompt {
@@ -1854,9 +1912,6 @@
     min-height: 96px;
     max-height: 100%;
     flex: 1 1 auto;
-}
-.vst-detail-settings {
-    max-width: 360px;
 }
 .vst-detail-delete {
     align-self: flex-start;
@@ -1905,7 +1960,7 @@
 }
 .vst-detail-fields {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     column-gap: 16px;
     row-gap: 6px;
     align-content: start;

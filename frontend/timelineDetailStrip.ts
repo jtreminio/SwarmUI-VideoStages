@@ -1188,13 +1188,10 @@ export const createTimelineDetailStrip = (
         );
 
         if (clip.refs.length > 0) {
-            const refsSection = document.createElement("div");
-            refsSection.className =
-                "vst-audio-field vst-stage-refs vst-detail-span-full";
-            const refsLabel = document.createElement("span");
-            refsLabel.className = "vst-audio-field-label";
-            refsLabel.textContent = "Reference Strengths";
-            refsSection.appendChild(refsLabel);
+            const refsHeader = document.createElement("div");
+            refsHeader.className = "vst-detail-sec vst-detail-span-full";
+            refsHeader.textContent = "Reference Strengths";
+            fields.appendChild(refsHeader);
             clip.refs.forEach((ref, refIdx) => {
                 const current =
                     refIdx < stage.refStrengths.length
@@ -1220,9 +1217,8 @@ export const createTimelineDetailStrip = (
                 );
                 slider.classList.add("vst-stage-ref-slider");
                 tagFocus(slider, `ref-${refIdx}`);
-                refsSection.appendChild(slider);
+                fields.appendChild(slider);
             });
-            fields.appendChild(refsSection);
         }
 
         const controlNetSlider = buildSlider(
@@ -1241,7 +1237,6 @@ export const createTimelineDetailStrip = (
             },
             { hint: "Only applies when a ControlNet source is set" },
         );
-        controlNetSlider.classList.add("vst-detail-span-full");
         tagFocus(controlNetSlider, "controlnet");
         fields.appendChild(controlNetSlider);
 
@@ -2141,11 +2136,6 @@ export const createTimelineDetailStrip = (
         widthInput.classList.add("vst-settings-num");
         widthInput.disabled = !isCustom;
         widthInput.setAttribute("data-vst-focus-key", "settings-width");
-        const widthField = buildField("Width", widthInput);
-        if (!isCustom) {
-            widthField.classList.add("vst-audio-disabled");
-        }
-        body.appendChild(widthField);
 
         const heightInput = buildNumber(
             displayed.height,
@@ -2162,11 +2152,20 @@ export const createTimelineDetailStrip = (
         heightInput.classList.add("vst-settings-num");
         heightInput.disabled = !isCustom;
         heightInput.setAttribute("data-vst-focus-key", "settings-height");
-        const heightField = buildField("Height", heightInput);
+
+        // Width and Height share one "Dimensions" row (W × H) to keep the
+        // wrapping settings flow dense.
+        const dimsPair = document.createElement("div");
+        dimsPair.className = "vst-settings-dims";
+        const dimsSep = document.createElement("span");
+        dimsSep.className = "vst-settings-dims-sep";
+        dimsSep.textContent = "×";
+        dimsPair.append(widthInput, dimsSep, heightInput);
+        const dimsField = buildField("Dimensions", dimsPair);
         if (!isCustom) {
-            heightField.classList.add("vst-audio-disabled");
+            dimsField.classList.add("vst-audio-disabled");
         }
-        body.appendChild(heightField);
+        body.appendChild(dimsField);
 
         const badges = document.createElement("div");
         badges.className = "vst-settings-badges";

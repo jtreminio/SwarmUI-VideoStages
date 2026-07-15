@@ -251,15 +251,29 @@ describe("createTimelineDetailStrip", () => {
         expect(detail()).not.toBeNull();
         expect(crumbText()).toBe("Timeline settings");
         expect(detail()?.querySelector(".vst-detail-settings")).not.toBeNull();
-        // Resolution / Width / Height / FPS controls are present.
+        // Resolution / Dimensions / FPS controls are present.
         const labels = Array.from(
             document.querySelectorAll<HTMLElement>(
                 ".vst-detail .vst-audio-field-label",
             ),
         ).map((el) => el.textContent);
         expect(labels).toEqual(
-            expect.arrayContaining(["Resolution", "Width", "Height", "FPS"]),
+            expect.arrayContaining(["Resolution", "Dimensions", "FPS"]),
         );
+        // Width and Height inputs live side-by-side in the Dimensions pair.
+        const dims = detail()?.querySelector<HTMLElement>(".vst-settings-dims");
+        expect(dims).not.toBeNull();
+        expect(dims?.querySelectorAll("input")).toHaveLength(2);
+        expect(
+            dims
+                ?.querySelector<HTMLInputElement>(
+                    'input[data-vst-focus-key="settings-width"]',
+                )
+                ?.getAttribute("data-vst-focus-key"),
+        ).toBe("settings-width");
+        expect(
+            dims?.querySelector('input[data-vst-focus-key="settings-height"]'),
+        ).not.toBeNull();
     });
 
     it("renders the clip/stage columns when a stage chip is clicked", () => {
