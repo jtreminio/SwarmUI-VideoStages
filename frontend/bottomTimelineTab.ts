@@ -46,10 +46,16 @@ export const injectTimelineTab = (): HTMLElement | null => {
     pane.className = "tab-pane genpage-bottom-tab";
     pane.id = TAB_ID;
     pane.setAttribute("role", "tabpanel");
+    // Outer flex-row shell: the left dock (`.vst-detail`, created by the detail
+    // strip owner) and the tracks column (`.vst-right`, wiped by renderTimeline)
+    // are siblings, so the tracks re-render can never destroy the dock.
+    const shell = document.createElement("div");
+    shell.className = "vst-timeline";
     const body = document.createElement("div");
-    body.className = "vst-timeline";
+    body.className = "vst-right";
     body.id = TIMELINE_BODY_ID;
-    pane.appendChild(body);
+    shell.appendChild(body);
+    pane.appendChild(shell);
     content.appendChild(pane);
     const navLink = li.querySelector("a");
     if (navLink) {

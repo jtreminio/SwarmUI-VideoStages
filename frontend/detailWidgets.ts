@@ -2,18 +2,49 @@ import { clamp } from "./constants";
 
 let sliderSeq = 0;
 
-/** Label + control row, matching the existing `.vst-audio-field` design language. */
+/**
+ * Pick the host `.auto-*-box` wrapper modifier that matches a control, so the
+ * field row reads as a real SwarmUI `.auto-input` widget. Composite controls
+ * (dims pair, sliders) carry no native control class and get no box modifier.
+ */
+const boxClassFor = (control: HTMLElement): string | null => {
+    const cl = control.classList;
+    if (cl.contains("auto-dropdown")) {
+        return "auto-dropdown-box";
+    }
+    if (cl.contains("auto-number")) {
+        return "auto-number-box";
+    }
+    if (cl.contains("auto-text")) {
+        return "auto-text-box";
+    }
+    return null;
+};
+
+/**
+ * Label + control row in SwarmUI's native `.auto-input` vocabulary: the wrapper
+ * is `.auto-input` (host-styled), the label is `.auto-input-name` inside a
+ * `<label>`, and the control keeps its native `.auto-*` class. The legacy
+ * `.vst-audio-field` / `.vst-audio-field-label` classes ride along as hooks for
+ * the focus/pending machinery and the tests — they no longer carry styling.
+ */
 export const buildField = (
     label: string,
     control: HTMLElement,
     hint?: string,
 ): HTMLElement => {
     const row = document.createElement("div");
-    row.className = "vst-audio-field";
+    row.className = "auto-input vst-audio-field";
+    const boxClass = boxClassFor(control);
+    if (boxClass) {
+        row.classList.add(boxClass);
+    }
+    const labelEl = document.createElement("label");
     const text = document.createElement("span");
-    text.className = "vst-audio-field-label";
+    text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
-    row.append(text, control);
+    labelEl.appendChild(text);
+    row.append(labelEl, control);
     if (hint) {
         const small = document.createElement("small");
         small.className = "vst-audio-field-hint";
@@ -30,7 +61,7 @@ export const buildSelect = (
     onChange: (value: string) => void,
 ): HTMLSelectElement => {
     const select = document.createElement("select");
-    select.className = "vst-audio-select";
+    select.className = "auto-dropdown vst-audio-select";
     for (let i = 0; i < values.length; i++) {
         const opt = document.createElement("option");
         opt.value = values[i];
@@ -52,7 +83,7 @@ export const buildNumber = (
 ): HTMLInputElement => {
     const input = document.createElement("input");
     input.type = "number";
-    input.className = "vst-refs-num";
+    input.className = "auto-number vst-refs-num";
     input.min = `${min}`;
     input.max = `${max}`;
     input.step = `${step}`;
@@ -135,13 +166,15 @@ export const buildCheckbox = (
     onChange: (value: boolean) => void,
 ): HTMLElement => {
     const row = document.createElement("label");
-    row.className = "vst-audio-field vst-audio-field-check";
+    row.className =
+        "auto-input auto-checkbox-box auto-input-flex vst-audio-field vst-audio-field-check";
     const input = document.createElement("input");
     input.type = "checkbox";
+    input.className = "auto-checkbox";
     input.checked = checked;
     input.addEventListener("change", () => onChange(input.checked));
     const text = document.createElement("span");
-    text.className = "vst-audio-field-label";
+    text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
     row.append(input, text);
     return row;

@@ -21,7 +21,8 @@
     --vst-font-3xs: 0.7em;
     --vst-mono: var(--font-monospace, ui-monospace, Menlo, Consolas, monospace);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    align-items: stretch;
     height: 100%;
     min-height: 240px;
     color: var(--text);
@@ -30,6 +31,17 @@
 }
 .vst-timeline * {
     box-sizing: border-box;
+}
+/* Tracks column: the topbar + scrolling track plane. renderTimeline wipes this
+   element's innerHTML; the detail dock is a sibling, so it is never touched. */
+.vst-right {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .vst-topbar {
@@ -1352,25 +1364,24 @@
     margin-top: 6px;
     margin-bottom: 2px;
 }
-.vst-prompt-editor {
+/* Dock prompt textareas render as native `.auto-text.auto-text-block` (host
+   supplies the full-width box, border and background). These add only the
+   dock's taller editing affordance — vertical resize + roomier padding — which
+   the host's inline sidebar textareas don't carry.
+   `display: block` is load-bearing: a bare `<textarea>` defaults to
+   `inline-block`, so its `width: 100%` (from `.auto-text-block`) only reads
+   full-width when the containing block itself is full-width AND the textarea is
+   blockified by a flex parent. When the major/relay prompt is NOT wrapped in the
+   host's `.auto-input.auto-text-box` block wrapper, the inline-block collapses
+   toward content width if any ancestor fails to stretch — the recurring
+   "prompt not full width" regression. Forcing block makes it fill unconditionally. */
+.vst-detail .vst-prompt-editor {
+    display: block;
     width: 100%;
-    min-height: 72px;
-    max-height: 260px;
     padding: 8px 10px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    background: var(--background, var(--vst-panel));
-    opacity: 1;
-    color: var(--text);
-    font: inherit;
-    font-size: var(--vst-font-xs);
     line-height: 1.45;
     resize: vertical;
     box-sizing: border-box;
-}
-.vst-prompt-editor:focus {
-    outline: none;
-    border-color: var(--emphasis);
 }
 
 .vst-audio-clip {
@@ -1440,56 +1451,18 @@
     border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
 }
 
-.vst-audio-field {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    font-size: var(--vst-font-xs);
-    color: var(--text);
-}
-.vst-audio-field-check {
-    flex-direction: row;
-    align-items: center;
-    gap: 7px;
-    cursor: pointer;
-}
-.vst-audio-field-check input {
-    margin: 0;
-}
-.vst-audio-field-label {
-    font-size: var(--vst-font-3xs);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-}
-.vst-audio-field-check .vst-audio-field-label {
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: var(--vst-font-xs);
-    color: var(--text);
-}
-.vst-audio-select,
-.vst-refs-num {
-    width: 100%;
-    padding: 5px 8px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    background: var(--background, var(--vst-panel));
-    color: var(--text);
-    font: inherit;
-    font-size: var(--vst-font-xs);
-}
-.vst-audio-select:focus,
-.vst-refs-num:focus {
-    outline: none;
-    border-color: var(--emphasis);
-}
+/* Field ROWS (label + control) are now SwarmUI-native `.auto-input` widgets;
+   their layout, label typography and control sizing come from host site.css +
+   the dock override block near the end of this file. The `.vst-audio-*` classes
+   below are hooks/selectors only for genuinely dock-specific chrome. */
 .vst-audio-disabled {
     opacity: 0.45;
     cursor: not-allowed;
 }
 .vst-audio-upload {
+    display: flex;
     flex-direction: column;
+    align-items: stretch;
     gap: 5px;
 }
 .vst-audio-upload input[type="file"] {
@@ -1739,13 +1712,13 @@
     outline: 2px solid var(--emphasis);
     outline-offset: 1px;
 }
-.vst-settings-dims {
+.vst-settings-chip .vst-settings-dims {
     color: var(--text);
     font-weight: 600;
     min-width: 9ch;
     text-align: center;
 }
-.vst-settings-fps {
+.vst-settings-chip .vst-settings-fps {
     min-width: 6ch;
     text-align: center;
 }
@@ -1788,53 +1761,72 @@
 }
 
 /* ============================================================
-   Detail strip — full-width, selection-driven editor docked
-   below the tracks (clip/stage, ref, audio, prompt, settings).
+   Detail dock — selection-driven editor docked on the LEFT of
+   the tracks (clip/stage, ref, audio, prompt, settings). Chrome
+   follows SwarmUI's native `.input-group` accordion idiom.
    ============================================================ */
 .vst-detail {
-    /* Grow to content but yield to the cap; the px ceiling holds even if the
-       % can't resolve (ancestor chain has definite height: .vst-timeline is
-       height:100% inside a 100%-tall tab content elem). */
-    flex: 0 1 auto;
+    flex: 0 0 352px;
     display: flex;
     flex-direction: column;
-    min-height: 210px;
-    max-height: min(420px, 48%);
-    border-top: 2px solid var(--emphasis);
+    height: 100%;
+    min-height: 0;
+    border-right: 1px solid var(--shadow, var(--vst-border-strong));
     background: var(--vst-panel);
     overflow: hidden;
-    /* The strip is a reading/editing surface, not track chrome: scale the
+    /* The dock is a reading/editing surface, not track chrome: scale the
        shared font tokens up for everything inside it. */
     --vst-font-3xs: 0.82em;
     --vst-font-2xs: 0.86em;
     --vst-font-xs: 0.92em;
     --vst-font-sm: 0.97em;
 }
-.vst-detail.vst-detail-collapsed {
-    min-height: 0;
+/* Collapse is now a WIDTH collapse: the dock shrinks to a thin rail. */
+.vst-detail-collapsed {
+    flex-basis: 28px;
 }
 .vst-detail-head {
     flex: none;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    height: 28px;
-    padding: 0 12px;
+    gap: 8px;
+    height: 32px;
+    padding: 0 8px 0 12px;
     background: var(--vst-panel);
     border-bottom: 1px solid var(--vst-hairline);
 }
-.vst-detail-collapsed .vst-detail-head {
-    border-bottom: none;
-}
 .vst-detail-crumb {
+    flex: 1 1 auto;
+    min-width: 0;
     font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     font-weight: 600;
     color: var(--emphasis);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.vst-detail-clear {
+    flex: none;
+    padding: 2px 8px;
+    border: 1px solid var(--vst-hairline);
+    border-radius: var(--vst-radius-sm);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: var(--vst-font-3xs);
+    cursor: pointer;
+}
+.vst-detail-clear:hover,
+.vst-detail-clear:focus-visible {
+    outline: none;
+    color: var(--emphasis);
+    border-color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 12%, transparent);
 }
 .vst-detail-collapse {
+    flex: none;
     padding: 0 6px;
     border: none;
     background: transparent;
@@ -1850,100 +1842,340 @@
     color: var(--emphasis);
     background: color-mix(in srgb, var(--emphasis) 12%, transparent);
 }
+/* Collapsed rail: stack the head vertically, expand chevron on top, the
+   breadcrumb rotated into a vertical label. */
+.vst-detail-collapsed .vst-detail-head {
+    flex-direction: column;
+    height: 100%;
+    padding: 8px 0;
+    gap: 10px;
+    justify-content: flex-start;
+}
+.vst-detail-collapsed .vst-detail-collapse {
+    order: -1;
+}
+.vst-detail-collapsed .vst-detail-clear {
+    display: none;
+}
+.vst-detail-collapsed .vst-detail-crumb {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    text-align: right;
+    max-height: calc(100% - 40px);
+}
 .vst-detail-body {
     flex: 1 1 auto;
     display: flex;
-    align-items: stretch;
+    flex-direction: column;
     min-height: 0;
-    overflow: hidden;
-}
-/* Form editors (ref / audio / prompt / settings). Fields flow horizontally
-   across the full strip width instead of stacking in a narrow column. */
-.vst-detail-form-body {
-    flex-flow: row wrap;
-    align-items: flex-start;
-    align-content: flex-start;
-    gap: 8px 20px;
-    padding: 12px 16px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
-/* Each field claims a comfortable min width, grows to fill, but is capped so
-   controls don't stretch absurdly wide on a ~1900px strip. */
-.vst-detail-form-body > .vst-audio-field {
-    flex: 1 1 280px;
-    max-width: 420px;
+
+/* --- host-convention input-group accordion sections ---------------------- */
+.vst-detail .input-group {
+    flex: none;
+    /* Bootstrap's `.input-group` defaults to a horizontal flex row; force a
+       clean vertical stack (header over content) so nothing is laid out or
+       nudged toward center inside the narrow dock column. */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    border-bottom: 1px solid var(--vst-hairline);
 }
-/* Label-left, two-column rows — scoped to form editors so the shared
-   .vst-audio-field class stays label-above elsewhere (stage grid, LoRA rows).
-   Checkboxes (label-beside-box) and multi-part upload rows are excluded. */
-.vst-detail-form-body
-    > .vst-audio-field:not(.vst-audio-field-check):not(.vst-audio-upload) {
-    display: grid;
-    grid-template-columns: 110px minmax(0, 1fr);
+.vst-detail .input-group-header {
+    display: flex;
     align-items: center;
-    gap: 3px 10px;
+    padding: 7px 12px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--vst-panel);
+    transition: background var(--vst-ease);
 }
-/* Hints (a third child) should sit under the control, not in the label gutter. */
-.vst-detail-form-body
-    > .vst-audio-field:not(.vst-audio-field-check):not(.vst-audio-upload)
-    > .vst-audio-field-hint {
-    grid-column: 2;
+.vst-detail .input-group-header:hover {
+    background: var(--vst-panel-2);
 }
-/* Non-field blocks (notes, delete buttons, badges, previews) break the wrap
-   flow onto their own line rather than sitting inline beside a field. */
-.vst-detail-form-body > .vst-detail-note,
-.vst-detail-form-body > .vst-detail-delete,
-.vst-detail-form-body > .vst-detail-add-segment,
-.vst-detail-form-body > .vst-settings-badges,
-.vst-detail-form-body > .vst-boundary-info,
-.vst-detail-form-body > .vst-boundary-note,
-.vst-detail-form-body > .vst-refs-thumb-preview {
-    flex: 0 0 100%;
+.vst-detail .input-group .header-label-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+}
+.vst-detail .input-group .auto-symbol {
+    flex: none;
+    font-size: var(--vst-font-2xs);
+    line-height: 1;
+    color: var(--text-soft);
+}
+.vst-detail .input-group .header-label {
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--emphasis);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.vst-detail .input-group .header-label-spacer {
+    flex: 1 1 auto;
+}
+.vst-detail .input-group .header-label-counter {
+    flex: none;
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+}
+.vst-detail .input-group-content {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    align-content: flex-start;
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0;
+    text-align: left;
+}
+
+/* Form editors (ref / audio / prompt / settings) stack vertically in the dock;
+   the shared `.vst-audio-field` base is already label-above. */
+.vst-detail-form-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    /* Explicit full width so the prompt/field controls inside never resolve
+       their `width: 100%` against a stretch-collapsed parent (regression net for
+       "prompt not full width"). */
+    width: 100%;
+    box-sizing: border-box;
 }
 .vst-detail-prompt-body {
-    flex-direction: column;
-    flex-wrap: nowrap;
-}
-.vst-detail-prompt-body > .vst-audio-field {
-    max-width: none;
+    flex: 1 1 auto;
 }
 .vst-detail-prompt {
     width: 100%;
-    min-height: 96px;
-    max-height: 100%;
+    min-height: 140px;
     flex: 1 1 auto;
 }
 .vst-detail-delete {
     align-self: flex-start;
 }
+/* Relay panel: every minor window of the clip, stacked. */
+.vst-detail-minor-body {
+    gap: 12px;
+}
+.vst-detail-minor-window {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: color-mix(in srgb, var(--emphasis) 3%, transparent);
+    /* Explicit full width: the relay card is the textarea's containing block, so
+       it must span the dock rather than lean on flex-stretch alone. */
+    width: 100%;
+    box-sizing: border-box;
+}
+/* Begin/end edge editors sit side-by-side above the window prompt. */
+.vst-detail-minor-range {
+    display: flex;
+    gap: 8px;
+}
+.vst-detail-minor-range > .vst-audio-field {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.vst-detail-minor-active {
+    border-color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 10%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emphasis) 40%, transparent);
+}
+.vst-detail-minor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.vst-detail-minor-title {
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--text-soft);
+}
+.vst-detail-minor-active .vst-detail-minor-title {
+    color: var(--emphasis);
+}
+.vst-detail-minor-delete {
+    margin-top: 0;
+    padding: 1px 8px;
+    font-size: var(--vst-font-3xs);
+}
+.vst-detail-minor-window .vst-detail-prompt {
+    min-height: 72px;
+    flex: none;
+}
+/* Stacked multi-instance panels (refs, audio segments) reuse the relay
+   window's card + active-highlight look. */
+.vst-detail-instance-body {
+    gap: 12px;
+}
+.vst-detail-instance {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: color-mix(in srgb, var(--emphasis) 3%, transparent);
+    /* Explicit full width so nested field controls span the dock (see the
+       relay window note above). */
+    width: 100%;
+    box-sizing: border-box;
+}
+.vst-detail-instance-active {
+    border-color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 10%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emphasis) 40%, transparent);
+}
+.vst-detail-instance-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.vst-detail-instance-title {
+    font-family: var(--vst-mono);
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--text-soft);
+}
+.vst-detail-instance-active .vst-detail-instance-title {
+    color: var(--emphasis);
+}
+.vst-detail-instance-delete {
+    margin-top: 0;
+    padding: 1px 8px;
+    font-size: var(--vst-font-3xs);
+}
+.vst-detail-instance-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
 .vst-detail-col {
     padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
 }
-.vst-detail-clip {
-    flex: none;
-    width: 170px;
-    border-right: 1px solid var(--vst-hairline);
-    align-items: flex-start;
+/* ────────────────────────────────────────────────────────────────────────
+   Dock field layout — the ONE deliberate deviation from the host sidebar idiom
+   ────────────────────────────────────────────────────────────────────────
+   Field rows are native SwarmUI `.auto-input` widgets, so host site.css styles
+   the control internals (border, radius, background, spin buttons, focus). The
+   host lays those rows out as a wrapping, center-aligned, label-BESIDE-control
+   flex line sized for the wide Generate sidebar. The dock is a narrow 352px
+   editing column, so here — and ONLY here, keyed on the host's own native
+   classes rather than a pile of per-widget resets — we re-flow each row into a
+   LEFT-aligned, label-ABOVE stack whose control fills the column width.
+   Panel-body / instance / relay containers already stack vertically via their
+   own `display: flex; flex-direction: column` rules above (flex columns stretch
+   their children by default), so no container reset is needed here. */
+.vst-detail .auto-input {
+    display: block; /* over `.auto-input-flex`'s inline baseline flex row */
+    width: 100%;
+    max-width: 100%;
+    overflow: visible; /* host clips `.auto-input`; dock hints/menus must show */
+    margin: 0;
+    padding: 0;
+    text-align: left; /* host `.auto-input-name` centers; the dock reads left */
 }
-.vst-detail-rail {
+.vst-detail .auto-input > label {
+    display: block;
+    margin: 0;
+}
+.vst-detail .auto-input-name {
+    display: block;
+    text-align: left;
+    font-weight: 600;
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    white-space: normal;
+}
+/* Controls span the dock column. The host sizes dropdowns fit-content and
+   numbers to ~1rem + flex-grow (sized by the wide inline sidebar row); the
+   dock's block stack needs them to fill width instead. Flex children that carry
+   an explicit flex-basis (lora weight, dims pair, ref rows) are unaffected —
+   flex-basis wins over width. */
+.vst-detail .auto-dropdown,
+.vst-detail .auto-number,
+.vst-detail .auto-text {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+/* The host pins sidebar dropdowns narrow with `.input-group .auto-dropdown {
+   width: auto !important }` (site.css) so they hug their inline label. The dock
+   stacks label-above, so the select must fill the column — the only place we
+   must answer the host's `!important` in kind. */
+.vst-detail .auto-dropdown {
+    width: 100% !important;
+}
+/* Checkbox rows stay a horizontal box + label row: re-assert flex over the
+   `.auto-input` block rule above, and keep the label regular (not small-caps). */
+.vst-detail .auto-checkbox-box {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 7px;
+    cursor: pointer;
+}
+.vst-detail .auto-checkbox-box .auto-checkbox {
+    margin: 0;
     flex: none;
-    width: 92px;
-    border-right: 1px solid var(--vst-hairline);
+}
+.vst-detail .auto-checkbox-box .auto-input-name {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: var(--vst-font-xs);
+    color: var(--text);
+}
+/* Upload/file rows: the intrinsically-narrow native file picker fills width. */
+.vst-detail .vst-audio-upload,
+.vst-detail .vst-audio-upload input[type="file"] {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+/* Field hints drop onto their own line below the control in the block stack. */
+.vst-detail .vst-audio-field-hint {
+    display: block;
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
 }
 .vst-detail-rail-list {
     display: flex;
-    flex-direction: column;
+    flex-flow: row wrap;
     gap: 4px;
     align-items: stretch;
 }
 .vst-detail-rail-list .vst-stage-tab {
     cursor: pointer;
     text-align: center;
-    padding: 2px 6px;
+    padding: 2px 8px;
     background: color-mix(in srgb, var(--background) 40%, transparent);
     transition: border-color var(--vst-ease), background var(--vst-ease),
         filter var(--vst-ease);
@@ -1954,30 +2186,23 @@
     border-color: var(--emphasis);
     background: color-mix(in srgb, var(--emphasis) 16%, var(--background));
 }
-.vst-detail-params {
-    flex: 1 1 auto;
-    overflow-y: auto;
-}
 .vst-detail-fields {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    column-gap: 16px;
-    row-gap: 6px;
+    grid-template-columns: 1fr;
+    column-gap: 12px;
+    row-gap: 8px;
     align-content: start;
 }
-.vst-detail-fields > .vst-detail-span-2 {
-    grid-column: span 2;
-}
+.vst-detail-fields > .vst-detail-span-2,
 .vst-detail-fields > .vst-detail-span-full {
     grid-column: 1 / -1;
 }
 .vst-detail-delete-stage {
-    margin-top: auto;
     width: 100%;
     font-size: var(--vst-font-3xs);
 }
 .vst-detail-sec {
-    margin: 0 0 2px;
+    margin: 8px 0 2px;
     font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
     letter-spacing: 0.08em;

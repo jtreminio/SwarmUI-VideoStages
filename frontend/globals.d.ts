@@ -115,6 +115,8 @@ declare function makeCheckboxInput(
 declare function autoNumberWidth(elem: HTMLElement): void;
 declare function autoSelectWidth(elem: HTMLElement): void;
 declare function enableSlidersIn(elem: HTMLElement): void;
+/** SwarmUI cookie reader (util.js). Returns "" when the cookie is absent. */
+declare function getCookie(name: string): string;
 declare function clearMediaFileInput(elem: HTMLInputElement): void;
 declare function setMediaFileDirect(
     elem: HTMLInputElement,
@@ -158,6 +160,13 @@ declare const promptTabComplete:
               dataProvider: () => string[],
               insertable?: boolean,
           ) => void;
+          /**
+           * Host guard flag (prompttools.js): when true, `onInput` bails before
+           * opening the tab-complete popover. We raise it around our own
+           * programmatic prompt-box writes so a synthetic `input` event can
+           * never pop the keyboard-driven suggestion UI.
+           */
+          blockInput?: boolean;
       }
     | undefined;
 

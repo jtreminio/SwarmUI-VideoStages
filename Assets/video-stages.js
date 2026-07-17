@@ -234,10 +234,13 @@
     pane.className = "tab-pane genpage-bottom-tab";
     pane.id = TAB_ID;
     pane.setAttribute("role", "tabpanel");
+    const shell = document.createElement("div");
+    shell.className = "vst-timeline";
     const body = document.createElement("div");
-    body.className = "vst-timeline";
+    body.className = "vst-right";
     body.id = TIMELINE_BODY_ID;
-    pane.appendChild(body);
+    shell.appendChild(body);
+    pane.appendChild(shell);
     content.appendChild(pane);
     const navLink = li.querySelector("a");
     if (navLink) {
@@ -1135,6 +1138,20 @@
     }
   };
   var readStateToken = () => `${readDataParam()}\0${getPromptInput()?.value ?? ""}`;
+  var withSuppressedPromptTabComplete = (fn) => {
+    const tc = typeof promptTabComplete !== "undefined" ? promptTabComplete : null;
+    if (!tc) {
+      fn();
+      return;
+    }
+    const prev = tc.blockInput;
+    tc.blockInput = true;
+    try {
+      fn();
+    } finally {
+      tc.blockInput = prev;
+    }
+  };
   var writeClipPrompts = (clips, notify = true) => {
     const el = getPromptInput();
     if (!el) {
@@ -1142,7 +1159,7 @@
     }
     el.value = serializeClipPrompts(el.value ?? "", clips);
     if (notify) {
-      triggerChangeFor(el);
+      withSuppressedPromptTabComplete(() => triggerChangeFor(el));
     }
   };
   var readGlobalPrompt = () => extractGlobalPrompt(getPromptInput()?.value ?? "");
@@ -3651,13 +3668,32 @@
 
   // frontend/detailWidgets.ts
   var sliderSeq = 0;
+  var boxClassFor = (control) => {
+    const cl = control.classList;
+    if (cl.contains("auto-dropdown")) {
+      return "auto-dropdown-box";
+    }
+    if (cl.contains("auto-number")) {
+      return "auto-number-box";
+    }
+    if (cl.contains("auto-text")) {
+      return "auto-text-box";
+    }
+    return null;
+  };
   var buildField = (label, control, hint) => {
     const row = document.createElement("div");
-    row.className = "vst-audio-field";
+    row.className = "auto-input vst-audio-field";
+    const boxClass = boxClassFor(control);
+    if (boxClass) {
+      row.classList.add(boxClass);
+    }
+    const labelEl = document.createElement("label");
     const text = document.createElement("span");
-    text.className = "vst-audio-field-label";
+    text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
-    row.append(text, control);
+    labelEl.appendChild(text);
+    row.append(labelEl, control);
     if (hint) {
       const small = document.createElement("small");
       small.className = "vst-audio-field-hint";
@@ -3668,7 +3704,7 @@
   };
   var buildSelect = (values, labels, selected, onChange) => {
     const select = document.createElement("select");
-    select.className = "vst-audio-select";
+    select.className = "auto-dropdown vst-audio-select";
     for (let i = 0; i < values.length; i++) {
       const opt = document.createElement("option");
       opt.value = values[i];
@@ -3683,7 +3719,7 @@
   var buildNumber = (value, min, max, step, onChange) => {
     const input = document.createElement("input");
     input.type = "number";
-    input.className = "vst-refs-num";
+    input.className = "auto-number vst-refs-num";
     input.min = `${min}`;
     input.max = `${max}`;
     input.step = `${step}`;
@@ -3752,13 +3788,14 @@
   };
   var buildCheckbox = (label, checked, onChange) => {
     const row = document.createElement("label");
-    row.className = "vst-audio-field vst-audio-field-check";
+    row.className = "auto-input auto-checkbox-box auto-input-flex vst-audio-field vst-audio-field-check";
     const input = document.createElement("input");
     input.type = "checkbox";
+    input.className = "auto-checkbox";
     input.checked = checked;
     input.addEventListener("change", () => onChange(input.checked));
     const text = document.createElement("span");
-    text.className = "vst-audio-field-label";
+    text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
     row.append(input, text);
     return row;
@@ -3797,12 +3834,567 @@
     return REF_SOURCE_REFINER;
   };
 
+  // frontend/timelinePromptTrack.ts
+  var MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
+  var MINOR_SELECTOR = ".vst-minor-seg[data-clip-idx]";
+  var MINOR_EDGE_SELECTOR = "[data-vst-minor-edge]";
+  var MINOR_ACTION_SELECTOR = "[data-vst-minor-action]";
+  var LANE_SELECTOR = ".vst-minor-lane[data-clip-idx]";
+  var DRAG_THRESHOLD_PX3 = 4;
+  var DRAGGING_CLASS3 = "vst-prompt-dragging";
+  var GHOST_CLASS = "vst-minor-ghost";
+  var parseIntAttr2 = (el, name) => {
+    if (!el) {
+      return null;
+    }
+    const raw = el.getAttribute(name);
+    if (raw === null) {
+      return null;
+    }
+    const value = Number.parseInt(raw, 10);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  };
+  var clipDurationOf2 = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
+  var roundSeconds2 = (seconds) => Math.round(seconds * 10) / 10;
+  var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
+    k,
+    start: clamp(w.start, 0, clipDuration),
+    end: clamp(w.start + w.duration, 0, clipDuration)
+  })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
+  var freeIntervalAt = (spans, clipDuration, point) => {
+    const p = clamp(point, 0, clipDuration);
+    let lo = 0;
+    let hi = clipDuration;
+    for (const span of spans) {
+      if (span.end <= p) {
+        if (span.end > lo) {
+          lo = span.end;
+        }
+      } else if (span.start >= p) {
+        hi = span.start;
+        break;
+      } else {
+        return [p, p];
+      }
+    }
+    return [lo, hi];
+  };
+  var applyPromptWindowBegin = (clip, windowIdx, desiredBegin) => {
+    const window2 = clip.promptWindows?.[windowIdx];
+    if (!window2) {
+      return;
+    }
+    const clipDur = clipDurationOf2(clip);
+    const end = window2.start + window2.duration;
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
+    const start = clamp(desiredBegin, lo, end - PROMPT_WINDOW_MIN_DURATION);
+    window2.start = roundSeconds2(start);
+    window2.duration = roundSeconds2(end - start);
+  };
+  var applyPromptWindowEnd = (clip, windowIdx, desiredEnd) => {
+    const window2 = clip.promptWindows?.[windowIdx];
+    if (!window2) {
+      return;
+    }
+    const clipDur = clipDurationOf2(clip);
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
+    const end = clamp(
+      desiredEnd,
+      window2.start + PROMPT_WINDOW_MIN_DURATION,
+      hi
+    );
+    window2.start = roundSeconds2(window2.start);
+    window2.duration = roundSeconds2(end - window2.start);
+  };
+  var createTimelinePromptTrack = () => {
+    let moveState = null;
+    let resizeState = null;
+    let createState = null;
+    let suppressClick = false;
+    let boundBody = null;
+    const isStale = (sourceJson) => readStateToken() !== sourceJson;
+    const applyMinorAction = (clipIdx, windowIdx, action) => {
+      const clips = getClips();
+      const clip = clips[clipIdx];
+      const window2 = clip?.promptWindows?.[windowIdx];
+      if (!clip || !window2) {
+        return;
+      }
+      if (action !== "delete") {
+        return;
+      }
+      clip.promptWindows.splice(windowIdx, 1);
+      saveClips(clips);
+    };
+    const commitMove = (state, dxPx, pps) => {
+      if (isStale(state.sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      const window2 = clip?.promptWindows?.[state.windowIdx];
+      if (!clip || !window2) {
+        return;
+      }
+      const clipDur = clipDurationOf2(clip);
+      const desiredStart = state.startStart + dxPx / pps;
+      const dur = Math.min(state.duration, clipDur);
+      const maxStart = Math.max(state.boundLo, state.boundHi - dur);
+      window2.start = roundSeconds2(
+        clamp(desiredStart, state.boundLo, maxStart)
+      );
+      window2.duration = roundSeconds2(
+        Math.max(
+          PROMPT_WINDOW_MIN_DURATION,
+          Math.min(dur, state.boundHi - window2.start)
+        )
+      );
+      saveClips(clips);
+    };
+    const commitResize = (state, dxPx, pps) => {
+      if (isStale(state.sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      const window2 = clip?.promptWindows?.[state.windowIdx];
+      if (!clip || !window2) {
+        return;
+      }
+      const clipDur = clipDurationOf2(clip);
+      const spans = otherSpans(clip.promptWindows, state.windowIdx, clipDur);
+      const deltaSec = dxPx / pps;
+      if (state.edge === "right") {
+        const [, hi] = freeIntervalAt(spans, clipDur, state.startStart);
+        const end = clamp(
+          state.startStart + state.startDuration + deltaSec,
+          state.startStart + PROMPT_WINDOW_MIN_DURATION,
+          hi
+        );
+        window2.start = roundSeconds2(state.startStart);
+        window2.duration = roundSeconds2(end - state.startStart);
+      } else {
+        const end = state.startStart + state.startDuration;
+        const [lo] = freeIntervalAt(
+          spans,
+          clipDur,
+          Math.max(0, end - 1e-3)
+        );
+        const start = clamp(
+          state.startStart + deltaSec,
+          lo,
+          end - PROMPT_WINDOW_MIN_DURATION
+        );
+        window2.start = roundSeconds2(start);
+        window2.duration = roundSeconds2(end - start);
+      }
+      saveClips(clips);
+    };
+    const commitCreate = (state, endSec) => {
+      if (isStale(state.sourceJson)) {
+        return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      if (!clip) {
+        return;
+      }
+      const clipDur = clipDurationOf2(clip);
+      const spans = otherSpans(clip.promptWindows, -1, clipDur);
+      const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
+      const gap = hi - lo;
+      if (gap < PROMPT_WINDOW_MIN_DURATION) {
+        return;
+      }
+      let start;
+      let duration;
+      if (endSec === null) {
+        duration = Math.min(PROMPT_WINDOW_DEFAULT_DURATION, gap);
+        start = clamp(state.startSec, lo, hi - duration);
+      } else {
+        const a = clamp(Math.min(state.startSec, endSec), lo, hi);
+        const b = clamp(Math.max(state.startSec, endSec), lo, hi);
+        start = a;
+        duration = Math.max(PROMPT_WINDOW_MIN_DURATION, b - a);
+        if (start + duration > hi) {
+          duration = hi - start;
+        }
+      }
+      if (duration < PROMPT_WINDOW_MIN_DURATION) {
+        return;
+      }
+      const window2 = {
+        prompt: "",
+        start: roundSeconds2(start),
+        duration: roundSeconds2(duration)
+      };
+      clip.promptWindows.push(window2);
+      clip.promptWindows.sort((x, y) => x.start - y.start);
+      saveClips(clips);
+      const newIdx = clip.promptWindows.indexOf(window2);
+      if (newIdx >= 0) {
+        setSelection({
+          kind: "prompt-minor",
+          clipIdx: state.clipIdx,
+          windowIdx: newIdx
+        });
+      }
+    };
+    const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
+    const clearGesture = (body) => {
+      if (createState?.ghost) {
+        createState.ghost.remove();
+      }
+      moveState = null;
+      resizeState = null;
+      createState = null;
+      body.classList.remove(DRAGGING_CLASS3);
+    };
+    const onBodyMouseDown = (event) => {
+      suppressClick = false;
+      const me = event;
+      if (me.button !== 0 || !(me.target instanceof Element)) {
+        return;
+      }
+      if (me.target.closest(MINOR_ACTION_SELECTOR)) {
+        return;
+      }
+      if (me.shiftKey && me.target.closest(MINOR_SELECTOR)) {
+        me.preventDefault();
+        return;
+      }
+      const edgeEl = me.target.closest(MINOR_EDGE_SELECTOR);
+      if (edgeEl) {
+        const seg2 = edgeEl.closest(MINOR_SELECTOR);
+        const clipIdx = parseIntAttr2(seg2, "data-clip-idx");
+        const windowIdx = parseIntAttr2(seg2, "data-window-idx");
+        const edge = edgeEl.getAttribute("data-vst-minor-edge") === "left" ? "left" : "right";
+        if (clipIdx === null || windowIdx === null || !(seg2 instanceof HTMLElement)) {
+          return;
+        }
+        const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
+        if (!window2) {
+          return;
+        }
+        resizeState = {
+          clipIdx,
+          windowIdx,
+          edge,
+          el: seg2,
+          startX: me.clientX,
+          startStart: window2.start,
+          startDuration: window2.duration,
+          clipDuration: clipDurationOf2(getClips()[clipIdx]),
+          originalLeft: seg2.style.left,
+          originalWidth: seg2.style.width,
+          active: false,
+          sourceJson: readStateToken()
+        };
+        me.preventDefault();
+        return;
+      }
+      const seg = me.target.closest(MINOR_SELECTOR);
+      if (seg instanceof HTMLElement) {
+        const clipIdx = parseIntAttr2(seg, "data-clip-idx");
+        const windowIdx = parseIntAttr2(seg, "data-window-idx");
+        if (clipIdx === null || windowIdx === null) {
+          return;
+        }
+        const clip = getClips()[clipIdx];
+        const window2 = clip?.promptWindows?.[windowIdx];
+        if (!clip || !window2) {
+          return;
+        }
+        const clipDuration = clipDurationOf2(clip);
+        const [boundLo, boundHi] = freeIntervalAt(
+          otherSpans(clip.promptWindows, windowIdx, clipDuration),
+          clipDuration,
+          window2.start
+        );
+        moveState = {
+          clipIdx,
+          windowIdx,
+          el: seg,
+          startX: me.clientX,
+          startStart: window2.start,
+          duration: window2.duration,
+          clipDuration,
+          boundLo,
+          boundHi,
+          originalLeft: seg.style.left,
+          active: false,
+          sourceJson: readStateToken()
+        };
+        me.preventDefault();
+        return;
+      }
+      const lane = me.target.closest(LANE_SELECTOR);
+      if (lane instanceof HTMLElement) {
+        const clipIdx = parseIntAttr2(lane, "data-clip-idx");
+        if (clipIdx === null) {
+          return;
+        }
+        const rect = lane.getBoundingClientRect();
+        const pps = livePxPerSecond(boundBody ?? lane);
+        const clipDuration = clipDurationOf2(getClips()[clipIdx]);
+        const startSec = clamp(
+          (me.clientX - rect.left) / pps,
+          0,
+          clipDuration
+        );
+        createState = {
+          clipIdx,
+          lane,
+          laneLeft: rect.left,
+          startSec,
+          startX: me.clientX,
+          clipDuration,
+          ghost: null,
+          active: false,
+          sourceJson: readStateToken()
+        };
+        me.preventDefault();
+      }
+    };
+    const onDocMouseMove = (body, event) => {
+      const me = event;
+      const pps = livePxPerSecond(body);
+      if (resizeState) {
+        const dx = me.clientX - resizeState.startX;
+        if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
+          return;
+        }
+        resizeState.active = true;
+        body.classList.add(DRAGGING_CLASS3);
+        const clipDur = resizeState.clipDuration;
+        const deltaSec = dx / pps;
+        if (resizeState.edge === "right") {
+          const end = clamp(
+            resizeState.startStart + resizeState.startDuration + deltaSec,
+            resizeState.startStart + PROMPT_WINDOW_MIN_DURATION,
+            clipDur
+          );
+          resizeState.el.style.width = `${Math.max(2, (end - resizeState.startStart) * pps)}px`;
+        } else {
+          const end = resizeState.startStart + resizeState.startDuration;
+          const start = clamp(
+            resizeState.startStart + deltaSec,
+            0,
+            end - PROMPT_WINDOW_MIN_DURATION
+          );
+          resizeState.el.style.left = `${start * pps}px`;
+          resizeState.el.style.width = `${Math.max(2, (end - start) * pps)}px`;
+        }
+        return;
+      }
+      if (moveState) {
+        const dx = me.clientX - moveState.startX;
+        if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
+          return;
+        }
+        moveState.active = true;
+        body.classList.add(DRAGGING_CLASS3);
+        const dur = Math.min(moveState.duration, moveState.clipDuration);
+        const maxStart = Math.max(
+          moveState.boundLo,
+          moveState.boundHi - dur
+        );
+        const start = clamp(
+          moveState.startStart + dx / pps,
+          moveState.boundLo,
+          maxStart
+        );
+        moveState.el.style.left = `${start * pps}px`;
+        return;
+      }
+      if (createState) {
+        const dx = me.clientX - createState.startX;
+        if (!createState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
+          return;
+        }
+        createState.active = true;
+        body.classList.add(DRAGGING_CLASS3);
+        const nowSec = laneTimeAt(createState, me.clientX, pps);
+        const a = Math.min(createState.startSec, nowSec);
+        const b = Math.max(createState.startSec, nowSec);
+        if (!createState.ghost) {
+          const ghost = document.createElement("div");
+          ghost.className = GHOST_CLASS;
+          createState.lane.appendChild(ghost);
+          createState.ghost = ghost;
+        }
+        createState.ghost.style.left = `${a * pps}px`;
+        createState.ghost.style.width = `${Math.max(2, (b - a) * pps)}px`;
+      }
+    };
+    const onDocMouseUp = (body, event) => {
+      const me = event;
+      const pps = livePxPerSecond(body);
+      if (resizeState) {
+        const state = resizeState;
+        resizeState = null;
+        body.classList.remove(DRAGGING_CLASS3);
+        if (state.active) {
+          suppressClick = true;
+          commitResize(state, me.clientX - state.startX, pps);
+        } else {
+          state.el.style.left = state.originalLeft;
+          state.el.style.width = state.originalWidth;
+        }
+        return;
+      }
+      if (moveState) {
+        const state = moveState;
+        moveState = null;
+        body.classList.remove(DRAGGING_CLASS3);
+        if (state.active) {
+          suppressClick = true;
+          commitMove(state, me.clientX - state.startX, pps);
+        } else {
+          state.el.style.left = state.originalLeft;
+        }
+        return;
+      }
+      if (createState) {
+        const state = createState;
+        createState = null;
+        body.classList.remove(DRAGGING_CLASS3);
+        if (state.ghost) {
+          state.ghost.remove();
+        }
+        suppressClick = true;
+        if (state.active) {
+          commitCreate(state, laneTimeAt(state, me.clientX, pps));
+        } else {
+          commitCreate(state, null);
+        }
+      }
+    };
+    const onBodyClick = (event) => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const actionEl = event.target.closest(MINOR_ACTION_SELECTOR);
+      if (actionEl) {
+        const seg = actionEl.closest(MINOR_SELECTOR);
+        const clipIdx = parseIntAttr2(seg, "data-clip-idx");
+        const windowIdx = parseIntAttr2(seg, "data-window-idx");
+        const action = actionEl.getAttribute("data-vst-minor-action") ?? "";
+        if (clipIdx !== null && windowIdx !== null) {
+          applyMinorAction(clipIdx, windowIdx, action);
+        }
+        return;
+      }
+      const minor = event.target.closest(MINOR_SELECTOR);
+      if (minor instanceof HTMLElement) {
+        const clipIdx = parseIntAttr2(minor, "data-clip-idx");
+        const windowIdx = parseIntAttr2(minor, "data-window-idx");
+        if (clipIdx === null || windowIdx === null) {
+          return;
+        }
+        if (event.shiftKey) {
+          applyMinorAction(clipIdx, windowIdx, "delete");
+          return;
+        }
+        const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
+        if (!window2) {
+          return;
+        }
+        setSelection({ kind: "prompt-minor", clipIdx, windowIdx });
+        return;
+      }
+      const major = event.target.closest(MAJOR_SELECTOR);
+      if (major instanceof HTMLElement) {
+        const clipIdx = parseIntAttr2(major, "data-clip-idx");
+        if (clipIdx === null) {
+          return;
+        }
+        if (!getClips()[clipIdx]) {
+          return;
+        }
+        setSelection({ kind: "prompt-major", clipIdx });
+      }
+    };
+    const onDocKeyDown = (body, event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (resizeState) {
+        resizeState.el.style.left = resizeState.originalLeft;
+        resizeState.el.style.width = resizeState.originalWidth;
+      } else if (moveState) {
+        moveState.el.style.left = moveState.originalLeft;
+      } else if (!createState) {
+        return;
+      }
+      clearGesture(body);
+    };
+    let moveHandler = null;
+    let upHandler = null;
+    let keyHandler = null;
+    const attach = (body) => {
+      if (boundBody === body) {
+        return;
+      }
+      dispose();
+      boundBody = body;
+      body.addEventListener("mousedown", onBodyMouseDown);
+      body.addEventListener("click", onBodyClick);
+      moveHandler = (event) => onDocMouseMove(body, event);
+      upHandler = (event) => onDocMouseUp(body, event);
+      keyHandler = (event) => onDocKeyDown(body, event);
+      document.addEventListener("mousemove", moveHandler);
+      document.addEventListener("mouseup", upHandler);
+      document.addEventListener("keydown", keyHandler);
+    };
+    const dispose = () => {
+      if (boundBody) {
+        boundBody.removeEventListener("mousedown", onBodyMouseDown);
+        boundBody.removeEventListener("click", onBodyClick);
+      }
+      if (moveHandler) {
+        document.removeEventListener("mousemove", moveHandler);
+        moveHandler = null;
+      }
+      if (upHandler) {
+        document.removeEventListener("mouseup", upHandler);
+        upHandler = null;
+      }
+      if (keyHandler) {
+        document.removeEventListener("keydown", keyHandler);
+        keyHandler = null;
+      }
+      moveState = null;
+      resizeState = null;
+      createState = null;
+      boundBody = null;
+    };
+    return { attach, dispose };
+  };
+
   // frontend/timelineDetailStrip.ts
   var STAGE_SELECTOR = "[data-vst-stage]";
   var STAGE_ADD_SELECTOR = "[data-vst-stage-add]";
   var MODEL_SELECTOR = "[data-vst-model]";
   var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${STAGE_ADD_SELECTOR}, ${MODEL_SELECTOR}`;
   var DETAIL_CLASS = "vst-detail";
+  var GROUP_CLIP = "vstdock_clip";
+  var GROUP_STAGES = "vstdock_stages";
+  var GROUP_STAGEPARAMS = "vstdock_stageparams";
+  var GROUP_REF = "vstdock_ref";
+  var GROUP_AUDIO = "vstdock_audio";
+  var GROUP_AUDIOSEG = "vstdock_audioseg";
+  var GROUP_PROMPTMAJOR = "vstdock_promptmajor";
+  var GROUP_PROMPTMINOR = "vstdock_promptminor";
+  var GROUP_RETAKE = "vstdock_retake";
+  var GROUP_BOUNDARY = "vstdock_boundary";
+  var GROUP_SETTINGS = "vstdock_settings";
   var DURATION_STEP = 0.1;
   var UPSCALE_EPSILON = 1e-6;
   var LORA_WEIGHT_STEP = 0.05;
@@ -3816,8 +4408,8 @@
     ROOT_DIMENSION_MAX
   );
   var clampFps = (value) => clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
-  var roundSeconds2 = (seconds) => Math.round(seconds * 10) / 10;
-  var parseIntAttr2 = (el, name) => {
+  var roundSeconds3 = (seconds) => Math.round(seconds * 10) / 10;
+  var parseIntAttr3 = (el, name) => {
     if (!el) {
       return null;
     }
@@ -3864,21 +4456,61 @@
   };
   var createTimelineDetailStrip = (options) => {
     let boundBody = null;
+    let dockEl = null;
     let unsubscribe = null;
     let sourceToken = "";
     let pendingTimer = null;
     let flushing = false;
     let rendering = false;
     let suppressSelectionRender = false;
+    let sliderDragActive = false;
     let settingsMode = null;
     let pendingFocus = null;
-    const captureFocus = () => {
+    let focusLeftDock = false;
+    let renderedSel = null;
+    let suppressNextDockRebuild = false;
+    const isTypingInDock = () => {
+      if (!dockEl) {
+        return false;
+      }
       const active = document.activeElement;
-      if (!(active instanceof HTMLElement)) {
+      if (!(active instanceof HTMLElement) || !dockEl.contains(active)) {
+        return false;
+      }
+      if (active instanceof HTMLTextAreaElement) {
+        return true;
+      }
+      if (active instanceof HTMLInputElement) {
+        return active.type === "text" || active.type === "number";
+      }
+      return false;
+    };
+    const isSliderGesture = () => {
+      if (sliderDragActive) {
+        return true;
+      }
+      if (!dockEl) {
+        return false;
+      }
+      const active = document.activeElement;
+      if (!(active instanceof HTMLInputElement) || !dockEl.contains(active)) {
+        return false;
+      }
+      return active.type === "range" || active.classList.contains("auto-slider-number");
+    };
+    const captureFocus = () => {
+      if (focusLeftDock) {
+        pendingFocus = null;
+        return;
+      }
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement) || !dockEl?.contains(active)) {
+        pendingFocus = null;
         return;
       }
       const holder = active.closest("[data-vst-focus-key]");
-      if (!holder) {
+      if (!holder || !dockEl.contains(holder)) {
+        pendingFocus = null;
         return;
       }
       let start = null;
@@ -3931,15 +4563,20 @@
       if (flushing || pending.size === 0) {
         return;
       }
-      const entries = [...pending.values()];
+      const entryList = [...pending.entries()];
+      const entries = entryList.map(([, e]) => e);
       pending.clear();
       captureFocus();
       if (isStale()) {
         return;
       }
+      const wantTimelineRefresh = entries.some((e) => e.refresh);
       const clipMutates = entries.filter((e) => e.kind === "clips").map((e) => e.mutate);
       const stateMutates = entries.filter((e) => e.kind === "state").map((e) => e.mutate);
+      const prevSuppress = suppressNextDockRebuild;
+      suppressNextDockRebuild = true;
       flushing = true;
+      let flushedClips = null;
       try {
         if (clipMutates.length > 0) {
           const clips = getClips();
@@ -3947,6 +4584,7 @@
             m(clips);
           }
           saveClips(clips);
+          flushedClips = clips;
         }
         if (stateMutates.length > 0) {
           const state = getState();
@@ -3958,11 +4596,39 @@
           });
         }
         sourceToken = readStateToken();
+        flushing = false;
+        if (stateMutates.length > 0 || wantTimelineRefresh) {
+          options.refresh?.();
+        }
       } finally {
         flushing = false;
+        suppressNextDockRebuild = prevSuppress;
       }
-      if (stateMutates.length > 0) {
-        options.refresh?.();
+      writeBackClamped(entryList, flushedClips);
+      syncValueDerivedUI(renderedSel);
+    };
+    const writeBackClamped = (entryList, clips) => {
+      if (!dockEl || !clips) {
+        return;
+      }
+      for (const [key, entry] of entryList) {
+        if (!entry.readBack) {
+          continue;
+        }
+        const input = dockEl.querySelector(
+          `input[data-vst-focus-key="${key}"]`
+        );
+        if (!input) {
+          continue;
+        }
+        const display = entry.readBack(clips);
+        if (display == null) {
+          continue;
+        }
+        const next = `${display}`;
+        if (input.value !== next) {
+          input.value = next;
+        }
       }
     };
     const schedulePending = (key, entry) => {
@@ -3972,6 +4638,10 @@
       pending.set(key, entry);
       if (pendingTimer) {
         clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+      if (isTypingInDock() || isSliderGesture()) {
+        return;
       }
       pendingTimer = setTimeout(() => {
         pendingTimer = null;
@@ -3984,6 +4654,24 @@
     const debouncedCommitState = (key, mutate) => {
       schedulePending(key, { kind: "state", mutate });
     };
+    const buildClampedNumber = (opts) => {
+      const input = buildNumber(
+        opts.value,
+        opts.min,
+        opts.max,
+        opts.step,
+        (value) => {
+          schedulePending(opts.key, {
+            kind: "clips",
+            mutate: (clips) => opts.mutate(clips, value),
+            refresh: opts.refresh === true,
+            readBack: opts.readBack
+          });
+        }
+      );
+      input.setAttribute("data-vst-focus-key", opts.key);
+      return input;
+    };
     const commit = (mutate) => {
       flushPending();
       captureFocus();
@@ -3993,8 +4681,15 @@
       }
       const clips = getClips();
       mutate(clips);
-      saveClips(clips);
-      sourceToken = readStateToken();
+      const prevSuppress = suppressNextDockRebuild;
+      suppressNextDockRebuild = true;
+      try {
+        saveClips(clips);
+        sourceToken = readStateToken();
+      } finally {
+        suppressNextDockRebuild = prevSuppress;
+      }
+      syncValueDerivedUI(renderedSel);
     };
     const commitState = (mutate) => {
       flushPending();
@@ -4005,15 +4700,22 @@
       }
       const state = getState();
       mutate(state);
-      saveState(state, void 0, {
-        notifyDomChange: isVideoStagesEnabled()
-      });
-      sourceToken = readStateToken();
-      options.refresh?.();
+      const prevSuppress = suppressNextDockRebuild;
+      suppressNextDockRebuild = true;
+      try {
+        saveState(state, void 0, {
+          notifyDomChange: isVideoStagesEnabled()
+        });
+        sourceToken = readStateToken();
+        options.refresh?.();
+      } finally {
+        suppressNextDockRebuild = prevSuppress;
+      }
+      syncValueDerivedUI(renderedSel);
     };
     const buildOptionSelect = (specs, selected, onChange) => {
       const select = document.createElement("select");
-      select.className = "vst-audio-select";
+      select.className = "auto-dropdown vst-audio-select";
       for (const spec of specs) {
         const opt = document.createElement("option");
         opt.value = spec.value;
@@ -4028,7 +4730,7 @@
     };
     const buildTextarea = (value, placeholder, focusKey, onInput) => {
       const editor = document.createElement("textarea");
-      editor.className = "vst-prompt-editor vst-detail-prompt";
+      editor.className = "auto-text auto-text-block vst-prompt-editor vst-detail-prompt";
       editor.value = value;
       editor.placeholder = placeholder;
       editor.setAttribute("data-vst-focus-key", focusKey);
@@ -4040,9 +4742,9 @@
     };
     const buildUploadRow = (label, accept, name, onFile, onClear) => {
       const row = document.createElement("div");
-      row.className = "vst-audio-field vst-audio-upload";
+      row.className = "auto-input vst-audio-field vst-audio-upload";
       const uploadLabel = document.createElement("span");
-      uploadLabel.className = "vst-audio-field-label";
+      uploadLabel.className = "auto-input-name vst-audio-field-label";
       uploadLabel.textContent = label;
       const fileInput = document.createElement("input");
       fileInput.type = "file";
@@ -4072,6 +4774,35 @@
       clearBtn.addEventListener("click", () => onClear());
       row.append(uploadLabel, fileInput, fileName, clearBtn);
       return row;
+    };
+    const buildInstanceRow = (spec) => {
+      const row = document.createElement("div");
+      row.className = `vst-detail-instance ${spec.rowClass}`;
+      row.setAttribute(spec.indexAttr, `${spec.index}`);
+      if (spec.active) {
+        row.classList.add("vst-detail-instance-active");
+      }
+      const head = document.createElement("div");
+      head.className = "vst-detail-instance-head";
+      const title = document.createElement("span");
+      title.className = "vst-detail-instance-title";
+      title.textContent = spec.title;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "vst-refs-delete vst-detail-delete vst-detail-instance-delete";
+      del.textContent = spec.deleteLabel;
+      del.title = spec.deleteLabel;
+      del.addEventListener("click", (event) => {
+        event.preventDefault();
+        spec.onDelete();
+      });
+      head.append(title, del);
+      row.appendChild(head);
+      const fields = document.createElement("div");
+      fields.className = "vst-detail-instance-fields";
+      row.appendChild(fields);
+      row.addEventListener("focusin", () => spec.repoint());
+      return { row, fields };
     };
     const deleteRefEntry = (clipIdx, refIdx) => {
       flushPending();
@@ -4255,7 +4986,7 @@
     const handleActivation = (target, shiftKey) => {
       const addChip = target.closest(STAGE_ADD_SELECTOR);
       if (addChip instanceof HTMLElement) {
-        const clipIdx = parseIntAttr2(addChip, "data-clip-idx");
+        const clipIdx = parseIntAttr3(addChip, "data-clip-idx");
         if (clipIdx !== null) {
           addStage(clipIdx);
         }
@@ -4263,8 +4994,8 @@
       }
       const stageChip = target.closest(STAGE_SELECTOR);
       if (stageChip instanceof HTMLElement) {
-        const clipIdx = parseIntAttr2(stageChip, "data-clip-idx");
-        const stageIdx = parseIntAttr2(stageChip, "data-stage-idx");
+        const clipIdx = parseIntAttr3(stageChip, "data-clip-idx");
+        const stageIdx = parseIntAttr3(stageChip, "data-stage-idx");
         if (clipIdx === null || stageIdx === null) {
           return;
         }
@@ -4277,7 +5008,7 @@
       }
       const modelBadge = target.closest(MODEL_SELECTOR);
       if (modelBadge instanceof HTMLElement) {
-        const clipIdx = parseIntAttr2(modelBadge, "data-clip-idx");
+        const clipIdx = parseIntAttr3(modelBadge, "data-clip-idx");
         if (clipIdx !== null) {
           selectStage(clipIdx, 0);
         }
@@ -4317,23 +5048,97 @@
       event.stopPropagation();
       setSelection({ kind: "none" });
     };
+    const onDockFocusOut = (event) => {
+      if (rendering) {
+        return;
+      }
+      const next = event.relatedTarget;
+      if (next instanceof Node && dockEl?.contains(next)) {
+        return;
+      }
+      focusLeftDock = true;
+      pendingFocus = null;
+      flushPending();
+    };
+    const onDockFocusIn = () => {
+      focusLeftDock = false;
+    };
+    const onDockChange = (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === "number" && document.activeElement === target) {
+        flushPending();
+      }
+    };
+    const onDocPointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !dockEl?.contains(target)) {
+        return;
+      }
+      if (target.closest('input[type="range"]')) {
+        sliderDragActive = true;
+      }
+    };
+    const onDocPointerUp = () => {
+      if (!sliderDragActive) {
+        return;
+      }
+      sliderDragActive = false;
+      flushPending();
+    };
     const ensureDetail = () => {
-      const host = boundBody;
-      if (!host) {
+      if (!dockEl) {
         throw new Error("detail strip not attached");
       }
-      let detail = host.querySelector(
-        `:scope > .${DETAIL_CLASS}`
-      );
-      if (!detail) {
-        detail = document.createElement("div");
-        detail.className = DETAIL_CLASS;
-        detail.addEventListener("keydown", onStripKeyDown);
+      return dockEl;
+    };
+    const isGroupOpen = (groupId) => {
+      if (typeof getCookie === "function") {
+        return getCookie(`group_open_${groupId}`) !== "closed";
       }
-      if (detail.parentElement !== host || host.lastElementChild !== detail) {
-        host.appendChild(detail);
+      return true;
+    };
+    const buildGroup = (groupId, title, counter, content, opts) => {
+      const collapsible = opts?.collapsible !== false;
+      const open = collapsible ? isGroupOpen(groupId) : true;
+      const group = document.createElement("div");
+      group.className = `input-group ${open ? "input-group-open" : "input-group-closed"}`;
+      group.id = `auto-group-${groupId}`;
+      const header = document.createElement("span");
+      header.className = `input-group-header ${collapsible ? "input-group-shrinkable" : "input-group-noshrink"}`;
+      header.id = `input_group_${groupId}`;
+      const wrap = document.createElement("span");
+      wrap.className = "header-label-wrap";
+      if (collapsible) {
+        const symbol = document.createElement("span");
+        symbol.className = "auto-symbol";
+        symbol.innerHTML = open ? "&#x2B9F;" : "&#x2B9E;";
+        wrap.appendChild(symbol);
       }
-      return detail;
+      const labelEl = document.createElement("span");
+      labelEl.className = "header-label";
+      labelEl.textContent = title;
+      const spacer = document.createElement("span");
+      spacer.className = "header-label-spacer";
+      const counterEl = document.createElement("span");
+      counterEl.className = "header-label-counter";
+      counterEl.textContent = counter;
+      wrap.append(labelEl, spacer, counterEl);
+      header.appendChild(wrap);
+      const contentEl = document.createElement("div");
+      contentEl.className = "input-group-content";
+      contentEl.id = `input_group_content_${groupId}`;
+      if (!open) {
+        contentEl.style.display = "none";
+      }
+      contentEl.appendChild(content);
+      group.append(header, contentEl);
+      return group;
+    };
+    const wrapForm = (groupId, title, counter, content, opts) => {
+      const body = document.createElement("div");
+      body.className = "vst-detail-body";
+      body.appendChild(buildGroup(groupId, title, counter, content, opts));
+      return body;
     };
     const breadcrumbFor = (sel) => {
       switch (sel.kind) {
@@ -4348,8 +5153,8 @@
           if (!seg) {
             return `Audio segment · Clip ${sel.clipIdx}`;
           }
-          const start = roundSeconds2(seg.startSeconds);
-          const end = roundSeconds2(seg.startSeconds + seg.lengthSeconds);
+          const start = roundSeconds3(seg.startSeconds);
+          const end = roundSeconds3(seg.startSeconds + seg.lengthSeconds);
           return `Audio segment · Clip ${sel.clipIdx} · ${start}–${end} s`;
         }
         case "boundary":
@@ -4361,8 +5166,8 @@
           if (!w) {
             return `Relay · Clip ${sel.clipIdx}`;
           }
-          const start = roundSeconds2(w.start);
-          const end = roundSeconds2(w.start + w.duration);
+          const start = roundSeconds3(w.start);
+          const end = roundSeconds3(w.start + w.duration);
           return `Relay ${start}–${end}s · Clip ${sel.clipIdx}`;
         }
         case "retake": {
@@ -4370,8 +5175,8 @@
           if (!r) {
             return `Retake · Clip ${sel.clipIdx}`;
           }
-          const start = roundSeconds2(r.startSeconds);
-          const end = roundSeconds2(r.startSeconds + r.lengthSeconds);
+          const start = roundSeconds3(r.startSeconds);
+          const end = roundSeconds3(r.startSeconds + r.lengthSeconds);
           return `Retake · Clip ${sel.clipIdx} · ${start}–${end} s`;
         }
         default:
@@ -4384,6 +5189,16 @@
       const crumb = document.createElement("span");
       crumb.className = "vst-detail-crumb";
       crumb.textContent = breadcrumbFor(sel);
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "vst-detail-clear";
+      clear.textContent = "Clear";
+      clear.title = "Clear selection (show timeline settings)";
+      clear.setAttribute("aria-label", clear.title);
+      clear.hidden = sel.kind === "none";
+      clear.addEventListener("click", () => {
+        setSelection({ kind: "none" });
+      });
       const toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "vst-detail-collapse";
@@ -4394,16 +5209,12 @@
         options.setCollapsed(!options.isCollapsed());
         render();
       });
-      head.append(crumb, toggle);
+      head.append(crumb, clear, toggle);
       return head;
     };
     const buildClipColumn = (clip, clipIdx) => {
       const col = document.createElement("div");
       col.className = "vst-detail-col vst-detail-clip";
-      const label = document.createElement("p");
-      label.className = "vst-detail-sec";
-      label.textContent = `CLIP ${clipIdx}`;
-      col.appendChild(label);
       const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
       const durationInput = buildNumber(
         clip.duration,
@@ -4457,10 +5268,6 @@
     const buildStageRail = (clip, clipIdx, stageIdx) => {
       const col = document.createElement("div");
       col.className = "vst-detail-col vst-detail-rail";
-      const label = document.createElement("p");
-      label.className = "vst-detail-sec";
-      label.textContent = "STAGES";
-      col.appendChild(label);
       const list = document.createElement("div");
       list.className = "vst-detail-rail-list";
       clip.stages.forEach((stage, idx) => {
@@ -4731,29 +5538,31 @@
           fields.appendChild(slider);
         });
       }
-      const controlNetSlider = buildSlider(
-        "ControlNet Strength",
-        stage.controlNetStrength,
-        STAGE_CONTROLNET_STRENGTH_MIN,
-        STAGE_CONTROLNET_STRENGTH_MAX,
-        STAGE_CONTROLNET_STRENGTH_STEP,
-        (value) => {
-          debouncedCommit("controlnet", (clips) => {
-            const target = clips[clipIdx]?.stages[stageIdx];
-            if (target) {
-              target.controlNetStrength = value;
-            }
-          });
-        },
-        { hint: "Only applies when a ControlNet source is set" }
-      );
-      tagFocus(controlNetSlider, "controlnet");
-      fields.appendChild(controlNetSlider);
+      if (normalizeControlNetLora(clip.controlNetLora) !== "") {
+        const controlNetSlider = buildSlider(
+          "ControlNet Strength",
+          stage.controlNetStrength,
+          STAGE_CONTROLNET_STRENGTH_MIN,
+          STAGE_CONTROLNET_STRENGTH_MAX,
+          STAGE_CONTROLNET_STRENGTH_STEP,
+          (value) => {
+            debouncedCommit("controlnet", (clips) => {
+              const target = clips[clipIdx]?.stages[stageIdx];
+              if (target) {
+                target.controlNetStrength = value;
+              }
+            });
+          },
+          { hint: "Only applies when a ControlNet source is set" }
+        );
+        tagFocus(controlNetSlider, "controlnet");
+        fields.appendChild(controlNetSlider);
+      }
       fields.appendChild(
         buildLorasSection(clipIdx, stageIdx, stage, defaults)
       );
       railSkipSync = (skipped) => {
-        const railChip = boundBody?.querySelector(
+        const railChip = dockEl?.querySelector(
           `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
         );
         railChip?.classList.toggle("vst-stage-tab-skipped", skipped);
@@ -4870,8 +5679,25 @@
       const clip = clips[sel.clipIdx];
       const stage = clip.stages[sel.stageIdx];
       const defaults = getRootDefaults();
-      body.appendChild(buildClipColumn(clip, sel.clipIdx));
-      body.appendChild(buildStageRail(clip, sel.clipIdx, sel.stageIdx));
+      const stageCount = clip.stages.length;
+      body.appendChild(
+        buildGroup(
+          GROUP_CLIP,
+          "Clip",
+          `Clip ${sel.clipIdx}`,
+          buildClipColumn(clip, sel.clipIdx),
+          { collapsible: false }
+        )
+      );
+      body.appendChild(
+        buildGroup(
+          GROUP_STAGES,
+          "Stages",
+          `${sel.stageIdx + 1} of ${stageCount}`,
+          buildStageRail(clip, sel.clipIdx, sel.stageIdx),
+          { collapsible: false }
+        )
+      );
       const params = buildParamsColumn(
         clip,
         sel.clipIdx,
@@ -4879,123 +5705,137 @@
         stage,
         defaults
       );
-      body.appendChild(params.col);
+      body.appendChild(
+        buildGroup(
+          GROUP_STAGEPARAMS,
+          "Stage Parameters",
+          `Stage ${sel.stageIdx + 1}`,
+          params.col,
+          { collapsible: false }
+        )
+      );
       return body;
     };
     const buildRefBody = (sel, clips) => {
-      const { clipIdx, refIdx } = sel;
+      const { clipIdx } = sel;
       const clip = clips[clipIdx];
-      const ref = clip.refs[refIdx];
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body";
+      body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
       const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-      const options2 = buildImageSourceOptions(ref.source ?? "");
-      const source = resolveImageSourceValue(ref.source ?? "", options2);
-      const isUpload = source === REF_SOURCE_UPLOAD;
-      const select = buildOptionSelect(options2, source, (value) => {
-        commit((cs) => {
-          const r = cs[clipIdx]?.refs[refIdx];
-          if (!r) {
-            return;
-          }
-          const resolved = resolveImageSourceValue(
-            value,
-            buildImageSourceOptions(value)
-          );
-          r.source = resolved;
-          if (resolved !== REF_SOURCE_UPLOAD) {
-            r.uploadedImage = null;
-            r.uploadFileName = null;
-          }
+      clip.refs.forEach((ref, refIdx) => {
+        const options2 = buildImageSourceOptions(ref.source ?? "");
+        const source = resolveImageSourceValue(ref.source ?? "", options2);
+        const isUpload = source === REF_SOURCE_UPLOAD;
+        const { row, fields } = buildInstanceRow({
+          rowClass: "vst-detail-ref-row",
+          indexAttr: "data-vst-ref-index",
+          index: refIdx,
+          active: refIdx === sel.refIdx,
+          title: `R${refIdx + 1}`,
+          deleteLabel: "Delete",
+          onDelete: () => deleteRefEntry(clipIdx, refIdx),
+          repoint: () => setSelection({ kind: "ref", clipIdx, refIdx })
         });
-        render();
-      });
-      body.appendChild(buildField("Image Source", select));
-      if (isUpload) {
-        const preview = document.createElement("div");
-        preview.className = "vst-refs-thumb-preview";
-        const data = ref.uploadedImage?.data;
-        if (data) {
-          preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-          preview.classList.add("vst-refs-thumb-preview-set");
-        }
-        body.appendChild(preview);
-      }
-      const frameInput = buildNumber(
-        ref.frame,
-        REF_FRAME_MIN,
-        frameMax,
-        1,
-        (value) => {
-          debouncedCommit("ref-frame", (cs) => {
+        const select = buildOptionSelect(options2, source, (value) => {
+          commit((cs) => {
             const r = cs[clipIdx]?.refs[refIdx];
-            if (r) {
-              r.frame = clamp(
-                Math.round(value),
-                REF_FRAME_MIN,
-                frameMax
-              );
+            if (!r) {
+              return;
+            }
+            const resolved = resolveImageSourceValue(
+              value,
+              buildImageSourceOptions(value)
+            );
+            r.source = resolved;
+            if (resolved !== REF_SOURCE_UPLOAD) {
+              r.uploadedImage = null;
+              r.uploadFileName = null;
             }
           });
+          render();
+        });
+        fields.appendChild(buildField("Image Source", select));
+        if (isUpload) {
+          const preview = document.createElement("div");
+          preview.className = "vst-refs-thumb-preview";
+          const data = ref.uploadedImage?.data;
+          if (data) {
+            preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
+            preview.classList.add("vst-refs-thumb-preview-set");
+          }
+          fields.appendChild(preview);
         }
-      );
-      frameInput.setAttribute("data-vst-focus-key", "ref-frame");
-      body.appendChild(
-        buildField(`Attach at Frame (1–${frameMax})`, frameInput)
-      );
-      body.appendChild(
-        buildCheckbox(
-          "Count from clip end",
-          ref.fromEnd === true,
+        const frameInput = buildNumber(
+          ref.frame,
+          REF_FRAME_MIN,
+          frameMax,
+          1,
           (value) => {
-            commit((cs) => {
+            debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
               const r = cs[clipIdx]?.refs[refIdx];
               if (r) {
-                r.fromEnd = value;
+                r.frame = clamp(
+                  Math.round(value),
+                  REF_FRAME_MIN,
+                  frameMax
+                );
               }
             });
           }
-        )
-      );
-      if (isUpload) {
-        body.appendChild(
-          buildUploadRow(
-            "Image Upload",
-            "image/*",
-            ref.uploadedImage?.fileName,
-            (data, fileName) => {
+        );
+        frameInput.setAttribute(
+          "data-vst-focus-key",
+          `ref-${refIdx}-frame`
+        );
+        fields.appendChild(
+          buildField(`Attach at Frame (1–${frameMax})`, frameInput)
+        );
+        fields.appendChild(
+          buildCheckbox(
+            "Count from clip end",
+            ref.fromEnd === true,
+            (value) => {
               commit((cs) => {
                 const r = cs[clipIdx]?.refs[refIdx];
                 if (r) {
-                  r.uploadedImage = { data, fileName };
-                  r.uploadFileName = fileName;
+                  r.fromEnd = value;
                 }
               });
-              render();
-            },
-            () => {
-              commit((cs) => {
-                const r = cs[clipIdx]?.refs[refIdx];
-                if (r) {
-                  r.uploadedImage = null;
-                  r.uploadFileName = null;
-                }
-              });
-              render();
             }
           )
         );
-      }
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "vst-refs-delete vst-detail-delete";
-      del.textContent = "Delete reference";
-      del.addEventListener("click", (event) => {
-        event.preventDefault();
-        deleteRefEntry(clipIdx, refIdx);
+        if (isUpload) {
+          fields.appendChild(
+            buildUploadRow(
+              "Image Upload",
+              "image/*",
+              ref.uploadedImage?.fileName,
+              (data, fileName) => {
+                commit((cs) => {
+                  const r = cs[clipIdx]?.refs[refIdx];
+                  if (r) {
+                    r.uploadedImage = { data, fileName };
+                    r.uploadFileName = fileName;
+                  }
+                });
+                render();
+              },
+              () => {
+                commit((cs) => {
+                  const r = cs[clipIdx]?.refs[refIdx];
+                  if (r) {
+                    r.uploadedImage = null;
+                    r.uploadFileName = null;
+                  }
+                });
+                render();
+              }
+            )
+          );
+        }
+        body.appendChild(row);
       });
-      body.appendChild(del);
-      return body;
+      return wrapForm(GROUP_REF, "Reference", `Clip ${clipIdx}`, body);
     };
     const buildAudioBody = (sel, clips) => {
       const { clipIdx } = sel;
@@ -5031,7 +5871,7 @@
         });
       };
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body";
+      body.className = "vst-detail-form-body";
       const select = buildOptionSelect(
         options2.map((o) => ({ value: o.value, label: o.label })),
         source,
@@ -5116,18 +5956,15 @@
         note.textContent = segCount === 1 ? "1 overlay segment · mixed additively over the base audio." : `${segCount} overlay segments · mixed additively over the base audio.`;
         body.appendChild(note);
       }
-      return body;
+      return wrapForm(GROUP_AUDIO, "Audio", `Clip ${clipIdx}`, body);
     };
     const buildAudioSegmentBody = (sel, clips) => {
-      const { clipIdx, segIdx } = sel;
+      const { clipIdx } = sel;
       const clip = clips[clipIdx];
-      const segment = clip?.audioSegments?.[segIdx];
+      const segments = clip?.audioSegments ?? [];
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body";
-      if (!segment) {
-        return body;
-      }
-      const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip.duration || 0);
+      body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
+      const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
       const clampSegment = (start, length) => {
         const s = clamp(
           start,
@@ -5141,105 +5978,112 @@
         );
         return { start: s, length: l };
       };
-      body.appendChild(
-        buildUploadRow(
-          "Audio Upload",
-          "audio/*",
-          segment.source?.fileName,
-          (data, fileName) => {
-            commit((cs) => {
-              const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-              if (seg) {
-                seg.source = { data, fileName };
-              }
-            });
-            render();
-          },
-          () => {
-            commit((cs) => {
-              const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-              if (seg) {
-                seg.source = null;
-              }
-            });
-            render();
-          }
-        )
-      );
-      const startInput = buildNumber(
-        segment.startSeconds,
-        0,
-        Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
-        AUDIO_SEGMENT_STEP,
-        (value) => {
-          debouncedCommit("audio-segment-start", (cs) => {
+      segments.forEach((segment, segIdx) => {
+        const { row, fields } = buildInstanceRow({
+          rowClass: "vst-detail-seg-row",
+          indexAttr: "data-vst-seg-index",
+          index: segIdx,
+          active: segIdx === sel.segIdx,
+          title: `S${segIdx + 1}`,
+          deleteLabel: "Remove segment",
+          onDelete: () => removeAudioSegment(clipIdx, segIdx),
+          repoint: () => setSelection({ kind: "audio-segment", clipIdx, segIdx })
+        });
+        fields.appendChild(
+          buildUploadRow(
+            "Audio Upload",
+            "audio/*",
+            segment.source?.fileName,
+            (data, fileName) => {
+              commit((cs) => {
+                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                if (seg) {
+                  seg.source = { data, fileName };
+                }
+              });
+              render();
+            },
+            () => {
+              commit((cs) => {
+                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                if (seg) {
+                  seg.source = null;
+                }
+              });
+              render();
+            }
+          )
+        );
+        const startInput = buildClampedNumber({
+          key: `seg-${segIdx}-start`,
+          value: segment.startSeconds,
+          min: 0,
+          max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
+          step: AUDIO_SEGMENT_STEP,
+          readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
+          mutate: (cs, value) => {
             const seg = cs[clipIdx]?.audioSegments?.[segIdx];
             if (seg) {
               const next = clampSegment(value, seg.lengthSeconds);
               seg.startSeconds = next.start;
               seg.lengthSeconds = next.length;
             }
-          });
-        }
-      );
-      startInput.setAttribute("data-vst-focus-key", "audio-segment-start");
-      body.appendChild(buildField("Start (s)", startInput));
-      const trimInput = buildNumber(
-        segment.trimStartSeconds,
-        0,
-        CLIP_DURATION_MAX,
-        AUDIO_SEGMENT_STEP,
-        (value) => {
-          debouncedCommit("audio-segment-trim", (cs) => {
-            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-            if (seg) {
-              seg.trimStartSeconds = Math.max(
-                0,
-                Math.round(value * 10) / 10
-              );
-            }
-          });
-        }
-      );
-      trimInput.setAttribute("data-vst-focus-key", "audio-segment-trim");
-      body.appendChild(buildField("Trim start (s)", trimInput));
-      const lengthInput = buildNumber(
-        segment.lengthSeconds,
-        AUDIO_SEGMENT_MIN_LENGTH,
-        clipDur,
-        AUDIO_SEGMENT_STEP,
-        (value) => {
-          debouncedCommit("audio-segment-length", (cs) => {
+          }
+        });
+        fields.appendChild(buildField("Start (s)", startInput));
+        const trimInput = buildNumber(
+          segment.trimStartSeconds,
+          0,
+          CLIP_DURATION_MAX,
+          AUDIO_SEGMENT_STEP,
+          (value) => {
+            debouncedCommit(`seg-${segIdx}-trim`, (cs) => {
+              const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+              if (seg) {
+                seg.trimStartSeconds = Math.max(
+                  0,
+                  Math.round(value * 10) / 10
+                );
+              }
+            });
+          }
+        );
+        trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
+        fields.appendChild(buildField("Trim start (s)", trimInput));
+        const lengthInput = buildClampedNumber({
+          key: `seg-${segIdx}-length`,
+          value: segment.lengthSeconds,
+          min: AUDIO_SEGMENT_MIN_LENGTH,
+          max: clipDur,
+          step: AUDIO_SEGMENT_STEP,
+          readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.lengthSeconds ?? null,
+          mutate: (cs, value) => {
             const seg = cs[clipIdx]?.audioSegments?.[segIdx];
             if (seg) {
               const next = clampSegment(seg.startSeconds, value);
               seg.startSeconds = next.start;
               seg.lengthSeconds = next.length;
             }
-          });
-        }
-      );
-      lengthInput.setAttribute("data-vst-focus-key", "audio-segment-length");
-      body.appendChild(buildField("Length (s)", lengthInput));
+          }
+        });
+        fields.appendChild(buildField("Length (s)", lengthInput));
+        body.appendChild(row);
+      });
       const note = document.createElement("p");
       note.className = "vst-detail-note";
       note.textContent = "Overlaid additively over the base audio; overlapping segments are mixed.";
       body.appendChild(note);
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "vst-refs-delete vst-detail-delete";
-      del.textContent = "Remove segment";
-      del.addEventListener("click", (event) => {
-        event.preventDefault();
-        removeAudioSegment(clipIdx, segIdx);
-      });
-      body.appendChild(del);
-      return body;
+      return wrapForm(
+        GROUP_AUDIOSEG,
+        "Audio Segments",
+        `Clip ${clipIdx}`,
+        body
+      );
     };
     const buildPromptMajorBody = (sel, clips) => {
       const { clipIdx } = sel;
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body vst-detail-prompt-body";
+      body.className = "vst-detail-form-body vst-detail-prompt-body";
       body.appendChild(
         buildTextarea(
           clips[clipIdx].prompt ?? "",
@@ -5255,46 +6099,120 @@
           }
         )
       );
-      return body;
+      return wrapForm(GROUP_PROMPTMAJOR, "Prompt", `Clip ${clipIdx}`, body, {
+        collapsible: false
+      });
     };
     const buildPromptMinorBody = (sel, clips) => {
       const { clipIdx, windowIdx } = sel;
+      const clip = clips[clipIdx];
+      const windows = clip?.promptWindows ?? [];
+      const clipDur = Math.max(
+        PROMPT_WINDOW_MIN_DURATION,
+        clip?.duration || 0
+      );
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body vst-detail-prompt-body";
-      body.appendChild(
-        buildTextarea(
-          clips[clipIdx].promptWindows[windowIdx].prompt ?? "",
+      body.className = "vst-detail-form-body vst-detail-prompt-body vst-detail-minor-body";
+      windows.forEach((w, idx) => {
+        const row = document.createElement("div");
+        row.className = "vst-detail-minor-window";
+        row.setAttribute("data-vst-minor-window", `${idx}`);
+        if (idx === windowIdx) {
+          row.classList.add("vst-detail-minor-active");
+        }
+        const head = document.createElement("div");
+        head.className = "vst-detail-minor-head";
+        const title = document.createElement("span");
+        title.className = "vst-detail-minor-title";
+        title.textContent = `W${idx + 1}`;
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "vst-refs-delete vst-detail-delete vst-detail-minor-delete";
+        del.textContent = "Delete";
+        del.title = "Delete this prompt window";
+        del.addEventListener("click", (event) => {
+          event.preventDefault();
+          deleteWindowEntry(clipIdx, idx);
+        });
+        head.append(title, del);
+        row.appendChild(head);
+        const range = document.createElement("div");
+        range.className = "vst-detail-minor-range";
+        const beginInput = buildClampedNumber({
+          key: `minor-${idx}-begin`,
+          value: roundSeconds3(w.start),
+          min: 0,
+          max: Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION),
+          step: 0.1,
+          refresh: true,
+          readBack: (cs) => {
+            const win = cs[clipIdx]?.promptWindows?.[idx];
+            return win ? roundSeconds3(win.start) : null;
+          },
+          mutate: (cs, value) => {
+            const c = cs[clipIdx];
+            if (c) {
+              applyPromptWindowBegin(c, idx, value);
+            }
+          }
+        });
+        range.appendChild(buildField("Begin (s)", beginInput));
+        const endInput = buildClampedNumber({
+          key: `minor-${idx}-end`,
+          value: roundSeconds3(w.start + w.duration),
+          min: PROMPT_WINDOW_MIN_DURATION,
+          max: clipDur,
+          step: 0.1,
+          refresh: true,
+          readBack: (cs) => {
+            const win = cs[clipIdx]?.promptWindows?.[idx];
+            return win ? roundSeconds3(win.start + win.duration) : null;
+          },
+          mutate: (cs, value) => {
+            const c = cs[clipIdx];
+            if (c) {
+              applyPromptWindowEnd(c, idx, value);
+            }
+          }
+        });
+        range.appendChild(buildField("End (s)", endInput));
+        row.appendChild(range);
+        const editor = buildTextarea(
+          w.prompt ?? "",
           "Minor prompt for this window…",
-          "prompt-minor",
+          `minor-${idx}`,
           (value) => {
-            debouncedCommit("prompt-minor", (cs) => {
-              const w = cs[clipIdx]?.promptWindows?.[windowIdx];
-              if (w) {
-                w.prompt = value.trim();
+            debouncedCommit(`minor-${idx}`, (cs) => {
+              const win = cs[clipIdx]?.promptWindows?.[idx];
+              if (win) {
+                win.prompt = value.trim();
               }
             });
           }
-        )
-      );
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "vst-refs-delete vst-detail-delete";
-      del.textContent = "Delete prompt window";
-      del.addEventListener("click", (event) => {
-        event.preventDefault();
-        deleteWindowEntry(clipIdx, windowIdx);
+        );
+        editor.addEventListener("focus", () => {
+          setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
+        });
+        row.appendChild(editor);
+        body.appendChild(row);
       });
-      body.appendChild(del);
-      return body;
+      return wrapForm(
+        GROUP_PROMPTMINOR,
+        "Prompt Windows",
+        windows.length > 0 ? `Clip ${clipIdx} · W${windowIdx + 1}/${windows.length}` : `Clip ${clipIdx}`,
+        body,
+        { collapsible: false }
+      );
     };
     const buildRetakeBody = (sel, clips) => {
       const { clipIdx } = sel;
       const clip = clips[clipIdx];
       const retake = clip.retake;
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body";
+      body.className = "vst-detail-form-body";
+      const wrap = () => wrapForm(GROUP_RETAKE, "Retake Window", `Clip ${clipIdx}`, body);
       if (!retake) {
-        return body;
+        return wrap();
       }
       const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
       const clampRetake = (start, length) => {
@@ -5310,41 +6228,39 @@
         );
         return { start: s, length: l };
       };
-      const startInput = buildNumber(
-        retake.startSeconds,
-        0,
-        Math.max(0, clipDur - RETAKE_MIN_DURATION),
-        RETAKE_DURATION_STEP,
-        (value) => {
-          debouncedCommit("retake-start", (cs) => {
-            const r = cs[clipIdx]?.retake;
-            if (r) {
-              const next = clampRetake(value, r.lengthSeconds);
-              r.startSeconds = next.start;
-              r.lengthSeconds = next.length;
-            }
-          });
+      const startInput = buildClampedNumber({
+        key: "retake-start",
+        value: retake.startSeconds,
+        min: 0,
+        max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
+        step: RETAKE_DURATION_STEP,
+        readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
+        mutate: (cs, value) => {
+          const r = cs[clipIdx]?.retake;
+          if (r) {
+            const next = clampRetake(value, r.lengthSeconds);
+            r.startSeconds = next.start;
+            r.lengthSeconds = next.length;
+          }
         }
-      );
-      startInput.setAttribute("data-vst-focus-key", "retake-start");
+      });
       body.appendChild(buildField("Start (s)", startInput));
-      const lengthInput = buildNumber(
-        retake.lengthSeconds,
-        RETAKE_MIN_DURATION,
-        clipDur,
-        RETAKE_DURATION_STEP,
-        (value) => {
-          debouncedCommit("retake-length", (cs) => {
-            const r = cs[clipIdx]?.retake;
-            if (r) {
-              const next = clampRetake(r.startSeconds, value);
-              r.startSeconds = next.start;
-              r.lengthSeconds = next.length;
-            }
-          });
+      const lengthInput = buildClampedNumber({
+        key: "retake-length",
+        value: retake.lengthSeconds,
+        min: RETAKE_MIN_DURATION,
+        max: clipDur,
+        step: RETAKE_DURATION_STEP,
+        readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
+        mutate: (cs, value) => {
+          const r = cs[clipIdx]?.retake;
+          if (r) {
+            const next = clampRetake(r.startSeconds, value);
+            r.startSeconds = next.start;
+            r.lengthSeconds = next.length;
+          }
         }
-      );
-      lengthInput.setAttribute("data-vst-focus-key", "retake-length");
+      });
       body.appendChild(buildField("Length (s)", lengthInput));
       body.appendChild(
         buildSlider(
@@ -5380,13 +6296,13 @@
         removeRetake(clipIdx);
       });
       body.appendChild(del);
-      return body;
+      return wrap();
     };
     const formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
     const buildBoundaryBody = (sel, clips) => {
       const { leftClipIdx } = sel;
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body vst-detail-boundary";
+      body.className = "vst-detail-form-body vst-detail-boundary";
       const clip = clips[leftClipIdx];
       const value = clip?.boundaryOut ?? "cut";
       const state = getState();
@@ -5433,7 +6349,12 @@
         note.textContent = "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
         body.appendChild(note);
       }
-      return body;
+      return wrapForm(
+        GROUP_BOUNDARY,
+        "Boundary",
+        `Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
+        body
+      );
     };
     const buildSettingsBody = () => {
       const state = getState();
@@ -5457,7 +6378,7 @@
         height: clampDimension(state.height)
       };
       const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-form-body vst-detail-settings";
+      body.className = "vst-detail-form-body vst-detail-settings";
       const resSpecs = [
         {
           value: SETTINGS_INHERIT,
@@ -5575,7 +6496,7 @@
         fpsField.classList.add("vst-audio-disabled");
       }
       body.appendChild(fpsField);
-      return body;
+      return wrapForm(GROUP_SETTINGS, "Timeline Settings", "", body);
     };
     const buildBody = (sel, clips) => {
       switch (sel.kind) {
@@ -5599,8 +6520,22 @@
           return buildSettingsBody();
       }
     };
+    const syncValueDerivedUI = (sel) => {
+      if (!dockEl || !sel) {
+        return;
+      }
+      const crumb = dockEl.querySelector(".vst-detail-crumb");
+      if (crumb) {
+        crumb.textContent = breadcrumbFor(sel);
+      }
+    };
     const render = () => {
-      if (!boundBody) {
+      if (!dockEl) {
+        return;
+      }
+      if (suppressNextDockRebuild && renderedSel && !options.isCollapsed() && isSameSelection(getSelection(), renderedSel)) {
+        sourceToken = readStateToken();
+        syncValueDerivedUI(renderedSel);
         return;
       }
       flushPending();
@@ -5616,6 +6551,9 @@
           return;
         }
         const collapsed = options.isCollapsed();
+        const prevBody = detail.querySelector(".vst-detail-body");
+        const savedScroll = prevBody ? prevBody.scrollTop : 0;
+        captureFocus();
         detail.className = `${DETAIL_CLASS}${collapsed ? " vst-detail-collapsed" : ""}`;
         detail.innerHTML = "";
         detail.appendChild(buildHeader(sel, collapsed));
@@ -5627,29 +6565,173 @@
           }
         }
         restoreFocus(detail);
+        const newBody = detail.querySelector(".vst-detail-body");
+        if (newBody && savedScroll > 0) {
+          newBody.scrollTop = savedScroll;
+        }
+        if (!collapsed) {
+          autoFocusSelection(detail, sel);
+        }
+        renderedSel = sel;
       } finally {
         rendering = false;
       }
+    };
+    const focusKeyForSelection = (sel) => {
+      switch (sel.kind) {
+        case "prompt-major":
+          return "prompt-major";
+        case "prompt-minor":
+          return `minor-${sel.windowIdx}`;
+        default:
+          return null;
+      }
+    };
+    const autoFocusSelection = (detail, sel) => {
+      if (focusLeftDock) {
+        return;
+      }
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && detail.contains(active)) {
+        return;
+      }
+      const wantKey = focusKeyForSelection(sel);
+      if (!wantKey) {
+        return;
+      }
+      const editor = detail.querySelector(
+        `textarea[data-vst-focus-key="${wantKey}"]`
+      );
+      if (!editor) {
+        return;
+      }
+      editor.focus();
+      const len = editor.value.length;
+      try {
+        editor.setSelectionRange(len, len);
+      } catch {
+      }
+      if (typeof editor.scrollIntoView === "function") {
+        editor.scrollIntoView({ block: "nearest" });
+      }
+    };
+    const targetedReselect = (sel) => {
+      if (!dockEl || !renderedSel || options.isCollapsed()) {
+        return false;
+      }
+      const prev = renderedSel;
+      if (prev.kind !== sel.kind) {
+        return false;
+      }
+      const active = document.activeElement;
+      const fromOutside = !(active instanceof HTMLElement && dockEl.contains(active));
+      const swap = (rowSelector, activeClass, index) => {
+        const rows = Array.from(
+          dockEl?.querySelectorAll(rowSelector) ?? []
+        );
+        if (index < 0 || index >= rows.length) {
+          return false;
+        }
+        rows.forEach((row, i) => {
+          row.classList.toggle(activeClass, i === index);
+        });
+        const crumb = dockEl?.querySelector(".vst-detail-crumb");
+        if (crumb) {
+          crumb.textContent = breadcrumbFor(sel);
+        }
+        if (fromOutside && typeof rows[index].scrollIntoView === "function") {
+          rows[index].scrollIntoView({ block: "nearest" });
+        }
+        renderedSel = sel;
+        return true;
+      };
+      if (sel.kind === "prompt-minor" && prev.kind === "prompt-minor") {
+        if (sel.clipIdx !== prev.clipIdx) {
+          return false;
+        }
+        const ok = swap(
+          ".vst-detail-minor-window",
+          "vst-detail-minor-active",
+          sel.windowIdx
+        );
+        if (ok) {
+          const counter = dockEl?.querySelector(
+            "#auto-group-vstdock_promptminor .header-label-counter"
+          );
+          const total = getClips()[sel.clipIdx]?.promptWindows?.length ?? 0;
+          if (counter && total > 0) {
+            counter.textContent = `Clip ${sel.clipIdx} · W${sel.windowIdx + 1}/${total}`;
+          }
+          if (fromOutside) {
+            const editor = dockEl?.querySelector(
+              `.vst-detail-minor-window[data-vst-minor-window="${sel.windowIdx}"] textarea`
+            );
+            if (editor) {
+              editor.focus();
+              const len = editor.value.length;
+              try {
+                editor.setSelectionRange(len, len);
+              } catch {
+              }
+            }
+          }
+        }
+        return ok;
+      }
+      if (sel.kind === "ref" && prev.kind === "ref") {
+        if (sel.clipIdx !== prev.clipIdx) {
+          return false;
+        }
+        return swap(
+          ".vst-detail-ref-row",
+          "vst-detail-instance-active",
+          sel.refIdx
+        );
+      }
+      if (sel.kind === "audio-segment" && prev.kind === "audio-segment") {
+        if (sel.clipIdx !== prev.clipIdx) {
+          return false;
+        }
+        return swap(
+          ".vst-detail-seg-row",
+          "vst-detail-instance-active",
+          sel.segIdx
+        );
+      }
+      return false;
     };
     const onSelectionChanged = (sel) => {
       if (suppressSelectionRender) {
         return;
       }
+      if (targetedReselect(sel)) {
+        return;
+      }
+      pendingFocus = null;
+      focusLeftDock = false;
       settingsMode = null;
       if (sel.kind !== "none" && options.isCollapsed()) {
         options.setCollapsed(false);
       }
       render();
     };
-    const attach = (body) => {
-      if (boundBody === body) {
+    const attach = (body, dock) => {
+      if (boundBody === body && dockEl === dock) {
         return;
       }
       dispose();
       boundBody = body;
+      dockEl = dock;
       body.addEventListener("mousedown", onMouseDownCapture, true);
       body.addEventListener("click", onClickCapture, true);
       body.addEventListener("keydown", onKeyDownCapture, true);
+      dock.addEventListener("keydown", onStripKeyDown);
+      dock.addEventListener("focusout", onDockFocusOut);
+      dock.addEventListener("focusin", onDockFocusIn);
+      dock.addEventListener("change", onDockChange);
+      document.addEventListener("pointerdown", onDocPointerDown, true);
+      document.addEventListener("pointerup", onDocPointerUp, true);
+      document.addEventListener("pointercancel", onDocPointerUp, true);
       unsubscribe = subscribeSelection(onSelectionChanged);
       render();
     };
@@ -5660,6 +6742,11 @@
         pendingTimer = null;
       }
       pending.clear();
+      sliderDragActive = false;
+      focusLeftDock = false;
+      document.removeEventListener("pointerdown", onDocPointerDown, true);
+      document.removeEventListener("pointerup", onDocPointerUp, true);
+      document.removeEventListener("pointercancel", onDocPointerUp, true);
       if (unsubscribe) {
         unsubscribe();
         unsubscribe = null;
@@ -5672,9 +6759,18 @@
         );
         boundBody.removeEventListener("click", onClickCapture, true);
         boundBody.removeEventListener("keydown", onKeyDownCapture, true);
-        boundBody.querySelector(`:scope > .${DETAIL_CLASS}`)?.remove();
         boundBody = null;
       }
+      if (dockEl) {
+        dockEl.removeEventListener("keydown", onStripKeyDown);
+        dockEl.removeEventListener("focusout", onDockFocusOut);
+        dockEl.removeEventListener("focusin", onDockFocusIn);
+        dockEl.removeEventListener("change", onDockChange);
+        dockEl.className = DETAIL_CLASS;
+        dockEl.innerHTML = "";
+        dockEl = null;
+      }
+      renderedSel = null;
     };
     return { attach, render, dispose };
   };
@@ -5854,513 +6950,6 @@
       moveHandler = null;
       upHandler = null;
       scrub = null;
-      boundBody = null;
-    };
-    return { attach, dispose };
-  };
-
-  // frontend/timelinePromptTrack.ts
-  var MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
-  var MINOR_SELECTOR = ".vst-minor-seg[data-clip-idx]";
-  var MINOR_EDGE_SELECTOR = "[data-vst-minor-edge]";
-  var MINOR_ACTION_SELECTOR = "[data-vst-minor-action]";
-  var LANE_SELECTOR = ".vst-minor-lane[data-clip-idx]";
-  var DRAG_THRESHOLD_PX3 = 4;
-  var DRAGGING_CLASS3 = "vst-prompt-dragging";
-  var GHOST_CLASS = "vst-minor-ghost";
-  var parseIntAttr3 = (el, name) => {
-    if (!el) {
-      return null;
-    }
-    const raw = el.getAttribute(name);
-    if (raw === null) {
-      return null;
-    }
-    const value = Number.parseInt(raw, 10);
-    return Number.isInteger(value) && value >= 0 ? value : null;
-  };
-  var clipDurationOf2 = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
-  var roundSeconds3 = (seconds) => Math.round(seconds * 10) / 10;
-  var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
-    k,
-    start: clamp(w.start, 0, clipDuration),
-    end: clamp(w.start + w.duration, 0, clipDuration)
-  })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
-  var freeIntervalAt = (spans, clipDuration, point) => {
-    const p = clamp(point, 0, clipDuration);
-    let lo = 0;
-    let hi = clipDuration;
-    for (const span of spans) {
-      if (span.end <= p) {
-        if (span.end > lo) {
-          lo = span.end;
-        }
-      } else if (span.start >= p) {
-        hi = span.start;
-        break;
-      } else {
-        return [p, p];
-      }
-    }
-    return [lo, hi];
-  };
-  var createTimelinePromptTrack = () => {
-    let moveState = null;
-    let resizeState = null;
-    let createState = null;
-    let suppressClick = false;
-    let boundBody = null;
-    const isStale = (sourceJson) => readStateToken() !== sourceJson;
-    const applyMinorAction = (clipIdx, windowIdx, action) => {
-      const clips = getClips();
-      const clip = clips[clipIdx];
-      const window2 = clip?.promptWindows?.[windowIdx];
-      if (!clip || !window2) {
-        return;
-      }
-      if (action !== "delete") {
-        return;
-      }
-      clip.promptWindows.splice(windowIdx, 1);
-      saveClips(clips);
-    };
-    const commitMove = (state, dxPx, pps) => {
-      if (isStale(state.sourceJson)) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[state.clipIdx];
-      const window2 = clip?.promptWindows?.[state.windowIdx];
-      if (!clip || !window2) {
-        return;
-      }
-      const clipDur = clipDurationOf2(clip);
-      const desiredStart = state.startStart + dxPx / pps;
-      const dur = Math.min(state.duration, clipDur);
-      const maxStart = Math.max(state.boundLo, state.boundHi - dur);
-      window2.start = roundSeconds3(
-        clamp(desiredStart, state.boundLo, maxStart)
-      );
-      window2.duration = roundSeconds3(
-        Math.max(
-          PROMPT_WINDOW_MIN_DURATION,
-          Math.min(dur, state.boundHi - window2.start)
-        )
-      );
-      saveClips(clips);
-    };
-    const commitResize = (state, dxPx, pps) => {
-      if (isStale(state.sourceJson)) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[state.clipIdx];
-      const window2 = clip?.promptWindows?.[state.windowIdx];
-      if (!clip || !window2) {
-        return;
-      }
-      const clipDur = clipDurationOf2(clip);
-      const spans = otherSpans(clip.promptWindows, state.windowIdx, clipDur);
-      const deltaSec = dxPx / pps;
-      if (state.edge === "right") {
-        const [, hi] = freeIntervalAt(spans, clipDur, state.startStart);
-        const end = clamp(
-          state.startStart + state.startDuration + deltaSec,
-          state.startStart + PROMPT_WINDOW_MIN_DURATION,
-          hi
-        );
-        window2.start = roundSeconds3(state.startStart);
-        window2.duration = roundSeconds3(end - state.startStart);
-      } else {
-        const end = state.startStart + state.startDuration;
-        const [lo] = freeIntervalAt(
-          spans,
-          clipDur,
-          Math.max(0, end - 1e-3)
-        );
-        const start = clamp(
-          state.startStart + deltaSec,
-          lo,
-          end - PROMPT_WINDOW_MIN_DURATION
-        );
-        window2.start = roundSeconds3(start);
-        window2.duration = roundSeconds3(end - start);
-      }
-      saveClips(clips);
-    };
-    const commitCreate = (state, endSec) => {
-      if (isStale(state.sourceJson)) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[state.clipIdx];
-      if (!clip) {
-        return;
-      }
-      const clipDur = clipDurationOf2(clip);
-      const spans = otherSpans(clip.promptWindows, -1, clipDur);
-      const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
-      const gap = hi - lo;
-      if (gap < PROMPT_WINDOW_MIN_DURATION) {
-        return;
-      }
-      let start;
-      let duration;
-      if (endSec === null) {
-        duration = Math.min(PROMPT_WINDOW_DEFAULT_DURATION, gap);
-        start = clamp(state.startSec, lo, hi - duration);
-      } else {
-        const a = clamp(Math.min(state.startSec, endSec), lo, hi);
-        const b = clamp(Math.max(state.startSec, endSec), lo, hi);
-        start = a;
-        duration = Math.max(PROMPT_WINDOW_MIN_DURATION, b - a);
-        if (start + duration > hi) {
-          duration = hi - start;
-        }
-      }
-      if (duration < PROMPT_WINDOW_MIN_DURATION) {
-        return;
-      }
-      const window2 = {
-        prompt: "",
-        start: roundSeconds3(start),
-        duration: roundSeconds3(duration)
-      };
-      clip.promptWindows.push(window2);
-      clip.promptWindows.sort((x, y) => x.start - y.start);
-      saveClips(clips);
-    };
-    const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
-    const clearGesture = (body) => {
-      if (createState?.ghost) {
-        createState.ghost.remove();
-      }
-      moveState = null;
-      resizeState = null;
-      createState = null;
-      body.classList.remove(DRAGGING_CLASS3);
-    };
-    const onBodyMouseDown = (event) => {
-      suppressClick = false;
-      const me = event;
-      if (me.button !== 0 || !(me.target instanceof Element)) {
-        return;
-      }
-      if (me.target.closest(MINOR_ACTION_SELECTOR)) {
-        return;
-      }
-      if (me.shiftKey && me.target.closest(MINOR_SELECTOR)) {
-        me.preventDefault();
-        return;
-      }
-      const edgeEl = me.target.closest(MINOR_EDGE_SELECTOR);
-      if (edgeEl) {
-        const seg2 = edgeEl.closest(MINOR_SELECTOR);
-        const clipIdx = parseIntAttr3(seg2, "data-clip-idx");
-        const windowIdx = parseIntAttr3(seg2, "data-window-idx");
-        const edge = edgeEl.getAttribute("data-vst-minor-edge") === "left" ? "left" : "right";
-        if (clipIdx === null || windowIdx === null || !(seg2 instanceof HTMLElement)) {
-          return;
-        }
-        const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
-        if (!window2) {
-          return;
-        }
-        resizeState = {
-          clipIdx,
-          windowIdx,
-          edge,
-          el: seg2,
-          startX: me.clientX,
-          startStart: window2.start,
-          startDuration: window2.duration,
-          clipDuration: clipDurationOf2(getClips()[clipIdx]),
-          originalLeft: seg2.style.left,
-          originalWidth: seg2.style.width,
-          active: false,
-          sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
-      }
-      const seg = me.target.closest(MINOR_SELECTOR);
-      if (seg instanceof HTMLElement) {
-        const clipIdx = parseIntAttr3(seg, "data-clip-idx");
-        const windowIdx = parseIntAttr3(seg, "data-window-idx");
-        if (clipIdx === null || windowIdx === null) {
-          return;
-        }
-        const clip = getClips()[clipIdx];
-        const window2 = clip?.promptWindows?.[windowIdx];
-        if (!clip || !window2) {
-          return;
-        }
-        const clipDuration = clipDurationOf2(clip);
-        const [boundLo, boundHi] = freeIntervalAt(
-          otherSpans(clip.promptWindows, windowIdx, clipDuration),
-          clipDuration,
-          window2.start
-        );
-        moveState = {
-          clipIdx,
-          windowIdx,
-          el: seg,
-          startX: me.clientX,
-          startStart: window2.start,
-          duration: window2.duration,
-          clipDuration,
-          boundLo,
-          boundHi,
-          originalLeft: seg.style.left,
-          active: false,
-          sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
-      }
-      const lane = me.target.closest(LANE_SELECTOR);
-      if (lane instanceof HTMLElement) {
-        const clipIdx = parseIntAttr3(lane, "data-clip-idx");
-        if (clipIdx === null) {
-          return;
-        }
-        const rect = lane.getBoundingClientRect();
-        const pps = livePxPerSecond(boundBody ?? lane);
-        const clipDuration = clipDurationOf2(getClips()[clipIdx]);
-        const startSec = clamp(
-          (me.clientX - rect.left) / pps,
-          0,
-          clipDuration
-        );
-        createState = {
-          clipIdx,
-          lane,
-          laneLeft: rect.left,
-          startSec,
-          startX: me.clientX,
-          clipDuration,
-          ghost: null,
-          active: false,
-          sourceJson: readStateToken()
-        };
-        me.preventDefault();
-      }
-    };
-    const onDocMouseMove = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const dx = me.clientX - resizeState.startX;
-        if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
-          return;
-        }
-        resizeState.active = true;
-        body.classList.add(DRAGGING_CLASS3);
-        const clipDur = resizeState.clipDuration;
-        const deltaSec = dx / pps;
-        if (resizeState.edge === "right") {
-          const end = clamp(
-            resizeState.startStart + resizeState.startDuration + deltaSec,
-            resizeState.startStart + PROMPT_WINDOW_MIN_DURATION,
-            clipDur
-          );
-          resizeState.el.style.width = `${Math.max(2, (end - resizeState.startStart) * pps)}px`;
-        } else {
-          const end = resizeState.startStart + resizeState.startDuration;
-          const start = clamp(
-            resizeState.startStart + deltaSec,
-            0,
-            end - PROMPT_WINDOW_MIN_DURATION
-          );
-          resizeState.el.style.left = `${start * pps}px`;
-          resizeState.el.style.width = `${Math.max(2, (end - start) * pps)}px`;
-        }
-        return;
-      }
-      if (moveState) {
-        const dx = me.clientX - moveState.startX;
-        if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
-          return;
-        }
-        moveState.active = true;
-        body.classList.add(DRAGGING_CLASS3);
-        const dur = Math.min(moveState.duration, moveState.clipDuration);
-        const maxStart = Math.max(
-          moveState.boundLo,
-          moveState.boundHi - dur
-        );
-        const start = clamp(
-          moveState.startStart + dx / pps,
-          moveState.boundLo,
-          maxStart
-        );
-        moveState.el.style.left = `${start * pps}px`;
-        return;
-      }
-      if (createState) {
-        const dx = me.clientX - createState.startX;
-        if (!createState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
-          return;
-        }
-        createState.active = true;
-        body.classList.add(DRAGGING_CLASS3);
-        const nowSec = laneTimeAt(createState, me.clientX, pps);
-        const a = Math.min(createState.startSec, nowSec);
-        const b = Math.max(createState.startSec, nowSec);
-        if (!createState.ghost) {
-          const ghost = document.createElement("div");
-          ghost.className = GHOST_CLASS;
-          createState.lane.appendChild(ghost);
-          createState.ghost = ghost;
-        }
-        createState.ghost.style.left = `${a * pps}px`;
-        createState.ghost.style.width = `${Math.max(2, (b - a) * pps)}px`;
-      }
-    };
-    const onDocMouseUp = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const state = resizeState;
-        resizeState = null;
-        body.classList.remove(DRAGGING_CLASS3);
-        if (state.active) {
-          suppressClick = true;
-          commitResize(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-          state.el.style.width = state.originalWidth;
-        }
-        return;
-      }
-      if (moveState) {
-        const state = moveState;
-        moveState = null;
-        body.classList.remove(DRAGGING_CLASS3);
-        if (state.active) {
-          suppressClick = true;
-          commitMove(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-        }
-        return;
-      }
-      if (createState) {
-        const state = createState;
-        createState = null;
-        body.classList.remove(DRAGGING_CLASS3);
-        if (state.ghost) {
-          state.ghost.remove();
-        }
-        suppressClick = true;
-        if (state.active) {
-          commitCreate(state, laneTimeAt(state, me.clientX, pps));
-        } else {
-          commitCreate(state, null);
-        }
-      }
-    };
-    const onBodyClick = (event) => {
-      if (suppressClick) {
-        suppressClick = false;
-        return;
-      }
-      if (!(event.target instanceof Element)) {
-        return;
-      }
-      const actionEl = event.target.closest(MINOR_ACTION_SELECTOR);
-      if (actionEl) {
-        const seg = actionEl.closest(MINOR_SELECTOR);
-        const clipIdx = parseIntAttr3(seg, "data-clip-idx");
-        const windowIdx = parseIntAttr3(seg, "data-window-idx");
-        const action = actionEl.getAttribute("data-vst-minor-action") ?? "";
-        if (clipIdx !== null && windowIdx !== null) {
-          applyMinorAction(clipIdx, windowIdx, action);
-        }
-        return;
-      }
-      const minor = event.target.closest(MINOR_SELECTOR);
-      if (minor instanceof HTMLElement) {
-        const clipIdx = parseIntAttr3(minor, "data-clip-idx");
-        const windowIdx = parseIntAttr3(minor, "data-window-idx");
-        if (clipIdx === null || windowIdx === null) {
-          return;
-        }
-        if (event.shiftKey) {
-          applyMinorAction(clipIdx, windowIdx, "delete");
-          return;
-        }
-        const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
-        if (!window2) {
-          return;
-        }
-        setSelection({ kind: "prompt-minor", clipIdx, windowIdx });
-        return;
-      }
-      const major = event.target.closest(MAJOR_SELECTOR);
-      if (major instanceof HTMLElement) {
-        const clipIdx = parseIntAttr3(major, "data-clip-idx");
-        if (clipIdx === null) {
-          return;
-        }
-        if (!getClips()[clipIdx]) {
-          return;
-        }
-        setSelection({ kind: "prompt-major", clipIdx });
-      }
-    };
-    const onDocKeyDown = (body, event) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      if (resizeState) {
-        resizeState.el.style.left = resizeState.originalLeft;
-        resizeState.el.style.width = resizeState.originalWidth;
-      } else if (moveState) {
-        moveState.el.style.left = moveState.originalLeft;
-      } else if (!createState) {
-        return;
-      }
-      clearGesture(body);
-    };
-    let moveHandler = null;
-    let upHandler = null;
-    let keyHandler = null;
-    const attach = (body) => {
-      if (boundBody === body) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      body.addEventListener("mousedown", onBodyMouseDown);
-      body.addEventListener("click", onBodyClick);
-      moveHandler = (event) => onDocMouseMove(body, event);
-      upHandler = (event) => onDocMouseUp(body, event);
-      keyHandler = (event) => onDocKeyDown(body, event);
-      document.addEventListener("mousemove", moveHandler);
-      document.addEventListener("mouseup", upHandler);
-      document.addEventListener("keydown", keyHandler);
-    };
-    const dispose = () => {
-      if (boundBody) {
-        boundBody.removeEventListener("mousedown", onBodyMouseDown);
-        boundBody.removeEventListener("click", onBodyClick);
-      }
-      if (moveHandler) {
-        document.removeEventListener("mousemove", moveHandler);
-        moveHandler = null;
-      }
-      if (upHandler) {
-        document.removeEventListener("mouseup", upHandler);
-        upHandler = null;
-      }
-      if (keyHandler) {
-        document.removeEventListener("keydown", keyHandler);
-        keyHandler = null;
-      }
-      moveState = null;
-      resizeState = null;
-      createState = null;
       boundBody = null;
     };
     return { attach, dispose };
@@ -7111,6 +7700,19 @@
       refresh();
     };
     const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
+    const ensureDock = (body) => {
+      const shell = body.parentElement;
+      if (!shell) {
+        throw new Error("timeline body has no shell parent");
+      }
+      let dock = shell.querySelector(":scope > .vst-detail");
+      if (!dock) {
+        dock = document.createElement("div");
+        dock.className = "vst-detail";
+        shell.insertBefore(dock, body);
+      }
+      return dock;
+    };
     const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
     const setZoom = (value) => {
       pxPerSecond = clampPxPerSecond(value);
@@ -7295,7 +7897,7 @@
         audioTrack.attach(body);
         boundaryTrack.attach(body);
         referencesTrack.attach(body);
-        detailStrip.attach(body);
+        detailStrip.attach(body, ensureDock(body));
         body.removeEventListener("click", onBodyClickSyncReadout);
         body.addEventListener("click", onBodyClickSyncReadout);
       }

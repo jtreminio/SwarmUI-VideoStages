@@ -181,6 +181,40 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         expect(windows[0].prompt).toBe("");
     });
 
+    it("selects the newly created window so the dock opens it ready to type", () => {
+        const body = setup([{ duration: 10 }]);
+        const lane = el(body, ".vst-minor-lane[data-clip-idx='0']");
+        lane.dispatchEvent(mouse("mousedown", 2 * PPS)); // t = 2s
+        document.dispatchEvent(mouse("mouseup", 2 * PPS));
+
+        // A brand-new window is the only one, so its index is 0.
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: 0,
+        });
+    });
+
+    it("selects the correct index when the new window sorts among existing ones", () => {
+        // Existing window at 6s; a new window created at 2s sorts to index 0,
+        // pushing the existing one to index 1 — selection must track the NEW one.
+        const body = setup([
+            { duration: 10, windows: [{ start: 6, duration: 2 }] },
+        ]);
+        const lane = el(body, ".vst-minor-lane[data-clip-idx='0']");
+        lane.dispatchEvent(mouse("mousedown", 2 * PPS));
+        document.dispatchEvent(mouse("mouseup", 2 * PPS));
+
+        const windows = savedWindows(saveSpy);
+        expect(windows).toHaveLength(2);
+        const newIdx = windows.findIndex((w) => Math.abs(w.start - 2) < 1e-3);
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: newIdx,
+        });
+    });
+
     it("click-dragging on empty lane space adds a window sized to the drag", () => {
         const body = setup([{ duration: 10 }]);
         const lane = el(body, ".vst-minor-lane[data-clip-idx='0']");

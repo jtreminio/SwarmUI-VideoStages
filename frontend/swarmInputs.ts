@@ -52,6 +52,31 @@ export const writeDataParam = (json: string, notify = true): void => {
 export const readStateToken = (): string =>
     `${readDataParam()}\x00${getPromptInput()?.value ?? ""}`;
 
+/**
+ * Run `fn` with the host prompt tab-complete guard raised, so the synthetic
+ * `input` event our programmatic prompt-box writes dispatch (via
+ * triggerChangeFor) can never open the keyboard-driven `<`-prefix suggestion
+ * popover. The host's `onInput` checks `blockInput` first and bails
+ * (prompttools.js:326-329); dispatch is synchronous, so restoring right after
+ * leaves genuine user typing unaffected. No-op when the host global is absent
+ * (jsdom / extension-only contexts).
+ */
+const withSuppressedPromptTabComplete = (fn: () => void): void => {
+    const tc =
+        typeof promptTabComplete !== "undefined" ? promptTabComplete : null;
+    if (!tc) {
+        fn();
+        return;
+    }
+    const prev = tc.blockInput;
+    tc.blockInput = true;
+    try {
+        fn();
+    } finally {
+        tc.blockInput = prev;
+    }
+};
+
 export const writeClipPrompts = (
     clips: ClipTextInput[],
     notify = true,
@@ -62,7 +87,7 @@ export const writeClipPrompts = (
     }
     el.value = serializeClipPrompts(el.value ?? "", clips);
     if (notify) {
-        triggerChangeFor(el);
+        withSuppressedPromptTabComplete(() => triggerChangeFor(el));
     }
 };
 

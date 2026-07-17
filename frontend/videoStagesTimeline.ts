@@ -152,6 +152,23 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
 
     const timelineBody = (): HTMLElement | null =>
         document.getElementById(TIMELINE_BODY_ID);
+
+    // The left dock (`.vst-detail`) is a sibling of the tracks body inside the
+    // `.vst-timeline` shell, created here so renderTimeline's innerHTML wipe of
+    // the tracks body never touches it. Rendered into by the detail strip.
+    const ensureDock = (body: HTMLElement): HTMLElement => {
+        const shell = body.parentElement;
+        if (!shell) {
+            throw new Error("timeline body has no shell parent");
+        }
+        let dock = shell.querySelector<HTMLElement>(":scope > .vst-detail");
+        if (!dock) {
+            dock = document.createElement("div");
+            dock.className = "vst-detail";
+            shell.insertBefore(dock, body);
+        }
+        return dock;
+    };
     const scrollEl = (): HTMLElement | null =>
         timelineBody()?.querySelector<HTMLElement>(".vst-scroll") ?? null;
 
@@ -360,7 +377,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             audioTrack.attach(body);
             boundaryTrack.attach(body);
             referencesTrack.attach(body);
-            detailStrip.attach(body);
+            detailStrip.attach(body, ensureDock(body));
             body.removeEventListener("click", onBodyClickSyncReadout);
             body.addEventListener("click", onBodyClickSyncReadout);
         }

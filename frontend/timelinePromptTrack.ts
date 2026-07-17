@@ -126,6 +126,59 @@ const freeIntervalAt = (
     return [lo, hi];
 };
 
+/**
+ * Move a prompt window's BEGIN edge to `desiredBegin` (seconds), keeping its end
+ * fixed — the exact rule the timeline's left-edge resize gesture applies
+ * (see `commitResize`, edge "left"): clamp the new start into the free interval
+ * ending at this window's end (so it can't cross an adjacent window or leave the
+ * clip) with a minimum-duration floor, then recompute duration. Mutates in place.
+ */
+export const applyPromptWindowBegin = (
+    clip: Clip,
+    windowIdx: number,
+    desiredBegin: number,
+): void => {
+    const window = clip.promptWindows?.[windowIdx];
+    if (!window) {
+        return;
+    }
+    const clipDur = clipDurationOf(clip);
+    const end = window.start + window.duration;
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
+    const start = clamp(desiredBegin, lo, end - PROMPT_WINDOW_MIN_DURATION);
+    window.start = roundSeconds(start);
+    window.duration = roundSeconds(end - start);
+};
+
+/**
+ * Move a prompt window's END edge to `desiredEnd` (seconds), keeping its start
+ * fixed — the exact rule the timeline's right-edge resize gesture applies
+ * (see `commitResize`, edge "right"): clamp the new end into the free interval
+ * starting at this window's start with a minimum-duration floor, then recompute
+ * duration. Mutates in place.
+ */
+export const applyPromptWindowEnd = (
+    clip: Clip,
+    windowIdx: number,
+    desiredEnd: number,
+): void => {
+    const window = clip.promptWindows?.[windowIdx];
+    if (!window) {
+        return;
+    }
+    const clipDur = clipDurationOf(clip);
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [, hi] = freeIntervalAt(spans, clipDur, window.start);
+    const end = clamp(
+        desiredEnd,
+        window.start + PROMPT_WINDOW_MIN_DURATION,
+        hi,
+    );
+    window.start = roundSeconds(window.start);
+    window.duration = roundSeconds(end - window.start);
+};
+
 export const createTimelinePromptTrack = (): TimelinePromptTrack => {
     let moveState: MoveState | null = null;
     let resizeState: ResizeState | null = null;
@@ -265,6 +318,16 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         clip.promptWindows.push(window);
         clip.promptWindows.sort((x, y) => x.start - y.start);
         saveClips(clips);
+        // Open the new window in the dock ready to type: selecting it auto-expands
+        // the dock (via the strip's selection subscriber) and focuses its editor.
+        const newIdx = clip.promptWindows.indexOf(window);
+        if (newIdx >= 0) {
+            setSelection({
+                kind: "prompt-minor",
+                clipIdx: state.clipIdx,
+                windowIdx: newIdx,
+            });
+        }
     };
 
     const laneTimeAt = (

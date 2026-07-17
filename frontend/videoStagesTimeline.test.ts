@@ -8,7 +8,11 @@ import {
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { __resetPersistenceForTests } from "./persistence";
-import { clearUiStateForTests } from "./uiState";
+import {
+    clearUiStateForTests,
+    resetSelectionForTests,
+    setSelection,
+} from "./uiState";
 import {
     type VideoStagesTimeline,
     videoStagesTimeline,
@@ -64,6 +68,7 @@ describe("videoStagesTimeline", () => {
         jest.useFakeTimers();
         __resetPersistenceForTests();
         clearUiStateForTests();
+        resetSelectionForTests();
         // Zoom/unit persist to localStorage; clear so one test's zoom never leaks into the next.
         localStorage.clear();
         setupBottomBar();
@@ -73,8 +78,19 @@ describe("videoStagesTimeline", () => {
         timeline?.dispose();
         timeline = null;
         jest.useRealTimers();
+        resetSelectionForTests();
         document.body.innerHTML = "";
     });
+
+    // Group toggle must be present + checked so live-apply writes actually
+    // dispatch the DOM-change signal that drives the real refresh path.
+    const mountEnabledToggle = (): void => {
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.id = "input_group_content_videostages_toggle";
+        cb.checked = true;
+        document.body.appendChild(cb);
+    };
 
     it("renders one region per clip on init", () => {
         mountState(makeClipsJson(1));
@@ -130,6 +146,51 @@ describe("videoStagesTimeline", () => {
         triggerChangeFor(promptInput);
 
         expect(regionCount()).toBe(2);
+    });
+
+    it("does not repaint the tracks while typing in a dock field, exactly once on blur", () => {
+        // Enabled so live-apply writes dispatch the DOM-change refresh signal.
+        mountEnabledToggle();
+        mountState(makeClipsJson(1));
+        timeline = videoStagesTimeline();
+        timeline.init();
+
+        // Show the clip's major-prompt editor in the left dock.
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+        const region = document.querySelector<HTMLElement>(
+            `#${TIMELINE_BODY_ID} .vst-region`,
+        );
+        const editor = document.querySelector<HTMLTextAreaElement>(
+            ".vst-detail .vst-detail-prompt",
+        );
+        if (!region || !editor) {
+            throw new Error("region or dock editor missing");
+        }
+
+        editor.focus();
+        editor.value = "sunset over rolling hills";
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+        // Poll interval + debounce both elapse: still ZERO track repaints, and
+        // the carrier is untouched (so the `<`-help dropdown never fires either).
+        jest.advanceTimersByTime(POLL_ADVANCE_MS * 3);
+        expect(document.querySelector(`#${TIMELINE_BODY_ID} .vst-region`)).toBe(
+            region,
+        );
+        expect(promptInput.value).not.toContain("sunset over rolling hills");
+
+        // Blur out of the dock: exactly one repaint (fresh region node) and the
+        // carrier now carries the typed prompt.
+        editor.dispatchEvent(
+            new FocusEvent("focusout", {
+                bubbles: true,
+                relatedTarget: document.body,
+            }),
+        );
+        const after = document.querySelector<HTMLElement>(
+            `#${TIMELINE_BODY_ID} .vst-region`,
+        );
+        expect(after).not.toBe(region);
+        expect(promptInput.value).toContain("sunset over rolling hills");
     });
 
     it("toggles ruler/region labels between seconds and frames in-memory", () => {
@@ -249,6 +310,68 @@ describe("videoStagesTimeline", () => {
         expect(
             body2.querySelector("[data-vst-readout-head]")?.textContent,
         ).toBe("▸ 1.0s · f24");
+    });
+
+    // Regression: the debounced live-apply flush → saveClips → prompt-input
+    // change → refresh → renderTimeline + dock re-render used to steal the caret
+    // out of the dock textarea. The dock must keep focus (and caret) through the
+    // real refresh path, including a second render arriving back-to-back.
+    it("keeps focus + caret in the MAJOR prompt textarea through the real refresh", () => {
+        mountEnabledToggle();
+        mountVideoStagesData(makeClipsJson(1, 10));
+        mountPromptBox("");
+        timeline = videoStagesTimeline();
+        timeline.init();
+
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+        const editor = document.querySelector<HTMLTextAreaElement>(
+            'textarea[data-vst-focus-key="prompt-major"]',
+        );
+        if (!editor) {
+            throw new Error("major textarea missing");
+        }
+        editor.focus();
+        editor.value = "hello world";
+        editor.setSelectionRange(11, 11);
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(250);
+        // A second render lands right after the first restored focus.
+        timeline.refresh();
+
+        const active = document.activeElement as HTMLTextAreaElement | null;
+        expect(active?.getAttribute("data-vst-focus-key")).toBe("prompt-major");
+        expect(active?.selectionStart).toBe(11);
+    });
+
+    it("keeps focus + caret in a MINOR relay textarea through the real refresh", () => {
+        mountEnabledToggle();
+        mountVideoStagesData(
+            JSON.stringify({
+                clips: [{ duration: 10, stages: [{}], refs: [] }],
+            }),
+        );
+        // A relay window rides in the prompt box as a <videoclip[0]:S-E> tag.
+        mountPromptBox("<videoclip[0]:2-5>old");
+        timeline = videoStagesTimeline();
+        timeline.init();
+
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+        const editor = document.querySelector<HTMLTextAreaElement>(
+            'textarea[data-vst-focus-key="minor-0"]',
+        );
+        if (!editor) {
+            throw new Error("minor textarea missing");
+        }
+        editor.focus();
+        editor.value = "a red car";
+        editor.setSelectionRange(9, 9);
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(250);
+        timeline.refresh();
+
+        const active = document.activeElement as HTMLTextAreaElement | null;
+        expect(active?.getAttribute("data-vst-focus-key")).toBe("minor-0");
+        expect(active?.selectionStart).toBe(9);
     });
 
     it("polls for state drift as a fallback when no event fires", () => {

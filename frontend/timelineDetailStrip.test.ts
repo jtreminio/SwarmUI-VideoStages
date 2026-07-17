@@ -1,3 +1,6 @@
+/// <reference types="node" />
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
     afterEach,
     beforeEach,
@@ -108,11 +111,27 @@ const mountRootDefaults = (loras: string[] = ["lora-x.safetensors"]): void => {
     });
 };
 
+// The dock (`.vst-detail`, render-host) is a sibling of the tracks body
+// (listener-host) inside the `.vst-timeline` shell, matching production.
 const makeBody = (): HTMLElement => {
+    const shell = document.createElement("div");
+    shell.className = "vst-timeline";
+    const dock = document.createElement("div");
+    dock.className = "vst-detail";
     const body = document.createElement("div");
+    body.className = "vst-right";
     body.id = "videostages-timeline-body";
-    document.body.appendChild(body);
+    shell.append(dock, body);
+    document.body.appendChild(shell);
     return body;
+};
+
+const dockHost = (body: HTMLElement): HTMLElement => {
+    const dock = body.parentElement?.querySelector<HTMLElement>(".vst-detail");
+    if (!dock) {
+        throw new Error("dock host not found");
+    }
+    return dock;
 };
 
 const detail = (): HTMLElement | null =>
@@ -225,7 +244,7 @@ describe("createTimelineDetailStrip", () => {
             },
             refresh: () => refreshSpy(),
         });
-        strip.attach(body);
+        strip.attach(body, dockHost(body));
         return body;
     };
 
@@ -334,6 +353,27 @@ describe("createTimelineDetailStrip", () => {
         expect(
             fieldByLabel("Upscale Method").querySelector("select"),
         ).not.toBeNull();
+    });
+
+    const controlNetLabels = (): (string | null)[] =>
+        Array.from(
+            document.querySelectorAll<HTMLElement>(
+                ".vst-detail .auto-input-name",
+            ),
+        ).map((el) => el.textContent);
+
+    it("hides ControlNet Strength when the clip has no ControlNet LoRA", () => {
+        setup([{ duration: 4, stages: [{}], controlNetLora: "" }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(controlNetLabels()).not.toContain("ControlNet Strength");
+    });
+
+    it("shows ControlNet Strength when the clip has a ControlNet LoRA", () => {
+        setup([
+            { duration: 4, stages: [{}], controlNetLora: "some-cnet-lora" },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(controlNetLabels()).toContain("ControlNet Strength");
     });
 
     it("live-applies a discrete select change through saveClips", () => {
@@ -732,7 +772,26 @@ describe("createTimelineDetailStrip", () => {
 
     // ---- Phase 2: ref / audio / prompt / settings editors ----------------
 
-    it("renders the reference editor and live-applies + deletes", () => {
+    const refRow = (idx: number): HTMLElement => {
+        const row = document.querySelector<HTMLElement>(
+            `.vst-detail-ref-row[data-vst-ref-index="${idx}"]`,
+        );
+        if (!row) {
+            throw new Error(`ref row ${idx} missing`);
+        }
+        return row;
+    };
+    const segRow = (idx: number): HTMLElement => {
+        const row = document.querySelector<HTMLElement>(
+            `.vst-detail-seg-row[data-vst-seg-index="${idx}"]`,
+        );
+        if (!row) {
+            throw new Error(`segment row ${idx} missing`);
+        }
+        return row;
+    };
+
+    it("stacks EVERY ref and live-applies + deletes the selected one", () => {
         setup([
             {
                 duration: 5,
@@ -745,11 +804,20 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 1 });
         expect(crumbText()).toBe("Ref 1 · Clip 0");
+        // Both refs are rendered, stacked; only the selected one is highlighted.
+        expect(document.querySelectorAll(".vst-detail-ref-row")).toHaveLength(
+            2,
+        );
+        expect(refRow(1).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
+        expect(refRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            false,
+        );
 
+        // Edit is scoped to the selected ref's OWN row (index 1), not ref 0.
         const sourceSelect =
-            fieldByLabel("Image Source").querySelector<HTMLSelectElement>(
-                "select",
-            );
+            refRow(1).querySelector<HTMLSelectElement>("select");
         if (!sourceSelect) {
             throw new Error("source select missing");
         }
@@ -762,13 +830,43 @@ describe("createTimelineDetailStrip", () => {
         sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
         expect(saveSpy).toHaveBeenCalled();
         expect(savedClips(saveSpy)[0].refs[1].source).toBe("Upload");
+        expect(savedClips(saveSpy)[0].refs[0].source).toBe("Refiner");
 
-        // Delete removes the ref and clears the selection.
-        document
-            .querySelector<HTMLElement>(".vst-detail .vst-detail-delete")
+        // Per-row delete removes THAT ref and clears the selection.
+        refRow(1)
+            .querySelector<HTMLElement>(".vst-detail-instance-delete")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(savedClips(saveSpy)[0].refs).toHaveLength(1);
         expect(getSelection().kind).toBe("none");
+    });
+
+    it("re-points the selection to a ref when its row is interacted with", () => {
+        setup([
+            {
+                duration: 5,
+                stages: [{}],
+                refs: [
+                    { source: "Base", frame: 1 },
+                    { source: "Refiner", frame: 2 },
+                ],
+            },
+        ]);
+        setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
+        expect(refRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
+        // Focusing a control in ref 1's row re-points the selection to ref 1 and
+        // swaps the highlight WITHOUT a rebuild (rows are the same nodes).
+        const before = refRow(1);
+        refRow(1).querySelector<HTMLInputElement>("input")?.focus();
+        expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 1 });
+        expect(refRow(1)).toBe(before);
+        expect(refRow(1).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
+        expect(refRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            false,
+        );
     });
 
     it("clamps an edited ref frame and writes it through saveClips", () => {
@@ -934,6 +1032,99 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].audioSegments).toEqual([]);
     });
 
+    const twoSegments = [
+        {
+            source: { data: "data:audio/wav;base64,QUJD", fileName: "a.wav" },
+            startSeconds: 1,
+            trimStartSeconds: 0,
+            lengthSeconds: 2,
+        },
+        {
+            source: { data: "data:audio/wav;base64,REVG", fileName: "b.wav" },
+            startSeconds: 4,
+            trimStartSeconds: 0,
+            lengthSeconds: 2,
+        },
+    ];
+
+    it("stacks EVERY audio segment, highlighting + re-pointing + distinct keys", () => {
+        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
+        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
+
+        // Both segments render, stacked; only the selected one is highlighted.
+        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
+            2,
+        );
+        expect(segRow(1).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
+        expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            false,
+        );
+        // Each row has its own Start field + per-row delete.
+        expect(
+            segRow(0).querySelector(".vst-detail-instance-delete"),
+        ).not.toBeNull();
+        expect(
+            segRow(1).querySelector(".vst-detail-instance-delete"),
+        ).not.toBeNull();
+
+        // Per-segment pending keys are distinct: editing seg 0 and seg 1 both
+        // land without clobbering each other.
+        jest.useFakeTimers();
+        const s0 = segRow(0).querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="seg-0-start"]',
+        );
+        const s1 = segRow(1).querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="seg-1-start"]',
+        );
+        if (!s0 || !s1) {
+            throw new Error("segment start inputs missing");
+        }
+        s0.value = "2";
+        s0.dispatchEvent(new Event("input", { bubbles: true }));
+        s1.value = "5";
+        s1.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        const segs = savedClips(saveSpy)[0].audioSegments;
+        expect(segs[0].startSeconds).toBe(2);
+        expect(segs[1].startSeconds).toBe(5);
+        jest.useRealTimers();
+    });
+
+    it("re-points the selection to a segment via a targeted highlight swap", () => {
+        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
+        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
+        const before = segRow(1);
+        // Interacting with seg 1's row re-points selection to seg 1 without a
+        // rebuild (same node) and swaps the highlight.
+        segRow(1).querySelector<HTMLInputElement>("input")?.focus();
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 1,
+        });
+        expect(segRow(1)).toBe(before);
+        expect(segRow(1).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
+        expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            false,
+        );
+    });
+
+    it("deletes one segment via its per-row delete button", () => {
+        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
+        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
+        segRow(1)
+            .querySelector<HTMLElement>(".vst-detail-instance-delete")
+            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        const segs = savedClips(saveSpy)[0].audioSegments;
+        expect(segs).toHaveLength(1);
+        expect(segs[0].startSeconds).toBe(1); // the surviving first segment
+        expect(getSelection().kind).toBe("none");
+    });
+
     it("edits the clip's major prompt (debounced) through saveClips", () => {
         setup([{ duration: 5, stages: [{}] }]);
         setSelection({ kind: "prompt-major", clipIdx: 0 });
@@ -944,41 +1135,669 @@ describe("createTimelineDetailStrip", () => {
         if (!editor) {
             throw new Error("prompt textarea missing");
         }
+        // The panel auto-focuses the textarea, so typing is HELD (no timer)
+        // while the caret is in it. Blurring out of the dock hands the field
+        // back to the debounce timer, exercising the coalesced-write path.
+        editor.blur();
         editor.value = "a wide landscape";
         editor.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
         expect(savedClips(saveSpy)[0].prompt).toBe("a wide landscape");
     });
 
-    it("edits and deletes a minor relay window", () => {
+    it("auto-focuses the major prompt textarea (caret at end) on a timeline-origin selection", () => {
+        setup([{ duration: 5, stages: [{}], prompt: "existing text" }]);
+        // A timeline click selects the major prompt while focus is OUTSIDE the
+        // dock (nothing in the dock is focused yet).
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+        const editor =
+            document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
+        if (!editor) {
+            throw new Error("prompt textarea missing");
+        }
+        // The caret is ready to type at the end of the existing text.
+        expect(document.activeElement).toBe(editor);
+        expect(editor.selectionStart).toBe(editor.value.length);
+        expect(editor.selectionEnd).toBe(editor.value.length);
+    });
+
+    it("does not steal focus / snap the caret when the major prompt is re-rendered in place", () => {
+        setup([{ duration: 5, stages: [{}], prompt: "existing text" }]);
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+        const before =
+            document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
+        if (!before) {
+            throw new Error("prompt textarea missing");
+        }
+        // User places the caret mid-text (selection change now originates from
+        // inside the dock).
+        before.focus();
+        before.setSelectionRange(3, 3);
+        // A self-triggered re-render must preserve the caret, not snap it back
+        // to the end via auto-focus.
+        strip.render();
+        const after =
+            document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
+        if (!after) {
+            throw new Error("prompt textarea missing after render");
+        }
+        expect(document.activeElement).toBe(after);
+        expect(after.selectionStart).toBe(3);
+        expect(after.selectionEnd).toBe(3);
+    });
+
+    const minorRows = (): HTMLElement[] =>
+        Array.from(
+            document.querySelectorAll<HTMLElement>(".vst-detail-minor-window"),
+        );
+    const minorEditor = (idx: number): HTMLTextAreaElement => {
+        const ta = document.querySelector<HTMLTextAreaElement>(
+            `textarea[data-vst-focus-key="minor-${idx}"]`,
+        );
+        if (!ta) {
+            throw new Error(`minor editor ${idx} missing`);
+        }
+        return ta;
+    };
+
+    it("lists EVERY relay window of the clip, highlighting the selected one", () => {
+        setup([
+            {
+                duration: 12,
+                stages: [{}],
+                windows: [
+                    { start: 1, duration: 2, prompt: "w0" },
+                    { start: 4, duration: 2, prompt: "w1" },
+                    { start: 8, duration: 2, prompt: "w2" },
+                ],
+            },
+        ]);
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 1 });
+
+        const rows = minorRows();
+        expect(rows).toHaveLength(3);
+        // The identity label stays W{n}; the range is now editable begin/end.
+        expect(
+            rows[0].querySelector(".vst-detail-minor-title")?.textContent,
+        ).toBe("W1");
+        expect(
+            rows[2].querySelector(".vst-detail-minor-title")?.textContent,
+        ).toBe("W3");
+        const beginEnd = (row: HTMLElement): [string, string] => [
+            row.querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key$="-begin"]',
+            )?.value ?? "",
+            row.querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key$="-end"]',
+            )?.value ?? "",
+        ];
+        expect(beginEnd(rows[0])).toEqual(["1", "3"]);
+        expect(beginEnd(rows[2])).toEqual(["8", "10"]);
+        expect(rows.every((r) => r.querySelector("textarea"))).toBe(true);
+        expect(rows.every((r) => r.querySelector(".vst-detail-delete"))).toBe(
+            true,
+        );
+        // Only the selected window is highlighted, and it is focused ready to type.
+        expect(rows[1].classList.contains("vst-detail-minor-active")).toBe(
+            true,
+        );
+        expect(rows[0].classList.contains("vst-detail-minor-active")).toBe(
+            false,
+        );
+        expect(document.activeElement).toBe(minorEditor(1));
+    });
+
+    it("focusing another window's editor re-points the selection (highlight follows)", () => {
+        setup([
+            {
+                duration: 12,
+                stages: [{}],
+                windows: [
+                    { start: 1, duration: 2, prompt: "w0" },
+                    { start: 4, duration: 2, prompt: "w1" },
+                ],
+            },
+        ]);
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: 0,
+        });
+
+        // Focusing window 1's editor updates the selection to window 1.
+        minorEditor(1).focus();
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: 1,
+        });
+        // And the re-render keeps focus in window 1 (not stolen back to 0).
+        expect(document.activeElement).toBe(minorEditor(1));
+        expect(
+            minorRows()[1].classList.contains("vst-detail-minor-active"),
+        ).toBe(true);
+    });
+
+    it("keeps per-window pending keys distinct so edits never collide", () => {
+        setup([
+            {
+                duration: 12,
+                stages: [{}],
+                windows: [
+                    { start: 1, duration: 2, prompt: "old0" },
+                    { start: 4, duration: 2, prompt: "old1" },
+                ],
+            },
+        ]);
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+        jest.useFakeTimers();
+
+        // The selected window's editor is focused (auto-focus), so typing is
+        // HELD — nothing writes mid-keystroke even past the debounce window.
+        const e0 = minorEditor(0);
+        e0.value = "red car";
+        e0.dispatchEvent(new Event("input", { bubbles: true }));
+        const e1 = minorEditor(1);
+        e1.value = "blue sky";
+        e1.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        expect(saveSpy).not.toHaveBeenCalled();
+
+        // Blurring out of the dock flushes both held edits at once, keyed
+        // distinctly per window so neither clobbers the other.
+        e1.dispatchEvent(
+            new FocusEvent("focusout", {
+                bubbles: true,
+                relatedTarget: document.body,
+            }),
+        );
+        const windows = savedClips(saveSpy)[0].promptWindows;
+        expect(windows[0].prompt).toBe("red car");
+        expect(windows[1].prompt).toBe("blue sky");
+        jest.useRealTimers();
+    });
+
+    it("deletes a single relay window via its per-row delete button", () => {
+        setup([
+            {
+                duration: 12,
+                stages: [{}],
+                windows: [
+                    { start: 1, duration: 2, prompt: "keep" },
+                    { start: 4, duration: 2, prompt: "drop" },
+                ],
+            },
+        ]);
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 1 });
+        minorRows()[1]
+            .querySelector<HTMLElement>(".vst-detail-delete")
+            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(savedClips(saveSpy)[0].promptWindows).toHaveLength(1);
+        expect(savedClips(saveSpy)[0].promptWindows[0].prompt).toBe("keep");
+        expect(getSelection().kind).toBe("none");
+    });
+
+    it("edits a relay window's begin/end with clamping and repaints the timeline", () => {
+        setup([
+            {
+                duration: 12,
+                stages: [{}],
+                windows: [
+                    { start: 1, duration: 2, prompt: "w0" },
+                    { start: 6, duration: 2, prompt: "w1" },
+                ],
+            },
+        ]);
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+        const beginInput = () =>
+            minorRows()[0].querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="minor-0-begin"]',
+            );
+        const endInput = () =>
+            minorRows()[0].querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="minor-0-end"]',
+            );
+        // A `change` while the number field is focused (spinner / Enter) commits
+        // the held edit live.
+        const commitNumber = (input: HTMLInputElement, value: string): void => {
+            input.focus();
+            input.value = value;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+
+        // Move the end out to 4s: end held-fixed rule keeps start=1, duration=3.
+        const end = endInput();
+        if (!end) {
+            throw new Error("end input missing");
+        }
+        commitNumber(end, "4");
+        let w0 = savedClips(saveSpy)[0].promptWindows[0];
+        expect(w0.start).toBe(1);
+        expect(w0.duration).toBe(3);
+        // The window edit repaints the timeline (unlike a plain clip field edit).
+        expect(refreshSpy).toHaveBeenCalled();
+
+        // Push begin past the neighbouring window (start 6): clamped so it can't
+        // cross it — begin can't exceed end - min-duration.
+        const begin = beginInput();
+        if (!begin) {
+            throw new Error("begin input missing");
+        }
+        commitNumber(begin, "9");
+        w0 = savedClips(saveSpy)[0].promptWindows[0];
+        // begin can't reach 9: clamped to end - PROMPT_WINDOW_MIN_DURATION
+        // (4 - 0.25 = 3.75, rounded to 0.1s like the timeline gesture → 3.8) and
+        // never crosses the neighbouring window at start 6.
+        expect(w0.start).toBe(3.8);
+        expect(w0.start).toBeLessThan(6);
+    });
+
+    // ---- value-only commits never rebuild the dock (focus survives) -------
+    //
+    // In production a value save fires the carrier notify → videoStagesTimeline
+    // .refresh() → detailStrip.render() SYNCHRONOUSLY, and refresh:true / state
+    // edits additionally call options.refresh() → render(). Both would innerHTML
+    // -rebuild the dock and drop the caret. These tests reproduce that wiring
+    // faithfully — a prompt-input listener that calls render() (the notify path)
+    // plus a refresh() that calls render() (the options.refresh path) — and
+    // assert the edited field's node (and focus) survives untouched.
+    describe("value-only commits keep the dock DOM", () => {
+        // Emulate the two prod render triggers a value save produces.
+        const wireLiveRenders = (): void => {
+            refreshSpy.mockImplementation(() => strip?.render());
+            document
+                .querySelector<HTMLTextAreaElement>("#input_prompt")
+                ?.addEventListener("input", () => strip?.render());
+        };
+        // A spinner click / Enter: a `change` while the field still owns focus.
+        const commitNumber = (input: HTMLInputElement, value: string): void => {
+            input.focus();
+            input.value = value;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+
+        it("keeps focus and the same node on a first Begin/End change, and repaints", () => {
+            setup([
+                {
+                    duration: 12,
+                    stages: [{}],
+                    windows: [
+                        { start: 1, duration: 2, prompt: "w0" },
+                        { start: 6, duration: 2, prompt: "w1" },
+                    ],
+                },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+            const end = minorRows()[0].querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="minor-0-end"]',
+            );
+            if (!end) {
+                throw new Error("end input missing");
+            }
+            commitNumber(end, "4");
+            // The exact same input node is still in the DOM and still focused —
+            // never rebuilt out from under the caret.
+            expect(
+                minorRows()[0].querySelector(
+                    'input[data-vst-focus-key="minor-0-end"]',
+                ),
+            ).toBe(end);
+            expect(document.activeElement).toBe(end);
+            // The data was written and the timeline was repainted (refresh:true).
+            expect(savedClips(saveSpy)[0].promptWindows[0].duration).toBe(3);
+            expect(refreshSpy).toHaveBeenCalled();
+            // The value-derived breadcrumb was synced WITHOUT a rebuild.
+            expect(crumbText()).toBe("Relay 1–4s · Clip 0");
+        });
+
+        it("keeps focus and the same node on a first Duration change", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            wireLiveRenders();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const dur =
+                fieldByLabel("Duration (s)").querySelector<HTMLInputElement>(
+                    "input",
+                );
+            if (!dur) {
+                throw new Error("duration input missing");
+            }
+            commitNumber(dur, "6");
+            expect(fieldByLabel("Duration (s)").querySelector("input")).toBe(
+                dur,
+            );
+            expect(document.activeElement).toBe(dur);
+            expect(savedClips(saveSpy)[0].duration).toBe(6);
+        });
+
+        it("keeps focus and the same node on a first Steps change", () => {
+            setup([{ duration: 4, stages: [{ steps: 8 }] }]);
+            wireLiveRenders();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const steps = sliderNumberByLabel("Steps");
+            commitNumber(steps, "14");
+            expect(sliderNumberByLabel("Steps")).toBe(steps);
+            expect(document.activeElement).toBe(steps);
+            expect(savedClips(saveSpy)[0].stages[0].steps).toBe(14);
+        });
+
+        it("syncs the upscale-method gate live without rebuilding the method select", () => {
+            setup([{ duration: 4, stages: [{}, { upscale: 2 }] }]);
+            wireLiveRenders();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+            const method =
+                fieldByLabel("Upscale Method").querySelector<HTMLSelectElement>(
+                    "select",
+                );
+            const upscale = sliderNumberByLabel("Upscale");
+            expect(method?.disabled).toBe(false);
+            commitNumber(upscale, "1");
+            // Same select node (no rebuild) but now disabled by the live gate.
+            expect(fieldByLabel("Upscale Method").querySelector("select")).toBe(
+                method,
+            );
+            expect(method?.disabled).toBe(true);
+        });
+
+        it("still REBUILDS on a structure-affecting commit (ref source → Upload)", () => {
+            setup([
+                { duration: 4, stages: [{}], refs: [{ source: "", frame: 1 }] },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
+            const before = refRow(0).querySelector<HTMLSelectElement>("select");
+            // No upload row yet.
+            expect(detail()?.querySelector(".vst-audio-upload")).toBeNull();
+            const select = refRow(0).querySelector<HTMLSelectElement>("select");
+            if (!select) {
+                throw new Error("ref source select missing");
+            }
+            select.value = "Upload";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            // Structure changed: the upload row appeared and the panel rebuilt
+            // (the select is a fresh node).
+            expect(detail()?.querySelector(".vst-audio-upload")).not.toBeNull();
+            expect(refRow(0).querySelector("select")).not.toBe(before);
+        });
+
+        it("fully rebuilds on an external (non-flush) render — the handshake never leaks", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            wireLiveRenders();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const before = fieldByLabel("Duration (s)").querySelector("input");
+            // An external carrier change arriving as a plain render (no flush in
+            // flight) must rebuild the dock, replacing the node.
+            strip?.render();
+            expect(
+                fieldByLabel("Duration (s)").querySelector("input"),
+            ).not.toBe(before);
+        });
+    });
+
+    // ---- contextual-clamp write-back (value-only, no rebuild) -------------
+    //
+    // A value-only commit skips the dock rebuild that used to re-display fields.
+    // For a field whose commit mutator applies a clamp its static min/max can't
+    // express (a relay window's neighbour bound; a segment/retake length capped
+    // by its start), the input would keep showing the raw typed value while the
+    // data holds the clamped one. buildClampedNumber's readBack corrects the
+    // DISPLAYED value in place after the flush — same node, focus intact, no
+    // rebuild. These tests reproduce the verifier-confirmed defects.
+    describe("contextual-clamp write-back", () => {
+        // Faithfully reproduce the prod render triggers a value save fires, so a
+        // rebuild WOULD be visible if the handshake leaked (the node would swap).
+        const wireLiveRenders = (): void => {
+            refreshSpy.mockImplementation(() => strip?.render());
+            document
+                .querySelector<HTMLTextAreaElement>("#input_prompt")
+                ?.addEventListener("input", () => strip?.render());
+        };
+        // A spinner click / Enter: a `change` while the field still owns focus.
+        const commitNumber = (input: HTMLInputElement, value: string): void => {
+            input.focus();
+            input.value = value;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+
+        it("re-displays a relay Begin clamped by the neighbouring window", () => {
+            setup([
+                {
+                    duration: 10,
+                    stages: [{}],
+                    windows: [
+                        { start: 0, duration: 3, prompt: "w0" },
+                        { start: 5, duration: 3, prompt: "w1" },
+                    ],
+                },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 1 });
+            const begin = minorRows()[1].querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="minor-1-begin"]',
+            );
+            if (!begin) {
+                throw new Error("begin input missing");
+            }
+            commitNumber(begin, "1");
+            // Stored begin clamped to the neighbour bound (W0 ends at 3); the
+            // input is corrected to the stored value, not the typed 1.
+            expect(savedClips(saveSpy)[0].promptWindows[1].start).toBe(3);
+            const after = minorRows()[1].querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="minor-1-begin"]',
+            );
+            expect(after).toBe(begin); // same node — no rebuild
+            expect(after?.value).toBe("3"); // shows the clamped stored value
+            expect(document.activeElement).toBe(begin); // focus intact
+            expect(crumbText()).toBe("Relay 3–8s · Clip 0");
+        });
+
+        it("re-displays a relay End clamped to the minimum duration", () => {
+            setup([
+                {
+                    duration: 10,
+                    stages: [{}],
+                    windows: [{ start: 5, duration: 3, prompt: "w0" }],
+                },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+            const end = minorRows()[0].querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="minor-0-end"]',
+            );
+            if (!end) {
+                throw new Error("end input missing");
+            }
+            commitNumber(end, "0.3");
+            // End can't come inside start + min-duration (5 + 0.25 = 5.25); the
+            // gesture rounds seconds to 0.1 (roundSeconds: Math.round(2.5)=3), so
+            // the stored end is 5.3 — either way, NOT the typed 0.3.
+            const w = savedClips(saveSpy)[0].promptWindows[0];
+            expect(w.start).toBe(5);
+            expect(w.duration).toBe(0.3);
+            const after = minorRows()[0].querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="minor-0-end"]',
+            );
+            expect(after).toBe(end);
+            expect(after?.value).toBe("5.3");
+            expect(document.activeElement).toBe(end);
+        });
+
+        it("re-displays an audio-segment Length capped by its start", () => {
+            setup([
+                {
+                    duration: 10,
+                    stages: [{}],
+                    audioSegments: [
+                        {
+                            source: {
+                                data: "data:audio/wav;base64,QUJD",
+                                fileName: "a.wav",
+                            },
+                            startSeconds: 8,
+                            trimStartSeconds: 0,
+                            lengthSeconds: 1,
+                        },
+                    ],
+                },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
+            const len = fieldByLabel(
+                "Length (s)",
+            ).querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="seg-0-length"]',
+            );
+            if (!len) {
+                throw new Error("length input missing");
+            }
+            commitNumber(len, "5");
+            // Length capped at clipDur - start = 10 - 8 = 2.
+            expect(savedClips(saveSpy)[0].audioSegments[0].lengthSeconds).toBe(
+                2,
+            );
+            const after = fieldByLabel(
+                "Length (s)",
+            ).querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="seg-0-length"]',
+            );
+            expect(after).toBe(len);
+            expect(after?.value).toBe("2");
+            expect(document.activeElement).toBe(len);
+        });
+
+        it("re-displays a retake Length capped by its start", () => {
+            setup([
+                {
+                    duration: 10,
+                    stages: [{}],
+                    retake: {
+                        startSeconds: 8,
+                        lengthSeconds: 1,
+                        strength: 1,
+                    },
+                },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "retake", clipIdx: 0 });
+            const len = fieldByLabel(
+                "Length (s)",
+            ).querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="retake-length"]',
+            );
+            if (!len) {
+                throw new Error("retake length input missing");
+            }
+            commitNumber(len, "5");
+            expect(savedClips(saveSpy)[0].retake.lengthSeconds).toBe(2);
+            const after = fieldByLabel(
+                "Length (s)",
+            ).querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="retake-length"]',
+            );
+            expect(after).toBe(len);
+            expect(after?.value).toBe("2");
+            expect(document.activeElement).toBe(len);
+        });
+
+        it("does NOT write back mid-typing (no flush, no clamp, keeps typed text)", () => {
+            setup([
+                {
+                    duration: 10,
+                    stages: [{}],
+                    retake: {
+                        startSeconds: 8,
+                        lengthSeconds: 1,
+                        strength: 1,
+                    },
+                },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "retake", clipIdx: 0 });
+            jest.useFakeTimers();
+            const len = fieldByLabel(
+                "Length (s)",
+            ).querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="retake-length"]',
+            );
+            if (!len) {
+                throw new Error("retake length input missing");
+            }
+            len.focus();
+            len.value = "5";
+            // Only an `input` event (still typing): the flush is HELD while the
+            // number field owns focus, so no save and no write-back fire.
+            len.dispatchEvent(new Event("input", { bubbles: true }));
+            expect(saveSpy).not.toHaveBeenCalled();
+            expect(len.value).toBe("5"); // typed text untouched
+            jest.advanceTimersByTime(200);
+            // The debounce timer was never armed (typing deferral), so still no
+            // save until a blur/change flush.
+            expect(saveSpy).not.toHaveBeenCalled();
+            expect(len.value).toBe("5");
+        });
+
+        it("does NOT rewrite a non-clamped field (Steps) that was already valid", () => {
+            setup([{ duration: 4, stages: [{ steps: 8 }] }]);
+            wireLiveRenders();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const steps = sliderNumberByLabel("Steps");
+            commitNumber(steps, "14");
+            // Steps has no readBack, so nothing forces its display — it keeps the
+            // value the user committed (in range), same node, focus intact.
+            expect(sliderNumberByLabel("Steps")).toBe(steps);
+            expect(steps.value).toBe("14");
+            expect(savedClips(saveSpy)[0].stages[0].steps).toBe(14);
+            expect(document.activeElement).toBe(steps);
+        });
+    });
+
+    it("renders both prompt panels as non-collapsible groups (no chevron)", () => {
         setup([
             {
                 duration: 10,
                 stages: [{}],
-                windows: [{ start: 2, duration: 3, prompt: "old" }],
+                windows: [{ start: 2, duration: 3, prompt: "x" }],
             },
         ]);
-        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
-        expect(crumbText()).toBe("Relay 2–5s · Clip 0");
-        jest.useFakeTimers();
-        const editor =
-            document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
-        if (!editor) {
-            throw new Error("minor textarea missing");
-        }
-        editor.value = "a red car";
-        editor.dispatchEvent(new Event("input", { bubbles: true }));
-        jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].promptWindows[0].prompt).toBe(
-            "a red car",
-        );
-        jest.useRealTimers();
 
-        document
-            .querySelector<HTMLElement>(".vst-detail .vst-detail-delete")
-            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].promptWindows).toHaveLength(0);
-        expect(getSelection().kind).toBe("none");
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+        const major = detail()?.querySelector<HTMLElement>(
+            "#auto-group-vstdock_promptmajor",
+        );
+        const majorHeader = major?.querySelector(".input-group-header");
+        expect(majorHeader?.classList.contains("input-group-noshrink")).toBe(
+            true,
+        );
+        expect(majorHeader?.classList.contains("input-group-shrinkable")).toBe(
+            false,
+        );
+        expect(major?.querySelector(".auto-symbol")).toBeNull();
+        expect(major?.classList.contains("input-group-open")).toBe(true);
+        expect(
+            major?.querySelector<HTMLElement>(".input-group-content")?.style
+                .display,
+        ).not.toBe("none");
+        // Title + counter are still present.
+        expect(major?.querySelector(".header-label")?.textContent).toBe(
+            "Prompt",
+        );
+
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+        const minor = detail()?.querySelector<HTMLElement>(
+            "#auto-group-vstdock_promptminor",
+        );
+        const minorHeader = minor?.querySelector(".input-group-header");
+        expect(minorHeader?.classList.contains("input-group-noshrink")).toBe(
+            true,
+        );
+        expect(minor?.querySelector(".auto-symbol")).toBeNull();
+        expect(minor?.querySelector(".header-label")?.textContent).toBe(
+            "Prompt Windows",
+        );
     });
 
     it("applies a resolution preset from the settings panel", () => {
@@ -1065,6 +1884,283 @@ describe("createTimelineDetailStrip", () => {
         expect(saveSpy).not.toHaveBeenCalled();
     });
 
+    // ---- slider-drag pointer latch (no mid-drag flush/rebuild) -----------
+
+    describe("slider drag", () => {
+        const rangeByLabel = (label: string): HTMLInputElement => {
+            const box = Array.from(
+                document.querySelectorAll<HTMLElement>(
+                    ".vst-detail .vst-stage-slider",
+                ),
+            ).find(
+                (el) =>
+                    el.querySelector(".auto-input-name")?.textContent === label,
+            );
+            const input = box?.querySelector<HTMLInputElement>(
+                "input.auto-slider-range",
+            );
+            if (!input) {
+                throw new Error(`range not found: ${label}`);
+            }
+            return input;
+        };
+
+        // jsdom has no PointerEvent constructor; a bubbling generic Event with
+        // the pointer type name reaches the document-level capture listeners and
+        // carries the range as its target, which is all the latch reads.
+        const pointer = (el: Element, type: string): void => {
+            el.dispatchEvent(new Event(type, { bubbles: true }));
+        };
+
+        const refClip = (): ClipFixture => ({
+            duration: 4,
+            stages: [{ steps: 8 }],
+            refs: [{ source: "Base", frame: 1 }],
+        });
+
+        it("holds the debounced edit through a drag (no mid-drag save or rebuild)", () => {
+            setup([refClip()]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            jest.useFakeTimers();
+            const range = rangeByLabel("R0");
+            // pointerdown latches the drag; streamed inputs sync range → number
+            // → our onChange (host enableSliderForBox wiring is live in tests).
+            pointer(range, "pointerdown");
+            for (const v of ["0.8", "0.6", "0.4"]) {
+                range.value = v;
+                range.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            // Well past the 200ms window: nothing is written and the range node
+            // is NOT rebuilt out from under the drag gesture.
+            jest.advanceTimersByTime(1000);
+            expect(saveSpy).not.toHaveBeenCalled();
+            expect(rangeByLabel("R0")).toBe(range);
+            jest.useRealTimers();
+        });
+
+        it("commits exactly once on pointer release", () => {
+            setup([refClip()]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            jest.useFakeTimers();
+            const range = rangeByLabel("R0");
+            pointer(range, "pointerdown");
+            range.value = "0.4";
+            range.dispatchEvent(new Event("input", { bubbles: true }));
+            jest.advanceTimersByTime(1000);
+            expect(saveSpy).not.toHaveBeenCalled();
+            // Release flushes the held edit exactly once (one save, one repaint).
+            pointer(range, "pointerup");
+            expect(saveSpy).toHaveBeenCalledTimes(1);
+            expect(savedClips(saveSpy)[0].stages[0].refStrengths[0]).toBe(0.4);
+            // No trailing timer re-writes after release.
+            jest.advanceTimersByTime(1000);
+            expect(saveSpy).toHaveBeenCalledTimes(1);
+            jest.useRealTimers();
+        });
+
+        it("clears the latch on pointercancel (no stray hold afterward)", () => {
+            setup([refClip()]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            jest.useFakeTimers();
+            const range = rangeByLabel("R0");
+            pointer(range, "pointerdown");
+            range.value = "0.4";
+            range.dispatchEvent(new Event("input", { bubbles: true }));
+            // Cancel clears the latch and flushes the queued edit.
+            pointer(range, "pointercancel");
+            expect(saveSpy).toHaveBeenCalledTimes(1);
+            // With the latch cleared, a subsequent unfocused (non-gesture) slider
+            // edit resumes its normal debounced flush — proving the latch is not
+            // stuck set (an input while nothing in the dock has focus arms the
+            // timer, which would stay held if sliderDragActive were still true).
+            const steps = sliderNumberByLabel("Steps");
+            steps.value = "12";
+            steps.dispatchEvent(new Event("input", { bubbles: true }));
+            jest.advanceTimersByTime(200);
+            expect(saveSpy).toHaveBeenCalledTimes(2);
+            jest.useRealTimers();
+        });
+
+        it("removes the document-level pointer listeners on dispose", () => {
+            setup([refClip()]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const removeSpy = jest.spyOn(document, "removeEventListener");
+            strip?.dispose();
+            strip = null;
+            const removed = removeSpy.mock.calls
+                .filter((c) => c[2] === true)
+                .map((c) => c[0]);
+            expect(removed).toContain("pointerdown");
+            expect(removed).toContain("pointerup");
+            expect(removed).toContain("pointercancel");
+        });
+    });
+
+    // ---- left-dock host-convention input-group sections ------------------
+
+    describe("dock groups & collapse", () => {
+        const group = (key: string): HTMLElement | null =>
+            detail()?.querySelector<HTMLElement>(`#auto-group-${key}`) ?? null;
+        const headerText = (
+            el: HTMLElement | null,
+            cls: string,
+        ): string | undefined =>
+            el?.querySelector<HTMLElement>(cls)?.textContent ?? undefined;
+
+        it("wraps a clip selection in three stable-keyed groups with counters", () => {
+            setup([{ duration: 4, stages: [{}, {}, {}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+
+            const clip = group("vstdock_clip");
+            const stages = group("vstdock_stages");
+            const params = group("vstdock_stageparams");
+            expect(clip).not.toBeNull();
+            expect(stages).not.toBeNull();
+            expect(params).not.toBeNull();
+
+            // Stable id + host skeleton (header wrap, label, counter, content id).
+            expect(
+                clip?.querySelector("#input_group_vstdock_clip"),
+            ).not.toBeNull();
+            expect(
+                clip?.querySelector("#input_group_content_vstdock_clip"),
+            ).not.toBeNull();
+            expect(headerText(clip, ".header-label")).toBe("Clip");
+
+            // Instance identity lives only in the counter, never the id.
+            expect(headerText(clip, ".header-label-counter")).toBe("Clip 0");
+            expect(headerText(stages, ".header-label-counter")).toBe("2 of 3");
+            expect(headerText(params, ".header-label-counter")).toBe("Stage 2");
+
+            // The clip fields still resolve inside their group's content.
+            expect(
+                detailBody()?.querySelector(".vst-detail-clip"),
+            ).not.toBeNull();
+            expect(
+                detailBody()?.querySelector(
+                    ".vst-detail-params .vst-stage-loras",
+                ),
+            ).not.toBeNull();
+        });
+
+        it("renders every clip-panel group non-collapsible (Clip, Stages, Stage Parameters)", () => {
+            setup([{ duration: 4, stages: [{}, {}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+            // No group in the clip panel collapses: all three render with the
+            // host `input-group-noshrink` idiom (no chevron, always open).
+            for (const key of [
+                "vstdock_clip",
+                "vstdock_stages",
+                "vstdock_stageparams",
+            ]) {
+                const g = group(key);
+                const header = g?.querySelector(".input-group-header");
+                expect(header?.classList.contains("input-group-noshrink")).toBe(
+                    true,
+                );
+                expect(
+                    header?.classList.contains("input-group-shrinkable"),
+                ).toBe(false);
+                // No chevron, always open, content visible.
+                expect(g?.querySelector(".auto-symbol")).toBeNull();
+                expect(g?.classList.contains("input-group-open")).toBe(true);
+                expect(
+                    g?.querySelector<HTMLElement>(".input-group-content")?.style
+                        .display,
+                ).not.toBe("none");
+            }
+        });
+
+        it("ignores a group_open cookie for the non-collapsible Clip group", () => {
+            const globals = globalThis as unknown as {
+                getCookie: (name: string) => string;
+            };
+            jest.spyOn(globals, "getCookie").mockImplementation((name) =>
+                name === "group_open_vstdock_clip" ? "closed" : "",
+            );
+            setup([{ duration: 4, stages: [{}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const clip = group("vstdock_clip");
+            // A non-collapsible group never reads the cookie: it stays open.
+            expect(clip?.classList.contains("input-group-open")).toBe(true);
+            expect(
+                clip?.querySelector<HTMLElement>(".input-group-content")?.style
+                    .display,
+            ).not.toBe("none");
+        });
+
+        it("wraps a single-panel selection in one keyed group with a counter", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            setSelection({ kind: "audio", clipIdx: 0 });
+            const audio = group("vstdock_audio");
+            expect(audio).not.toBeNull();
+            expect(headerText(audio, ".header-label")).toBe("Audio");
+            expect(headerText(audio, ".header-label-counter")).toBe("Clip 0");
+            // Only one group in a single-panel body.
+            expect(detail()?.querySelectorAll(".input-group")).toHaveLength(1);
+        });
+
+        it("defaults groups to open (open class, glyph, visible content)", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            // Default selection is none → the settings group.
+            const settings = group("vstdock_settings");
+            expect(settings?.classList.contains("input-group-open")).toBe(true);
+            expect(settings?.classList.contains("input-group-closed")).toBe(
+                false,
+            );
+            const content = settings?.querySelector<HTMLElement>(
+                ".input-group-content",
+            );
+            expect(content?.style.display).not.toBe("none");
+            expect(
+                settings?.querySelector(".auto-symbol")?.innerHTML,
+            ).toContain("⮟");
+        });
+
+        it("honours a group_open_*=closed cookie for the initial state", () => {
+            // Stub the host cookie reader so the settings group starts closed.
+            const globals = globalThis as unknown as {
+                getCookie: (name: string) => string;
+            };
+            expect(typeof globals.getCookie).toBe("function");
+            jest.spyOn(globals, "getCookie").mockImplementation((name) =>
+                name === "group_open_vstdock_settings" ? "closed" : "",
+            );
+            setup([{ duration: 4, stages: [{}] }]);
+            const settings = group("vstdock_settings");
+            expect(settings?.classList.contains("input-group-closed")).toBe(
+                true,
+            );
+            expect(settings?.classList.contains("input-group-open")).toBe(
+                false,
+            );
+            const content = settings?.querySelector<HTMLElement>(
+                ".input-group-content",
+            );
+            expect(content?.style.display).toBe("none");
+            expect(
+                settings?.querySelector(".auto-symbol")?.innerHTML,
+            ).toContain("⮞");
+        });
+
+        it("width-collapses the dock via the header chevron", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            expect(detail()?.classList.contains("vst-detail-collapsed")).toBe(
+                false,
+            );
+            detail()
+                ?.querySelector<HTMLElement>(".vst-detail-collapse")
+                ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            expect(detail()?.classList.contains("vst-detail-collapsed")).toBe(
+                true,
+            );
+            // Collapsed hides the panel body entirely.
+            expect(detailBody()).toBeNull();
+        });
+    });
+
     describe("boundary editor", () => {
         const boundarySelect = (): HTMLSelectElement => {
             const select =
@@ -1136,6 +2232,479 @@ describe("createTimelineDetailStrip", () => {
             // A re-render re-clamps the now-invalid selection to none.
             strip?.render();
             expect(getSelection()).toEqual({ kind: "none" });
+        });
+    });
+
+    // ---- #1/#5: defer writes while a keyboard field is focused -----------
+
+    describe("defer-while-typing", () => {
+        const blurOutOfDock = (el: HTMLElement): void => {
+            el.dispatchEvent(
+                new FocusEvent("focusout", {
+                    bubbles: true,
+                    relatedTarget: document.body,
+                }),
+            );
+        };
+
+        it("holds a major-prompt edit while focused and flushes on blur out", () => {
+            setup([{ duration: 5, stages: [{}] }]);
+            setSelection({ kind: "prompt-major", clipIdx: 0 });
+            jest.useFakeTimers();
+            const editor =
+                document.querySelector<HTMLTextAreaElement>(
+                    ".vst-detail-prompt",
+                );
+            if (!editor) {
+                throw new Error("prompt textarea missing");
+            }
+            editor.focus();
+            editor.value = "typed while focused";
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            // Held past the debounce window: no save fires mid-typing.
+            jest.advanceTimersByTime(1000);
+            expect(saveSpy).not.toHaveBeenCalled();
+            // Blur out of the dock flushes exactly once.
+            blurOutOfDock(editor);
+            expect(saveSpy).toHaveBeenCalledTimes(1);
+            expect(savedClips(saveSpy)[0].prompt).toBe("typed while focused");
+            jest.useRealTimers();
+        });
+
+        it("keeps holding when focus moves to another dock field, not out", () => {
+            setup([{ duration: 5, stages: [{}] }]);
+            setSelection({ kind: "prompt-major", clipIdx: 0 });
+            jest.useFakeTimers();
+            const editor =
+                document.querySelector<HTMLTextAreaElement>(
+                    ".vst-detail-prompt",
+                );
+            const sibling = document.querySelector<HTMLElement>(
+                ".vst-detail-collapse",
+            );
+            if (!editor || !sibling) {
+                throw new Error("dock nodes missing");
+            }
+            editor.focus();
+            editor.value = "held";
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            // Focus moving to another element still INSIDE the dock keeps the
+            // edit held (relatedTarget is in the dock).
+            editor.dispatchEvent(
+                new FocusEvent("focusout", {
+                    bubbles: true,
+                    relatedTarget: sibling,
+                }),
+            );
+            expect(saveSpy).not.toHaveBeenCalled();
+            jest.useRealTimers();
+        });
+
+        it("commits a number spinner change live even while the field is focused", () => {
+            setup([{ duration: 5, stages: [{}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            jest.useFakeTimers();
+            const dur =
+                fieldByLabel("Duration (s)").querySelector<HTMLInputElement>(
+                    "input",
+                );
+            if (!dur) {
+                throw new Error("duration input missing");
+            }
+            dur.focus();
+            // Typing is held (no timer) while focused...
+            dur.value = "7";
+            dur.dispatchEvent(new Event("input", { bubbles: true }));
+            jest.advanceTimersByTime(1000);
+            expect(saveSpy).not.toHaveBeenCalled();
+            // ...but a `change` while still focused (spinner/Enter) commits live.
+            dur.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(saveSpy).toHaveBeenCalled();
+            expect(savedClips(saveSpy)[0].duration).toBe(7);
+            jest.useRealTimers();
+        });
+
+        it("does NOT force focus back into a textarea the user tabbed away from", () => {
+            setup([{ duration: 5, stages: [{}], prompt: "existing" }]);
+            setSelection({ kind: "prompt-major", clipIdx: 0 });
+            const editor =
+                document.querySelector<HTMLTextAreaElement>(
+                    ".vst-detail-prompt",
+                );
+            if (!editor) {
+                throw new Error("prompt textarea missing");
+            }
+            editor.focus();
+            editor.value = "edited then left";
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            // User tabs OUT of the dock (focusout, relatedTarget outside).
+            blurOutOfDock(editor);
+            // A later refresh/render must NOT yank focus back into the prompt.
+            strip.render();
+            const after =
+                document.querySelector<HTMLTextAreaElement>(
+                    ".vst-detail-prompt",
+                );
+            expect(document.activeElement).not.toBe(editor); // old node gone
+            expect(document.activeElement).not.toBe(after); // not re-grabbed
+        });
+
+        it("preserves focus on the NEW dock field when focus moves within the dock", () => {
+            setup([
+                {
+                    duration: 12,
+                    stages: [{}],
+                    windows: [
+                        { start: 1, duration: 2, prompt: "w0" },
+                        { start: 5, duration: 2, prompt: "w1" },
+                    ],
+                },
+            ]);
+            setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+            const e0 = document.querySelector<HTMLTextAreaElement>(
+                'textarea[data-vst-focus-key="minor-0"]',
+            );
+            const e1 = document.querySelector<HTMLTextAreaElement>(
+                'textarea[data-vst-focus-key="minor-1"]',
+            );
+            if (!e0 || !e1) {
+                throw new Error("relay editors missing");
+            }
+            e0.focus();
+            e0.value = "typing in zero";
+            e0.dispatchEvent(new Event("input", { bubbles: true }));
+            // Focus moves to another dock field (window 1's editor).
+            e0.dispatchEvent(
+                new FocusEvent("focusout", {
+                    bubbles: true,
+                    relatedTarget: e1,
+                }),
+            );
+            e1.focus();
+            // A render keeps focus on the field the user moved TO, never the one
+            // they left.
+            strip.render();
+            const e1After = document.querySelector<HTMLTextAreaElement>(
+                'textarea[data-vst-focus-key="minor-1"]',
+            );
+            expect(document.activeElement).toBe(e1After);
+        });
+
+        it("flushes the held edit before a subsequent carrier read (Generate ordering)", () => {
+            setup([{ duration: 5, stages: [{}] }]);
+            setSelection({ kind: "prompt-major", clipIdx: 0 });
+            const editor =
+                document.querySelector<HTMLTextAreaElement>(
+                    ".vst-detail-prompt",
+                );
+            if (!editor) {
+                throw new Error("prompt textarea missing");
+            }
+            editor.focus();
+            editor.value = "landscape at dusk";
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            // Simulate the exact ordering a Generate click produces: focus leaves
+            // the dock (focusout) BEFORE anything reads the carrier.
+            let promptAtReadTime: string | null = null;
+            const readCarrier = (): void => {
+                promptAtReadTime =
+                    document.querySelector<HTMLInputElement>("#input_prompt")
+                        ?.value ?? null;
+            };
+            blurOutOfDock(editor);
+            readCarrier();
+            expect(saveSpy).toHaveBeenCalledTimes(1);
+            // The carrier already carries the typed prompt when it is read.
+            expect(promptAtReadTime).toContain("landscape at dusk");
+        });
+    });
+
+    // ---- #3: scroll preservation + targeted no-rebuild moves -------------
+
+    describe("scroll + targeted updates", () => {
+        it("preserves dock-body scrollTop across a value-change render", () => {
+            setup([{ duration: 4, stages: [{}, {}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const body = detailBody();
+            if (!body) {
+                throw new Error("dock body missing");
+            }
+            body.scrollTop = 140;
+            // A full re-render rebuilds .vst-detail-body's innerHTML.
+            strip?.render();
+            const rebuilt = detailBody();
+            expect(rebuilt).not.toBe(body); // proves a rebuild happened
+            expect(rebuilt?.scrollTop).toBe(140); // ...yet scroll is preserved
+        });
+
+        it("moves relay selection within the panel without a rebuild, keeping the caret", () => {
+            setup([
+                {
+                    duration: 12,
+                    stages: [{}],
+                    windows: [
+                        { start: 1, duration: 2, prompt: "hello world" },
+                        { start: 4, duration: 2, prompt: "second window" },
+                    ],
+                },
+            ]);
+            setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+            const e1Before = minorEditor(1);
+            // Clicking into window 1's editor: focus fires the re-point, which
+            // does a targeted highlight swap (no rebuild) — so the node is stable
+            // and the caret the user placed is NOT snapped to the end.
+            e1Before.focus();
+            e1Before.setSelectionRange(3, 3);
+            expect(getSelection()).toEqual({
+                kind: "prompt-minor",
+                clipIdx: 0,
+                windowIdx: 1,
+            });
+            expect(minorEditor(1)).toBe(e1Before); // same node — no rebuild
+            expect(document.activeElement).toBe(e1Before);
+            expect(e1Before.selectionStart).toBe(3); // caret preserved
+            expect(
+                minorRows()[1].classList.contains("vst-detail-minor-active"),
+            ).toBe(true);
+        });
+    });
+
+    // ---- #2: native-widget markup + dock-override CSSOM probe -------------
+    // The refactor swapped the dock's custom field markup for SwarmUI's native
+    // `.auto-input` widget vocabulary, so HOST site.css styles the controls and
+    // only a short, native-class-keyed override remains in our sheet. This probe
+    // is the regression net that would have caught all three prior CSS rounds:
+    // it loads the real host site.css alongside ours and asserts, on the actual
+    // rendered rows, that (a) rows carry the native host classes, (b) our few
+    // `.vst-detail` overrides resolve, and (c) with both sheets cascading, the
+    // controls read full-width and left-aligned (never narrow or centered).
+
+    describe("native widget markup + dock override (CSSOM probe)", () => {
+        const injectCss = (id: string, relPath: string[]): void => {
+            const css = fs.readFileSync(
+                path.join(__dirname, ...relPath),
+                "utf8",
+            );
+            const style = document.createElement("style");
+            style.id = id;
+            style.textContent = css;
+            document.head.appendChild(style);
+        };
+        // Host site.css FIRST, our dock sheet SECOND — mirrors production load
+        // order and lets our higher-specificity `.vst-detail` overrides win.
+        const injectHostCss = (): void =>
+            injectCss("vst-probe-host-css", [
+                "..",
+                "..",
+                "..",
+                "wwwroot",
+                "css",
+                "site.css",
+            ]);
+        const injectDockCss = (): void =>
+            injectCss("vst-probe-css", [
+                "..",
+                "Assets",
+                "video-stages-timeline.css",
+            ]);
+
+        const computed = (el: Element): CSSStyleDeclaration =>
+            window.getComputedStyle(el);
+
+        beforeEach(() => {
+            setup([
+                {
+                    duration: 10,
+                    stages: [{}, {}],
+                    refs: [{ source: "Base", frame: 1 }],
+                    windows: [{ start: 1, duration: 2, prompt: "w" }],
+                    audioSegments: [
+                        {
+                            source: {
+                                data: "data:audio/wav;base64,QUJD",
+                                fileName: "a.wav",
+                            },
+                            startSeconds: 1,
+                            trimStartSeconds: 0,
+                            lengthSeconds: 2,
+                        },
+                    ],
+                },
+            ]);
+        });
+
+        it("(a) emits native SwarmUI `.auto-input` widget markup for every field type", () => {
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+            // Dropdown → native `.auto-dropdown` inside an `.auto-input`.
+            const modelSelect = fieldByLabel("Model").querySelector("select");
+            expect(modelSelect?.classList.contains("auto-dropdown")).toBe(true);
+            const modelRow = fieldByLabel("Model");
+            expect(modelRow.classList.contains("auto-input")).toBe(true);
+            expect(modelRow.classList.contains("auto-dropdown-box")).toBe(true);
+            expect(
+                modelRow.querySelector(".auto-input-name")?.textContent,
+            ).toBe("Model");
+            // Number → native `.auto-number`.
+            const durInput =
+                fieldByLabel("Duration (s)").querySelector("input");
+            expect(durInput?.classList.contains("auto-number")).toBe(true);
+            expect(
+                fieldByLabel("Duration (s)").classList.contains(
+                    "auto-number-box",
+                ),
+            ).toBe(true);
+            // Checkbox → native `.auto-checkbox` in an `.auto-checkbox-box`.
+            const skipRow = document.querySelector<HTMLElement>(
+                ".vst-detail .vst-audio-field-check",
+            );
+            expect(skipRow?.classList.contains("auto-checkbox-box")).toBe(true);
+            expect(
+                skipRow
+                    ?.querySelector("input")
+                    ?.classList.contains("auto-checkbox"),
+            ).toBe(true);
+
+            // Prompt textarea → native `.auto-text.auto-text-block`.
+            setSelection({ kind: "prompt-major", clipIdx: 0 });
+            const editor = document.querySelector<HTMLTextAreaElement>(
+                ".vst-detail .vst-prompt-editor",
+            );
+            expect(editor?.classList.contains("auto-text")).toBe(true);
+            expect(editor?.classList.contains("auto-text-block")).toBe(true);
+        });
+
+        it("(b) resolves the dock's native-class overrides (label left, controls full-width)", () => {
+            injectDockCss();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+            // Label typography override: host centers `.auto-input-name`; the
+            // dock reads left.
+            const name = document.querySelector(".vst-detail .auto-input-name");
+            expect(name).not.toBeNull();
+            if (name) {
+                expect(computed(name).textAlign).toBe("left");
+            }
+            // Native controls span the column.
+            for (const control of document.querySelectorAll(
+                ".vst-detail .auto-dropdown, .vst-detail .auto-number",
+            )) {
+                expect(computed(control).width).toBe("100%");
+            }
+            // Checkbox rows stay a centered horizontal row.
+            const check = document.querySelector(
+                ".vst-detail .auto-checkbox-box",
+            );
+            expect(check).not.toBeNull();
+            if (check) {
+                expect(computed(check).alignItems).toBe("center");
+            }
+        });
+
+        it("(d) every ancestor from group-content down to the prompt textarea declares full-width/stretch", () => {
+            injectHostCss();
+            injectDockCss();
+            // A node passes if it will fill its parent's width: an explicit
+            // width:100%, a plain block box, OR a flex box that stretches its
+            // children (align-items stretch/normal). A regression that shrink-
+            // wraps a parent (inline-block, width:auto/fit-content, align-items
+            // center/flex-start) fails this. The textarea itself must be a
+            // full-width block, never the default inline-block.
+            const stretches = (el: Element): boolean => {
+                const c = computed(el);
+                if (c.width === "100%") {
+                    return true;
+                }
+                if (c.display === "block") {
+                    return true;
+                }
+                return (
+                    c.display.includes("flex") &&
+                    ["", "normal", "stretch"].includes(c.alignItems)
+                );
+            };
+            const walkFromTextarea = (): void => {
+                const ta = document.querySelector<HTMLElement>(
+                    ".vst-detail .vst-detail-prompt",
+                );
+                expect(ta).not.toBeNull();
+                if (!ta) {
+                    return;
+                }
+                // The textarea is a full-width BLOCK (not inline-block).
+                expect(computed(ta).width).toBe("100%");
+                expect(computed(ta).display).not.toBe("inline");
+                expect(computed(ta).display).not.toBe("inline-block");
+                // Walk up to (and including) the host group content: every link
+                // must keep the width, or the 100% resolves against a shrunk box.
+                let node: HTMLElement | null = ta.parentElement;
+                let sawGroupContent = false;
+                while (node) {
+                    expect({
+                        node: node.className,
+                        stretches: stretches(node),
+                    }).toEqual({ node: node.className, stretches: true });
+                    if (node.classList.contains("input-group-content")) {
+                        sawGroupContent = true;
+                        break;
+                    }
+                    node = node.parentElement;
+                }
+                expect(sawGroupContent).toBe(true);
+            };
+
+            setSelection({ kind: "prompt-major", clipIdx: 0 });
+            walkFromTextarea();
+            setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+            walkFromTextarea();
+        });
+
+        it("(c) with HOST site.css cascading, prompt/select/number rows read full-width, never centered", () => {
+            injectHostCss();
+            injectDockCss();
+            const panels: (() => void)[] = [
+                () => setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 }),
+                () => setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 }),
+                () => setSelection({ kind: "audio", clipIdx: 0 }),
+                () =>
+                    setSelection({
+                        kind: "audio-segment",
+                        clipIdx: 0,
+                        segIdx: 0,
+                    }),
+                () => setSelection({ kind: "prompt-major", clipIdx: 0 }),
+                () =>
+                    setSelection({
+                        kind: "prompt-minor",
+                        clipIdx: 0,
+                        windowIdx: 0,
+                    }),
+            ];
+            for (const select of panels) {
+                select();
+                // Every field row + its label reads left (no host centering
+                // leaks through), across every panel.
+                for (const field of document.querySelectorAll(
+                    ".vst-detail .auto-input",
+                )) {
+                    expect(computed(field).textAlign).toBe("left");
+                }
+                for (const nm of document.querySelectorAll(
+                    ".vst-detail .auto-input:not(.auto-checkbox-box) .auto-input-name",
+                )) {
+                    expect(computed(nm).textAlign).toBe("left");
+                }
+                // Native textareas / dropdowns / numbers + the upload box fill
+                // the dock column — the round-3 "not full width" symptom.
+                for (const control of document.querySelectorAll(
+                    [
+                        ".vst-detail .auto-text",
+                        ".vst-detail .auto-dropdown",
+                        ".vst-detail .auto-number",
+                        ".vst-detail .vst-audio-upload",
+                    ].join(", "),
+                )) {
+                    expect(computed(control).width).toBe("100%");
+                }
+            }
         });
     });
 });

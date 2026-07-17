@@ -13,6 +13,7 @@ import {
     CLIP_DURATION_MIN,
     clamp,
     mediaPreviewSrc,
+    PROMPT_WINDOW_MIN_DURATION,
     REF_FRAME_MIN,
     RETAKE_DEFAULT_DURATION,
     RETAKE_DURATION_STEP,
@@ -52,6 +53,7 @@ import {
 import {
     buildDefaultStage,
     getReferenceFrameMax,
+    normalizeControlNetLora,
     removeRefAt,
 } from "./normalization";
 import { getClips, getState, saveClips, saveState } from "./persistence";
@@ -67,6 +69,10 @@ import {
     stageChipTitle,
 } from "./timelineDetail";
 import { applyClipDurationResize } from "./timelineEdit";
+import {
+    applyPromptWindowBegin,
+    applyPromptWindowEnd,
+} from "./timelinePromptTrack";
 import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "./timelineView";
 import {
     type AudioSegment,
@@ -90,6 +96,19 @@ const MODEL_SELECTOR = "[data-vst-model]";
 const INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${STAGE_ADD_SELECTOR}, ${MODEL_SELECTOR}`;
 
 const DETAIL_CLASS = "vst-detail";
+// Stable, bounded group-section ids (never per-instance): collapse prefs persist
+// across selections and cookies stay bounded. Instance identity rides the counter.
+const GROUP_CLIP = "vstdock_clip";
+const GROUP_STAGES = "vstdock_stages";
+const GROUP_STAGEPARAMS = "vstdock_stageparams";
+const GROUP_REF = "vstdock_ref";
+const GROUP_AUDIO = "vstdock_audio";
+const GROUP_AUDIOSEG = "vstdock_audioseg";
+const GROUP_PROMPTMAJOR = "vstdock_promptmajor";
+const GROUP_PROMPTMINOR = "vstdock_promptminor";
+const GROUP_RETAKE = "vstdock_retake";
+const GROUP_BOUNDARY = "vstdock_boundary";
+const GROUP_SETTINGS = "vstdock_settings";
 const DURATION_STEP = 0.1;
 const UPSCALE_EPSILON = 1e-6;
 const LORA_WEIGHT_STEP = 0.05;
@@ -99,7 +118,13 @@ const SETTINGS_INHERIT = "inherit";
 const SETTINGS_CUSTOM = "custom";
 
 export interface TimelineDetailStrip {
-    attach(body: HTMLElement): void;
+    /**
+     * @param body listener-host: the tracks body carrying the capture-phase
+     *   mousedown/click/keydown listeners for in-track stage chips.
+     * @param dock render-host: the `.vst-detail` left-dock element (owned by the
+     *   caller) that the strip renders its header + panel groups into.
+     */
+    attach(body: HTMLElement, dock: HTMLElement): void;
     render(): void;
     dispose(): void;
 }
@@ -187,13 +212,25 @@ const clampSelection = (
 export const createTimelineDetailStrip = (
     options: TimelineDetailStripOptions,
 ): TimelineDetailStrip => {
+    // Listener-host (tracks body) vs render-host (the `.vst-detail` dock).
     let boundBody: HTMLElement | null = null;
+    let dockEl: HTMLElement | null = null;
     let unsubscribe: (() => void) | null = null;
     let sourceToken = "";
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
     let flushing = false;
     let rendering = false;
     let suppressSelectionRender = false;
+    // A range-slider drag is in progress. Set on pointerdown (capture) over a
+    // range input inside the dock; cleared on pointerup / pointercancel anywhere
+    // (the pointer can leave the dock mid-drag). While set, debounced edits are
+    // HELD — the flush timer is never armed — so a mid-drag pause can't trigger a
+    // save → timeline refresh → dock rebuild that destroys the range node the
+    // browser's drag gesture is bound to. Complements the focus-based check in
+    // isSliderGesture: this latch covers Safari-style browsers where a range
+    // input does not take focus on mousedown, and drags whose focus sits
+    // elsewhere.
+    let sliderDragActive = false;
     // The resolution mode the user picked while editing timeline settings. Kept
     // across settings re-renders so an explicit "Custom" choice sticks even when
     // its dimensions coincide with a preset; reset when selection leaves "none".
@@ -203,16 +240,104 @@ export const createTimelineDetailStrip = (
         start: number | null;
         end: number | null;
     } | null = null;
+    // The user deliberately moved focus OUT of the dock (tabbed to Generate, the
+    // timeline, elsewhere). While set, focus preservation is disabled: a
+    // flush/refresh/render that lands after the user left must NOT resurrect the
+    // field they abandoned (focusout fires before the new target is active, so a
+    // naive captureFocus would stash the departing field and the next render
+    // would yank focus back). Cleared the moment focus re-enters the dock.
+    let focusLeftDock = false;
+    // The selection the dock is currently showing rendered widgets for. Lets a
+    // same-panel selection move (e.g. relay W1→W2, ref R0→R1) do a targeted
+    // highlight swap instead of a full innerHTML rebuild.
+    let renderedSel: TimelineSelection | null = null;
+
+    // Value-only-commit handshake. A dock-origin VALUE edit (a number/slider/
+    // checkbox/select write that changes DATA but not panel STRUCTURE) already
+    // shows the right value in its own field — only the TIMELINE needs
+    // repainting, never the dock DOM. A save triggers the host's carrier
+    // notify → videoStagesTimeline.refresh() → detailStrip.render() SYNCHRONOUSLY
+    // (and value flushes may also call options.refresh() directly); that render
+    // would innerHTML-rebuild the dock and destroy the focused node. So the value
+    // primitives (flushPending / commit / commitState) raise this flag around the
+    // save+refresh, and render() consumes it by doing a light derived-UI sync
+    // instead of a rebuild. The flag lives ONLY inside that synchronous window
+    // (cleared in a finally before any async yield), so an external carrier
+    // change, undo/redo, or a selection change — all async or non-flush renders —
+    // never see it and always rebuild. STRUCTURE-affecting commits leave the flag
+    // untouched for their own explicit render() call, which rebuilds normally.
+    let suppressNextDockRebuild = false;
+
+    // A keyboard-edited dock field currently owns focus (textarea / typed text /
+    // number). While one does, debounced edits are HELD — the timer is not armed,
+    // so no save + timeline repaint fires mid-typing. Sliders (range), selects
+    // and checkboxes are not keyboard fields, so they keep their live/debounced
+    // behavior. Held edits flush on blur out of the dock, on a number field's
+    // live `change` (spinner / Enter), on Escape, on a selection change, before
+    // any structural op, and on dispose.
+    const isTypingInDock = (): boolean => {
+        if (!dockEl) {
+            return false;
+        }
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement) || !dockEl.contains(active)) {
+            return false;
+        }
+        if (active instanceof HTMLTextAreaElement) {
+            return true;
+        }
+        if (active instanceof HTMLInputElement) {
+            return active.type === "text" || active.type === "number";
+        }
+        return false;
+    };
+
+    // A slider (range) drag is in progress, so debounced edits must be HELD
+    // exactly like typing — the flush timer is never armed, so no save + timeline
+    // repaint fires mid-gesture (which would rebuild the dock and destroy the
+    // range node under the cursor). Two complementary signals:
+    //   (a) the explicit pointer-gesture latch (covers Safari, where a range
+    //       input doesn't focus on mousedown, and drags with focus elsewhere);
+    //   (b) a range input, or its `.auto-slider-number` twin, currently owns
+    //       focus inside the dock (covers Chrome/Firefox, where mousedown focuses
+    //       the range).
+    // Only the SAVE + REPAINT is deferred: the host's enableSliderForBox wiring
+    // keeps syncing range → number (the live value readout) throughout the drag.
+    const isSliderGesture = (): boolean => {
+        if (sliderDragActive) {
+            return true;
+        }
+        if (!dockEl) {
+            return false;
+        }
+        const active = document.activeElement;
+        if (!(active instanceof HTMLInputElement) || !dockEl.contains(active)) {
+            return false;
+        }
+        return (
+            active.type === "range" ||
+            active.classList.contains("auto-slider-number")
+        );
+    };
 
     // --- focus preservation across the self-triggered refresh/rebuild ------
 
     const captureFocus = (): void => {
+        // Focus has left the dock (or is about to, mid-focusout): there is no
+        // live editing session to preserve, so never stash a field — that is the
+        // exact value a subsequent render would wrongly restore to.
+        if (focusLeftDock) {
+            pendingFocus = null;
+            return;
+        }
         const active = document.activeElement;
-        if (!(active instanceof HTMLElement)) {
+        if (!(active instanceof HTMLElement) || !dockEl?.contains(active)) {
+            pendingFocus = null;
             return;
         }
         const holder = active.closest("[data-vst-focus-key]");
-        if (!holder) {
+        if (!holder || !dockEl.contains(holder)) {
+            pendingFocus = null;
             return;
         }
         let start: number | null = null;
@@ -275,6 +400,18 @@ export const createTimelineDetailStrip = (
     interface PendingEntry {
         kind: "clips" | "state";
         mutate: ((clips: Clip[]) => void) | ((state: StateDraft) => void);
+        // A clip edit whose result the timeline tracks must reflect (e.g. a
+        // relay window's begin/end, which the prompt track draws): flushing it
+        // repaints the whole timeline once, like a state change does.
+        refresh?: boolean;
+        // A contextually-clamped field's post-flush display corrector: re-derive
+        // the value to SHOW from the freshly-saved clips (the same accessor the
+        // panel builder read at build time) so a clamp the input's static
+        // min/max couldn't express (relay neighbour bound, length capped by
+        // start) is written back into the field. Keyed to the input by the
+        // pending map key === the field's `data-vst-focus-key`. Set only by
+        // buildClampedNumber, so it can never be forgotten for a new such field.
+        readBack?: (clips: Clip[]) => number | null;
     }
     // Debounced edits keyed by field, so distinct fields never clobber each
     // other and a single flush applies them all in one write.
@@ -294,19 +431,27 @@ export const createTimelineDetailStrip = (
         if (flushing || pending.size === 0) {
             return;
         }
-        const entries = [...pending.values()];
+        const entryList = [...pending.entries()];
+        const entries = entryList.map(([, e]) => e);
         pending.clear();
         captureFocus();
         if (isStale()) {
             return;
         }
+        const wantTimelineRefresh = entries.some((e) => e.refresh);
         const clipMutates = entries
             .filter((e) => e.kind === "clips")
             .map((e) => e.mutate as (clips: Clip[]) => void);
         const stateMutates = entries
             .filter((e) => e.kind === "state")
             .map((e) => e.mutate as (state: StateDraft) => void);
+        // Every entry in the pending map is value-only by construction (the
+        // debounced* commit helpers), so the whole flush is a value-only op:
+        // hold the dock DOM stable across the save-triggered render(s).
+        const prevSuppress = suppressNextDockRebuild;
+        suppressNextDockRebuild = true;
         flushing = true;
+        let flushedClips: Clip[] | null = null;
         try {
             if (clipMutates.length > 0) {
                 const clips = getClips();
@@ -314,6 +459,7 @@ export const createTimelineDetailStrip = (
                     m(clips);
                 }
                 saveClips(clips);
+                flushedClips = clips;
             }
             if (stateMutates.length > 0) {
                 const state = getState();
@@ -325,11 +471,60 @@ export const createTimelineDetailStrip = (
                 });
             }
             sourceToken = readStateToken();
+            flushing = false;
+            if (stateMutates.length > 0 || wantTimelineRefresh) {
+                options.refresh?.();
+            }
         } finally {
             flushing = false;
+            suppressNextDockRebuild = prevSuppress;
         }
-        if (stateMutates.length > 0) {
-            options.refresh?.();
+        // Contextual-clamp write-back: a flushed field's mutator may have stored
+        // a value the input's static min/max couldn't foresee (relay neighbour
+        // bound, length capped by start). Re-derive each such field's display
+        // from the freshly-saved clips and correct the input in place — no
+        // rebuild. Runs after any suppressed notify/refresh render, which never
+        // touches inputs, so this is the sole corrector of the shown value.
+        writeBackClamped(entryList, flushedClips);
+        // Belt-and-suspenders: sync value-derived dock UI directly, in case no
+        // notify/refresh render fired (e.g. a headless context with no prompt
+        // input). Idempotent with the sync any suppressed render already did.
+        syncValueDerivedUI(renderedSel);
+    };
+
+    // Re-display contextually-clamped fields after a flush (see readBack). Only
+    // rewrites when the stored display differs from what the input shows, so a
+    // field whose typed value was already valid keeps its caret untouched. Safe
+    // during a spinner/Enter commit on a focused field: showing the stored
+    // clamped value is the correct behaviour (number inputs reset the caret on a
+    // .value write, acceptable for a commit). Never runs mid-keystroke — a
+    // keyboard field being typed holds its flush (schedulePending), so there is
+    // no flush and thus no write-back until blur/change/Escape.
+    const writeBackClamped = (
+        entryList: [string, PendingEntry][],
+        clips: Clip[] | null,
+    ): void => {
+        if (!dockEl || !clips) {
+            return;
+        }
+        for (const [key, entry] of entryList) {
+            if (!entry.readBack) {
+                continue;
+            }
+            const input = dockEl.querySelector<HTMLInputElement>(
+                `input[data-vst-focus-key="${key}"]`,
+            );
+            if (!input) {
+                continue;
+            }
+            const display = entry.readBack(clips);
+            if (display == null) {
+                continue;
+            }
+            const next = `${display}`;
+            if (input.value !== next) {
+                input.value = next;
+            }
         }
     };
 
@@ -342,6 +537,14 @@ export const createTimelineDetailStrip = (
         pending.set(key, entry);
         if (pendingTimer) {
             clearTimeout(pendingTimer);
+            pendingTimer = null;
+        }
+        // Hold (do not arm the flush timer) while a keyboard field is being
+        // typed into or a range slider is being dragged, so the timeline never
+        // repaints mid-gesture. The edit is safely queued and flushes on
+        // blur-out / change / pointer release / selection change.
+        if (isTypingInDock() || isSliderGesture()) {
+            return;
         }
         pendingTimer = setTimeout(() => {
             pendingTimer = null;
@@ -363,6 +566,47 @@ export const createTimelineDetailStrip = (
         schedulePending(key, { kind: "state", mutate });
     };
 
+    // A number field whose commit mutator applies a CONTEXTUAL clamp the static
+    // min/max/step can't express (a relay window's neighbour bound; a segment or
+    // retake length capped by its start). A plain buildNumber only re-displays
+    // its own attr-clamped value on commit (buildNumber's apply(true)), so it
+    // would keep showing the raw typed value while the data holds the tighter
+    // clamped one. buildClampedNumber closes that gap generically: it tags the
+    // input with `key` as its focus-key and carries a `readBack` accessor — the
+    // SAME accessor the panel reads at build time — into the pending entry, so
+    // flushPending re-derives the display from the freshly-saved clips and writes
+    // it back (see writeBackClamped). Because every contextually-clamped field is
+    // built through here, `readBack` is a REQUIRED argument — a future such field
+    // cannot forget the sync.
+    const buildClampedNumber = (opts: {
+        key: string;
+        value: number;
+        min: number;
+        max: number;
+        step: number;
+        // Repaint the timeline on commit (relay windows the prompt track draws).
+        refresh?: boolean;
+        readBack: (clips: Clip[]) => number | null;
+        mutate: (clips: Clip[], value: number) => void;
+    }): HTMLInputElement => {
+        const input = buildNumber(
+            opts.value,
+            opts.min,
+            opts.max,
+            opts.step,
+            (value) => {
+                schedulePending(opts.key, {
+                    kind: "clips",
+                    mutate: (clips: Clip[]) => opts.mutate(clips, value),
+                    refresh: opts.refresh === true,
+                    readBack: opts.readBack,
+                });
+            },
+        );
+        input.setAttribute("data-vst-focus-key", opts.key);
+        return input;
+    };
+
     const commit = (mutate: (clips: Clip[]) => void): void => {
         flushPending();
         captureFocus();
@@ -372,8 +616,21 @@ export const createTimelineDetailStrip = (
         }
         const clips = getClips();
         mutate(clips);
-        saveClips(clips);
-        sourceToken = readStateToken();
+        // commit() is used by both value-only edits (a select/checkbox that only
+        // changes data — model, sampler, skip, …) and structure-affecting ones (a
+        // source select that shows/hides rows). Value-only callers do NOT call
+        // render() afterwards, so the save-triggered notify render must stay
+        // value-only (no rebuild); structure-affecting callers DO call render()
+        // after this returns (flag reset), so their explicit render rebuilds.
+        const prevSuppress = suppressNextDockRebuild;
+        suppressNextDockRebuild = true;
+        try {
+            saveClips(clips);
+            sourceToken = readStateToken();
+        } finally {
+            suppressNextDockRebuild = prevSuppress;
+        }
+        syncValueDerivedUI(renderedSel);
     };
 
     // Timeline settings ride in the top-level Data param, not in clips.
@@ -386,11 +643,21 @@ export const createTimelineDetailStrip = (
         }
         const state = getState();
         mutate(state);
-        saveState(state, undefined, {
-            notifyDomChange: isVideoStagesEnabled(),
-        });
-        sourceToken = readStateToken();
-        options.refresh?.();
+        // Same value-vs-structure split as commit(): the save + this refresh stay
+        // value-only; structure-affecting callers (resolution mode, custom-FPS
+        // toggle) rebuild via their own render() call after this returns.
+        const prevSuppress = suppressNextDockRebuild;
+        suppressNextDockRebuild = true;
+        try {
+            saveState(state, undefined, {
+                notifyDomChange: isVideoStagesEnabled(),
+            });
+            sourceToken = readStateToken();
+            options.refresh?.();
+        } finally {
+            suppressNextDockRebuild = prevSuppress;
+        }
+        syncValueDerivedUI(renderedSel);
     };
 
     // --- shared field builders for the non-clip editors ------------------
@@ -407,7 +674,7 @@ export const createTimelineDetailStrip = (
         onChange: (value: string) => void,
     ): HTMLSelectElement => {
         const select = document.createElement("select");
-        select.className = "vst-audio-select";
+        select.className = "auto-dropdown vst-audio-select";
         for (const spec of specs) {
             const opt = document.createElement("option");
             opt.value = spec.value;
@@ -428,7 +695,8 @@ export const createTimelineDetailStrip = (
         onInput: (value: string) => void,
     ): HTMLTextAreaElement => {
         const editor = document.createElement("textarea");
-        editor.className = "vst-prompt-editor vst-detail-prompt";
+        editor.className =
+            "auto-text auto-text-block vst-prompt-editor vst-detail-prompt";
         editor.value = value;
         editor.placeholder = placeholder;
         editor.setAttribute("data-vst-focus-key", focusKey);
@@ -447,9 +715,9 @@ export const createTimelineDetailStrip = (
         onClear: () => void,
     ): HTMLElement => {
         const row = document.createElement("div");
-        row.className = "vst-audio-field vst-audio-upload";
+        row.className = "auto-input vst-audio-field vst-audio-upload";
         const uploadLabel = document.createElement("span");
-        uploadLabel.className = "vst-audio-field-label";
+        uploadLabel.className = "auto-input-name vst-audio-field-label";
         uploadLabel.textContent = label;
         const fileInput = document.createElement("input");
         fileInput.type = "file";
@@ -479,6 +747,61 @@ export const createTimelineDetailStrip = (
         clearBtn.addEventListener("click", () => onClear());
         row.append(uploadLabel, fileInput, fileName, clearBtn);
         return row;
+    };
+
+    interface InstanceRowSpec {
+        rowClass: string;
+        indexAttr: string;
+        index: number;
+        active: boolean;
+        title: string;
+        deleteLabel: string;
+        onDelete: () => void;
+        repoint: () => void;
+    }
+
+    /**
+     * One instance of a "clip has multiples of a thing" panel (a ref, an audio
+     * segment) rendered as a stacked, individually-editable sub-section. Shared
+     * machinery matching the relay list: a `R{n}`/`S{n}` title, a per-row delete,
+     * an active highlight, and a focusin re-point so touching any control makes
+     * this instance the selection (timeline highlight follows) — targeted swap,
+     * no rebuild. Returns the row and the field-body to append controls into.
+     */
+    const buildInstanceRow = (
+        spec: InstanceRowSpec,
+    ): { row: HTMLElement; fields: HTMLElement } => {
+        const row = document.createElement("div");
+        row.className = `vst-detail-instance ${spec.rowClass}`;
+        row.setAttribute(spec.indexAttr, `${spec.index}`);
+        if (spec.active) {
+            row.classList.add("vst-detail-instance-active");
+        }
+        const head = document.createElement("div");
+        head.className = "vst-detail-instance-head";
+        const title = document.createElement("span");
+        title.className = "vst-detail-instance-title";
+        title.textContent = spec.title;
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className =
+            "vst-refs-delete vst-detail-delete vst-detail-instance-delete";
+        del.textContent = spec.deleteLabel;
+        del.title = spec.deleteLabel;
+        del.addEventListener("click", (event) => {
+            event.preventDefault();
+            spec.onDelete();
+        });
+        head.append(title, del);
+        row.appendChild(head);
+        const fields = document.createElement("div");
+        fields.className = "vst-detail-instance-fields";
+        row.appendChild(fields);
+        // Interacting with any control in this row re-points the selection so the
+        // timeline highlight follows. setSelection no-ops on an identical
+        // selection, so this never interrupts an in-progress edit.
+        row.addEventListener("focusin", () => spec.repoint());
+        return { row, fields };
     };
 
     const deleteRefEntry = (clipIdx: number, refIdx: number): void => {
@@ -761,25 +1084,179 @@ export const createTimelineDetailStrip = (
         setSelection({ kind: "none" });
     };
 
+    // Focus genuinely leaving the dock (into the timeline, the Generate button,
+    // anywhere) flushes any held edit — so the carrier is written before any
+    // downstream read (generation, refresh). Moving between two controls INSIDE
+    // the dock keeps the edit held, which lets an in-panel re-point do a
+    // targeted highlight swap without a disruptive rebuild.
+    const onDockFocusOut = (event: FocusEvent): void => {
+        // A full rebuild does `dockEl.innerHTML = ""`, which removes the focused
+        // node and dispatches a synchronous focusout with a null relatedTarget.
+        // That is OUR teardown, not the user leaving: captureFocus already stashed
+        // the field and restoreFocus will re-focus it. Treating it as a genuine
+        // blur here (setting focusLeftDock, nulling pendingFocus) is exactly the
+        // bug that dropped the caret on Begin/End/Duration commits — so ignore any
+        // focusout that fires mid-render.
+        if (rendering) {
+            return;
+        }
+        const next = event.relatedTarget;
+        if (next instanceof Node && dockEl?.contains(next)) {
+            // Focus moved to another control still INSIDE the dock: the editing
+            // session continues there. Keep the edit held; the new field owns
+            // focus and the next render captures IT, not the one just left.
+            return;
+        }
+        // Focus genuinely left the dock. Mark the session ended BEFORE flushing
+        // so the flush's captureFocus can't stash the departing field, then
+        // flush the held edit so the carrier is written before any downstream
+        // read (generation, refresh). restoreFocus stays disabled until focus
+        // re-enters the dock, so a refresh-driven render can't yank focus back.
+        focusLeftDock = true;
+        pendingFocus = null;
+        flushPending();
+    };
+
+    // Focus (re-)entering any dock control resumes an active editing session, so
+    // focus preservation is armed again. Runs before onDockFocusOut clears it on
+    // an in-dock hop, so an in-dock control-to-control move stays "inside".
+    const onDockFocusIn = (): void => {
+        focusLeftDock = false;
+    };
+
+    // A number field's `change` while it stays focused is a spinner click or
+    // Enter — commit it live so those still feel immediate. A blur-driven change
+    // (focus already moved on) is left to focusout so an in-dock field move
+    // stays held.
+    const onDockChange = (event: Event): void => {
+        const target = event.target;
+        if (
+            target instanceof HTMLInputElement &&
+            target.type === "number" &&
+            document.activeElement === target
+        ) {
+            flushPending();
+        }
+    };
+
+    // pointerdown on a range input inside the dock latches a slider drag, so the
+    // whole gesture holds its debounced edit (see isSliderGesture). Capture-phase
+    // so we see it before any per-widget handler. Document-level: the release
+    // half must fire even after the pointer leaves the dock mid-drag.
+    const onDocPointerDown = (event: Event): void => {
+        const target = event.target;
+        if (!(target instanceof Element) || !dockEl?.contains(target)) {
+            return;
+        }
+        if (target.closest('input[type="range"]')) {
+            sliderDragActive = true;
+        }
+    };
+
+    // Pointer release ends the drag: clear the latch and, if the drag left an
+    // edit queued, flush it once — a single save + repaint, replacing the
+    // mid-drag debounce we suppressed. flushPending is idempotent when nothing is
+    // pending, so a trailing native `change` (host wiring) can't double-write.
+    const onDocPointerUp = (): void => {
+        if (!sliderDragActive) {
+            return;
+        }
+        sliderDragActive = false;
+        flushPending();
+    };
+
     // --- rendering --------------------------------------------------------
 
     const ensureDetail = (): HTMLElement => {
-        const host = boundBody;
-        if (!host) {
+        if (!dockEl) {
             throw new Error("detail strip not attached");
         }
-        let detail = host.querySelector<HTMLElement>(
-            `:scope > .${DETAIL_CLASS}`,
-        );
-        if (!detail) {
-            detail = document.createElement("div");
-            detail.className = DETAIL_CLASS;
-            detail.addEventListener("keydown", onStripKeyDown);
+        return dockEl;
+    };
+
+    // --- host-convention input-group sections -----------------------------
+
+    // Initial open/closed from the host's `group_open_<id>` cookie (default
+    // open). getCookie may be absent under jsdom → guard the read.
+    const isGroupOpen = (groupId: string): boolean => {
+        if (typeof getCookie === "function") {
+            return getCookie(`group_open_${groupId}`) !== "closed";
         }
-        if (detail.parentElement !== host || host.lastElementChild !== detail) {
-            host.appendChild(detail);
+        return true;
+    };
+
+    /**
+     * A hand-authored host `.input-group` (params.js:360-369 skeleton). No inline
+     * onclick and no own listener: the host's global delegated click listener
+     * (params.js:257-265) toggles it, swaps the glyph, and writes the cookie in
+     * production. jsdom tests don't load params.js, so only initial structure is
+     * asserted. `groupId` is a stable `vstdock_*` key; instance identity is in
+     * `counter`.
+     */
+    const buildGroup = (
+        groupId: string,
+        title: string,
+        counter: string,
+        content: HTMLElement,
+        opts?: { collapsible?: boolean },
+    ): HTMLElement => {
+        // Non-collapsible groups (the prompt panels) render with the host's
+        // `input-group-noshrink` idiom: no chevron, always open, no cookie read.
+        // The host's delegated click listener force-reopens noshrink headers, so
+        // they can never be minimized.
+        const collapsible = opts?.collapsible !== false;
+        const open = collapsible ? isGroupOpen(groupId) : true;
+        const group = document.createElement("div");
+        group.className = `input-group ${open ? "input-group-open" : "input-group-closed"}`;
+        group.id = `auto-group-${groupId}`;
+
+        const header = document.createElement("span");
+        header.className = `input-group-header ${collapsible ? "input-group-shrinkable" : "input-group-noshrink"}`;
+        header.id = `input_group_${groupId}`;
+        const wrap = document.createElement("span");
+        wrap.className = "header-label-wrap";
+        if (collapsible) {
+            const symbol = document.createElement("span");
+            symbol.className = "auto-symbol";
+            symbol.innerHTML = open ? "&#x2B9F;" : "&#x2B9E;";
+            wrap.appendChild(symbol);
         }
-        return detail;
+        const labelEl = document.createElement("span");
+        labelEl.className = "header-label";
+        labelEl.textContent = title;
+        const spacer = document.createElement("span");
+        spacer.className = "header-label-spacer";
+        const counterEl = document.createElement("span");
+        counterEl.className = "header-label-counter";
+        counterEl.textContent = counter;
+        wrap.append(labelEl, spacer, counterEl);
+        header.appendChild(wrap);
+
+        const contentEl = document.createElement("div");
+        contentEl.className = "input-group-content";
+        contentEl.id = `input_group_content_${groupId}`;
+        if (!open) {
+            contentEl.style.display = "none";
+        }
+        contentEl.appendChild(content);
+
+        group.append(header, contentEl);
+        return group;
+    };
+
+    // Wrap a single-panel editor's field container in one host group inside a
+    // `.vst-detail-body` scroll host.
+    const wrapForm = (
+        groupId: string,
+        title: string,
+        counter: string,
+        content: HTMLElement,
+        opts?: { collapsible?: boolean },
+    ): HTMLElement => {
+        const body = document.createElement("div");
+        body.className = "vst-detail-body";
+        body.appendChild(buildGroup(groupId, title, counter, content, opts));
+        return body;
     };
 
     const breadcrumbFor = (sel: TimelineSelection): string => {
@@ -837,6 +1314,17 @@ export const createTimelineDetailStrip = (
         const crumb = document.createElement("span");
         crumb.className = "vst-detail-crumb";
         crumb.textContent = breadcrumbFor(sel);
+        // Clear the selection back to "none" (the Timeline Settings panel).
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.className = "vst-detail-clear";
+        clear.textContent = "Clear";
+        clear.title = "Clear selection (show timeline settings)";
+        clear.setAttribute("aria-label", clear.title);
+        clear.hidden = sel.kind === "none";
+        clear.addEventListener("click", () => {
+            setSelection({ kind: "none" });
+        });
         const toggle = document.createElement("button");
         toggle.type = "button";
         toggle.className = "vst-detail-collapse";
@@ -849,17 +1337,13 @@ export const createTimelineDetailStrip = (
             options.setCollapsed(!options.isCollapsed());
             render();
         });
-        head.append(crumb, toggle);
+        head.append(crumb, clear, toggle);
         return head;
     };
 
     const buildClipColumn = (clip: Clip, clipIdx: number): HTMLElement => {
         const col = document.createElement("div");
         col.className = "vst-detail-col vst-detail-clip";
-        const label = document.createElement("p");
-        label.className = "vst-detail-sec";
-        label.textContent = `CLIP ${clipIdx}`;
-        col.appendChild(label);
 
         const lengthDerived =
             clip.clipLengthFromAudio === true ||
@@ -926,10 +1410,6 @@ export const createTimelineDetailStrip = (
     ): HTMLElement => {
         const col = document.createElement("div");
         col.className = "vst-detail-col vst-detail-rail";
-        const label = document.createElement("p");
-        label.className = "vst-detail-sec";
-        label.textContent = "STAGES";
-        col.appendChild(label);
 
         const list = document.createElement("div");
         list.className = "vst-detail-rail-list";
@@ -1221,31 +1701,39 @@ export const createTimelineDetailStrip = (
             });
         }
 
-        const controlNetSlider = buildSlider(
-            "ControlNet Strength",
-            stage.controlNetStrength,
-            STAGE_CONTROLNET_STRENGTH_MIN,
-            STAGE_CONTROLNET_STRENGTH_MAX,
-            STAGE_CONTROLNET_STRENGTH_STEP,
-            (value) => {
-                debouncedCommit("controlnet", (clips) => {
-                    const target = clips[clipIdx]?.stages[stageIdx];
-                    if (target) {
-                        target.controlNetStrength = value;
-                    }
-                });
-            },
-            { hint: "Only applies when a ControlNet source is set" },
-        );
-        tagFocus(controlNetSlider, "controlnet");
-        fields.appendChild(controlNetSlider);
+        // ControlNet Strength is only meaningful when the clip has a ControlNet
+        // LoRA selected — main gates the whole field on the same predicate
+        // (`normalizeControlNetLora(clip.controlNetLora) !== ""`, renderHtml.ts)
+        // and omits it entirely otherwise. (main additionally DISABLES it when
+        // the stage model isn't LTX-Video; this branch has no model-family
+        // detection, so we only replicate the show/hide gate.)
+        if (normalizeControlNetLora(clip.controlNetLora) !== "") {
+            const controlNetSlider = buildSlider(
+                "ControlNet Strength",
+                stage.controlNetStrength,
+                STAGE_CONTROLNET_STRENGTH_MIN,
+                STAGE_CONTROLNET_STRENGTH_MAX,
+                STAGE_CONTROLNET_STRENGTH_STEP,
+                (value) => {
+                    debouncedCommit("controlnet", (clips) => {
+                        const target = clips[clipIdx]?.stages[stageIdx];
+                        if (target) {
+                            target.controlNetStrength = value;
+                        }
+                    });
+                },
+                { hint: "Only applies when a ControlNet source is set" },
+            );
+            tagFocus(controlNetSlider, "controlnet");
+            fields.appendChild(controlNetSlider);
+        }
 
         fields.appendChild(
             buildLorasSection(clipIdx, stageIdx, stage, defaults),
         );
 
         railSkipSync = (skipped: boolean): void => {
-            const railChip = boundBody?.querySelector<HTMLElement>(
+            const railChip = dockEl?.querySelector<HTMLElement>(
                 `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`,
             );
             railChip?.classList.toggle("vst-stage-tab-skipped", skipped);
@@ -1377,9 +1865,31 @@ export const createTimelineDetailStrip = (
         const clip = clips[sel.clipIdx];
         const stage = clip.stages[sel.stageIdx];
         const defaults = getRootDefaults();
+        const stageCount = clip.stages.length;
 
-        body.appendChild(buildClipColumn(clip, sel.clipIdx));
-        body.appendChild(buildStageRail(clip, sel.clipIdx, sel.stageIdx));
+        // The whole clip panel is non-collapsible now: Clip and Stages hold too
+        // little to be worth collapsing, and Stage Parameters is the panel's
+        // point — collapsing it just hides everything. All three render with the
+        // host `input-group-noshrink` idiom (no chevron, always open, no cookie),
+        // like the prompt groups. No group in the clip panel collapses.
+        body.appendChild(
+            buildGroup(
+                GROUP_CLIP,
+                "Clip",
+                `Clip ${sel.clipIdx}`,
+                buildClipColumn(clip, sel.clipIdx),
+                { collapsible: false },
+            ),
+        );
+        body.appendChild(
+            buildGroup(
+                GROUP_STAGES,
+                "Stages",
+                `${sel.stageIdx + 1} of ${stageCount}`,
+                buildStageRail(clip, sel.clipIdx, sel.stageIdx),
+                { collapsible: false },
+            ),
+        );
         const params = buildParamsColumn(
             clip,
             sel.clipIdx,
@@ -1387,136 +1897,154 @@ export const createTimelineDetailStrip = (
             stage,
             defaults,
         );
-        body.appendChild(params.col);
+        body.appendChild(
+            buildGroup(
+                GROUP_STAGEPARAMS,
+                "Stage Parameters",
+                `Stage ${sel.stageIdx + 1}`,
+                params.col,
+                { collapsible: false },
+            ),
+        );
         return body;
     };
 
     // --- reference editor -------------------------------------------------
 
+    // The ref panel lists EVERY reference of the clip, stacked. The selected ref
+    // is highlighted; touching any ref's control re-points the selection to it
+    // (targeted highlight swap, no rebuild) and per-ref keys keep edits distinct.
     const buildRefBody = (
         sel: Extract<TimelineSelection, { kind: "ref" }>,
         clips: Clip[],
     ): HTMLElement => {
-        const { clipIdx, refIdx } = sel;
+        const { clipIdx } = sel;
         const clip = clips[clipIdx];
-        const ref = clip.refs[refIdx];
         const body = document.createElement("div");
-        body.className = "vst-detail-body vst-detail-form-body";
-
+        body.className =
+            "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
         const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-        const options = buildImageSourceOptions(ref.source ?? "");
-        const source = resolveImageSourceValue(ref.source ?? "", options);
-        const isUpload = source === REF_SOURCE_UPLOAD;
 
-        const select = buildOptionSelect(options, source, (value) => {
-            commit((cs) => {
-                const r = cs[clipIdx]?.refs[refIdx];
-                if (!r) {
-                    return;
-                }
-                const resolved = resolveImageSourceValue(
-                    value,
-                    buildImageSourceOptions(value),
-                );
-                r.source = resolved;
-                if (resolved !== REF_SOURCE_UPLOAD) {
-                    r.uploadedImage = null;
-                    r.uploadFileName = null;
-                }
+        clip.refs.forEach((ref, refIdx) => {
+            const options = buildImageSourceOptions(ref.source ?? "");
+            const source = resolveImageSourceValue(ref.source ?? "", options);
+            const isUpload = source === REF_SOURCE_UPLOAD;
+            const { row, fields } = buildInstanceRow({
+                rowClass: "vst-detail-ref-row",
+                indexAttr: "data-vst-ref-index",
+                index: refIdx,
+                active: refIdx === sel.refIdx,
+                title: `R${refIdx + 1}`,
+                deleteLabel: "Delete",
+                onDelete: () => deleteRefEntry(clipIdx, refIdx),
+                repoint: () => setSelection({ kind: "ref", clipIdx, refIdx }),
             });
-            render();
-        });
-        body.appendChild(buildField("Image Source", select));
 
-        if (isUpload) {
-            const preview = document.createElement("div");
-            preview.className = "vst-refs-thumb-preview";
-            const data = ref.uploadedImage?.data;
-            if (data) {
-                preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-                preview.classList.add("vst-refs-thumb-preview-set");
-            }
-            body.appendChild(preview);
-        }
-
-        const frameInput = buildNumber(
-            ref.frame,
-            REF_FRAME_MIN,
-            frameMax,
-            1,
-            (value) => {
-                debouncedCommit("ref-frame", (cs) => {
+            const select = buildOptionSelect(options, source, (value) => {
+                commit((cs) => {
                     const r = cs[clipIdx]?.refs[refIdx];
-                    if (r) {
-                        r.frame = clamp(
-                            Math.round(value),
-                            REF_FRAME_MIN,
-                            frameMax,
-                        );
+                    if (!r) {
+                        return;
+                    }
+                    const resolved = resolveImageSourceValue(
+                        value,
+                        buildImageSourceOptions(value),
+                    );
+                    r.source = resolved;
+                    if (resolved !== REF_SOURCE_UPLOAD) {
+                        r.uploadedImage = null;
+                        r.uploadFileName = null;
                     }
                 });
-            },
-        );
-        frameInput.setAttribute("data-vst-focus-key", "ref-frame");
-        body.appendChild(
-            buildField(`Attach at Frame (1–${frameMax})`, frameInput),
-        );
+                render();
+            });
+            fields.appendChild(buildField("Image Source", select));
 
-        body.appendChild(
-            buildCheckbox(
-                "Count from clip end",
-                ref.fromEnd === true,
+            if (isUpload) {
+                const preview = document.createElement("div");
+                preview.className = "vst-refs-thumb-preview";
+                const data = ref.uploadedImage?.data;
+                if (data) {
+                    preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
+                    preview.classList.add("vst-refs-thumb-preview-set");
+                }
+                fields.appendChild(preview);
+            }
+
+            const frameInput = buildNumber(
+                ref.frame,
+                REF_FRAME_MIN,
+                frameMax,
+                1,
                 (value) => {
-                    commit((cs) => {
+                    debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
                         const r = cs[clipIdx]?.refs[refIdx];
                         if (r) {
-                            r.fromEnd = value;
+                            r.frame = clamp(
+                                Math.round(value),
+                                REF_FRAME_MIN,
+                                frameMax,
+                            );
                         }
                     });
                 },
-            ),
-        );
+            );
+            frameInput.setAttribute(
+                "data-vst-focus-key",
+                `ref-${refIdx}-frame`,
+            );
+            fields.appendChild(
+                buildField(`Attach at Frame (1–${frameMax})`, frameInput),
+            );
 
-        if (isUpload) {
-            body.appendChild(
-                buildUploadRow(
-                    "Image Upload",
-                    "image/*",
-                    ref.uploadedImage?.fileName,
-                    (data, fileName) => {
+            fields.appendChild(
+                buildCheckbox(
+                    "Count from clip end",
+                    ref.fromEnd === true,
+                    (value) => {
                         commit((cs) => {
                             const r = cs[clipIdx]?.refs[refIdx];
                             if (r) {
-                                r.uploadedImage = { data, fileName };
-                                r.uploadFileName = fileName;
+                                r.fromEnd = value;
                             }
                         });
-                        render();
-                    },
-                    () => {
-                        commit((cs) => {
-                            const r = cs[clipIdx]?.refs[refIdx];
-                            if (r) {
-                                r.uploadedImage = null;
-                                r.uploadFileName = null;
-                            }
-                        });
-                        render();
                     },
                 ),
             );
-        }
 
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "vst-refs-delete vst-detail-delete";
-        del.textContent = "Delete reference";
-        del.addEventListener("click", (event) => {
-            event.preventDefault();
-            deleteRefEntry(clipIdx, refIdx);
+            if (isUpload) {
+                fields.appendChild(
+                    buildUploadRow(
+                        "Image Upload",
+                        "image/*",
+                        ref.uploadedImage?.fileName,
+                        (data, fileName) => {
+                            commit((cs) => {
+                                const r = cs[clipIdx]?.refs[refIdx];
+                                if (r) {
+                                    r.uploadedImage = { data, fileName };
+                                    r.uploadFileName = fileName;
+                                }
+                            });
+                            render();
+                        },
+                        () => {
+                            commit((cs) => {
+                                const r = cs[clipIdx]?.refs[refIdx];
+                                if (r) {
+                                    r.uploadedImage = null;
+                                    r.uploadFileName = null;
+                                }
+                            });
+                            render();
+                        },
+                    ),
+                );
+            }
+            body.appendChild(row);
         });
-        body.appendChild(del);
-        return body;
+
+        return wrapForm(GROUP_REF, "Reference", `Clip ${clipIdx}`, body);
     };
 
     // --- audio editor -----------------------------------------------------
@@ -1568,7 +2096,7 @@ export const createTimelineDetailStrip = (
         };
 
         const body = document.createElement("div");
-        body.className = "vst-detail-body vst-detail-form-body";
+        body.className = "vst-detail-form-body";
 
         const select = buildOptionSelect(
             options.map((o) => ({ value: o.value, label: o.label })),
@@ -1663,24 +2191,26 @@ export const createTimelineDetailStrip = (
                     : `${segCount} overlay segments · mixed additively over the base audio.`;
             body.appendChild(note);
         }
-        return body;
+        return wrapForm(GROUP_AUDIO, "Audio", `Clip ${clipIdx}`, body);
     };
 
     // --- audio segment editor ---------------------------------------------
 
+    // The audio-segment panel lists EVERY overlay segment of the clip, stacked.
+    // The selected segment is highlighted; touching any segment's control
+    // re-points the selection to it (targeted swap, no rebuild) and per-segment
+    // keys keep edits distinct.
     const buildAudioSegmentBody = (
         sel: Extract<TimelineSelection, { kind: "audio-segment" }>,
         clips: Clip[],
     ): HTMLElement => {
-        const { clipIdx, segIdx } = sel;
+        const { clipIdx } = sel;
         const clip = clips[clipIdx];
-        const segment = clip?.audioSegments?.[segIdx];
+        const segments = clip?.audioSegments ?? [];
         const body = document.createElement("div");
-        body.className = "vst-detail-body vst-detail-form-body";
-        if (!segment) {
-            return body;
-        }
-        const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip.duration || 0);
+        body.className =
+            "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
+        const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
 
         const clampSegment = (
             start: number,
@@ -1699,89 +2229,104 @@ export const createTimelineDetailStrip = (
             return { start: s, length: l };
         };
 
-        body.appendChild(
-            buildUploadRow(
-                "Audio Upload",
-                "audio/*",
-                segment.source?.fileName,
-                (data, fileName) => {
-                    commit((cs) => {
-                        const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                        if (seg) {
-                            seg.source = { data, fileName };
-                        }
-                    });
-                    render();
-                },
-                () => {
-                    commit((cs) => {
-                        const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                        if (seg) {
-                            seg.source = null;
-                        }
-                    });
-                    render();
-                },
-            ),
-        );
+        segments.forEach((segment, segIdx) => {
+            const { row, fields } = buildInstanceRow({
+                rowClass: "vst-detail-seg-row",
+                indexAttr: "data-vst-seg-index",
+                index: segIdx,
+                active: segIdx === sel.segIdx,
+                title: `S${segIdx + 1}`,
+                deleteLabel: "Remove segment",
+                onDelete: () => removeAudioSegment(clipIdx, segIdx),
+                repoint: () =>
+                    setSelection({ kind: "audio-segment", clipIdx, segIdx }),
+            });
 
-        const startInput = buildNumber(
-            segment.startSeconds,
-            0,
-            Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
-            AUDIO_SEGMENT_STEP,
-            (value) => {
-                debouncedCommit("audio-segment-start", (cs) => {
+            fields.appendChild(
+                buildUploadRow(
+                    "Audio Upload",
+                    "audio/*",
+                    segment.source?.fileName,
+                    (data, fileName) => {
+                        commit((cs) => {
+                            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                            if (seg) {
+                                seg.source = { data, fileName };
+                            }
+                        });
+                        render();
+                    },
+                    () => {
+                        commit((cs) => {
+                            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                            if (seg) {
+                                seg.source = null;
+                            }
+                        });
+                        render();
+                    },
+                ),
+            );
+
+            const startInput = buildClampedNumber({
+                key: `seg-${segIdx}-start`,
+                value: segment.startSeconds,
+                min: 0,
+                max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
+                step: AUDIO_SEGMENT_STEP,
+                readBack: (cs) =>
+                    cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
+                mutate: (cs, value) => {
                     const seg = cs[clipIdx]?.audioSegments?.[segIdx];
                     if (seg) {
                         const next = clampSegment(value, seg.lengthSeconds);
                         seg.startSeconds = next.start;
                         seg.lengthSeconds = next.length;
                     }
-                });
-            },
-        );
-        startInput.setAttribute("data-vst-focus-key", "audio-segment-start");
-        body.appendChild(buildField("Start (s)", startInput));
+                },
+            });
+            fields.appendChild(buildField("Start (s)", startInput));
 
-        const trimInput = buildNumber(
-            segment.trimStartSeconds,
-            0,
-            CLIP_DURATION_MAX,
-            AUDIO_SEGMENT_STEP,
-            (value) => {
-                debouncedCommit("audio-segment-trim", (cs) => {
-                    const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                    if (seg) {
-                        seg.trimStartSeconds = Math.max(
-                            0,
-                            Math.round(value * 10) / 10,
-                        );
-                    }
-                });
-            },
-        );
-        trimInput.setAttribute("data-vst-focus-key", "audio-segment-trim");
-        body.appendChild(buildField("Trim start (s)", trimInput));
+            const trimInput = buildNumber(
+                segment.trimStartSeconds,
+                0,
+                CLIP_DURATION_MAX,
+                AUDIO_SEGMENT_STEP,
+                (value) => {
+                    debouncedCommit(`seg-${segIdx}-trim`, (cs) => {
+                        const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                        if (seg) {
+                            seg.trimStartSeconds = Math.max(
+                                0,
+                                Math.round(value * 10) / 10,
+                            );
+                        }
+                    });
+                },
+            );
+            trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
+            fields.appendChild(buildField("Trim start (s)", trimInput));
 
-        const lengthInput = buildNumber(
-            segment.lengthSeconds,
-            AUDIO_SEGMENT_MIN_LENGTH,
-            clipDur,
-            AUDIO_SEGMENT_STEP,
-            (value) => {
-                debouncedCommit("audio-segment-length", (cs) => {
+            const lengthInput = buildClampedNumber({
+                key: `seg-${segIdx}-length`,
+                value: segment.lengthSeconds,
+                min: AUDIO_SEGMENT_MIN_LENGTH,
+                max: clipDur,
+                step: AUDIO_SEGMENT_STEP,
+                readBack: (cs) =>
+                    cs[clipIdx]?.audioSegments?.[segIdx]?.lengthSeconds ?? null,
+                mutate: (cs, value) => {
                     const seg = cs[clipIdx]?.audioSegments?.[segIdx];
                     if (seg) {
                         const next = clampSegment(seg.startSeconds, value);
                         seg.startSeconds = next.start;
                         seg.lengthSeconds = next.length;
                     }
-                });
-            },
-        );
-        lengthInput.setAttribute("data-vst-focus-key", "audio-segment-length");
-        body.appendChild(buildField("Length (s)", lengthInput));
+                },
+            });
+            fields.appendChild(buildField("Length (s)", lengthInput));
+            body.appendChild(row);
+        });
 
         const note = document.createElement("p");
         note.className = "vst-detail-note";
@@ -1789,16 +2334,12 @@ export const createTimelineDetailStrip = (
             "Overlaid additively over the base audio; overlapping segments are mixed.";
         body.appendChild(note);
 
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "vst-refs-delete vst-detail-delete";
-        del.textContent = "Remove segment";
-        del.addEventListener("click", (event) => {
-            event.preventDefault();
-            removeAudioSegment(clipIdx, segIdx);
-        });
-        body.appendChild(del);
-        return body;
+        return wrapForm(
+            GROUP_AUDIOSEG,
+            "Audio Segments",
+            `Clip ${clipIdx}`,
+            body,
+        );
     };
 
     // --- prompt editors ---------------------------------------------------
@@ -1809,8 +2350,7 @@ export const createTimelineDetailStrip = (
     ): HTMLElement => {
         const { clipIdx } = sel;
         const body = document.createElement("div");
-        body.className =
-            "vst-detail-body vst-detail-form-body vst-detail-prompt-body";
+        body.className = "vst-detail-form-body vst-detail-prompt-body";
         body.appendChild(
             buildTextarea(
                 clips[clipIdx].prompt ?? "",
@@ -1826,42 +2366,138 @@ export const createTimelineDetailStrip = (
                 },
             ),
         );
-        return body;
+        return wrapForm(GROUP_PROMPTMAJOR, "Prompt", `Clip ${clipIdx}`, body, {
+            collapsible: false,
+        });
     };
 
+    // The relay panel lists EVERY minor prompt window of the clip, stacked. The
+    // selected window is highlighted and (on a selection change) scrolled into
+    // view and focused; focusing another window's textarea re-points the
+    // selection so the timeline highlight follows without disrupting typing.
     const buildPromptMinorBody = (
         sel: Extract<TimelineSelection, { kind: "prompt-minor" }>,
         clips: Clip[],
     ): HTMLElement => {
         const { clipIdx, windowIdx } = sel;
+        const clip = clips[clipIdx];
+        const windows = clip?.promptWindows ?? [];
+        const clipDur = Math.max(
+            PROMPT_WINDOW_MIN_DURATION,
+            clip?.duration || 0,
+        );
         const body = document.createElement("div");
         body.className =
-            "vst-detail-body vst-detail-form-body vst-detail-prompt-body";
-        body.appendChild(
-            buildTextarea(
-                clips[clipIdx].promptWindows[windowIdx].prompt ?? "",
+            "vst-detail-form-body vst-detail-prompt-body vst-detail-minor-body";
+
+        windows.forEach((w, idx) => {
+            const row = document.createElement("div");
+            row.className = "vst-detail-minor-window";
+            row.setAttribute("data-vst-minor-window", `${idx}`);
+            if (idx === windowIdx) {
+                row.classList.add("vst-detail-minor-active");
+            }
+
+            const head = document.createElement("div");
+            head.className = "vst-detail-minor-head";
+            const title = document.createElement("span");
+            title.className = "vst-detail-minor-title";
+            title.textContent = `W${idx + 1}`;
+            const del = document.createElement("button");
+            del.type = "button";
+            del.className =
+                "vst-refs-delete vst-detail-delete vst-detail-minor-delete";
+            del.textContent = "Delete";
+            del.title = "Delete this prompt window";
+            del.addEventListener("click", (event) => {
+                event.preventDefault();
+                deleteWindowEntry(clipIdx, idx);
+            });
+            head.append(title, del);
+            row.appendChild(head);
+
+            // Begin/end are editable, reusing the timeline's edge-resize clamp:
+            // begin holds the end fixed, end holds the begin fixed, both stay in
+            // the clip, keep a minimum duration, and can't cross a neighbouring
+            // window (applyPromptWindowBegin/End). Distinct pending keys per edge
+            // per window; the commit repaints the on-track segment.
+            const range = document.createElement("div");
+            range.className = "vst-detail-minor-range";
+
+            const beginInput = buildClampedNumber({
+                key: `minor-${idx}-begin`,
+                value: roundSeconds(w.start),
+                min: 0,
+                max: Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION),
+                step: 0.1,
+                refresh: true,
+                readBack: (cs) => {
+                    const win = cs[clipIdx]?.promptWindows?.[idx];
+                    return win ? roundSeconds(win.start) : null;
+                },
+                mutate: (cs, value) => {
+                    const c = cs[clipIdx];
+                    if (c) {
+                        applyPromptWindowBegin(c, idx, value);
+                    }
+                },
+            });
+            range.appendChild(buildField("Begin (s)", beginInput));
+
+            const endInput = buildClampedNumber({
+                key: `minor-${idx}-end`,
+                value: roundSeconds(w.start + w.duration),
+                min: PROMPT_WINDOW_MIN_DURATION,
+                max: clipDur,
+                step: 0.1,
+                refresh: true,
+                readBack: (cs) => {
+                    const win = cs[clipIdx]?.promptWindows?.[idx];
+                    return win ? roundSeconds(win.start + win.duration) : null;
+                },
+                mutate: (cs, value) => {
+                    const c = cs[clipIdx];
+                    if (c) {
+                        applyPromptWindowEnd(c, idx, value);
+                    }
+                },
+            });
+            range.appendChild(buildField("End (s)", endInput));
+            row.appendChild(range);
+
+            const editor = buildTextarea(
+                w.prompt ?? "",
                 "Minor prompt for this window…",
-                "prompt-minor",
+                `minor-${idx}`,
                 (value) => {
-                    debouncedCommit("prompt-minor", (cs) => {
-                        const w = cs[clipIdx]?.promptWindows?.[windowIdx];
-                        if (w) {
-                            w.prompt = value.trim();
+                    debouncedCommit(`minor-${idx}`, (cs) => {
+                        const win = cs[clipIdx]?.promptWindows?.[idx];
+                        if (win) {
+                            win.prompt = value.trim();
                         }
                     });
                 },
-            ),
-        );
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "vst-refs-delete vst-detail-delete";
-        del.textContent = "Delete prompt window";
-        del.addEventListener("click", (event) => {
-            event.preventDefault();
-            deleteWindowEntry(clipIdx, windowIdx);
+            );
+            // Focusing this window's editor makes it the active selection so the
+            // timeline highlight follows. setSelection no-ops on an identical
+            // selection, so this is a no-op while typing in the already-selected
+            // window and never interrupts the caret.
+            editor.addEventListener("focus", () => {
+                setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
+            });
+            row.appendChild(editor);
+            body.appendChild(row);
         });
-        body.appendChild(del);
-        return body;
+
+        return wrapForm(
+            GROUP_PROMPTMINOR,
+            "Prompt Windows",
+            windows.length > 0
+                ? `Clip ${clipIdx} · W${windowIdx + 1}/${windows.length}`
+                : `Clip ${clipIdx}`,
+            body,
+            { collapsible: false },
+        );
     };
 
     // --- retake editor ----------------------------------------------------
@@ -1874,9 +2510,11 @@ export const createTimelineDetailStrip = (
         const clip = clips[clipIdx];
         const retake = clip.retake;
         const body = document.createElement("div");
-        body.className = "vst-detail-body vst-detail-form-body";
+        body.className = "vst-detail-form-body";
+        const wrap = (): HTMLElement =>
+            wrapForm(GROUP_RETAKE, "Retake Window", `Clip ${clipIdx}`, body);
         if (!retake) {
-            return body;
+            return wrap();
         }
         const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
 
@@ -1897,42 +2535,40 @@ export const createTimelineDetailStrip = (
             return { start: s, length: l };
         };
 
-        const startInput = buildNumber(
-            retake.startSeconds,
-            0,
-            Math.max(0, clipDur - RETAKE_MIN_DURATION),
-            RETAKE_DURATION_STEP,
-            (value) => {
-                debouncedCommit("retake-start", (cs) => {
-                    const r = cs[clipIdx]?.retake;
-                    if (r) {
-                        const next = clampRetake(value, r.lengthSeconds);
-                        r.startSeconds = next.start;
-                        r.lengthSeconds = next.length;
-                    }
-                });
+        const startInput = buildClampedNumber({
+            key: "retake-start",
+            value: retake.startSeconds,
+            min: 0,
+            max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
+            step: RETAKE_DURATION_STEP,
+            readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
+            mutate: (cs, value) => {
+                const r = cs[clipIdx]?.retake;
+                if (r) {
+                    const next = clampRetake(value, r.lengthSeconds);
+                    r.startSeconds = next.start;
+                    r.lengthSeconds = next.length;
+                }
             },
-        );
-        startInput.setAttribute("data-vst-focus-key", "retake-start");
+        });
         body.appendChild(buildField("Start (s)", startInput));
 
-        const lengthInput = buildNumber(
-            retake.lengthSeconds,
-            RETAKE_MIN_DURATION,
-            clipDur,
-            RETAKE_DURATION_STEP,
-            (value) => {
-                debouncedCommit("retake-length", (cs) => {
-                    const r = cs[clipIdx]?.retake;
-                    if (r) {
-                        const next = clampRetake(r.startSeconds, value);
-                        r.startSeconds = next.start;
-                        r.lengthSeconds = next.length;
-                    }
-                });
+        const lengthInput = buildClampedNumber({
+            key: "retake-length",
+            value: retake.lengthSeconds,
+            min: RETAKE_MIN_DURATION,
+            max: clipDur,
+            step: RETAKE_DURATION_STEP,
+            readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
+            mutate: (cs, value) => {
+                const r = cs[clipIdx]?.retake;
+                if (r) {
+                    const next = clampRetake(r.startSeconds, value);
+                    r.startSeconds = next.start;
+                    r.lengthSeconds = next.length;
+                }
             },
-        );
-        lengthInput.setAttribute("data-vst-focus-key", "retake-length");
+        });
         body.appendChild(buildField("Length (s)", lengthInput));
 
         body.appendChild(
@@ -1972,7 +2608,7 @@ export const createTimelineDetailStrip = (
             removeRetake(clipIdx);
         });
         body.appendChild(del);
-        return body;
+        return wrap();
     };
 
     // --- boundary (seam) editor -------------------------------------------
@@ -1986,8 +2622,7 @@ export const createTimelineDetailStrip = (
     ): HTMLElement => {
         const { leftClipIdx } = sel;
         const body = document.createElement("div");
-        body.className =
-            "vst-detail-body vst-detail-form-body vst-detail-boundary";
+        body.className = "vst-detail-form-body vst-detail-boundary";
         const clip = clips[leftClipIdx];
         const value: BoundaryOut = clip?.boundaryOut ?? "cut";
         const state = getState();
@@ -2046,7 +2681,12 @@ export const createTimelineDetailStrip = (
                 "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
             body.appendChild(note);
         }
-        return body;
+        return wrapForm(
+            GROUP_BOUNDARY,
+            "Boundary",
+            `Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
+            body,
+        );
     };
 
     // --- timeline settings (none selection) -------------------------------
@@ -2085,8 +2725,7 @@ export const createTimelineDetailStrip = (
                     });
 
         const body = document.createElement("div");
-        body.className =
-            "vst-detail-body vst-detail-form-body vst-detail-settings";
+        body.className = "vst-detail-form-body vst-detail-settings";
 
         const resSpecs: OptionSpec[] = [
             {
@@ -2213,7 +2852,7 @@ export const createTimelineDetailStrip = (
             fpsField.classList.add("vst-audio-disabled");
         }
         body.appendChild(fpsField);
-        return body;
+        return wrapForm(GROUP_SETTINGS, "Timeline Settings", "", body);
     };
 
     const buildBody = (sel: TimelineSelection, clips: Clip[]): HTMLElement => {
@@ -2239,8 +2878,53 @@ export const createTimelineDetailStrip = (
         }
     };
 
+    // The value-derived dock UI that a VALUE-ONLY edit can legitimately change
+    // without any structural change to the panel. Kept in sync WITHOUT a rebuild
+    // so the edited field's node (and its caret) survive.
+    //
+    // Audit of every panel builder's value-dependent, non-structural display:
+    //   - `.vst-detail-crumb` breadcrumb: the ONLY text that a value edit moves —
+    //     the relay time range (begin/end), audio-segment start/end, and retake
+    //     start/end all feed breadcrumbFor(). Re-derived here from fresh clips.
+    //   - Upscale-method disabled state: already synced LIVE in the Upscale
+    //     slider's oninput (syncMethod), so no rebuild is needed for it.
+    //   - Skip-stage rail chip styling + field mute: already synced LIVE in the
+    //     Skip checkbox handler (applyMute + railSkipSync).
+    //   - Group header counters (Clip N, "k of n", Stage k, relay W k/total,
+    //     Clip N→M): all index/count based → only add/delete (STRUCTURAL) moves
+    //     them, never a value edit, so nothing to sync here.
+    //   - Settings badges / displayed dims, audio segment-count note, boundary
+    //     info: only the STRUCTURAL selects (resolution mode, source, join type)
+    //     change them, and those rebuild via their explicit render().
+    const syncValueDerivedUI = (sel: TimelineSelection | null): void => {
+        if (!dockEl || !sel) {
+            return;
+        }
+        const crumb = dockEl.querySelector<HTMLElement>(".vst-detail-crumb");
+        if (crumb) {
+            crumb.textContent = breadcrumbFor(sel);
+        }
+    };
+
     const render = (): void => {
-        if (!boundBody) {
+        if (!dockEl) {
+            return;
+        }
+        // Value-only-commit handshake (see suppressNextDockRebuild): a dock-origin
+        // value edit is mid-flush; its field already shows the new value. Never
+        // rebuild (that would destroy the focused node); just re-sync the derived
+        // UI. The flag is set only inside the synchronous flush window, so this
+        // branch is unreachable from an external/async render, undo/redo, or a
+        // selection change — those always rebuild. Guarded on an unchanged
+        // selection and an expanded dock; anything else falls through to rebuild.
+        if (
+            suppressNextDockRebuild &&
+            renderedSel &&
+            !options.isCollapsed() &&
+            isSameSelection(getSelection(), renderedSel)
+        ) {
+            sourceToken = readStateToken();
+            syncValueDerivedUI(renderedSel);
             return;
         }
         // Persist any debounced edit before we tear down its widget, and before
@@ -2259,6 +2943,17 @@ export const createTimelineDetailStrip = (
             }
 
             const collapsed = options.isCollapsed();
+            // Preserve the dock scroll position across the innerHTML rebuild so a
+            // value change never yanks the panel back to the top.
+            const prevBody =
+                detail.querySelector<HTMLElement>(".vst-detail-body");
+            const savedScroll = prevBody ? prevBody.scrollTop : 0;
+            // Capture whatever is focused in the dock RIGHT NOW, immediately
+            // before we tear the DOM down. Every render is thus self-contained:
+            // even a second render arriving back-to-back after an earlier one
+            // already restored focus re-captures from the live DOM and restores
+            // again, so the caret never escapes on the self-triggered refresh.
+            captureFocus();
             detail.className = `${DETAIL_CLASS}${collapsed ? " vst-detail-collapsed" : ""}`;
             detail.innerHTML = "";
             detail.appendChild(buildHeader(sel, collapsed));
@@ -2270,15 +2965,195 @@ export const createTimelineDetailStrip = (
                 }
             }
             restoreFocus(detail);
+            const newBody =
+                detail.querySelector<HTMLElement>(".vst-detail-body");
+            if (newBody && savedScroll > 0) {
+                newBody.scrollTop = savedScroll;
+            }
+            if (!collapsed) {
+                autoFocusSelection(detail, sel);
+            }
+            renderedSel = sel;
         } finally {
             rendering = false;
         }
+    };
+
+    // On a FRESH selection (arriving from outside the dock — a timeline click or
+    // a newly created instance), bring the selected editor into view and focus it
+    // ready to type. When focus is already inside the dock the user is
+    // interacting in place, so we never steal it back or snap the caret.
+    //
+    // Applies to any single-text-control panel whose editor is the obvious caret
+    // target: the relay window (`minor-N`) and the clip major prompt
+    // (`prompt-major`). Multi-instance panels that are NOT a single prompt
+    // (refs, audio segments) don't auto-focus — their controls are mixed and
+    // stealing focus into one of them would be surprising.
+    const focusKeyForSelection = (sel: TimelineSelection): string | null => {
+        switch (sel.kind) {
+            case "prompt-major":
+                return "prompt-major";
+            case "prompt-minor":
+                return `minor-${sel.windowIdx}`;
+            default:
+                return null;
+        }
+    };
+
+    const autoFocusSelection = (
+        detail: HTMLElement,
+        sel: TimelineSelection,
+    ): void => {
+        // The user deliberately moved focus out of the dock: a re-render (a
+        // refresh, a value-change repaint) must not grab focus back into a
+        // prompt they just left. Auto-focus is only for a FRESH selection
+        // (onSelectionChanged re-arms it by clearing focusLeftDock).
+        if (focusLeftDock) {
+            return;
+        }
+        // Never steal focus when the selection change originated from inside the
+        // dock (the user is editing in place).
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && detail.contains(active)) {
+            return;
+        }
+        const wantKey = focusKeyForSelection(sel);
+        if (!wantKey) {
+            return;
+        }
+        const editor = detail.querySelector<HTMLTextAreaElement>(
+            `textarea[data-vst-focus-key="${wantKey}"]`,
+        );
+        if (!editor) {
+            return;
+        }
+        editor.focus();
+        const len = editor.value.length;
+        try {
+            editor.setSelectionRange(len, len);
+        } catch {}
+        if (typeof editor.scrollIntoView === "function") {
+            editor.scrollIntoView({ block: "nearest" });
+        }
+    };
+
+    // Multi-instance panels (relay windows, refs, audio segments) render EVERY
+    // instance stacked, so moving the selection within the same panel/clip only
+    // needs a highlight swap — no rebuild. This preserves scroll AND keeps the
+    // caret at the click position (the known relay caret-to-end quirk).
+    const targetedReselect = (sel: TimelineSelection): boolean => {
+        if (!dockEl || !renderedSel || options.isCollapsed()) {
+            return false;
+        }
+        const prev = renderedSel;
+        if (prev.kind !== sel.kind) {
+            return false;
+        }
+        const active = document.activeElement;
+        const fromOutside = !(
+            active instanceof HTMLElement && dockEl.contains(active)
+        );
+        const swap = (
+            rowSelector: string,
+            activeClass: string,
+            index: number,
+        ): boolean => {
+            const rows = Array.from(
+                dockEl?.querySelectorAll<HTMLElement>(rowSelector) ?? [],
+            );
+            if (index < 0 || index >= rows.length) {
+                return false;
+            }
+            rows.forEach((row, i) => {
+                row.classList.toggle(activeClass, i === index);
+            });
+            const crumb =
+                dockEl?.querySelector<HTMLElement>(".vst-detail-crumb");
+            if (crumb) {
+                crumb.textContent = breadcrumbFor(sel);
+            }
+            if (
+                fromOutside &&
+                typeof rows[index].scrollIntoView === "function"
+            ) {
+                rows[index].scrollIntoView({ block: "nearest" });
+            }
+            renderedSel = sel;
+            return true;
+        };
+        if (sel.kind === "prompt-minor" && prev.kind === "prompt-minor") {
+            if (sel.clipIdx !== prev.clipIdx) {
+                return false;
+            }
+            const ok = swap(
+                ".vst-detail-minor-window",
+                "vst-detail-minor-active",
+                sel.windowIdx,
+            );
+            if (ok) {
+                const counter = dockEl?.querySelector<HTMLElement>(
+                    "#auto-group-vstdock_promptminor .header-label-counter",
+                );
+                const total =
+                    getClips()[sel.clipIdx]?.promptWindows?.length ?? 0;
+                if (counter && total > 0) {
+                    counter.textContent = `Clip ${sel.clipIdx} · W${sel.windowIdx + 1}/${total}`;
+                }
+                if (fromOutside) {
+                    const editor = dockEl?.querySelector<HTMLTextAreaElement>(
+                        `.vst-detail-minor-window[data-vst-minor-window="${sel.windowIdx}"] textarea`,
+                    );
+                    if (editor) {
+                        editor.focus();
+                        const len = editor.value.length;
+                        try {
+                            editor.setSelectionRange(len, len);
+                        } catch {}
+                    }
+                }
+            }
+            return ok;
+        }
+        if (sel.kind === "ref" && prev.kind === "ref") {
+            if (sel.clipIdx !== prev.clipIdx) {
+                return false;
+            }
+            return swap(
+                ".vst-detail-ref-row",
+                "vst-detail-instance-active",
+                sel.refIdx,
+            );
+        }
+        if (sel.kind === "audio-segment" && prev.kind === "audio-segment") {
+            if (sel.clipIdx !== prev.clipIdx) {
+                return false;
+            }
+            return swap(
+                ".vst-detail-seg-row",
+                "vst-detail-instance-active",
+                sel.segIdx,
+            );
+        }
+        return false;
     };
 
     const onSelectionChanged = (sel: TimelineSelection): void => {
         if (suppressSelectionRender) {
             return;
         }
+        // In-panel move within a stacked multi-instance list (relay W1→W2, ref
+        // R0→R1, segment S0→S1 on the same clip): swap the highlight in place, no
+        // rebuild — keeps scroll and the caret where the user clicked.
+        if (targetedReselect(sel)) {
+            return;
+        }
+        // A genuine selection change voids any focus we were preserving for the
+        // previous panel, so a stale caret can't bleed into the new panel; the
+        // new panel's own focus (live capture / auto-focus) takes over. A fresh
+        // selection is a new editing session, so re-arm auto-focus/restore even
+        // if the user had just left the dock.
+        pendingFocus = null;
+        focusLeftDock = false;
         // A fresh "none" re-derives the settings resolution mode from scratch.
         settingsMode = null;
         if (sel.kind !== "none" && options.isCollapsed()) {
@@ -2287,15 +3162,29 @@ export const createTimelineDetailStrip = (
         render();
     };
 
-    const attach = (body: HTMLElement): void => {
-        if (boundBody === body) {
+    const attach = (body: HTMLElement, dock: HTMLElement): void => {
+        if (boundBody === body && dockEl === dock) {
             return;
         }
         dispose();
         boundBody = body;
+        dockEl = dock;
+        // Capture-phase in-track chip listeners stay on the tracks body; only the
+        // render parent moves to the dock.
         body.addEventListener("mousedown", onMouseDownCapture, true);
         body.addEventListener("click", onClickCapture, true);
         body.addEventListener("keydown", onKeyDownCapture, true);
+        // Escape-clears-selection lives on the dock (the render host).
+        dock.addEventListener("keydown", onStripKeyDown);
+        // Flush-on-blur-out and live-number-change flushing (see handlers).
+        dock.addEventListener("focusout", onDockFocusOut);
+        dock.addEventListener("focusin", onDockFocusIn);
+        dock.addEventListener("change", onDockChange);
+        // Slider-drag latch: pointerdown scoped to the dock, release listened for
+        // document-wide (the pointer can leave the dock mid-drag).
+        document.addEventListener("pointerdown", onDocPointerDown, true);
+        document.addEventListener("pointerup", onDocPointerUp, true);
+        document.addEventListener("pointercancel", onDocPointerUp, true);
         unsubscribe = subscribeSelection(onSelectionChanged);
         render();
     };
@@ -2307,6 +3196,11 @@ export const createTimelineDetailStrip = (
             pendingTimer = null;
         }
         pending.clear();
+        sliderDragActive = false;
+        focusLeftDock = false;
+        document.removeEventListener("pointerdown", onDocPointerDown, true);
+        document.removeEventListener("pointerup", onDocPointerUp, true);
+        document.removeEventListener("pointercancel", onDocPointerUp, true);
         if (unsubscribe) {
             unsubscribe();
             unsubscribe = null;
@@ -2319,11 +3213,20 @@ export const createTimelineDetailStrip = (
             );
             boundBody.removeEventListener("click", onClickCapture, true);
             boundBody.removeEventListener("keydown", onKeyDownCapture, true);
-            boundBody
-                .querySelector<HTMLElement>(`:scope > .${DETAIL_CLASS}`)
-                ?.remove();
             boundBody = null;
         }
+        if (dockEl) {
+            // The dock element is owned by the caller: drop our listeners and
+            // clear our rendered content, but leave the element in place.
+            dockEl.removeEventListener("keydown", onStripKeyDown);
+            dockEl.removeEventListener("focusout", onDockFocusOut);
+            dockEl.removeEventListener("focusin", onDockFocusIn);
+            dockEl.removeEventListener("change", onDockChange);
+            dockEl.className = DETAIL_CLASS;
+            dockEl.innerHTML = "";
+            dockEl = null;
+        }
+        renderedSel = null;
     };
 
     return { attach, render, dispose };
