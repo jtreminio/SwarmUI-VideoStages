@@ -22,7 +22,7 @@ from .swarm_prompt_relay import (
     create_mask_fn,
     detect_model_type,
     distribute_segment_lengths,
-    get_raw_tokenizer,
+    get_tokenizer_wrapper,
     map_token_indices,
     parse_windows,
 )
@@ -143,20 +143,31 @@ class SwarmPromptRelayEncode(io.ComfyNode):
             latent_frames = max(1, len(locals_list))
             tokens_per_frame = 1
 
-        raw_tokenizer = get_raw_tokenizer(clip)
+        tokenizer_wrapper = get_tokenizer_wrapper(clip)
+        raw_tokenizer = tokenizer_wrapper.tokenizer
         full_prompt, token_ranges = map_token_indices(raw_tokenizer, global_prompt, locals_list)
 
         conditioning = clip.encode_from_tokens_scheduled(clip.tokenize(full_prompt))
 
         effective_lengths = distribute_segment_lengths(len(locals_list), latent_frames, parsed_lengths)
 
+        # Left-padding tokenizers (LTX-2's Gemma pads to >=1024) put the real prompt tokens
+        # at the END of the key axis; the mask must shift its 0-based token columns by
+        # Lk - total_tokens or the penalty lands on padding and the relay does nothing.
+        pad_left = bool(getattr(tokenizer_wrapper, "pad_left", False))
+        total_tokens = len(raw_tokenizer(full_prompt)["input_ids"])
+
         log.info(
-            "[PromptRelay] Latent: %d frames, %d tokens/frame (fallback), segments: %s",
-            latent_frames, tokens_per_frame, effective_lengths,
+            "[PromptRelay] Latent: %d frames, %d tokens/frame (fallback), segments: %s, "
+            "tokens: %d (pad_left=%s)",
+            latent_frames, tokens_per_frame, effective_lengths, total_tokens, pad_left,
         )
 
         q_token_idx = build_segments(token_ranges, effective_lengths, epsilon, None)
-        mask_fn = create_mask_fn(q_token_idx, tokens_per_frame, latent_frames)
+        mask_fn = create_mask_fn(
+            q_token_idx, tokens_per_frame, latent_frames,
+            total_tokens=total_tokens, pad_left=pad_left,
+        )
 
         patched = model.clone()
         apply_patches(patched, arch, mask_fn)

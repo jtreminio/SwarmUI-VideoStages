@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from swarm_prompt_relay.prompt_relay import (  # noqa: E402
     build_segments,
     convert_to_latent_lengths,
+    create_mask_fn,
     distribute_segment_lengths,
     map_token_indices,
     parse_windows,
@@ -83,3 +84,35 @@ def test_build_segments_midpoints_advance_with_cursor():
     assert len(segs) == 2
     assert segs[0]["midpoint"] < segs[1]["midpoint"]
     assert torch.equal(segs[0]["local_token_idx"], torch.arange(ranges[0][0], ranges[0][1]))
+
+
+def _penalized_columns(mask):
+    return set(torch.nonzero(mask < 0)[:, 1].tolist())
+
+
+def test_mask_fn_left_padded_keys_shift_token_columns_to_the_end():
+    # Ranges 1..3 and 3..5 within a 5-token prompt ("g" + 2x2 local tokens).
+    tok = _FakeTokenizer()
+    _, ranges = map_token_indices(tok, "g", ["red car", "blue boat"])
+    segs = build_segments(ranges, [4, 4], epsilon=1e-3)
+
+    mask_fn = create_mask_fn(segs, 1, latent_frames=8, total_tokens=5, pad_left=True)
+    # Lk=20 keys, left-padded: real tokens occupy columns 15..19.
+    mask = mask_fn(8, 20, torch.float32, "cpu", {})
+    assert mask is not None
+    cols = _penalized_columns(mask)
+    assert cols and cols <= set(range(15 + ranges[0][0], 20))
+    # Nothing lands in the pad region.
+    assert not cols & set(range(15))
+
+
+def test_mask_fn_right_padded_keys_keep_zero_based_columns():
+    tok = _FakeTokenizer()
+    _, ranges = map_token_indices(tok, "g", ["red car", "blue boat"])
+    segs = build_segments(ranges, [4, 4], epsilon=1e-3)
+
+    mask_fn = create_mask_fn(segs, 1, latent_frames=8, total_tokens=5, pad_left=False)
+    mask = mask_fn(8, 20, torch.float32, "cpu", {})
+    assert mask is not None
+    cols = _penalized_columns(mask)
+    assert cols and cols <= set(range(ranges[0][0], ranges[1][1]))

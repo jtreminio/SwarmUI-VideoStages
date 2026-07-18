@@ -7,6 +7,7 @@ from .prompt_relay import (
     create_mask_fn,
     distribute_segment_lengths,
     get_raw_tokenizer,
+    get_tokenizer_wrapper,
     map_token_indices,
     parse_windows,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "create_mask_fn",
     "distribute_segment_lengths",
     "get_raw_tokenizer",
+    "get_tokenizer_wrapper",
     "map_token_indices",
     "parse_windows",
 ]

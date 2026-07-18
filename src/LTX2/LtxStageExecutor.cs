@@ -158,7 +158,7 @@ internal sealed class LtxStageExecutor(
         JArray windowsJson = new(tiled.Select(window => new JObject
         {
             ["prompt"] = window.Prompt ?? "",
-            ["seconds"] = window.Seconds,
+            ["seconds"] = Math.Round(window.Seconds, 1),
         }));
 
         SwarmPromptRelayEncodeNode relay = bridge.AddNode(new SwarmPromptRelayEncodeNode().With(
