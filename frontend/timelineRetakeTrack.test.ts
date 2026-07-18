@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
     createTimelineRetakeTrack,
@@ -37,7 +38,9 @@ const makeBody = (): HTMLElement => {
     return body;
 };
 
-// Minimal region + retake overlay with the data-* hooks the module reads.
+// Minimal region + retake lane (the real markup's shape: the retake window
+// lives in a per-clip lane BELOW the region) with the data-* hooks the module
+// reads.
 const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
     let cursor = 0;
     const parts: string[] = [];
@@ -56,7 +59,8 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
                 `</div>`;
         }
         parts.push(
-            `<div class="vst-region" data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px">${overlay}</div>`,
+            `<div class="vst-region" data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px"></div>`,
+            `<div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px">${overlay}</div>`,
         );
         cursor += clip.duration;
     });
@@ -64,6 +68,29 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
         `<div class="vst-track-row vst-track-video"><div class="vst-track-cell">` +
         parts.join("") +
         `</div></div>`;
+    // jsdom does no layout — stub each lane's rect from its clip offset.
+    cursor = 0;
+    clips.forEach((clip, i) => {
+        const left = cursor * PPS;
+        const lane = body.querySelector<HTMLElement>(
+            `.vst-retake-lane[data-clip-idx="${i}"]`,
+        );
+        if (lane) {
+            lane.getBoundingClientRect = (() =>
+                ({
+                    left,
+                    width: clip.duration * PPS,
+                    right: left + clip.duration * PPS,
+                    top: 100,
+                    bottom: 120,
+                    height: 20,
+                    x: left,
+                    y: 100,
+                    toJSON: () => ({}),
+                }) as DOMRect) as HTMLElement["getBoundingClientRect"];
+        }
+        cursor += clip.duration;
+    });
 };
 
 const el = (body: HTMLElement, selector: string): HTMLElement => {
@@ -96,6 +123,7 @@ const RETAKE: Retake = { startSeconds: 2, lengthSeconds: 3, strength: 1 };
 
 describe("createTimelineRetakeTrack (DOM gestures)", () => {
     let track: TimelineRetakeTrack | null = null;
+    let router: GestureRouter | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
     beforeEach(() => {
@@ -108,6 +136,8 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
     afterEach(() => {
         track?.dispose();
         track = null;
+        router?.dispose();
+        router = null;
         jest.restoreAllMocks();
         resetSelectionForTests();
         document.body.innerHTML = "";
@@ -119,7 +149,9 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         const body = makeBody();
         renderRetake(body, clips);
         track = createTimelineRetakeTrack();
-        track.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        track.attach(body, router);
         return body;
     };
 
@@ -153,6 +185,8 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         const retake = savedRetake(saveSpy);
         expect(retake?.startSeconds).toBeCloseTo(4, 5);
         expect(retake?.lengthSeconds).toBeCloseTo(3, 5);
+        // The committed drag selects the dragged retake.
+        expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
     });
 
     it("moving past the clip end clamps start so the window stays inside", () => {
@@ -213,5 +247,43 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         );
 
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
+    });
+
+    // ---- relay-prompt parity: lane create --------------------------------
+
+    it("clicking the empty lane adds a default-length retake and selects it", () => {
+        const body = setup([{ duration: 10 }]);
+        const lane = el(body, ".vst-retake-lane[data-clip-idx='0']");
+        lane.dispatchEvent(mouse("mousedown", 3 * PPS)); // t = 3s
+        document.dispatchEvent(mouse("mouseup", 3 * PPS));
+
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        const retake = savedRetake(saveSpy);
+        expect(retake?.startSeconds).toBeCloseTo(3, 5);
+        expect(retake?.lengthSeconds).toBeCloseTo(2, 5); // default length
+        expect(retake?.strength).toBe(1);
+        expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
+    });
+
+    it("click-dragging on the empty lane adds a retake sized to the drag", () => {
+        const body = setup([{ duration: 10 }]);
+        const lane = el(body, ".vst-retake-lane[data-clip-idx='0']");
+        lane.dispatchEvent(mouse("mousedown", 2 * PPS));
+        document.dispatchEvent(mouse("mousemove", 7 * PPS));
+        document.dispatchEvent(mouse("mouseup", 7 * PPS));
+
+        const retake = savedRetake(saveSpy);
+        expect(retake?.startSeconds).toBeCloseTo(2, 5);
+        expect(retake?.lengthSeconds).toBeCloseTo(5, 5);
+    });
+
+    it("a lane press does nothing when the clip already has a retake", () => {
+        const body = setup([{ duration: 10, retake: RETAKE }]);
+        const lane = el(body, ".vst-retake-lane[data-clip-idx='0']");
+        // Press the lane OUTSIDE the existing window (retake spans [2,5]).
+        lane.dispatchEvent(mouse("mousedown", 8 * PPS));
+        document.dispatchEvent(mouse("mouseup", 8 * PPS));
+
+        expect(saveSpy).not.toHaveBeenCalled();
     });
 });

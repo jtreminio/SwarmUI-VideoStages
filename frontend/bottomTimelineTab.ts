@@ -1,6 +1,29 @@
 const TAB_ID = "VideoStages-Timeline-Tab";
 export const TIMELINE_BODY_ID = "videostages-timeline-body";
 
+/**
+ * Show/hide a green checkmark on the bottom-bar "Timeline" tab selector so the
+ * VideoStages enable state is visible without opening the tab.
+ */
+export const updateTimelineTabIndicator = (enabled: boolean): void => {
+    const navLink = document.querySelector<HTMLElement>(`a[href="#${TAB_ID}"]`);
+    if (!navLink) {
+        return;
+    }
+    const mark = navLink.querySelector(".vst-tab-check");
+    if (enabled && !mark) {
+        const check = document.createElement("span");
+        check.className = "vst-tab-check";
+        check.setAttribute("aria-hidden", "true");
+        check.textContent = "✓";
+        navLink.appendChild(check);
+        navLink.title = "Video Stages is enabled";
+    } else if (!enabled && mark) {
+        mark.remove();
+        navLink.removeAttribute("title");
+    }
+};
+
 const registerTabWithLayout = (navLink: HTMLElement): void => {
     if (typeof genTabLayout === "undefined" || !genTabLayout) {
         return;

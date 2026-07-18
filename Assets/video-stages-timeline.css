@@ -6,8 +6,12 @@
     --vst-border-strong: var(--border-color, var(--light-border));
     --vst-header-w: 168px;
     --vst-ruler-h: 26px;
-    --vst-lane-video-h: 132px;
-    --vst-lane-audio-h: 54px;
+    /* Clip regions + a retake mini-lane beneath them (prompt-track idiom). */
+    --vst-lane-video-h: 158px;
+    --vst-retake-lane-h: 20px;
+    /* Two mini-rows (clip + segments lane), same split layout as the prompt
+       track — so same height. */
+    --vst-lane-audio-h: 72px;
     --vst-lane-prompt-h: 72px;
     --vst-lane-refs-h: 40px;
     --vst-refs-band: 8px;
@@ -20,6 +24,14 @@
     --vst-font-2xs: 0.714em;
     --vst-font-3xs: 0.7em;
     --vst-mono: var(--font-monospace, ui-monospace, Menlo, Consolas, monospace);
+    /* Cross-component stacking scale for the tracks canvas. Values 0-4 inside
+       a single positioned widget stay literal (local stacking contexts); only
+       layers that interleave ACROSS components live here. */
+    --vst-z-overlay: 6; /* in-region controls, edge-resize handles */
+    --vst-z-boundary-chip: 7; /* boundary chips */
+    --vst-z-track-header: 8; /* sticky track-header column */
+    --vst-z-ruler: 9; /* sticky time ruler */
+    --vst-z-corner: 10; /* sticky corner (header ∩ ruler) */
     display: flex;
     flex-direction: row;
     align-items: stretch;
@@ -31,6 +43,13 @@
 }
 .vst-timeline * {
     box-sizing: border-box;
+}
+/* Green enable check on the bottom-bar "Timeline" tab selector. Lives outside
+   .vst-timeline, so only host theme vars are available here. */
+.vst-tab-check {
+    margin-left: 5px;
+    color: var(--green);
+    font-weight: 700;
 }
 /* Tracks column: the topbar + scrolling track plane. renderTimeline wipes this
    element's innerHTML; the detail dock is a sibling, so it is never touched. */
@@ -124,7 +143,7 @@
 }
 .vst-enable-input:checked::after {
     transform: translateX(14px);
-    background: #fff;
+    background: var(--emphasis-text, var(--button-text));
 }
 .vst-enable-input:focus-visible {
     outline: 2px solid var(--emphasis);
@@ -168,11 +187,6 @@
     color: var(--emphasis);
     font-weight: 500;
 }
-.vst-readout-head {
-    color: var(--emphasis);
-    font-weight: 500;
-}
-
 .vst-toggle {
     font-size: var(--vst-font-sm);
     font-weight: 500;
@@ -294,7 +308,7 @@
 .vst-ruler-row {
     position: sticky;
     top: 0;
-    z-index: 9;
+    z-index: var(--vst-z-ruler);
     display: flex;
     height: var(--vst-ruler-h);
     background: var(--vst-panel);
@@ -303,7 +317,7 @@
 .vst-corner {
     position: sticky;
     left: 0;
-    z-index: 10;
+    z-index: var(--vst-z-corner);
     width: var(--vst-header-w);
     flex: none;
     display: flex;
@@ -360,47 +374,6 @@
     color: var(--text);
 }
 
-/* Playhead: a scrub cursor spanning the ruler + all track rows. View-only. */
-.vst-playhead-handle {
-    position: absolute;
-    bottom: 0;
-    width: 11px;
-    height: 11px;
-    margin-left: -5px;
-    z-index: 11;
-    background: var(--emphasis);
-    clip-path: polygon(50% 100%, 0 0, 100% 0);
-    pointer-events: auto;
-    cursor: ew-resize;
-}
-.vst-playhead {
-    position: absolute;
-    top: var(--vst-ruler-h);
-    bottom: 0;
-    width: 0;
-    z-index: 7;
-    pointer-events: none;
-}
-.vst-playhead-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: -1px;
-    width: 2px;
-    background: var(--emphasis);
-    box-shadow: 0 0 4px color-mix(in srgb, var(--emphasis) 60%, transparent);
-    pointer-events: none;
-}
-.vst-playhead-hit {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: -5px;
-    width: 11px;
-    pointer-events: auto;
-    cursor: ew-resize;
-}
-
 .vst-track-row {
     display: flex;
     border-bottom: 1px solid var(--vst-hairline);
@@ -411,7 +384,7 @@
     flex: none;
     position: sticky;
     left: 0;
-    z-index: 8;
+    z-index: var(--vst-z-track-header);
     display: flex;
     align-items: center;
     gap: 9px;
@@ -487,7 +460,8 @@
 .vst-region {
     position: absolute;
     top: var(--vst-refs-band);
-    bottom: 10px;
+    /* Clear the retake mini-lane below (lane height + 2×6px gaps). */
+    bottom: calc(var(--vst-retake-lane-h) + 12px);
     user-select: none;
     border-radius: var(--vst-radius);
     border: 1.5px solid
@@ -575,14 +549,6 @@
 .vst-region[data-clip-idx] {
     cursor: pointer;
 }
-/* Faint tint marking the clip the playhead resolves to (not a selection). */
-.vst-under-head {
-    background-image: linear-gradient(
-        0deg,
-        color-mix(in srgb, var(--emphasis) 12%, transparent),
-        color-mix(in srgb, var(--emphasis) 12%, transparent)
-    );
-}
 .vst-region-dragging {
     opacity: 0.45;
 }
@@ -605,15 +571,11 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 5px 8px 0;
+    /* Constant right padding clears the always-visible corner controls, so
+       the duration label never shifts on hover. */
+    padding: 5px 36px 0 8px;
     overflow: hidden;
     white-space: nowrap;
-    transition: padding-right var(--vst-ease);
-}
-.vst-region:hover .vst-region-head,
-.vst-region-selected .vst-region-head,
-.vst-region:focus-within .vst-region-head {
-    padding-right: 58px;
 }
 .vst-region-name {
     font-size: var(--vst-font-xs);
@@ -660,11 +622,6 @@
     opacity: 0.4;
     filter: grayscale(1);
     text-decoration: line-through;
-    border-style: dashed;
-}
-.vst-stage-chip-add {
-    font-weight: 700;
-    color: color-mix(in srgb, var(--emphasis) 80%, var(--text));
     border-style: dashed;
 }
 .vst-region-dur {
@@ -731,23 +688,15 @@
     color: var(--emphasis);
 }
 
+/* Always visible (not hover-revealed): a stable corner control means the
+   region head never reflows when the pointer enters that corner. */
 .vst-region-controls {
     position: absolute;
     top: 4px;
     right: 10px;
     display: flex;
     gap: 4px;
-    z-index: 6;
-    opacity: 0;
-    transform: translateY(-2px);
-    transition: opacity var(--vst-ease), transform var(--vst-ease);
-}
-.vst-region:hover .vst-region-controls,
-.vst-region-selected .vst-region-controls,
-.vst-region:focus-within .vst-region-controls,
-.vst-region-controls:focus-within {
-    opacity: 1;
-    transform: translateY(0);
+    z-index: var(--vst-z-overlay);
 }
 .vst-region-btn {
     position: relative;
@@ -788,15 +737,23 @@
     border-color: color-mix(in srgb, var(--emphasis) 55%, transparent);
     background: color-mix(in srgb, var(--emphasis) 18%, var(--background));
 }
-.vst-region-resize {
+/* Shared edge-resize handle chrome; widgets override offsets/stacking below. */
+.vst-region-resize,
+.vst-minor-resize,
+.vst-retake-resize,
+.vst-audio-seg-resize {
     position: absolute;
     top: 0;
-    bottom: 12px;
+    bottom: 0;
     width: 7px;
-    z-index: 6;
+    cursor: ew-resize;
+    z-index: 2;
+}
+.vst-region-resize {
+    bottom: 12px;
+    z-index: var(--vst-z-overlay);
     transition: background var(--vst-ease);
     right: 0;
-    cursor: ew-resize;
     border-radius: 0 var(--vst-radius) var(--vst-radius) 0;
 }
 .vst-region-resize:hover {
@@ -825,23 +782,15 @@
     pointer-events: none;
     z-index: 3;
 }
+/* Purely visual markers (editing lives on the References track): no pointer
+   events, no grab cursor, no hover affordance. */
 .vst-key {
     position: absolute;
     top: 0;
     width: 16px;
     height: 16px;
     transform: translateX(-50%);
-    pointer-events: auto;
-    cursor: grab;
-}
-.vst-keyframing .vst-key {
-    cursor: grabbing;
-}
-.vst-key:hover {
-    z-index: 4;
-}
-.vst-key:focus-visible {
-    outline: none;
+    pointer-events: none;
 }
 .vst-key-dot {
     position: absolute;
@@ -857,7 +806,6 @@
         0 1px 1px color-mix(in srgb, var(--background) 60%, transparent)
     );
     pointer-events: none;
-    transition: filter var(--vst-ease);
 }
 .vst-key-end .vst-key-dot {
     border-top-color: color-mix(in srgb, var(--emphasis) 45%, var(--vst-panel));
@@ -867,12 +815,6 @@
     border-right-width: 6px;
     border-top-width: 10px;
     border-top-color: var(--emphasis);
-}
-.vst-key:hover .vst-key-dot,
-.vst-key:focus-visible .vst-key-dot {
-    filter: drop-shadow(
-        0 0 3px color-mix(in srgb, var(--emphasis) 60%, transparent)
-    );
 }
 .vst-drop-indicator {
     position: absolute;
@@ -884,22 +826,36 @@
     background: var(--emphasis);
     box-shadow: 0 0 8px color-mix(in srgb, var(--emphasis) 60%, transparent);
     pointer-events: none;
-    z-index: 6;
+    z-index: var(--vst-z-overlay);
 }
 
 .vst-audio-clip {
+    /* Top mini-row of the audio track (segments lane sits beneath), mirroring
+       the prompt track's major/minor split. Every source kind renders the
+       full-width fake waveform in its own tint (set by .vst-audio-kind-*). */
+    --vst-audio-tint: var(--green);
     position: absolute;
-    top: 8px;
-    bottom: 8px;
+    top: 6px;
+    height: calc(50% - 10px);
     border-radius: 4px;
     background: linear-gradient(
         180deg,
-        color-mix(in srgb, var(--green) 16%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--green) 34%, var(--vst-panel)) 50%,
-        color-mix(in srgb, var(--green) 16%, var(--vst-panel)) 100%
+        color-mix(in srgb, var(--vst-audio-tint) 16%, var(--vst-panel)) 0%,
+        color-mix(in srgb, var(--vst-audio-tint) 34%, var(--vst-panel)) 50%,
+        color-mix(in srgb, var(--vst-audio-tint) 16%, var(--vst-panel)) 100%
     );
-    border: 1px solid color-mix(in srgb, var(--green) 40%, var(--light-border));
+    border: 1px solid
+        color-mix(in srgb, var(--vst-audio-tint) 40%, var(--light-border));
     overflow: hidden;
+}
+.vst-audio-kind-native {
+    --vst-audio-tint: var(--green);
+}
+.vst-audio-kind-upload {
+    --vst-audio-tint: hsl(207 65% 52%);
+}
+.vst-audio-kind-ace {
+    --vst-audio-tint: hsl(275 55% 58%);
 }
 .vst-audio-wave {
     position: absolute;
@@ -910,22 +866,34 @@
     overflow: hidden;
 }
 .vst-audio-wave span {
-    flex: none;
-    width: 2px;
+    /* Grow to fill: the bar count is density, not coverage — the waveform
+       always spans the clip's full width. */
+    flex: 1 1 2px;
+    min-width: 2px;
     min-height: 2px;
     border-radius: 1px;
-    background: color-mix(in srgb, var(--green) 45%, var(--text));
+    background: color-mix(in srgb, var(--vst-audio-tint, var(--green)) 45%, var(--text));
     opacity: 0.7;
 }
 .vst-audio-label {
+    /* Opaque tinted pill: the full-width waveform runs underneath, so a bare
+       text-shadow is not enough contrast. */
     position: absolute;
-    top: 2px;
-    left: 8px;
+    top: 3px;
+    left: 6px;
     z-index: 1;
+    padding: 1px 6px;
+    border-radius: 3px;
     font-size: var(--vst-font-2xs);
     font-weight: 500;
     color: var(--text);
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--background) 60%, transparent);
+    background: color-mix(
+        in srgb,
+        var(--vst-panel) 86%,
+        var(--vst-audio-tint, var(--green))
+    );
+    border: 1px solid
+        color-mix(in srgb, var(--vst-audio-tint, var(--green)) 35%, transparent);
     pointer-events: none;
 }
 
@@ -1073,14 +1041,6 @@
     text-overflow: ellipsis;
     pointer-events: none;
 }
-.vst-minor-resize {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 7px;
-    cursor: ew-resize;
-    z-index: 2;
-}
 .vst-minor-resize-l {
     left: -1px;
 }
@@ -1120,12 +1080,33 @@
     z-index: 4;
 }
 
-/* Retake range: hatched overlay on the clip region (bottom band). */
+/* Retake mini-lane under each clip region — same idiom as the relay lane:
+   click empty space to add, drag the window to move/resize. */
+.vst-retake-lane {
+    position: absolute;
+    bottom: 6px;
+    height: var(--vst-retake-lane-h);
+    border-radius: var(--vst-radius-sm);
+    background: color-mix(in srgb, var(--emphasis) 5%, transparent);
+    box-shadow: inset 0 0 0 1px var(--vst-hairline);
+    cursor: copy;
+}
+.vst-retake-ghost {
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px dashed color-mix(in srgb, var(--emphasis) 65%, transparent);
+    background: color-mix(in srgb, var(--emphasis) 18%, transparent);
+    pointer-events: none;
+    z-index: 4;
+}
+/* Retake range: hatched window inside its lane. */
 .vst-retake {
     position: absolute;
     left: 0;
-    bottom: 2px;
-    height: 18px;
+    top: 1px;
+    bottom: 1px;
     z-index: 3;
     display: flex;
     align-items: center;
@@ -1161,25 +1142,12 @@
     pointer-events: none;
     text-shadow: 0 1px 2px color-mix(in srgb, var(--vst-panel) 70%, transparent);
 }
-.vst-retake-resize {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 7px;
-    cursor: ew-resize;
-    z-index: 2;
-}
 .vst-retake-resize-l {
     left: -1px;
 }
 .vst-retake-resize-r {
     right: -1px;
 }
-.vst-retake.vst-selected {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
-}
-
 .vst-detail-add-retake {
     align-self: flex-start;
     margin-top: 2px;
@@ -1217,12 +1185,40 @@
     color: var(--text-soft);
 }
 
-/* Overlay audio-segment spans, drawn on top of a clip's base audio lane. */
+/* The audio track's bottom mini-row: a per-clip segments lane, mirroring the
+   prompt track's minor lane — click empty space to add a segment. */
+.vst-audio-cell::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 1px dashed var(--vst-hairline);
+    pointer-events: none;
+}
+.vst-audio-seg-lane {
+    position: absolute;
+    bottom: 6px;
+    height: calc(50% - 10px);
+    border-radius: var(--vst-radius-sm);
+    background: color-mix(in srgb, var(--emphasis) 5%, transparent);
+    box-shadow: inset 0 0 0 1px var(--vst-hairline);
+    cursor: copy;
+}
+.vst-audio-seg-ghost {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px dashed color-mix(in srgb, var(--emphasis) 65%, transparent);
+    background: color-mix(in srgb, var(--emphasis) 18%, transparent);
+    pointer-events: none;
+    z-index: 4;
+}
 .vst-audio-seg {
     position: absolute;
     top: 2px;
-    height: 16px;
-    z-index: 4;
+    bottom: 2px;
     display: flex;
     align-items: center;
     padding: 0 6px;
@@ -1249,29 +1245,27 @@
     pointer-events: none;
     text-shadow: 0 1px 2px color-mix(in srgb, var(--vst-panel) 70%, transparent);
 }
-.vst-audio-seg-resize {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 6px;
-    cursor: ew-resize;
-    z-index: 2;
-}
 .vst-audio-seg-resize-l {
     left: 0;
 }
 .vst-audio-seg-resize-r {
     right: 0;
 }
-.vst-audio-seg.vst-selected {
-    outline: 2px solid var(--accent, var(--emphasis));
-    outline-offset: 1px;
-}
 
-/* Track element bound to the detail strip (non-clip selection kinds). */
+/* Track elements bound to the detail strip (non-clip selection kinds) share
+   one selection affordance. --accent was never defined by any host theme, so
+   folding the audio segment's old var(--accent, --emphasis) in here is a
+   no-op. */
+.vst-retake.vst-selected,
+.vst-audio-seg.vst-selected,
 .vst-major-seg.vst-selected,
-.vst-minor-seg.vst-selected {
-    outline: 2px solid var(--emphasis);
+.vst-minor-seg.vst-selected,
+.vst-audio-clip.vst-selected,
+.vst-audio-clip:focus-visible {
+    /* NOT emphasis: these elements' resting borders are already emphasis-mixed,
+       so an emphasis outline read as "same color, just bolder". Text color
+       contrasts in both themes (the NLE-style selection ring). */
+    outline: 2px solid var(--text);
     outline-offset: 1px;
 }
 
@@ -1390,22 +1384,6 @@
 }
 .vst-audio-clip:hover {
     filter: brightness(1.06);
-}
-.vst-audio-clip:focus-visible {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
-}
-.vst-audio-clip.vst-selected {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
-}
-.vst-audio-clip.vst-audio-native {
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--text) 5%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--text) 9%, var(--vst-panel)) 100%
-    );
-    border-color: var(--vst-hairline);
 }
 .vst-audio-native .vst-audio-label {
     color: var(--text-soft);
@@ -1581,8 +1559,18 @@
     outline: none;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--emphasis) 45%, transparent);
 }
+/* Mirrored highlight while hovering the ref's strength row in the dock: must
+   read clearly even on the primary ref, whose resting border is already the
+   emphasis color — so brighten the thumb and use a full-strength ring. */
+.vst-refs-mark.vst-ref-hover .vst-refs-thumb {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--emphasis);
+    filter: brightness(1.35);
+}
 .vst-refs-mark.vst-selected .vst-refs-thumb {
-    box-shadow: 0 0 0 2px var(--emphasis);
+    /* Same text-color ring as the shared .vst-selected rule — the primary
+       ref's resting border is already emphasis-colored. */
+    box-shadow: 0 0 0 2px var(--text);
 }
 .vst-refs-primary .vst-refs-thumb {
     border-color: var(--emphasis);
@@ -1661,6 +1649,7 @@
 }
 .vst-stage-lora-add {
     align-self: flex-start;
+    margin-top: 4px;
     padding: 3px 10px;
     border-radius: var(--vst-radius-sm);
     border: 1px solid var(--vst-hairline);
@@ -1763,7 +1752,7 @@
 /* ============================================================
    Detail dock — selection-driven editor docked on the LEFT of
    the tracks (clip/stage, ref, audio, prompt, settings). Chrome
-   follows SwarmUI's native `.input-group` accordion idiom.
+   follows SwarmUI's native `.input-group` idiom (headerless).
    ============================================================ */
 .vst-detail {
     flex: 0 0 352px;
@@ -1872,7 +1861,7 @@
     overflow-x: hidden;
 }
 
-/* --- host-convention input-group accordion sections ---------------------- */
+/* --- host-convention input-group sections (headerless containers) -------- */
 .vst-detail .input-group {
     flex: none;
     /* Bootstrap's `.input-group` defaults to a horizontal flex row; force a
@@ -1884,60 +1873,31 @@
     width: 100%;
     border-bottom: 1px solid var(--vst-hairline);
 }
-.vst-detail .input-group-header {
-    display: flex;
-    align-items: center;
-    padding: 7px 12px;
-    cursor: pointer;
-    user-select: none;
-    background: var(--vst-panel);
-    transition: background var(--vst-ease);
-}
-.vst-detail .input-group-header:hover {
-    background: var(--vst-panel-2);
-}
-.vst-detail .input-group .header-label-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    min-width: 0;
-}
-.vst-detail .input-group .auto-symbol {
-    flex: none;
-    font-size: var(--vst-font-2xs);
-    line-height: 1;
-    color: var(--text-soft);
-}
-.vst-detail .input-group .header-label {
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-3xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 600;
-    color: var(--emphasis);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.vst-detail .input-group .header-label-spacer {
-    flex: 1 1 auto;
-}
-.vst-detail .input-group .header-label-counter {
-    flex: none;
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-3xs);
-    color: var(--text-soft);
-}
+/* Groups are headerless: the dock breadcrumb is the single panel label. */
 .vst-detail .input-group-content {
     display: flex;
     flex-direction: column;
+    flex-wrap: nowrap;
     align-items: stretch;
     align-content: flex-start;
     width: 100%;
     max-width: 100%;
     padding-left: 0;
     text-align: left;
+}
+/* The modern theme ships `.input-group .input-group-content>div
+   { padding: 5px 10px; align-items: center }` (themes/modern.css), whose
+   specificity beats every single-class dock wrapper — it center-shrinks the
+   section wraps (labels looked centered, the stage rail never filled the
+   column) and silently replaced panel-body padding. Out-specify it: sections
+   stretch, and padding is routed through --vst-content-pad so each container
+   states its own (default 0). */
+.vst-detail .input-group .input-group-content > div {
+    padding: var(--vst-content-pad, 0);
+    align-items: stretch;
+}
+.vst-detail-form-body {
+    --vst-content-pad: 12px 14px;
 }
 
 /* Form editors (ref / audio / prompt / settings) stack vertically in the dock;
@@ -1990,10 +1950,10 @@
     flex: 1 1 0;
     min-width: 0;
 }
+/* Active = a single highlight border only: no background tint, no inner
+   box-shadow, no child highlights. */
 .vst-detail-minor-active {
     border-color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 10%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emphasis) 40%, transparent);
 }
 .vst-detail-minor-head {
     display: flex;
@@ -2008,9 +1968,6 @@
     text-transform: uppercase;
     font-weight: 600;
     color: var(--text-soft);
-}
-.vst-detail-minor-active .vst-detail-minor-title {
-    color: var(--emphasis);
 }
 .vst-detail-minor-delete {
     margin-top: 0;
@@ -2039,10 +1996,9 @@
     width: 100%;
     box-sizing: border-box;
 }
+/* Active = a single highlight border only, same as the relay window card. */
 .vst-detail-instance-active {
     border-color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 10%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--emphasis) 40%, transparent);
 }
 .vst-detail-instance-head {
     display: flex;
@@ -2057,9 +2013,6 @@
     text-transform: uppercase;
     font-weight: 600;
     color: var(--text-soft);
-}
-.vst-detail-instance-active .vst-detail-instance-title {
-    color: var(--emphasis);
 }
 .vst-detail-instance-delete {
     margin-top: 0;
@@ -2166,11 +2119,76 @@
     font-size: var(--vst-font-3xs);
     color: var(--text-soft);
 }
+/* Clip panel: the clip's own fields render bare (no group container); a
+   hairline separates them from the Stages group below. */
+.vst-detail-clip-body > .vst-detail-clip {
+    border-bottom: 1px solid var(--vst-hairline);
+}
+/* One Stages section: selector rail on top, the selected stage's parameters
+   directly beneath — collapse the seam padding between the two columns. */
+.vst-detail-stages-wrap {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+/* Section label inside a group wrap (Stages / Retake) — the group chrome is
+   headerless, so this is the one plain-text label. */
+.vst-detail-wrap-sec {
+    margin: 0;
+    padding: 10px 14px 0;
+}
+/* The rail is one row: stage tabs left-aligned filling the width, and a
+   right-aligned action column (Add above Delete, both always present). */
+.vst-detail-stages-wrap > .vst-detail-rail {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 0;
+}
 .vst-detail-rail-list {
     display: flex;
     flex-flow: row wrap;
     gap: 4px;
+    align-items: flex-start;
+    align-content: flex-start;
+    justify-content: flex-start;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.vst-detail-rail-actions {
+    flex: none;
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    /* stretch = both buttons share the widest one's width. */
     align-items: stretch;
+    gap: 4px;
+}
+.vst-detail-rail-btn {
+    padding: 2px 10px;
+    font-size: var(--vst-font-3xs);
+    white-space: nowrap;
+    text-align: center;
+}
+/* Neutral chrome for non-destructive rail buttons; destructive ones keep
+   their .vst-refs-delete red treatment. */
+.vst-detail-rail-btn:not(.vst-refs-delete) {
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background: transparent;
+    color: var(--text-soft);
+    cursor: pointer;
+}
+.vst-detail-rail-btn:not(.vst-refs-delete):hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--emphasis);
+}
+.vst-detail-rail-btn:disabled {
+    opacity: 0.45;
+    /* not-allowed needs pointer-events left ON; disabled buttons don't fire
+       clicks anyway. */
+    cursor: not-allowed;
 }
 .vst-detail-rail-list .vst-stage-tab {
     cursor: pointer;
@@ -2197,10 +2215,6 @@
 .vst-detail-fields > .vst-detail-span-full {
     grid-column: 1 / -1;
 }
-.vst-detail-delete-stage {
-    width: 100%;
-    font-size: var(--vst-font-3xs);
-}
 .vst-detail-sec {
     margin: 8px 0 2px;
     font-family: var(--vst-mono);
@@ -2216,7 +2230,7 @@
     position: absolute;
     top: 50%;
     transform: translate(-50%, -50%);
-    z-index: 7;
+    z-index: var(--vst-z-boundary-chip);
     width: 18px;
     height: 18px;
     display: inline-flex;

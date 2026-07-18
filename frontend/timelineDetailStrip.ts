@@ -6,7 +6,6 @@ import {
     resolveAudioSourceValue,
 } from "./audioSource";
 import {
-    AUDIO_SEGMENT_DEFAULT_LENGTH,
     AUDIO_SEGMENT_MIN_LENGTH,
     AUDIO_SEGMENT_STEP,
     CLIP_DURATION_MAX,
@@ -58,7 +57,12 @@ import {
 } from "./normalization";
 import { getClips, getState, saveClips, saveState } from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import type { UpdateMeta } from "./store";
 import { isVideoStagesEnabled, readStateToken } from "./swarmInputs";
+import {
+    audioSegmentNeighborBounds,
+    firstAudioSegmentGap,
+} from "./timelineAudioSegmentTrack";
 import {
     type BoundaryPlan,
     crossfadePlanForClips,
@@ -72,6 +76,7 @@ import { applyClipDurationResize } from "./timelineEdit";
 import {
     applyPromptWindowBegin,
     applyPromptWindowEnd,
+    promptWindowNeighborBounds,
 } from "./timelinePromptTrack";
 import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "./timelineView";
 import {
@@ -91,16 +96,13 @@ import {
 } from "./uiState";
 
 const STAGE_SELECTOR = "[data-vst-stage]";
-const STAGE_ADD_SELECTOR = "[data-vst-stage-add]";
 const MODEL_SELECTOR = "[data-vst-model]";
-const INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${STAGE_ADD_SELECTOR}, ${MODEL_SELECTOR}`;
+const INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
 
 const DETAIL_CLASS = "vst-detail";
 // Stable, bounded group-section ids (never per-instance): collapse prefs persist
 // across selections and cookies stay bounded. Instance identity rides the counter.
-const GROUP_CLIP = "vstdock_clip";
 const GROUP_STAGES = "vstdock_stages";
-const GROUP_STAGEPARAMS = "vstdock_stageparams";
 const GROUP_REF = "vstdock_ref";
 const GROUP_AUDIO = "vstdock_audio";
 const GROUP_AUDIOSEG = "vstdock_audioseg";
@@ -125,15 +127,18 @@ export interface TimelineDetailStrip {
      *   caller) that the strip renders its header + panel groups into.
      */
     attach(body: HTMLElement, dock: HTMLElement): void;
-    render(): void;
+    /**
+     * @param meta store-update metadata when this render is driven by a store
+     *   notification (commit/external); omitted for direct renders (selection
+     *   change, settings open, view-state repaints).
+     */
+    render(meta?: UpdateMeta): void;
     dispose(): void;
 }
 
 export interface TimelineDetailStripOptions {
     isCollapsed: () => boolean;
     setCollapsed: (collapsed: boolean) => void;
-    /** Re-render the whole timeline (used after a settings/dims change). */
-    refresh?: () => void;
 }
 
 const clampDimension = (value: number): number =>
@@ -252,21 +257,15 @@ export const createTimelineDetailStrip = (
     // highlight swap instead of a full innerHTML rebuild.
     let renderedSel: TimelineSelection | null = null;
 
-    // Value-only-commit handshake. A dock-origin VALUE edit (a number/slider/
-    // checkbox/select write that changes DATA but not panel STRUCTURE) already
-    // shows the right value in its own field — only the TIMELINE needs
-    // repainting, never the dock DOM. A save triggers the host's carrier
-    // notify → videoStagesTimeline.refresh() → detailStrip.render() SYNCHRONOUSLY
-    // (and value flushes may also call options.refresh() directly); that render
-    // would innerHTML-rebuild the dock and destroy the focused node. So the value
-    // primitives (flushPending / commit / commitState) raise this flag around the
-    // save+refresh, and render() consumes it by doing a light derived-UI sync
-    // instead of a rebuild. The flag lives ONLY inside that synchronous window
-    // (cleared in a finally before any async yield), so an external carrier
-    // change, undo/redo, or a selection change — all async or non-flush renders —
-    // never see it and always rebuild. STRUCTURE-affecting commits leave the flag
-    // untouched for their own explicit render() call, which rebuilds normally.
-    let suppressNextDockRebuild = false;
+    // Value-only commits: a dock-origin VALUE edit (a number/slider/checkbox/
+    // select write that changes DATA but not panel STRUCTURE) already shows the
+    // right value in its own field — only the TIMELINE needs repainting, never
+    // the dock DOM. The value primitives (flushPending / commit / commitState)
+    // save with `valueOnly: true`, which reaches render() as
+    // meta.hint === "value-only" on the store's commit notification; render()
+    // answers it with a light derived-UI sync instead of a rebuild. Renders with
+    // no meta or without the hint — an external carrier change, undo/redo, a
+    // selection change, a STRUCTURE-affecting dock commit — always rebuild.
 
     // A keyboard-edited dock field currently owns focus (textarea / typed text /
     // number). While one does, debounced edits are HELD — the timer is not armed,
@@ -400,10 +399,6 @@ export const createTimelineDetailStrip = (
     interface PendingEntry {
         kind: "clips" | "state";
         mutate: ((clips: Clip[]) => void) | ((state: StateDraft) => void);
-        // A clip edit whose result the timeline tracks must reflect (e.g. a
-        // relay window's begin/end, which the prompt track draws): flushing it
-        // repaints the whole timeline once, like a state change does.
-        refresh?: boolean;
         // A contextually-clamped field's post-flush display corrector: re-derive
         // the value to SHOW from the freshly-saved clips (the same accessor the
         // panel builder read at build time) so a clamp the input's static
@@ -438,7 +433,6 @@ export const createTimelineDetailStrip = (
         if (isStale()) {
             return;
         }
-        const wantTimelineRefresh = entries.some((e) => e.refresh);
         const clipMutates = entries
             .filter((e) => e.kind === "clips")
             .map((e) => e.mutate as (clips: Clip[]) => void);
@@ -447,9 +441,8 @@ export const createTimelineDetailStrip = (
             .map((e) => e.mutate as (state: StateDraft) => void);
         // Every entry in the pending map is value-only by construction (the
         // debounced* commit helpers), so the whole flush is a value-only op:
-        // hold the dock DOM stable across the save-triggered render(s).
-        const prevSuppress = suppressNextDockRebuild;
-        suppressNextDockRebuild = true;
+        // the commit notification renders with the value-only hint, holding
+        // the dock DOM stable while the timeline repaints.
         flushing = true;
         let flushedClips: Clip[] | null = null;
         try {
@@ -458,7 +451,10 @@ export const createTimelineDetailStrip = (
                 for (const m of clipMutates) {
                     m(clips);
                 }
-                saveClips(clips);
+                saveClips(clips, undefined, {
+                    origin: "detail-strip",
+                    valueOnly: true,
+                });
                 flushedClips = clips;
             }
             if (stateMutates.length > 0) {
@@ -468,27 +464,24 @@ export const createTimelineDetailStrip = (
                 }
                 saveState(state, undefined, {
                     notifyDomChange: isVideoStagesEnabled(),
+                    origin: "detail-strip",
+                    valueOnly: true,
                 });
             }
             sourceToken = readStateToken();
-            flushing = false;
-            if (stateMutates.length > 0 || wantTimelineRefresh) {
-                options.refresh?.();
-            }
         } finally {
             flushing = false;
-            suppressNextDockRebuild = prevSuppress;
         }
         // Contextual-clamp write-back: a flushed field's mutator may have stored
         // a value the input's static min/max couldn't foresee (relay neighbour
         // bound, length capped by start). Re-derive each such field's display
         // from the freshly-saved clips and correct the input in place — no
-        // rebuild. Runs after any suppressed notify/refresh render, which never
-        // touches inputs, so this is the sole corrector of the shown value.
+        // rebuild. Runs after the value-only notify render, which never touches
+        // inputs, so this is the sole corrector of the shown value.
         writeBackClamped(entryList, flushedClips);
         // Belt-and-suspenders: sync value-derived dock UI directly, in case no
-        // notify/refresh render fired (e.g. a headless context with no prompt
-        // input). Idempotent with the sync any suppressed render already did.
+        // notify render fired (e.g. a headless context with no prompt input).
+        // Idempotent with the sync any value-only render already did.
         syncValueDerivedUI(renderedSel);
     };
 
@@ -584,8 +577,6 @@ export const createTimelineDetailStrip = (
         min: number;
         max: number;
         step: number;
-        // Repaint the timeline on commit (relay windows the prompt track draws).
-        refresh?: boolean;
         readBack: (clips: Clip[]) => number | null;
         mutate: (clips: Clip[], value: number) => void;
     }): HTMLInputElement => {
@@ -598,7 +589,6 @@ export const createTimelineDetailStrip = (
                 schedulePending(opts.key, {
                     kind: "clips",
                     mutate: (clips: Clip[]) => opts.mutate(clips, value),
-                    refresh: opts.refresh === true,
                     readBack: opts.readBack,
                 });
             },
@@ -619,17 +609,15 @@ export const createTimelineDetailStrip = (
         // commit() is used by both value-only edits (a select/checkbox that only
         // changes data — model, sampler, skip, …) and structure-affecting ones (a
         // source select that shows/hides rows). Value-only callers do NOT call
-        // render() afterwards, so the save-triggered notify render must stay
-        // value-only (no rebuild); structure-affecting callers DO call render()
-        // after this returns (flag reset), so their explicit render rebuilds.
-        const prevSuppress = suppressNextDockRebuild;
-        suppressNextDockRebuild = true;
-        try {
-            saveClips(clips);
-            sourceToken = readStateToken();
-        } finally {
-            suppressNextDockRebuild = prevSuppress;
-        }
+        // render() afterwards, so the commit notification's render must stay
+        // value-only (the hint below); structure-affecting callers DO call
+        // render() after this returns — a direct render with no meta, which
+        // rebuilds.
+        saveClips(clips, undefined, {
+            origin: "detail-strip",
+            valueOnly: true,
+        });
+        sourceToken = readStateToken();
         syncValueDerivedUI(renderedSel);
     };
 
@@ -643,20 +631,16 @@ export const createTimelineDetailStrip = (
         }
         const state = getState();
         mutate(state);
-        // Same value-vs-structure split as commit(): the save + this refresh stay
-        // value-only; structure-affecting callers (resolution mode, custom-FPS
-        // toggle) rebuild via their own render() call after this returns.
-        const prevSuppress = suppressNextDockRebuild;
-        suppressNextDockRebuild = true;
-        try {
-            saveState(state, undefined, {
-                notifyDomChange: isVideoStagesEnabled(),
-            });
-            sourceToken = readStateToken();
-            options.refresh?.();
-        } finally {
-            suppressNextDockRebuild = prevSuppress;
-        }
+        // Same value-vs-structure split as commit(): the commit notification's
+        // render stays value-only; structure-affecting callers (resolution
+        // mode, custom-FPS toggle) rebuild via their own render() call after
+        // this returns.
+        saveState(state, undefined, {
+            notifyDomChange: isVideoStagesEnabled(),
+            origin: "detail-strip",
+            valueOnly: true,
+        });
+        sourceToken = readStateToken();
         syncValueDerivedUI(renderedSel);
     };
 
@@ -815,9 +799,18 @@ export const createTimelineDetailStrip = (
         if (!clip || !removeRefAt(clip, refIdx)) {
             return;
         }
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
-        setSelection({ kind: "none" });
+        // Stay in context: the neighbouring ref if one remains, else the clip.
+        setSelection(
+            clip.refs.length > 0
+                ? {
+                      kind: "ref",
+                      clipIdx,
+                      refIdx: Math.min(refIdx, clip.refs.length - 1),
+                  }
+                : { kind: "clip", clipIdx, stageIdx: 0 },
+        );
     };
 
     const deleteWindowEntry = (clipIdx: number, windowIdx: number): void => {
@@ -832,9 +825,18 @@ export const createTimelineDetailStrip = (
             return;
         }
         windows.splice(windowIdx, 1);
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
-        setSelection({ kind: "none" });
+        // Stay in context: the neighbouring window, else the clip's major prompt.
+        setSelection(
+            windows.length > 0
+                ? {
+                      kind: "prompt-minor",
+                      clipIdx,
+                      windowIdx: Math.min(windowIdx, windows.length - 1),
+                  }
+                : { kind: "prompt-major", clipIdx },
+        );
     };
 
     // --- structural retake operations ------------------------------------
@@ -863,7 +865,7 @@ export const createTimelineDetailStrip = (
             lengthSeconds,
             strength: RETAKE_STRENGTH_DEFAULT,
         };
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
         setSelection({ kind: "retake", clipIdx });
     };
@@ -880,9 +882,10 @@ export const createTimelineDetailStrip = (
             return;
         }
         clip.retake = null;
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
-        setSelection({ kind: "none" });
+        // Stay in context: back to the clip that owned the retake.
+        setSelection({ kind: "clip", clipIdx, stageIdx: 0 });
     };
 
     // --- structural audio-segment operations -----------------------------
@@ -898,27 +901,30 @@ export const createTimelineDetailStrip = (
         if (!clip) {
             return;
         }
-        const clipDur = Math.max(0, clip.duration || 0);
-        const lengthSeconds = Math.max(
-            AUDIO_SEGMENT_MIN_LENGTH,
-            Math.min(
-                AUDIO_SEGMENT_DEFAULT_LENGTH,
-                clipDur || AUDIO_SEGMENT_DEFAULT_LENGTH,
-            ),
-        );
+        // Same non-overlap discipline as the lane-click path: the new segment
+        // lands in the first free gap, the array stays sorted by start, and
+        // the NEW segment's post-sort index is selected (normalization sorts
+        // on every parse, so an unsorted append would misalign the selection
+        // after a round-trip).
+        const gap = firstAudioSegmentGap(clip);
+        if (!gap) {
+            return;
+        }
         const segment: AudioSegment = {
             source: null,
-            startSeconds: 0,
+            startSeconds: gap.start,
             trimStartSeconds: 0,
-            lengthSeconds,
+            lengthSeconds: gap.length,
         };
-        clip.audioSegments = [...(clip.audioSegments ?? []), segment];
-        saveClips(clips);
+        const segments = [...(clip.audioSegments ?? []), segment];
+        segments.sort((x, y) => x.startSeconds - y.startSeconds);
+        clip.audioSegments = segments;
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
         setSelection({
             kind: "audio-segment",
             clipIdx,
-            segIdx: clip.audioSegments.length - 1,
+            segIdx: segments.indexOf(segment),
         });
     };
 
@@ -934,9 +940,18 @@ export const createTimelineDetailStrip = (
             return;
         }
         clip.audioSegments = clip.audioSegments.filter((_, i) => i !== segIdx);
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
-        setSelection({ kind: "none" });
+        // Stay in context: the neighbouring segment, else the clip's audio panel.
+        setSelection(
+            clip.audioSegments.length > 0
+                ? {
+                      kind: "audio-segment",
+                      clipIdx,
+                      segIdx: Math.min(segIdx, clip.audioSegments.length - 1),
+                  }
+                : { kind: "audio", clipIdx },
+        );
     };
 
     // --- structural stage operations -------------------------------------
@@ -966,7 +981,7 @@ export const createTimelineDetailStrip = (
             ),
         );
         const newIdx = clip.stages.length - 1;
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
         suppressSelectionRender = true;
         setSelection({ kind: "clip", clipIdx, stageIdx: newIdx });
@@ -989,7 +1004,7 @@ export const createTimelineDetailStrip = (
             return;
         }
         clip.stages.splice(stageIdx, 1);
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
         const nextStage = clamp(stageIdx, 0, clip.stages.length - 1);
         suppressSelectionRender = true;
@@ -1001,14 +1016,6 @@ export const createTimelineDetailStrip = (
     // --- region interaction (stage chips / model badge on the video track) --
 
     const handleActivation = (target: Element, shiftKey: boolean): void => {
-        const addChip = target.closest(STAGE_ADD_SELECTOR);
-        if (addChip instanceof HTMLElement) {
-            const clipIdx = parseIntAttr(addChip, "data-clip-idx");
-            if (clipIdx !== null) {
-                addStage(clipIdx);
-            }
-            return;
-        }
         const stageChip = target.closest(STAGE_SELECTOR);
         if (stageChip instanceof HTMLElement) {
             const clipIdx = parseIntAttr(stageChip, "data-clip-idx");
@@ -1176,86 +1183,32 @@ export const createTimelineDetailStrip = (
 
     // --- host-convention input-group sections -----------------------------
 
-    // Initial open/closed from the host's `group_open_<id>` cookie (default
-    // open). getCookie may be absent under jsdom → guard the read.
-    const isGroupOpen = (groupId: string): boolean => {
-        if (typeof getCookie === "function") {
-            return getCookie(`group_open_${groupId}`) !== "closed";
-        }
-        return true;
-    };
-
     /**
-     * A hand-authored host `.input-group` (params.js:360-369 skeleton). No inline
-     * onclick and no own listener: the host's global delegated click listener
-     * (params.js:257-265) toggles it, swaps the glyph, and writes the cookie in
-     * production. jsdom tests don't load params.js, so only initial structure is
-     * asserted. `groupId` is a stable `vstdock_*` key; instance identity is in
-     * `counter`.
+     * A headerless host `.input-group` container. The dock breadcrumb is the
+     * one label for the panel — section title rows only duplicated it — so a
+     * group is now purely structural chrome (border, background, content
+     * padding). `groupId` is a stable `vstdock_*` key kept as a CSS/test hook.
      */
-    const buildGroup = (
-        groupId: string,
-        title: string,
-        counter: string,
-        content: HTMLElement,
-        opts?: { collapsible?: boolean },
-    ): HTMLElement => {
-        // Non-collapsible groups (the prompt panels) render with the host's
-        // `input-group-noshrink` idiom: no chevron, always open, no cookie read.
-        // The host's delegated click listener force-reopens noshrink headers, so
-        // they can never be minimized.
-        const collapsible = opts?.collapsible !== false;
-        const open = collapsible ? isGroupOpen(groupId) : true;
+    const buildGroup = (groupId: string, content: HTMLElement): HTMLElement => {
         const group = document.createElement("div");
-        group.className = `input-group ${open ? "input-group-open" : "input-group-closed"}`;
+        group.className = "input-group input-group-open";
         group.id = `auto-group-${groupId}`;
-
-        const header = document.createElement("span");
-        header.className = `input-group-header ${collapsible ? "input-group-shrinkable" : "input-group-noshrink"}`;
-        header.id = `input_group_${groupId}`;
-        const wrap = document.createElement("span");
-        wrap.className = "header-label-wrap";
-        if (collapsible) {
-            const symbol = document.createElement("span");
-            symbol.className = "auto-symbol";
-            symbol.innerHTML = open ? "&#x2B9F;" : "&#x2B9E;";
-            wrap.appendChild(symbol);
-        }
-        const labelEl = document.createElement("span");
-        labelEl.className = "header-label";
-        labelEl.textContent = title;
-        const spacer = document.createElement("span");
-        spacer.className = "header-label-spacer";
-        const counterEl = document.createElement("span");
-        counterEl.className = "header-label-counter";
-        counterEl.textContent = counter;
-        wrap.append(labelEl, spacer, counterEl);
-        header.appendChild(wrap);
 
         const contentEl = document.createElement("div");
         contentEl.className = "input-group-content";
         contentEl.id = `input_group_content_${groupId}`;
-        if (!open) {
-            contentEl.style.display = "none";
-        }
         contentEl.appendChild(content);
 
-        group.append(header, contentEl);
+        group.appendChild(contentEl);
         return group;
     };
 
     // Wrap a single-panel editor's field container in one host group inside a
     // `.vst-detail-body` scroll host.
-    const wrapForm = (
-        groupId: string,
-        title: string,
-        counter: string,
-        content: HTMLElement,
-        opts?: { collapsible?: boolean },
-    ): HTMLElement => {
+    const wrapForm = (groupId: string, content: HTMLElement): HTMLElement => {
         const body = document.createElement("div");
         body.className = "vst-detail-body";
-        body.appendChild(buildGroup(groupId, title, counter, content, opts));
+        body.appendChild(buildGroup(groupId, content));
         return body;
     };
 
@@ -1387,19 +1340,6 @@ export const createTimelineDetailStrip = (
             }),
         );
 
-        if (!clip.retake) {
-            const addRetake = document.createElement("button");
-            addRetake.type = "button";
-            addRetake.className = "vst-detail-add-retake";
-            addRetake.textContent = "+ Retake";
-            addRetake.title =
-                "Add a retake window (regenerates a sub-range when refining a base video)";
-            addRetake.addEventListener("click", (event) => {
-                event.preventDefault();
-                createRetake(clipIdx);
-            });
-            col.appendChild(addRetake);
-        }
         return col;
     };
 
@@ -1411,6 +1351,7 @@ export const createTimelineDetailStrip = (
         const col = document.createElement("div");
         col.className = "vst-detail-col vst-detail-rail";
 
+        // Stage tabs, left-aligned and taking the full remaining width.
         const list = document.createElement("div");
         list.className = "vst-detail-rail-list";
         clip.stages.forEach((stage, idx) => {
@@ -1434,26 +1375,36 @@ export const createTimelineDetailStrip = (
             });
             list.appendChild(chip);
         });
-        const addChip = document.createElement("button");
-        addChip.type = "button";
-        addChip.className = "vst-chip vst-stage-tab vst-stage-tab-add";
-        addChip.textContent = "+";
-        addChip.title = "Add a refine stage";
-        addChip.addEventListener("click", () => addStage(clipIdx));
-        list.appendChild(addChip);
         col.appendChild(list);
 
-        if (clip.stages.length > 1) {
-            const deleteBtn = document.createElement("button");
-            deleteBtn.type = "button";
-            deleteBtn.className = "vst-refs-delete vst-detail-delete-stage";
-            deleteBtn.textContent = "Delete stage";
-            deleteBtn.addEventListener("click", (event) => {
-                event.preventDefault();
-                deleteStage(clipIdx, stageIdx);
-            });
-            col.appendChild(deleteBtn);
-        }
+        // Right-aligned action column: Add above Delete, both ALWAYS present;
+        // Delete disables (never hides) when there is nothing to delete.
+        const actions = document.createElement("div");
+        actions.className = "vst-detail-rail-actions";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "vst-detail-rail-btn vst-detail-add-stage";
+        addBtn.textContent = "Add stage";
+        addBtn.title = "Add a refine stage";
+        addBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            addStage(clipIdx);
+        });
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className =
+            "vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
+        deleteBtn.textContent = "Delete stage";
+        deleteBtn.disabled = clip.stages.length <= 1;
+        deleteBtn.title = deleteBtn.disabled
+            ? "A clip always keeps at least one stage"
+            : `Delete stage ${stageChipLabel(stageIdx)}`;
+        deleteBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            deleteStage(clipIdx, stageIdx);
+        });
+        actions.append(addBtn, deleteBtn);
+        col.appendChild(actions);
         return col;
     };
 
@@ -1672,6 +1623,15 @@ export const createTimelineDetailStrip = (
             refsHeader.className = "vst-detail-sec vst-detail-span-full";
             refsHeader.textContent = "Reference Strengths";
             fields.appendChild(refsHeader);
+            // Hovering a strength row highlights its ref mark on the
+            // references track, so R0/R1/… map visibly to the right image.
+            const setRefHover = (refIdx: number, on: boolean): void => {
+                boundBody
+                    ?.querySelector<HTMLElement>(
+                        `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`,
+                    )
+                    ?.classList.toggle("vst-ref-hover", on);
+            };
             clip.refs.forEach((ref, refIdx) => {
                 const current =
                     refIdx < stage.refStrengths.length
@@ -1697,6 +1657,12 @@ export const createTimelineDetailStrip = (
                 );
                 slider.classList.add("vst-stage-ref-slider");
                 tagFocus(slider, `ref-${refIdx}`);
+                slider.addEventListener("mouseenter", () =>
+                    setRefHover(refIdx, true),
+                );
+                slider.addEventListener("mouseleave", () =>
+                    setRefHover(refIdx, false),
+                );
                 fields.appendChild(slider);
             });
         }
@@ -1751,8 +1717,9 @@ export const createTimelineDetailStrip = (
         const section = document.createElement("div");
         section.className =
             "vst-audio-field vst-stage-loras vst-detail-span-full";
-        const label = document.createElement("span");
-        label.className = "vst-audio-field-label";
+        // Same section-header treatment as "Reference Strengths" above.
+        const label = document.createElement("div");
+        label.className = "vst-detail-sec";
         label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
         section.appendChild(label);
 
@@ -1818,7 +1785,7 @@ export const createTimelineDetailStrip = (
                         return;
                     }
                     target.loras.splice(index, 1);
-                    saveClips(clips);
+                    saveClips(clips, undefined, { origin: "detail-strip" });
                     sourceToken = readStateToken();
                     render();
                 });
@@ -1846,7 +1813,7 @@ export const createTimelineDetailStrip = (
                     name: defaults.loraValues[0] ?? "",
                     weight: LORA_WEIGHT_DEFAULT,
                 });
-                saveClips(clips);
+                saveClips(clips, undefined, { origin: "detail-strip" });
                 sourceToken = readStateToken();
                 render();
             });
@@ -1854,6 +1821,135 @@ export const createTimelineDetailStrip = (
         }
 
         return section;
+    };
+
+    const sectionLabel = (text: string): HTMLElement => {
+        const sec = document.createElement("div");
+        sec.className = "vst-detail-sec vst-detail-wrap-sec";
+        sec.textContent = text;
+        return sec;
+    };
+
+    // Retake section of the clip panel — lives alongside Stages, same shape:
+    // a plain section label plus the fields (or an add button when none).
+    const buildRetakeSection = (clip: Clip, clipIdx: number): HTMLElement => {
+        const wrap = document.createElement("div");
+        wrap.className = "vst-detail-stages-wrap";
+        wrap.appendChild(sectionLabel("Retake"));
+        const col = document.createElement("div");
+        col.className = "vst-detail-col vst-detail-retake-col";
+        wrap.appendChild(col);
+        const retake = clip.retake;
+
+        if (!retake) {
+            const hint = document.createElement("small");
+            hint.className = "vst-audio-field-hint";
+            hint.textContent =
+                "Regenerates a sub-range when refining a base video.";
+            const addBtn = document.createElement("button");
+            addBtn.type = "button";
+            addBtn.className = "vst-detail-rail-btn vst-detail-add-retake";
+            addBtn.textContent = "Add retake";
+            addBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                createRetake(clipIdx);
+            });
+            col.append(hint, addBtn);
+            return wrap;
+        }
+
+        const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
+        const clampRetake = (
+            start: number,
+            length: number,
+        ): { start: number; length: number } => {
+            const s = clamp(
+                start,
+                0,
+                Math.max(0, clipDur - RETAKE_MIN_DURATION),
+            );
+            const l = clamp(
+                length,
+                RETAKE_MIN_DURATION,
+                Math.max(RETAKE_MIN_DURATION, clipDur - s),
+            );
+            return { start: s, length: l };
+        };
+
+        const startInput = buildClampedNumber({
+            key: "retake-start",
+            value: retake.startSeconds,
+            min: 0,
+            max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
+            step: RETAKE_DURATION_STEP,
+            readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
+            mutate: (cs, value) => {
+                const r = cs[clipIdx]?.retake;
+                if (r) {
+                    const next = clampRetake(value, r.lengthSeconds);
+                    r.startSeconds = next.start;
+                    r.lengthSeconds = next.length;
+                }
+            },
+        });
+        col.appendChild(buildField("Start (s)", startInput));
+
+        const lengthInput = buildClampedNumber({
+            key: "retake-length",
+            value: retake.lengthSeconds,
+            min: RETAKE_MIN_DURATION,
+            max: clipDur,
+            step: RETAKE_DURATION_STEP,
+            readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
+            mutate: (cs, value) => {
+                const r = cs[clipIdx]?.retake;
+                if (r) {
+                    const next = clampRetake(r.startSeconds, value);
+                    r.startSeconds = next.start;
+                    r.lengthSeconds = next.length;
+                }
+            },
+        });
+        col.appendChild(buildField("Length (s)", lengthInput));
+
+        col.appendChild(
+            buildSlider(
+                "Strength",
+                retake.strength,
+                RETAKE_STRENGTH_MIN,
+                RETAKE_STRENGTH_MAX,
+                RETAKE_STRENGTH_STEP,
+                (value) => {
+                    debouncedCommit("retake-strength", (cs) => {
+                        const r = cs[clipIdx]?.retake;
+                        if (r) {
+                            r.strength = clamp(
+                                value,
+                                RETAKE_STRENGTH_MIN,
+                                RETAKE_STRENGTH_MAX,
+                            );
+                        }
+                    });
+                },
+            ),
+        );
+
+        const note = document.createElement("p");
+        note.className = "vst-detail-note";
+        note.textContent =
+            "Applies when refining a base video; audio inside the window regenerates with the frames.";
+        col.appendChild(note);
+
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+        del.textContent = "Remove retake";
+        del.addEventListener("click", (event) => {
+            event.preventDefault();
+            removeRetake(clipIdx);
+        });
+        col.appendChild(del);
+        return wrap;
     };
 
     const buildClipBody = (
@@ -1865,31 +1961,11 @@ export const createTimelineDetailStrip = (
         const clip = clips[sel.clipIdx];
         const stage = clip.stages[sel.stageIdx];
         const defaults = getRootDefaults();
-        const stageCount = clip.stages.length;
-
-        // The whole clip panel is non-collapsible now: Clip and Stages hold too
-        // little to be worth collapsing, and Stage Parameters is the panel's
-        // point — collapsing it just hides everything. All three render with the
-        // host `input-group-noshrink` idiom (no chevron, always open, no cookie),
-        // like the prompt groups. No group in the clip panel collapses.
-        body.appendChild(
-            buildGroup(
-                GROUP_CLIP,
-                "Clip",
-                `Clip ${sel.clipIdx}`,
-                buildClipColumn(clip, sel.clipIdx),
-                { collapsible: false },
-            ),
-        );
-        body.appendChild(
-            buildGroup(
-                GROUP_STAGES,
-                "Stages",
-                `${sel.stageIdx + 1} of ${stageCount}`,
-                buildStageRail(clip, sel.clipIdx, sel.stageIdx),
-                { collapsible: false },
-            ),
-        );
+        // The clip's own fields render bare (no group header/container — the
+        // dock breadcrumb already names the clip), followed by a Stages group
+        // (labelled rail + the selected stage's parameters) and a Retake group
+        // — retake editing lives in the clip panel, like stages.
+        body.appendChild(buildClipColumn(clip, sel.clipIdx));
         const params = buildParamsColumn(
             clip,
             sel.clipIdx,
@@ -1897,14 +1973,16 @@ export const createTimelineDetailStrip = (
             stage,
             defaults,
         );
+        const stagesWrap = document.createElement("div");
+        stagesWrap.className = "vst-detail-stages-wrap";
+        stagesWrap.append(
+            sectionLabel("Stages"),
+            buildStageRail(clip, sel.clipIdx, sel.stageIdx),
+            params.col,
+        );
+        body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
         body.appendChild(
-            buildGroup(
-                GROUP_STAGEPARAMS,
-                "Stage Parameters",
-                `Stage ${sel.stageIdx + 1}`,
-                params.col,
-                { collapsible: false },
-            ),
+            buildGroup(GROUP_RETAKE, buildRetakeSection(clip, sel.clipIdx)),
         );
         return body;
     };
@@ -2044,7 +2122,7 @@ export const createTimelineDetailStrip = (
             body.appendChild(row);
         });
 
-        return wrapForm(GROUP_REF, "Reference", `Clip ${clipIdx}`, body);
+        return wrapForm(GROUP_REF, body);
     };
 
     // --- audio editor -----------------------------------------------------
@@ -2191,7 +2269,7 @@ export const createTimelineDetailStrip = (
                     : `${segCount} overlay segments · mixed additively over the base audio.`;
             body.appendChild(note);
         }
-        return wrapForm(GROUP_AUDIO, "Audio", `Clip ${clipIdx}`, body);
+        return wrapForm(GROUP_AUDIO, body);
     };
 
     // --- audio segment editor ---------------------------------------------
@@ -2212,19 +2290,31 @@ export const createTimelineDetailStrip = (
             "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
         const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
 
+        // Segments obey the same non-overlap rule as relay windows: start and
+        // length clamp into the free interval between neighbouring segments
+        // (audioSegmentNeighborBounds), re-derived from the LIVE clips at
+        // commit time so a stale wall can never be applied.
         const clampSegment = (
+            cs: Clip[],
+            segIdx: number,
             start: number,
             length: number,
         ): { start: number; length: number } => {
+            const liveClip = cs[clipIdx];
+            const walls = liveClip
+                ? audioSegmentNeighborBounds(liveClip, segIdx)
+                : null;
+            const lo = walls?.startMin ?? 0;
+            const hi = walls?.endMax ?? clipDur;
             const s = clamp(
                 start,
-                0,
-                Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
+                lo,
+                Math.max(lo, hi - AUDIO_SEGMENT_MIN_LENGTH),
             );
             const l = clamp(
                 length,
                 AUDIO_SEGMENT_MIN_LENGTH,
-                Math.max(AUDIO_SEGMENT_MIN_LENGTH, clipDur - s),
+                Math.max(AUDIO_SEGMENT_MIN_LENGTH, hi - s),
             );
             return { start: s, length: l };
         };
@@ -2268,10 +2358,16 @@ export const createTimelineDetailStrip = (
                 ),
             );
 
+            // Neighbour wall in the attr (like a relay window's Begin): the
+            // spinner stops AT the previous segment. Only the neighbour wall
+            // is static-attr-safe — see the relay fields for why.
+            const segWalls = clip
+                ? audioSegmentNeighborBounds(clip, segIdx)
+                : null;
             const startInput = buildClampedNumber({
                 key: `seg-${segIdx}-start`,
                 value: segment.startSeconds,
-                min: 0,
+                min: segWalls?.startMin ?? 0,
                 max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
                 step: AUDIO_SEGMENT_STEP,
                 readBack: (cs) =>
@@ -2279,7 +2375,12 @@ export const createTimelineDetailStrip = (
                 mutate: (cs, value) => {
                     const seg = cs[clipIdx]?.audioSegments?.[segIdx];
                     if (seg) {
-                        const next = clampSegment(value, seg.lengthSeconds);
+                        const next = clampSegment(
+                            cs,
+                            segIdx,
+                            value,
+                            seg.lengthSeconds,
+                        );
                         seg.startSeconds = next.start;
                         seg.lengthSeconds = next.length;
                     }
@@ -2318,7 +2419,12 @@ export const createTimelineDetailStrip = (
                 mutate: (cs, value) => {
                     const seg = cs[clipIdx]?.audioSegments?.[segIdx];
                     if (seg) {
-                        const next = clampSegment(seg.startSeconds, value);
+                        const next = clampSegment(
+                            cs,
+                            segIdx,
+                            seg.startSeconds,
+                            value,
+                        );
                         seg.startSeconds = next.start;
                         seg.lengthSeconds = next.length;
                     }
@@ -2331,15 +2437,10 @@ export const createTimelineDetailStrip = (
         const note = document.createElement("p");
         note.className = "vst-detail-note";
         note.textContent =
-            "Overlaid additively over the base audio; overlapping segments are mixed.";
+            "Overlaid additively over the base audio; segments cannot overlap each other.";
         body.appendChild(note);
 
-        return wrapForm(
-            GROUP_AUDIOSEG,
-            "Audio Segments",
-            `Clip ${clipIdx}`,
-            body,
-        );
+        return wrapForm(GROUP_AUDIOSEG, body);
     };
 
     // --- prompt editors ---------------------------------------------------
@@ -2366,9 +2467,7 @@ export const createTimelineDetailStrip = (
                 },
             ),
         );
-        return wrapForm(GROUP_PROMPTMAJOR, "Prompt", `Clip ${clipIdx}`, body, {
-            collapsible: false,
-        });
+        return wrapForm(GROUP_PROMPTMAJOR, body);
     };
 
     // The relay panel lists EVERY minor prompt window of the clip, stacked. The
@@ -2419,18 +2518,33 @@ export const createTimelineDetailStrip = (
             // Begin/end are editable, reusing the timeline's edge-resize clamp:
             // begin holds the end fixed, end holds the begin fixed, both stay in
             // the clip, keep a minimum duration, and can't cross a neighbouring
-            // window (applyPromptWindowBegin/End). Distinct pending keys per edge
-            // per window; the commit repaints the on-track segment.
+            // window (applyPromptWindowBegin/End). The inputs' min/max are the
+            // SAME neighbour-aware intervals, so spinner arrows stop AT the
+            // neighbour instead of running past and snapping back on commit.
+            // Distinct pending keys per edge per window; the commit repaints the
+            // on-track segment.
             const range = document.createElement("div");
             range.className = "vst-detail-minor-range";
+            const bounds = clip ? promptWindowNeighborBounds(clip, idx) : null;
+
+            // The browser's number spinner steps on a grid anchored at the
+            // `min` attribute. A min of 0.25 puts whole-tenth values OFF the
+            // 0.1 grid, so a down-spin snaps to x.95 — which roundSeconds
+            // (half-up) rounds straight back to the original value: END could
+            // never decrease. Keep the attrs ON the 0.1 grid (min rounded up,
+            // max rounded down); the true 0.25-duration floor stays enforced
+            // by the commit clamp (applyPromptWindowBegin/End).
+            const gridCeil = (v: number): number => Math.ceil(v * 10) / 10;
+            const gridFloor = (v: number): number => Math.floor(v * 10) / 10;
 
             const beginInput = buildClampedNumber({
                 key: `minor-${idx}-begin`,
                 value: roundSeconds(w.start),
-                min: 0,
-                max: Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION),
+                min: bounds?.beginMin ?? 0,
+                max: gridFloor(
+                    Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION),
+                ),
                 step: 0.1,
-                refresh: true,
                 readBack: (cs) => {
                     const win = cs[clipIdx]?.promptWindows?.[idx];
                     return win ? roundSeconds(win.start) : null;
@@ -2447,10 +2561,9 @@ export const createTimelineDetailStrip = (
             const endInput = buildClampedNumber({
                 key: `minor-${idx}-end`,
                 value: roundSeconds(w.start + w.duration),
-                min: PROMPT_WINDOW_MIN_DURATION,
-                max: clipDur,
+                min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
+                max: bounds?.endMax ?? clipDur,
                 step: 0.1,
-                refresh: true,
                 readBack: (cs) => {
                     const win = cs[clipIdx]?.promptWindows?.[idx];
                     return win ? roundSeconds(win.start + win.duration) : null;
@@ -2489,127 +2602,10 @@ export const createTimelineDetailStrip = (
             body.appendChild(row);
         });
 
-        return wrapForm(
-            GROUP_PROMPTMINOR,
-            "Prompt Windows",
-            windows.length > 0
-                ? `Clip ${clipIdx} · W${windowIdx + 1}/${windows.length}`
-                : `Clip ${clipIdx}`,
-            body,
-            { collapsible: false },
-        );
+        return wrapForm(GROUP_PROMPTMINOR, body);
     };
 
     // --- retake editor ----------------------------------------------------
-
-    const buildRetakeBody = (
-        sel: Extract<TimelineSelection, { kind: "retake" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const { clipIdx } = sel;
-        const clip = clips[clipIdx];
-        const retake = clip.retake;
-        const body = document.createElement("div");
-        body.className = "vst-detail-form-body";
-        const wrap = (): HTMLElement =>
-            wrapForm(GROUP_RETAKE, "Retake Window", `Clip ${clipIdx}`, body);
-        if (!retake) {
-            return wrap();
-        }
-        const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
-
-        const clampRetake = (
-            start: number,
-            length: number,
-        ): { start: number; length: number } => {
-            const s = clamp(
-                start,
-                0,
-                Math.max(0, clipDur - RETAKE_MIN_DURATION),
-            );
-            const l = clamp(
-                length,
-                RETAKE_MIN_DURATION,
-                Math.max(RETAKE_MIN_DURATION, clipDur - s),
-            );
-            return { start: s, length: l };
-        };
-
-        const startInput = buildClampedNumber({
-            key: "retake-start",
-            value: retake.startSeconds,
-            min: 0,
-            max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
-            step: RETAKE_DURATION_STEP,
-            readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
-            mutate: (cs, value) => {
-                const r = cs[clipIdx]?.retake;
-                if (r) {
-                    const next = clampRetake(value, r.lengthSeconds);
-                    r.startSeconds = next.start;
-                    r.lengthSeconds = next.length;
-                }
-            },
-        });
-        body.appendChild(buildField("Start (s)", startInput));
-
-        const lengthInput = buildClampedNumber({
-            key: "retake-length",
-            value: retake.lengthSeconds,
-            min: RETAKE_MIN_DURATION,
-            max: clipDur,
-            step: RETAKE_DURATION_STEP,
-            readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
-            mutate: (cs, value) => {
-                const r = cs[clipIdx]?.retake;
-                if (r) {
-                    const next = clampRetake(r.startSeconds, value);
-                    r.startSeconds = next.start;
-                    r.lengthSeconds = next.length;
-                }
-            },
-        });
-        body.appendChild(buildField("Length (s)", lengthInput));
-
-        body.appendChild(
-            buildSlider(
-                "Strength",
-                retake.strength,
-                RETAKE_STRENGTH_MIN,
-                RETAKE_STRENGTH_MAX,
-                RETAKE_STRENGTH_STEP,
-                (value) => {
-                    debouncedCommit("retake-strength", (cs) => {
-                        const r = cs[clipIdx]?.retake;
-                        if (r) {
-                            r.strength = clamp(
-                                value,
-                                RETAKE_STRENGTH_MIN,
-                                RETAKE_STRENGTH_MAX,
-                            );
-                        }
-                    });
-                },
-            ),
-        );
-
-        const note = document.createElement("p");
-        note.className = "vst-detail-note";
-        note.textContent =
-            "Applies when refining a base video; audio inside the window regenerates with the frames.";
-        body.appendChild(note);
-
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "vst-refs-delete vst-detail-delete";
-        del.textContent = "Remove retake";
-        del.addEventListener("click", (event) => {
-            event.preventDefault();
-            removeRetake(clipIdx);
-        });
-        body.appendChild(del);
-        return wrap();
-    };
 
     // --- boundary (seam) editor -------------------------------------------
 
@@ -2681,12 +2677,7 @@ export const createTimelineDetailStrip = (
                 "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
             body.appendChild(note);
         }
-        return wrapForm(
-            GROUP_BOUNDARY,
-            "Boundary",
-            `Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
-            body,
-        );
+        return wrapForm(GROUP_BOUNDARY, body);
     };
 
     // --- timeline settings (none selection) -------------------------------
@@ -2852,7 +2843,7 @@ export const createTimelineDetailStrip = (
             fpsField.classList.add("vst-audio-disabled");
         }
         body.appendChild(fpsField);
-        return wrapForm(GROUP_SETTINGS, "Timeline Settings", "", body);
+        return wrapForm(GROUP_SETTINGS, body);
     };
 
     const buildBody = (sel: TimelineSelection, clips: Clip[]): HTMLElement => {
@@ -2870,7 +2861,13 @@ export const createTimelineDetailStrip = (
             case "prompt-minor":
                 return buildPromptMinorBody(sel, clips);
             case "retake":
-                return buildRetakeBody(sel, clips);
+                // Retake editing lives in the clip panel (like Stages): a
+                // retake selection shows the owning clip's panel, whose Retake
+                // section carries the same "retake-*" focus keys.
+                return buildClipBody(
+                    { kind: "clip", clipIdx: sel.clipIdx, stageIdx: 0 },
+                    clips,
+                );
             case "boundary":
                 return buildBoundaryBody(sel, clips);
             default:
@@ -2906,19 +2903,20 @@ export const createTimelineDetailStrip = (
         }
     };
 
-    const render = (): void => {
+    const render = (meta?: UpdateMeta): void => {
         if (!dockEl) {
             return;
         }
-        // Value-only-commit handshake (see suppressNextDockRebuild): a dock-origin
-        // value edit is mid-flush; its field already shows the new value. Never
-        // rebuild (that would destroy the focused node); just re-sync the derived
-        // UI. The flag is set only inside the synchronous flush window, so this
-        // branch is unreachable from an external/async render, undo/redo, or a
-        // selection change — those always rebuild. Guarded on an unchanged
-        // selection and an expanded dock; anything else falls through to rebuild.
+        // Value-only commit from this dock (meta.hint, set by the value
+        // primitives): the edited field already shows the new value. Never
+        // rebuild (that would destroy the focused node); just re-sync the
+        // derived UI. External changes, undo/redo, selection changes, and
+        // structural dock commits arrive without the hint (or without meta at
+        // all) and always rebuild. Guarded on an unchanged selection and an
+        // expanded dock; anything else falls through to rebuild.
         if (
-            suppressNextDockRebuild &&
+            meta?.origin === "detail-strip" &&
+            meta.hint === "value-only" &&
             renderedSel &&
             !options.isCollapsed() &&
             isSameSelection(getSelection(), renderedSel)
@@ -3091,14 +3089,6 @@ export const createTimelineDetailStrip = (
                 sel.windowIdx,
             );
             if (ok) {
-                const counter = dockEl?.querySelector<HTMLElement>(
-                    "#auto-group-vstdock_promptminor .header-label-counter",
-                );
-                const total =
-                    getClips()[sel.clipIdx]?.promptWindows?.length ?? 0;
-                if (counter && total > 0) {
-                    counter.textContent = `Clip ${sel.clipIdx} · W${sel.windowIdx + 1}/${total}`;
-                }
                 if (fromOutside) {
                     const editor = dockEl?.querySelector<HTMLTextAreaElement>(
                         `.vst-detail-minor-window[data-vst-minor-window="${sel.windowIdx}"] textarea`,

@@ -1,3 +1,4 @@
+import { isAceStepFunAudioSource } from "./audioSource";
 import { clipHueCss } from "./clipColor";
 import { clamp, mediaPreviewSrc } from "./constants";
 import { matchPresetKey } from "./dimensionPresets";
@@ -43,7 +44,6 @@ export interface RenderTimelineOptions {
     fpsExplicit?: boolean;
     unit?: TimelineUnit;
     pxPerSecond?: number;
-    playheadSeconds?: number;
     selectedIndex?: number | null;
     enabled?: boolean;
     onToggleEnabled?: (enabled: boolean) => void;
@@ -126,53 +126,6 @@ export const snapSecondsToFrame = (seconds: number, fps: number): number => {
         return Math.max(0, seconds);
     }
     return Math.round(seconds * fps) / fps;
-};
-
-/**
- * Clamp a playhead position to [0, total] and snap it to the frame grid. Kept
- * pure so both the renderer and the scrub gesture resolve positions identically.
- */
-export const resolvePlayheadSeconds = (
-    seconds: number,
-    totalSeconds: number,
-    fps: number,
-): number => {
-    const total = Math.max(0, Number.isFinite(totalSeconds) ? totalSeconds : 0);
-    const base = Number.isFinite(seconds)
-        ? Math.max(0, Math.min(total, seconds))
-        : 0;
-    const snapped = snapSecondsToFrame(base, fps);
-    return Math.max(0, Math.min(total, snapped));
-};
-
-/**
- * Index of the clip under a playhead position. A position exactly on a seam
- * belongs to the right/starting clip (the greatest start ≤ seconds). Returns
- * null when there are no clips.
- */
-export const clipIndexAtSeconds = (
-    layouts: RegionLayout[],
-    seconds: number,
-): number | null => {
-    if (layouts.length === 0) {
-        return null;
-    }
-    let idx = 0;
-    for (let i = 0; i < layouts.length; i++) {
-        if (seconds >= layouts[i].startSeconds - 1e-9) {
-            idx = i;
-        } else {
-            break;
-        }
-    }
-    return idx;
-};
-
-/** Toolbar readout for the playhead, e.g. "▸ 3.2s · f77". */
-export const formatPlayheadReadout = (seconds: number, fps: number): string => {
-    const s = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
-    const useFps = Number.isFinite(fps) && fps > 0 ? fps : 24;
-    return `▸ ${s.toFixed(1)}s · f${Math.round(s * useFps)}`;
 };
 
 export const computeRegionLayout = (
@@ -293,6 +246,8 @@ const renderKeyframes = (
     if (refs.length === 0) {
         return "";
     }
+    // Purely visual markers mirroring the References track — editing (drag,
+    // from-end toggle, delete) happens on the track's thumbnails, never here.
     const pips = refs
         .map((ref: RefImage, refIdx: number) => {
             const time = keyframeTimeSeconds(
@@ -305,13 +260,12 @@ const renderKeyframes = (
             const isEnd = ref.fromEnd === true;
             const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
             const source = refSourceLabel(ref.source ?? "");
-            const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)} · drag to move, shift-click to toggle from-end`;
+            const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
             const kindClass =
                 (isEnd ? " vst-key-end" : " vst-key-start") +
                 (isPrimary ? " vst-key-primary" : "");
-            const markAria = `Reference ${refIdx} marker (${source}${isEnd ? ", from end" : ""}) — drag to move, Enter toggles from end`;
             return (
-                `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" role="button" tabindex="0" aria-label="${escapeHtml(markAria)}">` +
+                `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" aria-hidden="true">` +
                 `<span class="vst-key-dot" aria-hidden="true"></span>` +
                 `</span>`
             );
@@ -349,8 +303,8 @@ const renderStageChips = (clip: Clip, clipIdx: number): string => {
             );
         })
         .join("");
-    const addChip = `<span class="vst-chip vst-stage-chip vst-stage-chip-add" data-vst-stage-add data-clip-idx="${clipIdx}" role="button" tabindex="0" title="Add a refine stage">+</span>`;
-    return chips + addChip;
+    // No add-stage chip here: stages are added from the dock's stage rail.
+    return chips;
 };
 
 const lengthDerived = (clip: Clip): boolean =>
@@ -580,8 +534,14 @@ export const renderAudioTrackRow = (
             }
             const badge = audioSourceBadge(clip.audioSource ?? "");
             const native = badge.label === "Native";
-            const nativeClass = native ? " vst-audio-native" : "";
             const width = Math.max(1, l.widthPx - 2);
+            // Per-source tinting: every source kind renders a full-width fake
+            // waveform in its own color so the track reads at a glance.
+            const kindClass = native
+                ? " vst-audio-native vst-audio-kind-native"
+                : isAceStepFunAudioSource(clip.audioSource ?? "")
+                  ? " vst-audio-kind-ace"
+                  : " vst-audio-kind-upload";
             const upload =
                 !native && clip.audioSource === "Upload"
                     ? clip.uploadedAudio?.fileName
@@ -592,23 +552,28 @@ export const renderAudioTrackRow = (
             const title = native
                 ? "Audio: Native — click to choose an audio source"
                 : `${badge.title} — click to edit`;
-            const body = native
+            const barCount = Math.min(
+                400,
+                Math.max(8, Math.floor(width / 5.5)),
+            );
+            const bars = waveBarHeights(l.index, barCount)
+                .map((h) => `<span style="height:${h}%"></span>`)
+                .join("");
+            // Native keeps its hover call-to-action on top of the waveform.
+            const hint = native
                 ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>`
-                : (() => {
-                      const barCount = Math.min(
-                          400,
-                          Math.max(8, Math.floor(width / 5.5)),
-                      );
-                      const bars = waveBarHeights(l.index, barCount)
-                          .map((h) => `<span style="height:${h}%"></span>`)
-                          .join("");
-                      return `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>`;
-                  })();
+                : "";
+            const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
+            // Two mini-rows per clip, mirroring the Prompt track: the audio
+            // clip (source/waveform) on top, a segments lane on the bottom —
+            // clicking empty lane space adds a segment at that time.
             return (
-                `<div class="vst-audio-clip${nativeClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeHtml(title)}" aria-label="Edit audio for clip ${l.index}">` +
+                `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeHtml(title)}" aria-label="Edit audio for clip ${l.index}">` +
                 `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +
                 audioFlagChips(clip) +
                 body +
+                `</div>` +
+                `<div class="vst-audio-seg-lane" data-vst-audio-seg-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${width}px" title="Click empty space to add an audio segment">` +
                 renderAudioSegments(clip, l.index, clip.duration || 0) +
                 `</div>`
             );
@@ -620,7 +585,7 @@ export const renderAudioTrackRow = (
         `<div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div>` +
         `<div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div>` +
         `</div>` +
-        `<div class="vst-track-cell">${segments}</div>` +
+        `<div class="vst-track-cell vst-audio-cell">${segments}</div>` +
         `</div>`
     );
 };
@@ -712,12 +677,6 @@ export const renderTimeline = (
 
     const layouts = computeRegionLayout(clips, { pxPerSecond });
     const totalSeconds = layouts.reduce((sum, l) => sum + l.durationSeconds, 0);
-    const headSeconds = resolvePlayheadSeconds(
-        options?.playheadSeconds ?? 0,
-        totalSeconds,
-        fps,
-    );
-    const headClipIdx = clipIndexAtSeconds(layouts, headSeconds);
     const totalPx = layouts.reduce(
         (max, l) => Math.max(max, l.startPx + l.widthPx),
         0,
@@ -739,8 +698,6 @@ export const renderTimeline = (
     const readout =
         `<span class="vst-readout" data-vst-readout>` +
         `<span title="Sequence total">${totalLabel} total</span>` +
-        `<span class="vst-dot" aria-hidden="true">·</span>` +
-        `<span class="vst-readout-head" data-vst-readout-head title="Playhead position (seconds · frame)">${escapeHtml(formatPlayheadReadout(headSeconds, fps))}</span>` +
         `<span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span>` +
         `<span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span>` +
         `</span>`;
@@ -931,8 +888,6 @@ export const renderTimeline = (
             const clip = clips[l.index];
             const skipClass = l.skipped ? " vst-region-skipped" : "";
             const tinyClass = l.widthPx <= 12 ? " vst-region-tiny" : "";
-            const underHeadClass =
-                l.index === headClipIdx ? " vst-under-head" : "";
             const skipChip = l.skipped
                 ? `<span class="vst-chip vst-chip-skip">skipped</span>`
                 : "";
@@ -951,10 +906,9 @@ export const renderTimeline = (
             const hue = clipHueCss(clip.hue);
             const renderWidth = Math.max(1, l.widthPx - 2);
             return (
-                `<div class="vst-region${skipClass}${tinyClass}${underHeadClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` +
+                `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +
                 renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) +
-                renderRetakeOverlay(clip, l.index, l.durationSeconds) +
                 `<div class="vst-region-head">` +
                 `<span class="vst-region-name">Clip ${l.index}</span>` +
                 renderStageChips(clip, l.index) +
@@ -965,6 +919,11 @@ export const renderTimeline = (
                 renderBadges(clip, l.index) +
                 controls +
                 rightGrip +
+                `</div>` +
+                // Retake mini-lane under the clip region, like the prompt
+                // track's relay lane: click empty space to add a retake.
+                `<div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${renderWidth}px" title="Click empty space to add a retake window">` +
+                renderRetakeOverlay(clip, l.index, l.durationSeconds) +
                 `</div>`
             );
         })
@@ -987,25 +946,16 @@ export const renderTimeline = (
     );
 
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    const playheadRulerPx = headSeconds * pxPerSecond;
-    const playheadPlanePx = TRACK_HEADER_W_PX + playheadRulerPx;
-    const playheadHandle = `<span class="vst-playhead-handle" data-vst-playhead-handle style="left:${playheadRulerPx}px" title="Playhead — drag to scrub" aria-hidden="true"></span>`;
-    const playheadLine =
-        `<div class="vst-playhead" data-vst-playhead style="left:${playheadPlanePx}px" aria-hidden="true">` +
-        `<div class="vst-playhead-hit" data-vst-playhead-hit></div>` +
-        `<div class="vst-playhead-line"></div>` +
-        `</div>`;
     body.innerHTML =
         `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +
         `<div class="vst-ruler-row">` +
         `<div class="vst-corner">Timeline</div>` +
-        `<div class="vst-ruler">${ticks.join("")}${playheadHandle}</div>` +
+        `<div class="vst-ruler">${ticks.join("")}</div>` +
         `</div>` +
         promptRow +
         `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}${renderBoundarySeams(clips, layouts)}</div></div>` +
         referencesRow +
         audioRow +
-        playheadLine +
         `</div></div>`;
     wireTopbar();
     wireScroll();

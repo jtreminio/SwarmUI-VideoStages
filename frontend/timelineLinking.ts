@@ -1,14 +1,8 @@
-import { clamp, REF_FRAME_MIN } from "./constants";
-import { getReferenceFrameMax } from "./normalization";
+import type { GestureRouter, GestureSession } from "./gestureRouter";
 import { getClips, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { readStateToken } from "./swarmInputs";
-import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
-import {
-    applyClipDurationResize,
-    pxToDuration,
-    pxToFrame,
-} from "./timelineEdit";
+import { applyClipDurationResize, pxToDuration } from "./timelineEdit";
 import {
     computeDropIndex,
     type DropRegion,
@@ -24,12 +18,10 @@ const REGION_ACTION_SELECTOR = "[data-vst-region-action]";
 const REGION_RESIZE_SELECTOR = ".vst-region-resize";
 const CLIP_SHIFT_SELECTOR =
     ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
-const KEY_SELECTOR = ".vst-key[data-ref-idx]";
 
 const REGION_SELECTED_CLASS = "vst-region-selected";
 const DRAGGING_CLASS = "vst-dragging";
 const RESIZING_CLASS = "vst-resizing";
-const KEYFRAMING_CLASS = "vst-keyframing";
 const DROP_INDICATOR_CLASS = "vst-drop-indicator";
 
 const DRAG_THRESHOLD_PX = 5;
@@ -110,7 +102,7 @@ export const parseRefIdx = (el: Element | null): number | null => {
 };
 
 export interface TimelineLinking {
-    attach(body: HTMLElement): void;
+    attach(body: HTMLElement, router: GestureRouter): void;
     reapplySelection(body: HTMLElement, clipCount: number): void;
     getSelectedIndex(): number | null;
     dispose(): void;
@@ -135,40 +127,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         setSelection({ kind: "clip", clipIdx, stageIdx });
     };
 
-    let dragState: {
-        sourceIdx: number;
-        startX: number;
-        startY: number;
-        active: boolean;
-        sourceJson: string;
-    } | null = null;
-    let suppressClick = false;
     let dropIndicator: HTMLElement | null = null;
-
-    let resizeState: {
-        idx: number;
-        el: HTMLElement;
-        startX: number;
-        startLeftPx: number;
-        originalWidthPx: number;
-        active: boolean;
-        sourceJson: string;
-    } | null = null;
-
-    let keyframeState: {
-        clipIdx: number;
-        refIdx: number;
-        el: HTMLElement;
-        regionEl: HTMLElement;
-        startX: number;
-        originalLeft: string;
-        active: boolean;
-        durationSeconds: number;
-        fps: number;
-        fromEnd: boolean;
-        shiftKey: boolean;
-        sourceJson: string;
-    } | null = null;
 
     const findRegion = (body: HTMLElement, idx: number): HTMLElement | null =>
         body.querySelector<HTMLElement>(`.vst-region[data-clip-idx="${idx}"]`);
@@ -187,10 +146,6 @@ export const createTimelineLinking = (): TimelineLinking => {
     };
 
     const onRegionClick = (body: HTMLElement, event: Event): void => {
-        if (suppressClick) {
-            suppressClick = false;
-            return;
-        }
         const target = event.target;
         if (!(target instanceof Element)) {
             return;
@@ -263,35 +218,13 @@ export const createTimelineLinking = (): TimelineLinking => {
         dropIndicator.style.left = `${left}px`;
     };
 
-    const endDrag = (body: HTMLElement): void => {
-        if (dragState) {
-            findRegion(body, dragState.sourceIdx)?.classList.remove(
-                REGION_DRAGGING_CLASS,
-            );
-        }
-        dragState = null;
-        removeDropIndicator();
-        body.classList.remove(DRAGGING_CLASS);
-    };
-
-    const endResize = (body: HTMLElement, keepPreview = false): void => {
-        if (!keepPreview) {
-            if (resizeState) {
-                resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
-            }
-            clearClipShifts(body);
-        }
-        resizeState = null;
-        body.classList.remove(RESIZING_CLASS);
-    };
-
     const applySkip = (idx: number): void => {
         const clips = getClips();
         if (idx < 0 || idx >= clips.length) {
             return;
         }
         clips[idx].skipped = !clips[idx].skipped;
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "linking" });
     };
 
     const applyDelete = (idx: number): void => {
@@ -308,361 +241,186 @@ export const createTimelineLinking = (): TimelineLinking => {
                 setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
             }
         }
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "linking" });
     };
 
-    const applyToggleKeyframeFromEnd = (
-        clipIdx: number,
-        refIdx: number,
-        sourceJson: string,
-    ): void => {
-        if (readStateToken() !== sourceJson) {
-            return;
-        }
-        const clips = getClips();
-        const clip = clips[clipIdx];
-        const ref = clip?.refs?.[refIdx];
-        if (!ref) {
-            return;
-        }
-        ref.fromEnd = !ref.fromEnd;
-        ref.frame = clamp(
-            ref.frame,
-            REF_FRAME_MIN,
-            getReferenceFrameMax(getRootDefaults, clip),
-        );
-        saveClips(clips);
+    interface ResizeState {
+        idx: number;
+        el: HTMLElement;
+        startLeftPx: number;
+        originalWidthPx: number;
+        sourceJson: string;
+    }
+
+    const resizeSession = (
+        body: HTMLElement,
+        state: ResizeState,
+    ): GestureSession => {
+        const restore = (): void => {
+            state.el.style.width = `${state.originalWidthPx}px`;
+            clearClipShifts(body);
+            body.classList.remove(RESIZING_CLASS);
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            escapeClickSuppression: "if-active",
+            onMove: (ctx) => {
+                const width = Math.max(
+                    MIN_RESIZE_WIDTH_PX,
+                    ctx.event.clientX - state.startLeftPx,
+                );
+                body.classList.add(RESIZING_CLASS);
+                state.el.style.width = `${width}px`;
+                shiftClipsAfter(body, state.idx, width - state.originalWidthPx);
+            },
+            onCommit: (ctx) => {
+                const width = ctx.event.clientX - state.startLeftPx;
+                let committed = false;
+                if (readStateToken() === state.sourceJson) {
+                    const clips = getClips();
+                    if (
+                        state.idx >= 0 &&
+                        state.idx < clips.length &&
+                        !clips[state.idx].clipLengthFromAudio &&
+                        !clips[state.idx].clipLengthFromControlNet
+                    ) {
+                        const newDuration = pxToDuration(
+                            width,
+                            livePxPerSecond(body),
+                            currentFps(),
+                        );
+                        if (
+                            applyClipDurationResize(
+                                clips[state.idx],
+                                newDuration,
+                                getRootDefaults,
+                            )
+                        ) {
+                            selectClip(state.idx, stageForClip(state.idx));
+                            saveClips(clips, undefined, { origin: "linking" });
+                            committed = true;
+                        }
+                    }
+                }
+                if (committed) {
+                    // Keep the preview width/shifts; the save's re-render
+                    // replaces them with the real layout.
+                    body.classList.remove(RESIZING_CLASS);
+                } else {
+                    restore();
+                }
+            },
+            onTap: restore,
+            onCancel: restore,
+        };
     };
 
-    const endKeyframe = (body: HTMLElement, keepPreview = false): void => {
-        if (!keepPreview && keyframeState) {
-            keyframeState.el.style.left = keyframeState.originalLeft;
-        }
-        keyframeState = null;
-        body.classList.remove(KEYFRAMING_CLASS);
+    interface DragState {
+        sourceIdx: number;
+        sourceJson: string;
+    }
+
+    const dragSession = (
+        body: HTMLElement,
+        state: DragState,
+    ): GestureSession => {
+        const cleanup = (): void => {
+            findRegion(body, state.sourceIdx)?.classList.remove(
+                REGION_DRAGGING_CLASS,
+            );
+            removeDropIndicator();
+            body.classList.remove(DRAGGING_CLASS);
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            axis: "xy",
+            escapeClickSuppression: "if-active",
+            onMove: (ctx) => {
+                body.classList.add(DRAGGING_CLASS);
+                findRegion(body, state.sourceIdx)?.classList.add(
+                    REGION_DRAGGING_CLASS,
+                );
+                const { els, rects } = readRegions(body);
+                showDropIndicator(
+                    els,
+                    computeDropIndex(ctx.event.clientX, rects),
+                );
+            },
+            onCommit: (ctx) => {
+                cleanup();
+                const { rects } = readRegions(body);
+                const gap = computeDropIndex(ctx.event.clientX, rects);
+                const from = state.sourceIdx;
+                if (isNoOpMove(from, gap)) {
+                    selectClip(from, stageForClip(from));
+                    markSelection(body);
+                    return;
+                }
+                if (readStateToken() !== state.sourceJson) {
+                    return;
+                }
+                const clips = getClips();
+                if (from < 0 || from >= clips.length) {
+                    return;
+                }
+                const destIdx = finalIndexAfterMove(from, gap);
+                selectClip(destIdx, stageForClip(from));
+                saveClips(moveItem(clips, from, gap), undefined, {
+                    origin: "linking",
+                });
+            },
+            onCancel: cleanup,
+        };
     };
 
-    const onBodyMouseDown = (event: Event): void => {
-        suppressClick = false;
-        const me = event as MouseEvent;
-        if (me.button !== 0) {
-            return;
-        }
+    const onPress = (
+        me: MouseEvent,
+        body: HTMLElement,
+    ): GestureSession | null => {
         if (!(me.target instanceof Element)) {
-            return;
-        }
-        const pip = me.target.closest(KEY_SELECTOR);
-        if (pip instanceof HTMLElement) {
-            const pipRegion = pip.closest(REGION_SELECTOR);
-            const clipIdx = parseClipIdx(pipRegion);
-            const refIdx = parseRefIdx(pip);
-            if (
-                clipIdx === null ||
-                refIdx === null ||
-                !(pipRegion instanceof HTMLElement)
-            ) {
-                return;
-            }
-            const clips = getClips();
-            const clip = clips[clipIdx];
-            const ref = clip?.refs?.[refIdx];
-            if (!ref) {
-                return;
-            }
-            keyframeState = {
-                clipIdx,
-                refIdx,
-                el: pip,
-                regionEl: pipRegion,
-                startX: me.clientX,
-                originalLeft: pip.style.left,
-                active: false,
-                durationSeconds: clip.duration,
-                fps: currentFps(),
-                fromEnd: ref.fromEnd === true,
-                shiftKey: me.shiftKey,
-                sourceJson: readStateToken(),
-            };
-            me.preventDefault();
-            return;
+            return null;
         }
         if (me.target.closest(REGION_ACTION_SELECTOR)) {
-            return;
+            return null;
         }
         if (me.shiftKey) {
+            // No drag on a shift press; the shift-CLICK delete is handled by
+            // onRegionClick.
             me.preventDefault();
-            return;
+            return null;
         }
         const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
         if (resizeGrip) {
             const region = resizeGrip.closest(REGION_SELECTOR);
             const idx = parseClipIdx(region);
             if (idx === null || !(region instanceof HTMLElement)) {
-                return;
+                return null;
             }
             const rect = region.getBoundingClientRect();
-            resizeState = {
+            me.preventDefault();
+            return resizeSession(body, {
                 idx,
                 el: region,
-                startX: me.clientX,
                 startLeftPx: rect.left,
                 originalWidthPx: rect.width,
-                active: false,
                 sourceJson: readStateToken(),
-            };
-            me.preventDefault();
-            return;
+            });
         }
         const target = me.target.closest(REGION_SELECTOR);
         const idx = parseClipIdx(target);
         if (idx === null) {
-            return;
+            return null;
         }
-        dragState = {
+        return dragSession(body, {
             sourceIdx: idx,
-            startX: me.clientX,
-            startY: me.clientY,
-            active: false,
             sourceJson: readStateToken(),
-        };
-    };
-
-    const onDocMouseMove = (body: HTMLElement, event: Event): void => {
-        if (keyframeState) {
-            const kme = event as MouseEvent;
-            if (!keyframeState.active) {
-                if (
-                    Math.abs(kme.clientX - keyframeState.startX) <
-                    DRAG_THRESHOLD_PX
-                ) {
-                    return;
-                }
-                keyframeState.active = true;
-                body.classList.add(KEYFRAMING_CLASS);
-            }
-            const rect = keyframeState.regionEl.getBoundingClientRect();
-            const frame = pxToFrame(
-                kme.clientX - rect.left,
-                rect.width,
-                keyframeState.durationSeconds,
-                keyframeState.fps,
-                keyframeState.fromEnd,
-            );
-            const time = keyframeTimeSeconds(
-                frame,
-                keyframeState.fromEnd,
-                keyframeState.durationSeconds,
-                keyframeState.fps,
-            );
-            keyframeState.el.style.left = `${keyframeLeftPercent(
-                time,
-                keyframeState.durationSeconds,
-            )}%`;
-            return;
-        }
-        if (resizeState) {
-            const rme = event as MouseEvent;
-            if (!resizeState.active) {
-                if (
-                    Math.abs(rme.clientX - resizeState.startX) <
-                    DRAG_THRESHOLD_PX
-                ) {
-                    return;
-                }
-                resizeState.active = true;
-            }
-            const width = Math.max(
-                MIN_RESIZE_WIDTH_PX,
-                rme.clientX - resizeState.startLeftPx,
-            );
-            body.classList.add(RESIZING_CLASS);
-            resizeState.el.style.width = `${width}px`;
-            shiftClipsAfter(
-                body,
-                resizeState.idx,
-                width - resizeState.originalWidthPx,
-            );
-            return;
-        }
-        if (!dragState) {
-            return;
-        }
-        const me = event as MouseEvent;
-        if (!dragState.active) {
-            const dx = me.clientX - dragState.startX;
-            const dy = me.clientY - dragState.startY;
-            if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-                return;
-            }
-            dragState.active = true;
-            body.classList.add(DRAGGING_CLASS);
-            findRegion(body, dragState.sourceIdx)?.classList.add(
-                REGION_DRAGGING_CLASS,
-            );
-        }
-        const { els, rects } = readRegions(body);
-        showDropIndicator(els, computeDropIndex(me.clientX, rects));
-    };
-
-    const onDocMouseUp = (body: HTMLElement, event: Event): void => {
-        if (keyframeState) {
-            const ks = keyframeState;
-            const kme = event as MouseEvent;
-            const rect = ks.regionEl.getBoundingClientRect();
-            suppressClick = true;
-            if (!ks.active) {
-                endKeyframe(body);
-                if (ks.shiftKey) {
-                    applyToggleKeyframeFromEnd(
-                        ks.clipIdx,
-                        ks.refIdx,
-                        ks.sourceJson,
-                    );
-                }
-                return;
-            }
-            let committed = false;
-            if (readStateToken() === ks.sourceJson) {
-                const newFrame = pxToFrame(
-                    kme.clientX - rect.left,
-                    rect.width,
-                    ks.durationSeconds,
-                    ks.fps,
-                    ks.fromEnd,
-                );
-                const clips = getClips();
-                const ref = clips[ks.clipIdx]?.refs?.[ks.refIdx];
-                if (ref && ref.frame !== newFrame) {
-                    ref.frame = newFrame;
-                    saveClips(clips);
-                    committed = true;
-                }
-            }
-            endKeyframe(body, committed);
-            return;
-        }
-        if (resizeState) {
-            const rs = resizeState;
-            const me = event as MouseEvent;
-            if (!rs.active) {
-                endResize(body);
-                return;
-            }
-            const width = me.clientX - rs.startLeftPx;
-            suppressClick = true;
-            let committed = false;
-            if (readStateToken() === rs.sourceJson) {
-                const clips = getClips();
-                if (
-                    rs.idx >= 0 &&
-                    rs.idx < clips.length &&
-                    !clips[rs.idx].clipLengthFromAudio &&
-                    !clips[rs.idx].clipLengthFromControlNet
-                ) {
-                    const newDuration = pxToDuration(
-                        width,
-                        livePxPerSecond(body),
-                        currentFps(),
-                    );
-                    if (
-                        applyClipDurationResize(
-                            clips[rs.idx],
-                            newDuration,
-                            getRootDefaults,
-                        )
-                    ) {
-                        selectClip(rs.idx, stageForClip(rs.idx));
-                        saveClips(clips);
-                        committed = true;
-                    }
-                }
-            }
-            endResize(body, committed);
-            return;
-        }
-        const state = dragState;
-        if (!state) {
-            return;
-        }
-        endDrag(body);
-        if (!state.active) {
-            return;
-        }
-        suppressClick = true;
-        const me = event as MouseEvent;
-        const { rects } = readRegions(body);
-        const gap = computeDropIndex(me.clientX, rects);
-        const from = state.sourceIdx;
-        if (isNoOpMove(from, gap)) {
-            selectClip(from, stageForClip(from));
-            markSelection(body);
-            return;
-        }
-        if (readStateToken() !== state.sourceJson) {
-            return;
-        }
-        const clips = getClips();
-        if (from < 0 || from >= clips.length) {
-            return;
-        }
-        const destIdx = finalIndexAfterMove(from, gap);
-        selectClip(destIdx, stageForClip(from));
-        saveClips(moveItem(clips, from, gap));
-    };
-
-    const onDocKeyDown = (body: HTMLElement, event: Event): void => {
-        if ((event as KeyboardEvent).key !== "Escape") {
-            return;
-        }
-        if (keyframeState) {
-            suppressClick = true;
-            endKeyframe(body);
-        }
-        if (resizeState) {
-            if (resizeState.active) {
-                suppressClick = true;
-            }
-            endResize(body);
-        }
-        if (dragState) {
-            if (dragState.active) {
-                suppressClick = true;
-            }
-            endDrag(body);
-        }
-    };
-
-    const onBodyKeyDown = (event: Event): void => {
-        const ke = event as KeyboardEvent;
-        if (ke.key !== "Enter" && ke.key !== " ") {
-            return;
-        }
-        const target = event.target;
-        if (!(target instanceof Element)) {
-            return;
-        }
-        const pipEl = target.closest(KEY_SELECTOR);
-        if (!(pipEl instanceof HTMLElement)) {
-            return;
-        }
-        ke.preventDefault();
-        const pipRegion = pipEl.closest(REGION_SELECTOR);
-        const clipIdx = parseClipIdx(pipRegion);
-        const refIdx = parseRefIdx(pipEl);
-        if (clipIdx === null || refIdx === null) {
-            return;
-        }
-        applyToggleKeyframeFromEnd(clipIdx, refIdx, readStateToken());
+        });
     };
 
     let bodyClickHandler: ((e: Event) => void) | null = null;
-    let bodyDownHandler: ((e: Event) => void) | null = null;
-    let bodyKeyDownHandler: ((e: Event) => void) | null = null;
-    let docMoveHandler: ((e: Event) => void) | null = null;
-    let docUpHandler: ((e: Event) => void) | null = null;
-    let docKeyHandler: ((e: Event) => void) | null = null;
+    let unregister: (() => void) | null = null;
 
-    const attach = (body: HTMLElement): void => {
+    const attach = (body: HTMLElement, router: GestureRouter): void => {
         if (attachedBody === body) {
             return;
         }
@@ -670,17 +428,12 @@ export const createTimelineLinking = (): TimelineLinking => {
             dispose();
         }
         bodyClickHandler = (e) => onRegionClick(body, e);
-        bodyDownHandler = (e) => onBodyMouseDown(e);
-        bodyKeyDownHandler = (e) => onBodyKeyDown(e);
-        docMoveHandler = (e) => onDocMouseMove(body, e);
-        docUpHandler = (e) => onDocMouseUp(body, e);
-        docKeyHandler = (e) => onDocKeyDown(body, e);
         body.addEventListener("click", bodyClickHandler);
-        body.addEventListener("mousedown", bodyDownHandler);
-        body.addEventListener("keydown", bodyKeyDownHandler);
-        document.addEventListener("mousemove", docMoveHandler);
-        document.addEventListener("mouseup", docUpHandler);
-        document.addEventListener("keydown", docKeyHandler);
+        unregister = router.register({
+            id: "linking",
+            priority: 10,
+            onPress,
+        });
         attachedBody = body;
     };
 
@@ -697,36 +450,12 @@ export const createTimelineLinking = (): TimelineLinking => {
             if (bodyClickHandler) {
                 attachedBody.removeEventListener("click", bodyClickHandler);
             }
-            if (bodyDownHandler) {
-                attachedBody.removeEventListener("mousedown", bodyDownHandler);
-            }
-            if (bodyKeyDownHandler) {
-                attachedBody.removeEventListener("keydown", bodyKeyDownHandler);
-            }
-            endDrag(attachedBody);
-            endResize(attachedBody);
-            endKeyframe(attachedBody);
         }
-        if (docMoveHandler) {
-            document.removeEventListener("mousemove", docMoveHandler);
-        }
-        if (docUpHandler) {
-            document.removeEventListener("mouseup", docUpHandler);
-        }
-        if (docKeyHandler) {
-            document.removeEventListener("keydown", docKeyHandler);
-        }
+        removeDropIndicator();
+        unregister?.();
+        unregister = null;
         bodyClickHandler = null;
-        bodyDownHandler = null;
-        bodyKeyDownHandler = null;
-        docMoveHandler = null;
-        docUpHandler = null;
-        docKeyHandler = null;
         attachedBody = null;
-        dragState = null;
-        resizeState = null;
-        keyframeState = null;
-        suppressClick = false;
     };
 
     const getSelectedIndex = (): number | null => selectedClip();

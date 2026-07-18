@@ -242,8 +242,11 @@ describe("createTimelineDetailStrip", () => {
             setCollapsed: (value) => {
                 collapsed = value;
             },
-            refresh: () => refreshSpy(),
         });
+        // Every save commits through the store, whose notification is what
+        // drives the orchestrator's timeline repaint in prod. refreshSpy
+        // observes those notifications — the "timeline was repainted" signal.
+        persistence.getTimelineStore().subscribe(() => refreshSpy());
         strip.attach(body, dockHost(body));
         return body;
     };
@@ -454,18 +457,28 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
     });
 
-    it("adds a stage from the rail + button and selects it", () => {
+    it("adds a stage from the rail's Add button and selects it", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        // Delete is present but DISABLED with a single stage (never hidden).
+        const del = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-delete-stage",
+        );
+        expect(del).not.toBeNull();
+        expect(del?.disabled).toBe(true);
         document
-            .querySelector<HTMLElement>(
-                ".vst-detail-rail-list .vst-stage-tab-add",
-            )
+            .querySelector<HTMLElement>(".vst-detail-add-stage")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedClips(saveSpy)[0].stages).toHaveLength(2);
         expect(activeRailLabel()).toBe("S1");
         expect(crumbText()).toBe("Clip 0 · S1");
+        // With two stages the Delete button is live.
+        expect(
+            document.querySelector<HTMLButtonElement>(
+                ".vst-detail-delete-stage",
+            )?.disabled,
+        ).toBe(false);
     });
 
     it("mutes the stage params and persists Skip this stage", () => {
@@ -596,7 +609,33 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].retake?.startSeconds).toBe(4);
     });
 
-    it("removes the retake and clears the selection", () => {
+    it("a retake selection opens the CLIP panel with its Retake section", () => {
+        setup([
+            {
+                duration: 10,
+                stages: [{}],
+                retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
+            },
+        ]);
+        setSelection({ kind: "retake", clipIdx: 0 });
+        // The clip panel (bare fields + Stages group) is what renders…
+        expect(detailBody()?.querySelector(".vst-detail-clip")).not.toBeNull();
+        expect(
+            detail()?.querySelector("#auto-group-vstdock_stages"),
+        ).not.toBeNull();
+        // …and its Retake section carries the editable fields.
+        const retakeGroup = detail()?.querySelector(
+            "#auto-group-vstdock_retake",
+        );
+        expect(
+            retakeGroup?.querySelector(
+                'input[data-vst-focus-key="retake-start"]',
+            ),
+        ).not.toBeNull();
+        expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
+    });
+
+    it("removes the retake and falls back to the owning clip's panel", () => {
         setup([
             {
                 duration: 10,
@@ -609,7 +648,11 @@ describe("createTimelineDetailStrip", () => {
             ?.querySelector<HTMLElement>(".vst-detail-delete")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(savedClips(saveSpy)[0].retake).toBeNull();
-        expect(getSelection()).toEqual({ kind: "none" });
+        expect(getSelection()).toEqual({
+            kind: "clip",
+            clipIdx: 0,
+            stageIdx: 0,
+        });
     });
 
     it("falls back to no selection when a retake selection points at a clip with none", () => {
@@ -832,12 +875,33 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].refs[1].source).toBe("Upload");
         expect(savedClips(saveSpy)[0].refs[0].source).toBe("Refiner");
 
-        // Per-row delete removes THAT ref and clears the selection.
+        // Per-row delete removes THAT ref and re-points the selection to the
+        // neighbouring ref — never back to the settings panel.
         refRow(1)
             .querySelector<HTMLElement>(".vst-detail-instance-delete")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(savedClips(saveSpy)[0].refs).toHaveLength(1);
-        expect(getSelection().kind).toBe("none");
+        expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 0 });
+    });
+
+    it("deleting the LAST ref falls back to the owning clip's panel", () => {
+        setup([
+            {
+                duration: 5,
+                stages: [{}],
+                refs: [{ source: "Base", frame: 1 }],
+            },
+        ]);
+        setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
+        refRow(0)
+            .querySelector<HTMLElement>(".vst-detail-instance-delete")
+            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(savedClips(saveSpy)[0].refs).toHaveLength(0);
+        expect(getSelection()).toEqual({
+            kind: "clip",
+            clipIdx: 0,
+            stageIdx: 0,
+        });
     });
 
     it("re-points the selection to a ref when its row is interacted with", () => {
@@ -956,6 +1020,28 @@ describe("createTimelineDetailStrip", () => {
         expect(segments[0].source).toBeNull();
     });
 
+    it("+ Add segment lands in the first free gap, sorted, never overlapping", () => {
+        // Existing segments [1,3] and [4,6] leave gaps [0,1], [3,4], [6,10].
+        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
+        setSelection({ kind: "audio", clipIdx: 0 });
+        document
+            .querySelector<HTMLElement>(".vst-detail-add-segment")
+            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        const segments = savedClips(saveSpy)[0].audioSegments;
+        expect(segments).toHaveLength(3);
+        // First gap is [0,1] → start 0, length capped to 1; array stays sorted
+        // and the NEW segment (post-sort index 0) is selected.
+        expect(segments[0].startSeconds).toBe(0);
+        expect(segments[0].lengthSeconds).toBe(1);
+        expect(segments.map((s) => s.startSeconds)).toEqual([0, 1, 4]);
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 0,
+        });
+    });
+
     it("renders the audio-segment editor with breadcrumb, fields and remove", () => {
         setup([
             {
@@ -1028,7 +1114,8 @@ describe("createTimelineDetailStrip", () => {
         const del =
             detailBody()?.querySelector<HTMLElement>(".vst-detail-delete");
         del?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(getSelection()).toEqual({ kind: "none" });
+        // The last segment is gone → fall back to the clip's audio panel.
+        expect(getSelection()).toEqual({ kind: "audio", clipIdx: 0 });
         expect(savedClips(saveSpy)[0].audioSegments).toEqual([]);
     });
 
@@ -1092,6 +1179,46 @@ describe("createTimelineDetailStrip", () => {
         jest.useRealTimers();
     });
 
+    it("clamps a segment's Start/Length at its neighbouring segments", () => {
+        // seg0 [1,3], seg1 [4,6] in a 10s clip.
+        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
+        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
+
+        // seg1's Start spinner wall is seg0's end (3) — in the attr.
+        const s1 = segRow(1).querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="seg-1-start"]',
+        );
+        expect(s1?.min).toBe("3");
+
+        // Typing a Start INSIDE seg0 clamps to seg0's end.
+        jest.useFakeTimers();
+        if (!s1) {
+            throw new Error("start input missing");
+        }
+        s1.value = "2";
+        s1.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        let segs = savedClips(saveSpy)[0].audioSegments;
+        expect(segs[1].startSeconds).toBe(3);
+
+        // seg0's Length cannot extend into seg1: end clamps to seg1's start.
+        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
+        const l0 = segRow(0).querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="seg-0-length"]',
+        );
+        if (!l0) {
+            throw new Error("length input missing");
+        }
+        l0.value = "9";
+        l0.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        segs = savedClips(saveSpy)[0].audioSegments;
+        // seg1 moved to [3,5] above, so seg0 [1,…] may reach at most 3 → length 2.
+        expect(segs[0].startSeconds).toBe(1);
+        expect(segs[0].lengthSeconds).toBe(2);
+        jest.useRealTimers();
+    });
+
     it("re-points the selection to a segment via a targeted highlight swap", () => {
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
@@ -1122,7 +1249,12 @@ describe("createTimelineDetailStrip", () => {
         const segs = savedClips(saveSpy)[0].audioSegments;
         expect(segs).toHaveLength(1);
         expect(segs[0].startSeconds).toBe(1); // the surviving first segment
-        expect(getSelection().kind).toBe("none");
+        // Selection re-points to the surviving neighbour segment.
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 0,
+        });
     });
 
     it("edits the clip's major prompt (debounced) through saveClips", () => {
@@ -1335,7 +1467,12 @@ describe("createTimelineDetailStrip", () => {
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(savedClips(saveSpy)[0].promptWindows).toHaveLength(1);
         expect(savedClips(saveSpy)[0].promptWindows[0].prompt).toBe("keep");
-        expect(getSelection().kind).toBe("none");
+        // Selection re-points to the surviving neighbour window.
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: 0,
+        });
     });
 
     it("edits a relay window's begin/end with clamping and repaints the timeline", () => {
@@ -1376,7 +1513,8 @@ describe("createTimelineDetailStrip", () => {
         let w0 = savedClips(saveSpy)[0].promptWindows[0];
         expect(w0.start).toBe(1);
         expect(w0.duration).toBe(3);
-        // The window edit repaints the timeline (unlike a plain clip field edit).
+        // The window edit committed through the store — the notification that
+        // repaints the timeline (and the on-track relay segment) in prod.
         expect(refreshSpy).toHaveBeenCalled();
 
         // Push begin past the neighbouring window (start 6): clamped so it can't
@@ -1394,22 +1532,93 @@ describe("createTimelineDetailStrip", () => {
         expect(w0.start).toBeLessThan(6);
     });
 
+    it("bounds a relay window's begin/end inputs at its neighbours", () => {
+        setup([
+            {
+                duration: 12,
+                stages: [{}],
+                windows: [
+                    { start: 1, duration: 2, prompt: "w0" }, // [1,3]
+                    { start: 6, duration: 2, prompt: "w1" }, // [6,8]
+                ],
+            },
+        ]);
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+        // w0's END spinner stops at w1's start (6): its max attr IS the wall.
+        const w0End = minorRows()[0].querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="minor-0-end"]',
+        );
+        expect(w0End?.max).toBe("6");
+        // w1's BEGIN spinner stops at w0's end (3): its min attr IS the wall.
+        const w1Begin = minorRows()[1].querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="minor-1-begin"]',
+        );
+        expect(w1Begin?.min).toBe("3");
+        // Outer edges stay clip-bounded.
+        const w0Begin = minorRows()[0].querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="minor-0-begin"]',
+        );
+        expect(w0Begin?.min).toBe("0");
+        const w1End = minorRows()[1].querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="minor-1-end"]',
+        );
+        expect(w1End?.max).toBe("12");
+        // The attrs sit ON the 0.1 spinner grid: a 0.25-anchored min would put
+        // whole-tenth values off-grid, and the browser's down-spin snap (x.95)
+        // rounds half-up straight back — END could never decrease.
+        expect(w0End?.min).toBe("0.3");
+        expect(w0Begin?.max).toBe("11.7"); // floor(12 - 0.25) onto the grid
+    });
+
+    it("hovering a Reference Strength row highlights that ref's timeline mark", () => {
+        const body = setup([
+            {
+                duration: 4,
+                stages: [{}],
+                refs: [
+                    { source: "Base", frame: 1 },
+                    { source: "Refiner", frame: 12 },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const rows = document.querySelectorAll<HTMLElement>(
+            ".vst-detail .vst-stage-ref-slider",
+        );
+        expect(rows).toHaveLength(2);
+        const mark = body.querySelector<HTMLElement>(
+            '.vst-refs-mark[data-clip-idx="0"][data-ref-idx="1"]',
+        );
+        if (!mark) {
+            throw new Error("ref mark missing");
+        }
+        rows[1].dispatchEvent(new MouseEvent("mouseenter"));
+        expect(mark.classList.contains("vst-ref-hover")).toBe(true);
+        // The OTHER ref's mark is untouched.
+        expect(
+            body
+                .querySelector('.vst-refs-mark[data-ref-idx="0"]')
+                ?.classList.contains("vst-ref-hover"),
+        ).toBe(false);
+        rows[1].dispatchEvent(new MouseEvent("mouseleave"));
+        expect(mark.classList.contains("vst-ref-hover")).toBe(false);
+    });
+
     // ---- value-only commits never rebuild the dock (focus survives) -------
     //
-    // In production a value save fires the carrier notify → videoStagesTimeline
-    // .refresh() → detailStrip.render() SYNCHRONOUSLY, and refresh:true / state
-    // edits additionally call options.refresh() → render(). Both would innerHTML
-    // -rebuild the dock and drop the caret. These tests reproduce that wiring
-    // faithfully — a prompt-input listener that calls render() (the notify path)
-    // plus a refresh() that calls render() (the options.refresh path) — and
-    // assert the edited field's node (and focus) survives untouched.
+    // In production a value save commits through the store, whose notification
+    // drives videoStagesTimeline.renderAll(meta) → detailStrip.render(meta)
+    // SYNCHRONOUSLY. A rebuild there would innerHTML-wipe the dock and drop the
+    // caret; the value primitives mark their saves valueOnly, which arrives as
+    // meta.hint === "value-only" and holds the dock DOM. These tests reproduce
+    // that wiring faithfully — a store subscription that calls render(meta) —
+    // and assert the edited field's node (and focus) survives untouched.
     describe("value-only commits keep the dock DOM", () => {
-        // Emulate the two prod render triggers a value save produces.
+        // Emulate the prod render trigger a save produces.
         const wireLiveRenders = (): void => {
-            refreshSpy.mockImplementation(() => strip?.render());
-            document
-                .querySelector<HTMLTextAreaElement>("#input_prompt")
-                ?.addEventListener("input", () => strip?.render());
+            persistence
+                .getTimelineStore()
+                .subscribe((_state, meta) => strip?.render(meta));
         };
         // A spinner click / Enter: a `change` while the field still owns focus.
         const commitNumber = (input: HTMLInputElement, value: string): void => {
@@ -1447,7 +1656,8 @@ describe("createTimelineDetailStrip", () => {
                 ),
             ).toBe(end);
             expect(document.activeElement).toBe(end);
-            // The data was written and the timeline was repainted (refresh:true).
+            // The data was written and the commit notification fired (the
+            // timeline repaint driver).
             expect(savedClips(saveSpy)[0].promptWindows[0].duration).toBe(3);
             expect(refreshSpy).toHaveBeenCalled();
             // The value-derived breadcrumb was synced WITHOUT a rebuild.
@@ -1547,13 +1757,13 @@ describe("createTimelineDetailStrip", () => {
     // DISPLAYED value in place after the flush — same node, focus intact, no
     // rebuild. These tests reproduce the verifier-confirmed defects.
     describe("contextual-clamp write-back", () => {
-        // Faithfully reproduce the prod render triggers a value save fires, so a
-        // rebuild WOULD be visible if the handshake leaked (the node would swap).
+        // Faithfully reproduce the prod render trigger a value save fires, so a
+        // rebuild WOULD be visible if the value-only hint leaked (the node
+        // would swap).
         const wireLiveRenders = (): void => {
-            refreshSpy.mockImplementation(() => strip?.render());
-            document
-                .querySelector<HTMLTextAreaElement>("#input_prompt")
-                ?.addEventListener("input", () => strip?.render());
+            persistence
+                .getTimelineStore()
+                .subscribe((_state, meta) => strip?.render(meta));
         };
         // A spinner click / Enter: a `change` while the field still owns focus.
         const commitNumber = (input: HTMLInputElement, value: string): void => {
@@ -1755,7 +1965,7 @@ describe("createTimelineDetailStrip", () => {
         });
     });
 
-    it("renders both prompt panels as non-collapsible groups (no chevron)", () => {
+    it("renders both prompt panels as headerless groups (breadcrumb is the label)", () => {
         setup([
             {
                 duration: 10,
@@ -1768,36 +1978,22 @@ describe("createTimelineDetailStrip", () => {
         const major = detail()?.querySelector<HTMLElement>(
             "#auto-group-vstdock_promptmajor",
         );
-        const majorHeader = major?.querySelector(".input-group-header");
-        expect(majorHeader?.classList.contains("input-group-noshrink")).toBe(
-            true,
-        );
-        expect(majorHeader?.classList.contains("input-group-shrinkable")).toBe(
-            false,
-        );
-        expect(major?.querySelector(".auto-symbol")).toBeNull();
+        expect(major?.querySelector(".input-group-header")).toBeNull();
+        expect(major?.querySelector(".header-label")).toBeNull();
         expect(major?.classList.contains("input-group-open")).toBe(true);
         expect(
             major?.querySelector<HTMLElement>(".input-group-content")?.style
                 .display,
         ).not.toBe("none");
-        // Title + counter are still present.
-        expect(major?.querySelector(".header-label")?.textContent).toBe(
-            "Prompt",
-        );
+        // The panel's one label is the breadcrumb.
+        expect(crumbText()).toBe("Prompt · Clip 0");
 
         setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
         const minor = detail()?.querySelector<HTMLElement>(
             "#auto-group-vstdock_promptminor",
         );
-        const minorHeader = minor?.querySelector(".input-group-header");
-        expect(minorHeader?.classList.contains("input-group-noshrink")).toBe(
-            true,
-        );
-        expect(minor?.querySelector(".auto-symbol")).toBeNull();
-        expect(minor?.querySelector(".header-label")?.textContent).toBe(
-            "Prompt Windows",
-        );
+        expect(minor?.querySelector(".input-group-header")).toBeNull();
+        expect(minor?.querySelector(".header-label")).toBeNull();
     });
 
     it("applies a resolution preset from the settings panel", () => {
@@ -2001,110 +2197,74 @@ describe("createTimelineDetailStrip", () => {
     describe("dock groups & collapse", () => {
         const group = (key: string): HTMLElement | null =>
             detail()?.querySelector<HTMLElement>(`#auto-group-${key}`) ?? null;
-        const headerText = (
-            el: HTMLElement | null,
-            cls: string,
-        ): string | undefined =>
-            el?.querySelector<HTMLElement>(cls)?.textContent ?? undefined;
 
-        it("wraps a clip selection in three stable-keyed groups with counters", () => {
+        it("renders bare clip fields plus ONE Stages group (rail + parameters)", () => {
             setup([{ duration: 4, stages: [{}, {}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
 
-            const clip = group("vstdock_clip");
+            // The clip's own fields render directly in the body — no group
+            // container, no header (the breadcrumb already names the clip).
+            expect(group("vstdock_clip")).toBeNull();
+            const clipCol = detailBody()?.querySelector(".vst-detail-clip");
+            expect(clipCol).not.toBeNull();
+            expect(clipCol?.closest(".input-group")).toBeNull();
+
+            // One merged Stages group: a plain "Stages" label, the selector
+            // rail, and the selected stage's parameters — one section.
+            expect(group("vstdock_stageparams")).toBeNull();
             const stages = group("vstdock_stages");
-            const params = group("vstdock_stageparams");
-            expect(clip).not.toBeNull();
             expect(stages).not.toBeNull();
-            expect(params).not.toBeNull();
-
-            // Stable id + host skeleton (header wrap, label, counter, content id).
             expect(
-                clip?.querySelector("#input_group_vstdock_clip"),
+                stages?.querySelector("#input_group_content_vstdock_stages"),
             ).not.toBeNull();
+            const wrap = stages?.querySelector(".vst-detail-stages-wrap");
+            expect(wrap).not.toBeNull();
+            const cols = wrap ? Array.from(wrap.children) : [];
+            expect(cols[0]?.classList.contains("vst-detail-sec")).toBe(true);
+            expect(cols[0]?.textContent).toBe("Stages");
+            expect(cols[1]?.classList.contains("vst-detail-rail")).toBe(true);
+            expect(cols[2]?.classList.contains("vst-detail-params")).toBe(true);
             expect(
-                clip?.querySelector("#input_group_content_vstdock_clip"),
+                wrap?.querySelector(".vst-detail-params .vst-stage-loras"),
             ).not.toBeNull();
-            expect(headerText(clip, ".header-label")).toBe("Clip");
 
-            // Instance identity lives only in the counter, never the id.
-            expect(headerText(clip, ".header-label-counter")).toBe("Clip 0");
-            expect(headerText(stages, ".header-label-counter")).toBe("2 of 3");
-            expect(headerText(params, ".header-label-counter")).toBe("Stage 2");
-
-            // The clip fields still resolve inside their group's content.
-            expect(
-                detailBody()?.querySelector(".vst-detail-clip"),
-            ).not.toBeNull();
-            expect(
-                detailBody()?.querySelector(
-                    ".vst-detail-params .vst-stage-loras",
-                ),
-            ).not.toBeNull();
-        });
-
-        it("renders every clip-panel group non-collapsible (Clip, Stages, Stage Parameters)", () => {
-            setup([{ duration: 4, stages: [{}, {}] }]);
-            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-
-            // No group in the clip panel collapses: all three render with the
-            // host `input-group-noshrink` idiom (no chevron, always open).
-            for (const key of [
-                "vstdock_clip",
-                "vstdock_stages",
-                "vstdock_stageparams",
-            ]) {
-                const g = group(key);
-                const header = g?.querySelector(".input-group-header");
-                expect(header?.classList.contains("input-group-noshrink")).toBe(
-                    true,
-                );
-                expect(
-                    header?.classList.contains("input-group-shrinkable"),
-                ).toBe(false);
-                // No chevron, always open, content visible.
-                expect(g?.querySelector(".auto-symbol")).toBeNull();
-                expect(g?.classList.contains("input-group-open")).toBe(true);
-                expect(
-                    g?.querySelector<HTMLElement>(".input-group-content")?.style
-                        .display,
-                ).not.toBe("none");
-            }
-        });
-
-        it("ignores a group_open cookie for the non-collapsible Clip group", () => {
-            const globals = globalThis as unknown as {
-                getCookie: (name: string) => string;
-            };
-            jest.spyOn(globals, "getCookie").mockImplementation((name) =>
-                name === "group_open_vstdock_clip" ? "closed" : "",
+            // The Retake section lives in the clip panel too, labelled, with
+            // an add button when the clip has no retake.
+            const retake = group("vstdock_retake");
+            expect(retake).not.toBeNull();
+            expect(retake?.querySelector(".vst-detail-sec")?.textContent).toBe(
+                "Retake",
             );
-            setup([{ duration: 4, stages: [{}] }]);
-            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const clip = group("vstdock_clip");
-            // A non-collapsible group never reads the cookie: it stays open.
-            expect(clip?.classList.contains("input-group-open")).toBe(true);
             expect(
-                clip?.querySelector<HTMLElement>(".input-group-content")?.style
-                    .display,
-            ).not.toBe("none");
+                retake?.querySelector(".vst-detail-add-retake"),
+            ).not.toBeNull();
         });
 
-        it("wraps a single-panel selection in one keyed group with a counter", () => {
+        it("wraps a single-panel selection in one keyed headerless group", () => {
             setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "audio", clipIdx: 0 });
             const audio = group("vstdock_audio");
             expect(audio).not.toBeNull();
-            expect(headerText(audio, ".header-label")).toBe("Audio");
-            expect(headerText(audio, ".header-label-counter")).toBe("Clip 0");
+            // The breadcrumb is the panel's one label; the group has no header.
+            expect(crumbText()).toBe("Audio · Clip 0");
+            expect(audio?.querySelector(".input-group-header")).toBeNull();
             // Only one group in a single-panel body.
             expect(detail()?.querySelectorAll(".input-group")).toHaveLength(1);
         });
 
-        it("defaults groups to open (open class, glyph, visible content)", () => {
+        it("renders every group headerless, always open, cookies ignored", () => {
+            // Even a stale group_open_*=closed cookie must not collapse
+            // anything: per-section headers and minimize are gone entirely.
+            const globals = globalThis as unknown as {
+                getCookie: (name: string) => string;
+            };
+            expect(typeof globals.getCookie).toBe("function");
+            jest.spyOn(globals, "getCookie").mockImplementation(() => "closed");
             setup([{ duration: 4, stages: [{}] }]);
             // Default selection is none → the settings group.
             const settings = group("vstdock_settings");
+            expect(settings?.querySelector(".input-group-header")).toBeNull();
+            expect(settings?.querySelector(".auto-symbol")).toBeNull();
             expect(settings?.classList.contains("input-group-open")).toBe(true);
             expect(settings?.classList.contains("input-group-closed")).toBe(
                 false,
@@ -2113,35 +2273,6 @@ describe("createTimelineDetailStrip", () => {
                 ".input-group-content",
             );
             expect(content?.style.display).not.toBe("none");
-            expect(
-                settings?.querySelector(".auto-symbol")?.innerHTML,
-            ).toContain("⮟");
-        });
-
-        it("honours a group_open_*=closed cookie for the initial state", () => {
-            // Stub the host cookie reader so the settings group starts closed.
-            const globals = globalThis as unknown as {
-                getCookie: (name: string) => string;
-            };
-            expect(typeof globals.getCookie).toBe("function");
-            jest.spyOn(globals, "getCookie").mockImplementation((name) =>
-                name === "group_open_vstdock_settings" ? "closed" : "",
-            );
-            setup([{ duration: 4, stages: [{}] }]);
-            const settings = group("vstdock_settings");
-            expect(settings?.classList.contains("input-group-closed")).toBe(
-                true,
-            );
-            expect(settings?.classList.contains("input-group-open")).toBe(
-                false,
-            );
-            const content = settings?.querySelector<HTMLElement>(
-                ".input-group-content",
-            );
-            expect(content?.style.display).toBe("none");
-            expect(
-                settings?.querySelector(".auto-symbol")?.innerHTML,
-            ).toContain("⮞");
         });
 
         it("width-collapses the dock via the header chevron", () => {
@@ -2490,9 +2621,13 @@ describe("createTimelineDetailStrip", () => {
             style.textContent = css;
             document.head.appendChild(style);
         };
-        // Host site.css FIRST, our dock sheet SECOND — mirrors production load
-        // order and lets our higher-specificity `.vst-detail` overrides win.
-        const injectHostCss = (): void =>
+        // Host site.css + the default theme (modern_dark = modern.css + vars)
+        // FIRST, our dock sheet SECOND — mirrors production load order and lets
+        // our higher-specificity `.vst-detail` overrides win. The theme MUST be
+        // in the probe: modern.css styles `.input-group .input-group-content>div`
+        // (padding + align-items:center) at a specificity that beat our
+        // single-class wrappers undetected until it was probed.
+        const injectHostCss = (): void => {
             injectCss("vst-probe-host-css", [
                 "..",
                 "..",
@@ -2501,6 +2636,16 @@ describe("createTimelineDetailStrip", () => {
                 "css",
                 "site.css",
             ]);
+            injectCss("vst-probe-theme-css", [
+                "..",
+                "..",
+                "..",
+                "wwwroot",
+                "css",
+                "themes",
+                "modern.css",
+            ]);
+        };
         const injectDockCss = (): void =>
             injectCss("vst-probe-css", [
                 "..",
@@ -2655,6 +2800,26 @@ describe("createTimelineDetailStrip", () => {
             walkFromTextarea();
             setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
             walkFromTextarea();
+        });
+
+        it("(e) out-specifies the theme's content>div center rule — sections stretch", () => {
+            // themes/modern.css ships `.input-group .input-group-content>div
+            // { padding: 5px 10px; align-items: center }`, which center-shrinks
+            // every dock section wrapper unless our higher-specificity counter
+            // rule wins.
+            injectHostCss();
+            injectDockCss();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const wraps = document.querySelectorAll<HTMLElement>(
+                ".vst-detail .input-group-content > div",
+            );
+            expect(wraps.length).toBeGreaterThan(0);
+            for (const wrap of wraps) {
+                expect({
+                    node: wrap.className,
+                    alignItems: computed(wrap).alignItems,
+                }).toEqual({ node: wrap.className, alignItems: "stretch" });
+            }
         });
 
         it("(c) with HOST site.css cascading, prompt/select/number rows read full-width, never centered", () => {

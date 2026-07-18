@@ -7,13 +7,14 @@ import {
     jest,
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
     createTimelinePromptTrack,
     type TimelinePromptTrack,
 } from "./timelinePromptTrack";
 import type { Clip, PromptWindow } from "./types";
-import { getSelection, resetSelectionForTests } from "./uiState";
+import { getSelection, resetSelectionForTests, setSelection } from "./uiState";
 
 const PPS = 44;
 
@@ -141,6 +142,7 @@ const savedWindows = (
 
 describe("createTimelinePromptTrack (DOM gestures)", () => {
     let track: TimelinePromptTrack | null = null;
+    let router: GestureRouter | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
     beforeEach(() => {
@@ -163,7 +165,9 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         const body = makeBody();
         renderPromptTrack(body, clips);
         track = createTimelinePromptTrack();
-        track.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        track.attach(body, router);
         return body;
     };
 
@@ -240,6 +244,48 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         const windows = savedWindows(saveSpy);
         expect(windows[0].start).toBeCloseTo(3, 5);
         expect(windows[0].duration).toBeCloseTo(2, 5);
+    });
+
+    it("a committed drag selects the dragged window, not any previous one", () => {
+        // Regression: with W0 selected (its dock editor focused), dragging W1
+        // used to leave W0 selected — the dock's focus-restore re-pointed the
+        // selection back to W0's editor after the commit rebuild.
+        const body = setup([
+            {
+                duration: 20,
+                windows: [
+                    { start: 1, duration: 2, prompt: "first" },
+                    { start: 8, duration: 2, prompt: "second" },
+                ],
+            },
+        ]);
+        setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
+        const seg = el(body, ".vst-minor-seg[data-window-idx='1']");
+        seg.dispatchEvent(mouse("mousedown", 400));
+        document.dispatchEvent(mouse("mousemove", 400 + 2 * PPS));
+        document.dispatchEvent(mouse("mouseup", 400 + 2 * PPS));
+
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: 1,
+        });
+    });
+
+    it("a committed edge resize selects the resized window", () => {
+        const body = setup([
+            { duration: 10, windows: [{ start: 1, duration: 2 }] },
+        ]);
+        const grip = el(body, ".vst-minor-resize-r");
+        grip.dispatchEvent(mouse("mousedown", 200));
+        document.dispatchEvent(mouse("mousemove", 200 + 1 * PPS));
+        document.dispatchEvent(mouse("mouseup", 200 + 1 * PPS));
+
+        expect(getSelection()).toEqual({
+            kind: "prompt-minor",
+            clipIdx: 0,
+            windowIdx: 0,
+        });
     });
 
     it("clicking a minor segment (no drag) leaves its rendered position untouched", () => {

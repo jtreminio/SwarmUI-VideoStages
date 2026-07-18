@@ -572,7 +572,7 @@ describe("renderTimeline (DOM)", () => {
         expect(hueOf(regions[2])).toBe("hsl(300 65% 55%)");
     });
 
-    it("always renders an editable audio segment per clip, muting Native ones", () => {
+    it("always renders an editable audio segment per clip, tinted per source", () => {
         // The lane is always present so every clip (even Native) is clickable
         // to set/change its audio source.
         renderTimeline(body, [makeClip(2, 1, 0)]);
@@ -581,9 +581,14 @@ describe("renderTimeline (DOM)", () => {
         const nativeSeg = lane?.querySelector(".vst-audio-clip");
         expect(nativeSeg).not.toBeNull();
         expect(nativeSeg?.classList.contains("vst-audio-native")).toBe(true);
+        expect(nativeSeg?.classList.contains("vst-audio-kind-native")).toBe(
+            true,
+        );
         expect(nativeSeg?.getAttribute("role")).toBe("button");
-        // Native segments show a call-to-action hint, not a waveform.
-        expect(nativeSeg?.querySelector(".vst-audio-wave")).toBeNull();
+        // Every source kind renders the full-width fake waveform.
+        expect(
+            nativeSeg?.querySelectorAll(".vst-audio-wave span").length,
+        ).toBeGreaterThan(0);
         expect(nativeSeg?.querySelector(".vst-audio-hint")).not.toBeNull();
         expect(nativeSeg?.querySelector(".vst-audio-label")?.textContent).toBe(
             "Native",
@@ -593,16 +598,28 @@ describe("renderTimeline (DOM)", () => {
             ...makeClip(2, 1, 0),
             audioSource: "Upload",
         } as unknown as Clip;
-        renderTimeline(body, [makeClip(2, 1, 0), withAudio]);
+        const withAce = {
+            ...makeClip(2, 1, 0),
+            audioSource: "audio1",
+        } as unknown as Clip;
+        renderTimeline(body, [makeClip(2, 1, 0), withAudio, withAce]);
         const segments = body
             .querySelector(".vst-track-audio")
             ?.querySelectorAll(".vst-audio-clip");
-        expect(segments).toHaveLength(2);
-        // Clip 0 is Native (muted, no wave); clip 1 is Upload (wave + label).
-        expect(segments?.[0].classList.contains("vst-audio-native")).toBe(true);
+        expect(segments).toHaveLength(3);
+        // Clip 0 Native, clip 1 Upload, clip 2 AceStepFun — distinct tints.
+        expect(segments?.[0].classList.contains("vst-audio-kind-native")).toBe(
+            true,
+        );
         const uploadSeg = segments?.[1];
         expect(uploadSeg?.getAttribute("data-clip-idx")).toBe("1");
         expect(uploadSeg?.classList.contains("vst-audio-native")).toBe(false);
+        expect(uploadSeg?.classList.contains("vst-audio-kind-upload")).toBe(
+            true,
+        );
+        expect(segments?.[2].classList.contains("vst-audio-kind-ace")).toBe(
+            true,
+        );
         expect(
             uploadSeg?.querySelectorAll(".vst-audio-wave span").length,
         ).toBeGreaterThan(0);
@@ -654,7 +671,28 @@ describe("renderTimeline (DOM)", () => {
         expect(waves[1].querySelectorAll("span")).toHaveLength(400);
     });
 
-    it("renders one editable chip per stage plus an add chip", () => {
+    it("renders a retake lane under each region, holding the retake window", () => {
+        const withRetake = {
+            duration: 4,
+            refs: [],
+            stages: [{}],
+            retake: { startSeconds: 1, lengthSeconds: 2, strength: 1 },
+        } as unknown as Clip;
+        renderTimeline(body, [withRetake, makeClip(2, 1, 0)]);
+        const lanes = body.querySelectorAll(
+            ".vst-retake-lane[data-vst-retake-add]",
+        );
+        expect(lanes).toHaveLength(2); // one per clip, retake or not
+        // The retake window lives in the LANE, not inside the region.
+        const retake = body.querySelector(".vst-retake");
+        expect(retake).not.toBeNull();
+        expect(retake?.closest(".vst-retake-lane")).not.toBeNull();
+        expect(retake?.closest(".vst-region")).toBeNull();
+        // The retake-less clip's lane is empty.
+        expect(lanes[1].querySelector(".vst-retake")).toBeNull();
+    });
+
+    it("renders one editable chip per stage and NO add chip (adding lives in the dock)", () => {
         const clip = {
             duration: 2,
             refs: [],
@@ -664,13 +702,8 @@ describe("renderTimeline (DOM)", () => {
         const chips = Array.from(
             body.querySelectorAll<HTMLElement>(".vst-stage-chip"),
         );
-        // 3 stage chips + 1 add chip.
-        expect(chips).toHaveLength(4);
-        expect(chips.slice(0, 3).map((c) => c.textContent)).toEqual([
-            "S0",
-            "⊘ S1",
-            "S2",
-        ]);
+        expect(chips).toHaveLength(3);
+        expect(chips.map((c) => c.textContent)).toEqual(["S0", "⊘ S1", "S2"]);
         // The skipped stage (index 1) carries the skipped modifier.
         expect(chips[1].classList.contains("vst-stage-chip-skipped")).toBe(
             true,
@@ -684,11 +717,7 @@ describe("renderTimeline (DOM)", () => {
         expect(chips[0].getAttribute("title")).toContain(
             "Shift+click to delete",
         );
-        // The add chip is last and marked as such.
-        const add = chips[3];
-        expect(add.classList.contains("vst-stage-chip-add")).toBe(true);
-        expect(add.hasAttribute("data-vst-stage-add")).toBe(true);
-        expect(add.textContent).toBe("+");
+        expect(body.querySelector("[data-vst-stage-add]")).toBeNull();
     });
 
     it("draws a bare arrow marker on the clip and shows the ref image on the References-track thumbnail", () => {

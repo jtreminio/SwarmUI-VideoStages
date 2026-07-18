@@ -20,7 +20,6 @@
         "@biomejs/biome": "^2.4.11",
         "@jest/globals": "^30.3.0",
         "esbuild": "^0.28.0",
-        "html-template-tag": "^5.0.0",
         "jest": "^30.3.0",
         "jest-environment-jsdom": "^30.3.0",
         "ts-jest": "^29.4.9",

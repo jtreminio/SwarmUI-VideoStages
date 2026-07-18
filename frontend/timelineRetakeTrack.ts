@@ -1,4 +1,14 @@
-import { clamp, RETAKE_MIN_DURATION } from "./constants";
+import {
+    clamp,
+    RETAKE_DEFAULT_DURATION,
+    RETAKE_MIN_DURATION,
+    RETAKE_STRENGTH_DEFAULT,
+} from "./constants";
+import {
+    claimOnly,
+    type GestureRouter,
+    type GestureSession,
+} from "./gestureRouter";
 import { getClips, saveClips } from "./persistence";
 import { readStateToken } from "./swarmInputs";
 import { livePxPerSecond } from "./timelineLinking";
@@ -7,19 +17,19 @@ import { setSelection } from "./uiState";
 
 const RETAKE_SELECTOR = ".vst-retake[data-clip-idx]";
 const RETAKE_EDGE_SELECTOR = "[data-vst-retake-edge]";
+const LANE_SELECTOR = ".vst-retake-lane[data-vst-retake-add]";
 
 const DRAG_THRESHOLD_PX = 4;
 const DRAGGING_CLASS = "vst-retake-dragging";
+const GHOST_CLASS = "vst-retake-ghost";
 
 interface MoveState {
     clipIdx: number;
     el: HTMLElement;
-    startX: number;
     startStart: number;
     length: number;
     clipDuration: number;
     originalLeft: string;
-    active: boolean;
     sourceJson: string;
 }
 
@@ -27,18 +37,26 @@ interface ResizeState {
     clipIdx: number;
     edge: "left" | "right";
     el: HTMLElement;
-    startX: number;
     startStart: number;
     startLength: number;
     clipDuration: number;
     originalLeft: string;
     originalWidth: string;
-    active: boolean;
+    sourceJson: string;
+}
+
+interface CreateState {
+    clipIdx: number;
+    lane: HTMLElement;
+    laneLeft: number;
+    startSec: number;
+    clipDuration: number;
+    ghost: HTMLElement | null;
     sourceJson: string;
 }
 
 export interface TimelineRetakeTrack {
-    attach(body: HTMLElement): void;
+    attach(body: HTMLElement, router: GestureRouter): void;
     dispose(): void;
 }
 
@@ -66,10 +84,8 @@ const widthPct = (length: number, duration: number): number =>
     duration > 0 ? (clamp(length, 0, duration) / duration) * 100 : 0;
 
 export const createTimelineRetakeTrack = (): TimelineRetakeTrack => {
-    let moveState: MoveState | null = null;
-    let resizeState: ResizeState | null = null;
-    let suppressClick = false;
     let boundBody: HTMLElement | null = null;
+    let unregister: (() => void) | null = null;
 
     const isStale = (sourceJson: string): boolean =>
         readStateToken() !== sourceJson;
@@ -81,7 +97,7 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack => {
             return;
         }
         clip.retake = null;
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "retake-track" });
     };
 
     const commitMove = (state: MoveState, dxPx: number, pps: number): void => {
@@ -101,7 +117,10 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack => {
         clip.retake.lengthSeconds = roundSeconds(
             Math.min(length, clipDur - clip.retake.startSeconds),
         );
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "retake-track" });
+        // The dragged retake becomes the selection — after the save, so a dock
+        // focus-restore can't re-point the selection elsewhere.
+        setSelection({ kind: "retake", clipIdx: state.clipIdx });
     };
 
     const commitResize = (
@@ -137,155 +156,273 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack => {
             clip.retake.startSeconds = roundSeconds(start);
             clip.retake.lengthSeconds = roundSeconds(end - start);
         }
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "retake-track" });
+        // See commitMove: select the resized retake, after the save.
+        setSelection({ kind: "retake", clipIdx: state.clipIdx });
     };
 
-    const clearGesture = (body: HTMLElement): void => {
-        moveState = null;
-        resizeState = null;
-        body.classList.remove(DRAGGING_CLASS);
-    };
-
-    const onBodyMouseDown = (event: Event): void => {
-        suppressClick = false;
-        const me = event as MouseEvent;
-        if (me.button !== 0 || !(me.target instanceof Element)) {
+    // Create a retake from a lane press — a clip holds at most ONE retake, so
+    // the lane only creates when none exists (onPress guards). A plain tap
+    // places a default-length window at the pressed time; a drag sizes it.
+    const commitCreate = (state: CreateState, endSec: number | null): void => {
+        if (isStale(state.sourceJson)) {
             return;
+        }
+        const clips = getClips();
+        const clip = clips[state.clipIdx];
+        if (!clip || clip.retake) {
+            return;
+        }
+        const clipDur = clipDurationOf(clip);
+        if (clipDur < RETAKE_MIN_DURATION) {
+            return;
+        }
+        let start: number;
+        let length: number;
+        if (endSec === null) {
+            length = Math.min(RETAKE_DEFAULT_DURATION, clipDur);
+            start = clamp(state.startSec, 0, clipDur - length);
+        } else {
+            const a = clamp(Math.min(state.startSec, endSec), 0, clipDur);
+            const b = clamp(Math.max(state.startSec, endSec), 0, clipDur);
+            start = a;
+            length = Math.max(RETAKE_MIN_DURATION, b - a);
+            if (start + length > clipDur) {
+                length = clipDur - start;
+            }
+        }
+        if (length < RETAKE_MIN_DURATION) {
+            return;
+        }
+        clip.retake = {
+            startSeconds: roundSeconds(start),
+            lengthSeconds: roundSeconds(length),
+            strength: RETAKE_STRENGTH_DEFAULT,
+        };
+        saveClips(clips, undefined, { origin: "retake-track" });
+        // Open the new retake in the dock (the clip panel's Retake section).
+        setSelection({ kind: "retake", clipIdx: state.clipIdx });
+    };
+
+    const laneTimeAt = (
+        state: CreateState,
+        clientX: number,
+        pps: number,
+    ): number => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
+
+    const createSession = (
+        body: HTMLElement,
+        state: CreateState,
+    ): GestureSession => {
+        const removeGhost = (): void => {
+            state.ghost?.remove();
+            state.ghost = null;
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            // A plain lane tap creates a default-length retake, so the
+            // concluding click is always consumed.
+            suppressTapClick: true,
+            onMove: (ctx) => {
+                body.classList.add(DRAGGING_CLASS);
+                const pps = livePxPerSecond(body);
+                const nowSec = laneTimeAt(state, ctx.event.clientX, pps);
+                const a = Math.min(state.startSec, nowSec);
+                const b = Math.max(state.startSec, nowSec);
+                if (!state.ghost) {
+                    const ghost = document.createElement("div");
+                    ghost.className = GHOST_CLASS;
+                    state.lane.appendChild(ghost);
+                    state.ghost = ghost;
+                }
+                const dur = state.clipDuration;
+                state.ghost.style.left = `${leftPct(a, dur)}%`;
+                state.ghost.style.width = `${widthPct(b - a, dur)}%`;
+            },
+            onCommit: (ctx) => {
+                body.classList.remove(DRAGGING_CLASS);
+                removeGhost();
+                commitCreate(
+                    state,
+                    laneTimeAt(state, ctx.event.clientX, livePxPerSecond(body)),
+                );
+            },
+            onTap: () => {
+                removeGhost();
+                commitCreate(state, null);
+            },
+            onCancel: () => {
+                removeGhost();
+                body.classList.remove(DRAGGING_CLASS);
+            },
+        };
+    };
+
+    const resizeSession = (
+        body: HTMLElement,
+        state: ResizeState,
+    ): GestureSession => {
+        const restore = (): void => {
+            state.el.style.left = state.originalLeft;
+            state.el.style.width = state.originalWidth;
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            onMove: (ctx) => {
+                body.classList.add(DRAGGING_CLASS);
+                const pps = livePxPerSecond(body);
+                const clipDur = state.clipDuration;
+                const deltaSec = ctx.dx / pps;
+                if (state.edge === "right") {
+                    const end = clamp(
+                        state.startStart + state.startLength + deltaSec,
+                        state.startStart + RETAKE_MIN_DURATION,
+                        clipDur,
+                    );
+                    state.el.style.width = `${widthPct(end - state.startStart, clipDur)}%`;
+                } else {
+                    const end = state.startStart + state.startLength;
+                    const start = clamp(
+                        state.startStart + deltaSec,
+                        0,
+                        end - RETAKE_MIN_DURATION,
+                    );
+                    state.el.style.left = `${leftPct(start, clipDur)}%`;
+                    state.el.style.width = `${widthPct(end - start, clipDur)}%`;
+                }
+            },
+            onCommit: (ctx) => {
+                body.classList.remove(DRAGGING_CLASS);
+                commitResize(state, ctx.dx, livePxPerSecond(body));
+            },
+            onTap: restore,
+            onCancel: () => {
+                restore();
+                body.classList.remove(DRAGGING_CLASS);
+            },
+        };
+    };
+
+    const moveSession = (
+        body: HTMLElement,
+        state: MoveState,
+    ): GestureSession => {
+        const restore = (): void => {
+            state.el.style.left = state.originalLeft;
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            onMove: (ctx) => {
+                body.classList.add(DRAGGING_CLASS);
+                const pps = livePxPerSecond(body);
+                const clipDur = state.clipDuration;
+                const length = Math.min(state.length, clipDur);
+                const maxStart = Math.max(0, clipDur - length);
+                const start = clamp(
+                    state.startStart + ctx.dx / pps,
+                    0,
+                    maxStart,
+                );
+                state.el.style.left = `${leftPct(start, clipDur)}%`;
+            },
+            onCommit: (ctx) => {
+                body.classList.remove(DRAGGING_CLASS);
+                commitMove(state, ctx.dx, livePxPerSecond(body));
+            },
+            onTap: restore,
+            onCancel: () => {
+                restore();
+                body.classList.remove(DRAGGING_CLASS);
+            },
+        };
+    };
+
+    const onPress = (
+        me: MouseEvent,
+        body: HTMLElement,
+    ): GestureSession | null => {
+        if (!(me.target instanceof Element)) {
+            return null;
         }
         const overlay = me.target.closest(RETAKE_SELECTOR);
         if (!(overlay instanceof HTMLElement)) {
-            return;
+            // Empty lane press → create (only when the clip has no retake yet).
+            const lane = me.target.closest(LANE_SELECTOR);
+            if (lane instanceof HTMLElement) {
+                const clipIdx = parseIntAttr(lane, "data-clip-idx");
+                if (clipIdx === null) {
+                    return null;
+                }
+                const clip = getClips()[clipIdx];
+                if (!clip || clip.retake) {
+                    return null;
+                }
+                const rect = lane.getBoundingClientRect();
+                const pps = livePxPerSecond(body);
+                const clipDuration = clipDurationOf(clip);
+                const startSec = clamp(
+                    (me.clientX - rect.left) / pps,
+                    0,
+                    clipDuration,
+                );
+                me.preventDefault();
+                return createSession(body, {
+                    clipIdx,
+                    lane,
+                    laneLeft: rect.left,
+                    startSec,
+                    clipDuration,
+                    ghost: null,
+                    sourceJson: readStateToken(),
+                });
+            }
+            return null;
         }
-        // Retake owns this gesture; keep the region drag/reorder in linking from also firing.
-        me.stopImmediatePropagation();
         if (me.shiftKey) {
+            // The retake owns this press (keeps the region drag from starting);
+            // the shift-CLICK delete stays in onBodyClick.
             me.preventDefault();
-            return;
+            return claimOnly();
         }
         const clipIdx = parseIntAttr(overlay, "data-clip-idx");
         if (clipIdx === null) {
-            return;
+            return null;
         }
         const clip = getClips()[clipIdx];
         if (!clip?.retake) {
-            return;
+            return null;
         }
         const clipDuration = clipDurationOf(clip);
         const edgeEl = me.target.closest(RETAKE_EDGE_SELECTOR);
+        me.preventDefault();
         if (edgeEl) {
-            resizeState = {
+            return resizeSession(body, {
                 clipIdx,
                 edge:
                     edgeEl.getAttribute("data-vst-retake-edge") === "left"
                         ? "left"
                         : "right",
                 el: overlay,
-                startX: me.clientX,
                 startStart: clip.retake.startSeconds,
                 startLength: clip.retake.lengthSeconds,
                 clipDuration,
                 originalLeft: overlay.style.left,
                 originalWidth: overlay.style.width,
-                active: false,
                 sourceJson: readStateToken(),
-            };
-            me.preventDefault();
-            return;
+            });
         }
-        moveState = {
+        return moveSession(body, {
             clipIdx,
             el: overlay,
-            startX: me.clientX,
             startStart: clip.retake.startSeconds,
             length: clip.retake.lengthSeconds,
             clipDuration,
             originalLeft: overlay.style.left,
-            active: false,
             sourceJson: readStateToken(),
-        };
-        me.preventDefault();
-    };
-
-    const onDocMouseMove = (body: HTMLElement, event: Event): void => {
-        const me = event as MouseEvent;
-        const pps = livePxPerSecond(body);
-        if (resizeState) {
-            const dx = me.clientX - resizeState.startX;
-            if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX) {
-                return;
-            }
-            resizeState.active = true;
-            body.classList.add(DRAGGING_CLASS);
-            const clipDur = resizeState.clipDuration;
-            const deltaSec = dx / pps;
-            if (resizeState.edge === "right") {
-                const end = clamp(
-                    resizeState.startStart + resizeState.startLength + deltaSec,
-                    resizeState.startStart + RETAKE_MIN_DURATION,
-                    clipDur,
-                );
-                resizeState.el.style.width = `${widthPct(end - resizeState.startStart, clipDur)}%`;
-            } else {
-                const end = resizeState.startStart + resizeState.startLength;
-                const start = clamp(
-                    resizeState.startStart + deltaSec,
-                    0,
-                    end - RETAKE_MIN_DURATION,
-                );
-                resizeState.el.style.left = `${leftPct(start, clipDur)}%`;
-                resizeState.el.style.width = `${widthPct(end - start, clipDur)}%`;
-            }
-            return;
-        }
-        if (moveState) {
-            const dx = me.clientX - moveState.startX;
-            if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX) {
-                return;
-            }
-            moveState.active = true;
-            body.classList.add(DRAGGING_CLASS);
-            const clipDur = moveState.clipDuration;
-            const length = Math.min(moveState.length, clipDur);
-            const maxStart = Math.max(0, clipDur - length);
-            const start = clamp(moveState.startStart + dx / pps, 0, maxStart);
-            moveState.el.style.left = `${leftPct(start, clipDur)}%`;
-        }
-    };
-
-    const onDocMouseUp = (body: HTMLElement, event: Event): void => {
-        const me = event as MouseEvent;
-        const pps = livePxPerSecond(body);
-        if (resizeState) {
-            const state = resizeState;
-            resizeState = null;
-            body.classList.remove(DRAGGING_CLASS);
-            if (state.active) {
-                suppressClick = true;
-                commitResize(state, me.clientX - state.startX, pps);
-            } else {
-                state.el.style.left = state.originalLeft;
-                state.el.style.width = state.originalWidth;
-            }
-            return;
-        }
-        if (moveState) {
-            const state = moveState;
-            moveState = null;
-            body.classList.remove(DRAGGING_CLASS);
-            if (state.active) {
-                suppressClick = true;
-                commitMove(state, me.clientX - state.startX, pps);
-            } else {
-                state.el.style.left = state.originalLeft;
-            }
-        }
+        });
     };
 
     const onBodyClick = (event: Event): void => {
-        if (suppressClick) {
-            suppressClick = false;
-            return;
-        }
         if (!(event.target instanceof Element)) {
             return;
         }
@@ -334,62 +471,28 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack => {
         setSelection({ kind: "retake", clipIdx });
     };
 
-    const onDocKeyDown = (body: HTMLElement, event: KeyboardEvent): void => {
-        if (event.key !== "Escape") {
-            return;
-        }
-        if (resizeState) {
-            resizeState.el.style.left = resizeState.originalLeft;
-            resizeState.el.style.width = resizeState.originalWidth;
-        } else if (moveState) {
-            moveState.el.style.left = moveState.originalLeft;
-        } else {
-            return;
-        }
-        clearGesture(body);
-    };
-
-    let moveHandler: ((event: Event) => void) | null = null;
-    let upHandler: ((event: Event) => void) | null = null;
-    let keyHandler: ((event: KeyboardEvent) => void) | null = null;
-
-    const attach = (body: HTMLElement): void => {
+    const attach = (body: HTMLElement, router: GestureRouter): void => {
         if (boundBody === body) {
             return;
         }
         dispose();
         boundBody = body;
-        body.addEventListener("mousedown", onBodyMouseDown);
         body.addEventListener("click", onBodyClick);
         body.addEventListener("keydown", onBodyKeyDown);
-        moveHandler = (event) => onDocMouseMove(body, event);
-        upHandler = (event) => onDocMouseUp(body, event);
-        keyHandler = (event) => onDocKeyDown(body, event);
-        document.addEventListener("mousemove", moveHandler);
-        document.addEventListener("mouseup", upHandler);
-        document.addEventListener("keydown", keyHandler);
+        unregister = router.register({
+            id: "retake",
+            priority: 50,
+            onPress,
+        });
     };
 
     const dispose = (): void => {
         if (boundBody) {
-            boundBody.removeEventListener("mousedown", onBodyMouseDown);
             boundBody.removeEventListener("click", onBodyClick);
             boundBody.removeEventListener("keydown", onBodyKeyDown);
         }
-        if (moveHandler) {
-            document.removeEventListener("mousemove", moveHandler);
-            moveHandler = null;
-        }
-        if (upHandler) {
-            document.removeEventListener("mouseup", upHandler);
-            upHandler = null;
-        }
-        if (keyHandler) {
-            document.removeEventListener("keydown", keyHandler);
-            keyHandler = null;
-        }
-        moveState = null;
-        resizeState = null;
+        unregister?.();
+        unregister = null;
         boundBody = null;
     };
 

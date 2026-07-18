@@ -1,18 +1,19 @@
-import { injectTimelineTab, TIMELINE_BODY_ID } from "./bottomTimelineTab";
-import { buildDefaultClip } from "./normalization";
-import { getClips, getState, saveClips } from "./persistence";
 import {
-    getDefaultStageModel,
-    getRootDefaults,
-    readInheritedDimsSignature,
-} from "./rootDefaults";
+    injectTimelineTab,
+    TIMELINE_BODY_ID,
+    updateTimelineTabIndicator,
+} from "./bottomTimelineTab";
+import { createGestureRouter } from "./gestureRouter";
+import { buildDefaultClip } from "./normalization";
+import { getClips, getState, getTimelineStore, saveClips } from "./persistence";
+import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import type { UpdateMeta } from "./store";
 import {
     getGroupToggle,
     getPromptInput,
     isVideoStagesEnabled,
     readCarrierSnapshot,
     readGlobalPrompt,
-    readStateToken,
     restoreCarrierSnapshot,
     setVideoStagesEnabled,
 } from "./swarmInputs";
@@ -23,7 +24,6 @@ import type { TimelineUnit } from "./timelineDetail";
 import { createTimelineDetailStrip } from "./timelineDetailStrip";
 import { createTimelineHistory } from "./timelineHistory";
 import { createTimelineLinking } from "./timelineLinking";
-import { createTimelinePlayhead } from "./timelinePlayhead";
 import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
 import { createTimelineRetakeTrack } from "./timelineRetakeTrack";
@@ -55,11 +55,9 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let boundInput: HTMLInputElement | HTMLTextAreaElement | null = null;
     let boundToggle: HTMLInputElement | null = null;
     let inputSyncInterval: ReturnType<typeof setInterval> | null = null;
-    let lastSeenValue: string | null = null;
-    let lastDimsSignature: string | null = null;
+    let storeUnsub: (() => void) | null = null;
     let unit: TimelineUnit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
-    let playheadSeconds = 0;
     let stripCollapsed = false;
     let selectionUnsub: (() => void) | null = null;
     const detailStrip = createTimelineDetailStrip({
@@ -68,16 +66,9 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             stripCollapsed = collapsed;
             saveViewState();
         },
-        refresh: () => refresh(),
     });
     const linking = createTimelineLinking();
-    const playhead = createTimelinePlayhead({
-        setSeconds: (seconds) => {
-            playheadSeconds = seconds;
-            saveViewState();
-            refresh();
-        },
-    });
+    const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack();
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
@@ -109,7 +100,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             const parsed = JSON.parse(raw) as {
                 pxPerSecond?: unknown;
                 unit?: unknown;
-                playheadSeconds?: unknown;
                 stripCollapsed?: unknown;
             };
             if (typeof parsed.pxPerSecond === "number") {
@@ -117,13 +107,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             }
             if (parsed.unit === "frames" || parsed.unit === "seconds") {
                 unit = parsed.unit;
-            }
-            if (
-                typeof parsed.playheadSeconds === "number" &&
-                Number.isFinite(parsed.playheadSeconds) &&
-                parsed.playheadSeconds >= 0
-            ) {
-                playheadSeconds = parsed.playheadSeconds;
             }
             if (typeof parsed.stripCollapsed === "boolean") {
                 stripCollapsed = parsed.stripCollapsed;
@@ -137,7 +120,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 JSON.stringify({
                     pxPerSecond,
                     unit,
-                    playheadSeconds,
                     stripCollapsed,
                 }),
             );
@@ -238,17 +220,22 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const addClip = (): void => {
         const clips = getClips();
         clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "timeline" });
     };
 
-    const refresh = (): void => {
+    /**
+     * Repaint everything from current state. Driven by the store subscription
+     * for state changes (meta says who committed) and called directly (no
+     * meta) for view-only changes: zoom, unit, strip collapse,
+     * enable toggle — none of which touch the carriers.
+     */
+    const renderAll = (meta?: UpdateMeta): void => {
+        const enabled = isVideoStagesEnabled();
+        updateTimelineTabIndicator(enabled);
         const body = document.getElementById(TIMELINE_BODY_ID);
         if (!body) {
             return;
         }
-        lastSeenValue = readStateToken();
-        lastDimsSignature = readInheritedDimsSignature();
-        history.capture();
         try {
             const state = getState();
             const clips = state.clips;
@@ -260,9 +247,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 fpsExplicit: state.fpsExplicit,
                 unit,
                 pxPerSecond,
-                playheadSeconds,
                 selectedIndex: linking.getSelectedIndex(),
-                enabled: isVideoStagesEnabled(),
+                enabled,
                 onToggleEnabled: setVideoStagesEnabled,
                 onOpenSettings: () => openSettings(),
                 onToggleUnit: toggleUnit,
@@ -277,17 +263,17 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 globalPrompt: readGlobalPrompt(),
             });
             linking.reapplySelection(body, clips.length);
-            detailStrip.render();
+            detailStrip.render(meta);
             applySelectionHighlight(body);
         } catch (error) {
             console.warn("VideoStages: timeline render failed", error);
         }
     };
 
+    const refresh = (): void => renderAll();
+
     const onInputChanged = (): void => {
-        if (readStateToken() !== lastSeenValue) {
-            refresh();
-        }
+        getTimelineStore().syncFromCarrier();
     };
 
     const bindInputListener = (): void => {
@@ -324,15 +310,11 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (inputSyncInterval) {
             return;
         }
-        lastSeenValue = readStateToken();
-        lastDimsSignature = readInheritedDimsSignature();
+        // Catches carrier writers that fire no events (host scripts poking the
+        // inputs) and inherited-dims changes — both are part of the store's
+        // change token, so one sync call covers them.
         inputSyncInterval = setInterval(() => {
-            if (
-                readStateToken() !== lastSeenValue ||
-                readInheritedDimsSignature() !== lastDimsSignature
-            ) {
-                refresh();
-            }
+            getTimelineStore().syncFromCarrier();
         }, INPUT_SYNC_INTERVAL_MS);
     };
 
@@ -364,20 +346,21 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         injectTimelineTab();
         const body = document.getElementById(TIMELINE_BODY_ID);
         if (body) {
-            // Attach before linking so retake-overlay gestures win the region's drag/click.
-            retakeTrack.attach(body);
-            // Attach before the audio track (and linking) so a segment gesture
-            // wins over the audio-clip select and the region drag.
-            audioSegmentTrack.attach(body);
-            // Attach before linking so a ruler/hit-area press starts scrubbing
-            // instead of a region drag.
-            playhead.attach(body);
-            linking.attach(body);
-            promptTrack.attach(body);
+            // Press-drag priority lives in the gesture router's table
+            // (retake 50 > audio-segment 40 > prompt-track 20 >
+            // linking 10), not in attach order.
+            retakeTrack.attach(body, gestures);
+            audioSegmentTrack.attach(body, gestures);
+            linking.attach(body, gestures);
+            promptTrack.attach(body, gestures);
             audioTrack.attach(body);
             boundaryTrack.attach(body);
             referencesTrack.attach(body);
             detailStrip.attach(body, ensureDock(body));
+            // ORDER MATTERS: the router's capture-phase listeners must attach
+            // AFTER the detail strip's, so the strip's chip handler runs first
+            // and its stopPropagation claim is visible to the router.
+            gestures.attach(body);
             body.removeEventListener("click", onBodyClickSyncReadout);
             body.addEventListener("click", onBodyClickSyncReadout);
         }
@@ -387,6 +370,19 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             if (el) {
                 applySelectionHighlight(el);
             }
+        });
+        // init re-runs on every host param rebuild: dropdown lists and root
+        // defaults may have changed under the cached parse, so force a re-read.
+        const store = getTimelineStore();
+        store.invalidate();
+        storeUnsub?.();
+        storeUnsub = store.subscribe((_state, meta) => {
+            // Capture BEFORE painting (the order refresh() used to do it in);
+            // capture reads the carriers directly, which the store wrote
+            // before notifying, so every commit/external change lands exactly
+            // one history point.
+            history.capture();
+            renderAll(meta);
         });
         bindInputListener();
         bindToggleListener();
@@ -413,15 +409,17 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         }
         retakeTrack.dispose();
         audioSegmentTrack.dispose();
-        playhead.dispose();
         linking.dispose();
         promptTrack.dispose();
+        gestures.dispose();
         audioTrack.dispose();
         boundaryTrack.dispose();
         referencesTrack.dispose();
         detailStrip.dispose();
         selectionUnsub?.();
         selectionUnsub = null;
+        storeUnsub?.();
+        storeUnsub = null;
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);
         document.removeEventListener("keydown", onKeydown);

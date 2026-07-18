@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
     createTimelineAudioSegmentTrack,
@@ -37,7 +38,8 @@ const makeBody = (): HTMLElement => {
     return body;
 };
 
-// Minimal audio cell + segment overlay with the data-* hooks the module reads.
+// Minimal audio cell mirroring the real markup: per-clip audio clip on top
+// plus a segments LANE beneath it (segments live in the lane, not the clip).
 const renderSegments = (body: HTMLElement, clips: ClipFixture[]): void => {
     let cursor = 0;
     const parts: string[] = [];
@@ -58,14 +60,38 @@ const renderSegments = (body: HTMLElement, clips: ClipFixture[]): void => {
             })
             .join("");
         parts.push(
-            `<div class="vst-audio-clip" data-vst-audio="clip" data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px">${segs}</div>`,
+            `<div class="vst-audio-clip" data-vst-audio="clip" data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px"></div>`,
+            `<div class="vst-audio-seg-lane" data-vst-audio-seg-add data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px">${segs}</div>`,
         );
         cursor += clip.duration;
     });
     body.innerHTML =
-        `<div class="vst-track-row vst-track-audio"><div class="vst-track-cell">` +
+        `<div class="vst-track-row vst-track-audio"><div class="vst-track-cell vst-audio-cell">` +
         parts.join("") +
         `</div></div>`;
+    // jsdom does no layout — stub each lane's rect from its clip offset.
+    cursor = 0;
+    clips.forEach((clip, i) => {
+        const left = cursor * PPS;
+        const lane = body.querySelector<HTMLElement>(
+            `.vst-audio-seg-lane[data-clip-idx="${i}"]`,
+        );
+        if (lane) {
+            lane.getBoundingClientRect = (() =>
+                ({
+                    left,
+                    width: clip.duration * PPS,
+                    right: left + clip.duration * PPS,
+                    top: 40,
+                    bottom: 60,
+                    height: 20,
+                    x: left,
+                    y: 40,
+                    toJSON: () => ({}),
+                }) as DOMRect) as HTMLElement["getBoundingClientRect"];
+        }
+        cursor += clip.duration;
+    });
 };
 
 const el = (body: HTMLElement, selector: string): HTMLElement => {
@@ -104,6 +130,7 @@ const SEGMENT: AudioSegment = {
 
 describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
     let track: TimelineAudioSegmentTrack | null = null;
+    let router: GestureRouter | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
     beforeEach(() => {
@@ -116,6 +143,8 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
     afterEach(() => {
         track?.dispose();
         track = null;
+        router?.dispose();
+        router = null;
         jest.restoreAllMocks();
         resetSelectionForTests();
         document.body.innerHTML = "";
@@ -127,7 +156,9 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         const body = makeBody();
         renderSegments(body, clips);
         track = createTimelineAudioSegmentTrack();
-        track.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        track.attach(body, router);
         return body;
     };
 
@@ -169,6 +200,12 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         expect(s.startSeconds).toBeCloseTo(4, 5);
         expect(s.lengthSeconds).toBeCloseTo(3, 5);
         expect(s.trimStartSeconds).toBeCloseTo(1, 5);
+        // The committed drag selects the dragged segment.
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 0,
+        });
     });
 
     it("moving past the clip end clamps start so the segment stays inside", () => {
@@ -210,7 +247,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         expect(s.lengthSeconds).toBeCloseTo(2, 5);
     });
 
-    it("dragging the left edge left is clamped so trim never goes below 0", () => {
+    it("dragging the left edge left starts the segment earlier; trim floors at 0", () => {
         const body = oneSegment();
         const edge = el(body, ".vst-audio-seg-resize-l");
         edge.dispatchEvent(mouse("mousedown", 100));
@@ -218,10 +255,35 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         document.dispatchEvent(mouse("mouseup", 100 - 3 * PPS));
 
         const s = savedSegments(saveSpy)[0];
-        // start floored to startStart - trim = 2 - 1 = 1, trim -> 0, end 5 so length 4.
-        expect(s.startSeconds).toBeCloseTo(1, 5);
+        // Like a relay begin edge: start 2 → -1 clamps to the lane start (0);
+        // trim un-winds 1 → 0 and floors there; end stays 5 so length 5.
+        expect(s.startSeconds).toBeCloseTo(0, 5);
         expect(s.trimStartSeconds).toBeCloseTo(0, 5);
-        expect(s.lengthSeconds).toBeCloseTo(4, 5);
+        expect(s.lengthSeconds).toBeCloseTo(5, 5);
+    });
+
+    it("left-edge drag left stops at the previous segment's end", () => {
+        const body = setup([
+            {
+                duration: 20,
+                audioSegments: [
+                    { ...SEGMENT, startSeconds: 1, trimStartSeconds: 0 }, // A: [1,4]
+                    { ...SEGMENT, startSeconds: 8, trimStartSeconds: 0 }, // B: [8,11]
+                ],
+            },
+        ]);
+        const edge = el(
+            body,
+            ".vst-audio-seg[data-seg-idx='1'] .vst-audio-seg-resize-l",
+        );
+        edge.dispatchEvent(mouse("mousedown", 400));
+        document.dispatchEvent(mouse("mousemove", 400 - 10 * PPS));
+        document.dispatchEvent(mouse("mouseup", 400 - 10 * PPS));
+
+        const b = savedSegments(saveSpy)[1];
+        // B's start clamps at A's end (4); end stays 11.
+        expect(b.startSeconds).toBeCloseTo(4, 5);
+        expect(b.lengthSeconds).toBeCloseTo(7, 5);
     });
 
     it("Enter on a segment selects it", () => {
@@ -236,5 +298,132 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
             clipIdx: 0,
             segIdx: 0,
         });
+    });
+
+    // ---- relay-prompt parity: lane create + non-overlap walls ------------
+
+    it("clicking empty lane space adds a default-length segment and selects it", () => {
+        const body = setup([{ duration: 10 }]);
+        const lane = el(body, ".vst-audio-seg-lane[data-clip-idx='0']");
+        lane.dispatchEvent(mouse("mousedown", 3 * PPS)); // t = 3s
+        document.dispatchEvent(mouse("mouseup", 3 * PPS));
+
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        const segs = savedSegments(saveSpy);
+        expect(segs).toHaveLength(1);
+        expect(segs[0].startSeconds).toBeCloseTo(3, 5);
+        expect(segs[0].lengthSeconds).toBeCloseTo(2, 5); // default length
+        expect(segs[0].trimStartSeconds).toBe(0);
+        expect(segs[0].source).toBeNull();
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 0,
+        });
+    });
+
+    it("click-dragging on empty lane space adds a segment sized to the drag", () => {
+        const body = setup([{ duration: 10 }]);
+        const lane = el(body, ".vst-audio-seg-lane[data-clip-idx='0']");
+        lane.dispatchEvent(mouse("mousedown", 2 * PPS));
+        document.dispatchEvent(mouse("mousemove", 6 * PPS));
+        document.dispatchEvent(mouse("mouseup", 6 * PPS));
+
+        const segs = savedSegments(saveSpy);
+        expect(segs).toHaveLength(1);
+        expect(segs[0].startSeconds).toBeCloseTo(2, 5);
+        expect(segs[0].lengthSeconds).toBeCloseTo(4, 5);
+    });
+
+    it("a segment created before an existing one selects its SORTED index", () => {
+        const body = setup([
+            {
+                duration: 10,
+                audioSegments: [{ ...SEGMENT, startSeconds: 6 }],
+            },
+        ]);
+        const lane = el(body, ".vst-audio-seg-lane[data-clip-idx='0']");
+        lane.dispatchEvent(mouse("mousedown", 1 * PPS)); // t = 1s, before 6s
+        document.dispatchEvent(mouse("mouseup", 1 * PPS));
+
+        const segs = savedSegments(saveSpy);
+        expect(segs).toHaveLength(2);
+        expect(segs[0].startSeconds).toBeCloseTo(1, 5); // sorted first
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 0,
+        });
+    });
+
+    it("a new segment cannot overlap an existing one (clamped into the gap)", () => {
+        const body = setup([
+            {
+                duration: 10,
+                audioSegments: [{ ...SEGMENT, startSeconds: 4 }], // [4,7]
+            },
+        ]);
+        const lane = el(body, ".vst-audio-seg-lane[data-clip-idx='0']");
+        // Tap at 3s: default length 2 would reach 5s — clamped to end at 4s.
+        lane.dispatchEvent(mouse("mousedown", 3 * PPS));
+        document.dispatchEvent(mouse("mouseup", 3 * PPS));
+
+        const segs = savedSegments(saveSpy);
+        expect(segs).toHaveLength(2);
+        const created = segs.find((s) => s.startSeconds < 4);
+        expect(created).toBeDefined();
+        expect(
+            (created?.startSeconds ?? 0) + (created?.lengthSeconds ?? 0),
+        ).toBeLessThanOrEqual(4 + 1e-6);
+    });
+
+    it("moving a segment stops at a neighbouring segment", () => {
+        const body = setup([
+            {
+                duration: 20,
+                audioSegments: [
+                    { ...SEGMENT, startSeconds: 1 }, // A: [1,4]
+                    { ...SEGMENT, startSeconds: 10 }, // B: [10,13]
+                ],
+            },
+        ]);
+        // Drag A far right, past B's left edge.
+        const seg = el(body, ".vst-audio-seg[data-seg-idx='0']");
+        seg.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 100 + 15 * PPS));
+        document.dispatchEvent(mouse("mouseup", 100 + 15 * PPS));
+
+        const segs = savedSegments(saveSpy);
+        const [a, b] = [...segs].sort(
+            (x, y) => x.startSeconds - y.startSeconds,
+        );
+        expect(a.startSeconds + a.lengthSeconds).toBeLessThanOrEqual(
+            b.startSeconds + 1e-6,
+        );
+        expect(a.lengthSeconds).toBeCloseTo(3, 5); // length preserved
+    });
+
+    it("right-edge resize stops at the next segment's start", () => {
+        const body = setup([
+            {
+                duration: 20,
+                audioSegments: [
+                    { ...SEGMENT, startSeconds: 2 }, // A: [2,5]
+                    { ...SEGMENT, startSeconds: 8 }, // B: [8,11]
+                ],
+            },
+        ]);
+        const edge = el(
+            body,
+            ".vst-audio-seg[data-seg-idx='0'] .vst-audio-seg-resize-r",
+        );
+        edge.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 100 + 10 * PPS));
+        document.dispatchEvent(mouse("mouseup", 100 + 10 * PPS));
+
+        const s = savedSegments(saveSpy)[0];
+        expect(s.startSeconds).toBeCloseTo(2, 5);
+        // End clamped to B's start (8s) → length 6, not 13.
+        expect(s.lengthSeconds).toBeCloseTo(6, 5);
     });
 });

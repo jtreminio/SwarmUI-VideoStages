@@ -7,7 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
-import { __resetPersistenceForTests } from "./persistence";
+import { __resetPersistenceForTests, getClips, saveClips } from "./persistence";
 import {
     clearUiStateForTests,
     resetSelectionForTests,
@@ -102,6 +102,28 @@ describe("videoStagesTimeline", () => {
         expect(regionCount()).toBe(1);
     });
 
+    it("shows a green check on the Timeline tab nav while enabled, and clears it on disable", () => {
+        mountEnabledToggle();
+        mountState(makeClipsJson(1));
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+
+        const navLink = document.querySelector(
+            'a[href="#VideoStages-Timeline-Tab"]',
+        );
+        expect(navLink).not.toBeNull();
+        expect(navLink?.querySelector(".vst-tab-check")?.textContent).toBe("✓");
+
+        const toggle = document.getElementById(
+            "input_group_content_videostages_toggle",
+        ) as HTMLInputElement;
+        toggle.checked = false;
+        toggle.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(navLink?.querySelector(".vst-tab-check")).toBeNull();
+    });
+
     it("re-renders when the Data param dispatches a change signal (triggerChangeFor)", () => {
         mountState(makeClipsJson(1));
 
@@ -132,6 +154,85 @@ describe("videoStagesTimeline", () => {
         notify();
 
         expect(regionCount()).toBe(3);
+    });
+
+    it("a drag starting on a stage chip never becomes a region reorder", () => {
+        // The detail strip's capture-phase chip handler claims chip presses via
+        // stopPropagation; the gesture router (also capture-phase, attached
+        // later) must honor that claim — a sibling capture listener would
+        // otherwise still fire and hand the press to the region-drag route.
+        mountEnabledToggle();
+        mountState(
+            JSON.stringify({
+                clips: [
+                    { duration: 2, stages: [{}], refs: [] },
+                    { duration: 4, stages: [{}], refs: [] },
+                ],
+            }),
+        );
+        timeline = videoStagesTimeline();
+        timeline.init();
+        const chip = document.querySelector<HTMLElement>(
+            '[data-vst-stage][data-clip-idx="0"]',
+        );
+        if (!chip) {
+            throw new Error("stage chip not found");
+        }
+        const body = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
+        chip.dispatchEvent(
+            new MouseEvent("mousedown", { bubbles: true, clientX: 10 }),
+        );
+        document.dispatchEvent(
+            new MouseEvent("mousemove", { bubbles: true, clientX: 60 }),
+        );
+        expect(body.classList.contains("vst-dragging")).toBe(false);
+        document.dispatchEvent(
+            new MouseEvent("mouseup", { bubbles: true, clientX: 60 }),
+        );
+        const stored = JSON.parse(dataInput.value) as {
+            clips: { duration: number }[];
+        };
+        expect(stored.clips.map((c) => c.duration)).toEqual([2, 4]);
+    });
+
+    it("repaints the tracks exactly once for a single committed save", () => {
+        // Enabled: the save dispatches the host change signal, whose synchronous
+        // echo into our own carrier listener must NOT cause a second repaint on
+        // top of the store's commit notification.
+        mountEnabledToggle();
+        mountState(makeClipsJson(1));
+        timeline = videoStagesTimeline();
+        timeline.init();
+        expect(regionCount()).toBe(1);
+
+        // Count full tracks repaints: renderTimeline performs exactly one
+        // innerHTML write on the tracks body per render.
+        const body = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
+        const proto = Object.getOwnPropertyDescriptor(
+            Element.prototype,
+            "innerHTML",
+        ) as PropertyDescriptor;
+        let repaints = 0;
+        Object.defineProperty(body, "innerHTML", {
+            configurable: true,
+            get() {
+                return (proto.get as (this: Element) => string).call(this);
+            },
+            set(value: string) {
+                repaints++;
+                (proto.set as (this: Element, v: string) => void).call(
+                    this,
+                    value,
+                );
+            },
+        });
+
+        const clips = getClips();
+        clips.push(structuredClone(clips[0]));
+        saveClips(clips, undefined, { origin: "linking" });
+
+        expect(repaints).toBe(1);
+        expect(regionCount()).toBe(2);
     });
 
     it("keeps the region count stable when only surrounding prompt prose changes", () => {
@@ -276,40 +377,24 @@ describe("videoStagesTimeline", () => {
         expect(sel?.textContent).toBe("clip 1");
     });
 
-    it("persists the scrubbed playhead in view state and restores it on re-init", () => {
-        mountState(makeClipsJson(2, 2)); // two 2s clips -> 4s total
+    it("renders no playhead (removed until an existing-video workflow needs it)", () => {
+        mountState(makeClipsJson(2, 2));
         timeline = videoStagesTimeline();
         timeline.init();
         const body = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
-        const scroll = body.querySelector<HTMLElement>(".vst-scroll");
-        if (scroll) {
-            scroll.getBoundingClientRect = () =>
-                ({ left: 0, top: 0, right: 0, bottom: 0 }) as DOMRect;
-        }
-
-        // Scrub the ruler to 1s (168px header + 1s * 44px/s).
+        expect(body.querySelector("[data-vst-playhead]")).toBeNull();
+        expect(body.querySelector("[data-vst-playhead-handle]")).toBeNull();
+        expect(body.querySelector("[data-vst-readout-head]")).toBeNull();
+        // Pressing the ruler is inert — no gesture route claims it.
         const ruler = body.querySelector<HTMLElement>(".vst-ruler");
         ruler?.dispatchEvent(
             new MouseEvent("mousedown", { bubbles: true, clientX: 212 }),
         );
         document.dispatchEvent(new MouseEvent("mouseup", { clientX: 212 }));
-
         const stored = JSON.parse(
             localStorage.getItem("videostages.timeline.viewState") ?? "{}",
         );
-        expect(stored.playheadSeconds).toBeCloseTo(1, 5);
-
-        // Re-init a fresh controller: it reloads the persisted playhead.
-        timeline.dispose();
-        timeline = videoStagesTimeline();
-        timeline.init();
-        const body2 = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
-        expect(
-            body2.querySelector<HTMLElement>("[data-vst-playhead]")?.style.left,
-        ).toBe("212px");
-        expect(
-            body2.querySelector("[data-vst-readout-head]")?.textContent,
-        ).toBe("▸ 1.0s · f24");
+        expect(stored.playheadSeconds).toBeUndefined();
     });
 
     // Regression: the debounced live-apply flush → saveClips → prompt-input

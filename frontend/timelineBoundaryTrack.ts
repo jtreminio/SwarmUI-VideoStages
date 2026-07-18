@@ -123,7 +123,7 @@ export const createTimelineBoundaryTrack = (): TimelineBoundaryTrack => {
             return;
         }
         clip.boundaryOut = nextBoundary(clip.boundaryOut ?? "cut");
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "boundary-track" });
     };
 
     const onBodyClick = (event: Event): void => {

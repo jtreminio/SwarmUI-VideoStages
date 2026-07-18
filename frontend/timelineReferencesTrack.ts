@@ -108,7 +108,15 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         const ref = buildDefaultRef();
         ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
         appendRefToClip(clip, ref);
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "references-track" });
+        // Open the new ref in the dock — after the save, so the rebuilt ref
+        // panel already contains its row (works even when another ref was
+        // selected: the same-panel path is a targeted highlight swap).
+        setSelection({
+            kind: "ref",
+            clipIdx,
+            refIdx: clip.refs.length - 1,
+        });
     };
 
     const deleteRef = (
@@ -124,7 +132,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         if (!clip || !removeRefAt(clip, refIdx)) {
             return;
         }
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "references-track" });
     };
 
     const endRefDrag = (restore: boolean): void => {
@@ -247,7 +255,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         }
         endRefDrag(false);
         ref.frame = newFrame;
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "references-track" });
     };
 
     const onDocKeyDown = (event: Event): void => {

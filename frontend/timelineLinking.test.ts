@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
     createTimelineLinking,
@@ -169,6 +170,7 @@ const savedClips = (
 
 describe("createTimelineLinking selection + write gestures (DOM)", () => {
     let linking: TimelineLinking | null = null;
+    let router: GestureRouter | null = null;
 
     beforeEach(() => {
         resetSelectionForTests();
@@ -177,6 +179,8 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     afterEach(() => {
         linking?.dispose();
+        router?.dispose();
+        router = null;
         linking = null;
         jest.restoreAllMocks();
         document.body.innerHTML = "";
@@ -189,7 +193,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
         linking = createTimelineLinking();
-        linking.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
         linking.reapplySelection(body, 3);
 
         region(body, 1).dispatchEvent(
@@ -212,7 +218,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         renderRegions(body, 3);
 
         linking = createTimelineLinking();
-        linking.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
         linking.reapplySelection(body, 3);
         region(body, 2).dispatchEvent(
             new MouseEvent("click", { bubbles: true }),
@@ -240,7 +248,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
         linking = createTimelineLinking();
-        linking.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
 
         region(body, 1)
             .querySelector<HTMLButtonElement>("[data-vst-region-action='skip']")
@@ -260,7 +270,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
         linking = createTimelineLinking();
-        linking.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
 
         region(body, 1).dispatchEvent(
             new MouseEvent("click", { bubbles: true, shiftKey: true }),
@@ -280,7 +292,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
         linking = createTimelineLinking();
-        linking.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
         linking.reapplySelection(body, 3);
 
         // Grab region 0 (centre x=50), drag right past region 1's midpoint (x=220 → gap index 2), release.
@@ -306,7 +320,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
         linking = createTimelineLinking();
-        linking.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
         linking.reapplySelection(body, 3);
 
         region(body, 0).dispatchEvent(mouse("mousedown", 50));
@@ -329,7 +345,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
         linking = createTimelineLinking();
-        linking.attach(body);
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
 
         // Grab region 0's right grip, drag from x=100 to x=176 (176px / 44px/s = 4s at 24fps).
         region(body, 0)
@@ -342,56 +360,5 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const clips = savedClips(saveSpy);
         expect(clips[0].duration).toBe(4);
         expect(clips[1].duration).toBe(2);
-    });
-});
-
-describe("createTimelineLinking keyframe editing (DOM)", () => {
-    let linking: TimelineLinking | null = null;
-
-    const renderPipRegion = (body: HTMLElement): void => {
-        body.innerHTML =
-            `<div class="vst-region" data-clip-idx="0">` +
-            `<div class="vst-keys">` +
-            `<span class="vst-key" data-clip-idx="0" data-ref-idx="0" role="button" tabindex="0" style="left:50%">` +
-            `<span class="vst-key-dot"></span>` +
-            `</span>` +
-            `</div>` +
-            `</div>`;
-    };
-
-    beforeEach(() => {
-        resetSelectionForTests();
-        persistence.__resetPersistenceForTests();
-    });
-
-    afterEach(() => {
-        linking?.dispose();
-        linking = null;
-        jest.restoreAllMocks();
-        document.body.innerHTML = "";
-    });
-
-    it("shift-clicking a pip toggles its ref.fromEnd via saveClips", () => {
-        clipsSection([
-            {
-                duration: 2,
-                stages: [{ refStrengths: [0.8] }],
-                refs: [{ frame: 10, fromEnd: false }],
-            },
-        ]);
-        const body = makeBody();
-        renderPipRegion(body);
-        stubRegionRects(body);
-        const saveSpy = jest.spyOn(persistence, "saveClips");
-
-        linking = createTimelineLinking();
-        linking.attach(body);
-
-        const dot = body.querySelector<HTMLElement>(".vst-key-dot");
-        dot?.dispatchEvent(mouse("mousedown", 50, { shiftKey: true }));
-        document.dispatchEvent(mouse("mouseup", 50, { shiftKey: true }));
-
-        expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].refs[0].fromEnd).toBe(true);
     });
 });

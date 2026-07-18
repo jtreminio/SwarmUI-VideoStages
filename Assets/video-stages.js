@@ -190,6 +190,24 @@
   // frontend/bottomTimelineTab.ts
   var TAB_ID = "VideoStages-Timeline-Tab";
   var TIMELINE_BODY_ID = "videostages-timeline-body";
+  var updateTimelineTabIndicator = (enabled) => {
+    const navLink = document.querySelector(`a[href="#${TAB_ID}"]`);
+    if (!navLink) {
+      return;
+    }
+    const mark = navLink.querySelector(".vst-tab-check");
+    if (enabled && !mark) {
+      const check = document.createElement("span");
+      check.className = "vst-tab-check";
+      check.setAttribute("aria-hidden", "true");
+      check.textContent = "✓";
+      navLink.appendChild(check);
+      navLink.title = "Video Stages is enabled";
+    } else if (!enabled && mark) {
+      mark.remove();
+      navLink.removeAttribute("title");
+    }
+  };
   var registerTabWithLayout = (navLink) => {
     if (typeof genTabLayout === "undefined" || !genTabLayout) {
       return;
@@ -247,6 +265,154 @@
       registerTabWithLayout(navLink);
     }
     return body;
+  };
+
+  // frontend/gestureRouter.ts
+  var DEFAULT_THRESHOLD_PX = 5;
+  var claimOnly = () => ({
+    threshold: Number.POSITIVE_INFINITY,
+    onMove: () => {
+    },
+    onCommit: () => {
+    }
+  });
+  var createGestureRouter = () => {
+    let body = null;
+    const routes = [];
+    let live = null;
+    let swallowNextClick = false;
+    const ctxFor = (me) => ({
+      event: me,
+      dx: me.clientX - (live?.startX ?? 0),
+      dy: me.clientY - (live?.startY ?? 0)
+    });
+    const onMouseDown = (event) => {
+      swallowNextClick = false;
+      const me = event;
+      if (me.cancelBubble) {
+        return;
+      }
+      if (me.button !== 0 || !(me.target instanceof Element) || !body) {
+        return;
+      }
+      if (live) {
+        return;
+      }
+      const ordered = [...routes].sort((a, b) => b.priority - a.priority);
+      for (const route of ordered) {
+        const session = route.onPress(me, body);
+        if (session) {
+          live = {
+            session,
+            startX: me.clientX,
+            startY: me.clientY,
+            active: (session.threshold ?? DEFAULT_THRESHOLD_PX) <= 0
+          };
+          me.stopPropagation();
+          return;
+        }
+      }
+    };
+    const onDocMouseMove = (event) => {
+      if (!live) {
+        return;
+      }
+      const ctx = ctxFor(event);
+      if (!live.active) {
+        const threshold = live.session.threshold ?? DEFAULT_THRESHOLD_PX;
+        const dist = live.session.axis === "xy" ? Math.hypot(ctx.dx, ctx.dy) : Math.abs(ctx.dx);
+        if (dist < threshold) {
+          return;
+        }
+        live.active = true;
+      }
+      live.session.onMove(ctx);
+    };
+    const onDocMouseUp = (event) => {
+      if (!live) {
+        return;
+      }
+      const ctx = ctxFor(event);
+      const { session, active } = live;
+      live = null;
+      if (active) {
+        swallowNextClick = true;
+        session.onCommit(ctx);
+        return;
+      }
+      if (session.suppressTapClick) {
+        swallowNextClick = true;
+      }
+      session.onTap?.(ctx);
+    };
+    const onDocKeyDown = (event) => {
+      if (event.key !== "Escape" || !live) {
+        return;
+      }
+      const { session, active } = live;
+      live = null;
+      const mode = session.escapeClickSuppression ?? "never";
+      if (mode === "always" || mode === "if-active" && active) {
+        swallowNextClick = true;
+      }
+      session.onCancel?.();
+    };
+    const onBodyClickCapture = (event) => {
+      if (!swallowNextClick) {
+        return;
+      }
+      swallowNextClick = false;
+      event.stopPropagation();
+      event.preventDefault();
+    };
+    const removeListeners = () => {
+      if (body) {
+        body.removeEventListener("mousedown", onMouseDown, true);
+        body.removeEventListener("click", onBodyClickCapture, true);
+      }
+      document.removeEventListener("mousemove", onDocMouseMove);
+      document.removeEventListener("mouseup", onDocMouseUp);
+      document.removeEventListener("keydown", onDocKeyDown);
+    };
+    const cancelLive = () => {
+      if (live) {
+        const { session } = live;
+        live = null;
+        session.onCancel?.();
+      }
+    };
+    return {
+      attach: (nextBody) => {
+        if (body === nextBody) {
+          return;
+        }
+        cancelLive();
+        removeListeners();
+        body = nextBody;
+        swallowNextClick = false;
+        nextBody.addEventListener("mousedown", onMouseDown, true);
+        nextBody.addEventListener("click", onBodyClickCapture, true);
+        document.addEventListener("mousemove", onDocMouseMove);
+        document.addEventListener("mouseup", onDocMouseUp);
+        document.addEventListener("keydown", onDocKeyDown);
+      },
+      register: (route) => {
+        routes.push(route);
+        return () => {
+          const at = routes.indexOf(route);
+          if (at !== -1) {
+            routes.splice(at, 1);
+          }
+        };
+      },
+      isGestureActive: () => live !== null,
+      dispose: () => {
+        cancelLive();
+        removeListeners();
+        body = null;
+        swallowNextClick = false;
+      }
+    };
   };
 
   // frontend/clipColor.ts
@@ -1162,6 +1328,16 @@
       withSuppressedPromptTabComplete(() => triggerChangeFor(el));
     }
   };
+  var notifyCarrierChanged = () => {
+    const dataEl = getDataInput();
+    if (dataEl) {
+      triggerChangeFor(dataEl);
+    }
+    const promptEl = getPromptInput();
+    if (promptEl) {
+      withSuppressedPromptTabComplete(() => triggerChangeFor(promptEl));
+    }
+  };
   var readGlobalPrompt = () => extractGlobalPrompt(getPromptInput()?.value ?? "");
   var readCarrierSnapshot = () => JSON.stringify({
     data: readDataParam(),
@@ -1354,6 +1530,106 @@
       cfgScaleMin: utils.toNumber(cfgScale?.min, 0),
       cfgScaleMax: Math.min(10, utils.toNumber(cfgScale?.max, 10)),
       cfgScaleStep: utils.toNumber(cfgScale?.step, 0.5)
+    };
+  };
+
+  // frontend/store.ts
+  var createTimelineStore = (deps) => {
+    let canonical = null;
+    let cachedToken = null;
+    let syncedToken = null;
+    let lastGoodSerialized = "";
+    let ver = 0;
+    const subscribers = /* @__PURE__ */ new Set();
+    const parseCurrent = () => {
+      const serialized = deps.readDataParam() || lastGoodSerialized;
+      if (!serialized) {
+        return deps.parseEmpty();
+      }
+      const parsed = deps.parse(serialized);
+      if (parsed) {
+        lastGoodSerialized = serialized;
+        return parsed;
+      }
+      if (serialized !== lastGoodSerialized && lastGoodSerialized) {
+        const fallback = deps.parse(lastGoodSerialized);
+        if (fallback) {
+          return fallback;
+        }
+      }
+      return deps.parseEmpty();
+    };
+    const revalidate = () => {
+      const token = deps.readToken();
+      if (canonical && token === cachedToken) {
+        return canonical;
+      }
+      canonical = parseCurrent();
+      cachedToken = token;
+      if (syncedToken === null) {
+        syncedToken = token;
+      }
+      return canonical;
+    };
+    const notify = (meta) => {
+      const state = canonical;
+      if (!state) {
+        return;
+      }
+      const snapshot = structuredClone(state);
+      for (const cb of [...subscribers]) {
+        try {
+          cb(snapshot, meta);
+        } catch {
+        }
+      }
+    };
+    const save = (state, origin, notifyDomChange, hint) => {
+      const serialized = deps.writeQuiet(state);
+      lastGoodSerialized = serialized;
+      canonical = deps.parse(serialized) ?? structuredClone(state);
+      cachedToken = deps.readToken();
+      syncedToken = cachedToken;
+      ver++;
+      if (notifyDomChange) {
+        deps.notifyHost();
+      }
+      notify({ origin, kind: "commit", hint, version: ver });
+      return serialized;
+    };
+    const syncFromCarrier = () => {
+      const token = deps.readToken();
+      if (canonical && syncedToken !== null && token === syncedToken) {
+        return false;
+      }
+      revalidate();
+      syncedToken = cachedToken;
+      ver++;
+      notify({ origin: "external", kind: "external", version: ver });
+      return true;
+    };
+    return {
+      getState: () => structuredClone(revalidate()),
+      save,
+      syncFromCarrier,
+      subscribe: (cb) => {
+        subscribers.add(cb);
+        return () => {
+          subscribers.delete(cb);
+        };
+      },
+      invalidate: () => {
+        cachedToken = null;
+      },
+      version: () => ver,
+      resetForTests: () => {
+        canonical = null;
+        cachedToken = null;
+        syncedToken = null;
+        lastGoodSerialized = "";
+        ver = 0;
+        subscribers.clear();
+      }
     };
   };
 
@@ -1567,7 +1843,6 @@
     out.clips = serializeClipsForStorage(state.clips);
     return JSON.stringify(out);
   };
-  var lastSerializedState = "";
   var overlayPromptAndUiState = (clips) => {
     const { sections, windows } = parseClipPrompts(
       getPromptInput()?.value ?? ""
@@ -1613,46 +1888,51 @@
       return null;
     }
   };
-  var getState = () => {
+  var inheritedDims = () => {
     const defaults = getRootDefaults();
-    const inherited = {
+    return {
       width: defaults.width,
       height: defaults.height,
       fps: defaults.fps
     };
-    const serialized = readDataParam() || lastSerializedState;
-    if (!serialized) {
-      const clips = [];
-      overlayPromptAndUiState(clips);
-      return rootConfig(resolveRootDims(inherited, {}), clips);
-    }
-    let parsedState = parseSerializedState(serialized, inherited);
-    if (parsedState) {
-      lastSerializedState = serialized;
-      return parsedState;
-    }
-    if (serialized !== lastSerializedState && lastSerializedState) {
-      parsedState = parseSerializedState(lastSerializedState, inherited);
-      if (parsedState) {
-        return parsedState;
-      }
-    }
-    return rootConfig(resolveRootDims(inherited, {}), []);
   };
-  var saveState = (state, callbacks, options) => {
+  var parseEmptyConfig = () => {
+    const clips = [];
+    overlayPromptAndUiState(clips);
+    return rootConfig(resolveRootDims(inheritedDims(), {}), clips);
+  };
+  var writeQuietly = (state) => {
     assignMissingHues(state.clips);
     const serialized = serializeStateForStorage(state);
-    lastSerializedState = serialized;
-    const willNotifyDom = options?.notifyDomChange !== false;
-    writeDataParam(serialized, willNotifyDom);
+    writeDataParam(serialized, false);
     writeClipPrompts(
       state.clips.map((clip) => ({
         prompt: clip.prompt,
         windows: clip.promptWindows
       })),
-      willNotifyDom
+      false
     );
     saveUiState(state.clips);
+    return serialized;
+  };
+  var store = createTimelineStore({
+    readToken: () => `${readStateToken()}\0${readInheritedDimsSignature()}`,
+    readDataParam,
+    parse: (serialized) => parseSerializedState(serialized, inheritedDims()),
+    parseEmpty: parseEmptyConfig,
+    writeQuiet: writeQuietly,
+    notifyHost: notifyCarrierChanged
+  });
+  var getTimelineStore = () => store;
+  var getState = () => store.getState();
+  var saveState = (state, callbacks, options) => {
+    const willNotifyDom = options?.notifyDomChange !== false;
+    const serialized = store.save(
+      state,
+      options?.origin ?? "timeline",
+      willNotifyDom,
+      options?.valueOnly ? "value-only" : void 0
+    );
     callbacks?.onAfterSerialize?.(serialized);
     videoStagesDebugLog("persistence", "saveState", {
       notifyDomChange: options?.notifyDomChange,
@@ -1671,122 +1951,24 @@
     saveState(state, callbacks, { ...options, notifyDomChange });
   };
 
-  // frontend/timelineDetail.ts
-  var DEFAULT_FPS = 24;
-  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
-  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
-    const duration = Math.max(0, clipDurationSeconds || 0);
-    const offset = Math.max(0, frame || 0) / safeFps(fps);
-    const raw = fromEnd ? duration - offset : offset;
-    return Math.min(Math.max(raw, 0), duration);
-  };
-  var keyframeLeftPercent = (time, duration) => {
-    const dur = Math.max(0, duration || 0);
-    const fraction = dur > 0 ? (time || 0) / dur : 0;
-    return Math.min(100, Math.max(0, fraction * 100));
-  };
-  var formatTimeLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
-    }
-    const rounded = Math.round((seconds || 0) * 10) / 10;
-    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
-  };
-  var RULER_MIN_TICK_SPACING_PX = 60;
-  var RULER_STEP_LADDER_SECONDS = [
-    0.5,
-    1,
-    2,
-    5,
-    10,
-    15,
-    30,
-    60,
-    120,
-    300,
-    600,
-    900,
-    1800,
-    3600
-  ];
-  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
-    for (const step of RULER_STEP_LADDER_SECONDS) {
-      if (step * pps >= minSpacingPx) {
-        return step;
-      }
-    }
-    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
-  };
-  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const total = Math.max(0, totalSeconds || 0);
-    if (total <= 0 || pxPerSecond <= 0) {
-      return [{ x: 0, seconds: 0 }];
-    }
-    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
-    const ticks = [];
-    const MAX_TICKS = 1e3;
-    for (let i = 0; i < MAX_TICKS; i++) {
-      const t = i * step;
-      if (t > total + 1e-6) {
+  // frontend/intervals.ts
+  var freeIntervalAt = (spans, total, point) => {
+    const p = Math.min(Math.max(point, 0), total);
+    let lo = 0;
+    let hi = total;
+    for (const span of spans) {
+      if (span.end <= p) {
+        if (span.end > lo) {
+          lo = span.end;
+        }
+      } else if (span.start >= p) {
+        hi = span.start;
         break;
+      } else {
+        return [p, p];
       }
-      ticks.push({ x: t * pxPerSecond, seconds: t });
     }
-    return ticks;
-  };
-  var formatRulerLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
-    }
-    const s = Math.max(0, seconds || 0);
-    if (s >= 60) {
-      const totalWhole = Math.round(s);
-      const mm = Math.floor(totalWhole / 60);
-      const ss = totalWhole % 60;
-      return `${mm}:${`${ss}`.padStart(2, "0")}`;
-    }
-    return formatTimeLabel(s, unit, fps);
-  };
-  var refSourceLabel = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value) {
-      return REF_SOURCE_REFINER;
-    }
-    const editStage = parseBase2EditStageIndex(value);
-    if (editStage != null) {
-      return `Base2Edit Edit ${editStage}`;
-    }
-    return value;
-  };
-  var audioSourceBadge = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value || value === "Native") {
-      return { label: "Native", title: "Audio source: Native" };
-    }
-    return { label: value, title: `Audio source: ${value}` };
-  };
-  var shortModelName = (model) => {
-    const raw = `${model ?? ""}`.trim();
-    if (!raw) {
-      return "(default)";
-    }
-    const segment = raw.split(/[\\/]/).pop() ?? raw;
-    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
-  };
-  var stageChipLabel = (index) => `S${index}`;
-  var stageChipTitle = (stage, index) => {
-    const parts = [
-      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
-      `model: ${shortModelName(stage?.model ?? "")}`,
-      `steps: ${stage?.steps ?? "?"}`,
-      `cfg: ${stage?.cfgScale ?? "?"}`,
-      `control: ${stage?.control ?? "?"}`
-    ];
-    if (stage?.skipped) {
-      parts.push("skipped");
-    }
-    return parts.join(" · ");
+    return [lo, hi];
   };
 
   // frontend/timelineEdit.ts
@@ -1986,6 +2168,124 @@
   };
   var presetBadgeElements = (presetKey) => parsePresetStops(presetKey).map((stop) => upscaleBadgeElement(stop));
 
+  // frontend/timelineDetail.ts
+  var DEFAULT_FPS = 24;
+  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
+  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
+    const duration = Math.max(0, clipDurationSeconds || 0);
+    const offset = Math.max(0, frame || 0) / safeFps(fps);
+    const raw = fromEnd ? duration - offset : offset;
+    return Math.min(Math.max(raw, 0), duration);
+  };
+  var keyframeLeftPercent = (time, duration) => {
+    const dur = Math.max(0, duration || 0);
+    const fraction = dur > 0 ? (time || 0) / dur : 0;
+    return Math.min(100, Math.max(0, fraction * 100));
+  };
+  var formatTimeLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const rounded = Math.round((seconds || 0) * 10) / 10;
+    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
+  };
+  var RULER_MIN_TICK_SPACING_PX = 60;
+  var RULER_STEP_LADDER_SECONDS = [
+    0.5,
+    1,
+    2,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+    600,
+    900,
+    1800,
+    3600
+  ];
+  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
+    for (const step of RULER_STEP_LADDER_SECONDS) {
+      if (step * pps >= minSpacingPx) {
+        return step;
+      }
+    }
+    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
+  };
+  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const total = Math.max(0, totalSeconds || 0);
+    if (total <= 0 || pxPerSecond <= 0) {
+      return [{ x: 0, seconds: 0 }];
+    }
+    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
+    const ticks = [];
+    const MAX_TICKS = 1e3;
+    for (let i = 0; i < MAX_TICKS; i++) {
+      const t = i * step;
+      if (t > total + 1e-6) {
+        break;
+      }
+      ticks.push({ x: t * pxPerSecond, seconds: t });
+    }
+    return ticks;
+  };
+  var formatRulerLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const s = Math.max(0, seconds || 0);
+    if (s >= 60) {
+      const totalWhole = Math.round(s);
+      const mm = Math.floor(totalWhole / 60);
+      const ss = totalWhole % 60;
+      return `${mm}:${`${ss}`.padStart(2, "0")}`;
+    }
+    return formatTimeLabel(s, unit, fps);
+  };
+  var refSourceLabel = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value) {
+      return REF_SOURCE_REFINER;
+    }
+    const editStage = parseBase2EditStageIndex(value);
+    if (editStage != null) {
+      return `Base2Edit Edit ${editStage}`;
+    }
+    return value;
+  };
+  var audioSourceBadge = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value || value === "Native") {
+      return { label: "Native", title: "Audio source: Native" };
+    }
+    return { label: value, title: `Audio source: ${value}` };
+  };
+  var shortModelName = (model) => {
+    const raw = `${model ?? ""}`.trim();
+    if (!raw) {
+      return "(default)";
+    }
+    const segment = raw.split(/[\\/]/).pop() ?? raw;
+    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
+  };
+  var stageChipLabel = (index) => `S${index}`;
+  var stageChipTitle = (stage, index) => {
+    const parts = [
+      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
+      `model: ${shortModelName(stage?.model ?? "")}`,
+      `steps: ${stage?.steps ?? "?"}`,
+      `cfg: ${stage?.cfgScale ?? "?"}`,
+      `control: ${stage?.control ?? "?"}`
+    ];
+    if (stage?.skipped) {
+      parts.push("skipped");
+    }
+    return parts.join(" · ");
+  };
+
   // frontend/timelineView.ts
   var DEFAULT_PX_PER_SECOND = 44;
   var DEFAULT_MIN_WIDTH_PX = 8;
@@ -2020,40 +2320,6 @@
       return DEFAULT_PX_PER_SECOND;
     }
     return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
-  };
-  var snapSecondsToFrame = (seconds, fps) => {
-    if (!Number.isFinite(seconds)) {
-      return 0;
-    }
-    if (!Number.isFinite(fps) || fps <= 0) {
-      return Math.max(0, seconds);
-    }
-    return Math.round(seconds * fps) / fps;
-  };
-  var resolvePlayheadSeconds = (seconds, totalSeconds, fps) => {
-    const total = Math.max(0, Number.isFinite(totalSeconds) ? totalSeconds : 0);
-    const base = Number.isFinite(seconds) ? Math.max(0, Math.min(total, seconds)) : 0;
-    const snapped = snapSecondsToFrame(base, fps);
-    return Math.max(0, Math.min(total, snapped));
-  };
-  var clipIndexAtSeconds = (layouts, seconds) => {
-    if (layouts.length === 0) {
-      return null;
-    }
-    let idx = 0;
-    for (let i = 0; i < layouts.length; i++) {
-      if (seconds >= layouts[i].startSeconds - 1e-9) {
-        idx = i;
-      } else {
-        break;
-      }
-    }
-    return idx;
-  };
-  var formatPlayheadReadout = (seconds, fps) => {
-    const s = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
-    const useFps = Number.isFinite(fps) && fps > 0 ? fps : 24;
-    return `▸ ${s.toFixed(1)}s · f${Math.round(s * useFps)}`;
   };
   var computeRegionLayout = (clips, options) => {
     const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
@@ -2146,10 +2412,9 @@
       const isEnd = ref.fromEnd === true;
       const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
       const source = refSourceLabel(ref.source ?? "");
-      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)} · drag to move, shift-click to toggle from-end`;
+      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
       const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
-      const markAria = `Reference ${refIdx} marker (${source}${isEnd ? ", from end" : ""}) — drag to move, Enter toggles from end`;
-      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" role="button" tabindex="0" aria-label="${escapeAttr(markAria)}"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
+      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
     }).join("");
     return `<div class="vst-keys" title="Reference markers">${pips}</div>`;
   };
@@ -2174,8 +2439,7 @@
       const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
       return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(label)}</span>`;
     }).join("");
-    const addChip = `<span class="vst-chip vst-stage-chip vst-stage-chip-add" data-vst-stage-add data-clip-idx="${clipIdx}" role="button" tabindex="0" title="Add a refine stage">+</span>`;
-    return chips + addChip;
+    return chips;
   };
   var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
   var BOUNDARY_GLYPH = {
@@ -2307,22 +2571,21 @@
       }
       const badge = audioSourceBadge(clip.audioSource ?? "");
       const native = badge.label === "Native";
-      const nativeClass = native ? " vst-audio-native" : "";
       const width = Math.max(1, l.widthPx - 2);
+      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
       const upload = !native && clip.audioSource === "Upload" ? clip.uploadedAudio?.fileName : null;
       const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
       const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
-      const body = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : (() => {
-        const barCount = Math.min(
-          400,
-          Math.max(8, Math.floor(width / 5.5))
-        );
-        const bars = waveBarHeights(l.index, barCount).map((h) => `<span style="height:${h}%"></span>`).join("");
-        return `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>`;
-      })();
-      return `<div class="vst-audio-clip${nativeClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${l.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + renderAudioSegments(clip, l.index, clip.duration || 0) + `</div>`;
+      const barCount = Math.min(
+        400,
+        Math.max(8, Math.floor(width / 5.5))
+      );
+      const bars = waveBarHeights(l.index, barCount).map((h) => `<span style="height:${h}%"></span>`).join("");
+      const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
+      const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
+      return `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${l.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div><div class="vst-audio-seg-lane" data-vst-audio-seg-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${width}px" title="Click empty space to add an audio segment">` + renderAudioSegments(clip, l.index, clip.duration || 0) + `</div>`;
     }).join("");
-    return `<div class="vst-track-row vst-track-audio"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell">${segments}</div></div>`;
+    return `<div class="vst-track-row vst-track-audio"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell vst-audio-cell">${segments}</div></div>`;
   };
   var REF_EDGE_ALIGN_FRAMES = 3;
   var renderReferencesTrackRow = (clips, layouts, fps, unit) => {
@@ -2369,12 +2632,6 @@
     body.dataset.vstFps = String(fps);
     const layouts = computeRegionLayout(clips, { pxPerSecond });
     const totalSeconds = layouts.reduce((sum, l) => sum + l.durationSeconds, 0);
-    const headSeconds = resolvePlayheadSeconds(
-      options?.playheadSeconds ?? 0,
-      totalSeconds,
-      fps
-    );
-    const headClipIdx = clipIndexAtSeconds(layouts, headSeconds);
     const totalPx = layouts.reduce(
       (max, l) => Math.max(max, l.startPx + l.widthPx),
       0
@@ -2386,7 +2643,7 @@
     const rawSelected = options?.selectedIndex;
     const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clips.length ? rawSelected : null;
     const selHidden = selectedIndex === null ? " hidden" : "";
-    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" aria-hidden="true">·</span><span class="vst-readout-head" data-vst-readout-head title="Playhead position (seconds · frame)">${escapeAttr(formatPlayheadReadout(headSeconds, fps))}</span><span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
+    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
     const chipWidth = Math.max(0, Math.round(options?.width ?? 0));
     const chipHeight = Math.max(0, Math.round(options?.height ?? 0));
     const chipFps = fps;
@@ -2513,7 +2770,6 @@
       const clip = clips[l.index];
       const skipClass = l.skipped ? " vst-region-skipped" : "";
       const tinyClass = l.widthPx <= 12 ? " vst-region-tiny" : "";
-      const underHeadClass = l.index === headClipIdx ? " vst-under-head" : "";
       const skipChip = l.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
       const dur = escapeAttr(
         formatTimeLabel(l.durationSeconds, unit, fps)
@@ -2524,7 +2780,7 @@
       const rightGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
       const hue = clipHueCss(clip.hue);
       const renderWidth = Math.max(1, l.widthPx - 2);
-      return `<div class="vst-region${skipClass}${tinyClass}${underHeadClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + renderRetakeOverlay(clip, l.index, l.durationSeconds) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span>` + renderStageChips(clip, l.index) + `<span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip, l.index) + controls + rightGrip + `</div>`;
+      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span>` + renderStageChips(clip, l.index) + `<span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip, l.index) + controls + rightGrip + `</div><div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${renderWidth}px" title="Click empty space to add a retake window">` + renderRetakeOverlay(clip, l.index, l.durationSeconds) + `</div>`;
     }).join("");
     const audioRow = renderAudioTrackRow(clips, layouts);
     const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
@@ -2536,11 +2792,7 @@
       `${options?.globalPrompt ?? ""}`
     );
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    const playheadRulerPx = headSeconds * pxPerSecond;
-    const playheadPlanePx = TRACK_HEADER_W_PX + playheadRulerPx;
-    const playheadHandle = `<span class="vst-playhead-handle" data-vst-playhead-handle style="left:${playheadRulerPx}px" title="Playhead — drag to scrub" aria-hidden="true"></span>`;
-    const playheadLine = `<div class="vst-playhead" data-vst-playhead style="left:${playheadPlanePx}px" aria-hidden="true"><div class="vst-playhead-hit" data-vst-playhead-hit></div><div class="vst-playhead-line"></div></div>`;
-    body.innerHTML = `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${ticks.join("")}${playheadHandle}</div></div>` + promptRow + `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}${renderBoundarySeams(clips, layouts)}</div></div>` + referencesRow + audioRow + playheadLine + `</div></div>`;
+    body.innerHTML = `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${ticks.join("")}</div></div>` + promptRow + `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}${renderBoundarySeams(clips, layouts)}</div></div>` + referencesRow + audioRow + `</div></div>`;
     wireTopbar();
     wireScroll();
   };
@@ -2550,11 +2802,9 @@
   var REGION_ACTION_SELECTOR = "[data-vst-region-action]";
   var REGION_RESIZE_SELECTOR = ".vst-region-resize";
   var CLIP_SHIFT_SELECTOR = ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
-  var KEY_SELECTOR = ".vst-key[data-ref-idx]";
   var REGION_SELECTED_CLASS = "vst-region-selected";
   var DRAGGING_CLASS = "vst-dragging";
   var RESIZING_CLASS = "vst-resizing";
-  var KEYFRAMING_CLASS = "vst-keyframing";
   var DROP_INDICATOR_CLASS = "vst-drop-indicator";
   var DRAG_THRESHOLD_PX = 5;
   var MIN_RESIZE_WIDTH_PX = 24;
@@ -2601,17 +2851,6 @@
       el.style.transform = "";
     }
   };
-  var parseRefIdx = (el) => {
-    if (!el) {
-      return null;
-    }
-    const raw = el.getAttribute("data-ref-idx");
-    if (raw === null) {
-      return null;
-    }
-    const idx = Number.parseInt(raw, 10);
-    return Number.isInteger(idx) && idx >= 0 ? idx : null;
-  };
   var createTimelineLinking = () => {
     let attachedBody = null;
     const selectedClip = () => getSelectedClipIndex();
@@ -2622,11 +2861,7 @@
     const selectClip = (clipIdx, stageIdx) => {
       setSelection({ kind: "clip", clipIdx, stageIdx });
     };
-    let dragState = null;
-    let suppressClick = false;
     let dropIndicator = null;
-    let resizeState = null;
-    let keyframeState = null;
     const findRegion = (body, idx) => body.querySelector(`.vst-region[data-clip-idx="${idx}"]`);
     const markSelection = (body) => {
       for (const region of body.querySelectorAll(
@@ -2641,10 +2876,6 @@
       findRegion(body, idx)?.classList.add(REGION_SELECTED_CLASS);
     };
     const onRegionClick = (body, event) => {
-      if (suppressClick) {
-        suppressClick = false;
-        return;
-      }
       const target = event.target;
       if (!(target instanceof Element)) {
         return;
@@ -2707,33 +2938,13 @@
       const left = gap < els.length ? els[gap].offsetLeft : els[els.length - 1].offsetLeft + els[els.length - 1].offsetWidth;
       dropIndicator.style.left = `${left}px`;
     };
-    const endDrag = (body) => {
-      if (dragState) {
-        findRegion(body, dragState.sourceIdx)?.classList.remove(
-          REGION_DRAGGING_CLASS
-        );
-      }
-      dragState = null;
-      removeDropIndicator();
-      body.classList.remove(DRAGGING_CLASS);
-    };
-    const endResize = (body, keepPreview = false) => {
-      if (!keepPreview) {
-        if (resizeState) {
-          resizeState.el.style.width = `${resizeState.originalWidthPx}px`;
-        }
-        clearClipShifts(body);
-      }
-      resizeState = null;
-      body.classList.remove(RESIZING_CLASS);
-    };
     const applySkip = (idx) => {
       const clips = getClips();
       if (idx < 0 || idx >= clips.length) {
         return;
       }
       clips[idx].skipped = !clips[idx].skipped;
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "linking" });
     };
     const applyDelete = (idx) => {
       const clips = getClips();
@@ -2749,331 +2960,148 @@
           setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
         }
       }
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "linking" });
     };
-    const applyToggleKeyframeFromEnd = (clipIdx, refIdx, sourceJson) => {
-      if (readStateToken() !== sourceJson) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[clipIdx];
-      const ref = clip?.refs?.[refIdx];
-      if (!ref) {
-        return;
-      }
-      ref.fromEnd = !ref.fromEnd;
-      ref.frame = clamp(
-        ref.frame,
-        REF_FRAME_MIN,
-        getReferenceFrameMax(getRootDefaults, clip)
-      );
-      saveClips(clips);
+    const resizeSession = (body, state) => {
+      const restore = () => {
+        state.el.style.width = `${state.originalWidthPx}px`;
+        clearClipShifts(body);
+        body.classList.remove(RESIZING_CLASS);
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX,
+        escapeClickSuppression: "if-active",
+        onMove: (ctx) => {
+          const width = Math.max(
+            MIN_RESIZE_WIDTH_PX,
+            ctx.event.clientX - state.startLeftPx
+          );
+          body.classList.add(RESIZING_CLASS);
+          state.el.style.width = `${width}px`;
+          shiftClipsAfter(body, state.idx, width - state.originalWidthPx);
+        },
+        onCommit: (ctx) => {
+          const width = ctx.event.clientX - state.startLeftPx;
+          let committed = false;
+          if (readStateToken() === state.sourceJson) {
+            const clips = getClips();
+            if (state.idx >= 0 && state.idx < clips.length && !clips[state.idx].clipLengthFromAudio && !clips[state.idx].clipLengthFromControlNet) {
+              const newDuration = pxToDuration(
+                width,
+                livePxPerSecond(body),
+                currentFps()
+              );
+              if (applyClipDurationResize(
+                clips[state.idx],
+                newDuration,
+                getRootDefaults
+              )) {
+                selectClip(state.idx, stageForClip(state.idx));
+                saveClips(clips, void 0, { origin: "linking" });
+                committed = true;
+              }
+            }
+          }
+          if (committed) {
+            body.classList.remove(RESIZING_CLASS);
+          } else {
+            restore();
+          }
+        },
+        onTap: restore,
+        onCancel: restore
+      };
     };
-    const endKeyframe = (body, keepPreview = false) => {
-      if (!keepPreview && keyframeState) {
-        keyframeState.el.style.left = keyframeState.originalLeft;
-      }
-      keyframeState = null;
-      body.classList.remove(KEYFRAMING_CLASS);
+    const dragSession = (body, state) => {
+      const cleanup = () => {
+        findRegion(body, state.sourceIdx)?.classList.remove(
+          REGION_DRAGGING_CLASS
+        );
+        removeDropIndicator();
+        body.classList.remove(DRAGGING_CLASS);
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX,
+        axis: "xy",
+        escapeClickSuppression: "if-active",
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS);
+          findRegion(body, state.sourceIdx)?.classList.add(
+            REGION_DRAGGING_CLASS
+          );
+          const { els, rects } = readRegions(body);
+          showDropIndicator(
+            els,
+            computeDropIndex(ctx.event.clientX, rects)
+          );
+        },
+        onCommit: (ctx) => {
+          cleanup();
+          const { rects } = readRegions(body);
+          const gap = computeDropIndex(ctx.event.clientX, rects);
+          const from = state.sourceIdx;
+          if (isNoOpMove(from, gap)) {
+            selectClip(from, stageForClip(from));
+            markSelection(body);
+            return;
+          }
+          if (readStateToken() !== state.sourceJson) {
+            return;
+          }
+          const clips = getClips();
+          if (from < 0 || from >= clips.length) {
+            return;
+          }
+          const destIdx = finalIndexAfterMove(from, gap);
+          selectClip(destIdx, stageForClip(from));
+          saveClips(moveItem(clips, from, gap), void 0, {
+            origin: "linking"
+          });
+        },
+        onCancel: cleanup
+      };
     };
-    const onBodyMouseDown = (event) => {
-      suppressClick = false;
-      const me = event;
-      if (me.button !== 0) {
-        return;
-      }
+    const onPress = (me, body) => {
       if (!(me.target instanceof Element)) {
-        return;
-      }
-      const pip = me.target.closest(KEY_SELECTOR);
-      if (pip instanceof HTMLElement) {
-        const pipRegion = pip.closest(REGION_SELECTOR);
-        const clipIdx = parseClipIdx(pipRegion);
-        const refIdx = parseRefIdx(pip);
-        if (clipIdx === null || refIdx === null || !(pipRegion instanceof HTMLElement)) {
-          return;
-        }
-        const clips = getClips();
-        const clip = clips[clipIdx];
-        const ref = clip?.refs?.[refIdx];
-        if (!ref) {
-          return;
-        }
-        keyframeState = {
-          clipIdx,
-          refIdx,
-          el: pip,
-          regionEl: pipRegion,
-          startX: me.clientX,
-          originalLeft: pip.style.left,
-          active: false,
-          durationSeconds: clip.duration,
-          fps: currentFps(),
-          fromEnd: ref.fromEnd === true,
-          shiftKey: me.shiftKey,
-          sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
+        return null;
       }
       if (me.target.closest(REGION_ACTION_SELECTOR)) {
-        return;
+        return null;
       }
       if (me.shiftKey) {
         me.preventDefault();
-        return;
+        return null;
       }
       const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
       if (resizeGrip) {
         const region = resizeGrip.closest(REGION_SELECTOR);
         const idx2 = parseClipIdx(region);
         if (idx2 === null || !(region instanceof HTMLElement)) {
-          return;
+          return null;
         }
         const rect = region.getBoundingClientRect();
-        resizeState = {
+        me.preventDefault();
+        return resizeSession(body, {
           idx: idx2,
           el: region,
-          startX: me.clientX,
           startLeftPx: rect.left,
           originalWidthPx: rect.width,
-          active: false,
           sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
+        });
       }
       const target = me.target.closest(REGION_SELECTOR);
       const idx = parseClipIdx(target);
       if (idx === null) {
-        return;
+        return null;
       }
-      dragState = {
+      return dragSession(body, {
         sourceIdx: idx,
-        startX: me.clientX,
-        startY: me.clientY,
-        active: false,
         sourceJson: readStateToken()
-      };
-    };
-    const onDocMouseMove = (body, event) => {
-      if (keyframeState) {
-        const kme = event;
-        if (!keyframeState.active) {
-          if (Math.abs(kme.clientX - keyframeState.startX) < DRAG_THRESHOLD_PX) {
-            return;
-          }
-          keyframeState.active = true;
-          body.classList.add(KEYFRAMING_CLASS);
-        }
-        const rect = keyframeState.regionEl.getBoundingClientRect();
-        const frame = pxToFrame(
-          kme.clientX - rect.left,
-          rect.width,
-          keyframeState.durationSeconds,
-          keyframeState.fps,
-          keyframeState.fromEnd
-        );
-        const time = keyframeTimeSeconds(
-          frame,
-          keyframeState.fromEnd,
-          keyframeState.durationSeconds,
-          keyframeState.fps
-        );
-        keyframeState.el.style.left = `${keyframeLeftPercent(
-          time,
-          keyframeState.durationSeconds
-        )}%`;
-        return;
-      }
-      if (resizeState) {
-        const rme = event;
-        if (!resizeState.active) {
-          if (Math.abs(rme.clientX - resizeState.startX) < DRAG_THRESHOLD_PX) {
-            return;
-          }
-          resizeState.active = true;
-        }
-        const width = Math.max(
-          MIN_RESIZE_WIDTH_PX,
-          rme.clientX - resizeState.startLeftPx
-        );
-        body.classList.add(RESIZING_CLASS);
-        resizeState.el.style.width = `${width}px`;
-        shiftClipsAfter(
-          body,
-          resizeState.idx,
-          width - resizeState.originalWidthPx
-        );
-        return;
-      }
-      if (!dragState) {
-        return;
-      }
-      const me = event;
-      if (!dragState.active) {
-        const dx = me.clientX - dragState.startX;
-        const dy = me.clientY - dragState.startY;
-        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) {
-          return;
-        }
-        dragState.active = true;
-        body.classList.add(DRAGGING_CLASS);
-        findRegion(body, dragState.sourceIdx)?.classList.add(
-          REGION_DRAGGING_CLASS
-        );
-      }
-      const { els, rects } = readRegions(body);
-      showDropIndicator(els, computeDropIndex(me.clientX, rects));
-    };
-    const onDocMouseUp = (body, event) => {
-      if (keyframeState) {
-        const ks = keyframeState;
-        const kme = event;
-        const rect = ks.regionEl.getBoundingClientRect();
-        suppressClick = true;
-        if (!ks.active) {
-          endKeyframe(body);
-          if (ks.shiftKey) {
-            applyToggleKeyframeFromEnd(
-              ks.clipIdx,
-              ks.refIdx,
-              ks.sourceJson
-            );
-          }
-          return;
-        }
-        let committed = false;
-        if (readStateToken() === ks.sourceJson) {
-          const newFrame = pxToFrame(
-            kme.clientX - rect.left,
-            rect.width,
-            ks.durationSeconds,
-            ks.fps,
-            ks.fromEnd
-          );
-          const clips2 = getClips();
-          const ref = clips2[ks.clipIdx]?.refs?.[ks.refIdx];
-          if (ref && ref.frame !== newFrame) {
-            ref.frame = newFrame;
-            saveClips(clips2);
-            committed = true;
-          }
-        }
-        endKeyframe(body, committed);
-        return;
-      }
-      if (resizeState) {
-        const rs = resizeState;
-        const me2 = event;
-        if (!rs.active) {
-          endResize(body);
-          return;
-        }
-        const width = me2.clientX - rs.startLeftPx;
-        suppressClick = true;
-        let committed = false;
-        if (readStateToken() === rs.sourceJson) {
-          const clips2 = getClips();
-          if (rs.idx >= 0 && rs.idx < clips2.length && !clips2[rs.idx].clipLengthFromAudio && !clips2[rs.idx].clipLengthFromControlNet) {
-            const newDuration = pxToDuration(
-              width,
-              livePxPerSecond(body),
-              currentFps()
-            );
-            if (applyClipDurationResize(
-              clips2[rs.idx],
-              newDuration,
-              getRootDefaults
-            )) {
-              selectClip(rs.idx, stageForClip(rs.idx));
-              saveClips(clips2);
-              committed = true;
-            }
-          }
-        }
-        endResize(body, committed);
-        return;
-      }
-      const state = dragState;
-      if (!state) {
-        return;
-      }
-      endDrag(body);
-      if (!state.active) {
-        return;
-      }
-      suppressClick = true;
-      const me = event;
-      const { rects } = readRegions(body);
-      const gap = computeDropIndex(me.clientX, rects);
-      const from = state.sourceIdx;
-      if (isNoOpMove(from, gap)) {
-        selectClip(from, stageForClip(from));
-        markSelection(body);
-        return;
-      }
-      if (readStateToken() !== state.sourceJson) {
-        return;
-      }
-      const clips = getClips();
-      if (from < 0 || from >= clips.length) {
-        return;
-      }
-      const destIdx = finalIndexAfterMove(from, gap);
-      selectClip(destIdx, stageForClip(from));
-      saveClips(moveItem(clips, from, gap));
-    };
-    const onDocKeyDown = (body, event) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      if (keyframeState) {
-        suppressClick = true;
-        endKeyframe(body);
-      }
-      if (resizeState) {
-        if (resizeState.active) {
-          suppressClick = true;
-        }
-        endResize(body);
-      }
-      if (dragState) {
-        if (dragState.active) {
-          suppressClick = true;
-        }
-        endDrag(body);
-      }
-    };
-    const onBodyKeyDown = (event) => {
-      const ke = event;
-      if (ke.key !== "Enter" && ke.key !== " ") {
-        return;
-      }
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-      const pipEl = target.closest(KEY_SELECTOR);
-      if (!(pipEl instanceof HTMLElement)) {
-        return;
-      }
-      ke.preventDefault();
-      const pipRegion = pipEl.closest(REGION_SELECTOR);
-      const clipIdx = parseClipIdx(pipRegion);
-      const refIdx = parseRefIdx(pipEl);
-      if (clipIdx === null || refIdx === null) {
-        return;
-      }
-      applyToggleKeyframeFromEnd(clipIdx, refIdx, readStateToken());
+      });
     };
     let bodyClickHandler = null;
-    let bodyDownHandler = null;
-    let bodyKeyDownHandler = null;
-    let docMoveHandler = null;
-    let docUpHandler = null;
-    let docKeyHandler = null;
-    const attach = (body) => {
+    let unregister = null;
+    const attach = (body, router) => {
       if (attachedBody === body) {
         return;
       }
@@ -3081,17 +3109,12 @@
         dispose();
       }
       bodyClickHandler = (e) => onRegionClick(body, e);
-      bodyDownHandler = (e) => onBodyMouseDown(e);
-      bodyKeyDownHandler = (e) => onBodyKeyDown(e);
-      docMoveHandler = (e) => onDocMouseMove(body, e);
-      docUpHandler = (e) => onDocMouseUp(body, e);
-      docKeyHandler = (e) => onDocKeyDown(body, e);
       body.addEventListener("click", bodyClickHandler);
-      body.addEventListener("mousedown", bodyDownHandler);
-      body.addEventListener("keydown", bodyKeyDownHandler);
-      document.addEventListener("mousemove", docMoveHandler);
-      document.addEventListener("mouseup", docUpHandler);
-      document.addEventListener("keydown", docKeyHandler);
+      unregister = router.register({
+        id: "linking",
+        priority: 10,
+        onPress
+      });
       attachedBody = body;
     };
     const reapplySelection = (body, clipCount) => {
@@ -3106,36 +3129,12 @@
         if (bodyClickHandler) {
           attachedBody.removeEventListener("click", bodyClickHandler);
         }
-        if (bodyDownHandler) {
-          attachedBody.removeEventListener("mousedown", bodyDownHandler);
-        }
-        if (bodyKeyDownHandler) {
-          attachedBody.removeEventListener("keydown", bodyKeyDownHandler);
-        }
-        endDrag(attachedBody);
-        endResize(attachedBody);
-        endKeyframe(attachedBody);
       }
-      if (docMoveHandler) {
-        document.removeEventListener("mousemove", docMoveHandler);
-      }
-      if (docUpHandler) {
-        document.removeEventListener("mouseup", docUpHandler);
-      }
-      if (docKeyHandler) {
-        document.removeEventListener("keydown", docKeyHandler);
-      }
+      removeDropIndicator();
+      unregister?.();
+      unregister = null;
       bodyClickHandler = null;
-      bodyDownHandler = null;
-      bodyKeyDownHandler = null;
-      docMoveHandler = null;
-      docUpHandler = null;
-      docKeyHandler = null;
       attachedBody = null;
-      dragState = null;
-      resizeState = null;
-      keyframeState = null;
-      suppressClick = false;
     };
     const getSelectedIndex = () => selectedClip();
     return { attach, reapplySelection, getSelectedIndex, dispose };
@@ -3144,8 +3143,10 @@
   // frontend/timelineAudioSegmentTrack.ts
   var SEG_SELECTOR = ".vst-audio-seg[data-clip-idx][data-seg-idx]";
   var SEG_EDGE_SELECTOR = "[data-vst-audio-seg-edge]";
+  var LANE_SELECTOR = ".vst-audio-seg-lane[data-vst-audio-seg-add]";
   var DRAG_THRESHOLD_PX2 = 4;
   var DRAGGING_CLASS2 = "vst-audio-seg-dragging";
+  var GHOST_CLASS = "vst-audio-seg-ghost";
   var parseIntAttr = (el, name) => {
     if (!el) {
       return null;
@@ -3166,33 +3167,66 @@
     const segment = clip?.audioSegments?.[segIdx];
     return clip && segment ? { clip, segment } : null;
   };
-  var resizeLeft = (state, deltaSec) => {
+  var otherSpans = (segments, excludeIdx, clipDuration) => (segments ?? []).map((seg, k) => ({
+    k,
+    start: clamp(seg.startSeconds, 0, clipDuration),
+    end: clamp(seg.startSeconds + seg.lengthSeconds, 0, clipDuration)
+  })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
+  var audioSegmentNeighborBounds = (clip, segIdx) => {
+    const segment = clip.audioSegments?.[segIdx];
+    if (!segment) {
+      return null;
+    }
+    const clipDur = clipDurationOf(clip);
+    const end = segment.startSeconds + segment.lengthSeconds;
+    const spans = otherSpans(clip.audioSegments, segIdx, clipDur);
+    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
+    const [, hi] = freeIntervalAt(spans, clipDur, segment.startSeconds);
+    return { startMin: roundSeconds(lo), endMax: roundSeconds(hi) };
+  };
+  var firstAudioSegmentGap = (clip) => {
+    const clipDur = clipDurationOf(clip);
+    const spans = otherSpans(clip.audioSegments, -1, clipDur);
+    let cursor = 0;
+    const gapAt = (lo, hi) => hi - lo >= AUDIO_SEGMENT_MIN_LENGTH ? {
+      start: roundSeconds(lo),
+      length: roundSeconds(
+        Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, hi - lo)
+      )
+    } : null;
+    for (const span of spans) {
+      const gap = gapAt(cursor, span.start);
+      if (gap) {
+        return gap;
+      }
+      cursor = Math.max(cursor, span.end);
+    }
+    return gapAt(cursor, clipDur);
+  };
+  var resizeLeft = (state, deltaSec, wallLo) => {
     const end = state.startStart + state.startLength;
-    const minStart = Math.max(0, state.startStart - state.startTrim);
     const start = clamp(
       state.startStart + deltaSec,
-      minStart,
+      Math.min(wallLo, end - AUDIO_SEGMENT_MIN_LENGTH),
       end - AUDIO_SEGMENT_MIN_LENGTH
     );
     return {
       start,
-      trim: state.startTrim + (start - state.startStart),
+      trim: Math.max(0, state.startTrim + (start - state.startStart)),
       length: end - start
     };
   };
-  var resizeRight = (state, deltaSec, clipDur) => {
+  var resizeRight = (state, deltaSec, wallHi) => {
     const end = clamp(
       state.startStart + state.startLength + deltaSec,
       state.startStart + AUDIO_SEGMENT_MIN_LENGTH,
-      clipDur
+      wallHi
     );
     return { length: end - state.startStart };
   };
   var createTimelineAudioSegmentTrack = () => {
-    let moveState = null;
-    let resizeState = null;
-    let suppressClick = false;
     let boundBody = null;
+    let unregister = null;
     const isStale = (sourceJson) => readStateToken() !== sourceJson;
     const deleteSegment = (clipIdx, segIdx) => {
       const clips = getClips();
@@ -3203,7 +3237,7 @@
       clip.audioSegments = clip.audioSegments.filter(
         (_, i) => i !== segIdx
       );
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "audio-segment-track" });
     };
     const commitMove = (state, dxPx, pps) => {
       if (isStale(state.sourceJson)) {
@@ -3216,13 +3250,22 @@
       }
       const clipDur = clipDurationOf(clips[state.clipIdx]);
       const length = Math.min(state.length, clipDur);
-      const maxStart = Math.max(0, clipDur - length);
-      const start = clamp(state.startStart + dxPx / pps, 0, maxStart);
+      const maxStart = Math.max(state.boundLo, state.boundHi - length);
+      const start = clamp(
+        state.startStart + dxPx / pps,
+        state.boundLo,
+        maxStart
+      );
       segment.startSeconds = roundSeconds(start);
       segment.lengthSeconds = roundSeconds(
-        Math.min(length, clipDur - segment.startSeconds)
+        Math.min(length, state.boundHi - segment.startSeconds)
       );
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "audio-segment-track" });
+      setSelection({
+        kind: "audio-segment",
+        clipIdx: state.clipIdx,
+        segIdx: state.segIdx
+      });
     };
     const commitResize = (state, dxPx, pps) => {
       if (isStale(state.sourceJson)) {
@@ -3233,157 +3276,286 @@
       if (!segment) {
         return;
       }
-      const clipDur = clipDurationOf(clips[state.clipIdx]);
       const deltaSec = dxPx / pps;
       if (state.edge === "right") {
-        const next = resizeRight(state, deltaSec, clipDur);
+        const next = resizeRight(state, deltaSec, state.wallHi);
         segment.startSeconds = roundSeconds(state.startStart);
         segment.lengthSeconds = roundSeconds(next.length);
       } else {
-        const next = resizeLeft(state, deltaSec);
+        const next = resizeLeft(state, deltaSec, state.wallLo);
         segment.startSeconds = roundSeconds(next.start);
         segment.trimStartSeconds = roundSeconds(Math.max(0, next.trim));
         segment.lengthSeconds = roundSeconds(next.length);
       }
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "audio-segment-track" });
+      setSelection({
+        kind: "audio-segment",
+        clipIdx: state.clipIdx,
+        segIdx: state.segIdx
+      });
     };
-    const clearGesture = (body) => {
-      moveState = null;
-      resizeState = null;
-      body.classList.remove(DRAGGING_CLASS2);
-    };
-    const onBodyMouseDown = (event) => {
-      suppressClick = false;
-      const me = event;
-      if (me.button !== 0 || !(me.target instanceof Element)) {
+    const commitCreate = (state, endSec) => {
+      if (isStale(state.sourceJson)) {
         return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      if (!clip) {
+        return;
+      }
+      const clipDur = clipDurationOf(clip);
+      const spans = otherSpans(clip.audioSegments, -1, clipDur);
+      const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
+      const gap = hi - lo;
+      if (gap < AUDIO_SEGMENT_MIN_LENGTH) {
+        return;
+      }
+      let start;
+      let length;
+      if (endSec === null) {
+        length = Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, gap);
+        start = clamp(state.startSec, lo, hi - length);
+      } else {
+        const a = clamp(Math.min(state.startSec, endSec), lo, hi);
+        const b = clamp(Math.max(state.startSec, endSec), lo, hi);
+        start = a;
+        length = Math.max(AUDIO_SEGMENT_MIN_LENGTH, b - a);
+        if (start + length > hi) {
+          length = hi - start;
+        }
+      }
+      if (length < AUDIO_SEGMENT_MIN_LENGTH) {
+        return;
+      }
+      const segment = {
+        source: null,
+        startSeconds: roundSeconds(start),
+        trimStartSeconds: 0,
+        lengthSeconds: roundSeconds(length)
+      };
+      const segments = [...clip.audioSegments ?? [], segment];
+      segments.sort((x, y) => x.startSeconds - y.startSeconds);
+      clip.audioSegments = segments;
+      saveClips(clips, void 0, { origin: "audio-segment-track" });
+      const newIdx = segments.indexOf(segment);
+      if (newIdx >= 0) {
+        setSelection({
+          kind: "audio-segment",
+          clipIdx: state.clipIdx,
+          segIdx: newIdx
+        });
+      }
+    };
+    const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
+    const createSession = (body, state) => {
+      const removeGhost = () => {
+        state.ghost?.remove();
+        state.ghost = null;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX2,
+        // A plain lane tap creates a default-length segment at the
+        // pressed time, so the concluding click is always consumed.
+        suppressTapClick: true,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS2);
+          const pps = livePxPerSecond(body);
+          const nowSec = laneTimeAt(state, ctx.event.clientX, pps);
+          const a = Math.min(state.startSec, nowSec);
+          const b = Math.max(state.startSec, nowSec);
+          if (!state.ghost) {
+            const ghost = document.createElement("div");
+            ghost.className = GHOST_CLASS;
+            state.lane.appendChild(ghost);
+            state.ghost = ghost;
+          }
+          const dur = state.clipDuration;
+          state.ghost.style.left = `${leftPct(a, dur)}%`;
+          state.ghost.style.width = `${widthPct(b - a, dur)}%`;
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS2);
+          removeGhost();
+          commitCreate(
+            state,
+            laneTimeAt(
+              state,
+              ctx.event.clientX,
+              livePxPerSecond(body)
+            )
+          );
+        },
+        onTap: () => {
+          removeGhost();
+          commitCreate(state, null);
+        },
+        onCancel: () => {
+          removeGhost();
+          body.classList.remove(DRAGGING_CLASS2);
+        }
+      };
+    };
+    const resizeSession = (body, state) => {
+      const restore = () => {
+        state.el.style.left = state.originalLeft;
+        state.el.style.width = state.originalWidth;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX2,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS2);
+          const pps = livePxPerSecond(body);
+          const clipDur = state.clipDuration;
+          const deltaSec = ctx.dx / pps;
+          if (state.edge === "right") {
+            const next = resizeRight(state, deltaSec, state.wallHi);
+            state.el.style.width = `${widthPct(next.length, clipDur)}%`;
+          } else {
+            const next = resizeLeft(state, deltaSec, state.wallLo);
+            state.el.style.left = `${leftPct(next.start, clipDur)}%`;
+            state.el.style.width = `${widthPct(next.length, clipDur)}%`;
+          }
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS2);
+          commitResize(state, ctx.dx, livePxPerSecond(body));
+        },
+        onTap: restore,
+        onCancel: () => {
+          restore();
+          body.classList.remove(DRAGGING_CLASS2);
+        }
+      };
+    };
+    const moveSession = (body, state) => {
+      const restore = () => {
+        state.el.style.left = state.originalLeft;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX2,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS2);
+          const pps = livePxPerSecond(body);
+          const clipDur = state.clipDuration;
+          const length = Math.min(state.length, clipDur);
+          const maxStart = Math.max(
+            state.boundLo,
+            state.boundHi - length
+          );
+          const start = clamp(
+            state.startStart + ctx.dx / pps,
+            state.boundLo,
+            maxStart
+          );
+          state.el.style.left = `${leftPct(start, clipDur)}%`;
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS2);
+          commitMove(state, ctx.dx, livePxPerSecond(body));
+        },
+        onTap: restore,
+        onCancel: () => {
+          restore();
+          body.classList.remove(DRAGGING_CLASS2);
+        }
+      };
+    };
+    const onPress = (me, body) => {
+      if (!(me.target instanceof Element)) {
+        return null;
       }
       const overlay = me.target.closest(SEG_SELECTOR);
-      if (!(overlay instanceof HTMLElement)) {
-        return;
-      }
-      me.stopImmediatePropagation();
-      if (me.shiftKey) {
+      if (overlay instanceof HTMLElement) {
+        if (me.shiftKey) {
+          me.preventDefault();
+          return claimOnly();
+        }
+        const clipIdx = parseIntAttr(overlay, "data-clip-idx");
+        const segIdx = parseIntAttr(overlay, "data-seg-idx");
+        if (clipIdx === null || segIdx === null) {
+          return null;
+        }
+        const found = segmentAt(clipIdx, segIdx);
+        if (!found) {
+          return null;
+        }
+        const clipDuration = clipDurationOf(found.clip);
+        const spans = otherSpans(
+          found.clip.audioSegments,
+          segIdx,
+          clipDuration
+        );
+        const segEnd = found.segment.startSeconds + found.segment.lengthSeconds;
+        const [wallLo] = freeIntervalAt(
+          spans,
+          clipDuration,
+          Math.max(0, segEnd - 1e-3)
+        );
+        const [, wallHi] = freeIntervalAt(
+          spans,
+          clipDuration,
+          found.segment.startSeconds
+        );
+        const edgeEl = me.target.closest(SEG_EDGE_SELECTOR);
         me.preventDefault();
-        return;
-      }
-      const clipIdx = parseIntAttr(overlay, "data-clip-idx");
-      const segIdx = parseIntAttr(overlay, "data-seg-idx");
-      if (clipIdx === null || segIdx === null) {
-        return;
-      }
-      const found = segmentAt(clipIdx, segIdx);
-      if (!found) {
-        return;
-      }
-      const clipDuration = clipDurationOf(found.clip);
-      const edgeEl = me.target.closest(SEG_EDGE_SELECTOR);
-      if (edgeEl) {
-        resizeState = {
+        if (edgeEl) {
+          return resizeSession(body, {
+            clipIdx,
+            segIdx,
+            edge: edgeEl.getAttribute("data-vst-audio-seg-edge") === "left" ? "left" : "right",
+            el: overlay,
+            startStart: found.segment.startSeconds,
+            startLength: found.segment.lengthSeconds,
+            startTrim: found.segment.trimStartSeconds,
+            clipDuration,
+            wallLo,
+            wallHi,
+            originalLeft: overlay.style.left,
+            originalWidth: overlay.style.width,
+            sourceJson: readStateToken()
+          });
+        }
+        return moveSession(body, {
           clipIdx,
           segIdx,
-          edge: edgeEl.getAttribute("data-vst-audio-seg-edge") === "left" ? "left" : "right",
           el: overlay,
-          startX: me.clientX,
           startStart: found.segment.startSeconds,
-          startLength: found.segment.lengthSeconds,
-          startTrim: found.segment.trimStartSeconds,
+          length: found.segment.lengthSeconds,
           clipDuration,
+          boundLo: wallLo,
+          boundHi: wallHi,
           originalLeft: overlay.style.left,
-          originalWidth: overlay.style.width,
-          active: false,
           sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
+        });
       }
-      moveState = {
-        clipIdx,
-        segIdx,
-        el: overlay,
-        startX: me.clientX,
-        startStart: found.segment.startSeconds,
-        length: found.segment.lengthSeconds,
-        clipDuration,
-        originalLeft: overlay.style.left,
-        active: false,
-        sourceJson: readStateToken()
-      };
-      me.preventDefault();
-    };
-    const onDocMouseMove = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const dx = me.clientX - resizeState.startX;
-        if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX2) {
-          return;
+      const lane = me.target.closest(LANE_SELECTOR);
+      if (lane instanceof HTMLElement) {
+        const clipIdx = parseIntAttr(lane, "data-clip-idx");
+        if (clipIdx === null) {
+          return null;
         }
-        resizeState.active = true;
-        body.classList.add(DRAGGING_CLASS2);
-        const clipDur = resizeState.clipDuration;
-        const deltaSec = dx / pps;
-        if (resizeState.edge === "right") {
-          const next = resizeRight(resizeState, deltaSec, clipDur);
-          resizeState.el.style.width = `${widthPct(next.length, clipDur)}%`;
-        } else {
-          const next = resizeLeft(resizeState, deltaSec);
-          resizeState.el.style.left = `${leftPct(next.start, clipDur)}%`;
-          resizeState.el.style.width = `${widthPct(next.length, clipDur)}%`;
-        }
-        return;
-      }
-      if (moveState) {
-        const dx = me.clientX - moveState.startX;
-        if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX2) {
-          return;
-        }
-        moveState.active = true;
-        body.classList.add(DRAGGING_CLASS2);
-        const clipDur = moveState.clipDuration;
-        const length = Math.min(moveState.length, clipDur);
-        const maxStart = Math.max(0, clipDur - length);
-        const start = clamp(
-          moveState.startStart + dx / pps,
+        const rect = lane.getBoundingClientRect();
+        const pps = livePxPerSecond(body);
+        const clipDuration = clipDurationOf(getClips()[clipIdx]);
+        const startSec = clamp(
+          (me.clientX - rect.left) / pps,
           0,
-          maxStart
+          clipDuration
         );
-        moveState.el.style.left = `${leftPct(start, clipDur)}%`;
+        me.preventDefault();
+        return createSession(body, {
+          clipIdx,
+          lane,
+          laneLeft: rect.left,
+          startSec,
+          clipDuration,
+          ghost: null,
+          sourceJson: readStateToken()
+        });
       }
-    };
-    const onDocMouseUp = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const state = resizeState;
-        resizeState = null;
-        body.classList.remove(DRAGGING_CLASS2);
-        if (state.active) {
-          suppressClick = true;
-          commitResize(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-          state.el.style.width = state.originalWidth;
-        }
-        return;
-      }
-      if (moveState) {
-        const state = moveState;
-        moveState = null;
-        body.classList.remove(DRAGGING_CLASS2);
-        if (state.active) {
-          suppressClick = true;
-          commitMove(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-        }
-      }
+      return null;
     };
     const onBodyClick = (event) => {
-      if (suppressClick) {
-        suppressClick = false;
-        return;
-      }
       if (!(event.target instanceof Element)) {
         return;
       }
@@ -3430,59 +3602,27 @@
       }
       setSelection({ kind: "audio-segment", clipIdx, segIdx });
     };
-    const onDocKeyDown = (body, event) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      if (resizeState) {
-        resizeState.el.style.left = resizeState.originalLeft;
-        resizeState.el.style.width = resizeState.originalWidth;
-      } else if (moveState) {
-        moveState.el.style.left = moveState.originalLeft;
-      } else {
-        return;
-      }
-      clearGesture(body);
-    };
-    let moveHandler = null;
-    let upHandler = null;
-    let keyHandler = null;
-    const attach = (body) => {
+    const attach = (body, router) => {
       if (boundBody === body) {
         return;
       }
       dispose();
       boundBody = body;
-      body.addEventListener("mousedown", onBodyMouseDown);
       body.addEventListener("click", onBodyClick);
       body.addEventListener("keydown", onBodyKeyDown);
-      moveHandler = (event) => onDocMouseMove(body, event);
-      upHandler = (event) => onDocMouseUp(body, event);
-      keyHandler = (event) => onDocKeyDown(body, event);
-      document.addEventListener("mousemove", moveHandler);
-      document.addEventListener("mouseup", upHandler);
-      document.addEventListener("keydown", keyHandler);
+      unregister = router.register({
+        id: "audio-segment",
+        priority: 40,
+        onPress
+      });
     };
     const dispose = () => {
       if (boundBody) {
-        boundBody.removeEventListener("mousedown", onBodyMouseDown);
         boundBody.removeEventListener("click", onBodyClick);
         boundBody.removeEventListener("keydown", onBodyKeyDown);
       }
-      if (moveHandler) {
-        document.removeEventListener("mousemove", moveHandler);
-        moveHandler = null;
-      }
-      if (upHandler) {
-        document.removeEventListener("mouseup", upHandler);
-        upHandler = null;
-      }
-      if (keyHandler) {
-        document.removeEventListener("keydown", keyHandler);
-        keyHandler = null;
-      }
-      moveState = null;
-      resizeState = null;
+      unregister?.();
+      unregister = null;
       boundBody = null;
     };
     return { attach, dispose };
@@ -3629,7 +3769,7 @@
         return;
       }
       clip.boundaryOut = nextBoundary(clip.boundaryOut ?? "cut");
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "boundary-track" });
     };
     const onBodyClick = (event) => {
       if (event.target instanceof Element) {
@@ -3839,10 +3979,10 @@
   var MINOR_SELECTOR = ".vst-minor-seg[data-clip-idx]";
   var MINOR_EDGE_SELECTOR = "[data-vst-minor-edge]";
   var MINOR_ACTION_SELECTOR = "[data-vst-minor-action]";
-  var LANE_SELECTOR = ".vst-minor-lane[data-clip-idx]";
+  var LANE_SELECTOR2 = ".vst-minor-lane[data-clip-idx]";
   var DRAG_THRESHOLD_PX3 = 4;
   var DRAGGING_CLASS3 = "vst-prompt-dragging";
-  var GHOST_CLASS = "vst-minor-ghost";
+  var GHOST_CLASS2 = "vst-minor-ghost";
   var parseIntAttr2 = (el, name) => {
     if (!el) {
       return null;
@@ -3856,29 +3996,11 @@
   };
   var clipDurationOf2 = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
   var roundSeconds2 = (seconds) => Math.round(seconds * 10) / 10;
-  var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
+  var otherSpans2 = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
     k,
     start: clamp(w.start, 0, clipDuration),
     end: clamp(w.start + w.duration, 0, clipDuration)
   })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
-  var freeIntervalAt = (spans, clipDuration, point) => {
-    const p = clamp(point, 0, clipDuration);
-    let lo = 0;
-    let hi = clipDuration;
-    for (const span of spans) {
-      if (span.end <= p) {
-        if (span.end > lo) {
-          lo = span.end;
-        }
-      } else if (span.start >= p) {
-        hi = span.start;
-        break;
-      } else {
-        return [p, p];
-      }
-    }
-    return [lo, hi];
-  };
   var applyPromptWindowBegin = (clip, windowIdx, desiredBegin) => {
     const window2 = clip.promptWindows?.[windowIdx];
     if (!window2) {
@@ -3886,7 +4008,7 @@
     }
     const clipDur = clipDurationOf2(clip);
     const end = window2.start + window2.duration;
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const spans = otherSpans2(clip.promptWindows, windowIdx, clipDur);
     const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
     const start = clamp(desiredBegin, lo, end - PROMPT_WINDOW_MIN_DURATION);
     window2.start = roundSeconds2(start);
@@ -3898,7 +4020,7 @@
       return;
     }
     const clipDur = clipDurationOf2(clip);
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const spans = otherSpans2(clip.promptWindows, windowIdx, clipDur);
     const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
     const end = clamp(
       desiredEnd,
@@ -3908,12 +4030,21 @@
     window2.start = roundSeconds2(window2.start);
     window2.duration = roundSeconds2(end - window2.start);
   };
+  var promptWindowNeighborBounds = (clip, windowIdx) => {
+    const window2 = clip.promptWindows?.[windowIdx];
+    if (!window2) {
+      return null;
+    }
+    const clipDur = clipDurationOf2(clip);
+    const end = window2.start + window2.duration;
+    const spans = otherSpans2(clip.promptWindows, windowIdx, clipDur);
+    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
+    const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
+    return { beginMin: roundSeconds2(lo), endMax: roundSeconds2(hi) };
+  };
   var createTimelinePromptTrack = () => {
-    let moveState = null;
-    let resizeState = null;
-    let createState = null;
-    let suppressClick = false;
     let boundBody = null;
+    let unregister = null;
     const isStale = (sourceJson) => readStateToken() !== sourceJson;
     const applyMinorAction = (clipIdx, windowIdx, action) => {
       const clips = getClips();
@@ -3926,7 +4057,7 @@
         return;
       }
       clip.promptWindows.splice(windowIdx, 1);
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "prompt-track" });
     };
     const commitMove = (state, dxPx, pps) => {
       if (isStale(state.sourceJson)) {
@@ -3951,7 +4082,12 @@
           Math.min(dur, state.boundHi - window2.start)
         )
       );
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "prompt-track" });
+      setSelection({
+        kind: "prompt-minor",
+        clipIdx: state.clipIdx,
+        windowIdx: state.windowIdx
+      });
     };
     const commitResize = (state, dxPx, pps) => {
       if (isStale(state.sourceJson)) {
@@ -3964,7 +4100,7 @@
         return;
       }
       const clipDur = clipDurationOf2(clip);
-      const spans = otherSpans(clip.promptWindows, state.windowIdx, clipDur);
+      const spans = otherSpans2(clip.promptWindows, state.windowIdx, clipDur);
       const deltaSec = dxPx / pps;
       if (state.edge === "right") {
         const [, hi] = freeIntervalAt(spans, clipDur, state.startStart);
@@ -3990,7 +4126,12 @@
         window2.start = roundSeconds2(start);
         window2.duration = roundSeconds2(end - start);
       }
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "prompt-track" });
+      setSelection({
+        kind: "prompt-minor",
+        clipIdx: state.clipIdx,
+        windowIdx: state.windowIdx
+      });
     };
     const commitCreate = (state, endSec) => {
       if (isStale(state.sourceJson)) {
@@ -4002,7 +4143,7 @@
         return;
       }
       const clipDur = clipDurationOf2(clip);
-      const spans = otherSpans(clip.promptWindows, -1, clipDur);
+      const spans = otherSpans2(clip.promptWindows, -1, clipDur);
       const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
       const gap = hi - lo;
       if (gap < PROMPT_WINDOW_MIN_DURATION) {
@@ -4032,7 +4173,7 @@
       };
       clip.promptWindows.push(window2);
       clip.promptWindows.sort((x, y) => x.start - y.start);
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "prompt-track" });
       const newIdx = clip.promptWindows.indexOf(window2);
       if (newIdx >= 0) {
         setSelection({
@@ -4043,240 +4184,216 @@
       }
     };
     const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
-    const clearGesture = (body) => {
-      if (createState?.ghost) {
-        createState.ghost.remove();
-      }
-      moveState = null;
-      resizeState = null;
-      createState = null;
-      body.classList.remove(DRAGGING_CLASS3);
+    const resizeSession = (body, state) => {
+      const restore = () => {
+        state.el.style.left = state.originalLeft;
+        state.el.style.width = state.originalWidth;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX3,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS3);
+          const pps = livePxPerSecond(body);
+          const clipDur = state.clipDuration;
+          const deltaSec = ctx.dx / pps;
+          if (state.edge === "right") {
+            const end = clamp(
+              state.startStart + state.startDuration + deltaSec,
+              state.startStart + PROMPT_WINDOW_MIN_DURATION,
+              clipDur
+            );
+            state.el.style.width = `${Math.max(2, (end - state.startStart) * pps)}px`;
+          } else {
+            const end = state.startStart + state.startDuration;
+            const start = clamp(
+              state.startStart + deltaSec,
+              0,
+              end - PROMPT_WINDOW_MIN_DURATION
+            );
+            state.el.style.left = `${start * pps}px`;
+            state.el.style.width = `${Math.max(2, (end - start) * pps)}px`;
+          }
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS3);
+          commitResize(state, ctx.dx, livePxPerSecond(body));
+        },
+        onTap: restore,
+        onCancel: () => {
+          restore();
+          body.classList.remove(DRAGGING_CLASS3);
+        }
+      };
     };
-    const onBodyMouseDown = (event) => {
-      suppressClick = false;
-      const me = event;
-      if (me.button !== 0 || !(me.target instanceof Element)) {
-        return;
+    const moveSession = (body, state) => {
+      const restore = () => {
+        state.el.style.left = state.originalLeft;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX3,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS3);
+          const pps = livePxPerSecond(body);
+          const dur = Math.min(state.duration, state.clipDuration);
+          const maxStart = Math.max(state.boundLo, state.boundHi - dur);
+          const start = clamp(
+            state.startStart + ctx.dx / pps,
+            state.boundLo,
+            maxStart
+          );
+          state.el.style.left = `${start * pps}px`;
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS3);
+          commitMove(state, ctx.dx, livePxPerSecond(body));
+        },
+        onTap: restore,
+        onCancel: () => {
+          restore();
+          body.classList.remove(DRAGGING_CLASS3);
+        }
+      };
+    };
+    const createSession = (body, state) => {
+      const removeGhost = () => {
+        state.ghost?.remove();
+        state.ghost = null;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX3,
+        // A plain lane tap creates a default-length window at the pressed
+        // time, so the concluding click is always consumed — as before.
+        suppressTapClick: true,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS3);
+          const pps = livePxPerSecond(body);
+          const nowSec = laneTimeAt(state, ctx.event.clientX, pps);
+          const a = Math.min(state.startSec, nowSec);
+          const b = Math.max(state.startSec, nowSec);
+          if (!state.ghost) {
+            const ghost = document.createElement("div");
+            ghost.className = GHOST_CLASS2;
+            state.lane.appendChild(ghost);
+            state.ghost = ghost;
+          }
+          state.ghost.style.left = `${a * pps}px`;
+          state.ghost.style.width = `${Math.max(2, (b - a) * pps)}px`;
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS3);
+          removeGhost();
+          commitCreate(
+            state,
+            laneTimeAt(state, ctx.event.clientX, livePxPerSecond(body))
+          );
+        },
+        onTap: () => {
+          removeGhost();
+          commitCreate(state, null);
+        },
+        onCancel: () => {
+          removeGhost();
+          body.classList.remove(DRAGGING_CLASS3);
+        }
+      };
+    };
+    const onPress = (me, body) => {
+      if (!(me.target instanceof Element)) {
+        return null;
       }
       if (me.target.closest(MINOR_ACTION_SELECTOR)) {
-        return;
+        return null;
       }
       if (me.shiftKey && me.target.closest(MINOR_SELECTOR)) {
         me.preventDefault();
-        return;
+        return claimOnly();
       }
       const edgeEl = me.target.closest(MINOR_EDGE_SELECTOR);
       if (edgeEl) {
         const seg2 = edgeEl.closest(MINOR_SELECTOR);
         const clipIdx = parseIntAttr2(seg2, "data-clip-idx");
         const windowIdx = parseIntAttr2(seg2, "data-window-idx");
-        const edge = edgeEl.getAttribute("data-vst-minor-edge") === "left" ? "left" : "right";
         if (clipIdx === null || windowIdx === null || !(seg2 instanceof HTMLElement)) {
-          return;
+          return null;
         }
         const window2 = getClips()[clipIdx]?.promptWindows?.[windowIdx];
         if (!window2) {
-          return;
+          return null;
         }
-        resizeState = {
+        me.preventDefault();
+        return resizeSession(body, {
           clipIdx,
           windowIdx,
-          edge,
+          edge: edgeEl.getAttribute("data-vst-minor-edge") === "left" ? "left" : "right",
           el: seg2,
-          startX: me.clientX,
           startStart: window2.start,
           startDuration: window2.duration,
           clipDuration: clipDurationOf2(getClips()[clipIdx]),
           originalLeft: seg2.style.left,
           originalWidth: seg2.style.width,
-          active: false,
           sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
+        });
       }
       const seg = me.target.closest(MINOR_SELECTOR);
       if (seg instanceof HTMLElement) {
         const clipIdx = parseIntAttr2(seg, "data-clip-idx");
         const windowIdx = parseIntAttr2(seg, "data-window-idx");
         if (clipIdx === null || windowIdx === null) {
-          return;
+          return null;
         }
         const clip = getClips()[clipIdx];
         const window2 = clip?.promptWindows?.[windowIdx];
         if (!clip || !window2) {
-          return;
+          return null;
         }
         const clipDuration = clipDurationOf2(clip);
         const [boundLo, boundHi] = freeIntervalAt(
-          otherSpans(clip.promptWindows, windowIdx, clipDuration),
+          otherSpans2(clip.promptWindows, windowIdx, clipDuration),
           clipDuration,
           window2.start
         );
-        moveState = {
+        me.preventDefault();
+        return moveSession(body, {
           clipIdx,
           windowIdx,
           el: seg,
-          startX: me.clientX,
           startStart: window2.start,
           duration: window2.duration,
           clipDuration,
           boundLo,
           boundHi,
           originalLeft: seg.style.left,
-          active: false,
           sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
+        });
       }
-      const lane = me.target.closest(LANE_SELECTOR);
+      const lane = me.target.closest(LANE_SELECTOR2);
       if (lane instanceof HTMLElement) {
         const clipIdx = parseIntAttr2(lane, "data-clip-idx");
         if (clipIdx === null) {
-          return;
+          return null;
         }
         const rect = lane.getBoundingClientRect();
-        const pps = livePxPerSecond(boundBody ?? lane);
+        const pps = livePxPerSecond(body);
         const clipDuration = clipDurationOf2(getClips()[clipIdx]);
         const startSec = clamp(
           (me.clientX - rect.left) / pps,
           0,
           clipDuration
         );
-        createState = {
+        me.preventDefault();
+        return createSession(body, {
           clipIdx,
           lane,
           laneLeft: rect.left,
           startSec,
-          startX: me.clientX,
           clipDuration,
           ghost: null,
-          active: false,
           sourceJson: readStateToken()
-        };
-        me.preventDefault();
+        });
       }
-    };
-    const onDocMouseMove = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const dx = me.clientX - resizeState.startX;
-        if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
-          return;
-        }
-        resizeState.active = true;
-        body.classList.add(DRAGGING_CLASS3);
-        const clipDur = resizeState.clipDuration;
-        const deltaSec = dx / pps;
-        if (resizeState.edge === "right") {
-          const end = clamp(
-            resizeState.startStart + resizeState.startDuration + deltaSec,
-            resizeState.startStart + PROMPT_WINDOW_MIN_DURATION,
-            clipDur
-          );
-          resizeState.el.style.width = `${Math.max(2, (end - resizeState.startStart) * pps)}px`;
-        } else {
-          const end = resizeState.startStart + resizeState.startDuration;
-          const start = clamp(
-            resizeState.startStart + deltaSec,
-            0,
-            end - PROMPT_WINDOW_MIN_DURATION
-          );
-          resizeState.el.style.left = `${start * pps}px`;
-          resizeState.el.style.width = `${Math.max(2, (end - start) * pps)}px`;
-        }
-        return;
-      }
-      if (moveState) {
-        const dx = me.clientX - moveState.startX;
-        if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
-          return;
-        }
-        moveState.active = true;
-        body.classList.add(DRAGGING_CLASS3);
-        const dur = Math.min(moveState.duration, moveState.clipDuration);
-        const maxStart = Math.max(
-          moveState.boundLo,
-          moveState.boundHi - dur
-        );
-        const start = clamp(
-          moveState.startStart + dx / pps,
-          moveState.boundLo,
-          maxStart
-        );
-        moveState.el.style.left = `${start * pps}px`;
-        return;
-      }
-      if (createState) {
-        const dx = me.clientX - createState.startX;
-        if (!createState.active && Math.abs(dx) < DRAG_THRESHOLD_PX3) {
-          return;
-        }
-        createState.active = true;
-        body.classList.add(DRAGGING_CLASS3);
-        const nowSec = laneTimeAt(createState, me.clientX, pps);
-        const a = Math.min(createState.startSec, nowSec);
-        const b = Math.max(createState.startSec, nowSec);
-        if (!createState.ghost) {
-          const ghost = document.createElement("div");
-          ghost.className = GHOST_CLASS;
-          createState.lane.appendChild(ghost);
-          createState.ghost = ghost;
-        }
-        createState.ghost.style.left = `${a * pps}px`;
-        createState.ghost.style.width = `${Math.max(2, (b - a) * pps)}px`;
-      }
-    };
-    const onDocMouseUp = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const state = resizeState;
-        resizeState = null;
-        body.classList.remove(DRAGGING_CLASS3);
-        if (state.active) {
-          suppressClick = true;
-          commitResize(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-          state.el.style.width = state.originalWidth;
-        }
-        return;
-      }
-      if (moveState) {
-        const state = moveState;
-        moveState = null;
-        body.classList.remove(DRAGGING_CLASS3);
-        if (state.active) {
-          suppressClick = true;
-          commitMove(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-        }
-        return;
-      }
-      if (createState) {
-        const state = createState;
-        createState = null;
-        body.classList.remove(DRAGGING_CLASS3);
-        if (state.ghost) {
-          state.ghost.remove();
-        }
-        suppressClick = true;
-        if (state.active) {
-          commitCreate(state, laneTimeAt(state, me.clientX, pps));
-        } else {
-          commitCreate(state, null);
-        }
-      }
+      return null;
     };
     const onBodyClick = (event) => {
-      if (suppressClick) {
-        suppressClick = false;
-        return;
-      }
       if (!(event.target instanceof Element)) {
         return;
       }
@@ -4321,58 +4438,25 @@
         setSelection({ kind: "prompt-major", clipIdx });
       }
     };
-    const onDocKeyDown = (body, event) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      if (resizeState) {
-        resizeState.el.style.left = resizeState.originalLeft;
-        resizeState.el.style.width = resizeState.originalWidth;
-      } else if (moveState) {
-        moveState.el.style.left = moveState.originalLeft;
-      } else if (!createState) {
-        return;
-      }
-      clearGesture(body);
-    };
-    let moveHandler = null;
-    let upHandler = null;
-    let keyHandler = null;
-    const attach = (body) => {
+    const attach = (body, router) => {
       if (boundBody === body) {
         return;
       }
       dispose();
       boundBody = body;
-      body.addEventListener("mousedown", onBodyMouseDown);
       body.addEventListener("click", onBodyClick);
-      moveHandler = (event) => onDocMouseMove(body, event);
-      upHandler = (event) => onDocMouseUp(body, event);
-      keyHandler = (event) => onDocKeyDown(body, event);
-      document.addEventListener("mousemove", moveHandler);
-      document.addEventListener("mouseup", upHandler);
-      document.addEventListener("keydown", keyHandler);
+      unregister = router.register({
+        id: "prompt-track",
+        priority: 20,
+        onPress
+      });
     };
     const dispose = () => {
       if (boundBody) {
-        boundBody.removeEventListener("mousedown", onBodyMouseDown);
         boundBody.removeEventListener("click", onBodyClick);
       }
-      if (moveHandler) {
-        document.removeEventListener("mousemove", moveHandler);
-        moveHandler = null;
-      }
-      if (upHandler) {
-        document.removeEventListener("mouseup", upHandler);
-        upHandler = null;
-      }
-      if (keyHandler) {
-        document.removeEventListener("keydown", keyHandler);
-        keyHandler = null;
-      }
-      moveState = null;
-      resizeState = null;
-      createState = null;
+      unregister?.();
+      unregister = null;
       boundBody = null;
     };
     return { attach, dispose };
@@ -4380,13 +4464,10 @@
 
   // frontend/timelineDetailStrip.ts
   var STAGE_SELECTOR = "[data-vst-stage]";
-  var STAGE_ADD_SELECTOR = "[data-vst-stage-add]";
   var MODEL_SELECTOR = "[data-vst-model]";
-  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${STAGE_ADD_SELECTOR}, ${MODEL_SELECTOR}`;
+  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
   var DETAIL_CLASS = "vst-detail";
-  var GROUP_CLIP = "vstdock_clip";
   var GROUP_STAGES = "vstdock_stages";
-  var GROUP_STAGEPARAMS = "vstdock_stageparams";
   var GROUP_REF = "vstdock_ref";
   var GROUP_AUDIO = "vstdock_audio";
   var GROUP_AUDIOSEG = "vstdock_audioseg";
@@ -4468,7 +4549,6 @@
     let pendingFocus = null;
     let focusLeftDock = false;
     let renderedSel = null;
-    let suppressNextDockRebuild = false;
     const isTypingInDock = () => {
       if (!dockEl) {
         return false;
@@ -4570,11 +4650,8 @@
       if (isStale()) {
         return;
       }
-      const wantTimelineRefresh = entries.some((e) => e.refresh);
       const clipMutates = entries.filter((e) => e.kind === "clips").map((e) => e.mutate);
       const stateMutates = entries.filter((e) => e.kind === "state").map((e) => e.mutate);
-      const prevSuppress = suppressNextDockRebuild;
-      suppressNextDockRebuild = true;
       flushing = true;
       let flushedClips = null;
       try {
@@ -4583,7 +4660,10 @@
           for (const m of clipMutates) {
             m(clips);
           }
-          saveClips(clips);
+          saveClips(clips, void 0, {
+            origin: "detail-strip",
+            valueOnly: true
+          });
           flushedClips = clips;
         }
         if (stateMutates.length > 0) {
@@ -4592,17 +4672,14 @@
             m(state);
           }
           saveState(state, void 0, {
-            notifyDomChange: isVideoStagesEnabled()
+            notifyDomChange: isVideoStagesEnabled(),
+            origin: "detail-strip",
+            valueOnly: true
           });
         }
         sourceToken = readStateToken();
-        flushing = false;
-        if (stateMutates.length > 0 || wantTimelineRefresh) {
-          options.refresh?.();
-        }
       } finally {
         flushing = false;
-        suppressNextDockRebuild = prevSuppress;
       }
       writeBackClamped(entryList, flushedClips);
       syncValueDerivedUI(renderedSel);
@@ -4664,7 +4741,6 @@
           schedulePending(opts.key, {
             kind: "clips",
             mutate: (clips) => opts.mutate(clips, value),
-            refresh: opts.refresh === true,
             readBack: opts.readBack
           });
         }
@@ -4681,14 +4757,11 @@
       }
       const clips = getClips();
       mutate(clips);
-      const prevSuppress = suppressNextDockRebuild;
-      suppressNextDockRebuild = true;
-      try {
-        saveClips(clips);
-        sourceToken = readStateToken();
-      } finally {
-        suppressNextDockRebuild = prevSuppress;
-      }
+      saveClips(clips, void 0, {
+        origin: "detail-strip",
+        valueOnly: true
+      });
+      sourceToken = readStateToken();
       syncValueDerivedUI(renderedSel);
     };
     const commitState = (mutate) => {
@@ -4700,17 +4773,12 @@
       }
       const state = getState();
       mutate(state);
-      const prevSuppress = suppressNextDockRebuild;
-      suppressNextDockRebuild = true;
-      try {
-        saveState(state, void 0, {
-          notifyDomChange: isVideoStagesEnabled()
-        });
-        sourceToken = readStateToken();
-        options.refresh?.();
-      } finally {
-        suppressNextDockRebuild = prevSuppress;
-      }
+      saveState(state, void 0, {
+        notifyDomChange: isVideoStagesEnabled(),
+        origin: "detail-strip",
+        valueOnly: true
+      });
+      sourceToken = readStateToken();
       syncValueDerivedUI(renderedSel);
     };
     const buildOptionSelect = (specs, selected, onChange) => {
@@ -4815,9 +4883,15 @@
       if (!clip || !removeRefAt(clip, refIdx)) {
         return;
       }
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
-      setSelection({ kind: "none" });
+      setSelection(
+        clip.refs.length > 0 ? {
+          kind: "ref",
+          clipIdx,
+          refIdx: Math.min(refIdx, clip.refs.length - 1)
+        } : { kind: "clip", clipIdx, stageIdx: 0 }
+      );
     };
     const deleteWindowEntry = (clipIdx, windowIdx) => {
       flushPending();
@@ -4831,9 +4905,15 @@
         return;
       }
       windows.splice(windowIdx, 1);
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
-      setSelection({ kind: "none" });
+      setSelection(
+        windows.length > 0 ? {
+          kind: "prompt-minor",
+          clipIdx,
+          windowIdx: Math.min(windowIdx, windows.length - 1)
+        } : { kind: "prompt-major", clipIdx }
+      );
     };
     const createRetake = (clipIdx) => {
       flushPending();
@@ -4859,7 +4939,7 @@
         lengthSeconds,
         strength: RETAKE_STRENGTH_DEFAULT
       };
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
       setSelection({ kind: "retake", clipIdx });
     };
@@ -4875,9 +4955,9 @@
         return;
       }
       clip.retake = null;
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
-      setSelection({ kind: "none" });
+      setSelection({ kind: "clip", clipIdx, stageIdx: 0 });
     };
     const addAudioSegment = (clipIdx) => {
       flushPending();
@@ -4890,27 +4970,25 @@
       if (!clip) {
         return;
       }
-      const clipDur = Math.max(0, clip.duration || 0);
-      const lengthSeconds = Math.max(
-        AUDIO_SEGMENT_MIN_LENGTH,
-        Math.min(
-          AUDIO_SEGMENT_DEFAULT_LENGTH,
-          clipDur || AUDIO_SEGMENT_DEFAULT_LENGTH
-        )
-      );
+      const gap = firstAudioSegmentGap(clip);
+      if (!gap) {
+        return;
+      }
       const segment = {
         source: null,
-        startSeconds: 0,
+        startSeconds: gap.start,
         trimStartSeconds: 0,
-        lengthSeconds
+        lengthSeconds: gap.length
       };
-      clip.audioSegments = [...clip.audioSegments ?? [], segment];
-      saveClips(clips);
+      const segments = [...clip.audioSegments ?? [], segment];
+      segments.sort((x, y) => x.startSeconds - y.startSeconds);
+      clip.audioSegments = segments;
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
       setSelection({
         kind: "audio-segment",
         clipIdx,
-        segIdx: clip.audioSegments.length - 1
+        segIdx: segments.indexOf(segment)
       });
     };
     const removeAudioSegment = (clipIdx, segIdx) => {
@@ -4925,9 +5003,15 @@
         return;
       }
       clip.audioSegments = clip.audioSegments.filter((_, i) => i !== segIdx);
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
-      setSelection({ kind: "none" });
+      setSelection(
+        clip.audioSegments.length > 0 ? {
+          kind: "audio-segment",
+          clipIdx,
+          segIdx: Math.min(segIdx, clip.audioSegments.length - 1)
+        } : { kind: "audio", clipIdx }
+      );
     };
     const selectStage = (clipIdx, stageIdx) => {
       setSelection({ kind: "clip", clipIdx, stageIdx });
@@ -4953,7 +5037,7 @@
         )
       );
       const newIdx = clip.stages.length - 1;
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
       suppressSelectionRender = true;
       setSelection({ kind: "clip", clipIdx, stageIdx: newIdx });
@@ -4975,7 +5059,7 @@
         return;
       }
       clip.stages.splice(stageIdx, 1);
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
       const nextStage = clamp(stageIdx, 0, clip.stages.length - 1);
       suppressSelectionRender = true;
@@ -4984,14 +5068,6 @@
       render();
     };
     const handleActivation = (target, shiftKey) => {
-      const addChip = target.closest(STAGE_ADD_SELECTOR);
-      if (addChip instanceof HTMLElement) {
-        const clipIdx = parseIntAttr3(addChip, "data-clip-idx");
-        if (clipIdx !== null) {
-          addStage(clipIdx);
-        }
-        return;
-      }
       const stageChip = target.closest(STAGE_SELECTOR);
       if (stageChip instanceof HTMLElement) {
         const clipIdx = parseIntAttr3(stageChip, "data-clip-idx");
@@ -5091,53 +5167,21 @@
       }
       return dockEl;
     };
-    const isGroupOpen = (groupId) => {
-      if (typeof getCookie === "function") {
-        return getCookie(`group_open_${groupId}`) !== "closed";
-      }
-      return true;
-    };
-    const buildGroup = (groupId, title, counter, content, opts) => {
-      const collapsible = opts?.collapsible !== false;
-      const open = collapsible ? isGroupOpen(groupId) : true;
+    const buildGroup = (groupId, content) => {
       const group = document.createElement("div");
-      group.className = `input-group ${open ? "input-group-open" : "input-group-closed"}`;
+      group.className = "input-group input-group-open";
       group.id = `auto-group-${groupId}`;
-      const header = document.createElement("span");
-      header.className = `input-group-header ${collapsible ? "input-group-shrinkable" : "input-group-noshrink"}`;
-      header.id = `input_group_${groupId}`;
-      const wrap = document.createElement("span");
-      wrap.className = "header-label-wrap";
-      if (collapsible) {
-        const symbol = document.createElement("span");
-        symbol.className = "auto-symbol";
-        symbol.innerHTML = open ? "&#x2B9F;" : "&#x2B9E;";
-        wrap.appendChild(symbol);
-      }
-      const labelEl = document.createElement("span");
-      labelEl.className = "header-label";
-      labelEl.textContent = title;
-      const spacer = document.createElement("span");
-      spacer.className = "header-label-spacer";
-      const counterEl = document.createElement("span");
-      counterEl.className = "header-label-counter";
-      counterEl.textContent = counter;
-      wrap.append(labelEl, spacer, counterEl);
-      header.appendChild(wrap);
       const contentEl = document.createElement("div");
       contentEl.className = "input-group-content";
       contentEl.id = `input_group_content_${groupId}`;
-      if (!open) {
-        contentEl.style.display = "none";
-      }
       contentEl.appendChild(content);
-      group.append(header, contentEl);
+      group.appendChild(contentEl);
       return group;
     };
-    const wrapForm = (groupId, title, counter, content, opts) => {
+    const wrapForm = (groupId, content) => {
       const body = document.createElement("div");
       body.className = "vst-detail-body";
-      body.appendChild(buildGroup(groupId, title, counter, content, opts));
+      body.appendChild(buildGroup(groupId, content));
       return body;
     };
     const breadcrumbFor = (sel) => {
@@ -5251,18 +5295,6 @@
           });
         })
       );
-      if (!clip.retake) {
-        const addRetake = document.createElement("button");
-        addRetake.type = "button";
-        addRetake.className = "vst-detail-add-retake";
-        addRetake.textContent = "+ Retake";
-        addRetake.title = "Add a retake window (regenerates a sub-range when refining a base video)";
-        addRetake.addEventListener("click", (event) => {
-          event.preventDefault();
-          createRetake(clipIdx);
-        });
-        col.appendChild(addRetake);
-      }
       return col;
     };
     const buildStageRail = (clip, clipIdx, stageIdx) => {
@@ -5291,25 +5323,30 @@
         });
         list.appendChild(chip);
       });
-      const addChip = document.createElement("button");
-      addChip.type = "button";
-      addChip.className = "vst-chip vst-stage-tab vst-stage-tab-add";
-      addChip.textContent = "+";
-      addChip.title = "Add a refine stage";
-      addChip.addEventListener("click", () => addStage(clipIdx));
-      list.appendChild(addChip);
       col.appendChild(list);
-      if (clip.stages.length > 1) {
-        const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.className = "vst-refs-delete vst-detail-delete-stage";
-        deleteBtn.textContent = "Delete stage";
-        deleteBtn.addEventListener("click", (event) => {
-          event.preventDefault();
-          deleteStage(clipIdx, stageIdx);
-        });
-        col.appendChild(deleteBtn);
-      }
+      const actions = document.createElement("div");
+      actions.className = "vst-detail-rail-actions";
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "vst-detail-rail-btn vst-detail-add-stage";
+      addBtn.textContent = "Add stage";
+      addBtn.title = "Add a refine stage";
+      addBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        addStage(clipIdx);
+      });
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
+      deleteBtn.textContent = "Delete stage";
+      deleteBtn.disabled = clip.stages.length <= 1;
+      deleteBtn.title = deleteBtn.disabled ? "A clip always keeps at least one stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
+      deleteBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        deleteStage(clipIdx, stageIdx);
+      });
+      actions.append(addBtn, deleteBtn);
+      col.appendChild(actions);
       return col;
     };
     const buildParamsColumn = (clip, clipIdx, stageIdx, stage, defaults) => {
@@ -5513,6 +5550,11 @@
         refsHeader.className = "vst-detail-sec vst-detail-span-full";
         refsHeader.textContent = "Reference Strengths";
         fields.appendChild(refsHeader);
+        const setRefHover = (refIdx, on) => {
+          boundBody?.querySelector(
+            `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
+          )?.classList.toggle("vst-ref-hover", on);
+        };
         clip.refs.forEach((ref, refIdx) => {
           const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
           const slider = buildSlider(
@@ -5535,6 +5577,14 @@
           );
           slider.classList.add("vst-stage-ref-slider");
           tagFocus(slider, `ref-${refIdx}`);
+          slider.addEventListener(
+            "mouseenter",
+            () => setRefHover(refIdx, true)
+          );
+          slider.addEventListener(
+            "mouseleave",
+            () => setRefHover(refIdx, false)
+          );
           fields.appendChild(slider);
         });
       }
@@ -5572,8 +5622,8 @@
     const buildLorasSection = (clipIdx, stageIdx, stage, defaults) => {
       const section = document.createElement("div");
       section.className = "vst-audio-field vst-stage-loras vst-detail-span-full";
-      const label = document.createElement("span");
-      label.className = "vst-audio-field-label";
+      const label = document.createElement("div");
+      label.className = "vst-detail-sec";
       label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
       section.appendChild(label);
       if (defaults.loraValues.length === 0) {
@@ -5638,7 +5688,7 @@
               return;
             }
             target.loras.splice(index, 1);
-            saveClips(clips);
+            saveClips(clips, void 0, { origin: "detail-strip" });
             sourceToken = readStateToken();
             render();
           });
@@ -5665,7 +5715,7 @@
             name: defaults.loraValues[0] ?? "",
             weight: LORA_WEIGHT_DEFAULT
           });
-          saveClips(clips);
+          saveClips(clips, void 0, { origin: "detail-strip" });
           sourceToken = readStateToken();
           render();
         });
@@ -5673,31 +5723,126 @@
       }
       return section;
     };
+    const sectionLabel = (text) => {
+      const sec = document.createElement("div");
+      sec.className = "vst-detail-sec vst-detail-wrap-sec";
+      sec.textContent = text;
+      return sec;
+    };
+    const buildRetakeSection = (clip, clipIdx) => {
+      const wrap = document.createElement("div");
+      wrap.className = "vst-detail-stages-wrap";
+      wrap.appendChild(sectionLabel("Retake"));
+      const col = document.createElement("div");
+      col.className = "vst-detail-col vst-detail-retake-col";
+      wrap.appendChild(col);
+      const retake = clip.retake;
+      if (!retake) {
+        const hint = document.createElement("small");
+        hint.className = "vst-audio-field-hint";
+        hint.textContent = "Regenerates a sub-range when refining a base video.";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "vst-detail-rail-btn vst-detail-add-retake";
+        addBtn.textContent = "Add retake";
+        addBtn.addEventListener("click", (event) => {
+          event.preventDefault();
+          createRetake(clipIdx);
+        });
+        col.append(hint, addBtn);
+        return wrap;
+      }
+      const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
+      const clampRetake = (start, length) => {
+        const s = clamp(
+          start,
+          0,
+          Math.max(0, clipDur - RETAKE_MIN_DURATION)
+        );
+        const l = clamp(
+          length,
+          RETAKE_MIN_DURATION,
+          Math.max(RETAKE_MIN_DURATION, clipDur - s)
+        );
+        return { start: s, length: l };
+      };
+      const startInput = buildClampedNumber({
+        key: "retake-start",
+        value: retake.startSeconds,
+        min: 0,
+        max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
+        step: RETAKE_DURATION_STEP,
+        readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
+        mutate: (cs, value) => {
+          const r = cs[clipIdx]?.retake;
+          if (r) {
+            const next = clampRetake(value, r.lengthSeconds);
+            r.startSeconds = next.start;
+            r.lengthSeconds = next.length;
+          }
+        }
+      });
+      col.appendChild(buildField("Start (s)", startInput));
+      const lengthInput = buildClampedNumber({
+        key: "retake-length",
+        value: retake.lengthSeconds,
+        min: RETAKE_MIN_DURATION,
+        max: clipDur,
+        step: RETAKE_DURATION_STEP,
+        readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
+        mutate: (cs, value) => {
+          const r = cs[clipIdx]?.retake;
+          if (r) {
+            const next = clampRetake(r.startSeconds, value);
+            r.startSeconds = next.start;
+            r.lengthSeconds = next.length;
+          }
+        }
+      });
+      col.appendChild(buildField("Length (s)", lengthInput));
+      col.appendChild(
+        buildSlider(
+          "Strength",
+          retake.strength,
+          RETAKE_STRENGTH_MIN,
+          RETAKE_STRENGTH_MAX,
+          RETAKE_STRENGTH_STEP,
+          (value) => {
+            debouncedCommit("retake-strength", (cs) => {
+              const r = cs[clipIdx]?.retake;
+              if (r) {
+                r.strength = clamp(
+                  value,
+                  RETAKE_STRENGTH_MIN,
+                  RETAKE_STRENGTH_MAX
+                );
+              }
+            });
+          }
+        )
+      );
+      const note = document.createElement("p");
+      note.className = "vst-detail-note";
+      note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
+      col.appendChild(note);
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+      del.textContent = "Remove retake";
+      del.addEventListener("click", (event) => {
+        event.preventDefault();
+        removeRetake(clipIdx);
+      });
+      col.appendChild(del);
+      return wrap;
+    };
     const buildClipBody = (sel, clips) => {
       const body = document.createElement("div");
       body.className = "vst-detail-body vst-detail-clip-body";
       const clip = clips[sel.clipIdx];
       const stage = clip.stages[sel.stageIdx];
       const defaults = getRootDefaults();
-      const stageCount = clip.stages.length;
-      body.appendChild(
-        buildGroup(
-          GROUP_CLIP,
-          "Clip",
-          `Clip ${sel.clipIdx}`,
-          buildClipColumn(clip, sel.clipIdx),
-          { collapsible: false }
-        )
-      );
-      body.appendChild(
-        buildGroup(
-          GROUP_STAGES,
-          "Stages",
-          `${sel.stageIdx + 1} of ${stageCount}`,
-          buildStageRail(clip, sel.clipIdx, sel.stageIdx),
-          { collapsible: false }
-        )
-      );
+      body.appendChild(buildClipColumn(clip, sel.clipIdx));
       const params = buildParamsColumn(
         clip,
         sel.clipIdx,
@@ -5705,14 +5850,16 @@
         stage,
         defaults
       );
+      const stagesWrap = document.createElement("div");
+      stagesWrap.className = "vst-detail-stages-wrap";
+      stagesWrap.append(
+        sectionLabel("Stages"),
+        buildStageRail(clip, sel.clipIdx, sel.stageIdx),
+        params.col
+      );
+      body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
       body.appendChild(
-        buildGroup(
-          GROUP_STAGEPARAMS,
-          "Stage Parameters",
-          `Stage ${sel.stageIdx + 1}`,
-          params.col,
-          { collapsible: false }
-        )
+        buildGroup(GROUP_RETAKE, buildRetakeSection(clip, sel.clipIdx))
       );
       return body;
     };
@@ -5835,7 +5982,7 @@
         }
         body.appendChild(row);
       });
-      return wrapForm(GROUP_REF, "Reference", `Clip ${clipIdx}`, body);
+      return wrapForm(GROUP_REF, body);
     };
     const buildAudioBody = (sel, clips) => {
       const { clipIdx } = sel;
@@ -5956,7 +6103,7 @@
         note.textContent = segCount === 1 ? "1 overlay segment · mixed additively over the base audio." : `${segCount} overlay segments · mixed additively over the base audio.`;
         body.appendChild(note);
       }
-      return wrapForm(GROUP_AUDIO, "Audio", `Clip ${clipIdx}`, body);
+      return wrapForm(GROUP_AUDIO, body);
     };
     const buildAudioSegmentBody = (sel, clips) => {
       const { clipIdx } = sel;
@@ -5965,16 +6112,20 @@
       const body = document.createElement("div");
       body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
       const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
-      const clampSegment = (start, length) => {
+      const clampSegment = (cs, segIdx, start, length) => {
+        const liveClip = cs[clipIdx];
+        const walls = liveClip ? audioSegmentNeighborBounds(liveClip, segIdx) : null;
+        const lo = walls?.startMin ?? 0;
+        const hi = walls?.endMax ?? clipDur;
         const s = clamp(
           start,
-          0,
-          Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH)
+          lo,
+          Math.max(lo, hi - AUDIO_SEGMENT_MIN_LENGTH)
         );
         const l = clamp(
           length,
           AUDIO_SEGMENT_MIN_LENGTH,
-          Math.max(AUDIO_SEGMENT_MIN_LENGTH, clipDur - s)
+          Math.max(AUDIO_SEGMENT_MIN_LENGTH, hi - s)
         );
         return { start: s, length: l };
       };
@@ -6014,17 +6165,23 @@
             }
           )
         );
+        const segWalls = clip ? audioSegmentNeighborBounds(clip, segIdx) : null;
         const startInput = buildClampedNumber({
           key: `seg-${segIdx}-start`,
           value: segment.startSeconds,
-          min: 0,
+          min: segWalls?.startMin ?? 0,
           max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
           step: AUDIO_SEGMENT_STEP,
           readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
           mutate: (cs, value) => {
             const seg = cs[clipIdx]?.audioSegments?.[segIdx];
             if (seg) {
-              const next = clampSegment(value, seg.lengthSeconds);
+              const next = clampSegment(
+                cs,
+                segIdx,
+                value,
+                seg.lengthSeconds
+              );
               seg.startSeconds = next.start;
               seg.lengthSeconds = next.length;
             }
@@ -6060,7 +6217,12 @@
           mutate: (cs, value) => {
             const seg = cs[clipIdx]?.audioSegments?.[segIdx];
             if (seg) {
-              const next = clampSegment(seg.startSeconds, value);
+              const next = clampSegment(
+                cs,
+                segIdx,
+                seg.startSeconds,
+                value
+              );
               seg.startSeconds = next.start;
               seg.lengthSeconds = next.length;
             }
@@ -6071,14 +6233,9 @@
       });
       const note = document.createElement("p");
       note.className = "vst-detail-note";
-      note.textContent = "Overlaid additively over the base audio; overlapping segments are mixed.";
+      note.textContent = "Overlaid additively over the base audio; segments cannot overlap each other.";
       body.appendChild(note);
-      return wrapForm(
-        GROUP_AUDIOSEG,
-        "Audio Segments",
-        `Clip ${clipIdx}`,
-        body
-      );
+      return wrapForm(GROUP_AUDIOSEG, body);
     };
     const buildPromptMajorBody = (sel, clips) => {
       const { clipIdx } = sel;
@@ -6099,9 +6256,7 @@
           }
         )
       );
-      return wrapForm(GROUP_PROMPTMAJOR, "Prompt", `Clip ${clipIdx}`, body, {
-        collapsible: false
-      });
+      return wrapForm(GROUP_PROMPTMAJOR, body);
     };
     const buildPromptMinorBody = (sel, clips) => {
       const { clipIdx, windowIdx } = sel;
@@ -6138,13 +6293,17 @@
         row.appendChild(head);
         const range = document.createElement("div");
         range.className = "vst-detail-minor-range";
+        const bounds = clip ? promptWindowNeighborBounds(clip, idx) : null;
+        const gridCeil = (v) => Math.ceil(v * 10) / 10;
+        const gridFloor = (v) => Math.floor(v * 10) / 10;
         const beginInput = buildClampedNumber({
           key: `minor-${idx}-begin`,
           value: roundSeconds3(w.start),
-          min: 0,
-          max: Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION),
+          min: bounds?.beginMin ?? 0,
+          max: gridFloor(
+            Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION)
+          ),
           step: 0.1,
-          refresh: true,
           readBack: (cs) => {
             const win = cs[clipIdx]?.promptWindows?.[idx];
             return win ? roundSeconds3(win.start) : null;
@@ -6160,10 +6319,9 @@
         const endInput = buildClampedNumber({
           key: `minor-${idx}-end`,
           value: roundSeconds3(w.start + w.duration),
-          min: PROMPT_WINDOW_MIN_DURATION,
-          max: clipDur,
+          min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
+          max: bounds?.endMax ?? clipDur,
           step: 0.1,
-          refresh: true,
           readBack: (cs) => {
             const win = cs[clipIdx]?.promptWindows?.[idx];
             return win ? roundSeconds3(win.start + win.duration) : null;
@@ -6196,107 +6354,7 @@
         row.appendChild(editor);
         body.appendChild(row);
       });
-      return wrapForm(
-        GROUP_PROMPTMINOR,
-        "Prompt Windows",
-        windows.length > 0 ? `Clip ${clipIdx} · W${windowIdx + 1}/${windows.length}` : `Clip ${clipIdx}`,
-        body,
-        { collapsible: false }
-      );
-    };
-    const buildRetakeBody = (sel, clips) => {
-      const { clipIdx } = sel;
-      const clip = clips[clipIdx];
-      const retake = clip.retake;
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body";
-      const wrap = () => wrapForm(GROUP_RETAKE, "Retake Window", `Clip ${clipIdx}`, body);
-      if (!retake) {
-        return wrap();
-      }
-      const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
-      const clampRetake = (start, length) => {
-        const s = clamp(
-          start,
-          0,
-          Math.max(0, clipDur - RETAKE_MIN_DURATION)
-        );
-        const l = clamp(
-          length,
-          RETAKE_MIN_DURATION,
-          Math.max(RETAKE_MIN_DURATION, clipDur - s)
-        );
-        return { start: s, length: l };
-      };
-      const startInput = buildClampedNumber({
-        key: "retake-start",
-        value: retake.startSeconds,
-        min: 0,
-        max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
-        step: RETAKE_DURATION_STEP,
-        readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
-        mutate: (cs, value) => {
-          const r = cs[clipIdx]?.retake;
-          if (r) {
-            const next = clampRetake(value, r.lengthSeconds);
-            r.startSeconds = next.start;
-            r.lengthSeconds = next.length;
-          }
-        }
-      });
-      body.appendChild(buildField("Start (s)", startInput));
-      const lengthInput = buildClampedNumber({
-        key: "retake-length",
-        value: retake.lengthSeconds,
-        min: RETAKE_MIN_DURATION,
-        max: clipDur,
-        step: RETAKE_DURATION_STEP,
-        readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
-        mutate: (cs, value) => {
-          const r = cs[clipIdx]?.retake;
-          if (r) {
-            const next = clampRetake(r.startSeconds, value);
-            r.startSeconds = next.start;
-            r.lengthSeconds = next.length;
-          }
-        }
-      });
-      body.appendChild(buildField("Length (s)", lengthInput));
-      body.appendChild(
-        buildSlider(
-          "Strength",
-          retake.strength,
-          RETAKE_STRENGTH_MIN,
-          RETAKE_STRENGTH_MAX,
-          RETAKE_STRENGTH_STEP,
-          (value) => {
-            debouncedCommit("retake-strength", (cs) => {
-              const r = cs[clipIdx]?.retake;
-              if (r) {
-                r.strength = clamp(
-                  value,
-                  RETAKE_STRENGTH_MIN,
-                  RETAKE_STRENGTH_MAX
-                );
-              }
-            });
-          }
-        )
-      );
-      const note = document.createElement("p");
-      note.className = "vst-detail-note";
-      note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
-      body.appendChild(note);
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "vst-refs-delete vst-detail-delete";
-      del.textContent = "Remove retake";
-      del.addEventListener("click", (event) => {
-        event.preventDefault();
-        removeRetake(clipIdx);
-      });
-      body.appendChild(del);
-      return wrap();
+      return wrapForm(GROUP_PROMPTMINOR, body);
     };
     const formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
     const buildBoundaryBody = (sel, clips) => {
@@ -6349,12 +6407,7 @@
         note.textContent = "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
         body.appendChild(note);
       }
-      return wrapForm(
-        GROUP_BOUNDARY,
-        "Boundary",
-        `Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
-        body
-      );
+      return wrapForm(GROUP_BOUNDARY, body);
     };
     const buildSettingsBody = () => {
       const state = getState();
@@ -6496,7 +6549,7 @@
         fpsField.classList.add("vst-audio-disabled");
       }
       body.appendChild(fpsField);
-      return wrapForm(GROUP_SETTINGS, "Timeline Settings", "", body);
+      return wrapForm(GROUP_SETTINGS, body);
     };
     const buildBody = (sel, clips) => {
       switch (sel.kind) {
@@ -6513,7 +6566,10 @@
         case "prompt-minor":
           return buildPromptMinorBody(sel, clips);
         case "retake":
-          return buildRetakeBody(sel, clips);
+          return buildClipBody(
+            { kind: "clip", clipIdx: sel.clipIdx, stageIdx: 0 },
+            clips
+          );
         case "boundary":
           return buildBoundaryBody(sel, clips);
         default:
@@ -6529,11 +6585,11 @@
         crumb.textContent = breadcrumbFor(sel);
       }
     };
-    const render = () => {
+    const render = (meta) => {
       if (!dockEl) {
         return;
       }
-      if (suppressNextDockRebuild && renderedSel && !options.isCollapsed() && isSameSelection(getSelection(), renderedSel)) {
+      if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSel && !options.isCollapsed() && isSameSelection(getSelection(), renderedSel)) {
         sourceToken = readStateToken();
         syncValueDerivedUI(renderedSel);
         return;
@@ -6655,13 +6711,6 @@
           sel.windowIdx
         );
         if (ok) {
-          const counter = dockEl?.querySelector(
-            "#auto-group-vstdock_promptminor .header-label-counter"
-          );
-          const total = getClips()[sel.clipIdx]?.promptWindows?.length ?? 0;
-          if (counter && total > 0) {
-            counter.textContent = `Clip ${sel.clipIdx} · W${sel.windowIdx + 1}/${total}`;
-          }
           if (fromOutside) {
             const editor = dockEl?.querySelector(
               `.vst-detail-minor-window[data-vst-minor-window="${sel.windowIdx}"] textarea`
@@ -6825,139 +6874,9 @@
     };
   };
 
-  // frontend/timelinePlayhead.ts
-  var SCRUB_SELECTOR = ".vst-ruler, [data-vst-playhead-handle], [data-vst-playhead-hit]";
-  var liveFps = (body) => {
-    const fps = Number.parseFloat(body.dataset.vstFps ?? "");
-    return Number.isFinite(fps) && fps > 0 ? fps : 24;
-  };
-  var createTimelinePlayhead = (deps) => {
-    let boundBody = null;
-    let scrub = null;
-    const secondsFromClientX = (body, clientX) => {
-      if (!scrub) {
-        return 0;
-      }
-      const scroll = body.querySelector(".vst-scroll");
-      const rect = scroll?.getBoundingClientRect();
-      const offsetX = clientX - (rect?.left ?? 0);
-      const raw = zoomAnchorTime(
-        offsetX,
-        scroll?.scrollLeft ?? 0,
-        scrub.pps,
-        TRACK_HEADER_W_PX
-      );
-      return resolvePlayheadSeconds(
-        clamp(raw, 0, scrub.totalSeconds),
-        scrub.totalSeconds,
-        scrub.fps
-      );
-    };
-    const paint = (body, seconds) => {
-      if (!scrub) {
-        return;
-      }
-      const rulerPx = seconds * scrub.pps;
-      const planePx = TRACK_HEADER_W_PX + rulerPx;
-      const line = body.querySelector("[data-vst-playhead]");
-      if (line) {
-        line.style.left = `${planePx}px`;
-      }
-      const handle = body.querySelector(
-        "[data-vst-playhead-handle]"
-      );
-      if (handle) {
-        handle.style.left = `${rulerPx}px`;
-      }
-      const readout = body.querySelector(
-        "[data-vst-readout-head]"
-      );
-      if (readout) {
-        readout.textContent = formatPlayheadReadout(seconds, scrub.fps);
-      }
-      const headClipIdx = clipIndexAtSeconds(scrub.layouts, seconds);
-      for (const el of body.querySelectorAll(
-        ".vst-region.vst-under-head"
-      )) {
-        el.classList.remove("vst-under-head");
-      }
-      if (headClipIdx !== null) {
-        body.querySelector(
-          `.vst-region[data-clip-idx="${headClipIdx}"]`
-        )?.classList.add("vst-under-head");
-      }
-    };
-    const onBodyMouseDown = (body, event) => {
-      const me = event;
-      if (me.button !== 0 || !(me.target instanceof Element)) {
-        return;
-      }
-      if (!me.target.closest(SCRUB_SELECTOR)) {
-        return;
-      }
-      const pps = livePxPerSecond(body);
-      const layouts = computeRegionLayout(getClips(), { pxPerSecond: pps });
-      const totalSeconds = layouts.reduce(
-        (sum, l) => sum + l.durationSeconds,
-        0
-      );
-      scrub = { layouts, totalSeconds, pps, fps: liveFps(body) };
-      me.stopImmediatePropagation();
-      me.preventDefault();
-      paint(body, secondsFromClientX(body, me.clientX));
-    };
-    const onDocMouseMove = (body, event) => {
-      if (!scrub) {
-        return;
-      }
-      paint(body, secondsFromClientX(body, event.clientX));
-    };
-    const onDocMouseUp = (body, event) => {
-      if (!scrub) {
-        return;
-      }
-      const seconds = secondsFromClientX(body, event.clientX);
-      scrub = null;
-      deps.setSeconds(seconds);
-    };
-    let downHandler = null;
-    let moveHandler = null;
-    let upHandler = null;
-    const attach = (body) => {
-      if (boundBody === body) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      downHandler = (event) => onBodyMouseDown(body, event);
-      moveHandler = (event) => onDocMouseMove(body, event);
-      upHandler = (event) => onDocMouseUp(body, event);
-      body.addEventListener("mousedown", downHandler);
-      document.addEventListener("mousemove", moveHandler);
-      document.addEventListener("mouseup", upHandler);
-    };
-    const dispose = () => {
-      if (boundBody && downHandler) {
-        boundBody.removeEventListener("mousedown", downHandler);
-      }
-      if (moveHandler) {
-        document.removeEventListener("mousemove", moveHandler);
-      }
-      if (upHandler) {
-        document.removeEventListener("mouseup", upHandler);
-      }
-      downHandler = null;
-      moveHandler = null;
-      upHandler = null;
-      scrub = null;
-      boundBody = null;
-    };
-    return { attach, dispose };
-  };
-
   // frontend/timelineReferencesTrack.ts
   var THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
-  var LANE_SELECTOR2 = ".vst-refs-lane[data-vst-ref-add]";
+  var LANE_SELECTOR3 = ".vst-refs-lane[data-vst-ref-add]";
   var DRAGGING_CLASS4 = "vst-refs-dragging";
   var DRAG_THRESHOLD_PX4 = 5;
   var currentFps2 = () => {
@@ -7012,7 +6931,12 @@
       const ref = buildDefaultRef();
       ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
       appendRefToClip(clip, ref);
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "references-track" });
+      setSelection({
+        kind: "ref",
+        clipIdx,
+        refIdx: clip.refs.length - 1
+      });
     };
     const deleteRef = (clipIdx, refIdx, sourceJson) => {
       if (isStale(sourceJson)) {
@@ -7023,7 +6947,7 @@
       if (!clip || !removeRefAt(clip, refIdx)) {
         return;
       }
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "references-track" });
     };
     const endRefDrag = (restore) => {
       if (refDrag && restore) {
@@ -7052,7 +6976,7 @@
         me.preventDefault();
         return;
       }
-      const lane = mark.closest(LANE_SELECTOR2);
+      const lane = mark.closest(LANE_SELECTOR3);
       const clipIdx = parseIntAttr4(mark, "data-clip-idx");
       const refIdx = parseIntAttr4(mark, "data-ref-idx");
       if (!(lane instanceof HTMLElement) || clipIdx === null || refIdx === null) {
@@ -7135,7 +7059,7 @@
       }
       endRefDrag(false);
       ref.frame = newFrame;
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "references-track" });
     };
     const onDocKeyDown = (event) => {
       if (event.key !== "Escape" || !refDrag) {
@@ -7170,7 +7094,7 @@
         }
         return;
       }
-      const lane = event.target.closest(LANE_SELECTOR2);
+      const lane = event.target.closest(LANE_SELECTOR3);
       if (!(lane instanceof HTMLElement)) {
         return;
       }
@@ -7244,8 +7168,10 @@
   // frontend/timelineRetakeTrack.ts
   var RETAKE_SELECTOR = ".vst-retake[data-clip-idx]";
   var RETAKE_EDGE_SELECTOR = "[data-vst-retake-edge]";
+  var LANE_SELECTOR4 = ".vst-retake-lane[data-vst-retake-add]";
   var DRAG_THRESHOLD_PX5 = 4;
   var DRAGGING_CLASS5 = "vst-retake-dragging";
+  var GHOST_CLASS3 = "vst-retake-ghost";
   var parseIntAttr5 = (el, name) => {
     if (!el) {
       return null;
@@ -7262,10 +7188,8 @@
   var leftPct2 = (start, duration) => duration > 0 ? clamp(start, 0, duration) / duration * 100 : 0;
   var widthPct2 = (length, duration) => duration > 0 ? clamp(length, 0, duration) / duration * 100 : 0;
   var createTimelineRetakeTrack = () => {
-    let moveState = null;
-    let resizeState = null;
-    let suppressClick = false;
     let boundBody = null;
+    let unregister = null;
     const isStale = (sourceJson) => readStateToken() !== sourceJson;
     const deleteRetake = (clipIdx) => {
       const clips = getClips();
@@ -7274,7 +7198,7 @@
         return;
       }
       clip.retake = null;
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "retake-track" });
     };
     const commitMove = (state, dxPx, pps) => {
       if (isStale(state.sourceJson)) {
@@ -7293,7 +7217,8 @@
       clip.retake.lengthSeconds = roundSeconds4(
         Math.min(length, clipDur - clip.retake.startSeconds)
       );
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "retake-track" });
+      setSelection({ kind: "retake", clipIdx: state.clipIdx });
     };
     const commitResize = (state, dxPx, pps) => {
       if (isStale(state.sourceJson)) {
@@ -7324,146 +7249,239 @@
         clip.retake.startSeconds = roundSeconds4(start);
         clip.retake.lengthSeconds = roundSeconds4(end - start);
       }
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "retake-track" });
+      setSelection({ kind: "retake", clipIdx: state.clipIdx });
     };
-    const clearGesture = (body) => {
-      moveState = null;
-      resizeState = null;
-      body.classList.remove(DRAGGING_CLASS5);
-    };
-    const onBodyMouseDown = (event) => {
-      suppressClick = false;
-      const me = event;
-      if (me.button !== 0 || !(me.target instanceof Element)) {
+    const commitCreate = (state, endSec) => {
+      if (isStale(state.sourceJson)) {
         return;
+      }
+      const clips = getClips();
+      const clip = clips[state.clipIdx];
+      if (!clip || clip.retake) {
+        return;
+      }
+      const clipDur = clipDurationOf3(clip);
+      if (clipDur < RETAKE_MIN_DURATION) {
+        return;
+      }
+      let start;
+      let length;
+      if (endSec === null) {
+        length = Math.min(RETAKE_DEFAULT_DURATION, clipDur);
+        start = clamp(state.startSec, 0, clipDur - length);
+      } else {
+        const a = clamp(Math.min(state.startSec, endSec), 0, clipDur);
+        const b = clamp(Math.max(state.startSec, endSec), 0, clipDur);
+        start = a;
+        length = Math.max(RETAKE_MIN_DURATION, b - a);
+        if (start + length > clipDur) {
+          length = clipDur - start;
+        }
+      }
+      if (length < RETAKE_MIN_DURATION) {
+        return;
+      }
+      clip.retake = {
+        startSeconds: roundSeconds4(start),
+        lengthSeconds: roundSeconds4(length),
+        strength: RETAKE_STRENGTH_DEFAULT
+      };
+      saveClips(clips, void 0, { origin: "retake-track" });
+      setSelection({ kind: "retake", clipIdx: state.clipIdx });
+    };
+    const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
+    const createSession = (body, state) => {
+      const removeGhost = () => {
+        state.ghost?.remove();
+        state.ghost = null;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX5,
+        // A plain lane tap creates a default-length retake, so the
+        // concluding click is always consumed.
+        suppressTapClick: true,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS5);
+          const pps = livePxPerSecond(body);
+          const nowSec = laneTimeAt(state, ctx.event.clientX, pps);
+          const a = Math.min(state.startSec, nowSec);
+          const b = Math.max(state.startSec, nowSec);
+          if (!state.ghost) {
+            const ghost = document.createElement("div");
+            ghost.className = GHOST_CLASS3;
+            state.lane.appendChild(ghost);
+            state.ghost = ghost;
+          }
+          const dur = state.clipDuration;
+          state.ghost.style.left = `${leftPct2(a, dur)}%`;
+          state.ghost.style.width = `${widthPct2(b - a, dur)}%`;
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS5);
+          removeGhost();
+          commitCreate(
+            state,
+            laneTimeAt(state, ctx.event.clientX, livePxPerSecond(body))
+          );
+        },
+        onTap: () => {
+          removeGhost();
+          commitCreate(state, null);
+        },
+        onCancel: () => {
+          removeGhost();
+          body.classList.remove(DRAGGING_CLASS5);
+        }
+      };
+    };
+    const resizeSession = (body, state) => {
+      const restore = () => {
+        state.el.style.left = state.originalLeft;
+        state.el.style.width = state.originalWidth;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX5,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS5);
+          const pps = livePxPerSecond(body);
+          const clipDur = state.clipDuration;
+          const deltaSec = ctx.dx / pps;
+          if (state.edge === "right") {
+            const end = clamp(
+              state.startStart + state.startLength + deltaSec,
+              state.startStart + RETAKE_MIN_DURATION,
+              clipDur
+            );
+            state.el.style.width = `${widthPct2(end - state.startStart, clipDur)}%`;
+          } else {
+            const end = state.startStart + state.startLength;
+            const start = clamp(
+              state.startStart + deltaSec,
+              0,
+              end - RETAKE_MIN_DURATION
+            );
+            state.el.style.left = `${leftPct2(start, clipDur)}%`;
+            state.el.style.width = `${widthPct2(end - start, clipDur)}%`;
+          }
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS5);
+          commitResize(state, ctx.dx, livePxPerSecond(body));
+        },
+        onTap: restore,
+        onCancel: () => {
+          restore();
+          body.classList.remove(DRAGGING_CLASS5);
+        }
+      };
+    };
+    const moveSession = (body, state) => {
+      const restore = () => {
+        state.el.style.left = state.originalLeft;
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX5,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS5);
+          const pps = livePxPerSecond(body);
+          const clipDur = state.clipDuration;
+          const length = Math.min(state.length, clipDur);
+          const maxStart = Math.max(0, clipDur - length);
+          const start = clamp(
+            state.startStart + ctx.dx / pps,
+            0,
+            maxStart
+          );
+          state.el.style.left = `${leftPct2(start, clipDur)}%`;
+        },
+        onCommit: (ctx) => {
+          body.classList.remove(DRAGGING_CLASS5);
+          commitMove(state, ctx.dx, livePxPerSecond(body));
+        },
+        onTap: restore,
+        onCancel: () => {
+          restore();
+          body.classList.remove(DRAGGING_CLASS5);
+        }
+      };
+    };
+    const onPress = (me, body) => {
+      if (!(me.target instanceof Element)) {
+        return null;
       }
       const overlay = me.target.closest(RETAKE_SELECTOR);
       if (!(overlay instanceof HTMLElement)) {
-        return;
+        const lane = me.target.closest(LANE_SELECTOR4);
+        if (lane instanceof HTMLElement) {
+          const clipIdx2 = parseIntAttr5(lane, "data-clip-idx");
+          if (clipIdx2 === null) {
+            return null;
+          }
+          const clip2 = getClips()[clipIdx2];
+          if (!clip2 || clip2.retake) {
+            return null;
+          }
+          const rect = lane.getBoundingClientRect();
+          const pps = livePxPerSecond(body);
+          const clipDuration2 = clipDurationOf3(clip2);
+          const startSec = clamp(
+            (me.clientX - rect.left) / pps,
+            0,
+            clipDuration2
+          );
+          me.preventDefault();
+          return createSession(body, {
+            clipIdx: clipIdx2,
+            lane,
+            laneLeft: rect.left,
+            startSec,
+            clipDuration: clipDuration2,
+            ghost: null,
+            sourceJson: readStateToken()
+          });
+        }
+        return null;
       }
-      me.stopImmediatePropagation();
       if (me.shiftKey) {
         me.preventDefault();
-        return;
+        return claimOnly();
       }
       const clipIdx = parseIntAttr5(overlay, "data-clip-idx");
       if (clipIdx === null) {
-        return;
+        return null;
       }
       const clip = getClips()[clipIdx];
       if (!clip?.retake) {
-        return;
+        return null;
       }
       const clipDuration = clipDurationOf3(clip);
       const edgeEl = me.target.closest(RETAKE_EDGE_SELECTOR);
+      me.preventDefault();
       if (edgeEl) {
-        resizeState = {
+        return resizeSession(body, {
           clipIdx,
           edge: edgeEl.getAttribute("data-vst-retake-edge") === "left" ? "left" : "right",
           el: overlay,
-          startX: me.clientX,
           startStart: clip.retake.startSeconds,
           startLength: clip.retake.lengthSeconds,
           clipDuration,
           originalLeft: overlay.style.left,
           originalWidth: overlay.style.width,
-          active: false,
           sourceJson: readStateToken()
-        };
-        me.preventDefault();
-        return;
+        });
       }
-      moveState = {
+      return moveSession(body, {
         clipIdx,
         el: overlay,
-        startX: me.clientX,
         startStart: clip.retake.startSeconds,
         length: clip.retake.lengthSeconds,
         clipDuration,
         originalLeft: overlay.style.left,
-        active: false,
         sourceJson: readStateToken()
-      };
-      me.preventDefault();
-    };
-    const onDocMouseMove = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const dx = me.clientX - resizeState.startX;
-        if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX5) {
-          return;
-        }
-        resizeState.active = true;
-        body.classList.add(DRAGGING_CLASS5);
-        const clipDur = resizeState.clipDuration;
-        const deltaSec = dx / pps;
-        if (resizeState.edge === "right") {
-          const end = clamp(
-            resizeState.startStart + resizeState.startLength + deltaSec,
-            resizeState.startStart + RETAKE_MIN_DURATION,
-            clipDur
-          );
-          resizeState.el.style.width = `${widthPct2(end - resizeState.startStart, clipDur)}%`;
-        } else {
-          const end = resizeState.startStart + resizeState.startLength;
-          const start = clamp(
-            resizeState.startStart + deltaSec,
-            0,
-            end - RETAKE_MIN_DURATION
-          );
-          resizeState.el.style.left = `${leftPct2(start, clipDur)}%`;
-          resizeState.el.style.width = `${widthPct2(end - start, clipDur)}%`;
-        }
-        return;
-      }
-      if (moveState) {
-        const dx = me.clientX - moveState.startX;
-        if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX5) {
-          return;
-        }
-        moveState.active = true;
-        body.classList.add(DRAGGING_CLASS5);
-        const clipDur = moveState.clipDuration;
-        const length = Math.min(moveState.length, clipDur);
-        const maxStart = Math.max(0, clipDur - length);
-        const start = clamp(moveState.startStart + dx / pps, 0, maxStart);
-        moveState.el.style.left = `${leftPct2(start, clipDur)}%`;
-      }
-    };
-    const onDocMouseUp = (body, event) => {
-      const me = event;
-      const pps = livePxPerSecond(body);
-      if (resizeState) {
-        const state = resizeState;
-        resizeState = null;
-        body.classList.remove(DRAGGING_CLASS5);
-        if (state.active) {
-          suppressClick = true;
-          commitResize(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-          state.el.style.width = state.originalWidth;
-        }
-        return;
-      }
-      if (moveState) {
-        const state = moveState;
-        moveState = null;
-        body.classList.remove(DRAGGING_CLASS5);
-        if (state.active) {
-          suppressClick = true;
-          commitMove(state, me.clientX - state.startX, pps);
-        } else {
-          state.el.style.left = state.originalLeft;
-        }
-      }
+      });
     };
     const onBodyClick = (event) => {
-      if (suppressClick) {
-        suppressClick = false;
-        return;
-      }
       if (!(event.target instanceof Element)) {
         return;
       }
@@ -7509,59 +7527,27 @@
       }
       setSelection({ kind: "retake", clipIdx });
     };
-    const onDocKeyDown = (body, event) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      if (resizeState) {
-        resizeState.el.style.left = resizeState.originalLeft;
-        resizeState.el.style.width = resizeState.originalWidth;
-      } else if (moveState) {
-        moveState.el.style.left = moveState.originalLeft;
-      } else {
-        return;
-      }
-      clearGesture(body);
-    };
-    let moveHandler = null;
-    let upHandler = null;
-    let keyHandler = null;
-    const attach = (body) => {
+    const attach = (body, router) => {
       if (boundBody === body) {
         return;
       }
       dispose();
       boundBody = body;
-      body.addEventListener("mousedown", onBodyMouseDown);
       body.addEventListener("click", onBodyClick);
       body.addEventListener("keydown", onBodyKeyDown);
-      moveHandler = (event) => onDocMouseMove(body, event);
-      upHandler = (event) => onDocMouseUp(body, event);
-      keyHandler = (event) => onDocKeyDown(body, event);
-      document.addEventListener("mousemove", moveHandler);
-      document.addEventListener("mouseup", upHandler);
-      document.addEventListener("keydown", keyHandler);
+      unregister = router.register({
+        id: "retake",
+        priority: 50,
+        onPress
+      });
     };
     const dispose = () => {
       if (boundBody) {
-        boundBody.removeEventListener("mousedown", onBodyMouseDown);
         boundBody.removeEventListener("click", onBodyClick);
         boundBody.removeEventListener("keydown", onBodyKeyDown);
       }
-      if (moveHandler) {
-        document.removeEventListener("mousemove", moveHandler);
-        moveHandler = null;
-      }
-      if (upHandler) {
-        document.removeEventListener("mouseup", upHandler);
-        upHandler = null;
-      }
-      if (keyHandler) {
-        document.removeEventListener("keydown", keyHandler);
-        keyHandler = null;
-      }
-      moveState = null;
-      resizeState = null;
+      unregister?.();
+      unregister = null;
       boundBody = null;
     };
     return { attach, dispose };
@@ -7618,11 +7604,9 @@
     let boundInput = null;
     let boundToggle = null;
     let inputSyncInterval = null;
-    let lastSeenValue = null;
-    let lastDimsSignature = null;
+    let storeUnsub = null;
     let unit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
-    let playheadSeconds = 0;
     let stripCollapsed = false;
     let selectionUnsub = null;
     const detailStrip = createTimelineDetailStrip({
@@ -7630,17 +7614,10 @@
       setCollapsed: (collapsed) => {
         stripCollapsed = collapsed;
         saveViewState();
-      },
-      refresh: () => refresh()
-    });
-    const linking = createTimelineLinking();
-    const playhead = createTimelinePlayhead({
-      setSeconds: (seconds) => {
-        playheadSeconds = seconds;
-        saveViewState();
-        refresh();
       }
     });
+    const linking = createTimelineLinking();
+    const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack();
     const promptTrack = createTimelinePromptTrack();
     const audioTrack = createTimelineAudioTrack();
@@ -7671,9 +7648,6 @@
         if (parsed.unit === "frames" || parsed.unit === "seconds") {
           unit = parsed.unit;
         }
-        if (typeof parsed.playheadSeconds === "number" && Number.isFinite(parsed.playheadSeconds) && parsed.playheadSeconds >= 0) {
-          playheadSeconds = parsed.playheadSeconds;
-        }
         if (typeof parsed.stripCollapsed === "boolean") {
           stripCollapsed = parsed.stripCollapsed;
         }
@@ -7687,7 +7661,6 @@
           JSON.stringify({
             pxPerSecond,
             unit,
-            playheadSeconds,
             stripCollapsed
           })
         );
@@ -7777,16 +7750,15 @@
     const addClip = () => {
       const clips = getClips();
       clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
-      saveClips(clips);
+      saveClips(clips, void 0, { origin: "timeline" });
     };
-    const refresh = () => {
+    const renderAll = (meta) => {
+      const enabled = isVideoStagesEnabled();
+      updateTimelineTabIndicator(enabled);
       const body = document.getElementById(TIMELINE_BODY_ID);
       if (!body) {
         return;
       }
-      lastSeenValue = readStateToken();
-      lastDimsSignature = readInheritedDimsSignature();
-      history.capture();
       try {
         const state = getState();
         const clips = state.clips;
@@ -7798,9 +7770,8 @@
           fpsExplicit: state.fpsExplicit,
           unit,
           pxPerSecond,
-          playheadSeconds,
           selectedIndex: linking.getSelectedIndex(),
-          enabled: isVideoStagesEnabled(),
+          enabled,
           onToggleEnabled: setVideoStagesEnabled,
           onOpenSettings: () => openSettings(),
           onToggleUnit: toggleUnit,
@@ -7815,16 +7786,15 @@
           globalPrompt: readGlobalPrompt()
         });
         linking.reapplySelection(body, clips.length);
-        detailStrip.render();
+        detailStrip.render(meta);
         applySelectionHighlight(body);
       } catch (error) {
         console.warn("VideoStages: timeline render failed", error);
       }
     };
+    const refresh = () => renderAll();
     const onInputChanged = () => {
-      if (readStateToken() !== lastSeenValue) {
-        refresh();
-      }
+      getTimelineStore().syncFromCarrier();
     };
     const bindInputListener = () => {
       const input = getPromptInput();
@@ -7857,12 +7827,8 @@
       if (inputSyncInterval) {
         return;
       }
-      lastSeenValue = readStateToken();
-      lastDimsSignature = readInheritedDimsSignature();
       inputSyncInterval = setInterval(() => {
-        if (readStateToken() !== lastSeenValue || readInheritedDimsSignature() !== lastDimsSignature) {
-          refresh();
-        }
+        getTimelineStore().syncFromCarrier();
       }, INPUT_SYNC_INTERVAL_MS);
     };
     const onKeydown = (event) => {
@@ -7889,15 +7855,15 @@
       injectTimelineTab();
       const body = document.getElementById(TIMELINE_BODY_ID);
       if (body) {
-        retakeTrack.attach(body);
-        audioSegmentTrack.attach(body);
-        playhead.attach(body);
-        linking.attach(body);
-        promptTrack.attach(body);
+        retakeTrack.attach(body, gestures);
+        audioSegmentTrack.attach(body, gestures);
+        linking.attach(body, gestures);
+        promptTrack.attach(body, gestures);
         audioTrack.attach(body);
         boundaryTrack.attach(body);
         referencesTrack.attach(body);
         detailStrip.attach(body, ensureDock(body));
+        gestures.attach(body);
         body.removeEventListener("click", onBodyClickSyncReadout);
         body.addEventListener("click", onBodyClickSyncReadout);
       }
@@ -7907,6 +7873,13 @@
         if (el) {
           applySelectionHighlight(el);
         }
+      });
+      const store2 = getTimelineStore();
+      store2.invalidate();
+      storeUnsub?.();
+      storeUnsub = store2.subscribe((_state, meta) => {
+        history.capture();
+        renderAll(meta);
       });
       bindInputListener();
       bindToggleListener();
@@ -7932,15 +7905,17 @@
       }
       retakeTrack.dispose();
       audioSegmentTrack.dispose();
-      playhead.dispose();
       linking.dispose();
       promptTrack.dispose();
+      gestures.dispose();
       audioTrack.dispose();
       boundaryTrack.dispose();
       referencesTrack.dispose();
       detailStrip.dispose();
       selectionUnsub?.();
       selectionUnsub = null;
+      storeUnsub?.();
+      storeUnsub = null;
       const body = document.getElementById(TIMELINE_BODY_ID);
       body?.removeEventListener("click", onBodyClickSyncReadout);
       document.removeEventListener("keydown", onKeydown);

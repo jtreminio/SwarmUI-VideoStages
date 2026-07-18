@@ -18,7 +18,7 @@ import {
     renderTimeline,
 } from "./timelineView";
 import type { Clip } from "./types";
-import { getSelection, resetSelectionForTests } from "./uiState";
+import { getSelection, resetSelectionForTests, setSelection } from "./uiState";
 
 const PPS = 44;
 
@@ -200,6 +200,19 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         const clips = savedClips(saveSpy);
         expect(clips[0].refs).toHaveLength(1);
         expect(clips[0].stages[0].refStrengths).toHaveLength(1);
+        // The new ref opens in the dock immediately.
+        expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 0 });
+    });
+
+    it("adding a ref selects the NEW ref even while another ref is selected", () => {
+        const body = setup([{ duration: 5, refs: [{ source: "Refiner" }] }]);
+        setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
+        body.querySelector<HTMLElement>(
+            '.vst-refs-lane[data-clip-idx="0"]',
+        )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        expect(savedClips(saveSpy)[0].refs).toHaveLength(2);
+        expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 1 });
     });
 
     it("retimes a ref by dragging its thumbnail, suppressing the trailing click", () => {

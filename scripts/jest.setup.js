@@ -13,6 +13,13 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const v8 = require("node:v8");
+
+// jsdom's global scope lacks structuredClone (used by the timeline store);
+// node's v8 serializer provides the same structured-clone semantics.
+if (typeof globalThis.structuredClone !== "function") {
+    globalThis.structuredClone = (value) => v8.deserialize(v8.serialize(value));
+}
 
 const SWARM_JS_DIR = path.resolve(__dirname, "..", "..", "..", "wwwroot", "js");
 

@@ -3,12 +3,23 @@ import { ROOT_DIMENSION_MIN, ROOT_FPS_MIN } from "./constants";
 import { videoStagesDebugLog } from "./debugLog";
 import { buildDefaultClip, normalizeClip } from "./normalization";
 import { parseClipPrompts } from "./promptSegments";
-import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import {
+    getDefaultStageModel,
+    getRootDefaults,
+    readInheritedDimsSignature,
+} from "./rootDefaults";
+import {
+    createTimelineStore,
+    type TimelineStore,
+    type UpdateOrigin,
+} from "./store";
 import {
     getPromptInput,
     isImageToVideoWorkflow,
     isVideoStagesEnabled,
+    notifyCarrierChanged,
     readDataParam,
+    readStateToken,
     writeClipPrompts,
     writeDataParam,
 } from "./swarmInputs";
@@ -138,13 +149,14 @@ export interface PersistenceCallbacks {
 
 export interface SaveStateOptions {
     notifyDomChange?: boolean;
+    /** Which component committed this save; threaded to store subscribers. */
+    origin?: UpdateOrigin;
+    /**
+     * A dock value edit that changes data but not panel structure — threaded
+     * to subscribers as UpdateMeta.hint so the dock skips its rebuild.
+     */
+    valueOnly?: boolean;
 }
-
-let lastSerializedState = "";
-
-export const __resetPersistenceForTests = (): void => {
-    lastSerializedState = "";
-};
 
 const overlayPromptAndUiState = (clips: Clip[]): void => {
     const { sections, windows } = parseClipPrompts(
@@ -196,52 +208,67 @@ const parseSerializedState = (
     }
 };
 
-export const getState = (): VideoStagesConfig => {
+const inheritedDims = (): InheritedDims => {
     const defaults = getRootDefaults();
-    const inherited: InheritedDims = {
+    return {
         width: defaults.width,
         height: defaults.height,
         fps: defaults.fps,
     };
-    const serialized = readDataParam() || lastSerializedState;
-    if (!serialized) {
-        const clips: Clip[] = [];
-        overlayPromptAndUiState(clips);
-        return rootConfig(resolveRootDims(inherited, {}), clips);
-    }
-
-    let parsedState = parseSerializedState(serialized, inherited);
-    if (parsedState) {
-        lastSerializedState = serialized;
-        return parsedState;
-    }
-    if (serialized !== lastSerializedState && lastSerializedState) {
-        parsedState = parseSerializedState(lastSerializedState, inherited);
-        if (parsedState) {
-            return parsedState;
-        }
-    }
-    return rootConfig(resolveRootDims(inherited, {}), []);
 };
+
+const parseEmptyConfig = (): VideoStagesConfig => {
+    const clips: Clip[] = [];
+    overlayPromptAndUiState(clips);
+    return rootConfig(resolveRootDims(inheritedDims(), {}), clips);
+};
+
+/** Serialize + write both carriers without host change events (store save path). */
+const writeQuietly = (state: VideoStagesConfig): string => {
+    assignMissingHues(state.clips);
+    const serialized = serializeStateForStorage(state);
+    writeDataParam(serialized, false);
+    writeClipPrompts(
+        state.clips.map((clip) => ({
+            prompt: clip.prompt,
+            windows: clip.promptWindows,
+        })),
+        false,
+    );
+    saveUiState(state.clips);
+    return serialized;
+};
+
+const store = createTimelineStore({
+    readToken: () => `${readStateToken()}\x00${readInheritedDimsSignature()}`,
+    readDataParam,
+    parse: (serialized) => parseSerializedState(serialized, inheritedDims()),
+    parseEmpty: parseEmptyConfig,
+    writeQuiet: writeQuietly,
+    notifyHost: notifyCarrierChanged,
+});
+
+/** The store singleton — subscription/sync surface for the orchestrator. */
+export const getTimelineStore = (): TimelineStore => store;
+
+export const __resetPersistenceForTests = (): void => {
+    store.resetForTests();
+};
+
+export const getState = (): VideoStagesConfig => store.getState();
 
 export const saveState = (
     state: VideoStagesConfig,
     callbacks?: PersistenceCallbacks,
     options?: SaveStateOptions,
 ): void => {
-    assignMissingHues(state.clips);
-    const serialized = serializeStateForStorage(state);
-    lastSerializedState = serialized;
     const willNotifyDom = options?.notifyDomChange !== false;
-    writeDataParam(serialized, willNotifyDom);
-    writeClipPrompts(
-        state.clips.map((clip) => ({
-            prompt: clip.prompt,
-            windows: clip.promptWindows,
-        })),
+    const serialized = store.save(
+        state,
+        options?.origin ?? "timeline",
         willNotifyDom,
+        options?.valueOnly ? "value-only" : undefined,
     );
-    saveUiState(state.clips);
     callbacks?.onAfterSerialize?.(serialized);
     videoStagesDebugLog("persistence", "saveState", {
         notifyDomChange: options?.notifyDomChange,
@@ -285,5 +312,5 @@ export const ensureClipsSeeded = (
             isImageToVideoWorkflow(),
         ),
     ];
-    saveState(state, callbacks, options);
+    saveState(state, callbacks, { origin: "seed", ...options });
 };

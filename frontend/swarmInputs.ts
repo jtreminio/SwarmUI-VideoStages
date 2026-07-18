@@ -91,6 +91,24 @@ export const writeClipPrompts = (
     }
 };
 
+/**
+ * Dispatch the host `change` events for both carriers after a quiet write
+ * (store save path). Data param first, then prompt — the order the old
+ * notifying writes fired in. The prompt dispatch runs our own carrier
+ * listeners synchronously, so callers must only invoke this once the store's
+ * canonical model already reflects the written values.
+ */
+export const notifyCarrierChanged = (): void => {
+    const dataEl = getDataInput();
+    if (dataEl) {
+        triggerChangeFor(dataEl);
+    }
+    const promptEl = getPromptInput();
+    if (promptEl) {
+        withSuppressedPromptTabComplete(() => triggerChangeFor(promptEl));
+    }
+};
+
 export const readGlobalPrompt = (): string =>
     extractGlobalPrompt(getPromptInput()?.value ?? "");
 

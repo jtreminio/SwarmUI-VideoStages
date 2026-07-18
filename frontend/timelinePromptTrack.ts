@@ -3,6 +3,12 @@ import {
     PROMPT_WINDOW_DEFAULT_DURATION,
     PROMPT_WINDOW_MIN_DURATION,
 } from "./constants";
+import {
+    claimOnly,
+    type GestureRouter,
+    type GestureSession,
+} from "./gestureRouter";
+import { freeIntervalAt, type Span } from "./intervals";
 import { getClips, saveClips } from "./persistence";
 import { readStateToken } from "./swarmInputs";
 import { livePxPerSecond } from "./timelineLinking";
@@ -23,14 +29,12 @@ interface MoveState {
     clipIdx: number;
     windowIdx: number;
     el: HTMLElement;
-    startX: number;
     startStart: number;
     duration: number;
     clipDuration: number;
     boundLo: number;
     boundHi: number;
     originalLeft: string;
-    active: boolean;
     sourceJson: string;
 }
 
@@ -39,13 +43,11 @@ interface ResizeState {
     windowIdx: number;
     edge: "left" | "right";
     el: HTMLElement;
-    startX: number;
     startStart: number;
     startDuration: number;
     clipDuration: number;
     originalLeft: string;
     originalWidth: string;
-    active: boolean;
     sourceJson: string;
 }
 
@@ -54,15 +56,13 @@ interface CreateState {
     lane: HTMLElement;
     laneLeft: number;
     startSec: number;
-    startX: number;
     clipDuration: number;
     ghost: HTMLElement | null;
-    active: boolean;
     sourceJson: string;
 }
 
 export interface TimelinePromptTrack {
-    attach(body: HTMLElement): void;
+    attach(body: HTMLElement, router: GestureRouter): void;
     dispose(): void;
 }
 
@@ -83,11 +83,6 @@ const clipDurationOf = (clip: Clip | undefined): number =>
 
 const roundSeconds = (seconds: number): number => Math.round(seconds * 10) / 10;
 
-interface Span {
-    start: number;
-    end: number;
-}
-
 const otherSpans = (
     windows: PromptWindow[],
     excludeIdx: number,
@@ -102,29 +97,6 @@ const otherSpans = (
         .filter((s) => s.k !== excludeIdx && s.end > s.start)
         .sort((a, b) => a.start - b.start)
         .map((s) => ({ start: s.start, end: s.end }));
-
-const freeIntervalAt = (
-    spans: Span[],
-    clipDuration: number,
-    point: number,
-): [number, number] => {
-    const p = clamp(point, 0, clipDuration);
-    let lo = 0;
-    let hi = clipDuration;
-    for (const span of spans) {
-        if (span.end <= p) {
-            if (span.end > lo) {
-                lo = span.end;
-            }
-        } else if (span.start >= p) {
-            hi = span.start;
-            break;
-        } else {
-            return [p, p];
-        }
-    }
-    return [lo, hi];
-};
 
 /**
  * Move a prompt window's BEGIN edge to `desiredBegin` (seconds), keeping its end
@@ -179,12 +151,35 @@ export const applyPromptWindowEnd = (
     window.duration = roundSeconds(end - window.start);
 };
 
+/**
+ * NEIGHBOUR bounds for a window's begin/end edges — the same interval walls
+ * applyPromptWindowBegin/End clamp against. The dock's begin/end number inputs
+ * use these as min (begin) / max (end) so spinner arrows stop AT a
+ * neighbouring window instead of marching past it and snapping back on commit.
+ * Only the neighbour walls belong in static input attributes: neighbours move
+ * via gestures/deletes that rebuild the panel (fresh attrs), whereas the
+ * window's OWN begin↔end coupling changes on value-only edits that don't
+ * rebuild — that coupling stays with the commit clamp + display write-back.
+ */
+export const promptWindowNeighborBounds = (
+    clip: Clip,
+    windowIdx: number,
+): { beginMin: number; endMax: number } | null => {
+    const window = clip.promptWindows?.[windowIdx];
+    if (!window) {
+        return null;
+    }
+    const clipDur = clipDurationOf(clip);
+    const end = window.start + window.duration;
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
+    const [, hi] = freeIntervalAt(spans, clipDur, window.start);
+    return { beginMin: roundSeconds(lo), endMax: roundSeconds(hi) };
+};
+
 export const createTimelinePromptTrack = (): TimelinePromptTrack => {
-    let moveState: MoveState | null = null;
-    let resizeState: ResizeState | null = null;
-    let createState: CreateState | null = null;
-    let suppressClick = false;
     let boundBody: HTMLElement | null = null;
+    let unregister: (() => void) | null = null;
 
     const isStale = (sourceJson: string): boolean =>
         readStateToken() !== sourceJson;
@@ -204,7 +199,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
             return;
         }
         clip.promptWindows.splice(windowIdx, 1);
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "prompt-track" });
     };
 
     const commitMove = (state: MoveState, dxPx: number, pps: number): void => {
@@ -230,7 +225,16 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
                 Math.min(dur, state.boundHi - window.start),
             ),
         );
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "prompt-track" });
+        // The dragged window becomes the selection. Must run AFTER the save:
+        // the save's dock rebuild restores focus to whichever editor owned it,
+        // and that editor's focus handler would re-point the selection to ITS
+        // window, hijacking the drag.
+        setSelection({
+            kind: "prompt-minor",
+            clipIdx: state.clipIdx,
+            windowIdx: state.windowIdx,
+        });
     };
 
     const commitResize = (
@@ -274,7 +278,13 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
             window.start = roundSeconds(start);
             window.duration = roundSeconds(end - start);
         }
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "prompt-track" });
+        // See commitMove: select the resized window, after the save.
+        setSelection({
+            kind: "prompt-minor",
+            clipIdx: state.clipIdx,
+            windowIdx: state.windowIdx,
+        });
     };
 
     const commitCreate = (state: CreateState, endSec: number | null): void => {
@@ -317,7 +327,7 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         };
         clip.promptWindows.push(window);
         clip.promptWindows.sort((x, y) => x.start - y.start);
-        saveClips(clips);
+        saveClips(clips, undefined, { origin: "prompt-track" });
         // Open the new window in the dock ready to type: selecting it auto-expands
         // the dock (via the strip's selection subscriber) and focuses its editor.
         const newIdx = clip.promptWindows.indexOf(window);
@@ -336,77 +346,191 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         pps: number,
     ): number => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
 
-    const clearGesture = (body: HTMLElement): void => {
-        if (createState?.ghost) {
-            createState.ghost.remove();
-        }
-        moveState = null;
-        resizeState = null;
-        createState = null;
-        body.classList.remove(DRAGGING_CLASS);
+    const resizeSession = (
+        body: HTMLElement,
+        state: ResizeState,
+    ): GestureSession => {
+        const restore = (): void => {
+            state.el.style.left = state.originalLeft;
+            state.el.style.width = state.originalWidth;
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            onMove: (ctx) => {
+                body.classList.add(DRAGGING_CLASS);
+                const pps = livePxPerSecond(body);
+                const clipDur = state.clipDuration;
+                const deltaSec = ctx.dx / pps;
+                if (state.edge === "right") {
+                    const end = clamp(
+                        state.startStart + state.startDuration + deltaSec,
+                        state.startStart + PROMPT_WINDOW_MIN_DURATION,
+                        clipDur,
+                    );
+                    state.el.style.width = `${Math.max(2, (end - state.startStart) * pps)}px`;
+                } else {
+                    const end = state.startStart + state.startDuration;
+                    const start = clamp(
+                        state.startStart + deltaSec,
+                        0,
+                        end - PROMPT_WINDOW_MIN_DURATION,
+                    );
+                    state.el.style.left = `${start * pps}px`;
+                    state.el.style.width = `${Math.max(2, (end - start) * pps)}px`;
+                }
+            },
+            onCommit: (ctx) => {
+                body.classList.remove(DRAGGING_CLASS);
+                commitResize(state, ctx.dx, livePxPerSecond(body));
+            },
+            onTap: restore,
+            onCancel: () => {
+                restore();
+                body.classList.remove(DRAGGING_CLASS);
+            },
+        };
     };
 
-    const onBodyMouseDown = (event: Event): void => {
-        suppressClick = false;
-        const me = event as MouseEvent;
-        if (me.button !== 0 || !(me.target instanceof Element)) {
-            return;
+    const moveSession = (
+        body: HTMLElement,
+        state: MoveState,
+    ): GestureSession => {
+        const restore = (): void => {
+            state.el.style.left = state.originalLeft;
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            onMove: (ctx) => {
+                body.classList.add(DRAGGING_CLASS);
+                const pps = livePxPerSecond(body);
+                const dur = Math.min(state.duration, state.clipDuration);
+                const maxStart = Math.max(state.boundLo, state.boundHi - dur);
+                const start = clamp(
+                    state.startStart + ctx.dx / pps,
+                    state.boundLo,
+                    maxStart,
+                );
+                state.el.style.left = `${start * pps}px`;
+            },
+            onCommit: (ctx) => {
+                body.classList.remove(DRAGGING_CLASS);
+                commitMove(state, ctx.dx, livePxPerSecond(body));
+            },
+            onTap: restore,
+            onCancel: () => {
+                restore();
+                body.classList.remove(DRAGGING_CLASS);
+            },
+        };
+    };
+
+    const createSession = (
+        body: HTMLElement,
+        state: CreateState,
+    ): GestureSession => {
+        const removeGhost = (): void => {
+            state.ghost?.remove();
+            state.ghost = null;
+        };
+        return {
+            threshold: DRAG_THRESHOLD_PX,
+            // A plain lane tap creates a default-length window at the pressed
+            // time, so the concluding click is always consumed — as before.
+            suppressTapClick: true,
+            onMove: (ctx) => {
+                body.classList.add(DRAGGING_CLASS);
+                const pps = livePxPerSecond(body);
+                const nowSec = laneTimeAt(state, ctx.event.clientX, pps);
+                const a = Math.min(state.startSec, nowSec);
+                const b = Math.max(state.startSec, nowSec);
+                if (!state.ghost) {
+                    const ghost = document.createElement("div");
+                    ghost.className = GHOST_CLASS;
+                    state.lane.appendChild(ghost);
+                    state.ghost = ghost;
+                }
+                state.ghost.style.left = `${a * pps}px`;
+                state.ghost.style.width = `${Math.max(2, (b - a) * pps)}px`;
+            },
+            onCommit: (ctx) => {
+                body.classList.remove(DRAGGING_CLASS);
+                removeGhost();
+                commitCreate(
+                    state,
+                    laneTimeAt(state, ctx.event.clientX, livePxPerSecond(body)),
+                );
+            },
+            onTap: () => {
+                removeGhost();
+                commitCreate(state, null);
+            },
+            onCancel: () => {
+                removeGhost();
+                body.classList.remove(DRAGGING_CLASS);
+            },
+        };
+    };
+
+    const onPress = (
+        me: MouseEvent,
+        body: HTMLElement,
+    ): GestureSession | null => {
+        if (!(me.target instanceof Element)) {
+            return null;
         }
         if (me.target.closest(MINOR_ACTION_SELECTOR)) {
-            return;
+            return null;
         }
         if (me.shiftKey && me.target.closest(MINOR_SELECTOR)) {
+            // The window owns this press; the shift-CLICK delete stays in
+            // onBodyClick.
             me.preventDefault();
-            return;
+            return claimOnly();
         }
         const edgeEl = me.target.closest(MINOR_EDGE_SELECTOR);
         if (edgeEl) {
             const seg = edgeEl.closest(MINOR_SELECTOR);
             const clipIdx = parseIntAttr(seg, "data-clip-idx");
             const windowIdx = parseIntAttr(seg, "data-window-idx");
-            const edge =
-                edgeEl.getAttribute("data-vst-minor-edge") === "left"
-                    ? "left"
-                    : "right";
             if (
                 clipIdx === null ||
                 windowIdx === null ||
                 !(seg instanceof HTMLElement)
             ) {
-                return;
+                return null;
             }
             const window = getClips()[clipIdx]?.promptWindows?.[windowIdx];
             if (!window) {
-                return;
+                return null;
             }
-            resizeState = {
+            me.preventDefault();
+            return resizeSession(body, {
                 clipIdx,
                 windowIdx,
-                edge,
+                edge:
+                    edgeEl.getAttribute("data-vst-minor-edge") === "left"
+                        ? "left"
+                        : "right",
                 el: seg,
-                startX: me.clientX,
                 startStart: window.start,
                 startDuration: window.duration,
                 clipDuration: clipDurationOf(getClips()[clipIdx]),
                 originalLeft: seg.style.left,
                 originalWidth: seg.style.width,
-                active: false,
                 sourceJson: readStateToken(),
-            };
-            me.preventDefault();
-            return;
+            });
         }
         const seg = me.target.closest(MINOR_SELECTOR);
         if (seg instanceof HTMLElement) {
             const clipIdx = parseIntAttr(seg, "data-clip-idx");
             const windowIdx = parseIntAttr(seg, "data-window-idx");
             if (clipIdx === null || windowIdx === null) {
-                return;
+                return null;
             }
             const clip = getClips()[clipIdx];
             const window = clip?.promptWindows?.[windowIdx];
             if (!clip || !window) {
-                return;
+                return null;
             }
             const clipDuration = clipDurationOf(clip);
             const [boundLo, boundHi] = freeIntervalAt(
@@ -414,175 +538,49 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
                 clipDuration,
                 window.start,
             );
-            moveState = {
+            me.preventDefault();
+            return moveSession(body, {
                 clipIdx,
                 windowIdx,
                 el: seg,
-                startX: me.clientX,
                 startStart: window.start,
                 duration: window.duration,
                 clipDuration,
                 boundLo,
                 boundHi,
                 originalLeft: seg.style.left,
-                active: false,
                 sourceJson: readStateToken(),
-            };
-            me.preventDefault();
-            return;
+            });
         }
         const lane = me.target.closest(LANE_SELECTOR);
         if (lane instanceof HTMLElement) {
             const clipIdx = parseIntAttr(lane, "data-clip-idx");
             if (clipIdx === null) {
-                return;
+                return null;
             }
             const rect = lane.getBoundingClientRect();
-            const pps = livePxPerSecond(boundBody ?? lane);
+            const pps = livePxPerSecond(body);
             const clipDuration = clipDurationOf(getClips()[clipIdx]);
             const startSec = clamp(
                 (me.clientX - rect.left) / pps,
                 0,
                 clipDuration,
             );
-            createState = {
+            me.preventDefault();
+            return createSession(body, {
                 clipIdx,
                 lane,
                 laneLeft: rect.left,
                 startSec,
-                startX: me.clientX,
                 clipDuration,
                 ghost: null,
-                active: false,
                 sourceJson: readStateToken(),
-            };
-            me.preventDefault();
+            });
         }
-    };
-
-    const onDocMouseMove = (body: HTMLElement, event: Event): void => {
-        const me = event as MouseEvent;
-        const pps = livePxPerSecond(body);
-        if (resizeState) {
-            const dx = me.clientX - resizeState.startX;
-            if (!resizeState.active && Math.abs(dx) < DRAG_THRESHOLD_PX) {
-                return;
-            }
-            resizeState.active = true;
-            body.classList.add(DRAGGING_CLASS);
-            const clipDur = resizeState.clipDuration;
-            const deltaSec = dx / pps;
-            if (resizeState.edge === "right") {
-                const end = clamp(
-                    resizeState.startStart +
-                        resizeState.startDuration +
-                        deltaSec,
-                    resizeState.startStart + PROMPT_WINDOW_MIN_DURATION,
-                    clipDur,
-                );
-                resizeState.el.style.width = `${Math.max(2, (end - resizeState.startStart) * pps)}px`;
-            } else {
-                const end = resizeState.startStart + resizeState.startDuration;
-                const start = clamp(
-                    resizeState.startStart + deltaSec,
-                    0,
-                    end - PROMPT_WINDOW_MIN_DURATION,
-                );
-                resizeState.el.style.left = `${start * pps}px`;
-                resizeState.el.style.width = `${Math.max(2, (end - start) * pps)}px`;
-            }
-            return;
-        }
-        if (moveState) {
-            const dx = me.clientX - moveState.startX;
-            if (!moveState.active && Math.abs(dx) < DRAG_THRESHOLD_PX) {
-                return;
-            }
-            moveState.active = true;
-            body.classList.add(DRAGGING_CLASS);
-            const dur = Math.min(moveState.duration, moveState.clipDuration);
-            const maxStart = Math.max(
-                moveState.boundLo,
-                moveState.boundHi - dur,
-            );
-            const start = clamp(
-                moveState.startStart + dx / pps,
-                moveState.boundLo,
-                maxStart,
-            );
-            moveState.el.style.left = `${start * pps}px`;
-            return;
-        }
-        if (createState) {
-            const dx = me.clientX - createState.startX;
-            if (!createState.active && Math.abs(dx) < DRAG_THRESHOLD_PX) {
-                return;
-            }
-            createState.active = true;
-            body.classList.add(DRAGGING_CLASS);
-            const nowSec = laneTimeAt(createState, me.clientX, pps);
-            const a = Math.min(createState.startSec, nowSec);
-            const b = Math.max(createState.startSec, nowSec);
-            if (!createState.ghost) {
-                const ghost = document.createElement("div");
-                ghost.className = GHOST_CLASS;
-                createState.lane.appendChild(ghost);
-                createState.ghost = ghost;
-            }
-            createState.ghost.style.left = `${a * pps}px`;
-            createState.ghost.style.width = `${Math.max(2, (b - a) * pps)}px`;
-        }
-    };
-
-    const onDocMouseUp = (body: HTMLElement, event: Event): void => {
-        const me = event as MouseEvent;
-        const pps = livePxPerSecond(body);
-        if (resizeState) {
-            const state = resizeState;
-            resizeState = null;
-            body.classList.remove(DRAGGING_CLASS);
-            if (state.active) {
-                suppressClick = true;
-                commitResize(state, me.clientX - state.startX, pps);
-            } else {
-                state.el.style.left = state.originalLeft;
-                state.el.style.width = state.originalWidth;
-            }
-            return;
-        }
-        if (moveState) {
-            const state = moveState;
-            moveState = null;
-            body.classList.remove(DRAGGING_CLASS);
-            if (state.active) {
-                suppressClick = true;
-                commitMove(state, me.clientX - state.startX, pps);
-            } else {
-                state.el.style.left = state.originalLeft;
-            }
-            return;
-        }
-        if (createState) {
-            const state = createState;
-            createState = null;
-            body.classList.remove(DRAGGING_CLASS);
-            if (state.ghost) {
-                state.ghost.remove();
-            }
-            suppressClick = true;
-            if (state.active) {
-                commitCreate(state, laneTimeAt(state, me.clientX, pps));
-            } else {
-                commitCreate(state, null);
-            }
-        }
+        return null;
     };
 
     const onBodyClick = (event: Event): void => {
-        if (suppressClick) {
-            suppressClick = false;
-            return;
-        }
         if (!(event.target instanceof Element)) {
             return;
         }
@@ -628,61 +626,26 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack => {
         }
     };
 
-    const onDocKeyDown = (body: HTMLElement, event: KeyboardEvent): void => {
-        if (event.key !== "Escape") {
-            return;
-        }
-        if (resizeState) {
-            resizeState.el.style.left = resizeState.originalLeft;
-            resizeState.el.style.width = resizeState.originalWidth;
-        } else if (moveState) {
-            moveState.el.style.left = moveState.originalLeft;
-        } else if (!createState) {
-            return;
-        }
-        clearGesture(body);
-    };
-
-    let moveHandler: ((event: Event) => void) | null = null;
-    let upHandler: ((event: Event) => void) | null = null;
-    let keyHandler: ((event: KeyboardEvent) => void) | null = null;
-
-    const attach = (body: HTMLElement): void => {
+    const attach = (body: HTMLElement, router: GestureRouter): void => {
         if (boundBody === body) {
             return;
         }
         dispose();
         boundBody = body;
-        body.addEventListener("mousedown", onBodyMouseDown);
         body.addEventListener("click", onBodyClick);
-        moveHandler = (event) => onDocMouseMove(body, event);
-        upHandler = (event) => onDocMouseUp(body, event);
-        keyHandler = (event) => onDocKeyDown(body, event);
-        document.addEventListener("mousemove", moveHandler);
-        document.addEventListener("mouseup", upHandler);
-        document.addEventListener("keydown", keyHandler);
+        unregister = router.register({
+            id: "prompt-track",
+            priority: 20,
+            onPress,
+        });
     };
 
     const dispose = (): void => {
         if (boundBody) {
-            boundBody.removeEventListener("mousedown", onBodyMouseDown);
             boundBody.removeEventListener("click", onBodyClick);
         }
-        if (moveHandler) {
-            document.removeEventListener("mousemove", moveHandler);
-            moveHandler = null;
-        }
-        if (upHandler) {
-            document.removeEventListener("mouseup", upHandler);
-            upHandler = null;
-        }
-        if (keyHandler) {
-            document.removeEventListener("keydown", keyHandler);
-            keyHandler = null;
-        }
-        moveState = null;
-        resizeState = null;
-        createState = null;
+        unregister?.();
+        unregister = null;
         boundBody = null;
     };
 
