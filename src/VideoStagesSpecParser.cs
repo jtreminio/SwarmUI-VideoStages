@@ -439,8 +439,9 @@ internal static class VideoStagesSpecParser
 
     /// <summary>
     /// Reads the optional per-clip <c>AudioSegments</c> array (seconds-based overlay pieces). Each entry
-    /// needs an embedded upload <c>Source</c> and a positive length; entries are clamped inside the clip
-    /// duration and sorted by start. Invalid entries are dropped. Returns an empty list when absent.
+    /// needs a <c>Source</c> — an embedded upload object, or an AceStepFun track ref string ("audio0", …)
+    /// — and a positive length; entries are clamped inside the clip duration and sorted by start.
+    /// Invalid entries are dropped. Returns an empty list when absent.
     /// </summary>
     private static IReadOnlyList<AudioSegmentSpec> ParseAudioSegments(JObject clipObj, double clipDurationSeconds)
     {
@@ -453,7 +454,17 @@ internal static class VideoStagesSpecParser
         foreach (JObject segObj in raw)
         {
             UploadedAudioSpec source = GetEmbeddedUploadSpec(segObj, "Source");
+            string aceSource = null;
             if (source is null)
+            {
+                string sourceRef = GetString(segObj, "Source")?.Trim();
+                if (!string.IsNullOrEmpty(sourceRef)
+                    && AudioHandler.TryParseAceStepFunAudioSource(sourceRef, out _))
+                {
+                    aceSource = sourceRef;
+                }
+            }
+            if (source is null && aceSource is null)
             {
                 continue;
             }
@@ -476,7 +487,8 @@ internal static class VideoStagesSpecParser
                 Source: source,
                 StartSeconds: RoundTenth(start),
                 TrimStartSeconds: RoundTenth(trim),
-                LengthSeconds: RoundTenth(length)));
+                LengthSeconds: RoundTenth(length),
+                AceStepFunSource: aceSource));
         }
         segments.Sort((a, b) => a.StartSeconds.CompareTo(b.StartSeconds));
         return segments;

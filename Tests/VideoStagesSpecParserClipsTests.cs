@@ -1209,6 +1209,32 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseClips_AudioSegments_AcceptsAceStepFunSourceRef()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 10.0);
+        JObject seg = MakeAudioSegment(1.0, 0.0, 2.0);
+        seg["Source"] = "audio2";
+        clip["AudioSegments"] = new JArray(seg);
+
+        ClipSpec parsed = ParseSingleClip(clip);
+
+        AudioSegmentSpec parsedSeg = Assert.Single(parsed.AudioSegments);
+        Assert.Null(parsedSeg.Source);
+        Assert.Equal("audio2", parsedSeg.AceStepFunSource);
+    }
+
+    [Fact]
+    public void ParseClips_AudioSegments_DropsUnknownStringSource()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 10.0);
+        JObject seg = MakeAudioSegment(1.0, 0.0, 2.0);
+        seg["Source"] = "not-an-audio-ref";
+        clip["AudioSegments"] = new JArray(seg);
+
+        Assert.Empty(ParseSingleClip(clip).AudioSegments);
+    }
+
+    [Fact]
     public void ParseClips_AudioSegments_DropsSourcelessAndInvalidLength()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 10.0);

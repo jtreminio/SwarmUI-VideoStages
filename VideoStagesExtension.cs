@@ -37,6 +37,8 @@ public class VideoStagesExtension : Extension
         RegisterComfyDependencies();
         RegisterParameters();
         RegisterComfyNodes();
+        AttachPromptMetadataRestorer("prompt");
+        AttachPromptMetadataRestorer("negativeprompt");
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
             step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
         AltImageToVideoScope.RegisterDispatcher();
@@ -138,6 +140,24 @@ public class VideoStagesExtension : Extension
             Group: VideoStagesGroup,
             FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
+    }
+
+    /// <summary>Metadata stores the PROCESSED prompt, where videoclip tags have been rewritten into internal
+    /// PromptRegion markers (<c>&lt;videoclip:w|0|0.5|4//cid=N&gt;</c>). Attach a MetadataFormat to the core
+    /// prompt params so saved metadata shows the tags as the user typed them.</summary>
+    private static void AttachPromptMetadataRestorer(string paramId)
+    {
+        if (!T2IParamTypes.Types.TryGetValue(paramId, out T2IParamType type))
+        {
+            return;
+        }
+        Func<string, string> existing = type.MetadataFormat;
+        T2IParamTypes.Types[paramId] = type with
+        {
+            MetadataFormat = existing is null
+                ? PromptParser.RestoreTagsForMetadata
+                : val => existing(PromptParser.RestoreTagsForMetadata(val)),
+        };
     }
 
     private void RegisterComfyNodes()

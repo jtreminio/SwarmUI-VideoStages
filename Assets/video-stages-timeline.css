@@ -9,8 +9,11 @@
     /* Clip regions + a retake mini-lane beneath them (prompt-track idiom). */
     --vst-lane-video-h: 158px;
     --vst-retake-lane-h: 20px;
-    /* Two mini-rows (clip + segments lane), same split layout as the prompt
-       track — so same height. */
+    /* Audio track: a clip mini-row on top, then one mini lane PER audio
+       segment plus a blank add-lane — the row height scales with
+       --vst-audio-lane-count (set inline by the renderer). */
+    --vst-audio-cliprow-h: 36px;
+    --vst-audio-seg-lane-h: 26px;
     --vst-lane-audio-h: 72px;
     --vst-lane-prompt-h: 72px;
     --vst-lane-refs-h: 40px;
@@ -442,7 +445,10 @@
     height: var(--vst-lane-video-h);
 }
 .vst-track-audio .vst-track-cell {
-    height: var(--vst-lane-audio-h);
+    height: calc(
+        var(--vst-audio-cliprow-h) + var(--vst-audio-lane-count, 1) *
+            var(--vst-audio-seg-lane-h) + 6px
+    );
 }
 .vst-track-cell::before {
     content: "";
@@ -830,13 +836,13 @@
 }
 
 .vst-audio-clip {
-    /* Top mini-row of the audio track (segments lane sits beneath), mirroring
-       the prompt track's major/minor split. Every source kind renders the
-       full-width fake waveform in its own tint (set by .vst-audio-kind-*). */
+    /* Top mini-row of the audio track (per-segment lanes sit beneath). Every
+       source kind renders the full-width fake waveform in its own tint (set
+       by .vst-audio-kind-*). */
     --vst-audio-tint: var(--green);
     position: absolute;
     top: 6px;
-    height: calc(50% - 10px);
+    height: calc(var(--vst-audio-cliprow-h) - 10px);
     border-radius: 4px;
     background: linear-gradient(
         180deg,
@@ -1185,25 +1191,35 @@
     color: var(--text-soft);
 }
 
-/* The audio track's bottom mini-row: a per-clip segments lane, mirroring the
-   prompt track's minor lane — click empty space to add a segment. */
+/* The audio track's per-segment mini lanes: the array index IS the lane
+   (--vst-audio-lane-idx), stacked under the clip mini-row; the last, blank
+   lane adds a segment on click/drag. */
 .vst-audio-cell::after {
     content: "";
     position: absolute;
     left: 0;
     right: 0;
-    top: 50%;
+    top: var(--vst-audio-cliprow-h);
     border-top: 1px dashed var(--vst-hairline);
     pointer-events: none;
 }
 .vst-audio-seg-lane {
     position: absolute;
-    bottom: 6px;
-    height: calc(50% - 10px);
+    top: calc(
+        var(--vst-audio-cliprow-h) + var(--vst-audio-lane-idx, 0) *
+            var(--vst-audio-seg-lane-h) + 2px
+    );
+    height: calc(var(--vst-audio-seg-lane-h) - 4px);
     border-radius: var(--vst-radius-sm);
     background: color-mix(in srgb, var(--emphasis) 5%, transparent);
     box-shadow: inset 0 0 0 1px var(--vst-hairline);
+}
+.vst-audio-seg-lane-blank {
     cursor: copy;
+    background: transparent;
+    box-shadow: inset 0 0 0 1px
+        color-mix(in srgb, var(--vst-hairline) 60%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--emphasis) 25%, transparent);
 }
 .vst-audio-seg-ghost {
     position: absolute;

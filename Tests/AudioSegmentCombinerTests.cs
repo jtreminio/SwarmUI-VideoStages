@@ -73,7 +73,8 @@ public class AudioSegmentCombinerTests
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
             ClipWithSegments(),
             baseAudio,
-            clipDurationSeconds: 10.0);
+            clipDurationSeconds: 10.0,
+            out _);
 
         Assert.Same(baseAudio, result);
         Assert.Equal(before, workflow.Count);
@@ -93,7 +94,8 @@ public class AudioSegmentCombinerTests
                 new AudioSegmentSpec(Upload("QUJD"), StartSeconds: 0.0, TrimStartSeconds: 1.0, LengthSeconds: 3.0),
                 new AudioSegmentSpec(Upload("WFla"), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
-            clipDurationSeconds: 10.0);
+            clipDurationSeconds: 10.0,
+            out _);
 
         // Each segment: one upload load + one trim. The offset (start > 0) segment adds one silence + concat.
         Assert.Equal(2, CountClassType(workflow, "SwarmLoadAudioB64"));
@@ -112,6 +114,101 @@ public class AudioSegmentCombinerTests
     }
 
     [Fact]
+    public void Combine_ReportsLoadedSegmentWindows()
+    {
+        JObject workflow = BuildWorkflowWithBaseAudio();
+        WorkflowGenerator g = BuildGenerator(workflow);
+        WGNodeData baseAudio = BaseAudio(g);
+
+        _ = new AudioSegmentCombiner(g).Combine(
+            ClipWithSegments(
+                new AudioSegmentSpec(Upload("QUJD"), StartSeconds: 0.5, TrimStartSeconds: 0.0, LengthSeconds: 3.0),
+                new AudioSegmentSpec(Upload("WFla"), StartSeconds: 6.0, TrimStartSeconds: 0.0, LengthSeconds: 2.0)),
+            baseAudio,
+            clipDurationSeconds: 10.0,
+            out IReadOnlyList<(double Start, double End)> windows);
+
+        Assert.Equal([(0.5, 3.5), (6.0, 8.0)], windows);
+    }
+
+    [Fact]
+    public void Combine_NoMaterializableSegments_ReportsNoWindows()
+    {
+        JObject workflow = BuildWorkflowWithBaseAudio();
+        WorkflowGenerator g = BuildGenerator(workflow);
+        WGNodeData baseAudio = BaseAudio(g);
+
+        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+            ClipWithSegments(new AudioSegmentSpec(
+                Source: null, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
+                AceStepFunSource: "audio5")),
+            baseAudio,
+            clipDurationSeconds: 10.0,
+            out IReadOnlyList<(double Start, double End)> windows);
+
+        Assert.Same(baseAudio, result);
+        Assert.Empty(windows);
+    }
+
+    [Fact]
+    public void Combine_AceStepFunSegment_UsesDecodeNodeAudio_NoLoadNode()
+    {
+        JObject workflow = [];
+        using (WorkflowBridge setup = WorkflowBridge.Create(workflow))
+        {
+            // AceStepFun decode node for track 2 (id = 65160 + 2*100) + the base audio stub.
+            setup.AddStub("VAEDecodeAudio", "65360").WithOutputs(WGNodeData.DT_AUDIO);
+            setup.AddStub("StubAudio", "203").WithOutputs(WGNodeData.DT_AUDIO);
+        }
+        WorkflowGenerator g = BuildGenerator(workflow);
+        WGNodeData baseAudio = BaseAudio(g);
+
+        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+            ClipWithSegments(new AudioSegmentSpec(
+                Source: null, StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
+                AceStepFunSource: "audio2")),
+            baseAudio,
+            clipDurationSeconds: 10.0,
+            out _);
+
+        Assert.NotNull(result);
+        // No upload load node — the segment reads straight from the decode node, via the length pad.
+        Assert.Equal(0, CountClassType(workflow, "SwarmLoadAudioB64"));
+        Assert.Equal(1, CountClassType(workflow, "TrimAudioDuration"));
+        Assert.Equal(1, CountClassType(workflow, "AudioMerge"));
+        JObject ensure = workflow.Properties()
+            .Select(p => p.Value as JObject)
+            .Single(node => node?["class_type"]?.ToString() == "SwarmEnsureAudio");
+        Assert.Equal("65360", (ensure["inputs"]?["audio"] as JArray)?[0]?.ToString());
+        string ensureId = workflow.Properties()
+            .Single(p => ReferenceEquals(p.Value, ensure)).Name;
+        JObject trim = workflow.Properties()
+            .Select(p => p.Value as JObject)
+            .Single(node => node?["class_type"]?.ToString() == "TrimAudioDuration");
+        Assert.Equal(ensureId, (trim["inputs"]?["audio"] as JArray)?[0]?.ToString());
+    }
+
+    [Fact]
+    public void Combine_AceStepFunSegment_MissingDecodeNode_IsSkipped()
+    {
+        JObject workflow = BuildWorkflowWithBaseAudio();
+        WorkflowGenerator g = BuildGenerator(workflow);
+        WGNodeData baseAudio = BaseAudio(g);
+        int before = workflow.Count;
+
+        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+            ClipWithSegments(new AudioSegmentSpec(
+                Source: null, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
+                AceStepFunSource: "audio5")),
+            baseAudio,
+            clipDurationSeconds: 10.0,
+            out _);
+
+        Assert.Same(baseAudio, result);
+        Assert.Equal(before, workflow.Count);
+    }
+
+    [Fact]
     public void Combine_NoBaseAudio_SynthesizesSilentBed_ForOffsetPlacement()
     {
         JObject workflow = [];
@@ -121,7 +218,8 @@ public class AudioSegmentCombinerTests
             ClipWithSegments(
                 new AudioSegmentSpec(Upload(), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio: null,
-            clipDurationSeconds: 10.0);
+            clipDurationSeconds: 10.0,
+            out _);
 
         Assert.NotNull(result);
         // Silent clip-duration bed + silence for the segment offset = 2 EmptyAudio nodes.

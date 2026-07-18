@@ -142,4 +142,57 @@ describe("renderAudioTrackRow (segment spans)", () => {
         host.innerHTML = renderAudioTrackRow(clips, layouts);
         expect(host.querySelectorAll(".vst-audio-seg")).toHaveLength(0);
     });
+
+    it("gives every segment its own lane plus one blank add-lane, sizing the row to the busiest clip", () => {
+        mountPromptBox("");
+        const seg = (start: number): Record<string, unknown> => ({
+            source: null,
+            startSeconds: start,
+            trimStartSeconds: 0,
+            lengthSeconds: 2,
+        });
+        mountVideoStagesData({
+            clips: [
+                {
+                    duration: 10,
+                    stages: [{}],
+                    refs: [],
+                    audioSegments: [seg(0), seg(1)], // overlapping is fine
+                },
+                { duration: 5, stages: [{}], refs: [] },
+            ],
+        });
+        const clips = getClips();
+        const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
+        const host = document.createElement("div");
+        host.innerHTML = renderAudioTrackRow(clips, layouts);
+
+        // Clip 0: two segment lanes + one blank; clip 1: just the blank lane.
+        const lanes = host.querySelectorAll(".vst-audio-seg-lane");
+        expect(lanes).toHaveLength(4);
+        const blanks = host.querySelectorAll(
+            ".vst-audio-seg-lane-blank[data-vst-audio-seg-add]",
+        );
+        expect(blanks).toHaveLength(2);
+        // Only blank lanes are add-targets.
+        expect(
+            host.querySelectorAll(
+                ".vst-audio-seg-lane[data-vst-audio-seg-add]",
+            ),
+        ).toHaveLength(2);
+        // Each occupied lane holds exactly one segment block at its lane index.
+        const clip0Segs = host.querySelectorAll(
+            '.vst-audio-seg[data-clip-idx="0"]',
+        );
+        expect(clip0Segs).toHaveLength(2);
+        // Row height scales with the busiest clip: 2 segments + blank = 3.
+        const row = host.querySelector<HTMLElement>(".vst-track-audio");
+        expect(row?.style.getPropertyValue("--vst-audio-lane-count")).toBe("3");
+        // Clip 0's blank lane sits beneath its two segment lanes (idx 2);
+        // clip 1's blank is its first lane (idx 0).
+        const blankIdx = [...blanks].map((b) =>
+            (b as HTMLElement).style.getPropertyValue("--vst-audio-lane-idx"),
+        );
+        expect(blankIdx).toEqual(["2", "0"]);
+    });
 });

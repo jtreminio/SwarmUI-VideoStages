@@ -52,14 +52,15 @@ export interface StageLora {
 
 /**
  * One overlay audio piece placed on a clip's audio lane, in addition to the
- * clip's base audio source. `source` is an uploaded audio blob (data URI +
- * fileName). `startSeconds` is where the piece begins inside the clip;
+ * clip's base audio source. `source` is either an uploaded audio blob (data
+ * URI + fileName) or an AceStepFun track ref string ("audio0", "audio1", …).
+ * `startSeconds` is where the piece begins inside the clip;
  * `trimStartSeconds` is how far into the source file playback starts; and
  * `lengthSeconds` is how long the piece plays. All seconds, 0.1 step, clamped
  * inside the clip. Backend mixes each segment additively over the base audio.
  */
 export interface AudioSegment {
-    source: UploadedAudio | null;
+    source: UploadedAudio | string | null;
     startSeconds: number;
     trimStartSeconds: number;
     lengthSeconds: number;

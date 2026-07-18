@@ -8,7 +8,6 @@ import {
     type GestureRouter,
     type GestureSession,
 } from "./gestureRouter";
-import { freeIntervalAt, type Span } from "./intervals";
 import { getClips, saveClips } from "./persistence";
 import { readStateToken } from "./swarmInputs";
 import { livePxPerSecond } from "./timelineLinking";
@@ -102,77 +101,9 @@ const segmentAt = (
     return clip && segment ? { clip, segment } : null;
 };
 
-// Occupied spans of every OTHER segment — audio segments obey the same
-// non-overlap discipline as relay prompt windows (see timelinePromptTrack).
-const otherSpans = (
-    segments: AudioSegment[] | undefined,
-    excludeIdx: number,
-    clipDuration: number,
-): Span[] =>
-    (segments ?? [])
-        .map((seg, k) => ({
-            k,
-            start: clamp(seg.startSeconds, 0, clipDuration),
-            end: clamp(seg.startSeconds + seg.lengthSeconds, 0, clipDuration),
-        }))
-        .filter((s) => s.k !== excludeIdx && s.end > s.start)
-        .sort((a, b) => a.start - b.start)
-        .map((s) => ({ start: s.start, end: s.end }));
-
-/**
- * NEIGHBOUR walls for a segment's start/end edges — the interval the segment
- * may occupy without overlapping another segment. Mirror of
- * promptWindowNeighborBounds; used by the dock's Start/Length clamps.
- */
-export const audioSegmentNeighborBounds = (
-    clip: Clip,
-    segIdx: number,
-): { startMin: number; endMax: number } | null => {
-    const segment = clip.audioSegments?.[segIdx];
-    if (!segment) {
-        return null;
-    }
-    const clipDur = clipDurationOf(clip);
-    const end = segment.startSeconds + segment.lengthSeconds;
-    const spans = otherSpans(clip.audioSegments, segIdx, clipDur);
-    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
-    const [, hi] = freeIntervalAt(spans, clipDur, segment.startSeconds);
-    return { startMin: roundSeconds(lo), endMax: roundSeconds(hi) };
-};
-
-/**
- * The first free gap in the clip's segment lane that can host a new segment —
- * used by the dock's "+ add segment", which has no pressed time to anchor on.
- * Returns the gap start plus the (default-capped) length a new segment may
- * take there, or null when the lane is full.
- */
-export const firstAudioSegmentGap = (
-    clip: Clip,
-): { start: number; length: number } | null => {
-    const clipDur = clipDurationOf(clip);
-    const spans = otherSpans(clip.audioSegments, -1, clipDur);
-    let cursor = 0;
-    const gapAt = (
-        lo: number,
-        hi: number,
-    ): { start: number; length: number } | null =>
-        hi - lo >= AUDIO_SEGMENT_MIN_LENGTH
-            ? {
-                  start: roundSeconds(lo),
-                  length: roundSeconds(
-                      Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, hi - lo),
-                  ),
-              }
-            : null;
-    for (const span of spans) {
-        const gap = gapAt(cursor, span.start);
-        if (gap) {
-            return gap;
-        }
-        cursor = Math.max(cursor, span.end);
-    }
-    return gapAt(cursor, clipDur);
-};
+// Segments live on per-segment lanes and may overlap freely in time (the
+// backend mixes overlapping audio additively); the old neighbour-wall /
+// free-gap helpers are gone with the single shared lane.
 
 /**
  * Left-edge resize moves the start while the end stays fixed — exactly like a
@@ -301,10 +232,11 @@ export const createTimelineAudioSegmentTrack =
             });
         };
 
-        // Create a segment from a lane press — same rules as a relay window:
-        // it fills at most the free interval around the pressed time, never
-        // overlapping an existing segment. `endSec === null` = plain tap →
-        // default length; otherwise the drag span [startSec, endSec].
+        // Create a segment from a press on the BLANK lane. The new segment is
+        // appended (it takes over this lane; a fresh blank lane appears below).
+        // Overlap with other lanes' segments is allowed — only the clip's own
+        // bounds clamp it. `endSec === null` = plain tap → default length;
+        // otherwise the drag span [startSec, endSec].
         const commitCreate = (
             state: CreateState,
             endSec: number | null,
@@ -318,24 +250,21 @@ export const createTimelineAudioSegmentTrack =
                 return;
             }
             const clipDur = clipDurationOf(clip);
-            const spans = otherSpans(clip.audioSegments, -1, clipDur);
-            const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
-            const gap = hi - lo;
-            if (gap < AUDIO_SEGMENT_MIN_LENGTH) {
+            if (clipDur < AUDIO_SEGMENT_MIN_LENGTH) {
                 return;
             }
             let start: number;
             let length: number;
             if (endSec === null) {
-                length = Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, gap);
-                start = clamp(state.startSec, lo, hi - length);
+                length = Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDur);
+                start = clamp(state.startSec, 0, clipDur - length);
             } else {
-                const a = clamp(Math.min(state.startSec, endSec), lo, hi);
-                const b = clamp(Math.max(state.startSec, endSec), lo, hi);
+                const a = clamp(Math.min(state.startSec, endSec), 0, clipDur);
+                const b = clamp(Math.max(state.startSec, endSec), 0, clipDur);
                 start = a;
                 length = Math.max(AUDIO_SEGMENT_MIN_LENGTH, b - a);
-                if (start + length > hi) {
-                    length = hi - start;
+                if (start + length > clipDur) {
+                    length = clipDur - start;
                 }
             }
             if (length < AUDIO_SEGMENT_MIN_LENGTH) {
@@ -347,19 +276,17 @@ export const createTimelineAudioSegmentTrack =
                 trimStartSeconds: 0,
                 lengthSeconds: roundSeconds(length),
             };
+            // Appended, never sorted: the array index IS the lane, and lanes
+            // must not reshuffle as segments move around in time.
             const segments = [...(clip.audioSegments ?? []), segment];
-            segments.sort((x, y) => x.startSeconds - y.startSeconds);
             clip.audioSegments = segments;
             saveClips(clips, undefined, { origin: "audio-segment-track" });
             // Open the new segment in the dock ready to edit.
-            const newIdx = segments.indexOf(segment);
-            if (newIdx >= 0) {
-                setSelection({
-                    kind: "audio-segment",
-                    clipIdx: state.clipIdx,
-                    segIdx: newIdx,
-                });
-            }
+            setSelection({
+                kind: "audio-segment",
+                clipIdx: state.clipIdx,
+                segIdx: segments.length - 1,
+            });
         };
 
         const laneTimeAt = (
@@ -520,23 +447,11 @@ export const createTimelineAudioSegmentTrack =
                     return null;
                 }
                 const clipDuration = clipDurationOf(found.clip);
-                const spans = otherSpans(
-                    found.clip.audioSegments,
-                    segIdx,
-                    clipDuration,
-                );
-                const segEnd =
-                    found.segment.startSeconds + found.segment.lengthSeconds;
-                const [wallLo] = freeIntervalAt(
-                    spans,
-                    clipDuration,
-                    Math.max(0, segEnd - 1e-3),
-                );
-                const [, wallHi] = freeIntervalAt(
-                    spans,
-                    clipDuration,
-                    found.segment.startSeconds,
-                );
+                // Every segment lives on its own lane, so segments may overlap
+                // in time (the backend mixes them additively) — the only walls
+                // are the clip's own bounds.
+                const wallLo = 0;
+                const wallHi = clipDuration;
                 const edgeEl = me.target.closest(SEG_EDGE_SELECTOR);
                 me.preventDefault();
                 if (edgeEl) {

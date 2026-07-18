@@ -13,13 +13,17 @@ public sealed class AudioHandler(WorkflowGenerator g)
     public static string MakeAceStepFunDecodeId(int trackIndex) =>
         (AceStepFunDecodeIdBase + trackIndex * AceStepFunTrackIdStride).ToString();
 
-    public WGNodeData DetectAceStepFunAudio(string source)
+    public WGNodeData DetectAceStepFunAudio(string source) =>
+        DetectAceStepFunAudio(source, WorkflowBridge.Create(g.Workflow));
+
+    /// <summary>Overload for callers resolving several sources in a row — reuse one bridge instead of
+    /// re-parsing the whole workflow graph per lookup.</summary>
+    public WGNodeData DetectAceStepFunAudio(string source, WorkflowBridge bridge)
     {
         if (!TryParseAceStepFunAudioSource(source, out int trackIndex))
         {
             return null;
         }
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         VAEDecodeAudioNode decode = FindAceStepFunDecode(bridge, trackIndex);
         return decode is null ? null : CreateAudioNode(decode.AUDIO);
     }

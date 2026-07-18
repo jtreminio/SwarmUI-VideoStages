@@ -2,6 +2,7 @@ import {
     AUDIO_SOURCE_NATIVE,
     buildAudioSourceOptions,
     canUseClipLengthFromAudio,
+    isAceStepFunAudioSource,
     resolveAudioSourceValue,
 } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
@@ -203,8 +204,13 @@ const normalizeAudioSegment = (
     }
     // A sourceless segment is kept in the working state so the "+ Add segment"
     // flow can create it and then prompt for the upload; the backend parser
-    // drops segments with no source at generation time.
-    const source = normalizeUploadedAudio(readProp(value, "source", "Source"));
+    // drops segments with no source at generation time. A string source is an
+    // AceStepFun track ref ("audio0", …).
+    const rawSource = readProp(value, "source", "Source");
+    const source =
+        typeof rawSource === "string" && isAceStepFunAudioSource(rawSource)
+            ? rawSource.trim()
+            : normalizeUploadedAudio(rawSource);
     const startRaw = Math.max(
         0,
         utils.toNumber(
@@ -246,8 +252,10 @@ const normalizeAudioSegment = (
 
 /**
  * Normalizes the optional per-clip audio segment list against the clip
- * duration: drops entries with no upload source or non-positive length, clamps
- * each inside the clip, and sorts by start time. Returns [] when absent.
+ * duration: drops entries with no upload source or non-positive length and
+ * clamps each inside the clip. Array ORDER is preserved — the index is the
+ * segment's timeline lane, and lanes must not reshuffle as segments move.
+ * Returns [] when absent.
  */
 export const normalizeAudioSegments = (
     value: unknown,
@@ -258,8 +266,7 @@ export const normalizeAudioSegments = (
     }
     return value
         .map((raw) => normalizeAudioSegment(raw, clipDuration))
-        .filter((seg): seg is AudioSegment => seg !== null)
-        .sort((a, b) => a.startSeconds - b.startSeconds);
+        .filter((seg): seg is AudioSegment => seg !== null);
 };
 
 export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {

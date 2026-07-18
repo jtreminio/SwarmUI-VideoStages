@@ -38,8 +38,15 @@ internal sealed class LtxManager
 
     public bool TryInjectAudio(
         WGNodeData audio,
-        bool matchVideoLengthToAudio = true) =>
-        audioInjector.TryInject(audio, matchVideoLengthToAudio);
+        bool matchVideoLengthToAudio = true,
+        IReadOnlyList<(double Start, double End)> preserveWindows = null) =>
+        audioInjector.TryInject(audio, matchVideoLengthToAudio, preserveWindows);
+
+    public WGNodeData TryBuildPreserveWindowedAudioLatent(
+        WGNodeData audio,
+        IReadOnlyList<(double Start, double End)> preserveWindows,
+        int stableIdSlot) =>
+        audioInjector.TryBuildPreserveWindowedAudioLatent(audio, preserveWindows, stableIdSlot);
 
     public bool TryApplyControlNetFrameCount(string controlNetSource)
     {

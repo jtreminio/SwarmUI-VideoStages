@@ -45,11 +45,17 @@ internal sealed class VideoStagesCoordinator(
                 firstClip.ClipLengthFromControlNet,
                 firstClip.ControlNetSource,
                 first.Model);
-            TryInjectResolvedClipAudio(
-                firstClip.Id,
-                firstClip.AudioSource,
-                firstClip.ClipLengthFromAudio,
-                clipAudioMaps);
+            // A first clip with audio segments defers injection to StageSequenceRunner.PrepareClipAudio,
+            // which injects the segment-combined audio (or the preserve-windowed variant) instead of the
+            // pure base track this method would use.
+            if (firstClip.AudioSegments is not { Count: > 0 })
+            {
+                TryInjectResolvedClipAudio(
+                    firstClip.Id,
+                    firstClip.AudioSource,
+                    firstClip.ClipLengthFromAudio,
+                    clipAudioMaps);
+            }
         }
 
         g.LastID = Math.Max(g.LastID, Constants.StagedNodeIdReservationFloor);

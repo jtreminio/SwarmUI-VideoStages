@@ -51,20 +51,12 @@
     }
     return ref;
   };
-  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
-    const options = [
-      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
-    ];
+  var appendAceStepFunRefs = (options) => {
     for (const ref of getAceStepFunRefs()) {
       options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
     }
-    if (context.controlNetEnabled) {
-      options.push({
-        value: AUDIO_SOURCE_CONTROLNET,
-        label: AUDIO_SOURCE_CONTROLNET
-      });
-    }
+  };
+  var appendMissingSelectedRef = (options, currentValue) => {
     const selected = `${currentValue || ""}`.trim();
     if (isAceStepFunAudioSource(selected) && !options.some((option) => option.value === selected)) {
       options.push({
@@ -72,6 +64,28 @@
         label: getAceStepFunRefLabel(selected)
       });
     }
+  };
+  var buildSegmentAudioSourceOptions = (currentValue = "") => {
+    const options = [
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    appendAceStepFunRefs(options);
+    appendMissingSelectedRef(options, currentValue);
+    return options;
+  };
+  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
+    const options = [
+      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    appendAceStepFunRefs(options);
+    if (context.controlNetEnabled) {
+      options.push({
+        value: AUDIO_SOURCE_CONTROLNET,
+        label: AUDIO_SOURCE_CONTROLNET
+      });
+    }
+    appendMissingSelectedRef(options, currentValue);
     return options;
   };
   var resolveAudioSourceValue = (currentValue, options) => {
@@ -686,7 +700,8 @@
     if (!isRecord(value)) {
       return null;
     }
-    const source = normalizeUploadedAudio(readProp(value, "source", "Source"));
+    const rawSource = readProp(value, "source", "Source");
+    const source = typeof rawSource === "string" && isAceStepFunAudioSource(rawSource) ? rawSource.trim() : normalizeUploadedAudio(rawSource);
     const startRaw = Math.max(
       0,
       utils.toNumber(
@@ -729,7 +744,7 @@
     if (!Array.isArray(value)) {
       return [];
     }
-    return value.map((raw) => normalizeAudioSegment(raw, clipDuration)).filter((seg) => seg !== null).sort((a, b) => a.startSeconds - b.startSeconds);
+    return value.map((raw) => normalizeAudioSegment(raw, clipDuration)).filter((seg) => seg !== null);
   };
   var normalizeBoundaryOut = (value) => {
     const raw = `${value ?? ""}`.trim().toLowerCase();
@@ -1951,26 +1966,6 @@
     saveState(state, callbacks, { ...options, notifyDomChange });
   };
 
-  // frontend/intervals.ts
-  var freeIntervalAt = (spans, total, point) => {
-    const p = Math.min(Math.max(point, 0), total);
-    let lo = 0;
-    let hi = total;
-    for (const span of spans) {
-      if (span.end <= p) {
-        if (span.end > lo) {
-          lo = span.end;
-        }
-      } else if (span.start >= p) {
-        hi = span.start;
-        break;
-      } else {
-        return [p, p];
-      }
-    }
-    return [lo, hi];
-  };
-
   // frontend/timelineEdit.ts
   var pxToDuration = (px, pxPerSecond, fps) => {
     if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
@@ -2539,29 +2534,36 @@
     }
     return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
   };
-  var renderAudioSegments = (clip, clipIdx, durationSeconds) => {
-    const segments = clip.audioSegments ?? [];
-    if (segments.length === 0 || durationSeconds <= 0) {
+  var renderAudioSegmentBlock = (seg, clipIdx, segIdx, durationSeconds) => {
+    const start = clamp(seg.startSeconds, 0, durationSeconds);
+    const end = clamp(
+      seg.startSeconds + seg.lengthSeconds,
+      start,
+      durationSeconds
+    );
+    if (end <= start) {
       return "";
     }
-    return segments.map((seg, segIdx) => {
-      const start = clamp(seg.startSeconds, 0, durationSeconds);
-      const end = clamp(
-        seg.startSeconds + seg.lengthSeconds,
-        start,
-        durationSeconds
-      );
-      if (end <= start) {
-        return "";
-      }
-      const leftPct3 = start / durationSeconds * 100;
-      const widthPct3 = (end - start) / durationSeconds * 100;
-      const name = seg.source?.fileName;
-      const labelText = name ? name : "audio segment";
-      const label = `${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
-      const title = `${labelText} · ${label} · drag to move/resize · Shift+click to delete`;
-      return `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}" style="left:${leftPct3}%;width:${widthPct3}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="Edit audio segment ${segIdx} for clip ${clipIdx}"><span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left" aria-hidden="true"></span><span class="vst-audio-seg-label">${escapeAttr(labelText)}</span><span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right" aria-hidden="true"></span></div>`;
-    }).join("");
+    const leftPct3 = start / durationSeconds * 100;
+    const widthPct3 = (end - start) / durationSeconds * 100;
+    const name = typeof seg.source === "string" ? seg.source : seg.source?.fileName;
+    const labelText = name ? name : "audio segment";
+    const label = `${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
+    const title = `${labelText} · ${label} · drag to move/resize · Shift+click to delete`;
+    return `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}" style="left:${leftPct3}%;width:${widthPct3}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="Edit audio segment ${segIdx} for clip ${clipIdx}"><span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left" aria-hidden="true"></span><span class="vst-audio-seg-label">${escapeAttr(labelText)}</span><span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right" aria-hidden="true"></span></div>`;
+  };
+  var renderAudioSegmentLanes = (clip, clipIdx, durationSeconds, startPx, widthPx) => {
+    const place = (laneIdx) => `left:${startPx}px;width:${widthPx}px;--vst-audio-lane-idx:${laneIdx}`;
+    const blankLane = (laneIdx) => `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>`;
+    if (durationSeconds <= 0) {
+      return blankLane(0);
+    }
+    const segments = clip.audioSegments ?? [];
+    const lanes = segments.map(
+      (seg, segIdx) => `<div class="vst-audio-seg-lane" style="${place(segIdx)}">` + renderAudioSegmentBlock(seg, clipIdx, segIdx, durationSeconds) + `</div>`
+    );
+    lanes.push(blankLane(segments.length));
+    return lanes.join("");
   };
   var renderAudioTrackRow = (clips, layouts) => {
     const segments = layouts.map((l) => {
@@ -2583,9 +2585,19 @@
       const bars = waveBarHeights(l.index, barCount).map((h) => `<span style="height:${h}%"></span>`).join("");
       const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      return `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${l.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div><div class="vst-audio-seg-lane" data-vst-audio-seg-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${width}px" title="Click empty space to add an audio segment">` + renderAudioSegments(clip, l.index, clip.duration || 0) + `</div>`;
+      return `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${l.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
+        clip,
+        l.index,
+        clip.duration || 0,
+        l.startPx,
+        width
+      );
     }).join("");
-    return `<div class="vst-track-row vst-track-audio"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell vst-audio-cell">${segments}</div></div>`;
+    const laneCount = Math.max(
+      1,
+      ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1)
+    );
+    return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell vst-audio-cell">${segments}</div></div>`;
   };
   var REF_EDGE_ALIGN_FRAMES = 3;
   var renderReferencesTrackRow = (clips, layouts, fps, unit) => {
@@ -3167,42 +3179,6 @@
     const segment = clip?.audioSegments?.[segIdx];
     return clip && segment ? { clip, segment } : null;
   };
-  var otherSpans = (segments, excludeIdx, clipDuration) => (segments ?? []).map((seg, k) => ({
-    k,
-    start: clamp(seg.startSeconds, 0, clipDuration),
-    end: clamp(seg.startSeconds + seg.lengthSeconds, 0, clipDuration)
-  })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
-  var audioSegmentNeighborBounds = (clip, segIdx) => {
-    const segment = clip.audioSegments?.[segIdx];
-    if (!segment) {
-      return null;
-    }
-    const clipDur = clipDurationOf(clip);
-    const end = segment.startSeconds + segment.lengthSeconds;
-    const spans = otherSpans(clip.audioSegments, segIdx, clipDur);
-    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
-    const [, hi] = freeIntervalAt(spans, clipDur, segment.startSeconds);
-    return { startMin: roundSeconds(lo), endMax: roundSeconds(hi) };
-  };
-  var firstAudioSegmentGap = (clip) => {
-    const clipDur = clipDurationOf(clip);
-    const spans = otherSpans(clip.audioSegments, -1, clipDur);
-    let cursor = 0;
-    const gapAt = (lo, hi) => hi - lo >= AUDIO_SEGMENT_MIN_LENGTH ? {
-      start: roundSeconds(lo),
-      length: roundSeconds(
-        Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, hi - lo)
-      )
-    } : null;
-    for (const span of spans) {
-      const gap = gapAt(cursor, span.start);
-      if (gap) {
-        return gap;
-      }
-      cursor = Math.max(cursor, span.end);
-    }
-    return gapAt(cursor, clipDur);
-  };
   var resizeLeft = (state, deltaSec, wallLo) => {
     const end = state.startStart + state.startLength;
     const start = clamp(
@@ -3304,24 +3280,21 @@
         return;
       }
       const clipDur = clipDurationOf(clip);
-      const spans = otherSpans(clip.audioSegments, -1, clipDur);
-      const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
-      const gap = hi - lo;
-      if (gap < AUDIO_SEGMENT_MIN_LENGTH) {
+      if (clipDur < AUDIO_SEGMENT_MIN_LENGTH) {
         return;
       }
       let start;
       let length;
       if (endSec === null) {
-        length = Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, gap);
-        start = clamp(state.startSec, lo, hi - length);
+        length = Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDur);
+        start = clamp(state.startSec, 0, clipDur - length);
       } else {
-        const a = clamp(Math.min(state.startSec, endSec), lo, hi);
-        const b = clamp(Math.max(state.startSec, endSec), lo, hi);
+        const a = clamp(Math.min(state.startSec, endSec), 0, clipDur);
+        const b = clamp(Math.max(state.startSec, endSec), 0, clipDur);
         start = a;
         length = Math.max(AUDIO_SEGMENT_MIN_LENGTH, b - a);
-        if (start + length > hi) {
-          length = hi - start;
+        if (start + length > clipDur) {
+          length = clipDur - start;
         }
       }
       if (length < AUDIO_SEGMENT_MIN_LENGTH) {
@@ -3334,17 +3307,13 @@
         lengthSeconds: roundSeconds(length)
       };
       const segments = [...clip.audioSegments ?? [], segment];
-      segments.sort((x, y) => x.startSeconds - y.startSeconds);
       clip.audioSegments = segments;
       saveClips(clips, void 0, { origin: "audio-segment-track" });
-      const newIdx = segments.indexOf(segment);
-      if (newIdx >= 0) {
-        setSelection({
-          kind: "audio-segment",
-          clipIdx: state.clipIdx,
-          segIdx: newIdx
-        });
-      }
+      setSelection({
+        kind: "audio-segment",
+        clipIdx: state.clipIdx,
+        segIdx: segments.length - 1
+      });
     };
     const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
     const createSession = (body, state) => {
@@ -3480,22 +3449,8 @@
           return null;
         }
         const clipDuration = clipDurationOf(found.clip);
-        const spans = otherSpans(
-          found.clip.audioSegments,
-          segIdx,
-          clipDuration
-        );
-        const segEnd = found.segment.startSeconds + found.segment.lengthSeconds;
-        const [wallLo] = freeIntervalAt(
-          spans,
-          clipDuration,
-          Math.max(0, segEnd - 1e-3)
-        );
-        const [, wallHi] = freeIntervalAt(
-          spans,
-          clipDuration,
-          found.segment.startSeconds
-        );
+        const wallLo = 0;
+        const wallHi = clipDuration;
         const edgeEl = me.target.closest(SEG_EDGE_SELECTOR);
         me.preventDefault();
         if (edgeEl) {
@@ -3974,6 +3929,26 @@
     return REF_SOURCE_REFINER;
   };
 
+  // frontend/intervals.ts
+  var freeIntervalAt = (spans, total, point) => {
+    const p = Math.min(Math.max(point, 0), total);
+    let lo = 0;
+    let hi = total;
+    for (const span of spans) {
+      if (span.end <= p) {
+        if (span.end > lo) {
+          lo = span.end;
+        }
+      } else if (span.start >= p) {
+        hi = span.start;
+        break;
+      } else {
+        return [p, p];
+      }
+    }
+    return [lo, hi];
+  };
+
   // frontend/timelinePromptTrack.ts
   var MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
   var MINOR_SELECTOR = ".vst-minor-seg[data-clip-idx]";
@@ -3996,7 +3971,7 @@
   };
   var clipDurationOf2 = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
   var roundSeconds2 = (seconds) => Math.round(seconds * 10) / 10;
-  var otherSpans2 = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
+  var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
     k,
     start: clamp(w.start, 0, clipDuration),
     end: clamp(w.start + w.duration, 0, clipDuration)
@@ -4008,7 +3983,7 @@
     }
     const clipDur = clipDurationOf2(clip);
     const end = window2.start + window2.duration;
-    const spans = otherSpans2(clip.promptWindows, windowIdx, clipDur);
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
     const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
     const start = clamp(desiredBegin, lo, end - PROMPT_WINDOW_MIN_DURATION);
     window2.start = roundSeconds2(start);
@@ -4020,7 +3995,7 @@
       return;
     }
     const clipDur = clipDurationOf2(clip);
-    const spans = otherSpans2(clip.promptWindows, windowIdx, clipDur);
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
     const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
     const end = clamp(
       desiredEnd,
@@ -4037,7 +4012,7 @@
     }
     const clipDur = clipDurationOf2(clip);
     const end = window2.start + window2.duration;
-    const spans = otherSpans2(clip.promptWindows, windowIdx, clipDur);
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
     const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
     const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
     return { beginMin: roundSeconds2(lo), endMax: roundSeconds2(hi) };
@@ -4100,7 +4075,7 @@
         return;
       }
       const clipDur = clipDurationOf2(clip);
-      const spans = otherSpans2(clip.promptWindows, state.windowIdx, clipDur);
+      const spans = otherSpans(clip.promptWindows, state.windowIdx, clipDur);
       const deltaSec = dxPx / pps;
       if (state.edge === "right") {
         const [, hi] = freeIntervalAt(spans, clipDur, state.startStart);
@@ -4143,7 +4118,7 @@
         return;
       }
       const clipDur = clipDurationOf2(clip);
-      const spans = otherSpans2(clip.promptWindows, -1, clipDur);
+      const spans = otherSpans(clip.promptWindows, -1, clipDur);
       const [lo, hi] = freeIntervalAt(spans, clipDur, state.startSec);
       const gap = hi - lo;
       if (gap < PROMPT_WINDOW_MIN_DURATION) {
@@ -4348,7 +4323,7 @@
         }
         const clipDuration = clipDurationOf2(clip);
         const [boundLo, boundHi] = freeIntervalAt(
-          otherSpans2(clip.promptWindows, windowIdx, clipDuration),
+          otherSpans(clip.promptWindows, windowIdx, clipDuration),
           clipDuration,
           window2.start
         );
@@ -4970,25 +4945,26 @@
       if (!clip) {
         return;
       }
-      const gap = firstAudioSegmentGap(clip);
-      if (!gap) {
+      const clipDur = Math.max(0, clip.duration || 0);
+      if (clipDur < AUDIO_SEGMENT_MIN_LENGTH) {
         return;
       }
       const segment = {
         source: null,
-        startSeconds: gap.start,
+        startSeconds: 0,
         trimStartSeconds: 0,
-        lengthSeconds: gap.length
+        lengthSeconds: roundSeconds3(
+          Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDur)
+        )
       };
       const segments = [...clip.audioSegments ?? [], segment];
-      segments.sort((x, y) => x.startSeconds - y.startSeconds);
       clip.audioSegments = segments;
       saveClips(clips, void 0, { origin: "detail-strip" });
       sourceToken = readStateToken();
       setSelection({
         kind: "audio-segment",
         clipIdx,
-        segIdx: segments.indexOf(segment)
+        segIdx: segments.length - 1
       });
     };
     const removeAudioSegment = (clipIdx, segIdx) => {
@@ -6112,20 +6088,16 @@
       const body = document.createElement("div");
       body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
       const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
-      const clampSegment = (cs, segIdx, start, length) => {
-        const liveClip = cs[clipIdx];
-        const walls = liveClip ? audioSegmentNeighborBounds(liveClip, segIdx) : null;
-        const lo = walls?.startMin ?? 0;
-        const hi = walls?.endMax ?? clipDur;
+      const clampSegment = (_cs, _segIdx, start, length) => {
         const s = clamp(
           start,
-          lo,
-          Math.max(lo, hi - AUDIO_SEGMENT_MIN_LENGTH)
+          0,
+          Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH)
         );
         const l = clamp(
           length,
           AUDIO_SEGMENT_MIN_LENGTH,
-          Math.max(AUDIO_SEGMENT_MIN_LENGTH, hi - s)
+          Math.max(AUDIO_SEGMENT_MIN_LENGTH, clipDur - s)
         );
         return { start: s, length: l };
       };
@@ -6140,36 +6112,58 @@
           onDelete: () => removeAudioSegment(clipIdx, segIdx),
           repoint: () => setSelection({ kind: "audio-segment", clipIdx, segIdx })
         });
-        fields.appendChild(
-          buildUploadRow(
-            "Audio Upload",
-            "audio/*",
-            segment.source?.fileName,
-            (data, fileName) => {
-              commit((cs) => {
-                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                if (seg) {
-                  seg.source = { data, fileName };
-                }
-              });
-              render();
-            },
-            () => {
-              commit((cs) => {
-                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                if (seg) {
-                  seg.source = null;
-                }
-              });
-              render();
-            }
-          )
+        const segSourceRef = typeof segment.source === "string" ? segment.source : "";
+        const segSourceValue = segSourceRef || AUDIO_SOURCE_UPLOAD;
+        const segSourceSelect = buildOptionSelect(
+          buildSegmentAudioSourceOptions(segSourceRef),
+          segSourceValue,
+          (value) => {
+            commit((cs) => {
+              const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+              if (!seg) {
+                return;
+              }
+              if (isAceStepFunAudioSource(value)) {
+                seg.source = value;
+              } else if (typeof seg.source === "string") {
+                seg.source = null;
+              }
+            });
+            render();
+          }
         );
-        const segWalls = clip ? audioSegmentNeighborBounds(clip, segIdx) : null;
+        fields.appendChild(buildField("Source", segSourceSelect));
+        if (!segSourceRef) {
+          fields.appendChild(
+            buildUploadRow(
+              "Audio Upload",
+              "audio/*",
+              typeof segment.source === "string" ? void 0 : segment.source?.fileName,
+              (data, fileName) => {
+                commit((cs) => {
+                  const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                  if (seg) {
+                    seg.source = { data, fileName };
+                  }
+                });
+                render();
+              },
+              () => {
+                commit((cs) => {
+                  const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                  if (seg) {
+                    seg.source = null;
+                  }
+                });
+                render();
+              }
+            )
+          );
+        }
         const startInput = buildClampedNumber({
           key: `seg-${segIdx}-start`,
           value: segment.startSeconds,
-          min: segWalls?.startMin ?? 0,
+          min: 0,
           max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
           step: AUDIO_SEGMENT_STEP,
           readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
@@ -7607,6 +7601,7 @@
     let storeUnsub = null;
     let unit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
+    let lastRenderedPxPerSecond = 0;
     let stripCollapsed = false;
     let selectionUnsub = null;
     const detailStrip = createTimelineDetailStrip({
@@ -7759,6 +7754,7 @@
       if (!body) {
         return;
       }
+      const prevScrollLeft = meta?.kind === "external" ? 0 : scrollEl()?.scrollLeft ?? 0;
       try {
         const state = getState();
         const clips = state.clips;
@@ -7785,6 +7781,22 @@
           onRedo: () => history.redo(),
           globalPrompt: readGlobalPrompt()
         });
+        if (prevScrollLeft > 0) {
+          const target = lastRenderedPxPerSecond > 0 && lastRenderedPxPerSecond !== pxPerSecond ? zoomAnchorScrollLeft(
+            zoomAnchorTime(
+              TRACK_HEADER_W_PX,
+              prevScrollLeft,
+              lastRenderedPxPerSecond
+            ),
+            pxPerSecond,
+            TRACK_HEADER_W_PX
+          ) : prevScrollLeft;
+          const fresh = scrollEl();
+          if (fresh) {
+            fresh.scrollLeft = target;
+          }
+        }
+        lastRenderedPxPerSecond = pxPerSecond;
         linking.reapplySelection(body, clips.length);
         detailStrip.render(meta);
         applySelectionHighlight(body);

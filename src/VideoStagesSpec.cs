@@ -71,7 +71,8 @@ public sealed record AudioSegmentSpec(
     UploadedAudioSpec Source,
     double StartSeconds,
     double TrimStartSeconds,
-    double LengthSeconds
+    double LengthSeconds,
+    string AceStepFunSource = null
 );
 
 public sealed record PromptWindowSpec(

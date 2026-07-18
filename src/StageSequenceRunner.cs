@@ -102,7 +102,7 @@ internal sealed class StageSequenceRunner(
 
                 StageSpec firstStage = clip.Stages[0];
                 ApplyControlNetClipLengthIfApplicable(clip, firstStage);
-                PrepareClipAudio(clip, firstStage, context);
+                PrepareClipAudio(clip, firstStage, context, isFirstClip: clipIndex == 0);
 
                 int clipStageIndex = 0;
                 foreach (StageSpec stage in clip.Stages)
@@ -220,7 +220,7 @@ internal sealed class StageSequenceRunner(
         return total;
     }
 
-    private void PrepareClipAudio(ClipSpec clip, StageSpec stage, RunContext context)
+    private void PrepareClipAudio(ClipSpec clip, StageSpec stage, RunContext context, bool isFirstClip)
     {
         if (g.CurrentMedia is null)
         {
@@ -239,22 +239,84 @@ internal sealed class StageSequenceRunner(
             suppressNative,
             ClipAudioWorkflowHelper.ClipAudioSourceNormalization.StageSpec);
         // Overlay any per-clip audio segments onto the resolved base audio, BEFORE the cross-clip merge so
-        // boundary trims apply to the combined result. Generation-time audio conditioning still uses the
-        // pure base audio (segments are post-hoc overlay pieces, not a generation driver).
+        // boundary trims apply to the combined result.
         int? clipFps = g.CurrentMedia?.GetRawFPS();
         double clipDurationSeconds = clip.Frames is int f && clipFps is int fps && fps > 0
             ? (double)f / fps
             : 0;
-        WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(clip, clipAudio, clipDurationSeconds);
-        currentMedia.AttachedAudio = combinedAudio;
+        WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(
+            clip,
+            clipAudio,
+            clipDurationSeconds,
+            out IReadOnlyList<(double Start, double End)> segmentWindows);
+
+        // Segment conditioning needs a known positive clip duration so the combiner built a
+        // full-clip-length silent bed; a bed-less (shorter-than-clip) track wired into the AV concat
+        // would mismatch the video latent's length.
+        bool segmentsOverNoBase = segmentWindows.Count > 0
+            && clipAudio is null
+            && clipDurationSeconds > 0;
+
+        // Segments over NO locked base track: inject the combined audio (silent bed + segments) as the
+        // sampling audio latent, preserving only the segment windows so the model generates the gaps and
+        // the video attends to the locked segment audio (matches LTX Director's audio-inpaint design).
+        // First clip only — the injectable (empty-audio) AV concat in the graph belongs to the root
+        // generation, which is the first clip's; later clips build their own AV latents at sample time.
+        bool segmentsConditionGeneration = isFirstClip
+            && segmentsOverNoBase
+            && ltxManager.TryInjectAudio(
+                combinedAudio,
+                matchVideoLengthToAudio: false,
+                preserveWindows: segmentWindows);
+
+        if (segmentsConditionGeneration)
+        {
+            // The sampled audio (segments + generated gaps) is the mux source; clear any stale attached
+            // track (e.g. a native route from the replaced root stage) so it cannot override it.
+            currentMedia.AttachedAudio = null;
+        }
+        else if (segmentsOverNoBase
+            && ltxManager.TryBuildPreserveWindowedAudioLatent(
+                combinedAudio, segmentWindows, stableIdSlot: clip.Id + 1) is WGNodeData windowedLatent)
+        {
+            // No injectable concat for this clip (later clip, or a flow without one): attach the
+            // pre-encoded windowed latent instead of the raw combined audio. AsSamplingLatent concats a
+            // latent attachment as-is, keeping the preserve-windows mask — raw audio would be baked
+            // fully-preserved, locking the silent-bed gaps instead of letting the model generate them.
+            currentMedia.AttachedAudio = windowedLatent;
+        }
+        else
+        {
+            currentMedia.AttachedAudio = combinedAudio;
+        }
         g.CurrentMedia = currentMedia;
-        if (context.RootStageHandoff
+
+        bool uploadInjectPath = context.RootStageHandoff
             && ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
                 clip.AudioSource,
                 clip.ClipLengthFromAudio,
-                restrictLengthMatchToUploadOrAce: true))
+                restrictLengthMatchToUploadOrAce: true);
+        if (uploadInjectPath && clipAudio is not null)
         {
-            _ = ltxManager.TryInjectAudio(clipAudio);
+            // A locked base track (upload / AceStepFun): inject the combined audio so segments are baked
+            // into the fully-preserved conditioning audio and the video reacts to them too. With no
+            // segments, Combine returned the base by reference, so this is the plain base injection.
+            _ = ltxManager.TryInjectAudio(combinedAudio);
+        }
+        else if (!context.RootStageHandoff
+            && isFirstClip
+            && segmentWindows.Count > 0
+            && clipAudio is not null)
+        {
+            // Non-handoff flows: VideoStagesCoordinator normally injects the first clip's base audio,
+            // but it defers to us when the clip has segments so the combined track (segments baked in)
+            // conditions generation here, with the coordinator's match-length semantics.
+            _ = ltxManager.TryInjectAudio(
+                combinedAudio,
+                ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
+                    clip.AudioSource,
+                    clip.ClipLengthFromAudio,
+                    restrictLengthMatchToUploadOrAce: false));
         }
     }
 

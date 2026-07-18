@@ -145,7 +145,8 @@ public static class Runner
     public static bool TryInjectLtxAudio(
         WorkflowGenerator g,
         WGNodeData audio,
-        bool matchVideoLengthToAudio = true)
+        bool matchVideoLengthToAudio = true,
+        IReadOnlyList<(double Start, double End)> preserveWindows = null)
     {
         StageRefStore stageRefStore = new(g);
         RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
@@ -158,7 +159,7 @@ public static class Runner
             rootVideoStageResizer,
             stageGuideMediaHelper,
             base2EditPublishedStageRefs);
-        return ltxManager.TryInjectAudio(audio, matchVideoLengthToAudio);
+        return ltxManager.TryInjectAudio(audio, matchVideoLengthToAudio, preserveWindows);
     }
 
     internal static RootVideoStageResizer GetRootVideoStageResizer(WorkflowGenerator g)

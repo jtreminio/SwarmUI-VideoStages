@@ -76,23 +76,21 @@ const getAceStepFunRefLabel = (ref: string): string => {
     return ref;
 };
 
-export const buildAudioSourceOptions = (
-    currentValue = "",
-    context: AudioSourceContext = {},
-): AudioSourceOption[] => {
-    const options: AudioSourceOption[] = [
-        { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
-        { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
-    ];
+/** Appends one option per AceStepFun generated track in the registry. */
+const appendAceStepFunRefs = (options: AudioSourceOption[]): void => {
     for (const ref of getAceStepFunRefs()) {
         options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
     }
-    if (context.controlNetEnabled) {
-        options.push({
-            value: AUDIO_SOURCE_CONTROLNET,
-            label: AUDIO_SOURCE_CONTROLNET,
-        });
-    }
+};
+
+/**
+ * Keeps a still-selected AceStepFun ref that is no longer in the registry so
+ * the select doesn't silently drop it. Always the last option.
+ */
+const appendMissingSelectedRef = (
+    options: AudioSourceOption[],
+    currentValue: string,
+): void => {
     const selected = `${currentValue || ""}`.trim();
     if (
         isAceStepFunAudioSource(selected) &&
@@ -103,6 +101,40 @@ export const buildAudioSourceOptions = (
             label: getAceStepFunRefLabel(selected),
         });
     }
+};
+
+/**
+ * Options for an audio SEGMENT's source select: an upload, or any AceStepFun
+ * generated track ("audio0", …). Unlike the clip-level options there is no
+ * Native/ControlNet — segments are overlay pieces with their own audio.
+ */
+export const buildSegmentAudioSourceOptions = (
+    currentValue = "",
+): AudioSourceOption[] => {
+    const options: AudioSourceOption[] = [
+        { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
+    ];
+    appendAceStepFunRefs(options);
+    appendMissingSelectedRef(options, currentValue);
+    return options;
+};
+
+export const buildAudioSourceOptions = (
+    currentValue = "",
+    context: AudioSourceContext = {},
+): AudioSourceOption[] => {
+    const options: AudioSourceOption[] = [
+        { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
+        { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
+    ];
+    appendAceStepFunRefs(options);
+    if (context.controlNetEnabled) {
+        options.push({
+            value: AUDIO_SOURCE_CONTROLNET,
+            label: AUDIO_SOURCE_CONTROLNET,
+        });
+    }
+    appendMissingSelectedRef(options, currentValue);
     return options;
 };
 

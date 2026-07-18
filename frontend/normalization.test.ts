@@ -572,6 +572,45 @@ describe("stage loras", () => {
             ]);
         });
 
+        it("keeps an AceStepFun track ref string as the source", () => {
+            expect(
+                normalizeAudioSegments(
+                    [
+                        {
+                            source: " audio2 ",
+                            startSeconds: 1,
+                            trimStartSeconds: 0,
+                            lengthSeconds: 2,
+                        },
+                    ],
+                    10,
+                ),
+            ).toEqual([
+                {
+                    source: "audio2",
+                    startSeconds: 1,
+                    trimStartSeconds: 0,
+                    lengthSeconds: 2,
+                },
+            ]);
+        });
+
+        it("treats a non-ref string source as no source", () => {
+            const result = normalizeAudioSegments(
+                [
+                    {
+                        source: "not-a-ref",
+                        startSeconds: 1,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 2,
+                    },
+                ],
+                10,
+            );
+            expect(result).toHaveLength(1);
+            expect(result[0].source).toBeNull();
+        });
+
         it("reads PascalCase keys and clamps length to fit the clip", () => {
             expect(
                 normalizeAudioSegments(
@@ -595,7 +634,7 @@ describe("stage loras", () => {
             ]);
         });
 
-        it("sorts by start, keeps sourceless entries, and drops non-positive length", () => {
+        it("preserves array order (index = lane), keeps sourceless entries, and drops non-positive length", () => {
             const result = normalizeAudioSegments(
                 [
                     {
@@ -620,7 +659,8 @@ describe("stage loras", () => {
                 ],
                 10,
             );
-            expect(result.map((s) => s.startSeconds)).toEqual([1, 2, 4]);
+            // Order preserved (no start-time sort): lanes must not reshuffle.
+            expect(result.map((s) => s.startSeconds)).toEqual([4, 2, 1]);
             expect(result.map((s) => s.source)).toEqual([src, null, src]);
         });
 

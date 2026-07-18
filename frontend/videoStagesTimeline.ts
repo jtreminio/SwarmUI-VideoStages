@@ -58,6 +58,9 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let storeUnsub: (() => void) | null = null;
     let unit: TimelineUnit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
+    // Zoom scale of the LAST completed render — lets the scroll restore detect
+    // zoom changes and re-anchor by time instead of raw pixels.
+    let lastRenderedPxPerSecond = 0;
     let stripCollapsed = false;
     let selectionUnsub: (() => void) | null = null;
     const detailStrip = createTimelineDetailStrip({
@@ -236,6 +239,13 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (!body) {
             return;
         }
+        // renderTimeline wipes the body's innerHTML, destroying the scroll
+        // container — without this, every state commit (drag-drop, edits)
+        // snaps a wide timeline back to the far left. External (host-side)
+        // replacements — loading a different config, prompt-box pastes — do
+        // NOT restore: the old position is meaningless for the new content.
+        const prevScrollLeft =
+            meta?.kind === "external" ? 0 : (scrollEl()?.scrollLeft ?? 0);
         try {
             const state = getState();
             const clips = state.clips;
@@ -262,6 +272,30 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 onRedo: () => history.redo(),
                 globalPrompt: readGlobalPrompt(),
             });
+            if (prevScrollLeft > 0) {
+                // If the zoom changed since the last render (toolbar buttons,
+                // slider, fit), a raw pixel restore would land on a different
+                // TIME — re-anchor the left edge's time under the new scale.
+                // (zoomWheel then overrides with its own pointer anchor.)
+                const target =
+                    lastRenderedPxPerSecond > 0 &&
+                    lastRenderedPxPerSecond !== pxPerSecond
+                        ? zoomAnchorScrollLeft(
+                              zoomAnchorTime(
+                                  TRACK_HEADER_W_PX,
+                                  prevScrollLeft,
+                                  lastRenderedPxPerSecond,
+                              ),
+                              pxPerSecond,
+                              TRACK_HEADER_W_PX,
+                          )
+                        : prevScrollLeft;
+                const fresh = scrollEl();
+                if (fresh) {
+                    fresh.scrollLeft = target;
+                }
+            }
+            lastRenderedPxPerSecond = pxPerSecond;
             linking.reapplySelection(body, clips.length);
             detailStrip.render(meta);
             applySelectionHighlight(body);

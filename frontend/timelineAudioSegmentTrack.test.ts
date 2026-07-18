@@ -38,30 +38,33 @@ const makeBody = (): HTMLElement => {
     return body;
 };
 
-// Minimal audio cell mirroring the real markup: per-clip audio clip on top
-// plus a segments LANE beneath it (segments live in the lane, not the clip).
+// Minimal audio cell mirroring the real markup: per-clip audio clip on top,
+// then one mini lane PER segment plus the blank add-lane at the bottom (only
+// the blank lane carries data-vst-audio-seg-add + data-clip-idx).
 const renderSegments = (body: HTMLElement, clips: ClipFixture[]): void => {
     let cursor = 0;
     const parts: string[] = [];
     clips.forEach((clip, i) => {
         const startPx = cursor * PPS;
         const widthPx = clip.duration * PPS;
-        const segs = (clip.audioSegments ?? [])
+        const segLanes = (clip.audioSegments ?? [])
             .map((seg, s) => {
                 const leftPct = (seg.startSeconds / clip.duration) * 100;
                 const widthPct = (seg.lengthSeconds / clip.duration) * 100;
                 return (
+                    `<div class="vst-audio-seg-lane" style="left:${startPx}px;width:${widthPx}px">` +
                     `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${i}" data-seg-idx="${s}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0">` +
                     `<span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left"></span>` +
                     `<span class="vst-audio-seg-label"></span>` +
                     `<span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right"></span>` +
-                    `</div>`
+                    `</div></div>`
                 );
             })
             .join("");
         parts.push(
             `<div class="vst-audio-clip" data-vst-audio="clip" data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px"></div>`,
-            `<div class="vst-audio-seg-lane" data-vst-audio-seg-add data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px">${segs}</div>`,
+            segLanes,
+            `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px"></div>`,
         );
         cursor += clip.duration;
     });
@@ -262,7 +265,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         expect(s.lengthSeconds).toBeCloseTo(5, 5);
     });
 
-    it("left-edge drag left stops at the previous segment's end", () => {
+    it("left-edge drag left crosses a neighbouring segment (overlap allowed), clamping at 0", () => {
         const body = setup([
             {
                 duration: 20,
@@ -281,9 +284,10 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         document.dispatchEvent(mouse("mouseup", 400 - 10 * PPS));
 
         const b = savedSegments(saveSpy)[1];
-        // B's start clamps at A's end (4); end stays 11.
-        expect(b.startSeconds).toBeCloseTo(4, 5);
-        expect(b.lengthSeconds).toBeCloseTo(7, 5);
+        // Each segment has its own lane: B extends straight over A's span,
+        // clamped only at the clip start; end stays 11.
+        expect(b.startSeconds).toBeCloseTo(0, 5);
+        expect(b.lengthSeconds).toBeCloseTo(11, 5);
     });
 
     it("Enter on a segment selects it", () => {
@@ -300,7 +304,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         });
     });
 
-    // ---- relay-prompt parity: lane create + non-overlap walls ------------
+    // ---- blank-lane create + overlap-allowed bounds ------------
 
     it("clicking empty lane space adds a default-length segment and selects it", () => {
         const body = setup([{ duration: 10 }]);
@@ -335,7 +339,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         expect(segs[0].lengthSeconds).toBeCloseTo(4, 5);
     });
 
-    it("a segment created before an existing one selects its SORTED index", () => {
+    it("a segment created before an existing one is APPENDED (index = lane) and selected", () => {
         const body = setup([
             {
                 duration: 10,
@@ -348,15 +352,18 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
 
         const segs = savedSegments(saveSpy);
         expect(segs).toHaveLength(2);
-        expect(segs[0].startSeconds).toBeCloseTo(1, 5); // sorted first
+        // No start-time sort: the existing segment keeps lane 0, the new one
+        // takes the blank lane (appended) and is selected there.
+        expect(segs[0].startSeconds).toBeCloseTo(6, 5);
+        expect(segs[1].startSeconds).toBeCloseTo(1, 5);
         expect(getSelection()).toEqual({
             kind: "audio-segment",
             clipIdx: 0,
-            segIdx: 0,
+            segIdx: 1,
         });
     });
 
-    it("a new segment cannot overlap an existing one (clamped into the gap)", () => {
+    it("a new segment may overlap an existing one (lanes mix additively)", () => {
         const body = setup([
             {
                 duration: 10,
@@ -364,20 +371,17 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
             },
         ]);
         const lane = el(body, ".vst-audio-seg-lane[data-clip-idx='0']");
-        // Tap at 3s: default length 2 would reach 5s — clamped to end at 4s.
+        // Tap at 3s: default length 2 reaches 5s, overlapping [4,7] — allowed.
         lane.dispatchEvent(mouse("mousedown", 3 * PPS));
         document.dispatchEvent(mouse("mouseup", 3 * PPS));
 
         const segs = savedSegments(saveSpy);
         expect(segs).toHaveLength(2);
-        const created = segs.find((s) => s.startSeconds < 4);
-        expect(created).toBeDefined();
-        expect(
-            (created?.startSeconds ?? 0) + (created?.lengthSeconds ?? 0),
-        ).toBeLessThanOrEqual(4 + 1e-6);
+        expect(segs[1].startSeconds).toBeCloseTo(3, 5);
+        expect(segs[1].lengthSeconds).toBeCloseTo(2, 5);
     });
 
-    it("moving a segment stops at a neighbouring segment", () => {
+    it("moving a segment keeps its length within the clip bounds", () => {
         const body = setup([
             {
                 duration: 20,
@@ -403,7 +407,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         expect(a.lengthSeconds).toBeCloseTo(3, 5); // length preserved
     });
 
-    it("right-edge resize stops at the next segment's start", () => {
+    it("right-edge resize extends past the next segment (overlap allowed)", () => {
         const body = setup([
             {
                 duration: 20,
@@ -423,7 +427,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
 
         const s = savedSegments(saveSpy)[0];
         expect(s.startSeconds).toBeCloseTo(2, 5);
-        // End clamped to B's start (8s) → length 6, not 13.
-        expect(s.lengthSeconds).toBeCloseTo(6, 5);
+        // Overlap allowed: the end extends straight past B ([8,11]) to 15s.
+        expect(s.lengthSeconds).toBeCloseTo(13, 5);
     });
 });

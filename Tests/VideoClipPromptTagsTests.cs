@@ -148,4 +148,39 @@ public class VideoClipPromptTagsTests
         Assert.Equal("real prompt", new PromptRegion(prompt).GlobalPrompt.Trim());
         Assert.DoesNotContain("clips", prompt.Split('>')[0]);
     }
+
+    // --- Metadata restore (processed markers -> authored syntax) ---
+
+    [Fact]
+    public void Metadata_restore_round_trips_window_tags()
+    {
+        string authored =
+            "a young woman, smiling at the viewer<videoclip[0]:0.5-4>she says \"hi\"<videoclip[0]:4-9.5>she giggles";
+        (string processed, _) = Normalize(authored);
+        Assert.NotEqual(authored, processed);
+        Assert.Equal(authored, PromptParser.RestoreTagsForMetadata(processed));
+    }
+
+    [Fact]
+    public void Metadata_restore_round_trips_clip_section_tags()
+    {
+        string authored = "base prose<videoclip[1]>clip prose";
+        (string processed, _) = Normalize(authored);
+        Assert.Equal(authored, PromptParser.RestoreTagsForMetadata(processed));
+    }
+
+    [Fact]
+    public void Metadata_restore_round_trips_bare_videoclip_tag()
+    {
+        string authored = "base prose<videoclip>shared prose";
+        (string processed, _) = Normalize(authored);
+        Assert.Equal(authored, PromptParser.RestoreTagsForMetadata(processed));
+    }
+
+    [Fact]
+    public void Metadata_restore_leaves_unmatched_markers_untouched()
+    {
+        string marker = $"<videoclip//cid={Constants.SectionID_VideoClipUnmatched}>";
+        Assert.Equal(marker, PromptParser.RestoreTagsForMetadata(marker));
+    }
 }

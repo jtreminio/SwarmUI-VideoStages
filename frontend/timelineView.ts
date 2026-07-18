@@ -18,7 +18,13 @@ import {
     stageChipTitle,
     type TimelineUnit,
 } from "./timelineDetail";
-import type { BoundaryOut, Clip, PromptWindow, RefImage } from "./types";
+import type {
+    AudioSegment,
+    BoundaryOut,
+    Clip,
+    PromptWindow,
+    RefImage,
+} from "./types";
 
 export interface RegionLayout {
     index: number;
@@ -485,41 +491,67 @@ const audioFlagChips = (clip: Clip): string => {
  * (move), left/right resize grips, click to select, shift+click to delete.
  * Positioned as a percentage of the clip duration so they track the cell width.
  */
-const renderAudioSegments = (
+const renderAudioSegmentBlock = (
+    seg: AudioSegment,
+    clipIdx: number,
+    segIdx: number,
+    durationSeconds: number,
+): string => {
+    const start = clamp(seg.startSeconds, 0, durationSeconds);
+    const end = clamp(
+        seg.startSeconds + seg.lengthSeconds,
+        start,
+        durationSeconds,
+    );
+    if (end <= start) {
+        return "";
+    }
+    const leftPct = (start / durationSeconds) * 100;
+    const widthPct = ((end - start) / durationSeconds) * 100;
+    const name =
+        typeof seg.source === "string" ? seg.source : seg.source?.fileName;
+    const labelText = name ? name : "audio segment";
+    const label = `${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
+    const title = `${labelText} · ${label} · drag to move/resize · Shift+click to delete`;
+    return (
+        `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="Edit audio segment ${segIdx} for clip ${clipIdx}">` +
+        `<span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left" aria-hidden="true"></span>` +
+        `<span class="vst-audio-seg-label">${escapeHtml(labelText)}</span>` +
+        `<span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right" aria-hidden="true"></span>` +
+        `</div>`
+    );
+};
+
+/**
+ * One mini lane per segment (the array index IS the lane), plus one BLANK lane
+ * at the bottom that adds a segment on click/drag — the new segment takes the
+ * blank lane over and a fresh blank lane appears beneath it. Per-lane segments
+ * may overlap in time; the backend mixes them additively.
+ */
+const renderAudioSegmentLanes = (
     clip: Clip,
     clipIdx: number,
     durationSeconds: number,
+    startPx: number,
+    widthPx: number,
 ): string => {
-    const segments = clip.audioSegments ?? [];
-    if (segments.length === 0 || durationSeconds <= 0) {
-        return "";
+    const place = (laneIdx: number): string =>
+        `left:${startPx}px;width:${widthPx}px;--vst-audio-lane-idx:${laneIdx}`;
+    const blankLane = (laneIdx: number): string =>
+        `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" ` +
+        `style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>`;
+    if (durationSeconds <= 0) {
+        return blankLane(0);
     }
-    return segments
-        .map((seg, segIdx) => {
-            const start = clamp(seg.startSeconds, 0, durationSeconds);
-            const end = clamp(
-                seg.startSeconds + seg.lengthSeconds,
-                start,
-                durationSeconds,
-            );
-            if (end <= start) {
-                return "";
-            }
-            const leftPct = (start / durationSeconds) * 100;
-            const widthPct = ((end - start) / durationSeconds) * 100;
-            const name = seg.source?.fileName;
-            const labelText = name ? name : "audio segment";
-            const label = `${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
-            const title = `${labelText} · ${label} · drag to move/resize · Shift+click to delete`;
-            return (
-                `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="Edit audio segment ${segIdx} for clip ${clipIdx}">` +
-                `<span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left" aria-hidden="true"></span>` +
-                `<span class="vst-audio-seg-label">${escapeHtml(labelText)}</span>` +
-                `<span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right" aria-hidden="true"></span>` +
-                `</div>`
-            );
-        })
-        .join("");
+    const segments = clip.audioSegments ?? [];
+    const lanes = segments.map(
+        (seg, segIdx) =>
+            `<div class="vst-audio-seg-lane" style="${place(segIdx)}">` +
+            renderAudioSegmentBlock(seg, clipIdx, segIdx, durationSeconds) +
+            `</div>`,
+    );
+    lanes.push(blankLane(segments.length));
+    return lanes.join("");
 };
 
 export const renderAudioTrackRow = (
@@ -564,23 +596,31 @@ export const renderAudioTrackRow = (
                 ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>`
                 : "";
             const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-            // Two mini-rows per clip, mirroring the Prompt track: the audio
-            // clip (source/waveform) on top, a segments lane on the bottom —
-            // clicking empty lane space adds a segment at that time.
+            // Per clip: the audio clip (source/waveform) mini-row on top,
+            // then one mini lane per segment plus a blank add-lane beneath.
             return (
                 `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeHtml(title)}" aria-label="Edit audio for clip ${l.index}">` +
                 `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +
                 audioFlagChips(clip) +
                 body +
                 `</div>` +
-                `<div class="vst-audio-seg-lane" data-vst-audio-seg-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${width}px" title="Click empty space to add an audio segment">` +
-                renderAudioSegments(clip, l.index, clip.duration || 0) +
-                `</div>`
+                renderAudioSegmentLanes(
+                    clip,
+                    l.index,
+                    clip.duration || 0,
+                    l.startPx,
+                    width,
+                )
             );
         })
         .join("");
+    // The row grows with the busiest clip: N segment lanes + the blank lane.
+    const laneCount = Math.max(
+        1,
+        ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1),
+    );
     return (
-        `<div class="vst-track-row vst-track-audio">` +
+        `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` +
         `<div class="vst-track-head">` +
         `<div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div>` +
         `<div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div>` +

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using FreneticUtilities.FreneticExtensions;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -157,6 +158,43 @@ internal static class PromptParser
         }
         start = Math.Max(0, start);
         return end > start;
+    }
+
+    private static readonly Regex WindowMarkerPattern = new(
+        $@"<{VideoClipTagName}:w\|(\d+)\|([0-9.]+)\|([0-9.]+){Regex.Escape(VideoClipCidMarker)}-?\d+>",
+        RegexOptions.Compiled);
+
+    private static readonly Regex SectionMarkerPattern = new(
+        $@"<{VideoClipTagName}{Regex.Escape(VideoClipCidMarker)}(-?\d+)>",
+        RegexOptions.Compiled);
+
+    /// <summary>Restores processed <c>videoclip</c> markers back to the user-facing tag syntax, for metadata.
+    /// Windows (<c>&lt;videoclip:w|0|0.5|4//cid=N&gt;</c>) become <c>&lt;videoclip[0]:0.5-4&gt;</c>; clip section
+    /// markers become <c>&lt;videoclip&gt;</c>/<c>&lt;videoclip[N]&gt;</c>. Flattened clip-stage and unmatched
+    /// section ids are not reversible without the spec and are left as-is.</summary>
+    public static string RestoreTagsForMetadata(string prompt)
+    {
+        if (string.IsNullOrEmpty(prompt) || !prompt.Contains($"<{VideoClipTagName}", StringComparison.OrdinalIgnoreCase))
+        {
+            return prompt;
+        }
+        prompt = WindowMarkerPattern.Replace(
+            prompt,
+            m => $"<{VideoClipTagName}[{m.Groups[1].Value}]:{m.Groups[2].Value}-{m.Groups[3].Value}>");
+        prompt = SectionMarkerPattern.Replace(prompt, m =>
+        {
+            int cid = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+            if (cid == Constants.SectionID_VideoClip)
+            {
+                return $"<{VideoClipTagName}>";
+            }
+            if (cid > Constants.SectionID_VideoClip && cid < Constants.SectionID_VideoClipUnmatched)
+            {
+                return $"<{VideoClipTagName}[{cid - Constants.SectionID_VideoClip - 1}]>";
+            }
+            return m.Value;
+        });
+        return prompt;
     }
 
     private static string Sanitize(string value) =>

@@ -1020,8 +1020,8 @@ describe("createTimelineDetailStrip", () => {
         expect(segments[0].source).toBeNull();
     });
 
-    it("+ Add segment lands in the first free gap, sorted, never overlapping", () => {
-        // Existing segments [1,3] and [4,6] leave gaps [0,1], [3,4], [6,10].
+    it("+ Add segment appends a default-length segment on its own lane (overlap allowed)", () => {
+        // Existing segments [1,3] and [4,6]; the new one may overlap them.
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
         setSelection({ kind: "audio", clipIdx: 0 });
         document
@@ -1030,15 +1030,14 @@ describe("createTimelineDetailStrip", () => {
 
         const segments = savedClips(saveSpy)[0].audioSegments;
         expect(segments).toHaveLength(3);
-        // First gap is [0,1] → start 0, length capped to 1; array stays sorted
-        // and the NEW segment (post-sort index 0) is selected.
-        expect(segments[0].startSeconds).toBe(0);
-        expect(segments[0].lengthSeconds).toBe(1);
-        expect(segments.map((s) => s.startSeconds)).toEqual([0, 1, 4]);
+        // Appended (the array index is the lane — no start-time sort): the new
+        // segment starts at 0 with the default length and is selected.
+        expect(segments.map((s) => s.startSeconds)).toEqual([1, 4, 0]);
+        expect(segments[2].lengthSeconds).toBe(2);
         expect(getSelection()).toEqual({
             kind: "audio-segment",
             clipIdx: 0,
-            segIdx: 0,
+            segIdx: 2,
         });
     });
 
@@ -1179,18 +1178,18 @@ describe("createTimelineDetailStrip", () => {
         jest.useRealTimers();
     });
 
-    it("clamps a segment's Start/Length at its neighbouring segments", () => {
-        // seg0 [1,3], seg1 [4,6] in a 10s clip.
+    it("clamps a segment's Start/Length only to the clip bounds (overlap allowed)", () => {
+        // seg0 [1,3], seg1 [4,6] in a 10s clip — segments live on their own
+        // lanes, so neighbours impose no walls.
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
 
-        // seg1's Start spinner wall is seg0's end (3) — in the attr.
         const s1 = segRow(1).querySelector<HTMLInputElement>(
             'input[data-vst-focus-key="seg-1-start"]',
         );
-        expect(s1?.min).toBe("3");
+        expect(s1?.min).toBe("0");
 
-        // Typing a Start INSIDE seg0 clamps to seg0's end.
+        // Typing a Start INSIDE seg0's span is allowed as-is.
         jest.useFakeTimers();
         if (!s1) {
             throw new Error("start input missing");
@@ -1199,9 +1198,9 @@ describe("createTimelineDetailStrip", () => {
         s1.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
         let segs = savedClips(saveSpy)[0].audioSegments;
-        expect(segs[1].startSeconds).toBe(3);
+        expect(segs[1].startSeconds).toBe(2);
 
-        // seg0's Length cannot extend into seg1: end clamps to seg1's start.
+        // seg0's Length may extend across seg1, clamped only at the clip end.
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
         const l0 = segRow(0).querySelector<HTMLInputElement>(
             'input[data-vst-focus-key="seg-0-length"]',
@@ -1209,13 +1208,13 @@ describe("createTimelineDetailStrip", () => {
         if (!l0) {
             throw new Error("length input missing");
         }
-        l0.value = "9";
+        l0.value = "12";
         l0.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
         segs = savedClips(saveSpy)[0].audioSegments;
-        // seg1 moved to [3,5] above, so seg0 [1,…] may reach at most 3 → length 2.
+        // start 1 in a 10s clip → length clamps to 9 (clip end), not seg1.
         expect(segs[0].startSeconds).toBe(1);
-        expect(segs[0].lengthSeconds).toBe(2);
+        expect(segs[0].lengthSeconds).toBe(9);
         jest.useRealTimers();
     });
 

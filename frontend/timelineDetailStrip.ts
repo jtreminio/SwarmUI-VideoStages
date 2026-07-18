@@ -1,11 +1,13 @@
 import {
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
+    buildSegmentAudioSourceOptions,
     canUseClipLengthFromAudio,
     isAceStepFunAudioSource,
     resolveAudioSourceValue,
 } from "./audioSource";
 import {
+    AUDIO_SEGMENT_DEFAULT_LENGTH,
     AUDIO_SEGMENT_MIN_LENGTH,
     AUDIO_SEGMENT_STEP,
     CLIP_DURATION_MAX,
@@ -59,10 +61,6 @@ import { getClips, getState, saveClips, saveState } from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import type { UpdateMeta } from "./store";
 import { isVideoStagesEnabled, readStateToken } from "./swarmInputs";
-import {
-    audioSegmentNeighborBounds,
-    firstAudioSegmentGap,
-} from "./timelineAudioSegmentTrack";
 import {
     type BoundaryPlan,
     crossfadePlanForClips,
@@ -901,30 +899,29 @@ export const createTimelineDetailStrip = (
         if (!clip) {
             return;
         }
-        // Same non-overlap discipline as the lane-click path: the new segment
-        // lands in the first free gap, the array stays sorted by start, and
-        // the NEW segment's post-sort index is selected (normalization sorts
-        // on every parse, so an unsorted append would misalign the selection
-        // after a round-trip).
-        const gap = firstAudioSegmentGap(clip);
-        if (!gap) {
+        // Each segment gets its own lane, so overlap is fine — the new segment
+        // simply starts at 0 with the default length and is APPENDED (the
+        // array index is the lane; lanes must not reshuffle).
+        const clipDur = Math.max(0, clip.duration || 0);
+        if (clipDur < AUDIO_SEGMENT_MIN_LENGTH) {
             return;
         }
         const segment: AudioSegment = {
             source: null,
-            startSeconds: gap.start,
+            startSeconds: 0,
             trimStartSeconds: 0,
-            lengthSeconds: gap.length,
+            lengthSeconds: roundSeconds(
+                Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDur),
+            ),
         };
         const segments = [...(clip.audioSegments ?? []), segment];
-        segments.sort((x, y) => x.startSeconds - y.startSeconds);
         clip.audioSegments = segments;
         saveClips(clips, undefined, { origin: "detail-strip" });
         sourceToken = readStateToken();
         setSelection({
             kind: "audio-segment",
             clipIdx,
-            segIdx: segments.indexOf(segment),
+            segIdx: segments.length - 1,
         });
     };
 
@@ -2290,31 +2287,24 @@ export const createTimelineDetailStrip = (
             "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
         const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
 
-        // Segments obey the same non-overlap rule as relay windows: start and
-        // length clamp into the free interval between neighbouring segments
-        // (audioSegmentNeighborBounds), re-derived from the LIVE clips at
-        // commit time so a stale wall can never be applied.
+        // Segments live on per-segment lanes and may overlap in time (the
+        // backend mixes them additively) — start/length clamp only to the
+        // clip's own bounds.
         const clampSegment = (
-            cs: Clip[],
-            segIdx: number,
+            _cs: Clip[],
+            _segIdx: number,
             start: number,
             length: number,
         ): { start: number; length: number } => {
-            const liveClip = cs[clipIdx];
-            const walls = liveClip
-                ? audioSegmentNeighborBounds(liveClip, segIdx)
-                : null;
-            const lo = walls?.startMin ?? 0;
-            const hi = walls?.endMax ?? clipDur;
             const s = clamp(
                 start,
-                lo,
-                Math.max(lo, hi - AUDIO_SEGMENT_MIN_LENGTH),
+                0,
+                Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
             );
             const l = clamp(
                 length,
                 AUDIO_SEGMENT_MIN_LENGTH,
-                Math.max(AUDIO_SEGMENT_MIN_LENGTH, hi - s),
+                Math.max(AUDIO_SEGMENT_MIN_LENGTH, clipDur - s),
             );
             return { start: s, length: l };
         };
@@ -2332,42 +2322,68 @@ export const createTimelineDetailStrip = (
                     setSelection({ kind: "audio-segment", clipIdx, segIdx }),
             });
 
-            fields.appendChild(
-                buildUploadRow(
-                    "Audio Upload",
-                    "audio/*",
-                    segment.source?.fileName,
-                    (data, fileName) => {
-                        commit((cs) => {
-                            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                            if (seg) {
-                                seg.source = { data, fileName };
-                            }
-                        });
-                        render();
-                    },
-                    () => {
-                        commit((cs) => {
-                            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                            if (seg) {
-                                seg.source = null;
-                            }
-                        });
-                        render();
-                    },
-                ),
+            // Source select: an upload, or an AceStepFun generated track ref.
+            const segSourceRef =
+                typeof segment.source === "string" ? segment.source : "";
+            const segSourceValue = segSourceRef || AUDIO_SOURCE_UPLOAD;
+            const segSourceSelect = buildOptionSelect(
+                buildSegmentAudioSourceOptions(segSourceRef),
+                segSourceValue,
+                (value) => {
+                    commit((cs) => {
+                        const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                        if (!seg) {
+                            return;
+                        }
+                        if (isAceStepFunAudioSource(value)) {
+                            seg.source = value;
+                        } else if (typeof seg.source === "string") {
+                            // Back to Upload: clear the ref so the upload
+                            // picker prompts for a file.
+                            seg.source = null;
+                        }
+                    });
+                    render();
+                },
             );
+            fields.appendChild(buildField("Source", segSourceSelect));
 
-            // Neighbour wall in the attr (like a relay window's Begin): the
-            // spinner stops AT the previous segment. Only the neighbour wall
-            // is static-attr-safe — see the relay fields for why.
-            const segWalls = clip
-                ? audioSegmentNeighborBounds(clip, segIdx)
-                : null;
+            if (!segSourceRef) {
+                fields.appendChild(
+                    buildUploadRow(
+                        "Audio Upload",
+                        "audio/*",
+                        typeof segment.source === "string"
+                            ? undefined
+                            : segment.source?.fileName,
+                        (data, fileName) => {
+                            commit((cs) => {
+                                const seg =
+                                    cs[clipIdx]?.audioSegments?.[segIdx];
+                                if (seg) {
+                                    seg.source = { data, fileName };
+                                }
+                            });
+                            render();
+                        },
+                        () => {
+                            commit((cs) => {
+                                const seg =
+                                    cs[clipIdx]?.audioSegments?.[segIdx];
+                                if (seg) {
+                                    seg.source = null;
+                                }
+                            });
+                            render();
+                        },
+                    ),
+                );
+            }
+
             const startInput = buildClampedNumber({
                 key: `seg-${segIdx}-start`,
                 value: segment.startSeconds,
-                min: segWalls?.startMin ?? 0,
+                min: 0,
                 max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
                 step: AUDIO_SEGMENT_STEP,
                 readBack: (cs) =>
