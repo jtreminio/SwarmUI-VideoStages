@@ -54,7 +54,7 @@ import {
     type StageLora,
     type UploadedAudio,
 } from "./types";
-import { utils } from "./utils";
+import { isRecord, roundToTenth, utils } from "./utils";
 
 const readProp = (raw: Record<string, unknown>, ...keys: string[]): unknown => {
     for (const key of keys) {
@@ -105,6 +105,33 @@ export const normalizePromptWindows = (
  * cannot fit inside the clip). Start is clamped to >= 0 and start+length is
  * clamped to the clip duration; strength is clamped to [0, 1] (default 1).
  */
+/**
+ * Clamp a (start, length) window inside [0, clipDuration] with a minimum
+ * length: start is clamped so at least minLength fits, then length is clamped
+ * to what remains. Returns null when no positive-length window survives.
+ */
+const clampWindowInDuration = (
+    startRaw: number,
+    lengthRaw: number,
+    clipDuration: number,
+    minLength: number,
+): { startSeconds: number; lengthSeconds: number } | null => {
+    if (!(lengthRaw > 0)) {
+        return null;
+    }
+    const maxStart = Math.max(0, clipDuration - minLength);
+    const startSeconds = clamp(startRaw, 0, maxStart);
+    const lengthSeconds = clamp(
+        lengthRaw,
+        minLength,
+        Math.max(minLength, clipDuration - startSeconds),
+    );
+    if (!(lengthSeconds > 0)) {
+        return null;
+    }
+    return { startSeconds, lengthSeconds };
+};
+
 export const normalizeRetake = (
     value: unknown,
     clipDuration: number,
@@ -123,17 +150,13 @@ export const normalizeRetake = (
         `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
         0,
     );
-    if (!(lengthRaw > 0)) {
-        return null;
-    }
-    const maxStart = Math.max(0, clipDuration - RETAKE_MIN_DURATION);
-    const startSeconds = clamp(startRaw, 0, maxStart);
-    const lengthSeconds = clamp(
+    const window = clampWindowInDuration(
+        startRaw,
         lengthRaw,
+        clipDuration,
         RETAKE_MIN_DURATION,
-        Math.max(RETAKE_MIN_DURATION, clipDuration - startSeconds),
     );
-    if (!(lengthSeconds > 0)) {
+    if (!window) {
         return null;
     }
     const strengthRaw = readProp(value, "strength", "Strength");
@@ -146,14 +169,11 @@ export const normalizeRetake = (
                   RETAKE_STRENGTH_MAX,
               );
     return {
-        startSeconds: roundRetakeSeconds(startSeconds),
-        lengthSeconds: roundRetakeSeconds(lengthSeconds),
+        startSeconds: roundToTenth(window.startSeconds),
+        lengthSeconds: roundToTenth(window.lengthSeconds),
         strength,
     };
 };
-
-const roundRetakeSeconds = (seconds: number): number =>
-    Math.round(seconds * 10) / 10;
 
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
@@ -163,12 +183,6 @@ const resolveRootPreferredUpscaleMethod = (
     ) ??
     upscaleMethodValues[0] ??
     "";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null && !Array.isArray(value);
-
-const normalizeExpanded = (raw: { expanded?: unknown }): boolean =>
-    raw.expanded === undefined ? true : !!raw.expanded;
 
 const snapStrengthToStep = (
     value: unknown,
@@ -204,9 +218,6 @@ export const normalizeUploadedAudio = (
     };
 };
 
-const roundSegmentSeconds = (seconds: number): number =>
-    Math.round(seconds * 10) / 10;
-
 const normalizeAudioSegment = (
     value: unknown,
     clipDuration: number,
@@ -241,24 +252,20 @@ const normalizeAudioSegment = (
         `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
         0,
     );
-    if (!(lengthRaw > 0)) {
-        return null;
-    }
-    const maxStart = Math.max(0, clipDuration - AUDIO_SEGMENT_MIN_LENGTH);
-    const startSeconds = clamp(startRaw, 0, maxStart);
-    const lengthSeconds = clamp(
+    const window = clampWindowInDuration(
+        startRaw,
         lengthRaw,
+        clipDuration,
         AUDIO_SEGMENT_MIN_LENGTH,
-        Math.max(AUDIO_SEGMENT_MIN_LENGTH, clipDuration - startSeconds),
     );
-    if (!(lengthSeconds > 0)) {
+    if (!window) {
         return null;
     }
     return {
         source,
-        startSeconds: roundSegmentSeconds(startSeconds),
-        trimStartSeconds: roundSegmentSeconds(trimStartRaw),
-        lengthSeconds: roundSegmentSeconds(lengthSeconds),
+        startSeconds: roundToTenth(window.startSeconds),
+        trimStartSeconds: roundToTenth(trimStartRaw),
+        lengthSeconds: roundToTenth(window.lengthSeconds),
     };
 };
 
@@ -296,13 +303,20 @@ export const normalizeControlNetSource = (value: unknown): string => {
     return CONTROLNET_SOURCE_OPTIONS[0];
 };
 
-export const normalizeOptionalModelName = (value: unknown): string => {
-    const raw = `${value ?? ""}`.trim();
-    return raw || "";
-};
+/** A fresh IC-LoRA entry with every knob at its default. */
+export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
+    lora: "",
+    preset: IC_LORA_PRESET_CUSTOM_ID,
+    source: IC_LORA_SOURCE_UPLOAD,
+    strength: IC_LORA_STRENGTH_DEFAULT,
+    attentionStrength: IC_LORA_ATTENTION_DEFAULT,
+    controlType: "none",
+    video: null,
+    ...overrides,
+});
 
 export const normalizeControlNetLora = (value: unknown): string => {
-    const raw = normalizeOptionalModelName(value);
+    const raw = `${value ?? ""}`.trim();
     if (!raw) {
         return "";
     }
@@ -388,17 +402,12 @@ export const normalizeIcLoras = (
         return [];
     }
     return [
-        {
+        defaultIcLora({
             lora: legacyLora,
-            preset: IC_LORA_PRESET_CUSTOM_ID,
             source: normalizeControlNetSource(
                 readProp(rawClip, "controlNetSource", "ControlNetSource"),
             ),
-            strength: IC_LORA_STRENGTH_DEFAULT,
-            attentionStrength: IC_LORA_ATTENTION_DEFAULT,
-            controlType: "none",
-            video: null,
-        },
+        }),
     ];
 };
 
@@ -445,15 +454,7 @@ export const readRawStageProp = (
     raw: Record<string, unknown>,
     camel: string,
     pascal: string,
-): unknown => {
-    if (Object.hasOwn(raw, camel)) {
-        return raw[camel];
-    }
-    if (Object.hasOwn(raw, pascal)) {
-        return raw[pascal];
-    }
-    return undefined;
-};
+): unknown => readProp(raw, camel, pascal);
 
 export const readRawStageString = (
     raw: Record<string, unknown>,
@@ -499,7 +500,6 @@ export const buildDefaultStage = (
 ): Stage => {
     const defaults = getRootDefaults();
     return {
-        expanded: true,
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
         controlNetStrength: previousStage
@@ -528,7 +528,6 @@ export const buildDefaultStage = (
 export const buildDefaultRef = (
     source: string = REF_SOURCE_REFINER,
 ): RefImage => ({
-    expanded: true,
     source,
     uploadFileName: null,
     uploadedImage: null,
@@ -564,7 +563,6 @@ export const buildDefaultClip = (
     const defaults = getRootDefaults();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
     return {
-        expanded: true,
         skipped: false,
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
@@ -670,7 +668,6 @@ export const normalizeStage = (
         );
     }
     const stage: Stage = {
-        expanded: normalizeExpanded(rawStage),
         skipped: !!rawStage.skipped,
         control,
         controlNetStrength: normalizeStageControlNetStrengthValue(
@@ -735,7 +732,6 @@ export const normalizeRef = (
     const fallback = buildDefaultRef();
     const source = `${rawRef.source ?? fallback.source}` || fallback.source;
     const ref: RefImage = {
-        expanded: normalizeExpanded(rawRef),
         source,
         uploadFileName:
             rawRef.uploadFileName == null || rawRef.uploadFileName === ""
@@ -815,7 +811,6 @@ export const normalizeClip = (
             rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet
         );
     const clip: Clip = {
-        expanded: normalizeExpanded(rawClip),
         skipped: !!rawClip.skipped,
         hue: normalizeStoredHue(rawClip.hue),
         boundaryOut: normalizeBoundaryOut(

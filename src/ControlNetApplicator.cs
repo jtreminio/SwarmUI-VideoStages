@@ -28,6 +28,25 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         (QwenImageDiffsynthControlnetNode.ClassType, "model_patch"),
     ];
 
+    /// <summary>Reads a bridge-resolvable [nodeId, slot] path cached in NodeHelpers
+    /// under <paramref name="key"/>; false when absent or no longer resolvable.</summary>
+    private static bool TryGetCachedPath(WorkflowGenerator g, WorkflowBridge bridge, string key, out JArray path)
+    {
+        if (g.NodeHelpers.TryGetValue(key, out string encoded)
+            && !string.IsNullOrWhiteSpace(encoded)
+            && JToken.Parse(encoded) is JArray { Count: 2 } cached
+            && (bridge is null || bridge.ResolvePath(cached) is not null))
+        {
+            path = cached;
+            return true;
+        }
+        path = null;
+        return false;
+    }
+
+    private static void CachePath(WorkflowGenerator g, string key, JArray path) =>
+        g.NodeHelpers[key] = path.ToString(Formatting.None);
+
     private static string CapturedControlNetImageKey(int index) =>
         $"{CapturedControlNetImageKeyPrefix}{index}";
 
@@ -312,10 +331,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         UploadedAudioSpec video)
     {
         string key = $"{UploadedDriveImagesKeyPrefix}{clipId}.{entryIdx}";
-        if (g.NodeHelpers.TryGetValue(key, out string encoded)
-            && !string.IsNullOrWhiteSpace(encoded)
-            && JToken.Parse(encoded) is JArray { Count: 2 } cached
-            && bridge.ResolvePath(cached) is not null)
+        if (TryGetCachedPath(g, bridge, key, out JArray cached))
         {
             return cached;
         }
@@ -337,7 +353,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             bridge.SyncNode(components);
             path = WorkflowBridge.ToPath(components.Images);
         }
-        g.NodeHelpers[key] = path.ToString(Formatting.None);
+        CachePath(g, key, path);
         return path;
     }
 
@@ -367,10 +383,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             return driveImages;
         }
         string key = $"{ControlSignalKeyPrefix}{clip.Id}.{entryIdx}";
-        if (g.NodeHelpers.TryGetValue(key, out string encoded)
-            && !string.IsNullOrWhiteSpace(encoded)
-            && JToken.Parse(encoded) is JArray { Count: 2 } cached
-            && bridge.ResolvePath(cached) is not null)
+        if (TryGetCachedPath(g, bridge, key, out JArray cached))
         {
             return cached;
         }
@@ -420,7 +433,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             bridge.SyncNode(render);
             processed = WorkflowBridge.ToPath(render.IMAGE);
         }
-        g.NodeHelpers[key] = processed.ToString(Formatting.None);
+        CachePath(g, key, processed);
         return processed;
     }
 
@@ -435,9 +448,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         }
         int index = ParseControlNetSourceIndex(controlNetSource);
         string helperKey = CapturedControlNetFrameCountKey(index);
-        if (g.NodeHelpers.TryGetValue(helperKey, out string encoded)
-            && !string.IsNullOrWhiteSpace(encoded)
-            && JToken.Parse(encoded) is JArray { Count: 2 } cached)
+        if (TryGetCachedPath(g, bridge: null, helperKey, out JArray cached))
         {
             framesConnection = cached;
             return true;
@@ -483,6 +494,14 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         return frames is int n ? new JValue(n) : null;
     }
 
+    // Shared config of the basic and Advanced IC-LoRA guide nodes (the Advanced
+    // node is the basic one plus per-guide attention strength).
+    private const int GuideFrameIdx = 0;
+    private const string GuideCrop = "disabled";
+    private const bool GuideUseTiledEncode = false;
+    private const int GuideTileSize = 256;
+    private const int GuideTileOverlap = 64;
+
     private void ApplyLtxIcloraGuide(
         WorkflowBridge bridge,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -504,12 +523,12 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         {
             LTXAddVideoICLoRAGuideAdvancedNode advanced =
                 bridge.AddNode(new LTXAddVideoICLoRAGuideAdvancedNode().With(
-                    FrameIdx: 0,
+                    FrameIdx: GuideFrameIdx,
                     Strength: strength,
-                    Crop: "disabled",
-                    UseTiledEncode: false,
-                    TileSize: 256,
-                    TileOverlap: 64,
+                    Crop: GuideCrop,
+                    UseTiledEncode: GuideUseTiledEncode,
+                    TileSize: GuideTileSize,
+                    TileOverlap: GuideTileOverlap,
                     AttentionStrength: entry.AttentionStrength));
             guideNode = advanced;
             vae = advanced.Vae;
@@ -522,12 +541,12 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         {
             LTXAddVideoICLoRAGuideNode basic =
                 bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(
-                    FrameIdx: 0,
+                    FrameIdx: GuideFrameIdx,
                     Strength: strength,
-                    Crop: "disabled",
-                    UseTiledEncode: false,
-                    TileSize: 256,
-                    TileOverlap: 64));
+                    Crop: GuideCrop,
+                    UseTiledEncode: GuideUseTiledEncode,
+                    TileSize: GuideTileSize,
+                    TileOverlap: GuideTileOverlap));
             guideNode = basic;
             vae = basic.Vae;
             latentInput = basic.LatentInput;

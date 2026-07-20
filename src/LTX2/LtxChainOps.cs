@@ -255,7 +255,7 @@ internal static class LtxChainOps
         bridge.Graph.RetargetConnections(oldImageOutput, newDecode.Outputs[0]);
     }
 
-    private static ComfyNode AddDecode(
+    internal static ComfyNode AddDecode(
         WorkflowBridge bridge,
         INodeOutput vaeOutput,
         INodeOutput samplesOutput,

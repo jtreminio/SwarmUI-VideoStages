@@ -5,27 +5,20 @@ export type UpdateOrigin =
     | "detail-strip"
     | "linking"
     | "prompt-track"
-    | "audio-track"
     | "audio-segment-track"
     | "boundary-track"
     | "references-track"
     | "retake-track"
     | "timeline"
-    | "seed"
-    | "history"
     | "external";
-
-export type UpdateKind = "commit" | "external";
 
 export interface UpdateMeta {
     origin: UpdateOrigin;
-    kind: UpdateKind;
     /**
      * "value-only": a dock value edit that changes data but not panel
      * structure — the dock keeps its DOM (no rebuild) for these commits.
      */
     hint?: "value-only";
-    version: number;
 }
 
 export type StoreSubscriber = (
@@ -83,7 +76,6 @@ export interface TimelineStore {
     subscribe(cb: StoreSubscriber): () => void;
     /** Drop the token cache so the next read re-parses (e.g. param rebuild). */
     invalidate(): void;
-    version(): number;
     resetForTests(): void;
 }
 
@@ -98,7 +90,6 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
     // inherited-dims change absorbed by a racing read would never repaint.
     let syncedToken: string | null = null;
     let lastGoodSerialized = "";
-    let ver = 0;
     const subscribers = new Set<StoreSubscriber>();
 
     /** Today's getState read path: live param, else last-good, else empty. */
@@ -166,11 +157,10 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         canonical = deps.parse(serialized) ?? structuredClone(state);
         cachedToken = deps.readToken();
         syncedToken = cachedToken;
-        ver++;
         if (notifyDomChange) {
             deps.notifyHost();
         }
-        notify({ origin, kind: "commit", hint, version: ver });
+        notify({ origin, hint });
         return serialized;
     };
 
@@ -183,8 +173,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         }
         revalidate();
         syncedToken = cachedToken;
-        ver++;
-        notify({ origin: "external", kind: "external", version: ver });
+        notify({ origin: "external" });
         return true;
     };
 
@@ -201,13 +190,11 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         invalidate: (): void => {
             cachedToken = null;
         },
-        version: (): number => ver,
         resetForTests: (): void => {
             canonical = null;
             cachedToken = null;
             syncedToken = null;
             lastGoodSerialized = "";
-            ver = 0;
             subscribers.clear();
         },
     };

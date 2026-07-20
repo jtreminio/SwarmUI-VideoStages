@@ -25,7 +25,7 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
     /// </summary>
     private const int TemporalDownscale = 8;
 
-    private const int DefaultFrameCount = 97;
+    private const int DefaultFrameCount = LtxStageExecutor.DefaultFrameCountValue;
 
     /// <summary>The three latent-frame block counts of a retake mask, in order.</summary>
     internal readonly record struct LatentWindow(int Prefix, int Window, int Suffix)

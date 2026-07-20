@@ -15,7 +15,6 @@ internal sealed class LtxStageOrchestrator(
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
         LtxPostVideoChainCapture postVideoChain)
@@ -71,7 +70,6 @@ internal sealed class LtxStageOrchestrator(
             sourceMedia,
             guideMedia,
             skipGuideReinjection,
-            applySourceVideoLatent,
             postVideoChain,
             clipRefs,
             guideMergeStrength);

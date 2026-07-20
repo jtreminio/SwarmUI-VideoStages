@@ -25,7 +25,6 @@ public class VideoStagesExtension : Extension
         T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (_, _) => "<break>";
         T2IPromptHandling.PromptTagLengthEstimators["videostages"] = (_, _) => "";
         StyleSheetFiles.Add("Assets/video-stages.css");
-        StyleSheetFiles.Add("Assets/video-stages-timeline.css");
         ScriptFiles.Add("Assets/video-stages.js");
     }
 

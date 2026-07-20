@@ -46,43 +46,27 @@ def parse_windows(windows_json):
     return prompts, seconds
 
 
-def build_temporal_cost(q_token_idx, Lq, Lk, device, dtype, tokens_per_frame, pad_offset=0):
-    """Gaussian penalty matrix [Lq, Lk] for video cross-attention (integer frame indexing).
+def build_temporal_cost(q_token_idx, Lq, Lk, device, dtype, tokens_per_frame=None, latent_frames=None, pad_offset=0):
+    """Gaussian penalty matrix [Lq, Lk] for cross-attention.
+
+    With ``tokens_per_frame`` set, query rows map to whole frames (video attn).
+    With ``latent_frames`` set instead, queries get fractional frame positions
+    (queries that don't map to integer frames, e.g. LTXAV audio tokens).
 
     pad_offset shifts token columns right by the text-key padding amount: left-padding
     tokenizers (LTX-2 Gemma pads to >=1024) place the real prompt tokens at the END of
     the key axis, so 0-based token indices must be offset by Lk - total_tokens.
     """
     offset = torch.zeros(Lq, Lk, device=device, dtype=dtype)
-    query_frames = torch.arange(Lq, device=device, dtype=torch.long) // tokens_per_frame
-
-    for seg in q_token_idx:
-        local = seg["local_token_idx"].to(device=device) + pad_offset
-        d = (query_frames.float()[:, None] - seg["midpoint"]).abs()
-        strength = seg.get("strength", 1.0)
-        cost = strength * (torch.relu(d - seg["window"]) ** 2) / (2 * seg["sigma"] ** 2)
-        offset[:, local] = cost.to(offset.dtype)
-
-    return offset
-
-
-def build_temporal_cost_scaled(q_token_idx, Lq, Lk, device, dtype, latent_frames, is_audio=False, pad_offset=0):
-    """Penalty matrix for queries that don't map to integer frames (e.g. LTXAV audio tokens)."""
-    offset = torch.zeros(Lq, Lk, device=device, dtype=dtype)
-    query_frames = torch.arange(Lq, device=device, dtype=torch.float32) * latent_frames / Lq
+    if tokens_per_frame is not None:
+        query_frames = (torch.arange(Lq, device=device, dtype=torch.long) // tokens_per_frame).float()
+    else:
+        query_frames = torch.arange(Lq, device=device, dtype=torch.float32) * latent_frames / Lq
 
     for seg in q_token_idx:
         local = seg["local_token_idx"].to(device=device) + pad_offset
         d = (query_frames[:, None] - seg["midpoint"]).abs()
-        if is_audio:
-            sigma_val = seg.get("sigma_audio", seg["sigma"])
-            window_val = seg.get("window_audio", seg["window"])
-            strength_val = seg.get("strength_audio", 1.0)
-        else:
-            sigma_val = seg["sigma"]
-            window_val = seg["window"]
-            strength_val = seg.get("strength", 1.0)
-        cost = strength_val * (torch.relu(d - window_val) ** 2) / (2 * sigma_val ** 2)
+        cost = (torch.relu(d - seg["window"]) ** 2) / (2 * seg["sigma"] ** 2)
         offset[:, local] = cost.to(offset.dtype)
 
     return offset
@@ -114,12 +98,9 @@ def create_mask_fn(q_token_idx, fallback_tokens_per_frame, latent_frames, total_
 
         grid_sizes = transformer_options.get("grid_sizes", None)
         attn_type = transformer_options.get("promptrelay_attn_type", "attn2")
-        is_audio = (attn_type == "audio_attn2")
 
-        if is_audio:
+        if attn_type == "audio_attn2":
             mode = "scaled"
-            video_tpf = fallback_tokens_per_frame
-            video_lq = -1
         else:
             if grid_sizes is not None:
                 video_tpf = int(grid_sizes[1]) * int(grid_sizes[2])
@@ -143,9 +124,9 @@ def create_mask_fn(q_token_idx, fallback_tokens_per_frame, latent_frames, total_
         key = (Lq, Lk, mode, device)
         if key not in cache:
             if mode == "video":
-                cost = build_temporal_cost(q_token_idx, Lq, Lk, device, dtype, video_tpf, pad_offset=pad_offset)
+                cost = build_temporal_cost(q_token_idx, Lq, Lk, device, dtype, tokens_per_frame=video_tpf, pad_offset=pad_offset)
             else:
-                cost = build_temporal_cost_scaled(q_token_idx, Lq, Lk, device, dtype, latent_frames, is_audio=is_audio, pad_offset=pad_offset)
+                cost = build_temporal_cost(q_token_idx, Lq, Lk, device, dtype, latent_frames=latent_frames, pad_offset=pad_offset)
             log.info(
                 "[PromptRelay] Built penalty matrix (%s): Lq=%d, Lk=%d, pad_offset=%d, nonzero=%d/%d",
                 mode, Lq, Lk, pad_offset, (cost > 0).sum().item(), cost.numel(),
@@ -157,29 +138,10 @@ def create_mask_fn(q_token_idx, fallback_tokens_per_frame, latent_frames, total_
     return mask_fn
 
 
-def build_segments(token_ranges, segment_lengths, epsilon=1e-3, relay_options=None):
-    """Per-segment metadata for the temporal penalty.
-
-    relay_options (optional dict) overrides per-stream knobs:
-        video_strength, video_window_scale,
-        audio_epsilon, audio_strength, audio_window_scale
-    Audio knobs only affect architectures whose cross-attention takes the scaled
-    (non-integer-frame) path — currently LTX audio_attn2.
-    """
+def build_segments(token_ranges, segment_lengths, epsilon=1e-3):
+    """Per-segment metadata for the temporal penalty."""
     # Paper uses a constant sigma regardless of segment length
     sigma = 1.0 / math.log(1.0 / epsilon) if 0 < epsilon < 1 else 0.1448
-
-    opts = relay_options or {}
-    v_strength = opts.get("video_strength", 1.0)
-    v_window_scale = opts.get("video_window_scale", 1.0)
-    a_epsilon = opts.get("audio_epsilon")
-    a_strength = opts.get("audio_strength", 1.0)
-    a_window_scale = opts.get("audio_window_scale", 1.0)
-
-    if a_epsilon is not None and 0 < a_epsilon < 1:
-        sigma_audio = 1.0 / math.log(1.0 / a_epsilon)
-    else:
-        sigma_audio = sigma
 
     q_token_idx = []
     frame_cursor = 0
@@ -189,16 +151,11 @@ def build_segments(token_ranges, segment_lengths, epsilon=1e-3, relay_options=No
             frame_cursor += L
             continue
         midpoint = (2 * frame_cursor + L) // 2
-        base_window = max(L // 2 - 2, 0)
         q_token_idx.append({
             "local_token_idx": torch.arange(tok_start, tok_end),
             "midpoint": midpoint,
-            "window": max(base_window * v_window_scale, 0.0),
+            "window": float(max(L // 2 - 2, 0)),
             "sigma": sigma,
-            "strength": v_strength,
-            "window_audio": max(base_window * a_window_scale, 0.0),
-            "sigma_audio": sigma_audio,
-            "strength_audio": a_strength,
         })
         frame_cursor += L
 
@@ -226,11 +183,6 @@ def get_tokenizer_wrapper(clip):
     )
 
 
-def get_raw_tokenizer(clip):
-    """Extract the raw SPiece/HF tokenizer from a ComfyUI CLIP object."""
-    return get_tokenizer_wrapper(clip).tokenizer
-
-
 def map_token_indices(raw_tokenizer, global_prompt, local_prompts):
     """Tokenize global + space-prefixed locals; return (full_prompt, per-local token ranges).
 
@@ -239,27 +191,13 @@ def map_token_indices(raw_tokenizer, global_prompt, local_prompts):
     prefixed_locals = [" " + lp for lp in local_prompts]
     full_prompt = global_prompt + "".join(prefixed_locals)
 
+    # The rest of this module already hard-assumes the dict result shape
+    # (raw_tokenizer(text)["input_ids"]), so the EOS probe does too.
     has_eos = getattr(raw_tokenizer, "add_eos", False)
     if not has_eos:
-        try:
-            test_res = raw_tokenizer("test")
-            if isinstance(test_res, dict) and "input_ids" in test_res:
-                ids = test_res["input_ids"]
-            elif hasattr(test_res, "input_ids"):
-                ids = test_res.input_ids
-            elif isinstance(test_res, list):
-                ids = test_res
-            else:
-                ids = []
-
-            if ids:
-                eos_id = getattr(raw_tokenizer, "eos_token_id", None)
-                if eos_id is not None and ids[-1] == eos_id:
-                    has_eos = True
-                elif ids[-1] == 1:
-                    has_eos = True
-        except Exception:
-            pass
+        ids = raw_tokenizer("test")["input_ids"]
+        eos_id = getattr(raw_tokenizer, "eos_token_id", None)
+        has_eos = bool(ids) and eos_id is not None and ids[-1] == eos_id
 
     eos_adj = 1 if has_eos else 0
 

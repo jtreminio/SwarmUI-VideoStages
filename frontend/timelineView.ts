@@ -17,6 +17,7 @@ import {
     stageChipLabel,
     stageChipTitle,
     type TimelineUnit,
+    truncate,
 } from "./timelineDetail";
 import type {
     AudioSegment,
@@ -25,6 +26,7 @@ import type {
     PromptWindow,
     RefImage,
 } from "./types";
+import { roundToTenth } from "./utils";
 
 export interface RegionLayout {
     index: number;
@@ -39,7 +41,6 @@ export interface RegionLayout {
 
 export interface RegionLayoutOptions {
     pxPerSecond?: number;
-    minWidthPx?: number;
 }
 
 export interface RenderTimelineOptions {
@@ -123,23 +124,12 @@ export const computeFitPxPerSecond = (
     return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
 };
 
-/** Snap a seconds value to the nearest whole frame at the given fps. */
-export const snapSecondsToFrame = (seconds: number, fps: number): number => {
-    if (!Number.isFinite(seconds)) {
-        return 0;
-    }
-    if (!Number.isFinite(fps) || fps <= 0) {
-        return Math.max(0, seconds);
-    }
-    return Math.round(seconds * fps) / fps;
-};
-
 export const computeRegionLayout = (
     clips: Clip[],
     options?: RegionLayoutOptions,
 ): RegionLayout[] => {
     const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
-    const minWidthPx = options?.minWidthPx ?? DEFAULT_MIN_WIDTH_PX;
+    const minWidthPx = DEFAULT_MIN_WIDTH_PX;
     const layouts: RegionLayout[] = [];
     let cursorSeconds = 0;
     let cursorPx = 0;
@@ -202,14 +192,48 @@ const renderRegionThumb = (clip: Clip): string => {
     return `<div class="vst-region-thumb" data-cells="${cellCount}" aria-hidden="true">${cells}</div>`;
 };
 
-const roundRetakeLabel = (seconds: number): number =>
-    Math.round(seconds * 10) / 10;
-
 /**
  * Hatched retake range overlaid on the clip region: draggable body (move),
  * left/right resize grips, click to select, shift+click to delete. Positioned
  * as a percentage of the clip duration so it tracks the region width.
  */
+/**
+ * Shared markup for a draggable window span on a clip lane (retake overlay,
+ * audio segment): clamped left/width percentages, two resize grips, a label,
+ * and the shift-click-delete affordance in the tooltip.
+ */
+const renderWindowSpan = (opts: {
+    className: string;
+    dataAttrs: string;
+    edgeAttr: string;
+    labelClass: string;
+    label: string;
+    title: string;
+    ariaLabel: string;
+    startSeconds: number;
+    lengthSeconds: number;
+    durationSeconds: number;
+}): string => {
+    const start = clamp(opts.startSeconds, 0, opts.durationSeconds);
+    const end = clamp(
+        opts.startSeconds + opts.lengthSeconds,
+        start,
+        opts.durationSeconds,
+    );
+    if (end <= start) {
+        return "";
+    }
+    const left = (start / opts.durationSeconds) * 100;
+    const width = ((end - start) / opts.durationSeconds) * 100;
+    return (
+        `<div class="${opts.className}" ${opts.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeHtml(opts.title)}" aria-label="${escapeHtml(opts.ariaLabel)}">` +
+        `<span class="${opts.className}-resize ${opts.className}-resize-l" ${opts.edgeAttr}="left" aria-hidden="true"></span>` +
+        `<span class="${opts.labelClass}">${escapeHtml(opts.label)}</span>` +
+        `<span class="${opts.className}-resize ${opts.className}-resize-r" ${opts.edgeAttr}="right" aria-hidden="true"></span>` +
+        `</div>`
+    );
+};
+
 const renderRetakeOverlay = (
     clip: Clip,
     clipIdx: number,
@@ -225,20 +249,19 @@ const renderRetakeOverlay = (
         start,
         durationSeconds,
     );
-    if (end <= start) {
-        return "";
-    }
-    const leftPct = (start / durationSeconds) * 100;
-    const widthPct = ((end - start) / durationSeconds) * 100;
-    const label = `RETAKE ${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
-    const title = `${label} · drag to move/resize · Shift+click to delete`;
-    return (
-        `<div class="vst-retake" data-vst-retake data-clip-idx="${clipIdx}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}">` +
-        `<span class="vst-retake-resize vst-retake-resize-l" data-vst-retake-edge="left" aria-hidden="true"></span>` +
-        `<span class="vst-retake-label">${escapeHtml(label)}</span>` +
-        `<span class="vst-retake-resize vst-retake-resize-r" data-vst-retake-edge="right" aria-hidden="true"></span>` +
-        `</div>`
-    );
+    const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;
+    return renderWindowSpan({
+        className: "vst-retake",
+        dataAttrs: `data-vst-retake data-clip-idx="${clipIdx}"`,
+        edgeAttr: "data-vst-retake-edge",
+        labelClass: "vst-retake-label",
+        label,
+        title: `${label} · drag to move/resize · Shift+click to delete`,
+        ariaLabel: label,
+        startSeconds: retake.startSeconds,
+        lengthSeconds: retake.lengthSeconds,
+        durationSeconds,
+    });
 };
 
 const renderKeyframes = (
@@ -373,7 +396,7 @@ export interface PromptWindowGeom {
     active: boolean;
 }
 
-export const promptWindowGeom = (
+const promptWindowGeom = (
     layout: RegionLayout,
     window: PromptWindow,
     pxPerSecond: number,
@@ -390,10 +413,10 @@ export const promptWindowGeom = (
     };
 };
 
-const PROMPT_PLACEHOLDER = "(no prompt)";
+/** Usable inner width of a clip lane (the 2px is the region border). */
+const clipInnerWidth = (widthPx: number): number => Math.max(1, widthPx - 2);
 
-const truncatePrompt = (text: string, max = 120): string =>
-    text.length > max ? `${text.slice(0, max - 1)}…` : text;
+const PROMPT_PLACEHOLDER = "(no prompt)";
 
 export const renderPromptTrackRow = (
     clips: Clip[],
@@ -409,7 +432,7 @@ export const renderPromptTrackRow = (
         if (!clip) {
             continue;
         }
-        const clipWidth = Math.max(1, layout.widthPx - 2);
+        const clipWidth = clipInnerWidth(layout.widthPx);
         const windows = clip.promptWindows ?? [];
 
         const ownPrompt = `${clip.prompt ?? ""}`.trim();
@@ -424,7 +447,7 @@ export const renderPromptTrackRow = (
             )
             .join("");
         const majorText =
-            major === "" ? PROMPT_PLACEHOLDER : truncatePrompt(major);
+            major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
         const majorClass =
             (major === "" ? " vst-major-empty" : "") +
             (inherited && major !== "" ? " vst-major-inherited" : "");
@@ -444,8 +467,7 @@ export const renderPromptTrackRow = (
             .map((w, j) => {
                 const g = promptWindowGeom(layout, w, pxPerSecond);
                 const text = `${w.prompt ?? ""}`.trim();
-                const label =
-                    text === "" ? "(empty)" : truncatePrompt(text, 60);
+                const label = text === "" ? "(empty)" : truncate(text, 60);
                 return (
                     `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeHtml(`${text || "(empty minor prompt)"} · Shift+click to delete`)}">` +
                     `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span>` +
@@ -509,23 +531,22 @@ const renderAudioSegmentBlock = (
         start,
         durationSeconds,
     );
-    if (end <= start) {
-        return "";
-    }
-    const leftPct = (start / durationSeconds) * 100;
-    const widthPct = ((end - start) / durationSeconds) * 100;
     const name =
         typeof seg.source === "string" ? seg.source : seg.source?.fileName;
     const labelText = name ? name : "audio segment";
-    const label = `${roundRetakeLabel(start)}–${roundRetakeLabel(end)} s`;
-    const title = `${labelText} · ${label} · drag to move/resize · Shift+click to delete`;
-    return (
-        `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="Edit audio segment ${segIdx} for clip ${clipIdx}">` +
-        `<span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left" aria-hidden="true"></span>` +
-        `<span class="vst-audio-seg-label">${escapeHtml(labelText)}</span>` +
-        `<span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right" aria-hidden="true"></span>` +
-        `</div>`
-    );
+    const label = `${roundToTenth(start)}–${roundToTenth(end)} s`;
+    return renderWindowSpan({
+        className: "vst-audio-seg",
+        dataAttrs: `data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}"`,
+        edgeAttr: "data-vst-audio-seg-edge",
+        labelClass: "vst-audio-seg-label",
+        label: labelText,
+        title: `${labelText} · ${label} · drag to move/resize · Shift+click to delete`,
+        ariaLabel: `Edit audio segment ${segIdx} for clip ${clipIdx}`,
+        startSeconds: seg.startSeconds,
+        lengthSeconds: seg.lengthSeconds,
+        durationSeconds,
+    });
 };
 
 /**
@@ -572,7 +593,7 @@ export const renderAudioTrackRow = (
             }
             const badge = audioSourceBadge(clip.audioSource ?? "");
             const native = badge.label === "Native";
-            const width = Math.max(1, l.widthPx - 2);
+            const width = clipInnerWidth(l.widthPx);
             // Per-source tinting: every source kind renders a full-width fake
             // waveform in its own color so the track reads at a glance.
             const kindClass = native
@@ -650,7 +671,7 @@ export const renderReferencesTrackRow = (
             if (!clip) {
                 return "";
             }
-            const laneWidth = Math.max(1, l.widthPx - 2);
+            const laneWidth = clipInnerWidth(l.widthPx);
             const marks = (clip.refs ?? [])
                 .map((ref: RefImage, refIdx: number) => {
                     const isEnd = ref.fromEnd === true;
@@ -773,7 +794,12 @@ export const renderTimeline = (
     const enabled = options?.enabled !== false;
     const enableToggle =
         `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual.">` +
-        `<input type="checkbox" class="vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}>` +
+        // The host's .toggle-switch composite (site.css) — the input is the
+        // invisible hit area, the -content div is the drawn switch.
+        `<span class="toggle-switch">` +
+        `<input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}>` +
+        `<div class="auto-slider-toggle-content"></div>` +
+        `</span>` +
         `<span class="vst-enable-label">Enable</span>` +
         `</label>`;
     const header =
@@ -950,7 +976,7 @@ export const renderTimeline = (
                 ? ""
                 : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
             const hue = clipHueCss(clip.hue);
-            const renderWidth = Math.max(1, l.widthPx - 2);
+            const renderWidth = clipInnerWidth(l.widthPx);
             return (
                 `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +

@@ -149,7 +149,7 @@ const crumbText = (): string | undefined =>
 const railChips = (): HTMLElement[] =>
     Array.from(
         document.querySelectorAll<HTMLElement>(
-            ".vst-detail-rail-list .vst-stage-tab:not(.vst-stage-tab-add)",
+            ".vst-detail-rail-list .vst-stage-tab",
         ),
     );
 
@@ -897,7 +897,7 @@ describe("createTimelineDetailStrip", () => {
 
         // Remove clip 1 from the carrier, re-render the tracks + strip.
         const clips = persistence.getClips().slice(0, 1);
-        persistence.saveClips(clips, undefined, { notifyDomChange: false });
+        persistence.saveClips(clips, { notifyDomChange: false });
         renderTimeline(body, persistence.getClips());
         strip?.render();
         expect(getSelection().kind).toBe("none");
@@ -2737,11 +2737,7 @@ describe("createTimelineDetailStrip", () => {
             ]);
         };
         const injectDockCss = (): void =>
-            injectCss("vst-probe-css", [
-                "..",
-                "Assets",
-                "video-stages-timeline.css",
-            ]);
+            injectCss("vst-probe-css", ["..", "Assets", "video-stages.css"]);
 
         const computed = (el: Element): CSSStyleDeclaration =>
             window.getComputedStyle(el);

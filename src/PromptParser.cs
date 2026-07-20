@@ -197,8 +197,11 @@ internal static class PromptParser
         return prompt;
     }
 
+    // '|' is stripped because it is the ExtraMeta override-stash delimiter (see
+    // StashOverride/ReadOverrides): a pipe inside a FIELD token would shift the
+    // bounded Split and silently decode as a different field.
     private static string Sanitize(string value) =>
-        (value ?? "").Replace("<", "").Replace(">", "").Replace(VideoClipCidMarker, "").Replace("\n", " ").Replace("\r", " ").Trim();
+        (value ?? "").Replace("<", "").Replace(">", "").Replace("|", "").Replace(VideoClipCidMarker, "").Replace("\n", " ").Replace("\r", " ").Trim();
 
     private static string Fmt(double value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
@@ -494,44 +497,21 @@ internal static class PromptParser
             return null;
         }
 
-        List<string> newLoras = [.. loras];
-        List<string> newWeights = [.. weights];
-        List<string> newTencWeights = [.. tencWeights];
-        List<string> newConfinements = [.. confinements];
-
-        while (newWeights.Count < loras.Count)
-        {
-            newWeights.Add("1");
-        }
-        while (newTencWeights.Count < loras.Count)
-        {
-            newTencWeights.Add(newWeights[newTencWeights.Count]);
-        }
-        while (newConfinements.Count < loras.Count)
-        {
-            newConfinements.Add("-1");
-        }
-
+        List<(string, string, string)> rows = [];
         foreach (int index in selectedIndices)
         {
             string weight = index < weights.Count ? weights[index] : "1";
             string tencWeight = index < tencWeights.Count ? tencWeights[index] : weight;
-            newLoras.Add(loras[index]);
-            newWeights.Add(weight);
-            newTencWeights.Add(tencWeight);
-            newConfinements.Add($"{T2IParamInput.SectionID_Video}");
+            rows.Add((loras[index], weight, tencWeight));
         }
 
-        ParamSnapshot snapshot = ParamSnapshot.Of(input,
-            T2IParamTypes.Loras.Type,
-            T2IParamTypes.LoraWeights.Type,
-            T2IParamTypes.LoraTencWeights.Type,
-            T2IParamTypes.LoraSectionConfinement.Type);
-        input.Set(T2IParamTypes.Loras, newLoras);
-        input.Set(T2IParamTypes.LoraWeights, newWeights);
-        input.Set(T2IParamTypes.LoraTencWeights, newTencWeights);
-        input.Set(T2IParamTypes.LoraSectionConfinement, newConfinements);
-        return snapshot;
+        return LoraParams.AppendVideoScoped(
+            input,
+            [.. loras],
+            [.. weights],
+            [.. tencWeights],
+            [.. confinements],
+            rows);
     }
 
     private static string CanonicalizeVideoclipBrackets(

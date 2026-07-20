@@ -78,7 +78,7 @@ const makeHarness = (): Harness => {
             return serialized;
         },
         notifyHost: (): void => {
-            notifyHostCalls.push(harness.store.version());
+            notifyHostCalls.push(notifyHostCalls.length + 1);
             harness.onNotifyHost?.();
         },
     };
@@ -198,9 +198,7 @@ describe("createTimelineStore", () => {
                 seen.push(meta);
             });
             h.store.save(emptyConfig(), "detail-strip", true);
-            expect(seen).toEqual([
-                { origin: "detail-strip", kind: "commit", version: 1 },
-            ]);
+            expect(seen).toEqual([{ origin: "detail-strip" }]);
             // Host dispatch happened before subscriber notification.
             expect(h.notifyHostCalls).toEqual([1]);
         });
@@ -211,7 +209,7 @@ describe("createTimelineStore", () => {
             // call must see an up-to-date token and do nothing.
             const externalNotifications: UpdateMeta[] = [];
             h.store.subscribe((_state, meta) => {
-                if (meta.kind === "external") {
+                if (meta.origin === "external") {
                     externalNotifications.push(meta);
                 }
             });
@@ -250,9 +248,7 @@ describe("createTimelineStore", () => {
             });
             h.carrier.data = '{"width":512,"clips":[]}';
             expect(h.store.syncFromCarrier()).toBe(true);
-            expect(seen).toEqual([
-                { origin: "external", kind: "external", version: 1 },
-            ]);
+            expect(seen).toEqual([{ origin: "external" }]);
             expect(h.store.getState().width).toBe(512);
         });
 
@@ -273,7 +269,7 @@ describe("createTimelineStore", () => {
             });
             expect(h.store.syncFromCarrier()).toBe(true);
             expect(seen).toHaveLength(1);
-            expect(seen[0].kind).toBe("external");
+            expect(seen[0].origin).toBe("external");
             // And the sync is idempotent afterwards.
             expect(h.store.syncFromCarrier()).toBe(false);
         });
@@ -312,20 +308,6 @@ describe("createTimelineStore", () => {
             h.carrier.data = '{"width":512,"clips":[]}';
             h.store.syncFromCarrier();
             expect(cb).not.toHaveBeenCalled();
-        });
-    });
-
-    describe("version", () => {
-        it("increments on commits and external absorptions, not on reads", () => {
-            expect(h.store.version()).toBe(0);
-            h.carrier.data = '{"width":640,"clips":[]}';
-            h.store.getState();
-            expect(h.store.version()).toBe(0);
-            h.store.save(emptyConfig(), "linking", false);
-            expect(h.store.version()).toBe(1);
-            h.carrier.data = '{"width":512,"clips":[]}';
-            h.store.syncFromCarrier();
-            expect(h.store.version()).toBe(2);
         });
     });
 });

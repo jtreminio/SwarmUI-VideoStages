@@ -1,5 +1,6 @@
 import { getClips, saveClips } from "./persistence";
 import { framesForClip } from "./renderUtils";
+import { bindClickSelectableTrack } from "./trackDomUtils";
 import type { BoundaryOut, Clip } from "./types";
 import { setSelection } from "./uiState";
 
@@ -105,6 +106,7 @@ const parseLeftClipIdx = (el: Element | null): number | null => {
  */
 export const createTimelineBoundaryTrack = (): TimelineBoundaryTrack => {
     let boundBody: HTMLElement | null = null;
+    let unbind: (() => void) | null = null;
 
     const activateFromTarget = (target: Element): void => {
         const chip = target.closest(CHIP_SELECTOR);
@@ -123,28 +125,7 @@ export const createTimelineBoundaryTrack = (): TimelineBoundaryTrack => {
             return;
         }
         clip.boundaryOut = nextBoundary(clip.boundaryOut ?? "cut");
-        saveClips(clips, undefined, { origin: "boundary-track" });
-    };
-
-    const onBodyClick = (event: Event): void => {
-        if (event.target instanceof Element) {
-            activateFromTarget(event.target);
-        }
-    };
-
-    const onBodyKeyDown = (event: Event): void => {
-        const ke = event as KeyboardEvent;
-        if (ke.key !== "Enter" && ke.key !== " ") {
-            return;
-        }
-        if (
-            !(ke.target instanceof Element) ||
-            !ke.target.closest(CHIP_SELECTOR)
-        ) {
-            return;
-        }
-        ke.preventDefault();
-        activateFromTarget(ke.target);
+        saveClips(clips, { origin: "boundary-track" });
     };
 
     const attach = (body: HTMLElement): void => {
@@ -153,16 +134,15 @@ export const createTimelineBoundaryTrack = (): TimelineBoundaryTrack => {
         }
         dispose();
         boundBody = body;
-        body.addEventListener("click", onBodyClick);
-        body.addEventListener("keydown", onBodyKeyDown);
+        unbind = bindClickSelectableTrack(body, CHIP_SELECTOR, (el) =>
+            activateFromTarget(el),
+        );
     };
 
     const dispose = (): void => {
-        if (boundBody) {
-            boundBody.removeEventListener("click", onBodyClick);
-            boundBody.removeEventListener("keydown", onBodyKeyDown);
-            boundBody = null;
-        }
+        unbind?.();
+        unbind = null;
+        boundBody = null;
     };
 
     return { attach, dispose };

@@ -20,7 +20,7 @@ import {
 import { createTimelineAudioSegmentTrack } from "./timelineAudioSegmentTrack";
 import { createTimelineAudioTrack } from "./timelineAudioTrack";
 import { createTimelineBoundaryTrack } from "./timelineBoundaryTrack";
-import type { TimelineUnit } from "./timelineDetail";
+import { safeFps, type TimelineUnit } from "./timelineDetail";
 import { createTimelineDetailStrip } from "./timelineDetailStrip";
 import { createTimelineHistory } from "./timelineHistory";
 import { createTimelineLinking } from "./timelineLinking";
@@ -39,9 +39,6 @@ import {
     zoomAnchorTime,
 } from "./timelineView";
 import { setSelection, subscribeSelection } from "./uiState";
-
-const safeStateFps = (fps: number): number =>
-    typeof fps === "number" && fps > 0 ? fps : 24;
 
 export interface VideoStagesTimeline {
     init(): void;
@@ -223,7 +220,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const addClip = (): void => {
         const clips = getClips();
         clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
-        saveClips(clips, undefined, { origin: "timeline" });
+        saveClips(clips, { origin: "timeline" });
     };
 
     /**
@@ -245,12 +242,12 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         // replacements — loading a different config, prompt-box pastes — do
         // NOT restore: the old position is meaningless for the new content.
         const prevScrollLeft =
-            meta?.kind === "external" ? 0 : (scrollEl()?.scrollLeft ?? 0);
+            meta?.origin === "external" ? 0 : (scrollEl()?.scrollLeft ?? 0);
         try {
             const state = getState();
             const clips = state.clips;
             renderTimeline(body, clips, {
-                fps: safeStateFps(state.fps),
+                fps: safeFps(state.fps),
                 width: state.width,
                 height: state.height,
                 dimsExplicit: state.dimsExplicit,
@@ -389,7 +386,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             promptTrack.attach(body, gestures);
             audioTrack.attach(body);
             boundaryTrack.attach(body);
-            referencesTrack.attach(body);
+            referencesTrack.attach(body, gestures);
             detailStrip.attach(body, ensureDock(body));
             // ORDER MATTERS: the router's capture-phase listeners must attach
             // AFTER the detail strip's, so the strip's chip handler runs first

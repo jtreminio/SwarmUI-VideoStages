@@ -5,7 +5,7 @@ import sys
 
 import torch
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from swarm_prompt_relay.prompt_relay import (  # noqa: E402
     build_segments,

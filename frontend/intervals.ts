@@ -1,8 +1,9 @@
 /**
- * Shared 1-D occupancy math for lane items that must not overlap (relay
- * prompt windows, audio segments). A track builds the sorted spans of every
- * OTHER item, then asks for the free interval around a point — the walls the
- * item may move/resize within.
+ * Shared 1-D occupancy math for lane items that must not overlap (today only
+ * relay prompt windows — audio segments moved to per-segment lanes and may
+ * overlap freely). A track builds the sorted spans of every OTHER item, then
+ * asks for the free interval around a point — the walls the item may
+ * move/resize within.
  */
 
 export interface Span {

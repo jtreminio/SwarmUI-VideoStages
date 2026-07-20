@@ -60,7 +60,7 @@ describe("createGestureRouter", () => {
                 | "threshold"
                 | "axis"
                 | "suppressTapClick"
-                | "escapeClickSuppression"
+                | "suppressEscapeClick"
             >
         > = {},
     ): MockSession =>
@@ -289,17 +289,8 @@ describe("createGestureRouter", () => {
             expect(click()).toBe(true);
         });
 
-        it('"always" swallows even for an inactive session', () => {
-            const s = session({ escapeClickSuppression: "always" });
-            router.register({ id: "r", priority: 1, onPress: () => s });
-            press(0);
-            pressEscape();
-            release(0);
-            expect(click()).toBe(false);
-        });
-
-        it('"if-active" swallows only after activation', () => {
-            const s = session({ escapeClickSuppression: "if-active" });
+        it("suppressEscapeClick swallows only after activation", () => {
+            const s = session({ suppressEscapeClick: true });
             router.register({ id: "r", priority: 1, onPress: () => s });
             press(0);
             pressEscape(); // inactive

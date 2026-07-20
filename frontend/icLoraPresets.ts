@@ -5,19 +5,10 @@ import type { IcLoraControlType } from "./types";
 // touch the prompt or gate behavior (any installed LoRA works via "Custom"), and the preset id rides
 // in the JSON purely so the editor reopens with the same context.
 
-export type IcLoraFamily =
-    | "control-signal"
-    | "effect"
-    | "restoration"
-    | "reference";
-
 export interface IcLoraPreset {
     /** Stable id used as the Preset dropdown value. */
     id: string;
     displayName: string;
-    /** HuggingFace repo the weights come from. */
-    repoId: string;
-    family: IcLoraFamily;
     /** Prompt phrase to prepend by hand; "" when none. */
     triggerPhrase: string;
     /** Recommended LoRA model strength; seeds the strength input when applied. */
@@ -34,8 +25,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "union-control",
         displayName: "Union Control",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
-        family: "control-signal",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control
         triggerPhrase: "",
         strength: 1,
         controlType: "depth",
@@ -44,8 +34,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "motion-track-control",
         displayName: "Motion Track Control",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control",
-        family: "control-signal",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -54,8 +43,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "in-outpainting",
         displayName: "In/Outpainting",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting",
-        family: "effect",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -64,8 +52,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "ingredients",
         displayName: "Ingredients",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients",
-        family: "reference",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -74,8 +61,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "lipdub",
         displayName: "LipDub",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-LipDub",
-        family: "effect",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-LipDub
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -84,8 +70,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "hdr",
         displayName: "HDR",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-HDR",
-        family: "effect",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-HDR
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -94,8 +79,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "pixel-spatial-upscaler",
         displayName: "Pixel Spatial Upscaler",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler",
-        family: "restoration",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -104,8 +88,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "deblur",
         displayName: "Deblur",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Deblur",
-        family: "restoration",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Deblur
         triggerPhrase: "DEBLUR",
         strength: 1,
         controlType: "none",
@@ -114,8 +97,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "decompression",
         displayName: "Decompression",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Decompression",
-        family: "restoration",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Decompression
         triggerPhrase: "ENHANCE QUALITY",
         strength: 1,
         controlType: "none",
@@ -124,8 +106,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "water-simulation",
         displayName: "Water Simulation",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation",
-        family: "effect",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation
         triggerPhrase: "ADD WATER",
         strength: 1.2,
         controlType: "none",
@@ -134,8 +115,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "instant-shave",
         displayName: "Instant Shave",
-        repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave",
-        family: "effect",
+        // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave
         triggerPhrase: "REMOVEBEARD",
         strength: 1,
         controlType: "none",
@@ -144,8 +124,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "colorizer",
         displayName: "Colorizer",
-        repoId: "DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer",
-        family: "restoration",
+        // weights: DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer
         triggerPhrase: "COLORIZE",
         strength: 1,
         controlType: "none",
@@ -154,8 +133,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "restyle",
         displayName: "ReStyle",
-        repoId: "Cseti/LTX2.3-22B_ReStyle_IC-LoRA",
-        family: "effect",
+        // weights: Cseti/LTX2.3-22B_ReStyle_IC-LoRA
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -164,8 +142,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "cameraman",
         displayName: "Cameraman",
-        repoId: "Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2",
-        family: "control-signal",
+        // weights: Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -174,8 +151,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "crossview-prompt",
         displayName: "CrossView Prompt",
-        repoId: "Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt",
-        family: "reference",
+        // weights: Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -184,8 +160,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "outpaint",
         displayName: "Outpaint",
-        repoId: "oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint",
-        family: "effect",
+        // weights: oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -194,8 +169,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "refocus",
         displayName: "ReFocus",
-        repoId: "oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus",
-        family: "restoration",
+        // weights: oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus
         triggerPhrase: "",
         strength: 1,
         controlType: "none",
@@ -204,8 +178,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
     {
         id: "vr360-outpaint",
         displayName: "VR 360 Outpaint",
-        repoId: "TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA",
-        family: "effect",
+        // weights: TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA
         triggerPhrase: "",
         strength: 1,
         controlType: "none",

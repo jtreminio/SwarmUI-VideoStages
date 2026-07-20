@@ -1,5 +1,5 @@
-import { audioSource } from "./audioSource";
 import { injectTimelineTab } from "./bottomTimelineTab";
+import { refineVideoButton } from "./refineVideoButton";
 import { videoStagesTimeline } from "./videoStagesTimeline";
 
 const timeline = videoStagesTimeline();
@@ -39,5 +39,5 @@ const scheduleTimelineInit = (): void => {
 
 scheduleTimelineInit();
 registerVideoStagesPromptPrefix();
-audioSource();
+refineVideoButton();
 injectTimelineTab();

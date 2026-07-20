@@ -11,10 +11,6 @@ using VideoStages.LTX2;
 
 namespace VideoStages;
 
-internal sealed record StageGenerationPlan(
-    WorkflowGenerator.ImageToVideoGenInfo GenInfo,
-    Action<WorkflowGenerator.ImageToVideoGenInfo> ApplySourceVideoLatent);
-
 internal class StageRunner(
     WorkflowGenerator g,
     StageGuideMediaHelper stageGuideMediaHelper,
@@ -43,7 +39,7 @@ internal class StageRunner(
             return;
         }
 
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.Plan.GenInfo;
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
             bool needsCrop = new ControlNetApplicator(g).ApplyIcLoras(
@@ -63,7 +59,6 @@ internal class StageRunner(
                 refStore,
                 genInfo,
                 stageFrame,
-                stageFrame.Plan.ApplySourceVideoLatent,
                 stageFrame.SourceMedia,
                 stageFrame.PriorOutputPath,
                 stageFrame.PostVideoChain))
@@ -96,8 +91,8 @@ internal class StageRunner(
             Logs.Error($"VideoStages: Stage {stage.Id} could not resolve source media.");
             return null;
         }
-        StageGenerationPlan plan = BuildGenInfo(clipContext, stage, sectionId, sourceMedia, replaceTextToVideoRootStage);
-        if (plan is null)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(clipContext, stage, sectionId, sourceMedia, replaceTextToVideoRootStage);
+        if (genInfo is null)
         {
             return null;
         }
@@ -112,7 +107,7 @@ internal class StageRunner(
             replaceTextToVideoRootStage,
             postVideoChain,
             sourceMedia,
-            plan,
+            genInfo,
             parallelMultiClip);
     }
 
@@ -128,22 +123,17 @@ internal class StageRunner(
             stageFrame.SourceMedia,
             scaleToSourceSize: true);
 
-        RunNativeStage(stage, stageFrame.Plan, stageFrame.SourceMedia, guideMedia, stageFrame.PriorOutputPath);
+        RunNativeStage(stage, stageFrame.GenInfo, stageFrame.SourceMedia, guideMedia, stageFrame.PriorOutputPath);
     }
 
     private void RunNativeStage(
         StageSpec stage,
-        StageGenerationPlan generationPlan,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         JArray priorOutputPath)
     {
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = generationPlan.GenInfo;
         g.CurrentMedia = guideMedia ?? sourceMedia;
-
-        using IDisposable sourceLatentScope = generationPlan.ApplySourceVideoLatent is not null
-            ? AltImageToVideoScope.Post(genInfo, generationPlan.ApplySourceVideoLatent)
-            : null;
 
         g.CreateImageToVideo(genInfo);
 
@@ -152,7 +142,7 @@ internal class StageRunner(
         RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
     }
 
-    private StageGenerationPlan BuildGenInfo(
+    private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(
         ClipContext clipContext,
         StageSpec stage,
         int sectionId,
@@ -195,7 +185,7 @@ internal class StageRunner(
             ContextID = sectionId,
             VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
         };
-        return new StageGenerationPlan(genInfo, ApplySourceVideoLatent: null);
+        return genInfo;
     }
 
     private int? ResolveFrames(WGNodeData sourceMedia, int sectionId, bool replaceTextToVideoRootStage = false)
@@ -247,32 +237,12 @@ internal class StageRunner(
         List<string> tencWeights = [.. input.Get(T2IParamTypes.LoraTencWeights) ?? []];
         List<string> confinements = [.. input.Get(T2IParamTypes.LoraSectionConfinement) ?? []];
 
-        while (weights.Count < loras.Count) { weights.Add("1"); }
-        while (tencWeights.Count < loras.Count) { tencWeights.Add(weights[tencWeights.Count]); }
-        while (confinements.Count < loras.Count) { confinements.Add("-1"); }
-
-        foreach (LoraRef lora in toApply)
-        {
-            loras.Add(lora.Name);
-            weights.Add(FormatLoraWeight(lora.Weight));
-            tencWeights.Add(FormatLoraWeight(lora.TencWeight ?? lora.Weight));
-            confinements.Add($"{T2IParamInput.SectionID_Video}");
-        }
-
-        ParamSnapshot snapshot = ParamSnapshot.Of(input,
-            T2IParamTypes.Loras.Type,
-            T2IParamTypes.LoraWeights.Type,
-            T2IParamTypes.LoraTencWeights.Type,
-            T2IParamTypes.LoraSectionConfinement.Type);
-        input.Set(T2IParamTypes.Loras, loras);
-        input.Set(T2IParamTypes.LoraWeights, weights);
-        input.Set(T2IParamTypes.LoraTencWeights, tencWeights);
-        input.Set(T2IParamTypes.LoraSectionConfinement, confinements);
-        return snapshot;
+        List<(string, string, string)> rows = [.. toApply.Select(lora => (
+            lora.Name,
+            LoraParams.FormatWeight(lora.Weight),
+            LoraParams.FormatWeight(lora.TencWeight ?? lora.Weight)))];
+        return LoraParams.AppendVideoScoped(input, loras, weights, tencWeights, confinements, rows);
     }
-
-    private static string FormatLoraWeight(double weight) =>
-        weight.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private WGNodeData ApplyStageUpscaleIfNeeded(
         ClipContext clipContext,

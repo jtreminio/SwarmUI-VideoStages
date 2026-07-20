@@ -1,4 +1,4 @@
-import { parseBase2EditStageIndex, ROOT_DIMENSION_MIN } from "./constants";
+import { parseBase2EditStageIndex } from "./constants";
 import {
     type ClipTextInput,
     extractGlobalPrompt,
@@ -38,15 +38,13 @@ export const getDataInput = ():
 
 export const readDataParam = (): string => getDataInput()?.value ?? "";
 
-export const writeDataParam = (json: string, notify = true): void => {
+/** Write the Data param without dispatching host change events (store save path). */
+export const writeDataParam = (json: string): void => {
     const el = getDataInput();
     if (!el) {
         return;
     }
     el.value = json;
-    if (notify) {
-        triggerChangeFor(el);
-    }
 };
 
 export const readStateToken = (): string =>
@@ -77,18 +75,13 @@ const withSuppressedPromptTabComplete = (fn: () => void): void => {
     }
 };
 
-export const writeClipPrompts = (
-    clips: ClipTextInput[],
-    notify = true,
-): void => {
+/** Write clip prompt sections without dispatching host change events (store save path). */
+export const writeClipPrompts = (clips: ClipTextInput[]): void => {
     const el = getPromptInput();
     if (!el) {
         return;
     }
     el.value = serializeClipPrompts(el.value ?? "", clips);
-    if (notify) {
-        withSuppressedPromptTabComplete(() => triggerChangeFor(el));
-    }
 };
 
 /**
@@ -125,35 +118,13 @@ export const restoreCarrierSnapshot = (snapshot: string): void => {
     } catch {
         return;
     }
-    writeDataParam(typeof parsed.data === "string" ? parsed.data : "", false);
+    writeDataParam(typeof parsed.data === "string" ? parsed.data : "");
     const el = getPromptInput();
     if (!el) {
         return;
     }
     el.value = typeof parsed.prompt === "string" ? parsed.prompt : "";
     triggerChangeFor(el);
-};
-
-export const getCoreDimensionInput = (
-    field: "width" | "height",
-): HTMLInputElement | null => {
-    const primaryId = field === "width" ? "input_width" : "input_height";
-    const fallbackId =
-        field === "width"
-            ? "input_aspectratiowidth"
-            : "input_aspectratioheight";
-    return (
-        utils.getInputElement(primaryId) ?? utils.getInputElement(fallbackId)
-    );
-};
-
-export const getCoreDimension = (field: "width" | "height"): number | null => {
-    const input = getCoreDimensionInput(field);
-    if (!input) {
-        return null;
-    }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_DIMENSION_MIN ? value : null;
 };
 
 export const getGroupToggle = (): HTMLInputElement | null =>
@@ -179,14 +150,6 @@ export const getBase2EditStageRefs = (): string[] => {
             (parseBase2EditStageIndex(left) ?? 0) -
             (parseBase2EditStageIndex(right) ?? 0),
     );
-};
-
-export const isAvailableBase2EditReference = (value: string): boolean => {
-    const stageIndex = parseBase2EditStageIndex(value);
-    if (stageIndex == null) {
-        return false;
-    }
-    return getBase2EditStageRefs().includes(`edit${stageIndex}`);
 };
 
 export const isRootTextToVideoModel = (): boolean => {

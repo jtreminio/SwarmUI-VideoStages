@@ -1,5 +1,5 @@
-export const HUE_MIN = 0;
-export const HUE_MAX = 359;
+const HUE_MIN = 0;
+const HUE_MAX = 359;
 const HUE_RANGE = 360;
 export const BASE_HUE = 210;
 export const UNASSIGNED_HUE = -1;

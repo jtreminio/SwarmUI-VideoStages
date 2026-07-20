@@ -26,7 +26,6 @@ public static class Constants
     internal const string LtxVideoNodeUrl = "https://github.com/Lightricks/ComfyUI-LTXVideo";
     public const string AudioSourceNative = "Native";
     public const string AudioSourceUpload = "Upload";
-    public const string AudioSourceSwarm = "Swarm Audio";
     public const string AudioSourceControlNet = "ControlNet";
     public const string ControlNetSourceOne = "ControlNet 1";
     public const string ControlNetSourceTwo = "ControlNet 2";

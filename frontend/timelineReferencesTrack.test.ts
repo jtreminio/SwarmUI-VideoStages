@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { createGestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
     createTimelineReferencesTrack,
@@ -69,6 +70,7 @@ const savedClips = (
 
 describe("createTimelineReferencesTrack (selection + gestures)", () => {
     let track: TimelineReferencesTrack | null = null;
+    let router: ReturnType<typeof createGestureRouter> | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
     beforeEach(() => {
@@ -81,6 +83,8 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     afterEach(() => {
         track?.dispose();
         track = null;
+        router?.dispose();
+        router = null;
         jest.restoreAllMocks();
         resetSelectionForTests();
         document.body.innerHTML = "";
@@ -91,7 +95,9 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         const body = makeBody();
         renderRefs(body, persistence.getClips());
         track = createTimelineReferencesTrack();
-        track.attach(body);
+        router = createGestureRouter();
+        track.attach(body, router);
+        router.attach(body);
         return body;
     };
 
@@ -288,7 +294,9 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         const body = makeBody();
         renderTimeline(body, persistence.getClips(), { pxPerSecond: PPS });
         track = createTimelineReferencesTrack();
-        track.attach(body);
+        router = createGestureRouter();
+        track.attach(body, router);
+        router.attach(body);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
         const arrow = body.querySelector<HTMLElement>(

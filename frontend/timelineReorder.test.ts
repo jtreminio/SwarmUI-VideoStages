@@ -5,7 +5,6 @@ import {
     finalIndexAfterMove,
     isNoOpMove,
     moveItem,
-    remapIndexAfterReorder,
 } from "./timelineReorder";
 
 // midpoints 50/150/250
@@ -104,36 +103,5 @@ describe("isNoOpMove", () => {
     it("flags genuine moves as non-trivial", () => {
         expect(isNoOpMove(0, 2)).toBe(false);
         expect(isNoOpMove(3, 1)).toBe(false);
-    });
-});
-
-describe("remapIndexAfterReorder", () => {
-    // Oracle: derive each index's remap from the array moveItem actually produces.
-    const forEachIndex = (from: number, dest: number, n: number): number[] => {
-        const before = Array.from({ length: n }, (_, i) => i);
-        // Recover the gap that lands the moved element at `dest`.
-        const gap = dest >= from ? dest + 1 : dest;
-        const after = moveItem(before, from, gap);
-        return before.map((i) => after.indexOf(i));
-    };
-
-    it("maps the moved element to its destination when moving right", () => {
-        // [0,1,2,3] move 0→2 ⇒ [1,2,0,3]; old 0→2, old1→0, old2→1, old3→3.
-        expect(
-            [0, 1, 2, 3].map((i) => remapIndexAfterReorder(i, 0, 2)),
-        ).toEqual(forEachIndex(0, 2, 4));
-    });
-
-    it("maps the moved element to its destination when moving left", () => {
-        // [0,1,2,3] move 3→1 ⇒ [0,3,1,2]; old3→1, old1→2, old2→3, old0→0.
-        expect(
-            [0, 1, 2, 3].map((i) => remapIndexAfterReorder(i, 3, 1)),
-        ).toEqual(forEachIndex(3, 1, 4));
-    });
-
-    it("leaves indices untouched when source equals destination", () => {
-        expect([0, 1, 2].map((i) => remapIndexAfterReorder(i, 1, 1))).toEqual([
-            0, 1, 2,
-        ]);
     });
 });

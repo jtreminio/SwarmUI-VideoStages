@@ -14,7 +14,7 @@ internal sealed class StageFrame
         bool replacesTextToVideoRoot,
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia,
-        StageGenerationPlan plan,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
         bool parallelMultiClip)
     {
         Stage = stage;
@@ -24,7 +24,7 @@ internal sealed class StageFrame
         ReplacesTextToVideoRoot = replacesTextToVideoRoot;
         PostVideoChain = postVideoChain;
         SourceMedia = sourceMedia;
-        Plan = plan;
+        GenInfo = genInfo;
         ParallelMultiClip = parallelMultiClip;
     }
 
@@ -35,7 +35,7 @@ internal sealed class StageFrame
     public bool ReplacesTextToVideoRoot { get; }
     public LtxPostVideoChainCapture PostVideoChain { get; }
     public WGNodeData SourceMedia { get; }
-    public StageGenerationPlan Plan { get; }
+    public WorkflowGenerator.ImageToVideoGenInfo GenInfo { get; }
     public bool ParallelMultiClip { get; }
 
     public bool NeedsCropGuidesAfterSampler { get; set; }

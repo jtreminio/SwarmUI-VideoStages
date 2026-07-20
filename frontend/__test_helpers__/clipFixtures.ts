@@ -6,7 +6,6 @@ import {
 } from "../types";
 
 export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
-    expanded: true,
     skipped: false,
     control: 1,
     controlNetStrength: 0.8,
@@ -23,7 +22,6 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
 });
 
 export const minimalRef = (overrides: Partial<RefImage> = {}): RefImage => ({
-    expanded: true,
     source: REF_SOURCE_BASE,
     uploadFileName: null,
     uploadedImage: null,
@@ -33,7 +31,6 @@ export const minimalRef = (overrides: Partial<RefImage> = {}): RefImage => ({
 });
 
 export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
-    expanded: true,
     skipped: false,
     hue: 210,
     boundaryOut: "cut",

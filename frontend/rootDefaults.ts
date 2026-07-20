@@ -10,6 +10,11 @@ import { utils } from "./utils";
 const trimDomValue = (el: { value: string } | null | undefined): string =>
     `${el?.value ?? ""}`.trim();
 
+/** Core input ids that carry the inherited dims/fps, in probe order. */
+const WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
+const HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
+const FPS_INPUT_IDS = ["input_videofps", "input_videoframespersecond"];
+
 const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
     for (let i = 0; i < ids.length; i++) {
         const el = utils.getInputElement(ids[i]);
@@ -35,15 +40,9 @@ export const getDefaultStageModel = (modelValues: string[]): string => {
 };
 
 export const readInheritedDimsSignature = (): string => {
-    const width = trimDomValue(
-        firstPresentInput("input_width", "input_aspectratiowidth"),
-    );
-    const height = trimDomValue(
-        firstPresentInput("input_height", "input_aspectratioheight"),
-    );
-    const fps = trimDomValue(
-        firstPresentInput("input_videofps", "input_videoframespersecond"),
-    );
+    const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
+    const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
+    const fps = trimDomValue(firstPresentInput(...FPS_INPUT_IDS));
     return `${width}|${height}|${fps}`;
 };
 
@@ -71,14 +70,8 @@ export const getRootDefaults = (): RootDefaults => {
 
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
-    const widthInput = firstPresentInput(
-        "input_width",
-        "input_aspectratiowidth",
-    );
-    const heightInput = firstPresentInput(
-        "input_height",
-        "input_aspectratioheight",
-    );
+    const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
+    const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
     const fpsInput = firstPresentInput(
         "input_videofps",
         "input_videoframespersecond",

@@ -94,14 +94,19 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         }
         else if (currentWidth != targetWidth || currentHeight != targetHeight)
         {
-            if (TryFindReusableImageScale(
+            if (ImageScaleReuse.TryFind(
                 bridge,
                 resolvedGuideMedia.Path,
                 targetWidth,
                 targetHeight,
-                out string reusableScaleId))
+                out ImageScaleNode reusable,
+                match =>
+                {
+                    match.Crop.Set("center");
+                    bridge.SyncNode(match);
+                }))
             {
-                resolvedGuideMedia = resolvedGuideMedia.WithPath([reusableScaleId, 0]);
+                resolvedGuideMedia = resolvedGuideMedia.WithPath([reusable.Id, 0]);
             }
             else
             {
@@ -172,36 +177,4 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         return true;
     }
 
-    private static bool TryFindReusableImageScale(
-        WorkflowBridge bridge,
-        JArray sourcePath,
-        int targetWidth,
-        int targetHeight,
-        out string scaleNodeId)
-    {
-        scaleNodeId = null;
-        if (sourcePath is not { Count: 2 })
-        {
-            return false;
-        }
-        string sourceId = $"{sourcePath[0]}";
-        int sourceSlot = (int)sourcePath[1];
-
-        foreach (ImageScaleNode candidate in bridge.Graph.NodesOfType<ImageScaleNode>())
-        {
-            INodeOutput candidateImage = candidate.Image.Connection;
-            if (candidateImage?.Node.Id != sourceId
-                || candidateImage.SlotIndex != sourceSlot
-                || candidate.Width.LiteralAsInt() != targetWidth
-                || candidate.Height.LiteralAsInt() != targetHeight)
-            {
-                continue;
-            }
-            candidate.Crop.Set("center");
-            bridge.SyncNode(candidate);
-            scaleNodeId = candidate.Id;
-            return true;
-        }
-        return false;
-    }
 }

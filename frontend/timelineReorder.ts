@@ -34,17 +34,3 @@ export const moveItem = <T>(array: T[], from: number, to: number): T[] => {
 
 export const isNoOpMove = (from: number, to: number): boolean =>
     to === from || to === from + 1;
-
-export const remapIndexAfterReorder = (
-    idx: number,
-    from: number,
-    dest: number,
-): number => {
-    if (idx === from) {
-        return dest;
-    }
-    if (from < dest) {
-        return idx > from && idx <= dest ? idx - 1 : idx;
-    }
-    return idx >= dest && idx < from ? idx + 1 : idx;
-};

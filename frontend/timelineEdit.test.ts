@@ -13,7 +13,6 @@ const rootDefaults = (fps: number, frames = 24): RootDefaults =>
 
 const ref = (frame: number): RefImage =>
     ({
-        expanded: true,
         source: "refiner",
         uploadFileName: null,
         uploadedImage: null,

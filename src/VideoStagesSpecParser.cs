@@ -311,24 +311,18 @@ internal static class VideoStagesSpecParser
                 parsedToken = trimmed;
                 break;
         }
-        foreach (JProperty existing in target.Properties().Where(p => StringUtils.Equals(p.Name, spec.Canonical)).ToList())
-        {
-            existing.Remove();
-        }
+        JsonUtil.RemoveAll(target, spec.Canonical);
         target[spec.Canonical] = parsedToken;
     }
 
     private static JObject GetStageObject(JObject clipObj, int stageIndex)
     {
-        foreach (JProperty property in clipObj.Properties())
+        if (JsonUtil.Get(clipObj, "Stages") is not JArray array)
         {
-            if (StringUtils.Equals(property.Name, "Stages") && property.Value is JArray array)
-            {
-                List<JObject> stages = [.. array.OfType<JObject>()];
-                return stageIndex >= 0 && stageIndex < stages.Count ? stages[stageIndex] : null;
-            }
+            return null;
         }
-        return null;
+        List<JObject> stages = [.. array.OfType<JObject>()];
+        return stageIndex >= 0 && stageIndex < stages.Count ? stages[stageIndex] : null;
     }
 
     internal static AudioFile MaterializeUploadedAudio(WorkflowGenerator g, UploadedAudioSpec spec)
@@ -383,7 +377,7 @@ internal static class VideoStagesSpecParser
     }
 
     private static bool IsClipShape(JObject entry) =>
-        entry.Properties().Any(p => StringUtils.Equals(p.Name, "Stages"));
+        JsonUtil.Get(entry, "Stages") is not null;
 
     private static bool IsRefineSourceVideoMode(WorkflowGenerator g)
     {
@@ -416,8 +410,7 @@ internal static class VideoStagesSpecParser
         string location = $"Clip {clipIndex} Retake";
         double startSeconds = GetOptionalDouble(retakeObj, "StartSeconds", 0, location);
         double lengthSeconds = GetOptionalDouble(retakeObj, "LengthSeconds", 0, location);
-        if (double.IsNaN(startSeconds) || double.IsNaN(lengthSeconds)
-            || double.IsInfinity(startSeconds) || double.IsInfinity(lengthSeconds)
+        if (!IsFinite(startSeconds) || !IsFinite(lengthSeconds)
             || startSeconds < 0 || lengthSeconds <= 0)
         {
             return null;
@@ -429,9 +422,7 @@ internal static class VideoStagesSpecParser
             return null;
         }
         double strength = GetOptionalDouble(retakeObj, "Strength", 1.0, location);
-        strength = double.IsNaN(strength) || double.IsInfinity(strength)
-            ? 1.0
-            : Math.Clamp(strength, 0.0, 1.0);
+        strength = IsFinite(strength) ? Math.Clamp(strength, 0.0, 1.0) : 1.0;
         return new RetakeWindowSpec(startFrame, lengthFrames, strength);
     }
 
@@ -686,31 +677,11 @@ internal static class VideoStagesSpecParser
         return int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : null;
     }
 
-    private static List<JObject> GetObjectArray(JObject obj, string key)
-    {
-        foreach (JProperty property in obj.Properties())
-        {
-            if (StringUtils.Equals(property.Name, key)
-                && property.Value is JArray array)
-            {
-                return [.. array.OfType<JObject>()];
-            }
-        }
-        return [];
-    }
+    private static List<JObject> GetObjectArray(JObject obj, string key) =>
+        JsonUtil.Get(obj, key) is JArray array ? [.. array.OfType<JObject>()] : [];
 
-    private static JObject GetObject(JObject obj, string key)
-    {
-        foreach (JProperty property in obj.Properties())
-        {
-            if (StringUtils.Equals(property.Name, key)
-                && property.Value is JObject nested)
-            {
-                return nested;
-            }
-        }
-        return null;
-    }
+    private static JObject GetObject(JObject obj, string key) =>
+        JsonUtil.Get(obj, key) as JObject;
 
     private static UploadedAudioSpec GetEmbeddedUploadSpec(JObject parent, string containerPropertyName)
     {
@@ -863,11 +834,9 @@ internal static class VideoStagesSpecParser
         }
 
         double value = GetOptionalDouble(stage, "ControlNetStrength", Constants.DefaultStageControlNetStrength, locationPrefix);
-        if (double.IsNaN(value) || double.IsInfinity(value))
-        {
-            return Constants.DefaultStageControlNetStrength;
-        }
-        return Math.Clamp(value, 0.0, 1.0);
+        return IsFinite(value)
+            ? Math.Clamp(value, 0.0, 1.0)
+            : Constants.DefaultStageControlNetStrength;
     }
 
     private static IReadOnlyList<double> ParseStageRefStrengths(JObject stage, int clipRefCount)
@@ -879,14 +848,8 @@ internal static class VideoStagesSpecParser
 
         double defaultStrength = Constants.DefaultStageRefStrength;
         List<double> strengths = [];
-        foreach (JProperty property in stage.Properties())
+        if (JsonUtil.Get(stage, "refStrengths") is JArray array)
         {
-            if (!StringUtils.Equals(property.Name, "refStrengths")
-                || property.Value is not JArray array)
-            {
-                continue;
-            }
-
             foreach (JToken entry in array)
             {
                 if (entry.Type == JTokenType.Float || entry.Type == JTokenType.Integer)
@@ -899,7 +862,6 @@ internal static class VideoStagesSpecParser
                     strengths.Add(ClampRefStrength(parsed));
                 }
             }
-            break;
         }
 
         while (strengths.Count < clipRefCount)
@@ -915,14 +877,10 @@ internal static class VideoStagesSpecParser
         return strengths;
     }
 
-    private static double ClampRefStrength(double value)
-    {
-        if (double.IsNaN(value) || double.IsInfinity(value))
-        {
-            return Constants.DefaultStageRefStrength;
-        }
-        return Math.Clamp(value, 0.0, 1.0);
-    }
+    private static double ClampRefStrength(double value) =>
+        IsFinite(value)
+            ? Math.Clamp(value, 0.0, 1.0)
+            : Constants.DefaultStageRefStrength;
 
     private static IReadOnlyList<LoraRef> ParseLoras(JObject obj)
     {
@@ -946,7 +904,7 @@ internal static class VideoStagesSpecParser
     }
 
     private static double SanitizeLoraWeight(double value, double fallback) =>
-        double.IsNaN(value) || double.IsInfinity(value) ? fallback : value;
+        IsFinite(value) ? value : fallback;
 
     private static string NormalizeImageReference(string rawValue, int clipIndex, int index, bool isTextToVideoRootWorkflow)
     {
@@ -1173,32 +1131,20 @@ internal static class VideoStagesSpecParser
         return value;
     }
 
-    private static JToken GetToken(JObject obj, string key)
-    {
-        foreach (JProperty property in obj.Properties())
-        {
-            if (StringUtils.Equals(property.Name, key))
-            {
-                return property.Value;
-            }
-        }
-        return null;
-    }
+    private static JToken GetToken(JObject obj, string key) => JsonUtil.Get(obj, key);
 
     private static string GetString(JObject obj, string key)
     {
-        foreach (JProperty property in obj.Properties())
+        JToken token = JsonUtil.Get(obj, key);
+        if (token is null)
         {
-            if (StringUtils.Equals(property.Name, key))
-            {
-                return property.Value?.Type == JTokenType.Null ? null : $"{property.Value}";
-            }
+            return null;
         }
-        return null;
+        return token.Type == JTokenType.Null ? null : $"{token}";
     }
 
     private static bool JsonHasOwnProperty(JObject obj, string key) =>
-        obj.Properties().Any(p => StringUtils.Equals(p.Name, key));
+        JsonUtil.Get(obj, key) is not null;
 
     private static double TruncateToDecimals(double value, int decimals)
     {

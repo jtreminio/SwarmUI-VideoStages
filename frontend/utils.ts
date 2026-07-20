@@ -1,3 +1,10 @@
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Round to the timeline's 0.1-second grid. */
+export const roundToTenth = (seconds: number): number =>
+    Math.round(seconds * 10) / 10;
+
 const getElementByType = <T extends Element>(
     id: string,
     ctor: { new (): T },

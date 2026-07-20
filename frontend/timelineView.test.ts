@@ -116,10 +116,7 @@ describe("computeRegionLayout", () => {
     it("lays clips left-to-right with cumulative offsets", () => {
         const layout = computeRegionLayout(
             [makeClip(2, 1, 0), makeClip(3, 2, 1)],
-            {
-                pxPerSecond: 10,
-                minWidthPx: 0,
-            },
+            { pxPerSecond: 10 },
         );
         expect(layout).toHaveLength(2);
         expect(layout[0]).toMatchObject({
@@ -144,15 +141,13 @@ describe("computeRegionLayout", () => {
     it("applies a minimum width so tiny clips stay visible", () => {
         const layout = computeRegionLayout([makeClip(0.1, 1, 0)], {
             pxPerSecond: 10,
-            minWidthPx: 40,
         });
-        expect(layout[0].widthPx).toBe(40);
+        expect(layout[0].widthPx).toBe(8);
     });
 
     it("flags skipped clips", () => {
         const layout = computeRegionLayout([makeClip(1, 1, 0, true)], {
             pxPerSecond: 10,
-            minWidthPx: 0,
         });
         expect(layout[0].skipped).toBe(true);
     });
@@ -171,7 +166,7 @@ describe("computeRegionLayout", () => {
 
 describe("renderBoundarySeams", () => {
     const layoutFor = (clips: Clip[]) =>
-        computeRegionLayout(clips, { pxPerSecond: 10, minWidthPx: 0 });
+        computeRegionLayout(clips, { pxPerSecond: 10 });
 
     it("renders one chip per interior seam and none after the last clip", () => {
         const clips = [boundaryClip(), boundaryClip(), boundaryClip()];

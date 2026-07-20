@@ -89,7 +89,6 @@ internal sealed class LtxManager
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
         LtxPostVideoChainCapture postVideoChain) =>
@@ -98,7 +97,6 @@ internal sealed class LtxManager
             refStore,
             genInfo,
             stageFrame,
-            applySourceVideoLatent,
             sourceMedia,
             priorOutputPath,
             postVideoChain);

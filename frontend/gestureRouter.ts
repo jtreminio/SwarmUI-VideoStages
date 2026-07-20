@@ -30,18 +30,21 @@ export interface GestureSession {
     onTap?(ctx: GestureMoveCtx): void;
     /** Escape or router teardown. Restore preview visuals; never commit. */
     onCancel?(): void;
-    /** Activation distance in px. Default 5. 0 = active at press (playhead). */
+    /** Activation distance in px. Default 5. */
     threshold?: number;
     /** Distance measure for activation: |dx| (default) or hypot(dx, dy). */
     axis?: "x" | "xy";
-    /** Swallow the concluding click even for a tap (linking's keyframe pip). */
+    /**
+     * Swallow the concluding click even for a tap (window tracks' tap-create
+     * presses, whose click would otherwise re-select).
+     */
     suppressTapClick?: boolean;
     /**
-     * Post-Escape click handling. The tracks genuinely differ today:
-     * linking pip = "always", linking resize/drag = "if-active",
-     * retake / audio-segment / prompt-track = "never" (default).
+     * Swallow the click that follows an Escape-cancelled ACTIVE drag
+     * (linking's clip drag/resize). Default false: the tracks let the
+     * post-Escape click fall through.
      */
-    escapeClickSuppression?: "always" | "if-active" | "never";
+    suppressEscapeClick?: boolean;
 }
 
 export interface GestureRoute {
@@ -61,8 +64,6 @@ export interface GestureRouter {
      */
     attach(body: HTMLElement): void;
     register(route: GestureRoute): () => void;
-    /** True while a claimed press is alive (pre- or post-activation). */
-    isGestureActive(): boolean;
     dispose(): void;
 }
 
@@ -176,8 +177,7 @@ export const createGestureRouter = (): GestureRouter => {
         }
         const { session, active } = live;
         live = null;
-        const mode = session.escapeClickSuppression ?? "never";
-        if (mode === "always" || (mode === "if-active" && active)) {
+        if (session.suppressEscapeClick && active) {
             swallowNextClick = true;
         }
         session.onCancel?.();
@@ -234,7 +234,6 @@ export const createGestureRouter = (): GestureRouter => {
                 }
             };
         },
-        isGestureActive: (): boolean => live !== null,
         dispose: (): void => {
             cancelLive();
             removeListeners();

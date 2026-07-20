@@ -11,6 +11,7 @@ import {
     moveItem,
 } from "./timelineReorder";
 import { DEFAULT_PX_PER_SECOND } from "./timelineView";
+import { currentTimelineFps } from "./trackDomUtils";
 import { getSelectedClipIndex, getSelection, setSelection } from "./uiState";
 
 const REGION_SELECTOR = ".vst-region[data-clip-idx]";
@@ -31,15 +32,6 @@ const REGION_DRAGGING_CLASS = "vst-region-dragging";
 export const livePxPerSecond = (body: HTMLElement): number => {
     const pps = Number.parseFloat(body.dataset.vstPps ?? "");
     return Number.isFinite(pps) && pps > 0 ? pps : DEFAULT_PX_PER_SECOND;
-};
-
-const currentFps = (): number => {
-    try {
-        const fps = getRootDefaults().fps;
-        return typeof fps === "number" && fps > 0 ? fps : 24;
-    } catch {
-        return 24;
-    }
 };
 
 export const resolveSelectedIndex = (
@@ -87,18 +79,6 @@ const clearClipShifts = (body: HTMLElement): void => {
     for (const el of body.querySelectorAll<HTMLElement>(CLIP_SHIFT_SELECTOR)) {
         el.style.transform = "";
     }
-};
-
-export const parseRefIdx = (el: Element | null): number | null => {
-    if (!el) {
-        return null;
-    }
-    const raw = el.getAttribute("data-ref-idx");
-    if (raw === null) {
-        return null;
-    }
-    const idx = Number.parseInt(raw, 10);
-    return Number.isInteger(idx) && idx >= 0 ? idx : null;
 };
 
 export interface TimelineLinking {
@@ -224,7 +204,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             return;
         }
         clips[idx].skipped = !clips[idx].skipped;
-        saveClips(clips, undefined, { origin: "linking" });
+        saveClips(clips, { origin: "linking" });
     };
 
     const applyDelete = (idx: number): void => {
@@ -241,7 +221,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                 setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
             }
         }
-        saveClips(clips, undefined, { origin: "linking" });
+        saveClips(clips, { origin: "linking" });
     };
 
     interface ResizeState {
@@ -263,7 +243,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         };
         return {
             threshold: DRAG_THRESHOLD_PX,
-            escapeClickSuppression: "if-active",
+            suppressEscapeClick: true,
             onMove: (ctx) => {
                 const width = Math.max(
                     MIN_RESIZE_WIDTH_PX,
@@ -287,7 +267,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                         const newDuration = pxToDuration(
                             width,
                             livePxPerSecond(body),
-                            currentFps(),
+                            currentTimelineFps(),
                         );
                         if (
                             applyClipDurationResize(
@@ -297,7 +277,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                             )
                         ) {
                             selectClip(state.idx, stageForClip(state.idx));
-                            saveClips(clips, undefined, { origin: "linking" });
+                            saveClips(clips, { origin: "linking" });
                             committed = true;
                         }
                     }
@@ -334,7 +314,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         return {
             threshold: DRAG_THRESHOLD_PX,
             axis: "xy",
-            escapeClickSuppression: "if-active",
+            suppressEscapeClick: true,
             onMove: (ctx) => {
                 body.classList.add(DRAGGING_CLASS);
                 findRegion(body, state.sourceIdx)?.classList.add(
@@ -365,7 +345,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                 }
                 const destIdx = finalIndexAfterMove(from, gap);
                 selectClip(destIdx, stageForClip(from));
-                saveClips(moveItem(clips, from, gap), undefined, {
+                saveClips(moveItem(clips, from, gap), {
                     origin: "linking",
                 });
             },

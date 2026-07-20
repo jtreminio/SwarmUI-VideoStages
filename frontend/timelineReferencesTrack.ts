@@ -1,5 +1,10 @@
 import { clamp, REF_FRAME_MIN } from "./constants";
 import {
+    claimOnly,
+    type GestureRouter,
+    type GestureSession,
+} from "./gestureRouter";
+import {
     appendRefToClip,
     buildDefaultRef,
     getReferenceFrameMax,
@@ -10,6 +15,12 @@ import { getRootDefaults } from "./rootDefaults";
 import { readStateToken } from "./swarmInputs";
 import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
+import {
+    currentTimelineFps,
+    isActivateKey,
+    isStaleToken,
+    parseIntAttr,
+} from "./trackDomUtils";
 import { setSelection } from "./uiState";
 
 const THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
@@ -18,50 +29,28 @@ const DRAGGING_CLASS = "vst-refs-dragging";
 const DRAG_THRESHOLD_PX = 5;
 
 export interface TimelineReferencesTrack {
-    attach(body: HTMLElement): void;
+    attach(body: HTMLElement, router: GestureRouter): void;
     dispose(): void;
 }
 
-const currentFps = (): number => {
-    try {
-        const fps = getRootDefaults().fps;
-        return typeof fps === "number" && fps > 0 ? fps : 24;
-    } catch {
-        return 24;
-    }
-};
-
-const parseIntAttr = (el: Element | null, name: string): number | null => {
-    if (!el) {
-        return null;
-    }
-    const raw = el.getAttribute(name);
-    if (raw === null) {
-        return null;
-    }
-    const value = Number.parseInt(raw, 10);
-    return Number.isInteger(value) && value >= 0 ? value : null;
-};
+interface RefDragState {
+    clipIdx: number;
+    refIdx: number;
+    mark: HTMLElement;
+    arrow: HTMLElement | null;
+    lane: HTMLElement;
+    originalLeft: string;
+    arrowOriginalLeft: string;
+    originalLabel: string;
+    durationSeconds: number;
+    fps: number;
+    fromEnd: boolean;
+    sourceJson: string;
+}
 
 export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
     let boundBody: HTMLElement | null = null;
-    let suppressClick = false;
-    let refDrag: {
-        clipIdx: number;
-        refIdx: number;
-        mark: HTMLElement;
-        arrow: HTMLElement | null;
-        lane: HTMLElement;
-        startX: number;
-        originalLeft: string;
-        arrowOriginalLeft: string;
-        originalLabel: string;
-        durationSeconds: number;
-        fps: number;
-        fromEnd: boolean;
-        active: boolean;
-        sourceJson: string;
-    } | null = null;
+    let unregister: (() => void) | null = null;
 
     const findArrow = (clipIdx: number, refIdx: number): HTMLElement | null =>
         boundBody?.querySelector<HTMLElement>(
@@ -88,15 +77,12 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         }
     };
 
-    const isStale = (sourceJson: string): boolean =>
-        readStateToken() !== sourceJson;
-
     const addRefAtFrame = (
         clipIdx: number,
         frame: number,
         sourceJson: string,
     ): void => {
-        if (isStale(sourceJson)) {
+        if (isStaleToken(sourceJson)) {
             return;
         }
         const clips = getClips();
@@ -108,7 +94,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         const ref = buildDefaultRef();
         ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
         appendRefToClip(clip, ref);
-        saveClips(clips, undefined, { origin: "references-track" });
+        saveClips(clips, { origin: "references-track" });
         // Open the new ref in the dock — after the save, so the rebuilt ref
         // panel already contains its row (works even when another ref was
         // selected: the same-panel path is a targeted highlight swap).
@@ -124,7 +110,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         refIdx: number,
         sourceJson: string,
     ): void => {
-        if (isStale(sourceJson)) {
+        if (isStaleToken(sourceJson)) {
             return;
         }
         const clips = getClips();
@@ -132,36 +118,87 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         if (!clip || !removeRefAt(clip, refIdx)) {
             return;
         }
-        saveClips(clips, undefined, { origin: "references-track" });
+        saveClips(clips, { origin: "references-track" });
     };
 
-    const endRefDrag = (restore: boolean): void => {
-        if (refDrag && restore) {
-            refDrag.mark.style.left = refDrag.originalLeft;
-            if (refDrag.arrow) {
-                refDrag.arrow.style.left = refDrag.arrowOriginalLeft;
-            }
-            const ph = refDrag.mark.querySelector<HTMLElement>(".vst-refs-ph");
-            if (ph) {
-                ph.textContent = refDrag.originalLabel;
-            }
+    const dragFrameAt = (state: RefDragState, clientX: number): number => {
+        const rect = state.lane.getBoundingClientRect();
+        return pxToFrame(
+            clientX - rect.left,
+            rect.width,
+            state.durationSeconds,
+            state.fps,
+            state.fromEnd,
+        );
+    };
+
+    const restoreDragPreview = (state: RefDragState): void => {
+        state.mark.style.left = state.originalLeft;
+        if (state.arrow) {
+            state.arrow.style.left = state.arrowOriginalLeft;
         }
-        refDrag = null;
-        (boundBody ?? document.body).classList.remove(DRAGGING_CLASS);
+        const ph = state.mark.querySelector<HTMLElement>(".vst-refs-ph");
+        if (ph) {
+            ph.textContent = state.originalLabel;
+        }
     };
 
-    const onBodyMouseDown = (event: Event): void => {
-        const me = event as MouseEvent;
-        if (me.button !== 0 || !(me.target instanceof Element)) {
-            return;
+    const dragSession = (
+        body: HTMLElement,
+        state: RefDragState,
+    ): GestureSession => ({
+        threshold: DRAG_THRESHOLD_PX,
+        suppressEscapeClick: true,
+        onMove: (ctx) => {
+            body.classList.add(DRAGGING_CLASS);
+            positionRefMarker(
+                state.mark,
+                state.arrow,
+                dragFrameAt(state, ctx.event.clientX),
+                state.fromEnd,
+                state.durationSeconds,
+                state.fps,
+            );
+        },
+        onCommit: (ctx) => {
+            body.classList.remove(DRAGGING_CLASS);
+            const newFrame = dragFrameAt(state, ctx.event.clientX);
+            const clips = getClips();
+            const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
+            if (
+                isStaleToken(state.sourceJson) ||
+                !ref ||
+                ref.frame === newFrame
+            ) {
+                restoreDragPreview(state);
+                return;
+            }
+            ref.frame = newFrame;
+            saveClips(clips, { origin: "references-track" });
+        },
+        onTap: () => restoreDragPreview(state),
+        onCancel: () => {
+            restoreDragPreview(state);
+            body.classList.remove(DRAGGING_CLASS);
+        },
+    });
+
+    const onPress = (
+        me: MouseEvent,
+        body: HTMLElement,
+    ): GestureSession | null => {
+        if (!(me.target instanceof Element)) {
+            return null;
         }
         const mark = me.target.closest(THUMB_SELECTOR);
         if (!(mark instanceof HTMLElement)) {
-            return;
+            return null;
         }
         if (me.shiftKey) {
+            // The thumb owns this press; the shift-CLICK delete stays in
+            // onBodyClick.
             me.preventDefault();
-            return;
+            return claimOnly();
         }
         const lane = mark.closest(LANE_SELECTOR);
         const clipIdx = parseIntAttr(mark, "data-clip-idx");
@@ -171,101 +208,31 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             clipIdx === null ||
             refIdx === null
         ) {
-            return;
+            return null;
         }
         const clip = getClips()[clipIdx];
         const ref = clip?.refs?.[refIdx];
         if (!clip || !ref) {
-            return;
+            return null;
         }
         const arrow = findArrow(clipIdx, refIdx);
-        refDrag = {
+        me.preventDefault();
+        return dragSession(body, {
             clipIdx,
             refIdx,
             mark,
             arrow,
             lane,
-            startX: me.clientX,
             originalLeft: mark.style.left,
             arrowOriginalLeft: arrow?.style.left ?? "",
             originalLabel:
                 mark.querySelector<HTMLElement>(".vst-refs-ph")?.textContent ??
                 "",
             durationSeconds: clip.duration,
-            fps: currentFps(),
+            fps: currentTimelineFps(),
             fromEnd: ref.fromEnd === true,
-            active: false,
             sourceJson: readStateToken(),
-        };
-        me.preventDefault();
-    };
-
-    const dragFrameAt = (clientX: number): number => {
-        if (!refDrag) {
-            return REF_FRAME_MIN;
-        }
-        const rect = refDrag.lane.getBoundingClientRect();
-        return pxToFrame(
-            clientX - rect.left,
-            rect.width,
-            refDrag.durationSeconds,
-            refDrag.fps,
-            refDrag.fromEnd,
-        );
-    };
-
-    const onDocMouseMove = (event: Event): void => {
-        if (!refDrag) {
-            return;
-        }
-        const me = event as MouseEvent;
-        if (!refDrag.active) {
-            if (Math.abs(me.clientX - refDrag.startX) < DRAG_THRESHOLD_PX) {
-                return;
-            }
-            refDrag.active = true;
-            (boundBody ?? document.body).classList.add(DRAGGING_CLASS);
-        }
-        positionRefMarker(
-            refDrag.mark,
-            refDrag.arrow,
-            dragFrameAt(me.clientX),
-            refDrag.fromEnd,
-            refDrag.durationSeconds,
-            refDrag.fps,
-        );
-    };
-
-    const onDocMouseUp = (event: Event): void => {
-        if (!refDrag) {
-            return;
-        }
-        const drag = refDrag;
-        const newFrame = dragFrameAt((event as MouseEvent).clientX);
-        if (!drag.active) {
-            endRefDrag(true);
-            return;
-        }
-        suppressClick = true;
-        const clips = getClips();
-        const ref = clips[drag.clipIdx]?.refs?.[drag.refIdx];
-        if (isStale(drag.sourceJson) || !ref || ref.frame === newFrame) {
-            endRefDrag(true);
-            return;
-        }
-        endRefDrag(false);
-        ref.frame = newFrame;
-        saveClips(clips, undefined, { origin: "references-track" });
-    };
-
-    const onDocKeyDown = (event: Event): void => {
-        if ((event as KeyboardEvent).key !== "Escape" || !refDrag) {
-            return;
-        }
-        if (refDrag.active) {
-            suppressClick = true;
-        }
-        endRefDrag(true);
+        });
     };
 
     const selectRef = (clipIdx: number, refIdx: number): void => {
@@ -273,10 +240,6 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
     };
 
     const onBodyClick = (event: Event): void => {
-        if (suppressClick) {
-            suppressClick = false;
-            return;
-        }
         if (!(event.target instanceof Element)) {
             return;
         }
@@ -310,7 +273,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             (event as MouseEvent).clientX - rect.left,
             rect.width,
             clip.duration,
-            currentFps(),
+            currentTimelineFps(),
             false,
         );
         addRefAtFrame(clipIdx, frame, readStateToken());
@@ -318,7 +281,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
 
     const onBodyKeyDown = (event: Event): void => {
         const ke = event as KeyboardEvent;
-        if (ke.key !== "Enter" && ke.key !== " ") {
+        if (!isActivateKey(ke)) {
             return;
         }
         if (!(ke.target instanceof Element)) {
@@ -337,7 +300,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         selectRef(clipIdx, refIdx);
     };
 
-    const attach = (body: HTMLElement): void => {
+    const attach = (body: HTMLElement, router: GestureRouter): void => {
         if (boundBody === body) {
             return;
         }
@@ -345,24 +308,21 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         boundBody = body;
         body.addEventListener("click", onBodyClick);
         body.addEventListener("keydown", onBodyKeyDown);
-        body.addEventListener("mousedown", onBodyMouseDown);
-        document.addEventListener("mousemove", onDocMouseMove);
-        document.addEventListener("mouseup", onDocMouseUp);
-        document.addEventListener("keydown", onDocKeyDown);
+        unregister = router.register({
+            id: "references",
+            priority: 30,
+            onPress: (me) => onPress(me, body),
+        });
     };
 
     const dispose = (): void => {
-        endRefDrag(false);
         if (boundBody) {
             boundBody.removeEventListener("click", onBodyClick);
             boundBody.removeEventListener("keydown", onBodyKeyDown);
-            boundBody.removeEventListener("mousedown", onBodyMouseDown);
             boundBody = null;
         }
-        document.removeEventListener("mousemove", onDocMouseMove);
-        document.removeEventListener("mouseup", onDocMouseUp);
-        document.removeEventListener("keydown", onDocKeyDown);
-        suppressClick = false;
+        unregister?.();
+        unregister = null;
     };
 
     return { attach, dispose };

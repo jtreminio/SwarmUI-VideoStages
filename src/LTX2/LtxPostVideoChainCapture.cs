@@ -182,9 +182,11 @@ internal sealed class LtxPostVideoChainCapture
             bridge.SyncNode(separate);
         }
 
-        string decodeNodeId = ShouldUseTiledVaeDecode()
-            ? AddTiledVideoDecode(bridge, vaeSource, separate.VideoLatent)
-            : AddPlainVideoDecode(bridge, vaeSource, separate.VideoLatent);
+        string decodeNodeId = LtxChainOps.AddDecode(
+            bridge,
+            vaeSource,
+            separate.VideoLatent,
+            BuildDecodeConfig()).Id;
 
         WGNodeData detachedGuide = new(new JArray(decodeNodeId, 0), g, WGNodeData.DT_VIDEO, vae.Compat)
         {
@@ -254,28 +256,6 @@ internal sealed class LtxPostVideoChainCapture
             Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
             TemporalSize: g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
             TemporalOverlap: g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
-    }
-
-    private string AddPlainVideoDecode(WorkflowBridge bridge, INodeOutput vaeSource, INodeOutput samplesSource)
-    {
-        VAEDecodeNode decode = bridge.AddNode(new VAEDecodeNode());
-        decode.Vae.ConnectToUntyped(vaeSource);
-        decode.Samples.ConnectToUntyped(samplesSource);
-        bridge.SyncNode(decode);
-        return decode.Id;
-    }
-
-    private string AddTiledVideoDecode(WorkflowBridge bridge, INodeOutput vaeSource, INodeOutput samplesSource)
-    {
-        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode().With(
-            TileSize: g.UserInput.Get(T2IParamTypes.VAETileSize, 768),
-            Overlap: g.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
-            TemporalSize: g.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
-            TemporalOverlap: g.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4)));
-        decode.Vae.ConnectToUntyped(vaeSource);
-        decode.Samples.ConnectToUntyped(samplesSource);
-        bridge.SyncNode(decode);
-        return decode.Id;
     }
 
     private WGNodeData CloneCurrentOutputWithAttachedAudio()

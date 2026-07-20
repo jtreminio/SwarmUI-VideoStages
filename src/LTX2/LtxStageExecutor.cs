@@ -38,7 +38,6 @@ internal sealed class LtxStageExecutor(
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         bool skipGuideReinjection,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         LtxPostVideoChainCapture postVideoChain,
         IReadOnlyList<ResolvedClipRef> clipRefs = null,
         double guideMergeStrength = DefaultGuideMergeStrength)
@@ -63,7 +62,6 @@ internal sealed class LtxStageExecutor(
                 effectiveSourceMedia,
                 guideMedia,
                 skipGuideReinjection,
-                applySourceVideoLatent,
                 postVideoChain,
                 clipRefs ?? [],
                 guideMergeStrength);
@@ -252,7 +250,6 @@ internal sealed class LtxStageExecutor(
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         bool skipGuideReinjection,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> applySourceVideoLatent,
         LtxPostVideoChainCapture postVideoChain,
         IReadOnlyList<ResolvedClipRef> clipRefs,
         double guideMergeStrength)
@@ -261,7 +258,6 @@ internal sealed class LtxStageExecutor(
         if (stageLatent is null)
         {
             genInfo.PrepFullCond(g, guideMedia);
-            applySourceVideoLatent?.Invoke(genInfo);
             return;
         }
 
@@ -716,7 +712,7 @@ internal sealed class LtxStageExecutor(
         }
 
         JArray scaleSourcePath = ResolveImageScaleBaseSource(bridge, guideImagePath);
-        if (TryFindReusableImageScale(bridge, scaleSourcePath, targetW, targetH, out ImageScaleNode reusable))
+        if (ImageScaleReuse.TryFind(bridge, scaleSourcePath, targetW, targetH, out ImageScaleNode reusable))
         {
             reusable.Crop.Set("center");
             bridge.SyncNode(reusable);
@@ -767,37 +763,6 @@ internal sealed class LtxStageExecutor(
             currentSlot = upstream.SlotIndex;
         }
         return current is null ? imagePath : new NodeRef(current.Id, currentSlot).ToJArray();
-    }
-
-    private static bool TryFindReusableImageScale(
-        WorkflowBridge bridge,
-        JArray sourcePath,
-        int targetW,
-        int targetH,
-        out ImageScaleNode scale)
-    {
-        scale = null;
-        if (sourcePath is not { Count: 2 })
-        {
-            return false;
-        }
-        string sourceId = $"{sourcePath[0]}";
-        int sourceSlot = (int)sourcePath[1];
-
-        foreach (ImageScaleNode candidate in bridge.Graph.NodesOfType<ImageScaleNode>())
-        {
-            INodeOutput candidateImage = candidate.Image.Connection;
-            if (candidateImage?.Node.Id != sourceId
-                || candidateImage.SlotIndex != sourceSlot
-                || candidate.Width.LiteralAsInt() != targetW
-                || candidate.Height.LiteralAsInt() != targetH)
-            {
-                continue;
-            }
-            scale = candidate;
-            return true;
-        }
-        return false;
     }
 
     private bool TryFindReusablePreprocessOutput(JArray guideImagePath, out JArray preprocessOutputPath)

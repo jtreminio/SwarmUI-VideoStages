@@ -67,7 +67,6 @@ export interface AudioSegment {
 }
 
 export interface Stage {
-    expanded: boolean;
     skipped: boolean;
     control: number;
     controlNetStrength: number;
@@ -100,7 +99,6 @@ export interface Retake {
 }
 
 export interface RefImage {
-    expanded: boolean;
     source: string;
     uploadFileName: string | null;
     uploadedImage: UploadedAudio | null;
@@ -135,7 +133,6 @@ export interface IcLora {
 }
 
 export interface Clip {
-    expanded: boolean;
     skipped: boolean;
     hue: number;
     boundaryOut: BoundaryOut;

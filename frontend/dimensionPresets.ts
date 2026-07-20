@@ -1,20 +1,3 @@
-export const DIMENSION_PRESET_KEYS: readonly string[] = [
-    "256x384",
-    "384x512",
-    "384x640",
-    "512x768",
-    "512x896",
-    "512x1024",
-    "768x1024",
-    "384x256",
-    "512x384",
-    "640x384",
-    "768x512",
-    "896x512",
-    "1024x512",
-    "1024x768",
-];
-
 export const DIMENSION_PRESET_METADATA: Readonly<Record<string, string[]>> = {
     "256x384": [
         "384x576,1.5",
@@ -71,6 +54,11 @@ export const DIMENSION_PRESET_METADATA: Readonly<Record<string, string[]>> = {
     "1024x512": ["*2304x1152,1.5,1.5", "*3072x1536,1.5,2"],
     "1024x768": ["*2304x1728,1.5,1.5", "*3072x2304,1.5,2"],
 };
+
+/** Preset keys in display order (the metadata object's insertion order). */
+export const DIMENSION_PRESET_KEYS: readonly string[] = Object.keys(
+    DIMENSION_PRESET_METADATA,
+);
 
 export interface WidthHeight {
     width: number;
@@ -136,7 +124,7 @@ export const parsePresetStops = (presetKey: string): UpscaleStop[] => {
     return out;
 };
 
-export const upscaleBadgeElement = (stop: UpscaleStop): HTMLSpanElement => {
+const upscaleBadgeElement = (stop: UpscaleStop): HTMLSpanElement => {
     const badge = document.createElement("span");
     badge.className = "param_view_block tag-text tag-type-8";
     const resolution = `${stop.width}x${stop.height}`;

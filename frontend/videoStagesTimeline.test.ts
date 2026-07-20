@@ -229,7 +229,7 @@ describe("videoStagesTimeline", () => {
 
         const clips = getClips();
         clips.push(structuredClone(clips[0]));
-        saveClips(clips, undefined, { origin: "linking" });
+        saveClips(clips, { origin: "linking" });
 
         expect(repaints).toBe(1);
         expect(regionCount()).toBe(2);

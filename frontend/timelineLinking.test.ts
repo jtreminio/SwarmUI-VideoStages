@@ -13,7 +13,6 @@ import {
     createTimelineLinking,
     livePxPerSecond,
     parseClipIdx,
-    parseRefIdx,
     resolveSelectedIndex,
     type TimelineLinking,
 } from "./timelineLinking";
@@ -52,22 +51,6 @@ describe("parseClipIdx", () => {
         const bad = document.createElement("div");
         bad.setAttribute("data-clip-idx", "x");
         expect(parseClipIdx(bad)).toBeNull();
-    });
-});
-
-describe("parseRefIdx", () => {
-    it("parses a valid data-ref-idx", () => {
-        const el = document.createElement("div");
-        el.setAttribute("data-ref-idx", "3");
-        expect(parseRefIdx(el)).toBe(3);
-    });
-
-    it("returns null for missing/invalid/null", () => {
-        expect(parseRefIdx(null)).toBeNull();
-        expect(parseRefIdx(document.createElement("div"))).toBeNull();
-        const bad = document.createElement("div");
-        bad.setAttribute("data-ref-idx", "nope");
-        expect(parseRefIdx(bad)).toBeNull();
     });
 });
 

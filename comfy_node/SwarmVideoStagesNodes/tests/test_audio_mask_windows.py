@@ -5,7 +5,7 @@ import sys
 
 import torch
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from audio_mask_windows import (  # noqa: E402
     audio_latents_per_second,

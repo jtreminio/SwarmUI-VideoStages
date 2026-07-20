@@ -20,7 +20,7 @@ from .swarm_prompt_relay import (
     build_segments,
     convert_to_latent_lengths,
     create_mask_fn,
-    detect_model_type,
+    detect_ltx,
     distribute_segment_lengths,
     get_tokenizer_wrapper,
     map_token_indices,
@@ -69,6 +69,9 @@ class SwarmPromptRelayEncode(io.ComfyNode):
                     "epsilon", default=0.001, min=0.0001, max=0.99, step=0.0001,
                     tooltip="Penalty decay. <~0.1 gives sharp boundaries (paper default 0.001); higher softens.",
                 ),
+                # The SwarmUI backend does not wire this input (LtxStageExecutor sets
+                # only prompt/windows/fps/epsilon); it exists for hand-built Comfy
+                # graphs that want exact latent geometry instead of the estimate.
                 io.Latent.Input(
                     "latent", optional=True,
                     tooltip="Optional. Connect the sampling latent for exact frame geometry.",
@@ -116,12 +119,9 @@ class SwarmPromptRelayEncode(io.ComfyNode):
 
         for i, p in enumerate(locals_list):
             if not p:
-                fallback = global_prompt.strip() if global_prompt else "video"
-                if not fallback:
-                    fallback = "video"
-                locals_list[i] = fallback
+                locals_list[i] = (global_prompt or "").strip() or "video"
 
-        arch, patch_size, temporal_stride = detect_model_type(model)
+        temporal_stride = detect_ltx(model)
 
         # Any positive per-window length means explicit geometry; all-zero falls back to auto-distribute.
         pixel_lengths = pixel_lengths_parsed if any(pixel_lengths_parsed) else None
@@ -130,7 +130,7 @@ class SwarmPromptRelayEncode(io.ComfyNode):
         if latent is not None:
             samples = latent["samples"]
             latent_frames = samples.shape[2]
-            tokens_per_frame = (samples.shape[3] // patch_size[1]) * (samples.shape[4] // patch_size[2])
+            tokens_per_frame = samples.shape[3] * samples.shape[4]
             if pixel_lengths:
                 parsed_lengths = convert_to_latent_lengths(pixel_lengths, temporal_stride, latent_frames)
         elif pixel_lengths:
@@ -163,13 +163,13 @@ class SwarmPromptRelayEncode(io.ComfyNode):
             latent_frames, tokens_per_frame, effective_lengths, total_tokens, pad_left,
         )
 
-        q_token_idx = build_segments(token_ranges, effective_lengths, epsilon, None)
+        q_token_idx = build_segments(token_ranges, effective_lengths, epsilon)
         mask_fn = create_mask_fn(
             q_token_idx, tokens_per_frame, latent_frames,
             total_tokens=total_tokens, pad_left=pad_left,
         )
 
         patched = model.clone()
-        apply_patches(patched, arch, mask_fn)
+        apply_patches(patched, mask_fn)
 
         return io.NodeOutput(patched, conditioning)

@@ -1,7 +1,7 @@
 import { assignMissingHues } from "./clipColor";
 import { ROOT_DIMENSION_MIN, ROOT_FPS_MIN } from "./constants";
 import { videoStagesDebugLog } from "./debugLog";
-import { buildDefaultClip, normalizeClip } from "./normalization";
+import { normalizeClip } from "./normalization";
 import { parseClipPrompts } from "./promptSegments";
 import {
     getDefaultStageModel,
@@ -15,7 +15,6 @@ import {
 } from "./store";
 import {
     getPromptInput,
-    isImageToVideoWorkflow,
     isVideoStagesEnabled,
     notifyCarrierChanged,
     readDataParam,
@@ -25,16 +24,13 @@ import {
 } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 import { applyUiState, saveUiState } from "./uiState";
-import { utils } from "./utils";
+import { isRecord, utils } from "./utils";
 
 type InheritedDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
 type RootDims = Pick<
     VideoStagesConfig,
     "width" | "height" | "fps" | "dimsExplicit" | "fpsExplicit"
 >;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null && !Array.isArray(value);
 
 const toIntOrNull = (value: unknown): number | null => {
     if (value == null || value === "") {
@@ -150,10 +146,6 @@ export const serializeStateForStorage = (
     return JSON.stringify(out);
 };
 
-export interface PersistenceCallbacks {
-    onAfterSerialize?: (serialized: string) => void;
-}
-
 export interface SaveStateOptions {
     notifyDomChange?: boolean;
     /** Which component committed this save; threaded to store subscribers. */
@@ -234,13 +226,12 @@ const parseEmptyConfig = (): VideoStagesConfig => {
 const writeQuietly = (state: VideoStagesConfig): string => {
     assignMissingHues(state.clips);
     const serialized = serializeStateForStorage(state);
-    writeDataParam(serialized, false);
+    writeDataParam(serialized);
     writeClipPrompts(
         state.clips.map((clip) => ({
             prompt: clip.prompt,
             windows: clip.promptWindows,
         })),
-        false,
     );
     saveUiState(state.clips);
     return serialized;
@@ -266,7 +257,6 @@ export const getState = (): VideoStagesConfig => store.getState();
 
 export const saveState = (
     state: VideoStagesConfig,
-    callbacks?: PersistenceCallbacks,
     options?: SaveStateOptions,
 ): void => {
     const willNotifyDom = options?.notifyDomChange !== false;
@@ -276,7 +266,6 @@ export const saveState = (
         willNotifyDom,
         options?.valueOnly ? "value-only" : undefined,
     );
-    callbacks?.onAfterSerialize?.(serialized);
     videoStagesDebugLog("persistence", "saveState", {
         notifyDomChange: options?.notifyDomChange,
         willNotifyDom,
@@ -286,11 +275,7 @@ export const saveState = (
 
 export const getClips = (): Clip[] => getState().clips;
 
-export const saveClips = (
-    clips: Clip[],
-    callbacks?: PersistenceCallbacks,
-    options?: SaveStateOptions,
-): void => {
+export const saveClips = (clips: Clip[], options?: SaveStateOptions): void => {
     videoStagesDebugLog("persistence", "saveClips", {
         clipCount: clips.length,
     });
@@ -300,24 +285,5 @@ export const saveClips = (
         options?.notifyDomChange !== undefined
             ? options.notifyDomChange
             : isVideoStagesEnabled();
-    saveState(state, callbacks, { ...options, notifyDomChange });
-};
-
-export const ensureClipsSeeded = (
-    callbacks?: PersistenceCallbacks,
-    options?: SaveStateOptions,
-): void => {
-    const state = getState();
-    if (state.clips.length > 0) {
-        return;
-    }
-
-    state.clips = [
-        buildDefaultClip(
-            getRootDefaults,
-            getDefaultStageModel,
-            isImageToVideoWorkflow(),
-        ),
-    ];
-    saveState(state, callbacks, { origin: "seed", ...options });
+    saveState(state, { ...options, notifyDomChange });
 };

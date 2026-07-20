@@ -81,28 +81,12 @@ internal static class MetadataSanitizer
         {
             return;
         }
-        foreach (JProperty dataProp in upload.Properties().Where(p => StringUtils.Equals(p.Name, "Data")).ToList())
-        {
-            dataProp.Remove();
-        }
+        JsonUtil.RemoveAll(upload, "Data");
         if (!upload.HasValues)
         {
-            foreach (JProperty containerProp in parent.Properties().Where(p => StringUtils.Equals(p.Name, containerKey)).ToList())
-            {
-                containerProp.Remove();
-            }
+            JsonUtil.RemoveAll(parent, containerKey);
         }
     }
 
-    private static JToken GetProperty(JObject obj, string name)
-    {
-        foreach (JProperty property in obj.Properties())
-        {
-            if (StringUtils.Equals(property.Name, name))
-            {
-                return property.Value;
-            }
-        }
-        return null;
-    }
+    private static JToken GetProperty(JObject obj, string name) => JsonUtil.Get(obj, name);
 }
