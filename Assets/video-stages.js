@@ -2716,7 +2716,7 @@
       const title = `Boundary clip ${leftClipIdx} → ${i}: ${label}. Click to cycle (cut → continue → crossfade).`;
       const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}. Click to cycle and edit.`;
       seams.push(
-        `<button type="button" class="vst-boundary-chip vst-boundary-${value}" data-vst-boundary-cycle data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
+        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-cycle data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
       );
     }
     return seams.join("");
@@ -2925,10 +2925,10 @@
     const dimsSource = chipDimsExplicit ? chipPresetKey ? `${chipPresetKey} preset` : "custom" : "inherited from image resolution";
     const fpsSource = chipFpsExplicit ? "custom" : "inherited from Video FPS";
     const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
-    const settingsChip = `<button type="button" class="vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${chipWidth}×${chipHeight}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${chipFps} fps</span></button>`;
+    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${chipWidth}×${chipHeight}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${chipFps} fps</span></button>`;
     const enabled = options?.enabled !== false;
     const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
-    const header = `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clips.length}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="vst-toggle vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="vst-toggle vst-zoom-btn" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="vst-toggle vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="vst-toggle vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="vst-toggle vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
+    const header = `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clips.length}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-toggle vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button vst-toggle vst-zoom-btn" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button vst-toggle vst-zoom-btn" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button vst-toggle vst-zoom-btn" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-toggle vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-toggle vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
     const wireTopbar = () => {
       const wire = (selector, handler) => {
         if (!handler) {
@@ -3004,7 +3004,7 @@
       );
     };
     if (clips.length === 0) {
-      body.innerHTML = `${header}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div><button type="button" class="vst-toggle vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
+      body.innerHTML = `${header}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-toggle vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
       wireTopbar();
       return;
     }
@@ -4168,7 +4168,7 @@
     fileName.textContent = name ? name : "No file chosen";
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
-    clearBtn.className = "vst-audio-upload-clear";
+    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
     clearBtn.textContent = "Clear";
     clearBtn.hidden = !name;
     fileInput.addEventListener("change", () => {
@@ -4203,7 +4203,7 @@
     title.textContent = spec.title;
     const del = document.createElement("button");
     del.type = "button";
-    del.className = "vst-refs-delete vst-detail-delete vst-detail-instance-delete";
+    del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-instance-delete";
     del.textContent = spec.deleteLabel;
     del.title = spec.deleteLabel;
     del.addEventListener("click", (event) => {
@@ -5129,7 +5129,7 @@
       crumb.textContent = breadcrumbFor(sel);
       const clear = document.createElement("button");
       clear.type = "button";
-      clear.className = "vst-detail-clear";
+      clear.className = "basic-button small-button vst-detail-clear";
       clear.textContent = "Clear";
       clear.title = "Clear selection (show timeline settings)";
       clear.setAttribute("aria-label", clear.title);
@@ -5139,7 +5139,7 @@
       });
       const toggle = document.createElement("button");
       toggle.type = "button";
-      toggle.className = "vst-detail-collapse";
+      toggle.className = "basic-button small-button vst-detail-collapse";
       toggle.textContent = collapsed ? "▸" : "▾";
       toggle.title = collapsed ? "Expand detail strip" : "Collapse detail strip";
       toggle.setAttribute("aria-label", toggle.title);
@@ -5222,7 +5222,7 @@
       actions.className = "vst-detail-rail-actions";
       const addBtn = document.createElement("button");
       addBtn.type = "button";
-      addBtn.className = "vst-detail-rail-btn vst-detail-add-stage";
+      addBtn.className = "basic-button small-button vst-detail-rail-btn vst-detail-add-stage";
       addBtn.textContent = "Add stage";
       addBtn.title = "Add a refine stage";
       addBtn.addEventListener("click", (event) => {
@@ -5231,7 +5231,7 @@
       });
       const deleteBtn = document.createElement("button");
       deleteBtn.type = "button";
-      deleteBtn.className = "vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
+      deleteBtn.className = "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
       deleteBtn.textContent = "Delete stage";
       deleteBtn.disabled = clip.stages.length <= 1;
       deleteBtn.title = deleteBtn.disabled ? "A clip always keeps at least one stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
@@ -5549,7 +5549,7 @@
           );
           const remove = document.createElement("button");
           remove.type = "button";
-          remove.className = "vst-stage-lora-remove";
+          remove.className = "basic-button vst-stage-lora-remove";
           remove.textContent = "×";
           remove.title = "Remove this LoRA";
           remove.addEventListener("click", () => {
@@ -5568,7 +5568,7 @@
         section.appendChild(list);
         const addBtn = document.createElement("button");
         addBtn.type = "button";
-        addBtn.className = "vst-stage-lora-add";
+        addBtn.className = "basic-button small-button vst-stage-lora-add";
         addBtn.textContent = "+ Add LoRA";
         addBtn.addEventListener("click", () => {
           structuralCommit((clips) => {
@@ -5601,7 +5601,7 @@
         hint.textContent = "Regenerates a sub-range when refining a base video.";
         const addBtn = document.createElement("button");
         addBtn.type = "button";
-        addBtn.className = "vst-detail-rail-btn vst-detail-add-retake";
+        addBtn.className = "basic-button small-button vst-detail-rail-btn vst-detail-add-retake";
         addBtn.textContent = "Add retake";
         addBtn.addEventListener("click", (event) => {
           event.preventDefault();
@@ -5673,7 +5673,7 @@
       col.appendChild(note);
       const del = document.createElement("button");
       del.type = "button";
-      del.className = "vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+      del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
       del.textContent = "Remove retake";
       del.addEventListener("click", (event) => {
         event.preventDefault();
@@ -5854,7 +5854,7 @@
       });
       const addBtn = document.createElement("button");
       addBtn.type = "button";
-      addBtn.className = "vst-detail-rail-btn vst-detail-add-iclora";
+      addBtn.className = "basic-button small-button vst-detail-rail-btn vst-detail-add-iclora";
       addBtn.textContent = "+ Add IC-LoRA";
       addBtn.addEventListener("click", (event) => {
         event.preventDefault();
@@ -6125,7 +6125,7 @@
       const segCount = clip.audioSegments?.length ?? 0;
       const addSegment = document.createElement("button");
       addSegment.type = "button";
-      addSegment.className = "vst-detail-add-segment";
+      addSegment.className = "basic-button small-button vst-detail-add-segment";
       addSegment.textContent = "+ Add segment";
       addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
       addSegment.addEventListener("click", (event) => {
@@ -6314,7 +6314,7 @@
         title.textContent = `W${idx + 1}`;
         const del = document.createElement("button");
         del.type = "button";
-        del.className = "vst-refs-delete vst-detail-delete vst-detail-minor-delete";
+        del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-minor-delete";
         del.textContent = "Delete";
         del.title = "Delete this prompt window";
         del.addEventListener("click", (event) => {

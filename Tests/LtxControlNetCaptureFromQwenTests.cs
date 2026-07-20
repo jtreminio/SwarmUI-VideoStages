@@ -160,8 +160,11 @@ public partial class StageFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -209,8 +212,11 @@ public partial class StageFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);

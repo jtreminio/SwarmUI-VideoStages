@@ -514,6 +514,36 @@ internal static class PromptParser
             rows);
     }
 
+    /// <summary>
+    /// One piece of a prompt split on '&lt;': the leading pre-tag text (<see cref="IsLeadingText"/>),
+    /// or a tag candidate. <see cref="HasTag"/> is false when the piece has no closing '&gt;'.
+    /// </summary>
+    private readonly record struct PromptTagPiece(string Piece, bool IsLeadingText, int TagEnd)
+    {
+        public bool HasTag => TagEnd >= 0;
+        public string Tag => Piece[..TagEnd];
+        public string Content => Piece[(TagEnd + 1)..];
+    }
+
+    /// <summary>
+    /// The shared tag-scanner skeleton of <see cref="CanonicalizeVideoclipBrackets"/> and
+    /// <see cref="RemoveAllVideoClipSections"/>: splits on '&lt;', yields the leading text as-is, skips
+    /// empty pieces (consecutive '&lt;'), and marks each remaining piece with its '&gt;' position.
+    /// Non-leading pieces re-serialize as <c>'&lt;' + Piece</c>.
+    /// </summary>
+    private static IEnumerable<PromptTagPiece> ScanTagPieces(string prompt)
+    {
+        string[] pieces = prompt.Split('<');
+        yield return new PromptTagPiece(pieces[0], IsLeadingText: true, TagEnd: -1);
+        foreach (string piece in pieces.Skip(1))
+        {
+            if (!string.IsNullOrEmpty(piece))
+            {
+                yield return new PromptTagPiece(piece, IsLeadingText: false, piece.IndexOf('>'));
+            }
+        }
+    }
+
     private static string CanonicalizeVideoclipBrackets(
         string prompt,
         int clipIndex,
@@ -523,33 +553,24 @@ internal static class PromptParser
         int stageCid)
     {
         StringBuilder result = new(prompt.Length + 16);
-        string[] pieces = prompt.Split('<');
-        bool first = true;
-        foreach (string piece in pieces)
+        foreach (PromptTagPiece piece in ScanTagPieces(prompt))
         {
-            if (first)
+            if (piece.IsLeadingText)
             {
-                first = false;
-                result.Append(piece);
+                result.Append(piece.Piece);
                 continue;
             }
-            if (string.IsNullOrEmpty(piece))
+            if (!piece.HasTag)
             {
+                result.Append('<').Append(piece.Piece);
                 continue;
             }
-            int end = piece.IndexOf('>');
-            if (end == -1)
-            {
-                result.Append('<').Append(piece);
-                continue;
-            }
-            string tag = piece[..end];
-            string content = piece[(end + 1)..];
+            string tag = piece.Tag;
 
             if (tag.Contains(VideoClipCidMarker, StringComparison.OrdinalIgnoreCase)
                 || !TryParseVideoclipTag(tag, out string preData, out string value))
             {
-                result.Append('<').Append(piece);
+                result.Append('<').Append(piece.Piece);
                 continue;
             }
 
@@ -557,7 +578,7 @@ internal static class PromptParser
                 ? ResolveBracketCid(preData, clipIndex, clipStageIndexWithinClip, globalCid, clipCid, stageCid)
                 : NoMatchCid;
             result.Append('<').Append(VideoClipTagName).Append(VideoClipCidMarker).Append(cid)
-                  .Append('>').Append(content);
+                  .Append('>').Append(piece.Content);
         }
         return result.ToString();
     }
@@ -693,30 +714,23 @@ internal static class PromptParser
         }
 
         StringBuilder result = new();
-        bool first = true;
         bool inVideoclip = false;
-        foreach (string piece in canonicalPrompt.Split('<'))
+        foreach (PromptTagPiece piece in ScanTagPieces(canonicalPrompt))
         {
-            if (first)
+            if (piece.IsLeadingText)
             {
-                first = false;
-                result.Append(piece);
+                result.Append(piece.Piece);
                 continue;
             }
-            if (string.IsNullOrEmpty(piece))
-            {
-                continue;
-            }
-            int end = piece.IndexOf('>');
-            if (end == -1)
+            if (!piece.HasTag)
             {
                 if (!inVideoclip)
                 {
-                    result.Append('<').Append(piece);
+                    result.Append('<').Append(piece.Piece);
                 }
                 continue;
             }
-            string prefix = ExtractTagPrefixLower(piece[..end]);
+            string prefix = ExtractTagPrefixLower(piece.Tag);
             if (prefix == VideoClipTagName)
             {
                 inVideoclip = true;
@@ -727,7 +741,7 @@ internal static class PromptParser
                 continue;
             }
             inVideoclip = false;
-            result.Append('<').Append(piece);
+            result.Append('<').Append(piece.Piece);
         }
         return result.ToString().Trim();
     }

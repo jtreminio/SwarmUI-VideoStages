@@ -249,7 +249,7 @@ export const buildUploadRow = (
     fileName.textContent = name ? name : "No file chosen";
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
-    clearBtn.className = "vst-audio-upload-clear";
+    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
     clearBtn.textContent = "Clear";
     clearBtn.hidden = !name;
     fileInput.addEventListener("change", () => {
@@ -307,7 +307,7 @@ export const buildInstanceRow = (
     const del = document.createElement("button");
     del.type = "button";
     del.className =
-        "vst-refs-delete vst-detail-delete vst-detail-instance-delete";
+        "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-instance-delete";
     del.textContent = spec.deleteLabel;
     del.title = spec.deleteLabel;
     del.addEventListener("click", (event) => {

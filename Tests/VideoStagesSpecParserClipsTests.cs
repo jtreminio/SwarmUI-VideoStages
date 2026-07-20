@@ -36,8 +36,7 @@ public class VideoStagesSpecParserClipsTests
         bool skipped = false,
         double duration = 3.0,
         string audioSource = Constants.AudioSourceNative,
-        string controlNetSource = Constants.ControlNetSourceOne,
-        string controlNetLora = null,
+        JArray icLoras = null,
         bool saveAudioTrack = false,
         bool clipLengthFromAudio = false,
         bool clipLengthFromControlNet = false,
@@ -49,7 +48,6 @@ public class VideoStagesSpecParserClipsTests
             ["Skipped"] = skipped,
             ["Duration"] = duration,
             ["AudioSource"] = audioSource,
-            ["ControlNetSource"] = controlNetSource,
             ["SaveAudioTrack"] = saveAudioTrack,
             ["ClipLengthFromAudio"] = clipLengthFromAudio,
             ["ClipLengthFromControlNet"] = clipLengthFromControlNet,
@@ -57,9 +55,9 @@ public class VideoStagesSpecParserClipsTests
             ["Refs"] = new JArray(refs ?? []),
             ["Stages"] = new JArray(stages),
         };
-        if (controlNetLora is not null)
+        if (icLoras is not null)
         {
-            clip["ControlNetLora"] = controlNetLora;
+            clip["IcLoras"] = icLoras;
         }
         if (uploadedAudio is not null)
         {
@@ -296,8 +294,14 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 12, fromEnd: true)],
                 duration: 4.0,
-                controlNetSource: Constants.ControlNetSourceTwo,
-                controlNetLora: "legacy-lora",
+                icLoras: new JArray(new JObject
+                {
+                    ["Lora"] = "clip-lora",
+                    ["Source"] = Constants.ControlNetSourceTwo,
+                    ["Strength"] = 0.7,
+                    ["AttentionStrength"] = 0.4,
+                    ["ControlType"] = Constants.IcLoraControlCanny,
+                }),
                 saveAudioTrack: true,
                 clipLengthFromAudio: true,
                 clipLengthFromControlNet: true,
@@ -312,9 +316,12 @@ public class VideoStagesSpecParserClipsTests
 
         Assert.Equal(2, clips.Count);
         Assert.Equal(0, clips[0].Id);
-        IcLoraSpec legacyEntry = Assert.Single(clips[0].IcLoras);
-        Assert.Equal("legacy-lora", legacyEntry.Lora);
-        Assert.Equal(Constants.ControlNetSourceTwo, legacyEntry.Source);
+        IcLoraSpec entry = Assert.Single(clips[0].IcLoras);
+        Assert.Equal("clip-lora", entry.Lora);
+        Assert.Equal(Constants.ControlNetSourceTwo, entry.Source);
+        Assert.Equal(0.7, entry.Strength);
+        Assert.Equal(0.4, entry.AttentionStrength);
+        Assert.Equal(Constants.IcLoraControlCanny, entry.ControlType);
         Assert.Equal(Constants.ControlNetSourceTwo, clips[0].PrimarySlotEntry?.Source);
         Assert.True(clips[0].SaveAudioTrack);
         Assert.False(clips[0].ClipLengthFromAudio);
@@ -333,6 +340,28 @@ public class VideoStagesSpecParserClipsTests
         Assert.False(clips[1].SaveAudioTrack);
         Assert.Empty(clips[1].ImageRefs);
         Assert.Equal(2, clips[1].Stages.Count);
+    }
+
+    // The ONE legacy-shape test: old saved configs carry ControlNetLora + ControlNetSource on the
+    // clip itself; the parser maps them to a single default-strength IC-LoRA entry. Every other
+    // fixture authors the shipping IcLoras[] shape.
+    [Fact]
+    public void ParseClips_LegacyControlNetFields_MapToSingleIcLoraEntry()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["ControlNetLora"] = "legacy-lora";
+        clip["ControlNetSource"] = Constants.ControlNetSourceTwo;
+
+        ClipSpec parsed = ParseSingleClip(clip);
+
+        IcLoraSpec entry = Assert.Single(parsed.IcLoras);
+        Assert.Equal("legacy-lora", entry.Lora);
+        Assert.Equal(Constants.ControlNetSourceTwo, entry.Source);
+        Assert.Equal(1, entry.Strength);
+        Assert.Equal(1, entry.AttentionStrength);
+        Assert.Equal(Constants.IcLoraControlNone, entry.ControlType);
+        Assert.Null(entry.Video);
+        Assert.Equal(Constants.ControlNetSourceTwo, parsed.PrimarySlotEntry?.Source);
     }
 
     [Fact]

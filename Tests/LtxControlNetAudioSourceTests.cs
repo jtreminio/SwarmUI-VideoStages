@@ -143,7 +143,6 @@ public class LtxControlNetAudioSourceTests
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["AudioSource"] = Constants.AudioSourceControlNet;
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -182,7 +181,6 @@ public class LtxControlNetAudioSourceTests
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["AudioSource"] = Constants.AudioSourceControlNet;
-        clip["ControlNetSource"] = Constants.ControlNetSourceTwo;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[1].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[1].Model, controlNetModel);
@@ -223,7 +221,6 @@ public class LtxControlNetAudioSourceTests
         };
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);

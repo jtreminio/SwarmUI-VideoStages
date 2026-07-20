@@ -36,8 +36,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
             return default;
         }
         int limit = clipFrames is > 0 ? clipFrames.Value : int.MaxValue;
-        int start = Math.Clamp(retake.StartFrame, 0, limit);
-        int end = Math.Clamp(retake.StartFrame + retake.LengthFrames, start, limit);
+        (int start, int end) = RetakeWindowSpec.ClampFrameWindow(retake.StartFrame, retake.LengthFrames, limit);
         return new AudioMaskWindow((double)start / fps, (double)end / fps);
     }
 

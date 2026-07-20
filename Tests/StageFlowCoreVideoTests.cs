@@ -247,7 +247,6 @@ public partial class StageFlowTests
                 upscale: 1.125,
                 upscaleMethod: "latentmodel-unit-upscaler.safetensors",
                 steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceTwo;
         string stagesJson = new JArray(clip).ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.Controlnets[1].Strength, 0.8);
@@ -280,7 +279,6 @@ public partial class StageFlowTests
         };
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceTwo;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[1].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[1].Model, controlNetModel);
@@ -333,8 +331,11 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         clip["ClipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -407,8 +408,11 @@ public partial class StageFlowTests
         stageB["ControlNetStrength"] = 0.6;
         stageB["refStrengths"] = new JArray(0.8);
         JObject clip = MakeClipWithRefs([MakeRef("Base", frame: 1)], stageA, stageB);
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         clip["ClipLengthFromControlNet"] = true;
         T2IParamInput input = BuildInput(models.BaseModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -447,8 +451,11 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -507,8 +514,11 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         clip["ClipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -567,8 +577,11 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -609,8 +622,11 @@ public partial class StageFlowTests
         stageA["ControlNetStrength"] = 0.7;
         stageB["ControlNetStrength"] = 0.3;
         JObject clip = MakeClip(stageA, stageB);
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -653,8 +669,11 @@ public partial class StageFlowTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         stage["ControlNetStrength"] = 0.0;
         JObject clip = MakeClip(stage);
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);

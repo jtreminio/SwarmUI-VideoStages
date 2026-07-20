@@ -17,7 +17,20 @@ public sealed record RetakeWindowSpec(
     int StartFrame,
     int LengthFrames,
     double Strength
-);
+)
+{
+    /// <summary>
+    /// Clamps a start/length pixel-frame window to <c>[0, limitFrames]</c> and returns the resulting
+    /// <c>[Start, End)</c> span; a non-positive length collapses to an empty span at Start. Shared by the
+    /// audio and video retake maskers so both windows describe the same frames.
+    /// </summary>
+    public static (int Start, int End) ClampFrameWindow(int startFrame, int lengthFrames, int limitFrames)
+    {
+        int start = Math.Clamp(startFrame, 0, limitFrames);
+        int end = Math.Clamp(startFrame + Math.Max(0, lengthFrames), start, limitFrames);
+        return (start, end);
+    }
+}
 
 public sealed record StageSpec(
     int Id,

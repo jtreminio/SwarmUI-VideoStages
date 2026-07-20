@@ -250,6 +250,33 @@ internal sealed class StageSequenceRunner(
             clipDurationSeconds,
             out IReadOnlyList<(double Start, double End)> segmentWindows);
 
+        InjectClipConditioningAudio(
+            clip,
+            context,
+            isFirstClip,
+            currentMedia,
+            clipAudio,
+            combinedAudio,
+            clipDurationSeconds,
+            segmentWindows);
+    }
+
+    /// <summary>
+    /// The audio-injection decision tree of <see cref="PrepareClipAudio"/>: decides how the clip's
+    /// combined audio conditions generation (injected sampling latent, preserve-windowed attachment, or
+    /// plain attachment), publishes the media, then runs the base-track injections that bake segments
+    /// into fully-preserved conditioning audio.
+    /// </summary>
+    private void InjectClipConditioningAudio(
+        ClipSpec clip,
+        RunContext context,
+        bool isFirstClip,
+        WGNodeData currentMedia,
+        WGNodeData clipAudio,
+        WGNodeData combinedAudio,
+        double clipDurationSeconds,
+        IReadOnlyList<(double Start, double End)> segmentWindows)
+    {
         // Segment conditioning needs a known positive clip duration so the combiner built a
         // full-clip-length silent bed; a bed-less (shorter-than-clip) track wired into the AV concat
         // would mismatch the video latent's length.

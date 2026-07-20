@@ -108,8 +108,11 @@ public sealed class LtxControlNetLoraDedupTests
         stageA["ControlNetStrength"] = 0.7;
         stageB["ControlNetStrength"] = 0.3;
         JObject clip = MakeClip(stageA, stageB);
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -181,8 +184,11 @@ public sealed class LtxControlNetLoraDedupTests
         stageA["Loras"] = new JArray(new JObject { ["Name"] = "UnitTest_ScopedStageLora", ["Weight"] = 1.0 });
         stageB["Loras"] = new JArray(new JObject { ["Name"] = "UnitTest_ScopedStageLora", ["Weight"] = 0.4 });
         JObject clip = MakeClip(stageA, stageB);
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         string stagesJson = new JArray(clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);

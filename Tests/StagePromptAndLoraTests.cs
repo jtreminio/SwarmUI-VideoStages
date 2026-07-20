@@ -181,7 +181,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Controlnet_lora_dropdown_uses_ltx_ic_model_only_loader()
+    public void Ic_lora_entry_uses_ltx_ic_model_only_loader()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -193,7 +193,11 @@ public partial class StageFlowTests
 
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetLora"] = "UnitTest_ControlNetLora";
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_ControlNetLora",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
         string stagesJson = new JArray(clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);

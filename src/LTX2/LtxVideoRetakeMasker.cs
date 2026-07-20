@@ -42,8 +42,7 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
         int safePixels = Math.Max(1, pixelFrames);
         int latentLength = (safePixels - 1) / TemporalDownscale + 1;
 
-        int startPixel = Math.Clamp(startFrame, 0, safePixels);
-        int endPixel = Math.Clamp(startFrame + Math.Max(0, lengthFrames), startPixel, safePixels);
+        (int startPixel, int endPixel) = RetakeWindowSpec.ClampFrameWindow(startFrame, lengthFrames, safePixels);
 
         int lStart = Math.Clamp(startPixel / TemporalDownscale, 0, latentLength);
         // Ceil-divide the exclusive end so any pixel frame that touches a latent frame regenerates it.

@@ -1145,7 +1145,7 @@ export const createTimelineDetailStrip = (
         // Clear the selection back to "none" (the Timeline Settings panel).
         const clear = document.createElement("button");
         clear.type = "button";
-        clear.className = "vst-detail-clear";
+        clear.className = "basic-button small-button vst-detail-clear";
         clear.textContent = "Clear";
         clear.title = "Clear selection (show timeline settings)";
         clear.setAttribute("aria-label", clear.title);
@@ -1155,7 +1155,7 @@ export const createTimelineDetailStrip = (
         });
         const toggle = document.createElement("button");
         toggle.type = "button";
-        toggle.className = "vst-detail-collapse";
+        toggle.className = "basic-button small-button vst-detail-collapse";
         toggle.textContent = collapsed ? "▸" : "▾";
         toggle.title = collapsed
             ? "Expand detail strip"
@@ -1258,7 +1258,8 @@ export const createTimelineDetailStrip = (
         actions.className = "vst-detail-rail-actions";
         const addBtn = document.createElement("button");
         addBtn.type = "button";
-        addBtn.className = "vst-detail-rail-btn vst-detail-add-stage";
+        addBtn.className =
+            "basic-button small-button vst-detail-rail-btn vst-detail-add-stage";
         addBtn.textContent = "Add stage";
         addBtn.title = "Add a refine stage";
         addBtn.addEventListener("click", (event) => {
@@ -1268,7 +1269,7 @@ export const createTimelineDetailStrip = (
         const deleteBtn = document.createElement("button");
         deleteBtn.type = "button";
         deleteBtn.className =
-            "vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
+            "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
         deleteBtn.textContent = "Delete stage";
         deleteBtn.disabled = clip.stages.length <= 1;
         deleteBtn.title = deleteBtn.disabled
@@ -1646,7 +1647,7 @@ export const createTimelineDetailStrip = (
                 );
                 const remove = document.createElement("button");
                 remove.type = "button";
-                remove.className = "vst-stage-lora-remove";
+                remove.className = "basic-button vst-stage-lora-remove";
                 remove.textContent = "×";
                 remove.title = "Remove this LoRA";
                 remove.addEventListener("click", () => {
@@ -1666,7 +1667,7 @@ export const createTimelineDetailStrip = (
 
             const addBtn = document.createElement("button");
             addBtn.type = "button";
-            addBtn.className = "vst-stage-lora-add";
+            addBtn.className = "basic-button small-button vst-stage-lora-add";
             addBtn.textContent = "+ Add LoRA";
             addBtn.addEventListener("click", () => {
                 structuralCommit((clips) => {
@@ -1705,7 +1706,8 @@ export const createTimelineDetailStrip = (
                 "Regenerates a sub-range when refining a base video.";
             const addBtn = document.createElement("button");
             addBtn.type = "button";
-            addBtn.className = "vst-detail-rail-btn vst-detail-add-retake";
+            addBtn.className =
+                "basic-button small-button vst-detail-rail-btn vst-detail-add-retake";
             addBtn.textContent = "Add retake";
             addBtn.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -1788,7 +1790,8 @@ export const createTimelineDetailStrip = (
 
         const del = document.createElement("button");
         del.type = "button";
-        del.className = "vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+        del.className =
+            "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
         del.textContent = "Remove retake";
         del.addEventListener("click", (event) => {
             event.preventDefault();
@@ -1999,7 +2002,8 @@ export const createTimelineDetailStrip = (
 
         const addBtn = document.createElement("button");
         addBtn.type = "button";
-        addBtn.className = "vst-detail-rail-btn vst-detail-add-iclora";
+        addBtn.className =
+            "basic-button small-button vst-detail-rail-btn vst-detail-add-iclora";
         addBtn.textContent = "+ Add IC-LoRA";
         addBtn.addEventListener("click", (event) => {
             event.preventDefault();
@@ -2316,7 +2320,8 @@ export const createTimelineDetailStrip = (
         const segCount = clip.audioSegments?.length ?? 0;
         const addSegment = document.createElement("button");
         addSegment.type = "button";
-        addSegment.className = "vst-detail-add-segment";
+        addSegment.className =
+            "basic-button small-button vst-detail-add-segment";
         addSegment.textContent = "+ Add segment";
         addSegment.title =
             "Overlay an extra uploaded audio piece on this clip's audio lane";
@@ -2566,7 +2571,7 @@ export const createTimelineDetailStrip = (
             const del = document.createElement("button");
             del.type = "button";
             del.className =
-                "vst-refs-delete vst-detail-delete vst-detail-minor-delete";
+                "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-minor-delete";
             del.textContent = "Delete";
             del.title = "Delete this prompt window";
             del.addEventListener("click", (event) => {

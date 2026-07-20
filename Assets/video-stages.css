@@ -156,26 +156,10 @@
     color: var(--emphasis);
     font-weight: 500;
 }
+/* Topbar buttons ride the host .basic-button/.small-button chrome; the
+   .vst-* classes below are layout/sizing hooks only. */
 .vst-toggle {
-    font-size: var(--vst-font-sm);
-    font-weight: 500;
-    padding: 0.25em 0.8em;
-    border-radius: 4px;
-    border: 1px solid var(--vst-hairline);
-    color: var(--text);
-    background: var(--vst-panel-2);
-    cursor: pointer;
     white-space: nowrap;
-    transition: border-color var(--vst-ease), background var(--vst-ease),
-        color var(--vst-ease);
-}
-.vst-toggle:hover {
-    border-color: var(--emphasis);
-    color: var(--emphasis);
-}
-.vst-toggle:focus-visible {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
 }
 .vst-toggle-unit {
     font-weight: 600;
@@ -194,18 +178,6 @@
     padding-right: 0.45em;
     text-align: center;
 }
-.vst-add-clip {
-    font-weight: 600;
-    background: var(--emphasis);
-    border-color: var(--emphasis);
-    color: var(--emphasis-text, var(--button-text));
-}
-.vst-add-clip:hover {
-    background: color-mix(in srgb, var(--emphasis) 85%, var(--text));
-    border-color: color-mix(in srgb, var(--emphasis) 85%, var(--text));
-    color: var(--emphasis-text, var(--button-text));
-}
-
 .vst-zoom {
     display: inline-flex;
     align-items: center;
@@ -876,7 +848,10 @@
 }
 
 /* ── Prompt track (MAJOR top half · MINOR relay bottom half) ── */
-.vst-track-icon-prompt,
+.vst-track-icon-prompt {
+    color: color-mix(in srgb, var(--emphasis) 60%, var(--text));
+    border-color: color-mix(in srgb, var(--emphasis) 35%, transparent);
+}
 .vst-track-prompt .vst-track-cell {
     height: var(--vst-lane-prompt-h);
 }
@@ -1055,19 +1030,6 @@
 .vst-detail-add-segment {
     align-self: flex-start;
     margin-top: 2px;
-    padding: 4px 10px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px dashed color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
-    background: transparent;
-    color: color-mix(in srgb, var(--emphasis) 85%, var(--text));
-    font-size: var(--vst-font-xs);
-    cursor: pointer;
-}
-.vst-detail-add-retake:hover,
-.vst-detail-add-iclora:hover,
-.vst-detail-add-segment:hover {
-    border-color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 14%, var(--background));
 }
 .vst-detail-note {
     margin: 2px 0 0;
@@ -1345,17 +1307,6 @@
 }
 .vst-audio-upload-clear {
     align-self: flex-start;
-    padding: 2px 8px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    background: transparent;
-    color: var(--text-soft);
-    font-size: var(--vst-font-3xs);
-    cursor: pointer;
-}
-.vst-audio-upload-clear:hover {
-    color: var(--text);
-    border-color: var(--emphasis);
 }
 
 /* ── References track (image refs, below the video clip) ── */
@@ -1481,17 +1432,16 @@
 .vst-refs-delete {
     align-self: flex-start;
     margin-top: 2px;
-    padding: 4px 10px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid color-mix(in srgb, var(--red) 45%, var(--light-border));
-    background: transparent;
-    color: color-mix(in srgb, var(--red) 85%, var(--text));
-    font-size: var(--vst-font-xs);
-    cursor: pointer;
 }
-.vst-refs-delete:hover {
-    border-color: var(--red);
-    background: color-mix(in srgb, var(--red) 16%, var(--background));
+/* Destructive buttons: red-tinted background on top of the host chrome. */
+.vst-refs-delete,
+.vst-stage-lora-remove {
+    background-color: color-mix(in srgb, var(--red) 30%, var(--button-background));
+    border-color: color-mix(in srgb, var(--red) 50%, var(--button-border));
+}
+.vst-refs-delete:hover,
+.vst-stage-lora-remove:hover {
+    background-color: color-mix(in srgb, var(--red) 50%, var(--button-background-hover));
 }
 
 .vst-stage-loras {
@@ -1519,32 +1469,13 @@
     flex: none;
     width: 26px;
     height: 26px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid color-mix(in srgb, var(--red) 40%, var(--light-border));
-    background: transparent;
-    color: color-mix(in srgb, var(--red) 85%, var(--text));
+    padding: 0;
     font-size: var(--vst-font-sm);
     line-height: 1;
-    cursor: pointer;
-}
-.vst-stage-lora-remove:hover {
-    border-color: var(--red);
-    background: color-mix(in srgb, var(--red) 16%, var(--background));
 }
 .vst-stage-lora-add {
     align-self: flex-start;
     margin-top: 4px;
-    padding: 3px 10px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    background: transparent;
-    color: var(--text-soft);
-    font-size: var(--vst-font-3xs);
-    cursor: pointer;
-}
-.vst-stage-lora-add:hover {
-    color: var(--text);
-    border-color: var(--emphasis);
 }
 /* --- Settings chip (topbar) + popover --- */
 .vst-settings-chip {
@@ -1552,27 +1483,10 @@
     align-items: center;
     gap: 5px;
     padding: 0.1em 0.55em;
-    border-radius: 4px;
-    border: 1px solid var(--vst-hairline);
-    background: var(--vst-panel-2);
-    color: var(--text-soft);
-    font-size: var(--vst-font-xs);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    cursor: pointer;
-    transition: border-color var(--vst-ease), color var(--vst-ease);
-}
-.vst-settings-chip:hover {
-    border-color: var(--emphasis);
-    color: var(--emphasis);
-}
-.vst-settings-chip:focus-visible {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
 }
 .vst-settings-chip .vst-settings-dims {
-    color: var(--text);
-    font-weight: 600;
     min-width: 9ch;
     text-align: center;
 }
@@ -1668,37 +1582,11 @@
 }
 .vst-detail-clear {
     flex: none;
-    padding: 2px 8px;
-    border: 1px solid var(--vst-hairline);
-    border-radius: var(--vst-radius-sm);
-    background: transparent;
-    color: var(--text-soft);
-    font-size: var(--vst-font-3xs);
-    cursor: pointer;
-}
-.vst-detail-clear:hover,
-.vst-detail-clear:focus-visible {
-    outline: none;
-    color: var(--emphasis);
-    border-color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 12%, transparent);
 }
 .vst-detail-collapse {
     flex: none;
     padding: 0 6px;
-    border: none;
-    background: transparent;
-    color: var(--text-soft);
-    font-size: var(--vst-font-md);
-    line-height: 1;
-    cursor: pointer;
-    border-radius: var(--vst-radius-sm);
-}
-.vst-detail-collapse:hover,
-.vst-detail-collapse:focus-visible {
-    outline: none;
-    color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 12%, transparent);
+    line-height: 1.2;
 }
 /* Collapsed rail: stack the head vertically, expand chevron on top, the
    breadcrumb rotated into a vertical label. */
@@ -1741,6 +1629,10 @@
     align-items: stretch;
     width: 100%;
     border-bottom: 1px solid var(--vst-hairline);
+    /* The host gives groups big page-form margins (1.2rem top, 2rem bottom on
+       -open); in the dock the hairline is the separator — stack them tight. */
+    margin-top: 0;
+    margin-bottom: 0;
 }
 /* Groups are headerless: the dock breadcrumb is the single panel label. */
 .vst-detail .input-group-content {
@@ -2007,28 +1899,12 @@
 }
 .vst-detail-rail-btn {
     padding: 2px 10px;
-    font-size: var(--vst-font-3xs);
     white-space: nowrap;
     text-align: center;
-}
-/* Neutral chrome for non-destructive rail buttons; destructive ones keep
-   their .vst-refs-delete red treatment. */
-.vst-detail-rail-btn:not(.vst-refs-delete) {
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    background: transparent;
-    color: var(--text-soft);
-    cursor: pointer;
-}
-.vst-detail-rail-btn:not(.vst-refs-delete):hover:not(:disabled) {
-    color: var(--text);
-    border-color: var(--emphasis);
-}
-.vst-detail-rail-btn:disabled {
-    opacity: 0.45;
-    /* not-allowed needs pointer-events left ON; disabled buttons don't fire
-       clicks anyway. */
-    cursor: not-allowed;
+    /* Rail buttons stack in a stretch column; the host's side margins would
+       make them ragged. */
+    margin-left: 0;
+    margin-right: 0;
 }
 .vst-detail-rail-list .vst-stage-tab {
     cursor: pointer;
@@ -2071,25 +1947,17 @@
     align-items: center;
     justify-content: center;
     padding: 0;
+    /* The host's side margins would shift the translate(-50%) centering. */
+    margin: 0;
     font-size: var(--vst-font-sm);
     line-height: 1;
+    /* The host 0.5rem radius is near-circular at 18px. */
     border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    color: var(--text-soft);
-    background: var(--vst-panel);
-    cursor: pointer;
     opacity: 0.85;
-    transition: border-color var(--vst-ease), color var(--vst-ease),
-        background var(--vst-ease), opacity var(--vst-ease);
+    transition: opacity var(--vst-ease);
 }
 .vst-boundary-chip:hover {
     opacity: 1;
-    border-color: var(--emphasis);
-    color: var(--text);
-}
-.vst-boundary-chip:focus-visible {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
 }
 .vst-boundary-continue,
 .vst-boundary-crossfade {
