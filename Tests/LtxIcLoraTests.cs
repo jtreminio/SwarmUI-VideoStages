@@ -1,0 +1,365 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
+using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
+using SwarmUI.Text2Image;
+using VideoStages.Generated;
+using Xunit;
+using static VideoStages.Tests.Fixtures;
+using static VideoStages.Tests.TypedWorkflowAssertions;
+
+namespace VideoStages.Tests;
+
+/// <summary>
+/// Pins the multi-IC-LoRA behaviors of <c>ControlNetApplicator.ApplyIcLoras</c>: the per-entry loader
+/// chain, guide stacking on conditioning + latent, metadata-driven downscale wiring, the Advanced
+/// guide for attention strength, uploaded drive videos, control-signal preprocessing, and loader-only
+/// entries.
+/// </summary>
+[Collection("VideoStagesTests")]
+public sealed class LtxIcLoraTests
+{
+    private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
+        new(g =>
+        {
+            using var bridge = BridgeSync.For(g);
+            UnknownNode refinerImage = bridge.AddStub("UnitTest_RefinerImage", "12").WithOutputs(WGNodeData.DT_IMAGE);
+            g.CurrentMedia = refinerImage.GetOutput(0).ToWGMedia(g, WGNodeData.DT_IMAGE,
+                width: 512, height: 512);
+        }, 5.0);
+
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowSteps() =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static T2IModel RegisterLora(string name)
+    {
+        if (!Program.T2IModelSets.TryGetValue("LoRA", out T2IModelHandler loraHandler))
+        {
+            loraHandler = new T2IModelHandler() { ModelType = "LoRA" };
+            Program.T2IModelSets["LoRA"] = loraHandler;
+        }
+        T2IModel lora = new(loraHandler, "/tmp", $"/tmp/{name}.safetensors", $"{name}.safetensors");
+        loraHandler.Models[lora.Name] = lora;
+        return lora;
+    }
+
+    private static JObject MakeIcLora(
+        string lora,
+        string source = Constants.IcLoraSourceUpload,
+        double strength = 1.0,
+        double attentionStrength = 1.0,
+        string controlType = Constants.IcLoraControlNone,
+        string videoData = null)
+    {
+        JObject entry = new()
+        {
+            ["Lora"] = lora,
+            ["Source"] = source,
+            ["Strength"] = strength,
+            ["AttentionStrength"] = attentionStrength,
+            ["ControlType"] = controlType,
+        };
+        if (videoData is not null)
+        {
+            entry["Video"] = new JObject { ["Data"] = videoData, ["FileName"] = "drive.mp4" };
+        }
+        return entry;
+    }
+
+    private static (JObject Workflow, WorkflowBridge Bridge) Generate(JObject clip, TestModelBundle models)
+    {
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
+        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowSteps());
+        return (workflow, WorkflowBridge.Create(workflow));
+    }
+
+    [Fact]
+    public void Two_uploaded_ic_loras_chain_loaders_and_stack_guides()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+        RegisterLora("UnitTest_IcLoraB");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        stage["ControlNetStrength"] = 0.7;
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora("UnitTest_IcLoraA", strength: 1.2, videoData: "data:video/mp4;base64,QUJD"),
+            MakeIcLora("UnitTest_IcLoraB", strength: 0.9, videoData: "data:video/mp4;base64,REVG"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        List<LTXICLoRALoaderModelOnlyNode> loaders = [.. bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>()
+            .OrderBy(n => int.Parse(n.Id))];
+        Assert.Equal(2, loaders.Count);
+        Assert.Equal("UnitTest_IcLoraA.safetensors", loaders[0].LoraName.LiteralAsString());
+        Assert.Equal("UnitTest_IcLoraB.safetensors", loaders[1].LoraName.LiteralAsString());
+        Assert.Equal(1.2, loaders[0].StrengthModel.LiteralAsDouble() ?? double.NaN, 4);
+        Assert.Equal(0.9, loaders[1].StrengthModel.LiteralAsDouble() ?? double.NaN, 4);
+        Assert.Same(loaders[0], loaders[1].ModelInput.Connection?.Node);
+
+        List<LTXAddVideoICLoRAGuideNode> guides = [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()
+            .OrderBy(n => int.Parse(n.Id))];
+        Assert.Equal(2, guides.Count);
+        // Guides stack: the second reads the first's conditioning and latent outputs.
+        Assert.Same(guides[0], guides[1].PositiveInput.Connection?.Node);
+        Assert.Same(guides[0], guides[1].NegativeInput.Connection?.Node);
+        Assert.Same(guides[0], guides[1].LatentInput.Connection?.Node);
+        // Each guide's downscale factor is wired from ITS loader's metadata output, not a literal.
+        Assert.Same(loaders[0], guides[0].LatentDownscaleFactor.Connection?.Node);
+        Assert.Same(loaders[1], guides[1].LatentDownscaleFactor.Connection?.Node);
+        Assert.Equal(1, guides[0].LatentDownscaleFactor.Connection?.SlotIndex);
+        // Stage guide strength applies to every entry's guide.
+        Assert.Equal(0.7, guides[0].Strength.LiteralAsDouble() ?? double.NaN, 4);
+        Assert.Equal(0.7, guides[1].Strength.LiteralAsDouble() ?? double.NaN, 4);
+    }
+
+    [Fact]
+    public void Uploaded_drive_video_loads_b64_with_stripped_prefix_and_feeds_guide()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        SwarmLoadVideoB64Node load = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        Assert.Equal("QUJD", load.VideoBase64.LiteralAsString());
+        GetVideoComponentsNode components = Assert.Single(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        Assert.Same(load, components.Video.Connection?.Node);
+
+        LTXAddVideoICLoRAGuideNode guide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.True(
+            GuideImageTracesTo(bridge, guide, components),
+            "Expected the guide image to trace upstream to the uploaded drive video's components.");
+    }
+
+    [Fact]
+    public void Attention_strength_below_one_selects_advanced_guide()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+        RegisterLora("UnitTest_IcLoraB");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"),
+            MakeIcLora("UnitTest_IcLoraB", attentionStrength: 0.65, videoData: "data:video/mp4;base64,REVG"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LTXAddVideoICLoRAGuideNode basic = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        LTXAddVideoICLoRAGuideAdvancedNode advanced =
+            Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideAdvancedNode>());
+        Assert.Equal(0.65, advanced.AttentionStrength.LiteralAsDouble() ?? double.NaN, 4);
+        // The advanced guide stacks on the basic one.
+        Assert.Same(basic, advanced.PositiveInput.Connection?.Node);
+    }
+
+    [Fact]
+    public void Canny_control_type_splices_canny_between_drive_video_and_guide()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora(
+                "UnitTest_IcLoraA",
+                controlType: Constants.IcLoraControlCanny,
+                videoData: "data:video/mp4;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        CannyNode canny = Assert.Single(bridge.Graph.NodesOfType<CannyNode>());
+        GetVideoComponentsNode components = Assert.Single(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        Assert.Same(components, canny.Image.Connection?.Node);
+        LTXAddVideoICLoRAGuideNode guide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.True(
+            GuideImageTracesTo(bridge, guide, canny),
+            "Expected the guide image to trace upstream through the Canny control signal.");
+    }
+
+    [Fact]
+    public void Depth_control_type_splices_da3_chain()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora(
+                "UnitTest_IcLoraA",
+                controlType: Constants.IcLoraControlDepth,
+                videoData: "data:video/mp4;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LoadDa3ModelNode da3Model = Assert.Single(bridge.Graph.NodesOfType<LoadDa3ModelNode>());
+        Assert.Equal(Constants.Da3ModelFileName, da3Model.ModelName.LiteralAsString());
+        Da3InferenceNode inference = Assert.Single(bridge.Graph.NodesOfType<Da3InferenceNode>());
+        Assert.Equal("mono", inference.Mode.LiteralAsString());
+        Da3RenderNode render = Assert.Single(bridge.Graph.NodesOfType<Da3RenderNode>());
+        Assert.Equal("depth", render.Output.LiteralAsString());
+        Assert.Equal("v2_style", $"{render.ExtraInputs?["output.normalization"]}");
+        Assert.Same(da3Model, inference.Da3Model.Connection?.Node);
+        Assert.Same(inference, render.Geometry.Connection?.Node);
+        LTXAddVideoICLoRAGuideNode guide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.True(
+            GuideImageTracesTo(bridge, guide, render),
+            "Expected the guide image to trace upstream through the DA3 depth render.");
+    }
+
+    [Fact]
+    public void Normal_control_type_splices_moge_chain()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora(
+                "UnitTest_IcLoraA",
+                controlType: Constants.IcLoraControlNormal,
+                videoData: "data:video/mp4;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LoadMoGeModelNode mogeModel = Assert.Single(bridge.Graph.NodesOfType<LoadMoGeModelNode>());
+        Assert.Equal(Constants.MoGeModelFileName, mogeModel.ModelName.LiteralAsString());
+        MoGeRenderNode render = Assert.Single(bridge.Graph.NodesOfType<MoGeRenderNode>());
+        Assert.Equal("normal_opengl", render.Output.LiteralAsString());
+        LTXAddVideoICLoRAGuideNode guide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.True(
+            GuideImageTracesTo(bridge, guide, render),
+            "Expected the guide image to trace upstream through the MoGe normal render.");
+    }
+
+    [Fact]
+    public void Uploaded_image_drive_uses_image_b64_load()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora("UnitTest_IcLoraA", videoData: "data:image/png;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        SwarmLoadImageB64Node load = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        Assert.Equal("QUJD", load.ImageBase64.LiteralAsString());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        LTXAddVideoICLoRAGuideNode guide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.True(
+            GuideImageTracesTo(bridge, guide, load),
+            "Expected the guide image to trace upstream to the uploaded still image.");
+    }
+
+    [Fact]
+    public void Entry_without_drive_video_is_loader_only()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(MakeIcLora("UnitTest_IcLoraA"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideAdvancedNode>());
+    }
+
+    [Fact]
+    public void Unresolvable_entry_is_skipped_and_later_entries_still_apply()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraB");
+
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora("UnitTest_MissingLora", videoData: "data:video/mp4;base64,QUJD"),
+            MakeIcLora("UnitTest_IcLoraB", videoData: "data:video/mp4;base64,REVG"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LTXICLoRALoaderModelOnlyNode loader =
+            Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Equal("UnitTest_IcLoraB.safetensors", loader.LoraName.LiteralAsString());
+        Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+    }
+
+    [Fact]
+    public void Uploaded_drive_chain_is_shared_across_stages()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
+        JObject clip = MakeClip(stageA, stageB);
+        clip["IcLoras"] = new JArray(
+            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        // One upload/load chain feeds both stages; loaders and guides stay per-stage.
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        Assert.Single(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count());
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count());
+    }
+
+    private static bool GuideImageTracesTo(WorkflowBridge bridge, ComfyNode guide, ComfyNode wanted)
+    {
+        ComfyNode start = guide.FindInput("image")?.Connection?.Node;
+        if (start is null)
+        {
+            return false;
+        }
+        if (start.Id == wanted.Id)
+        {
+            return true;
+        }
+        return bridge.Graph.FindNearestUpstream(start, node => node.Id == wanted.Id) is not null;
+    }
+}

@@ -43,7 +43,7 @@ internal sealed class VideoStagesCoordinator(
             StageSpec first = firstClip.Stages[0];
             TryApplyControlNetClipLength(
                 firstClip.ClipLengthFromControlNet,
-                firstClip.ControlNetSource,
+                firstClip.PrimarySlotEntry?.Source,
                 first.Model);
             // A first clip with audio segments defers injection to StageSequenceRunner.PrepareClipAudio,
             // which injects the segment-combined audio (or the preserve-windowed variant) instead of the
@@ -94,14 +94,14 @@ internal sealed class VideoStagesCoordinator(
     {
         if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
             || !clips.Any(clip =>
-                !string.IsNullOrWhiteSpace(clip.ControlNetLora)
+                clip.HasIcLoras
                 && clip.Stages.Any(stage => VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))))
         {
             return;
         }
 
         throw new SwarmUserErrorException(
-            "VideoStages ControlNet LoRA requires the ComfyUI-LTXVideo custom nodes. "
+            "VideoStages IC-LoRAs require the ComfyUI-LTXVideo custom nodes. "
             + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
     }
 
@@ -120,7 +120,7 @@ internal sealed class VideoStagesCoordinator(
             : null;
         TryApplyControlNetClipLength(
             first.ClipLengthFromControlNet,
-            first.ControlNetSource,
+            first.PrimarySlotEntry?.Source,
             firstClipStageModel);
         TryInjectResolvedClipAudio(
             first.Id,
@@ -167,7 +167,7 @@ internal sealed class VideoStagesCoordinator(
             {
                 continue;
             }
-            if (applicator.TryGetCapturedControlNetAudio(clip.ControlNetSource, out WGNodeData audio))
+            if (applicator.TryGetCapturedControlNetAudio(clip.PrimarySlotEntry?.Source, out WGNodeData audio))
             {
                 audios[clip.Id] = audio;
             }

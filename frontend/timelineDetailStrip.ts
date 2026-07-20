@@ -13,6 +13,14 @@ import {
     CLIP_DURATION_MAX,
     CLIP_DURATION_MIN,
     clamp,
+    IC_LORA_ATTENTION_MAX,
+    IC_LORA_ATTENTION_MIN,
+    IC_LORA_ATTENTION_STEP,
+    IC_LORA_SOURCE_UPLOAD,
+    IC_LORA_STRENGTH_DEFAULT,
+    IC_LORA_STRENGTH_MAX,
+    IC_LORA_STRENGTH_MIN,
+    IC_LORA_STRENGTH_STEP,
     mediaPreviewSrc,
     PROMPT_WINDOW_MIN_DURATION,
     REF_FRAME_MIN,
@@ -48,13 +56,19 @@ import {
     presetDimensions,
 } from "./dimensionPresets";
 import {
+    findIcLoraPreset,
+    IC_LORA_PRESET_CUSTOM_ID,
+    IC_LORA_PRESETS,
+    icLoraTriggerHint,
+} from "./icLoraPresets";
+import {
     buildImageSourceOptions,
     resolveImageSourceValue,
 } from "./imageSource";
 import {
     buildDefaultStage,
     getReferenceFrameMax,
-    normalizeControlNetLora,
+    hasSlotSourcedIcLora,
     removeRefAt,
 } from "./normalization";
 import { getClips, getState, saveClips, saveState } from "./persistence";
@@ -81,6 +95,8 @@ import {
     type AudioSegment,
     type BoundaryOut,
     type Clip,
+    type IcLora,
+    type IcLoraControlType,
     REF_SOURCE_UPLOAD,
     type RootDefaults,
     type Stage,
@@ -101,6 +117,7 @@ const DETAIL_CLASS = "vst-detail";
 // Stable, bounded group-section ids (never per-instance): collapse prefs persist
 // across selections and cookies stay bounded. Instance identity rides the counter.
 const GROUP_STAGES = "vstdock_stages";
+const GROUP_ICLORA = "vstdock_iclora";
 const GROUP_REF = "vstdock_ref";
 const GROUP_AUDIO = "vstdock_audio";
 const GROUP_AUDIOSEG = "vstdock_audioseg";
@@ -1664,15 +1681,11 @@ export const createTimelineDetailStrip = (
             });
         }
 
-        // ControlNet Strength is only meaningful when the clip has a ControlNet
-        // LoRA selected — main gates the whole field on the same predicate
-        // (`normalizeControlNetLora(clip.controlNetLora) !== ""`, renderHtml.ts)
-        // and omits it entirely otherwise. (main additionally DISABLES it when
-        // the stage model isn't LTX-Video; this branch has no model-family
-        // detection, so we only replicate the show/hide gate.)
-        if (normalizeControlNetLora(clip.controlNetLora) !== "") {
+        // Guide Strength is the per-stage conditioning strength shared by every
+        // IC-LoRA guide on the clip; only shown when the clip has IC-LoRAs.
+        if (clip.icLoras.length > 0) {
             const controlNetSlider = buildSlider(
-                "ControlNet Strength",
+                "IC-LoRA Guide Strength",
                 stage.controlNetStrength,
                 STAGE_CONTROLNET_STRENGTH_MIN,
                 STAGE_CONTROLNET_STRENGTH_MAX,
@@ -1685,7 +1698,7 @@ export const createTimelineDetailStrip = (
                         }
                     });
                 },
-                { hint: "Only applies when a ControlNet source is set" },
+                { hint: "Drive-video conditioning strength for this stage" },
             );
             tagFocus(controlNetSlider, "controlnet");
             fields.appendChild(controlNetSlider);
@@ -1949,6 +1962,244 @@ export const createTimelineDetailStrip = (
         return wrap;
     };
 
+    // IC-LoRAs section of the clip panel — same shape as Retake: a section
+    // label plus stacked per-entry editors. Each entry pairs an in-context LoRA
+    // with an optional uploaded drive video; presets seed strength/control-type
+    // defaults and surface a trigger-phrase hint, nothing more.
+    const buildIcLorasSection = (
+        clip: Clip,
+        clipIdx: number,
+        defaults: RootDefaults,
+    ): HTMLElement => {
+        const wrap = document.createElement("div");
+        wrap.className = "vst-detail-stages-wrap";
+        wrap.appendChild(sectionLabel("IC-LoRAs"));
+        const col = document.createElement("div");
+        col.className = "vst-detail-col vst-detail-iclora-col";
+        wrap.appendChild(col);
+
+        if (defaults.loraValues.length === 0) {
+            const empty = document.createElement("small");
+            empty.className = "vst-audio-field-hint";
+            empty.textContent = "(no LoRAs available)";
+            col.appendChild(empty);
+            return wrap;
+        }
+
+        const entryField = (
+            clips: Clip[],
+            entryIdx: number,
+        ): IcLora | undefined => clips[clipIdx]?.icLoras[entryIdx];
+
+        clip.icLoras.forEach((entry, entryIdx) => {
+            const { row, fields } = buildInstanceRow({
+                rowClass: "vst-detail-iclora",
+                indexAttr: "data-vst-iclora-idx",
+                index: entryIdx,
+                active: false,
+                title: `IC-LoRA ${entryIdx + 1}`,
+                deleteLabel: "Remove",
+                onDelete: () => {
+                    flushPending();
+                    if (isStale()) {
+                        render();
+                        return;
+                    }
+                    const clips = getClips();
+                    const target = clips[clipIdx];
+                    if (!target || entryIdx >= target.icLoras.length) {
+                        return;
+                    }
+                    target.icLoras.splice(entryIdx, 1);
+                    saveClips(clips, undefined, { origin: "detail-strip" });
+                    sourceToken = readStateToken();
+                    render();
+                },
+                repoint: () => {},
+            });
+
+            const presetSelect = buildOptionSelect(
+                [
+                    { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+                    ...IC_LORA_PRESETS.map((preset) => ({
+                        value: preset.id,
+                        label: preset.displayName,
+                    })),
+                ],
+                entry.preset,
+                (value) => {
+                    commit((clips) => {
+                        const target = entryField(clips, entryIdx);
+                        if (!target) {
+                            return;
+                        }
+                        target.preset = value;
+                        const preset = findIcLoraPreset(value);
+                        if (preset) {
+                            target.strength = preset.strength;
+                            target.controlType = preset.controlType;
+                        }
+                    });
+                    render();
+                },
+            );
+            fields.appendChild(buildField("Preset", presetSelect));
+
+            const loraSelect = buildSelect(
+                defaults.loraValues,
+                defaults.loraLabels,
+                entry.lora,
+                (value) => {
+                    commit((clips) => {
+                        const target = entryField(clips, entryIdx);
+                        if (target) {
+                            target.lora = value;
+                        }
+                    });
+                },
+            );
+            fields.appendChild(buildField("LoRA", loraSelect));
+
+            const strength = buildClampedNumber({
+                key: `iclora-${entryIdx}-strength`,
+                value: entry.strength,
+                min: IC_LORA_STRENGTH_MIN,
+                max: IC_LORA_STRENGTH_MAX,
+                step: IC_LORA_STRENGTH_STEP,
+                readBack: (cs) => entryField(cs, entryIdx)?.strength ?? null,
+                mutate: (cs, value) => {
+                    const target = entryField(cs, entryIdx);
+                    if (target) {
+                        target.strength = value;
+                    }
+                },
+            });
+            fields.appendChild(buildField("Strength", strength));
+
+            const attention = buildClampedNumber({
+                key: `iclora-${entryIdx}-attention`,
+                value: entry.attentionStrength,
+                min: IC_LORA_ATTENTION_MIN,
+                max: IC_LORA_ATTENTION_MAX,
+                step: IC_LORA_ATTENTION_STEP,
+                readBack: (cs) =>
+                    entryField(cs, entryIdx)?.attentionStrength ?? null,
+                mutate: (cs, value) => {
+                    const target = entryField(cs, entryIdx);
+                    if (target) {
+                        target.attentionStrength = value;
+                    }
+                },
+            });
+            fields.appendChild(buildField("Attention", attention));
+
+            const controlSelect = buildOptionSelect(
+                [
+                    { value: "none", label: "None (raw video)" },
+                    { value: "canny", label: "Canny edges" },
+                    { value: "depth", label: "Depth map" },
+                    { value: "normal", label: "Normal map" },
+                ],
+                entry.controlType,
+                (value) => {
+                    commit((clips) => {
+                        const target = entryField(clips, entryIdx);
+                        if (target) {
+                            target.controlType = value as IcLoraControlType;
+                        }
+                    });
+                },
+            );
+            fields.appendChild(buildField("Control", controlSelect));
+
+            // Legacy slot-sourced entries keep their captured-branch source and
+            // hide the upload row; everything authored here is upload-driven.
+            if (entry.source === IC_LORA_SOURCE_UPLOAD) {
+                fields.appendChild(
+                    buildUploadRow(
+                        "Drive Media",
+                        "video/*,image/*",
+                        entry.video?.fileName,
+                        (data, fileName) => {
+                            commit((clips) => {
+                                const target = entryField(clips, entryIdx);
+                                if (target) {
+                                    target.video = { data, fileName };
+                                }
+                            });
+                            render();
+                        },
+                        () => {
+                            commit((clips) => {
+                                const target = entryField(clips, entryIdx);
+                                if (target) {
+                                    target.video = null;
+                                }
+                            });
+                            render();
+                        },
+                    ),
+                );
+            } else {
+                const slot = document.createElement("small");
+                slot.className = "vst-audio-field-hint";
+                slot.textContent = `Driven by ${entry.source} (legacy source)`;
+                fields.appendChild(slot);
+            }
+
+            const preset = findIcLoraPreset(entry.preset);
+            const hintText = [
+                preset?.note ?? "",
+                icLoraTriggerHint(preset),
+                !entry.video && entry.source === IC_LORA_SOURCE_UPLOAD
+                    ? "No drive video: the LoRA still applies to the model (fine for HDR/text-driven use)."
+                    : "",
+            ]
+                .filter(Boolean)
+                .join(" ");
+            if (hintText) {
+                const hint = document.createElement("small");
+                hint.className = "vst-audio-field-hint";
+                hint.textContent = hintText;
+                fields.appendChild(hint);
+            }
+
+            col.appendChild(row);
+        });
+
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "vst-detail-rail-btn vst-detail-add-iclora";
+        addBtn.textContent = "+ Add IC-LoRA";
+        addBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            flushPending();
+            if (isStale()) {
+                render();
+                return;
+            }
+            const clips = getClips();
+            const target = clips[clipIdx];
+            if (!target) {
+                return;
+            }
+            target.icLoras.push({
+                lora: defaults.loraValues[0] ?? "",
+                preset: IC_LORA_PRESET_CUSTOM_ID,
+                source: IC_LORA_SOURCE_UPLOAD,
+                strength: IC_LORA_STRENGTH_DEFAULT,
+                attentionStrength: 1,
+                controlType: "none",
+                video: null,
+            });
+            saveClips(clips, undefined, { origin: "detail-strip" });
+            sourceToken = readStateToken();
+            render();
+        });
+        col.appendChild(addBtn);
+        return wrap;
+    };
+
     const buildClipBody = (
         sel: Extract<TimelineSelection, { kind: "clip" }>,
         clips: Clip[],
@@ -1978,6 +2229,12 @@ export const createTimelineDetailStrip = (
             params.col,
         );
         body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
+        body.appendChild(
+            buildGroup(
+                GROUP_ICLORA,
+                buildIcLorasSection(clip, sel.clipIdx, defaults),
+            ),
+        );
         body.appendChild(
             buildGroup(GROUP_RETAKE, buildRetakeSection(clip, sel.clipIdx)),
         );
@@ -2130,7 +2387,7 @@ export const createTimelineDetailStrip = (
     ): HTMLElement => {
         const { clipIdx } = sel;
         const clip = clips[clipIdx];
-        const controlNetEnabled = `${clip.controlNetLora ?? ""}`.trim() !== "";
+        const controlNetEnabled = hasSlotSourcedIcLora(clip.icLoras);
         const options = buildAudioSourceOptions(clip.audioSource ?? "", {
             controlNetEnabled,
         });
@@ -2145,8 +2402,7 @@ export const createTimelineDetailStrip = (
                     return;
                 }
                 mutate(target);
-                const cnEnabled =
-                    `${target.controlNetLora ?? ""}`.trim() !== "";
+                const cnEnabled = hasSlotSourcedIcLora(target.icLoras);
                 const nextSource = resolveAudioSourceValue(
                     target.audioSource,
                     buildAudioSourceOptions(target.audioSource, {

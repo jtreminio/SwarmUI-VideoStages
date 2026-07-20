@@ -44,6 +44,7 @@ interface ClipFixture {
     refs?: { source: string; frame: number }[];
     audioSource?: string;
     controlNetLora?: string;
+    icLoras?: Record<string, unknown>[];
     reuseAudio?: boolean;
     clipLengthFromAudio?: boolean;
     prompt?: string;
@@ -67,6 +68,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     boundaryOut: clip.boundaryOut ?? "cut",
     audioSource: clip.audioSource ?? "Native",
     controlNetLora: clip.controlNetLora ?? "",
+    ...(clip.icLoras ? { icLoras: clip.icLoras } : {}),
     reuseAudio: clip.reuseAudio ?? false,
     clipLengthFromAudio: clip.clipLengthFromAudio ?? false,
     stages: clip.stages.map((s) => ({
@@ -365,18 +367,107 @@ describe("createTimelineDetailStrip", () => {
             ),
         ).map((el) => el.textContent);
 
-    it("hides ControlNet Strength when the clip has no ControlNet LoRA", () => {
+    it("hides IC-LoRA Guide Strength when the clip has no IC-LoRAs", () => {
         setup([{ duration: 4, stages: [{}], controlNetLora: "" }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(controlNetLabels()).not.toContain("ControlNet Strength");
+        expect(controlNetLabels()).not.toContain("IC-LoRA Guide Strength");
     });
 
-    it("shows ControlNet Strength when the clip has a ControlNet LoRA", () => {
+    it("shows IC-LoRA Guide Strength when the clip has an IC-LoRA (legacy field)", () => {
         setup([
             { duration: 4, stages: [{}], controlNetLora: "some-cnet-lora" },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(controlNetLabels()).toContain("ControlNet Strength");
+        expect(controlNetLabels()).toContain("IC-LoRA Guide Strength");
+    });
+
+    it("adds an IC-LoRA entry with defaults via the add button", () => {
+        setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const addBtn = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-iclora",
+        );
+        if (!addBtn) {
+            throw new Error("add IC-LoRA button missing");
+        }
+        addBtn.click();
+        const clips = savedClips(saveSpy);
+        expect(clips[0].icLoras).toHaveLength(1);
+        expect(clips[0].icLoras[0]).toEqual({
+            lora: "lora-x.safetensors",
+            preset: "custom",
+            source: "Upload",
+            strength: 1,
+            attentionStrength: 1,
+            controlType: "none",
+            video: null,
+        });
+        // The rebuilt panel shows the entry editor with a drive-video upload.
+        expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();
+        expect(controlNetLabels()).toContain("Drive Media");
+    });
+
+    it("add IC-LoRA skips the host's (None) lora sentinel when seeding", () => {
+        // The live LoRA dropdown leads with "(None)"; seeding a new entry with
+        // it would make normalize drop the row on the next render.
+        setup(
+            [{ duration: 4, stages: [{}] }],
+            ["(None)", "lora-x.safetensors"],
+        );
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const addBtn = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-iclora",
+        );
+        if (!addBtn) {
+            throw new Error("add IC-LoRA button missing");
+        }
+        addBtn.click();
+        const clips = savedClips(saveSpy);
+        expect(clips[0].icLoras).toHaveLength(1);
+        expect(clips[0].icLoras[0].lora).toBe("lora-x.safetensors");
+        // The row survives the rebuild (the original bug: it vanished).
+        expect(document.querySelectorAll(".vst-detail-iclora")).toHaveLength(1);
+    });
+
+    it("applying a preset seeds strength and control type", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const presetSelect =
+            fieldByLabel("Preset").querySelector<HTMLSelectElement>("select");
+        if (!presetSelect) {
+            throw new Error("preset select missing");
+        }
+        presetSelect.value = "union-control";
+        presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const clips = savedClips(saveSpy);
+        expect(clips[0].icLoras[0].preset).toBe("union-control");
+        expect(clips[0].icLoras[0].controlType).toBe("depth");
+        expect(clips[0].icLoras[0].strength).toBe(1);
+    });
+
+    it("removes an IC-LoRA entry via its Remove button", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const removeBtn = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-iclora .vst-detail-instance-delete",
+        );
+        if (!removeBtn) {
+            throw new Error("remove IC-LoRA button missing");
+        }
+        removeBtn.click();
+        expect(savedClips(saveSpy)[0].icLoras).toHaveLength(0);
     });
 
     it("live-applies a discrete select change through saveClips", () => {

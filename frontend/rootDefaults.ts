@@ -52,7 +52,17 @@ export const getRootDefaults = (): RootDefaults => {
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
         model = utils.getSelectElement("input_model");
     }
-    const loras = getDropdownOptions("loras", "input_loras");
+    // The host's lora list can lead with a "(None)" sentinel; it's meaningless
+    // in our add-a-lora lists and a freshly-added entry seeded with it would be
+    // dropped as "no lora" on the next normalize pass.
+    const rawLoras = getDropdownOptions("loras", "input_loras");
+    const loras = { values: [] as string[], labels: [] as string[] };
+    rawLoras.values.forEach((value, i) => {
+        if (`${value}`.replace(/\s+/g, "").toLowerCase() !== "(none)") {
+            loras.values.push(value);
+            loras.labels.push(rawLoras.labels[i] ?? value);
+        }
+    });
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");

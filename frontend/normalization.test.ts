@@ -184,14 +184,13 @@ describe("normalization", () => {
         expect(rawDefaultClip.stages[0].controlNetStrength).toBe(0.8);
     });
 
-    it("normalizeClip defaults and normalizes ControlNet source", () => {
+    it("normalizeClip defaults to no IC-LoRAs and migrates legacy ControlNet fields", () => {
         const defaultClip = normalizeClip(
             {},
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(defaultClip.controlNetSource).toBe("ControlNet 1");
-        expect(defaultClip.controlNetLora).toBe("");
+        expect(defaultClip.icLoras).toEqual([]);
 
         const controlNetRaw = {
             ControlNetSource: "controlnet3",
@@ -202,17 +201,70 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(controlNetClip.controlNetSource).toBe("ControlNet 3");
-        expect(controlNetClip.controlNetLora).toBe("ltx-ic-lora.safetensors");
+        expect(controlNetClip.icLoras).toHaveLength(1);
+        expect(controlNetClip.icLoras[0].lora).toBe("ltx-ic-lora.safetensors");
+        expect(controlNetClip.icLoras[0].source).toBe("ControlNet 3");
+        expect(controlNetClip.icLoras[0].strength).toBe(1);
+        expect(controlNetClip.icLoras[0].controlType).toBe("none");
     });
 
-    it("normalizeClip maps Swarm (None) ControlNet LoRA token to empty", () => {
+    it("normalizeClip maps Swarm (None) legacy ControlNet LoRA token to no entries", () => {
         const clip = normalizeClip(
             { controlNetLora: " ( None ) " },
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.controlNetLora).toBe("");
+        expect(clip.icLoras).toEqual([]);
+    });
+
+    it("normalizeClip reads the icLoras array and clamps entry fields", () => {
+        const clip = normalizeClip(
+            {
+                icLoras: [
+                    {
+                        lora: " detail-lora.safetensors ",
+                        preset: "water-simulation",
+                        strength: 99,
+                        attentionStrength: -3,
+                        controlType: "DEPTH",
+                        video: {
+                            data: "data:video/mp4;base64,QUJD",
+                            fileName: "d.mp4",
+                        },
+                    },
+                    { lora: "" },
+                ],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.icLoras).toHaveLength(1);
+        const entry = clip.icLoras[0];
+        expect(entry.lora).toBe("detail-lora.safetensors");
+        expect(entry.preset).toBe("water-simulation");
+        expect(entry.source).toBe("Upload");
+        expect(entry.strength).toBe(2);
+        expect(entry.attentionStrength).toBe(0);
+        expect(entry.controlType).toBe("depth");
+        expect(entry.video).toEqual({
+            data: "data:video/mp4;base64,QUJD",
+            fileName: "d.mp4",
+        });
+    });
+
+    it("normalizeClip prefers the icLoras array over legacy fields", () => {
+        const clip = normalizeClip(
+            {
+                icLoras: [{ lora: "new-lora" }],
+                controlNetLora: "old-lora",
+                controlNetSource: "ControlNet 2",
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.icLoras).toHaveLength(1);
+        expect(clip.icLoras[0].lora).toBe("new-lora");
+        expect(clip.icLoras[0].source).toBe("Upload");
     });
 
     it("normalizeClip lets audio length override stored ControlNet length", () => {
@@ -241,7 +293,7 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.controlNetLora).toBe("");
+        expect(clip.icLoras).toEqual([]);
         expect(clip.clipLengthFromAudio).toBe(true);
         expect(clip.clipLengthFromControlNet).toBe(false);
     });
@@ -292,8 +344,9 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.controlNetSource).toBe("ControlNet 2");
-        expect(clip.controlNetLora).toBe("detail-lora.safetensors");
+        expect(clip.icLoras).toHaveLength(1);
+        expect(clip.icLoras[0].source).toBe("ControlNet 2");
+        expect(clip.icLoras[0].lora).toBe("detail-lora.safetensors");
     });
 
     it("normalizeStage reads PascalCase upscale fields for non-first stage", () => {

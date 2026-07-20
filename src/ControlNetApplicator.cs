@@ -1,9 +1,12 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
+using ComfyTyped.Types;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
@@ -15,6 +18,8 @@ internal class ControlNetApplicator(WorkflowGenerator g)
     private const string CapturedControlNetImageKeyPrefix = "videostages.controlnet.fullimage.";
     private const string CapturedControlNetFrameCountKeyPrefix = "videostages.controlnet.framecount.";
     private const string CapturedControlNetAudioKeyPrefix = "videostages.controlnet.audio.";
+    private const string UploadedDriveImagesKeyPrefix = "videostages.iclora.upload.";
+    private const string ControlSignalKeyPrefix = "videostages.iclora.control.";
 
     private static readonly (string ApplyClass, string LoaderInputName)[] KnownControlNetApplyNodes =
     [
@@ -169,39 +174,254 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         node is ResizeImageMaskNodeNode resize
         && resize.ResizeType.LiteralAsString() == "scale to multiple";
 
-    public bool Apply(
+    /// <summary>
+    /// Applies every IC-LoRA on the clip to this stage: a loader chain on the model (array order),
+    /// then one guide per entry that has a drive video — uploaded per-entry or a captured core
+    /// "ControlNet N" branch. Entries without a drive video stay loader-only (e.g. HDR, text-driven
+    /// use). Each guide's latent_downscale_factor is wired from its own loader's metadata output, and
+    /// an entry with AttentionStrength below 1 uses the Advanced guide node. Returns true when any
+    /// guide extended the latent (the caller then crops guide frames after the sampler).
+    /// </summary>
+    public bool ApplyIcLoras(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        string source,
+        ClipSpec clip,
         double? stageControlNetStrength,
         int? frameCount,
         bool clipLengthFromControlNet = false)
     {
-        if (string.IsNullOrWhiteSpace(source)
+        if (!clip.HasIcLoras
+            || genInfo.Model is null
             || genInfo.VideoModel.ModelClass.CompatClass.ID != T2IModelClassSorter.CompatLtxv2.ID)
         {
             return false;
         }
 
-        int index = ParseControlNetSourceIndex(source);
-        if (!TryGetCapturedCoreControlImage(index, out WGNodeData controlImage))
+        List<(IcLoraSpec Entry, int EntryIdx, T2IModel Lora)> resolved = [];
+        for (int i = 0; i < clip.IcLoras.Count; i++)
+        {
+            T2IModel lora = ResolveLoraModel(clip.IcLoras[i].Lora);
+            if (lora is not null)
+            {
+                resolved.Add((clip.IcLoras[i], i, lora));
+            }
+        }
+        if (resolved.Count == 0)
         {
             return false;
         }
-
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.NodeAt(genInfo.Model.Path) is not LTXICLoRALoaderModelOnlyNode)
+        if (!g.Features.Contains(Constants.LtxVideoFeatureFlag))
         {
-            Logs.Warning(
-                $"VideoStages: ControlNet '{source}' is configured but no controlnet_lora "
-                + "is set for this stage; skipping ControlNet.");
-            return false;
+            throw new SwarmUserErrorException(
+                "VideoStages IC-LoRAs require the ComfyUI-LTXVideo custom nodes. "
+                + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
         }
 
-        T2IParamTypes.ControlNetParamHolder controlnetParams = T2IParamTypes.Controlnets[index];
-        JToken guideFrameCount = ResolveGuideFrameCount(genInfo, frameCount, source, clipLengthFromControlNet);
-        double strength = stageControlNetStrength ?? g.UserInput.Get(controlnetParams.Strength);
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        List<LTXICLoRALoaderModelOnlyNode> loaders = [];
+        foreach ((IcLoraSpec entry, _, T2IModel lora) in resolved)
+        {
+            g.FinalLoadedModelList.Add(lora);
+            if (Program.ServerSettings.Metadata.ImageMetadataIncludeModelHash)
+            {
+                lora.GetOrGenerateTensorHashSha256();
+            }
+            LTXICLoRALoaderModelOnlyNode loader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode()).With(
+                LoraName: lora.ToString(g.ModelFolderFormat),
+                StrengthModel: entry.Strength);
+            if (genInfo.Model?.Path is JArray modelPath)
+            {
+                loader.ModelInput.ConnectFromPath(bridge, modelPath);
+            }
+            bridge.SyncNode(loader);
+            genInfo.Model = genInfo.Model.WithPath(loader.Model);
+            loaders.Add(loader);
+        }
 
-        return ApplyLtxIcloraGuide(genInfo, controlImage, strength, guideFrameCount);
+        bool anyGuide = false;
+        for (int i = 0; i < resolved.Count; i++)
+        {
+            (IcLoraSpec entry, int entryIdx, _) = resolved[i];
+            if (!TryResolveDriveImages(bridge, clip, entry, entryIdx, out JArray driveImages, out string slotSource))
+            {
+                continue;
+            }
+            double strength = stageControlNetStrength ?? ResolveSlotGuideStrength(slotSource);
+            if (strength <= 0)
+            {
+                continue;
+            }
+            JArray controlImages = ApplyControlSignal(bridge, clip, entry, entryIdx, driveImages);
+            JToken guideFrames = ResolveGuideFrameCount(
+                genInfo,
+                frameCount,
+                slotSource,
+                clipLengthFromControlNet && slotSource is not null);
+            ApplyLtxIcloraGuide(bridge, genInfo, entry, loaders[i], controlImages, strength, guideFrames);
+            anyGuide = true;
+        }
+        return anyGuide;
+    }
+
+    private double ResolveSlotGuideStrength(string slotSource)
+    {
+        if (slotSource is not null
+            && TryParseControlNetSourceIndex(slotSource, out int index)
+            && g.UserInput.TryGet(T2IParamTypes.Controlnets[index].Strength, out double slotStrength))
+        {
+            return slotStrength;
+        }
+        return 1.0;
+    }
+
+    private bool TryResolveDriveImages(
+        WorkflowBridge bridge,
+        ClipSpec clip,
+        IcLoraSpec entry,
+        int entryIdx,
+        out JArray images,
+        out string slotSource)
+    {
+        images = null;
+        slotSource = null;
+        if (StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload))
+        {
+            if (string.IsNullOrWhiteSpace(entry.Video?.Data))
+            {
+                return false;
+            }
+            images = GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, entry.Video);
+            return images is not null;
+        }
+        if (!TryParseControlNetSourceIndex(entry.Source, out int index)
+            || !TryGetCapturedCoreControlImage(index, out WGNodeData controlImage))
+        {
+            return false;
+        }
+        slotSource = entry.Source;
+        images = new JArray(controlImage.Path[0], controlImage.Path[1]);
+        return true;
+    }
+
+    // The load + component split for an uploaded drive video (or a still image — e.g. an
+    // Ingredients reference sheet) is created once per clip entry and reused by every stage's
+    // guide (each stage only adds its own frame-count trim).
+    private JArray GetOrCreateUploadedDriveImages(
+        WorkflowBridge bridge,
+        int clipId,
+        int entryIdx,
+        UploadedAudioSpec video)
+    {
+        string key = $"{UploadedDriveImagesKeyPrefix}{clipId}.{entryIdx}";
+        if (g.NodeHelpers.TryGetValue(key, out string encoded)
+            && !string.IsNullOrWhiteSpace(encoded)
+            && JToken.Parse(encoded) is JArray { Count: 2 } cached
+            && bridge.ResolvePath(cached) is not null)
+        {
+            return cached;
+        }
+        JArray path;
+        if (IsImageDataUri(video.Data))
+        {
+            SwarmLoadImageB64Node loadImage = bridge.AddNode(new SwarmLoadImageB64Node().With(
+                ImageBase64: StripDataUriPrefix(video.Data)));
+            bridge.SyncNode(loadImage);
+            path = WorkflowBridge.ToPath(loadImage.IMAGE);
+        }
+        else
+        {
+            SwarmLoadVideoB64Node load = bridge.AddNode(new SwarmLoadVideoB64Node().With(
+                VideoBase64: StripDataUriPrefix(video.Data)));
+            GetVideoComponentsNode components = bridge.AddNode(new GetVideoComponentsNode());
+            components.Video.ConnectToUntyped(load.VIDEO);
+            bridge.SyncNode(load);
+            bridge.SyncNode(components);
+            path = WorkflowBridge.ToPath(components.Images);
+        }
+        g.NodeHelpers[key] = path.ToString(Formatting.None);
+        return path;
+    }
+
+    private static bool IsImageDataUri(string data) =>
+        data.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase);
+
+    private static string StripDataUriPrefix(string data)
+    {
+        int comma = data.IndexOf(',');
+        return data.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && comma >= 0
+            ? data[(comma + 1)..]
+            : data;
+    }
+
+    // Renders the drive video into the entry's control signal (canny edges or MoGe depth/normal maps);
+    // cached per clip entry so every stage shares one preprocessing chain.
+    private JArray ApplyControlSignal(
+        WorkflowBridge bridge,
+        ClipSpec clip,
+        IcLoraSpec entry,
+        int entryIdx,
+        JArray driveImages)
+    {
+        if (StringUtils.Equals(entry.ControlType, Constants.IcLoraControlNone)
+            || string.IsNullOrWhiteSpace(entry.ControlType))
+        {
+            return driveImages;
+        }
+        string key = $"{ControlSignalKeyPrefix}{clip.Id}.{entryIdx}";
+        if (g.NodeHelpers.TryGetValue(key, out string encoded)
+            && !string.IsNullOrWhiteSpace(encoded)
+            && JToken.Parse(encoded) is JArray { Count: 2 } cached
+            && bridge.ResolvePath(cached) is not null)
+        {
+            return cached;
+        }
+
+        JArray processed;
+        if (StringUtils.Equals(entry.ControlType, Constants.IcLoraControlCanny))
+        {
+            CannyNode canny = bridge.AddNode(new CannyNode());
+            canny.Image.TryConnectFromPath(bridge, driveImages);
+            bridge.SyncNode(canny);
+            processed = WorkflowBridge.ToPath(canny.IMAGE);
+        }
+        else if (StringUtils.Equals(entry.ControlType, Constants.IcLoraControlDepth))
+        {
+            LoadDa3ModelNode da3Model = bridge.AddNode(new LoadDa3ModelNode());
+            da3Model.ModelName.Set(Constants.Da3ModelFileName);
+            Da3InferenceNode inference = bridge.AddNode(new Da3InferenceNode());
+            inference.Da3Model.ConnectToUntyped(da3Model.Model);
+            inference.Image.TryConnectFromPath(bridge, driveImages);
+            Da3RenderNode render = new()
+            {
+                ExtraInputs = new JObject
+                {
+                    ["output.normalization"] = "v2_style",
+                    ["output.apply_sky_clip"] = false,
+                },
+            };
+            bridge.AddNode(render);
+            render.Geometry.ConnectToUntyped(inference.Geometry);
+            bridge.SyncNode(da3Model);
+            bridge.SyncNode(inference);
+            bridge.SyncNode(render);
+            processed = WorkflowBridge.ToPath(render.IMAGE);
+        }
+        else
+        {
+            LoadMoGeModelNode mogeModel = bridge.AddNode(new LoadMoGeModelNode().With(
+                ModelName: Constants.MoGeModelFileName));
+            MoGeInferenceNode inference = bridge.AddNode(new MoGeInferenceNode());
+            inference.MogeModel.ConnectToUntyped(mogeModel.MOGEMODEL);
+            inference.Image.TryConnectFromPath(bridge, driveImages);
+            MoGeRenderNode render = bridge.AddNode(new MoGeRenderNode().With(
+                Output: "normal_opengl"));
+            render.MogeGeometry.ConnectToUntyped(inference.MogeGeometry);
+            bridge.SyncNode(mogeModel);
+            bridge.SyncNode(inference);
+            bridge.SyncNode(render);
+            processed = WorkflowBridge.ToPath(render.IMAGE);
+        }
+        g.NodeHelpers[key] = processed.ToString(Formatting.None);
+        return processed;
     }
 
     public bool TryCreateCapturedControlImageFrameCount(
@@ -263,46 +483,90 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         return frames is int n ? new JValue(n) : null;
     }
 
-    private bool ApplyLtxIcloraGuide(
+    private void ApplyLtxIcloraGuide(
+        WorkflowBridge bridge,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData controlImage,
+        IcLoraSpec entry,
+        LTXICLoRALoaderModelOnlyNode loader,
+        JArray controlImages,
         double strength,
         JToken frameCount)
     {
-        if (strength <= 0)
+        JArray guideImagePath = ControlImageForLtxIcloraGuide(bridge, controlImages, frameCount);
+
+        ComfyNode guideNode;
+        NodeInput<VaeType> vae;
+        NodeInput<LatentType> latentInput;
+        NodeInput<ImageType> image;
+        NodeInput<FloatType> downscale;
+        NodeOutput<LatentType> latentOut;
+        if (entry.AttentionStrength < 1)
         {
-            return false;
+            LTXAddVideoICLoRAGuideAdvancedNode advanced =
+                bridge.AddNode(new LTXAddVideoICLoRAGuideAdvancedNode().With(
+                    FrameIdx: 0,
+                    Strength: strength,
+                    Crop: "disabled",
+                    UseTiledEncode: false,
+                    TileSize: 256,
+                    TileOverlap: 64,
+                    AttentionStrength: entry.AttentionStrength));
+            guideNode = advanced;
+            vae = advanced.Vae;
+            latentInput = advanced.LatentInput;
+            image = advanced.Image;
+            downscale = advanced.LatentDownscaleFactor;
+            latentOut = advanced.Latent;
         }
-        if (!g.Features.Contains(Constants.LtxVideoFeatureFlag))
+        else
         {
-            throw new SwarmUserErrorException(
-                "VideoStages ControlNet IC-LoRA guides require the ComfyUI-LTXVideo custom nodes. "
-                + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
+            LTXAddVideoICLoRAGuideNode basic =
+                bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(
+                    FrameIdx: 0,
+                    Strength: strength,
+                    Crop: "disabled",
+                    UseTiledEncode: false,
+                    TileSize: 256,
+                    TileOverlap: 64));
+            guideNode = basic;
+            vae = basic.Vae;
+            latentInput = basic.LatentInput;
+            image = basic.Image;
+            downscale = basic.LatentDownscaleFactor;
+            latentOut = basic.Latent;
         }
 
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        JArray guideImagePath = ControlImageForLtxIcloraGuide(bridge, controlImage.Path, frameCount);
-
-        LTXAddVideoICLoRAGuideNode guide = bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(
-            FrameIdx: 0,
-            Strength: strength,
-            LatentDownscaleFactor: 2.0,
-            Crop: "disabled",
-            UseTiledEncode: false,
-            TileSize: 256,
-            TileOverlap: 64));
+        IConditioningPairNode guide = (IConditioningPairNode)guideNode;
         guide.ConnectConditioning(bridge, genInfo);
-        guide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
-        guide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
-        guide.Image.ConnectFromPath(bridge, guideImagePath);
-        bridge.SyncNode(guide);
+        vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+        latentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
+        image.ConnectFromPath(bridge, guideImagePath);
+        // The IC-LoRA's reference_downscale_factor rides in its safetensors metadata; the loader
+        // surfaces it, so the guide always encodes at the grid the LoRA was trained for.
+        downscale.ConnectToUntyped(loader.LatentDownscaleFactor);
+        bridge.SyncNode(guideNode);
 
         genInfo.SetConditioning(guide);
         g.CurrentMedia = g.CurrentMedia.WithPath(
-            guide.Latent,
+            latentOut,
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);
-        return true;
+    }
+
+    internal static T2IModel ResolveLoraModel(string loraName)
+    {
+        if (!Program.T2IModelSets.TryGetValue("LoRA", out T2IModelHandler loraHandler))
+        {
+            Logs.Error("LoRA models are not available.");
+            return null;
+        }
+        if (!loraHandler.Models.TryGetValue(loraName + ".safetensors", out T2IModel lora)
+            && !loraHandler.Models.TryGetValue(loraName, out lora))
+        {
+            Logs.Error($"LoRA Model '{loraName}' not found in the model set.");
+            return null;
+        }
+        return lora;
     }
 
     private JArray ControlImageForLtxIcloraGuide(

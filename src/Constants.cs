@@ -32,6 +32,21 @@ public static class Constants
     public const string ControlNetSourceTwo = "ControlNet 2";
     public const string ControlNetSourceThree = "ControlNet 3";
 
+    // IC-LoRA drive-video sources: an embedded per-entry upload, or one of the captured core
+    // "ControlNet N" branches above.
+    public const string IcLoraSourceUpload = "Upload";
+    // IC-LoRA control-signal renderings of the drive video. "none" feeds the raw frames (the common
+    // case for v2v effect/restoration LoRAs); the rest target Union-Control-style structural LoRAs.
+    public const string IcLoraControlNone = "none";
+    public const string IcLoraControlCanny = "canny";
+    public const string IcLoraControlDepth = "depth";
+    public const string IcLoraControlNormal = "normal";
+    // Geometry-estimation models (ComfyUI/models/geometry_estimation/). Depth renders through core
+    // Depth Anything 3 (mono model, any variant); normal maps need MoGe — the file the official
+    // ComfyUI LTX-2.3 IC-LoRA workflow ships with.
+    internal const string Da3ModelFileName = "depth_anything_3_mono_large.safetensors";
+    internal const string MoGeModelFileName = "moge_2_vitl_normal_fp16.safetensors";
+
     // Outgoing boundary between clip N and N+1; mirrors the frontend BoundaryOut union.
     // "continue" = generation-time continuity: the next clip is generated from this clip's final frame
     // (first-frame guide at strength 1) and the merge collapses the duplicated seam frame via a 1-frame

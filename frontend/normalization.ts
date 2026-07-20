@@ -12,6 +12,15 @@ import {
     CONTROLNET_SOURCE_OPTIONS,
     clamp,
     DEFAULT_CLIP_DURATION_SECONDS,
+    IC_LORA_ATTENTION_DEFAULT,
+    IC_LORA_ATTENTION_MAX,
+    IC_LORA_ATTENTION_MIN,
+    IC_LORA_ATTENTION_STEP,
+    IC_LORA_SOURCE_UPLOAD,
+    IC_LORA_STRENGTH_DEFAULT,
+    IC_LORA_STRENGTH_MAX,
+    IC_LORA_STRENGTH_MIN,
+    IC_LORA_STRENGTH_STEP,
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     normalizeUploadFileName,
     REF_FRAME_MIN,
@@ -28,11 +37,14 @@ import {
     STAGE_REF_STRENGTH_MIN,
     STAGE_REF_STRENGTH_STEP,
 } from "./constants";
+import { IC_LORA_PRESET_CUSTOM_ID } from "./icLoraPresets";
 import { framesForClip, snapDurationToFps } from "./renderUtils";
 import {
     type AudioSegment,
     type BoundaryOut,
     type Clip,
+    type IcLora,
+    type IcLoraControlType,
     type PromptWindow,
     REF_SOURCE_REFINER,
     type RefImage,
@@ -301,6 +313,99 @@ export const normalizeControlNetLora = (value: unknown): string => {
     return raw;
 };
 
+export const normalizeIcLoraControlType = (
+    value: unknown,
+): IcLoraControlType => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "canny" || raw === "depth" || raw === "normal"
+        ? raw
+        : "none";
+};
+
+const normalizeIcLoraSource = (value: unknown): string => {
+    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    if (!compact || compact === "upload") {
+        return IC_LORA_SOURCE_UPLOAD;
+    }
+    return normalizeControlNetSource(value);
+};
+
+/** Drops entries with no LoRA name; everything else is clamped to valid ranges. */
+export const normalizeIcLora = (raw: unknown): IcLora | null => {
+    if (!isRecord(raw)) {
+        return null;
+    }
+    const lora = normalizeControlNetLora(readProp(raw, "lora", "Lora"));
+    if (!lora) {
+        return null;
+    }
+    const preset = `${readProp(raw, "preset", "Preset") ?? ""}`.trim();
+    return {
+        lora,
+        preset: preset || IC_LORA_PRESET_CUSTOM_ID,
+        source: normalizeIcLoraSource(readProp(raw, "source", "Source")),
+        strength: snapStrengthToStep(
+            readProp(raw, "strength", "Strength"),
+            IC_LORA_STRENGTH_DEFAULT,
+            IC_LORA_STRENGTH_MIN,
+            IC_LORA_STRENGTH_MAX,
+            IC_LORA_STRENGTH_STEP,
+        ),
+        attentionStrength: snapStrengthToStep(
+            readProp(raw, "attentionStrength", "AttentionStrength"),
+            IC_LORA_ATTENTION_DEFAULT,
+            IC_LORA_ATTENTION_MIN,
+            IC_LORA_ATTENTION_MAX,
+            IC_LORA_ATTENTION_STEP,
+        ),
+        controlType: normalizeIcLoraControlType(
+            readProp(raw, "controlType", "ControlType"),
+        ),
+        video: normalizeUploadedAudio(readProp(raw, "video", "Video")),
+    };
+};
+
+/**
+ * Reads the clip's IC-LoRA list, falling back to the legacy single-entry
+ * `controlNetLora` + `controlNetSource` fields when no array is present.
+ */
+export const normalizeIcLoras = (
+    rawClip: Record<string, unknown>,
+): IcLora[] => {
+    const raw = readProp(rawClip, "icLoras", "IcLoras");
+    if (Array.isArray(raw)) {
+        const entries = raw
+            .map(normalizeIcLora)
+            .filter((entry): entry is IcLora => entry !== null);
+        if (entries.length > 0) {
+            return entries;
+        }
+    }
+    const legacyLora = normalizeControlNetLora(
+        readProp(rawClip, "controlNetLora", "ControlNetLora"),
+    );
+    if (!legacyLora) {
+        return [];
+    }
+    return [
+        {
+            lora: legacyLora,
+            preset: IC_LORA_PRESET_CUSTOM_ID,
+            source: normalizeControlNetSource(
+                readProp(rawClip, "controlNetSource", "ControlNetSource"),
+            ),
+            strength: IC_LORA_STRENGTH_DEFAULT,
+            attentionStrength: IC_LORA_ATTENTION_DEFAULT,
+            controlType: "none",
+            video: null,
+        },
+    ];
+};
+
+/** True when any entry is driven by a captured core "ControlNet N" branch. */
+export const hasSlotSourcedIcLora = (icLoras: IcLora[]): boolean =>
+    icLoras.some((entry) => entry.source !== IC_LORA_SOURCE_UPLOAD);
+
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
     snapStrengthToStep(
         value,
@@ -468,8 +573,7 @@ export const buildDefaultClip = (
             defaults.fps,
         ),
         audioSource: AUDIO_SOURCE_NATIVE,
-        controlNetSource: CONTROLNET_SOURCE_OPTIONS[0],
-        controlNetLora: "",
+        icLoras: [],
         saveAudioTrack: false,
         clipLengthFromAudio: false,
         clipLengthFromControlNet: false,
@@ -663,11 +767,9 @@ export const normalizeClip = (
 ): Clip => {
     const defaults = getRootDefaults();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
-    const controlNetLora = normalizeControlNetLora(
-        rawClip.controlNetLora ?? rawClip.ControlNetLora,
-    );
+    const icLoras = normalizeIcLoras(rawClip);
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
-        controlNetEnabled: controlNetLora !== "",
+        controlNetEnabled: hasSlotSourcedIcLora(icLoras),
     });
     const fps = Math.max(1, defaults.fps);
     const rawDuration = utils.toNumber(
@@ -707,7 +809,7 @@ export const normalizeClip = (
     const clipLengthFromAudio =
         canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet =
-        controlNetLora !== "" &&
+        hasSlotSourcedIcLora(icLoras) &&
         !clipLengthFromAudio &&
         !!(
             rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet
@@ -721,10 +823,7 @@ export const normalizeClip = (
         ),
         duration,
         audioSource,
-        controlNetSource: normalizeControlNetSource(
-            rawClip.controlNetSource ?? rawClip.ControlNetSource,
-        ),
-        controlNetLora,
+        icLoras,
         saveAudioTrack: !!rawClip.saveAudioTrack,
         clipLengthFromAudio,
         clipLengthFromControlNet,

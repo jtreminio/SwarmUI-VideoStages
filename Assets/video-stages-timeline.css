@@ -693,6 +693,13 @@
     content: "◈";
     color: var(--emphasis);
 }
+.vst-badge-iclora {
+    border-color: color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
+}
+.vst-badge-iclora::before {
+    content: "◇";
+    color: var(--emphasis);
+}
 
 /* Always visible (not hover-revealed): a stable corner control means the
    region head never reflows when the pointer enters that corner. */
@@ -1154,7 +1161,8 @@
 .vst-retake-resize-r {
     right: -1px;
 }
-.vst-detail-add-retake {
+.vst-detail-add-retake,
+.vst-detail-add-iclora {
     align-self: flex-start;
     margin-top: 2px;
     padding: 4px 10px;
@@ -1165,7 +1173,8 @@
     font-size: var(--vst-font-xs);
     cursor: pointer;
 }
-.vst-detail-add-retake:hover {
+.vst-detail-add-retake:hover,
+.vst-detail-add-iclora:hover {
     border-color: var(--emphasis);
     background: color-mix(in srgb, var(--emphasis) 14%, var(--background));
 }

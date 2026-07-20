@@ -324,7 +324,7 @@ internal sealed class StageSequenceRunner(
     {
         if (clip.ClipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
         {
-            _ = ltxManager.TryApplyControlNetFrameCount(clip.ControlNetSource);
+            _ = ltxManager.TryApplyControlNetFrameCount(clip.PrimarySlotEntry?.Source);
         }
     }
 

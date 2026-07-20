@@ -522,8 +522,7 @@ internal static class VideoStagesSpecParser
         bool clipLengthFromAudio = GetOptionalBool(clipObj, "ClipLengthFromAudio", defaultValue: false);
         bool clipLengthFromControlNet = GetOptionalBool(clipObj, "ClipLengthFromControlNet", defaultValue: false);
         bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
-        string controlNetSource = NormalizeControlNetSource(GetString(clipObj, "ControlNetSource"));
-        string controlNetLora = NormalizeControlNetLora(GetString(clipObj, "ControlNetLora"));
+        IReadOnlyList<IcLoraSpec> icLoras = ParseIcLoras(clipObj);
         string boundaryOut = NormalizeBoundaryOut(GetString(clipObj, "BoundaryOut"));
         UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, "UploadedAudio");
         IReadOnlyList<AudioSegmentSpec> audioSegments = ParseAudioSegments(clipObj, Math.Max(0, duration));
@@ -579,8 +578,7 @@ internal static class VideoStagesSpecParser
             Id: clipIndex,
             Frames: clipFrames,
             AudioSource: audioSource,
-            ControlNetSource: controlNetSource,
-            ControlNetLora: controlNetLora,
+            IcLoras: icLoras,
             SaveAudioTrack: saveAudioTrack,
             ClipLengthFromAudio: clipLengthFromAudio && !clipLengthFromControlNet,
             ClipLengthFromControlNet: clipLengthFromControlNet,
@@ -1019,6 +1017,72 @@ internal static class VideoStagesSpecParser
     private static string NormalizeOptionalModelName(string rawModelName)
     {
         return string.IsNullOrWhiteSpace(rawModelName) ? "" : rawModelName.Trim();
+    }
+
+    private static IReadOnlyList<IcLoraSpec> ParseIcLoras(JObject clipObj)
+    {
+        List<IcLoraSpec> entries = [];
+        foreach (JObject entryObj in GetObjectArray(clipObj, "IcLoras"))
+        {
+            string lora = NormalizeControlNetLora(GetString(entryObj, "Lora"));
+            if (lora.Length == 0)
+            {
+                continue;
+            }
+            entries.Add(new IcLoraSpec(
+                Lora: lora,
+                Source: NormalizeIcLoraSource(GetString(entryObj, "Source")),
+                Strength: Math.Clamp(
+                    GetOptionalDouble(entryObj, "Strength", 1, "Clip IcLora"), 0, 5),
+                AttentionStrength: Math.Clamp(
+                    GetOptionalDouble(entryObj, "AttentionStrength", 1, "Clip IcLora"), 0, 1),
+                ControlType: NormalizeIcLoraControlType(GetString(entryObj, "ControlType")),
+                Video: GetEmbeddedUploadSpec(entryObj, "Video")));
+        }
+        if (entries.Count == 0)
+        {
+            // Legacy single-entry form: ControlNetLora + ControlNetSource on the clip itself.
+            string legacyLora = NormalizeControlNetLora(GetString(clipObj, "ControlNetLora"));
+            if (legacyLora.Length > 0)
+            {
+                entries.Add(new IcLoraSpec(
+                    Lora: legacyLora,
+                    Source: NormalizeControlNetSource(GetString(clipObj, "ControlNetSource")),
+                    Strength: 1,
+                    AttentionStrength: 1,
+                    ControlType: Constants.IcLoraControlNone,
+                    Video: null));
+            }
+        }
+        return entries;
+    }
+
+    private static string NormalizeIcLoraSource(string source)
+    {
+        string compact = StringUtils.Compact(source);
+        if (compact.Length == 0 || StringUtils.Equals(compact, Constants.IcLoraSourceUpload))
+        {
+            return Constants.IcLoraSourceUpload;
+        }
+        return NormalizeControlNetSource(source);
+    }
+
+    private static string NormalizeIcLoraControlType(string controlType)
+    {
+        string compact = StringUtils.Compact(controlType);
+        if (StringUtils.Equals(compact, Constants.IcLoraControlCanny))
+        {
+            return Constants.IcLoraControlCanny;
+        }
+        if (StringUtils.Equals(compact, Constants.IcLoraControlDepth))
+        {
+            return Constants.IcLoraControlDepth;
+        }
+        if (StringUtils.Equals(compact, Constants.IcLoraControlNormal))
+        {
+            return Constants.IcLoraControlNormal;
+        }
+        return Constants.IcLoraControlNone;
     }
 
     private static string NormalizeControlNetLora(string raw)

@@ -570,7 +570,7 @@ internal sealed class LtxStageExecutor(
             return null;
         }
         return new ControlNetApplicator(g).TryCreateCapturedControlImageFrameCount(
-            clip.ControlNetSource,
+            clip.PrimarySlotEntry?.Source,
             out JArray framesConnection)
             ? framesConnection
             : null;

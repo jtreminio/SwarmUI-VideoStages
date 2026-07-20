@@ -292,7 +292,13 @@ const renderBadges = (clip: Clip, clipIdx: number): string => {
     const badge =
         `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">` +
         `${escapeHtml(short)}</span>`;
-    return `<div class="vst-badges">${badge}</div>`;
+    const icCount = (clip.icLoras ?? []).length;
+    const icTitle = `${icCount} IC-LoRA${icCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
+    const icBadge =
+        icCount > 0
+            ? `<span class="vst-badge vst-badge-iclora" title="${escapeHtml(icTitle)}" aria-label="${escapeHtml(icTitle)}">IC×${icCount}</span>`
+            : "";
+    return `<div class="vst-badges">${badge}${icBadge}</div>`;
 };
 
 const renderStageChips = (clip: Clip, clipIdx: number): string => {

@@ -37,6 +37,7 @@ public class VideoStagesSpecParserClipsTests
         double duration = 3.0,
         string audioSource = Constants.AudioSourceNative,
         string controlNetSource = Constants.ControlNetSourceOne,
+        string controlNetLora = null,
         bool saveAudioTrack = false,
         bool clipLengthFromAudio = false,
         bool clipLengthFromControlNet = false,
@@ -56,6 +57,10 @@ public class VideoStagesSpecParserClipsTests
             ["Refs"] = new JArray(refs ?? []),
             ["Stages"] = new JArray(stages),
         };
+        if (controlNetLora is not null)
+        {
+            clip["ControlNetLora"] = controlNetLora;
+        }
         if (uploadedAudio is not null)
         {
             clip["UploadedAudio"] = uploadedAudio;
@@ -292,6 +297,7 @@ public class VideoStagesSpecParserClipsTests
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 12, fromEnd: true)],
                 duration: 4.0,
                 controlNetSource: Constants.ControlNetSourceTwo,
+                controlNetLora: "legacy-lora",
                 saveAudioTrack: true,
                 clipLengthFromAudio: true,
                 clipLengthFromControlNet: true,
@@ -306,7 +312,10 @@ public class VideoStagesSpecParserClipsTests
 
         Assert.Equal(2, clips.Count);
         Assert.Equal(0, clips[0].Id);
-        Assert.Equal(Constants.ControlNetSourceTwo, clips[0].ControlNetSource);
+        IcLoraSpec legacyEntry = Assert.Single(clips[0].IcLoras);
+        Assert.Equal("legacy-lora", legacyEntry.Lora);
+        Assert.Equal(Constants.ControlNetSourceTwo, legacyEntry.Source);
+        Assert.Equal(Constants.ControlNetSourceTwo, clips[0].PrimarySlotEntry?.Source);
         Assert.True(clips[0].SaveAudioTrack);
         Assert.False(clips[0].ClipLengthFromAudio);
         Assert.True(clips[0].ClipLengthFromControlNet);
@@ -483,7 +492,7 @@ public class VideoStagesSpecParserClipsTests
         StageSpec stage = Assert.Single(clip.Stages);
         Assert.Equal(0, clip.Id);
         Assert.Equal(Constants.AudioSourceNative, clip.AudioSource);
-        Assert.Equal(Constants.ControlNetSourceOne, clip.ControlNetSource);
+        Assert.Empty(clip.IcLoras);
         Assert.False(clip.ClipLengthFromAudio);
         Assert.False(clip.ClipLengthFromControlNet);
         Assert.False(clip.ReuseAudio);

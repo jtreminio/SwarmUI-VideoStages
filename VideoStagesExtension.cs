@@ -82,6 +82,15 @@ public class VideoStagesExtension : Extension
             Constants.LtxVideoFeatureFlag;
         ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideNode.ClassType] =
             Constants.LtxVideoFeatureFlag;
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideAdvancedNode.ClassType] =
+            Constants.LtxVideoFeatureFlag;
+
+        // Depth/normal IC-LoRA control signals load their estimators from the shared
+        // geometry_estimation model folder; make it visible to self-start ComfyUI backends.
+        if (!ComfyUISelfStartBackend.FoldersToForwardInComfyPath.Contains("geometry_estimation"))
+        {
+            ComfyUISelfStartBackend.FoldersToForwardInComfyPath.Add("geometry_estimation");
+        }
     }
 
     private static void RegisterParameters()

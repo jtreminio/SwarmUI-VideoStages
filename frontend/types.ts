@@ -110,6 +110,30 @@ export interface RefImage {
 
 export type BoundaryOut = "cut" | "continue" | "crossfade";
 
+export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
+
+/**
+ * One in-context LoRA on a clip. `lora` is the LoRA model name; `preset` is a
+ * curated-catalog id ("custom" = none, guidance only — never sent to the
+ * backend as behavior); `strength` is the LoRA model strength; an
+ * `attentionStrength` below 1 switches the backend to the Advanced guide node
+ * (per-guide self-attention influence); `controlType` renders the drive video
+ * into a control signal before guiding; `video` is the uploaded drive video
+ * (data URI + name). An entry with no video still applies the LoRA to the
+ * model (loader-only — e.g. HDR). `source` is "Upload" for per-entry uploads;
+ * legacy JSON may carry "ControlNet N" captured-branch sources, preserved but
+ * not authorable in the UI.
+ */
+export interface IcLora {
+    lora: string;
+    preset: string;
+    source: string;
+    strength: number;
+    attentionStrength: number;
+    controlType: IcLoraControlType;
+    video: UploadedAudio | null;
+}
+
 export interface Clip {
     expanded: boolean;
     skipped: boolean;
@@ -117,8 +141,7 @@ export interface Clip {
     boundaryOut: BoundaryOut;
     duration: number;
     audioSource: string;
-    controlNetSource: string;
-    controlNetLora: string;
+    icLoras: IcLora[];
     saveAudioTrack: boolean;
     clipLengthFromAudio: boolean;
     clipLengthFromControlNet: boolean;
@@ -159,8 +182,7 @@ export type StoredClip = Pick<
     | "boundaryOut"
     | "duration"
     | "audioSource"
-    | "controlNetSource"
-    | "controlNetLora"
+    | "icLoras"
     | "saveAudioTrack"
     | "clipLengthFromAudio"
     | "clipLengthFromControlNet"

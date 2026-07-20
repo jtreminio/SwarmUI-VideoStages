@@ -32,8 +32,17 @@ describe("persistence", () => {
             const clips = [
                 minimalClip({
                     duration: 3,
-                    controlNetSource: "ControlNet 2",
-                    controlNetLora: "ltx-ic-lora.safetensors",
+                    icLoras: [
+                        {
+                            lora: "ltx-ic-lora.safetensors",
+                            preset: "custom",
+                            source: "ControlNet 2",
+                            strength: 1,
+                            attentionStrength: 1,
+                            controlType: "none",
+                            video: null,
+                        },
+                    ],
                     clipLengthFromControlNet: true,
                     prompt: "should not be serialized",
                     refs: [minimalRef({ frame: 2, fromEnd: true })],
@@ -54,8 +63,17 @@ describe("persistence", () => {
                     boundaryOut: "cut",
                     duration: 3,
                     audioSource: "Native",
-                    controlNetSource: "ControlNet 2",
-                    controlNetLora: "ltx-ic-lora.safetensors",
+                    icLoras: [
+                        {
+                            lora: "ltx-ic-lora.safetensors",
+                            preset: "custom",
+                            source: "ControlNet 2",
+                            strength: 1,
+                            attentionStrength: 1,
+                            controlType: "none",
+                            video: null,
+                        },
+                    ],
                     saveAudioTrack: false,
                     clipLengthFromAudio: false,
                     clipLengthFromControlNet: true,

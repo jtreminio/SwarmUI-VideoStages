@@ -46,10 +46,9 @@ internal class StageRunner(
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.Plan.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
-            ApplyControlNetLora(clipContext, currentGenInfo);
-            bool needsCrop = new ControlNetApplicator(g).Apply(
+            bool needsCrop = new ControlNetApplicator(g).ApplyIcLoras(
                 currentGenInfo,
-                clip.ControlNetSource,
+                clip,
                 stage.ControlNetStrength,
                 clipContext.Clip.Frames,
                 clip.ClipLengthFromControlNet);
@@ -274,63 +273,6 @@ internal class StageRunner(
 
     private static string FormatLoraWeight(double weight) =>
         weight.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-    private void ApplyControlNetLora(ClipContext clipContext, WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        ClipSpec clip = clipContext.Clip;
-        if (string.IsNullOrWhiteSpace(clip.ControlNetLora) || genInfo.Model is null)
-        {
-            return;
-        }
-
-        if (!VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel))
-        {
-            return;
-        }
-
-        T2IModel lora = ResolveLoraModel(clip.ControlNetLora);
-        if (lora is null)
-        {
-            return;
-        }
-        if (!g.Features.Contains(Constants.LtxVideoFeatureFlag))
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages ControlNet LoRA requires the ComfyUI-LTXVideo custom nodes. "
-                + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
-        }
-        g.FinalLoadedModelList.Add(lora);
-        if (Program.ServerSettings.Metadata.ImageMetadataIncludeModelHash)
-        {
-            lora.GetOrGenerateTensorHashSha256();
-        }
-
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        LTXICLoRALoaderModelOnlyNode loraLoader = bridge.AddNode(new LTXICLoRALoaderModelOnlyNode()).With(
-            LoraName: lora.ToString(g.ModelFolderFormat),
-            StrengthModel: 1.0);
-        if (genInfo.Model?.Path is JArray modelPath)
-        {
-            loraLoader.ModelInput.ConnectFromPath(bridge, modelPath);
-        }
-        genInfo.Model = genInfo.Model.WithPath(loraLoader.Model);
-    }
-
-    private static T2IModel ResolveLoraModel(string loraName)
-    {
-        if (!Program.T2IModelSets.TryGetValue("LoRA", out T2IModelHandler loraHandler))
-        {
-            Logs.Error("LoRA models are not available.");
-            return null;
-        }
-        if (!loraHandler.Models.TryGetValue(loraName + ".safetensors", out T2IModel lora)
-            && !loraHandler.Models.TryGetValue(loraName, out lora))
-        {
-            Logs.Error($"LoRA Model '{loraName}' not found in the model set.");
-            return null;
-        }
-        return lora;
-    }
 
     private WGNodeData ApplyStageUpscaleIfNeeded(
         ClipContext clipContext,

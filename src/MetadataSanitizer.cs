@@ -52,6 +52,16 @@ internal static class MetadataSanitizer
                 }
             }
         }
+        if (GetProperty(clip, "IcLoras") is JArray icLoras)
+        {
+            foreach (JToken entryToken in icLoras)
+            {
+                if (entryToken is JObject entryObj)
+                {
+                    StripUploadContainer(entryObj, "Video");
+                }
+            }
+        }
         if (GetProperty(clip, "Refs") is not JArray refs)
         {
             return;

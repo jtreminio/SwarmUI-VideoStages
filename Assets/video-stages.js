@@ -531,6 +531,15 @@
   var STAGE_CONTROLNET_STRENGTH_MAX = 1;
   var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
   var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_SOURCE_UPLOAD = "Upload";
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 2;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
   var parseBase2EditStageIndex = (value) => {
     const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
     if (!match) {
@@ -553,6 +562,204 @@
     }
     const prefix = typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "";
     return `${prefix}/${value}`;
+  };
+
+  // frontend/icLoraPresets.ts
+  var IC_LORA_PRESET_CUSTOM_ID = "custom";
+  var IC_LORA_PRESETS = [
+    {
+      id: "union-control",
+      displayName: "Union Control",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control",
+      family: "control-signal",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "depth",
+      note: "Structural control from depth/canny/normal signals; pick the control type to render."
+    },
+    {
+      id: "motion-track-control",
+      displayName: "Motion Track Control",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control",
+      family: "control-signal",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Guide motion with sparse point trajectories; feed a pre-rendered track video."
+    },
+    {
+      id: "in-outpainting",
+      displayName: "In/Outpainting",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting",
+      family: "effect",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Fill or extend a masked clip; feed the masked video directly."
+    },
+    {
+      id: "ingredients",
+      displayName: "Ingredients",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients",
+      family: "reference",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Consistent characters/props from a reference sheet; feed the sheet as the drive video."
+    },
+    {
+      id: "lipdub",
+      displayName: "LipDub",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-LipDub",
+      family: "effect",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "New lip movements matching target audio; pair with this clip's audio track."
+    },
+    {
+      id: "hdr",
+      displayName: "HDR",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-HDR",
+      family: "effect",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "16-bit HDR (LogC3) generation; works with no drive video (LoRA-only)."
+    },
+    {
+      id: "pixel-spatial-upscaler",
+      displayName: "Pixel Spatial Upscaler",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler",
+      family: "restoration",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Creative 2×/4× upscale; feed the low-res clip directly."
+    },
+    {
+      id: "deblur",
+      displayName: "Deblur",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Deblur",
+      family: "restoration",
+      triggerPhrase: "DEBLUR",
+      strength: 1,
+      controlType: "none",
+      note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
+    },
+    {
+      id: "decompression",
+      displayName: "Decompression",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Decompression",
+      family: "restoration",
+      triggerPhrase: "ENHANCE QUALITY",
+      strength: 1,
+      controlType: "none",
+      note: "Removes compression artifacts; feed a low-bitrate clip directly."
+    },
+    {
+      id: "water-simulation",
+      displayName: "Water Simulation",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation",
+      family: "effect",
+      triggerPhrase: "ADD WATER",
+      strength: 1.2,
+      controlType: "none",
+      note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
+    },
+    {
+      id: "instant-shave",
+      displayName: "Instant Shave",
+      repoId: "Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave",
+      family: "effect",
+      triggerPhrase: "REMOVEBEARD",
+      strength: 1,
+      controlType: "none",
+      note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
+    },
+    {
+      id: "colorizer",
+      displayName: "Colorizer",
+      repoId: "DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer",
+      family: "restoration",
+      triggerPhrase: "COLORIZE",
+      strength: 1,
+      controlType: "none",
+      note: "Community. Colorizes black & white footage; feed the grayscale clip. Confirm trigger in README."
+    },
+    {
+      id: "restyle",
+      displayName: "ReStyle",
+      repoId: "Cseti/LTX2.3-22B_ReStyle_IC-LoRA",
+      family: "effect",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Community. Style transfer over an existing clip; see README for style prompts."
+    },
+    {
+      id: "cameraman",
+      displayName: "Cameraman",
+      repoId: "Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2",
+      family: "control-signal",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Community. Camera-motion control driven by the reference video's movement."
+    },
+    {
+      id: "crossview-prompt",
+      displayName: "CrossView Prompt",
+      repoId: "Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt",
+      family: "reference",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Community. Re-renders the scene from a prompted new camera viewpoint."
+    },
+    {
+      id: "outpaint",
+      displayName: "Outpaint",
+      repoId: "oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint",
+      family: "effect",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Community. Extends the frame beyond the source video's borders."
+    },
+    {
+      id: "refocus",
+      displayName: "ReFocus",
+      repoId: "oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus",
+      family: "restoration",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Community. Fixes lens blur / refocuses; feed the blurred clip directly."
+    },
+    {
+      id: "vr360-outpaint",
+      displayName: "VR 360 Outpaint",
+      repoId: "TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA",
+      family: "effect",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Community. Outpaints to an equirectangular 360° panorama."
+    }
+  ];
+  var findIcLoraPreset = (id) => {
+    const wanted = `${id ?? ""}`.trim();
+    if (!wanted || wanted === IC_LORA_PRESET_CUSTOM_ID) {
+      return null;
+    }
+    return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
+  };
+  var icLoraTriggerHint = (preset) => {
+    if (!preset?.triggerPhrase) {
+      return "";
+    }
+    return `Prepend "${preset.triggerPhrase}" to your prompt`;
   };
 
   // frontend/renderUtils.ts
@@ -774,6 +981,79 @@
     }
     return raw;
   };
+  var normalizeIcLoraControlType = (value) => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
+  };
+  var normalizeIcLoraSource = (value) => {
+    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    if (!compact || compact === "upload") {
+      return IC_LORA_SOURCE_UPLOAD;
+    }
+    return normalizeControlNetSource(value);
+  };
+  var normalizeIcLora = (raw) => {
+    if (!isRecord(raw)) {
+      return null;
+    }
+    const lora = normalizeControlNetLora(readProp(raw, "lora", "Lora"));
+    if (!lora) {
+      return null;
+    }
+    const preset = `${readProp(raw, "preset", "Preset") ?? ""}`.trim();
+    return {
+      lora,
+      preset: preset || IC_LORA_PRESET_CUSTOM_ID,
+      source: normalizeIcLoraSource(readProp(raw, "source", "Source")),
+      strength: snapStrengthToStep(
+        readProp(raw, "strength", "Strength"),
+        IC_LORA_STRENGTH_DEFAULT,
+        IC_LORA_STRENGTH_MIN,
+        IC_LORA_STRENGTH_MAX,
+        IC_LORA_STRENGTH_STEP
+      ),
+      attentionStrength: snapStrengthToStep(
+        readProp(raw, "attentionStrength", "AttentionStrength"),
+        IC_LORA_ATTENTION_DEFAULT,
+        IC_LORA_ATTENTION_MIN,
+        IC_LORA_ATTENTION_MAX,
+        IC_LORA_ATTENTION_STEP
+      ),
+      controlType: normalizeIcLoraControlType(
+        readProp(raw, "controlType", "ControlType")
+      ),
+      video: normalizeUploadedAudio(readProp(raw, "video", "Video"))
+    };
+  };
+  var normalizeIcLoras = (rawClip) => {
+    const raw = readProp(rawClip, "icLoras", "IcLoras");
+    if (Array.isArray(raw)) {
+      const entries = raw.map(normalizeIcLora).filter((entry) => entry !== null);
+      if (entries.length > 0) {
+        return entries;
+      }
+    }
+    const legacyLora = normalizeControlNetLora(
+      readProp(rawClip, "controlNetLora", "ControlNetLora")
+    );
+    if (!legacyLora) {
+      return [];
+    }
+    return [
+      {
+        lora: legacyLora,
+        preset: IC_LORA_PRESET_CUSTOM_ID,
+        source: normalizeControlNetSource(
+          readProp(rawClip, "controlNetSource", "ControlNetSource")
+        ),
+        strength: IC_LORA_STRENGTH_DEFAULT,
+        attentionStrength: IC_LORA_ATTENTION_DEFAULT,
+        controlType: "none",
+        video: null
+      }
+    ];
+  };
+  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => entry.source !== IC_LORA_SOURCE_UPLOAD);
   var normalizeStageRefStrengthValue = (value) => snapStrengthToStep(
     value,
     STAGE_REF_STRENGTH_DEFAULT,
@@ -891,8 +1171,7 @@
         defaults.fps
       ),
       audioSource: AUDIO_SOURCE_NATIVE,
-      controlNetSource: CONTROLNET_SOURCE_OPTIONS[0],
-      controlNetLora: "",
+      icLoras: [],
       saveAudioTrack: false,
       clipLengthFromAudio: false,
       clipLengthFromControlNet: false,
@@ -1050,11 +1329,9 @@
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
-    const controlNetLora = normalizeControlNetLora(
-      rawClip.controlNetLora ?? rawClip.ControlNetLora
-    );
+    const icLoras = normalizeIcLoras(rawClip);
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
-      controlNetEnabled: controlNetLora !== ""
+      controlNetEnabled: hasSlotSourcedIcLora(icLoras)
     });
     const fps = Math.max(1, defaults.fps);
     const rawDuration = utils.toNumber(
@@ -1090,7 +1367,7 @@
       audioSourceOptions
     );
     const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource2) && !!rawClip.clipLengthFromAudio;
-    const clipLengthFromControlNet = controlNetLora !== "" && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
+    const clipLengthFromControlNet = hasSlotSourcedIcLora(icLoras) && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
     const clip = {
       expanded: normalizeExpanded(rawClip),
       skipped: !!rawClip.skipped,
@@ -1100,10 +1377,7 @@
       ),
       duration,
       audioSource: audioSource2,
-      controlNetSource: normalizeControlNetSource(
-        rawClip.controlNetSource ?? rawClip.ControlNetSource
-      ),
-      controlNetLora,
+      icLoras,
       saveAudioTrack: !!rawClip.saveAudioTrack,
       clipLengthFromAudio,
       clipLengthFromControlNet,
@@ -1476,7 +1750,14 @@
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
       model = utils.getSelectElement("input_model");
     }
-    const loras = getDropdownOptions("loras", "input_loras");
+    const rawLoras = getDropdownOptions("loras", "input_loras");
+    const loras = { values: [], labels: [] };
+    rawLoras.values.forEach((value, i) => {
+      if (`${value}`.replace(/\s+/g, "").toLowerCase() !== "(none)") {
+        loras.values.push(value);
+        loras.labels.push(rawLoras.labels[i] ?? value);
+      }
+    });
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
@@ -1802,8 +2083,15 @@
       boundaryOut: clip.boundaryOut,
       duration: clip.duration,
       audioSource: clip.audioSource,
-      controlNetSource: clip.controlNetSource,
-      controlNetLora: clip.controlNetLora,
+      icLoras: clip.icLoras.map((entry) => ({
+        lora: entry.lora,
+        preset: entry.preset,
+        source: entry.source,
+        strength: entry.strength,
+        attentionStrength: entry.attentionStrength,
+        controlType: entry.controlType,
+        video: entry.video
+      })),
       saveAudioTrack: clip.saveAudioTrack,
       clipLengthFromAudio: clip.clipLengthFromAudio,
       clipLengthFromControlNet: clip.clipLengthFromControlNet,
@@ -2423,7 +2711,10 @@
     const full = `${model}`.trim() || "(default)";
     const title = `Clip model: ${full} — click to change (applies to Stage 0)`;
     const badge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${escapeAttr(short)}</span>`;
-    return `<div class="vst-badges">${badge}</div>`;
+    const icCount = (clip.icLoras ?? []).length;
+    const icTitle = `${icCount} IC-LoRA${icCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
+    const icBadge = icCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeAttr(icTitle)}" aria-label="${escapeAttr(icTitle)}">IC×${icCount}</span>` : "";
+    return `<div class="vst-badges">${badge}${icBadge}</div>`;
   };
   var renderStageChips = (clip, clipIdx) => {
     const stages = clip.stages ?? [];
@@ -4443,6 +4734,7 @@
   var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
   var DETAIL_CLASS = "vst-detail";
   var GROUP_STAGES = "vstdock_stages";
+  var GROUP_ICLORA = "vstdock_iclora";
   var GROUP_REF = "vstdock_ref";
   var GROUP_AUDIO = "vstdock_audio";
   var GROUP_AUDIOSEG = "vstdock_audioseg";
@@ -5564,9 +5856,9 @@
           fields.appendChild(slider);
         });
       }
-      if (normalizeControlNetLora(clip.controlNetLora) !== "") {
+      if (clip.icLoras.length > 0) {
         const controlNetSlider = buildSlider(
-          "ControlNet Strength",
+          "IC-LoRA Guide Strength",
           stage.controlNetStrength,
           STAGE_CONTROLNET_STRENGTH_MIN,
           STAGE_CONTROLNET_STRENGTH_MAX,
@@ -5579,7 +5871,7 @@
               }
             });
           },
-          { hint: "Only applies when a ControlNet source is set" }
+          { hint: "Drive-video conditioning strength for this stage" }
         );
         tagFocus(controlNetSlider, "controlnet");
         fields.appendChild(controlNetSlider);
@@ -5812,6 +6104,214 @@
       col.appendChild(del);
       return wrap;
     };
+    const buildIcLorasSection = (clip, clipIdx, defaults) => {
+      const wrap = document.createElement("div");
+      wrap.className = "vst-detail-stages-wrap";
+      wrap.appendChild(sectionLabel("IC-LoRAs"));
+      const col = document.createElement("div");
+      col.className = "vst-detail-col vst-detail-iclora-col";
+      wrap.appendChild(col);
+      if (defaults.loraValues.length === 0) {
+        const empty = document.createElement("small");
+        empty.className = "vst-audio-field-hint";
+        empty.textContent = "(no LoRAs available)";
+        col.appendChild(empty);
+        return wrap;
+      }
+      const entryField = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
+      clip.icLoras.forEach((entry, entryIdx) => {
+        const { row, fields } = buildInstanceRow({
+          rowClass: "vst-detail-iclora",
+          indexAttr: "data-vst-iclora-idx",
+          index: entryIdx,
+          active: false,
+          title: `IC-LoRA ${entryIdx + 1}`,
+          deleteLabel: "Remove",
+          onDelete: () => {
+            flushPending();
+            if (isStale()) {
+              render();
+              return;
+            }
+            const clips = getClips();
+            const target = clips[clipIdx];
+            if (!target || entryIdx >= target.icLoras.length) {
+              return;
+            }
+            target.icLoras.splice(entryIdx, 1);
+            saveClips(clips, void 0, { origin: "detail-strip" });
+            sourceToken = readStateToken();
+            render();
+          },
+          repoint: () => {
+          }
+        });
+        const presetSelect = buildOptionSelect(
+          [
+            { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+            ...IC_LORA_PRESETS.map((preset2) => ({
+              value: preset2.id,
+              label: preset2.displayName
+            }))
+          ],
+          entry.preset,
+          (value) => {
+            commit((clips) => {
+              const target = entryField(clips, entryIdx);
+              if (!target) {
+                return;
+              }
+              target.preset = value;
+              const preset2 = findIcLoraPreset(value);
+              if (preset2) {
+                target.strength = preset2.strength;
+                target.controlType = preset2.controlType;
+              }
+            });
+            render();
+          }
+        );
+        fields.appendChild(buildField("Preset", presetSelect));
+        const loraSelect = buildSelect(
+          defaults.loraValues,
+          defaults.loraLabels,
+          entry.lora,
+          (value) => {
+            commit((clips) => {
+              const target = entryField(clips, entryIdx);
+              if (target) {
+                target.lora = value;
+              }
+            });
+          }
+        );
+        fields.appendChild(buildField("LoRA", loraSelect));
+        const strength = buildClampedNumber({
+          key: `iclora-${entryIdx}-strength`,
+          value: entry.strength,
+          min: IC_LORA_STRENGTH_MIN,
+          max: IC_LORA_STRENGTH_MAX,
+          step: IC_LORA_STRENGTH_STEP,
+          readBack: (cs) => entryField(cs, entryIdx)?.strength ?? null,
+          mutate: (cs, value) => {
+            const target = entryField(cs, entryIdx);
+            if (target) {
+              target.strength = value;
+            }
+          }
+        });
+        fields.appendChild(buildField("Strength", strength));
+        const attention = buildClampedNumber({
+          key: `iclora-${entryIdx}-attention`,
+          value: entry.attentionStrength,
+          min: IC_LORA_ATTENTION_MIN,
+          max: IC_LORA_ATTENTION_MAX,
+          step: IC_LORA_ATTENTION_STEP,
+          readBack: (cs) => entryField(cs, entryIdx)?.attentionStrength ?? null,
+          mutate: (cs, value) => {
+            const target = entryField(cs, entryIdx);
+            if (target) {
+              target.attentionStrength = value;
+            }
+          }
+        });
+        fields.appendChild(buildField("Attention", attention));
+        const controlSelect = buildOptionSelect(
+          [
+            { value: "none", label: "None (raw video)" },
+            { value: "canny", label: "Canny edges" },
+            { value: "depth", label: "Depth map" },
+            { value: "normal", label: "Normal map" }
+          ],
+          entry.controlType,
+          (value) => {
+            commit((clips) => {
+              const target = entryField(clips, entryIdx);
+              if (target) {
+                target.controlType = value;
+              }
+            });
+          }
+        );
+        fields.appendChild(buildField("Control", controlSelect));
+        if (entry.source === IC_LORA_SOURCE_UPLOAD) {
+          fields.appendChild(
+            buildUploadRow(
+              "Drive Media",
+              "video/*,image/*",
+              entry.video?.fileName,
+              (data, fileName) => {
+                commit((clips) => {
+                  const target = entryField(clips, entryIdx);
+                  if (target) {
+                    target.video = { data, fileName };
+                  }
+                });
+                render();
+              },
+              () => {
+                commit((clips) => {
+                  const target = entryField(clips, entryIdx);
+                  if (target) {
+                    target.video = null;
+                  }
+                });
+                render();
+              }
+            )
+          );
+        } else {
+          const slot = document.createElement("small");
+          slot.className = "vst-audio-field-hint";
+          slot.textContent = `Driven by ${entry.source} (legacy source)`;
+          fields.appendChild(slot);
+        }
+        const preset = findIcLoraPreset(entry.preset);
+        const hintText = [
+          preset?.note ?? "",
+          icLoraTriggerHint(preset),
+          !entry.video && entry.source === IC_LORA_SOURCE_UPLOAD ? "No drive video: the LoRA still applies to the model (fine for HDR/text-driven use)." : ""
+        ].filter(Boolean).join(" ");
+        if (hintText) {
+          const hint = document.createElement("small");
+          hint.className = "vst-audio-field-hint";
+          hint.textContent = hintText;
+          fields.appendChild(hint);
+        }
+        col.appendChild(row);
+      });
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "vst-detail-rail-btn vst-detail-add-iclora";
+      addBtn.textContent = "+ Add IC-LoRA";
+      addBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        flushPending();
+        if (isStale()) {
+          render();
+          return;
+        }
+        const clips = getClips();
+        const target = clips[clipIdx];
+        if (!target) {
+          return;
+        }
+        target.icLoras.push({
+          lora: defaults.loraValues[0] ?? "",
+          preset: IC_LORA_PRESET_CUSTOM_ID,
+          source: IC_LORA_SOURCE_UPLOAD,
+          strength: IC_LORA_STRENGTH_DEFAULT,
+          attentionStrength: 1,
+          controlType: "none",
+          video: null
+        });
+        saveClips(clips, void 0, { origin: "detail-strip" });
+        sourceToken = readStateToken();
+        render();
+      });
+      col.appendChild(addBtn);
+      return wrap;
+    };
     const buildClipBody = (sel, clips) => {
       const body = document.createElement("div");
       body.className = "vst-detail-body vst-detail-clip-body";
@@ -5834,6 +6334,12 @@
         params.col
       );
       body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
+      body.appendChild(
+        buildGroup(
+          GROUP_ICLORA,
+          buildIcLorasSection(clip, sel.clipIdx, defaults)
+        )
+      );
       body.appendChild(
         buildGroup(GROUP_RETAKE, buildRetakeSection(clip, sel.clipIdx))
       );
@@ -5963,7 +6469,7 @@
     const buildAudioBody = (sel, clips) => {
       const { clipIdx } = sel;
       const clip = clips[clipIdx];
-      const controlNetEnabled = `${clip.controlNetLora ?? ""}`.trim() !== "";
+      const controlNetEnabled = hasSlotSourcedIcLora(clip.icLoras);
       const options2 = buildAudioSourceOptions(clip.audioSource ?? "", {
         controlNetEnabled
       });
@@ -5977,7 +6483,7 @@
             return;
           }
           mutate(target);
-          const cnEnabled = `${target.controlNetLora ?? ""}`.trim() !== "";
+          const cnEnabled = hasSlotSourcedIcLora(target.icLoras);
           const nextSource = resolveAudioSourceValue(
             target.audioSource,
             buildAudioSourceOptions(target.audioSource, {
