@@ -2734,6 +2734,12 @@
     };
   };
   var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
+  var headTag = (kind, label, opts) => {
+    const cls = `vst-head-tag vst-head-tag-${kind}` + (opts?.active ? " vst-head-tag-active" : "") + (opts?.muted ? " vst-head-tag-muted" : "");
+    const style = opts?.style ? ` style="${opts.style}"` : "";
+    return `<div class="${cls}"${style} aria-hidden="true"><span class="vst-head-tag-pill">${label}</span><span class="vst-head-tag-tick"></span></div>`;
+  };
+  var renderTrackHead = (iconClass, icon, title, tags) => `<div class="vst-track-head"><div class="vst-head-top"><div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div><div class="vst-track-label"><strong>${title}</strong></div></div><div class="vst-head-tags">${tags}</div></div>`;
   var PROMPT_PLACEHOLDER = "(no prompt)";
   var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt) => {
     const globalTrimmed = `${globalPrompt ?? ""}`.trim();
@@ -2768,7 +2774,16 @@
         `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="Click empty space to add a minor prompt">${minorSegs}</div>`
       );
     }
-    return `<div class="vst-track-row vst-track-prompt"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-prompt" aria-hidden="true">✎</div><div class="vst-track-label"><strong>Prompt</strong><small>major · relay</small></div></div><div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
+    return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
+      "vst-track-icon-prompt",
+      "✎",
+      "Prompt",
+      headTag("major", "Major", { active: true }) + headTag("relay", "Relay", {
+        active: clips.some(
+          (c) => (c.promptWindows?.length ?? 0) > 0
+        )
+      })
+    ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
   };
   var audioFlagChips = (clip) => {
     const chips = [];
@@ -2857,7 +2872,23 @@
       1,
       ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1)
     );
-    return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div><div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div></div><div class="vst-track-cell vst-audio-cell">${segments}</div></div>`;
+    const laneTags = [headTag("src", "Src", { active: true })];
+    for (let i = 0; i < laneCount; i++) {
+      const blank = i === laneCount - 1;
+      laneTags.push(
+        headTag("seg", blank ? "+" : `S${i + 1}`, {
+          active: !blank,
+          muted: blank,
+          style: `--vst-audio-lane-idx:${i}`
+        })
+      );
+    }
+    return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` + renderTrackHead(
+      "vst-track-icon-audio",
+      "♪",
+      "Audio",
+      laneTags.join("")
+    ) + `<div class="vst-track-cell vst-audio-cell">${segments}</div></div>`;
   };
   var REF_EDGE_ALIGN_FRAMES = 3;
   var renderReferencesTrackRow = (clips, layouts, fps, unit) => {
@@ -2892,7 +2923,15 @@
       }).join("");
       return `<div class="vst-refs-lane" data-vst-ref-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${laneWidth}px" title="Click to add a reference image at this frame">${marks}</div>`;
     }).join("");
-    return `<div class="vst-track-row vst-track-refs"><div class="vst-track-head"><div class="vst-track-icon vst-track-icon-refs" aria-hidden="true">⧉</div><div class="vst-track-label"><strong>References</strong><small>image refs</small></div></div><div class="vst-track-cell">${lanes}</div></div>`;
+    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead(
+      "vst-track-icon-refs",
+      "⧉",
+      "References",
+      headTag("refs", "Refs", {
+        active: clips.some((c) => (c.refs?.length ?? 0) > 0),
+        muted: true
+      })
+    ) + `<div class="vst-track-cell">${lanes}</div></div>`;
   };
   var renderTimeline = (body, clips, options) => {
     const fps = safeFps(options?.fps);
@@ -3056,7 +3095,14 @@
     }).join("");
     const audioRow = renderAudioTrackRow(clips, layouts);
     const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
-    const videoHead = `<div class="vst-track-head"><div class="vst-track-icon vst-track-icon-video" aria-hidden="true">▶</div><div class="vst-track-label"><strong>Video</strong><small>V1 · ${clips.length} ${clipWord}</small></div></div>`;
+    const videoHead = renderTrackHead(
+      "vst-track-icon-video",
+      "▶",
+      "Video",
+      headTag("clip", "Clip", { active: true }) + headTag("retake", "Retake", {
+        active: clips.some((c) => c.retake != null)
+      })
+    );
     const promptRow = renderPromptTrackRow(
       clips,
       layouts,

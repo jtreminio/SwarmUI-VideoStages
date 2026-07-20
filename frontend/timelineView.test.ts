@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { minimalClip } from "./__test_helpers__/clipFixtures";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -6,7 +7,9 @@ import {
     DEFAULT_PX_PER_SECOND,
     MAX_PX_PER_SECOND,
     MIN_PX_PER_SECOND,
+    renderAudioTrackRow,
     renderBoundarySeams,
+    renderPromptTrackRow,
     renderTimeline,
     waveBarHeights,
     zoomAnchorScrollLeft,
@@ -833,5 +836,58 @@ describe("renderTimeline (DOM)", () => {
         expect(lanes).toHaveLength(2);
         expect(lanes[0].getAttribute("data-clip-idx")).toBe("0");
         expect(lanes[1].getAttribute("data-clip-idx")).toBe("1");
+    });
+});
+
+describe("track-head lane tags", () => {
+    it("emits lane tags with data-driven active/muted states", () => {
+        const clips = [
+            minimalClip({
+                duration: 5,
+                audioSegments: [
+                    {
+                        source: "a.wav",
+                        startSeconds: 0.5,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 1.5,
+                    },
+                    {
+                        source: "b.wav",
+                        startSeconds: 2.5,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 2,
+                    },
+                ],
+                promptWindows: [{ start: 1, duration: 2, prompt: "push in" }],
+            }),
+            minimalClip({ duration: 3 }),
+        ];
+        const layouts = computeRegionLayout(clips, { pxPerSecond: 60 });
+
+        // Audio: laneCount = 3 -> Src, S1, S2 active; trailing "+" muted on
+        // the blank add-lane, placed via the same lane-idx var the lanes use.
+        const audio = renderAudioTrackRow(clips, layouts);
+        expect(audio).toContain("vst-head-tag-src");
+        expect(audio).toContain(">S1<");
+        expect(audio).toContain(">S2<");
+        expect(audio).toMatch(
+            /vst-head-tag-seg vst-head-tag-muted" style="--vst-audio-lane-idx:2"/,
+        );
+
+        const prompt = renderPromptTrackRow(clips, layouts, 60, "global");
+        expect(prompt).toContain("vst-head-tag-major vst-head-tag-active");
+        expect(prompt).toContain("vst-head-tag-relay vst-head-tag-active");
+    });
+
+    it("leaves the relay tag inactive when no clip has prompt windows", () => {
+        const bare = [minimalClip({ duration: 3 })];
+        const html = renderPromptTrackRow(
+            bare,
+            computeRegionLayout(bare, { pxPerSecond: 60 }),
+            60,
+            "global",
+        );
+        expect(html).toContain("vst-head-tag-relay");
+        expect(html).not.toContain("vst-head-tag-relay vst-head-tag-active");
     });
 });

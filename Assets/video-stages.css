@@ -291,6 +291,9 @@
     border-bottom: 1px solid var(--vst-hairline);
     background: var(--vst-bed);
 }
+/* Head: icon + title anchored top-left in normal flow; lane tags live in an
+   absolutely-positioned overlay (sticky = positioned, so it is the containing
+   block) so each tag can align to the mini-lane it names. */
 .vst-track-head {
     width: var(--vst-header-w);
     flex: none;
@@ -298,11 +301,21 @@
     left: 0;
     z-index: var(--vst-z-track-header);
     display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 0 12px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 7px 8px 7px 12px;
     background: var(--vst-panel);
     border-right: 1px solid var(--vst-hairline);
+}
+.vst-head-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    position: relative;
+    /* Stay above tag ticks near the top edge. */
+    z-index: 1;
 }
 .vst-track-icon {
     width: 22px;
@@ -338,13 +351,98 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.vst-track-label small {
-    display: block;
+/* Lane tags: uppercase mono pills hugging the head's right edge, one per
+   mini-lane, each with a hairline tick pointing at the lane it names. Pure
+   annotation — pointer-events:none, no new hit targets. Per-track vertical
+   placement rules below copy the lane's own top/bottom/height math. */
+.vst-head-tags {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+.vst-head-tag {
+    position: absolute;
+    right: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    max-width: calc(100% - 14px);
+    min-width: 0;
+}
+.vst-head-tag-pill {
     font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
-    color: var(--text-soft);
+    font-weight: 500;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    color: var(--text-soft);
+    background: color-mix(in srgb, var(--text) 6%, var(--vst-panel));
+    border: 1px solid var(--vst-hairline);
+    border-radius: var(--vst-radius-sm);
+    padding: 1px 5px;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.vst-head-tag-tick {
+    flex: none;
+    width: 6px;
+    height: 1px;
+    background: var(--vst-hairline);
+}
+/* A tag whose lane currently carries content gets a faint emphasis tint. */
+.vst-head-tag-active .vst-head-tag-pill {
+    color: color-mix(in srgb, var(--emphasis) 70%, var(--text));
+    border-color: color-mix(in srgb, var(--emphasis) 38%, var(--vst-hairline));
+    background: color-mix(in srgb, var(--emphasis) 11%, var(--vst-panel));
+}
+.vst-head-tag-active .vst-head-tag-tick {
+    background: color-mix(in srgb, var(--emphasis) 45%, var(--vst-hairline));
+}
+/* Blank add-lanes (Audio "+") and single-lane tracks (Refs) read quieter. */
+.vst-head-tag-muted .vst-head-tag-pill {
+    opacity: 0.55;
+}
+
+/* Prompt: major top half / relay bottom half (mirrors .vst-major-seg and
+   .vst-minor-lane). */
+.vst-track-prompt .vst-head-tag-major {
+    top: 6px;
+    height: calc(50% - 10px);
+}
+.vst-track-prompt .vst-head-tag-relay {
+    bottom: 6px;
+    height: calc(50% - 10px);
+}
+/* Video: clip region span / retake mini-lane (mirrors .vst-region and
+   .vst-retake-lane). */
+.vst-track-video .vst-head-tag-clip {
+    top: var(--vst-refs-band);
+    bottom: calc(var(--vst-retake-lane-h) + 12px);
+}
+.vst-track-video .vst-head-tag-retake {
+    bottom: 6px;
+    height: var(--vst-retake-lane-h);
+}
+/* References: the single lane spans the whole row. */
+.vst-track-refs .vst-head-tag-refs {
+    top: 0;
+    bottom: 0;
+}
+/* Audio: source mini-row on top, then one tag per segment-lane index via the
+   same --vst-audio-lane-idx idiom .vst-audio-seg-lane uses. */
+.vst-track-audio .vst-head-tag-src {
+    top: 0;
+    height: var(--vst-audio-cliprow-h);
+}
+.vst-track-audio .vst-head-tag-seg {
+    top: calc(
+        var(--vst-audio-cliprow-h) + var(--vst-audio-lane-idx, 0) *
+            var(--vst-audio-seg-lane-h)
+    );
+    height: var(--vst-audio-seg-lane-h);
 }
 .vst-track-cell {
     flex: 1;

@@ -416,6 +416,45 @@ const promptWindowGeom = (
 /** Usable inner width of a clip lane (the 2px is the region border). */
 const clipInnerWidth = (widthPx: number): number => Math.max(1, widthPx - 2);
 
+/**
+ * Small non-interactive pill in a track head, vertically aligned to the
+ * mini-lane it names (placement comes from the per-track vst-head-tag-<kind>
+ * CSS rule, which copies that lane's top/bottom/height math). "active" tints
+ * the pill to hint the lane currently carries content; "muted" dims it (the
+ * blank add-lane, or a single-lane track that needs no pointing).
+ */
+const headTag = (
+    kind: string,
+    label: string,
+    opts?: { active?: boolean; muted?: boolean; style?: string },
+): string => {
+    const cls =
+        `vst-head-tag vst-head-tag-${kind}` +
+        (opts?.active ? " vst-head-tag-active" : "") +
+        (opts?.muted ? " vst-head-tag-muted" : "");
+    const style = opts?.style ? ` style="${opts.style}"` : "";
+    return (
+        `<div class="${cls}"${style} aria-hidden="true">` +
+        `<span class="vst-head-tag-pill">${label}</span>` +
+        `<span class="vst-head-tag-tick"></span>` +
+        `</div>`
+    );
+};
+
+const renderTrackHead = (
+    iconClass: string,
+    icon: string,
+    title: string,
+    tags: string,
+): string =>
+    `<div class="vst-track-head">` +
+    `<div class="vst-head-top">` +
+    `<div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div>` +
+    `<div class="vst-track-label"><strong>${title}</strong></div>` +
+    `</div>` +
+    `<div class="vst-head-tags">${tags}</div>` +
+    `</div>`;
+
 const PROMPT_PLACEHOLDER = "(no prompt)";
 
 export const renderPromptTrackRow = (
@@ -483,10 +522,17 @@ export const renderPromptTrackRow = (
     }
     return (
         `<div class="vst-track-row vst-track-prompt">` +
-        `<div class="vst-track-head">` +
-        `<div class="vst-track-icon vst-track-icon-prompt" aria-hidden="true">✎</div>` +
-        `<div class="vst-track-label"><strong>Prompt</strong><small>major · relay</small></div>` +
-        `</div>` +
+        renderTrackHead(
+            "vst-track-icon-prompt",
+            "✎",
+            "Prompt",
+            headTag("major", "Major", { active: true }) +
+                headTag("relay", "Relay", {
+                    active: clips.some(
+                        (c) => (c.promptWindows?.length ?? 0) > 0,
+                    ),
+                }),
+        ) +
         `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div>` +
         `</div>`
     );
@@ -646,12 +692,27 @@ export const renderAudioTrackRow = (
         1,
         ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1),
     );
+    // One tag per lane index, mirroring renderAudioSegmentLanes: the last
+    // lane is always the blank add-lane, so its tag is the muted "+".
+    const laneTags = [headTag("src", "Src", { active: true })];
+    for (let i = 0; i < laneCount; i++) {
+        const blank = i === laneCount - 1;
+        laneTags.push(
+            headTag("seg", blank ? "+" : `S${i + 1}`, {
+                active: !blank,
+                muted: blank,
+                style: `--vst-audio-lane-idx:${i}`,
+            }),
+        );
+    }
     return (
         `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` +
-        `<div class="vst-track-head">` +
-        `<div class="vst-track-icon vst-track-icon-audio" aria-hidden="true">♪</div>` +
-        `<div class="vst-track-label"><strong>Audio</strong><small>A1 · per-clip</small></div>` +
-        `</div>` +
+        renderTrackHead(
+            "vst-track-icon-audio",
+            "♪",
+            "Audio",
+            laneTags.join(""),
+        ) +
         `<div class="vst-track-cell vst-audio-cell">${segments}</div>` +
         `</div>`
     );
@@ -719,10 +780,15 @@ export const renderReferencesTrackRow = (
         .join("");
     return (
         `<div class="vst-track-row vst-track-refs">` +
-        `<div class="vst-track-head">` +
-        `<div class="vst-track-icon vst-track-icon-refs" aria-hidden="true">⧉</div>` +
-        `<div class="vst-track-label"><strong>References</strong><small>image refs</small></div>` +
-        `</div>` +
+        renderTrackHead(
+            "vst-track-icon-refs",
+            "⧉",
+            "References",
+            headTag("refs", "Refs", {
+                active: clips.some((c) => (c.refs?.length ?? 0) > 0),
+                muted: true,
+            }),
+        ) +
         `<div class="vst-track-cell">${lanes}</div>` +
         `</div>`
     );
@@ -1004,11 +1070,15 @@ export const renderTimeline = (
     const audioRow = renderAudioTrackRow(clips, layouts);
     const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
 
-    const videoHead =
-        `<div class="vst-track-head">` +
-        `<div class="vst-track-icon vst-track-icon-video" aria-hidden="true">▶</div>` +
-        `<div class="vst-track-label"><strong>Video</strong><small>V1 · ${clips.length} ${clipWord}</small></div>` +
-        `</div>`;
+    const videoHead = renderTrackHead(
+        "vst-track-icon-video",
+        "▶",
+        "Video",
+        headTag("clip", "Clip", { active: true }) +
+            headTag("retake", "Retake", {
+                active: clips.some((c) => c.retake != null),
+            }),
+    );
 
     const promptRow = renderPromptTrackRow(
         clips,
