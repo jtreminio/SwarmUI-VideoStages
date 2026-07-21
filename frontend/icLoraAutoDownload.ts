@@ -7,10 +7,12 @@ import {
 import type { IcLora } from "./types";
 
 // Fulfills "[AUTO]" IC-LoRA entries: when an entry pairs the [AUTO] lora choice with a preset
-// whose weights aren't installed, this kicks off SwarmUI's DoModelDownloadWS to fetch the
-// preset's safetensors into LTX-2/IC-LoRA/<preset id>. Download state is tracked per preset id
-// (module-level, shared by every entry using that preset); progress repaints only the tagged
-// hint elements so the websocket stream never forces a full strip re-render.
+// whose weights aren't installed, this kicks off the extension's VideoStagesDownloadIcLoraWS to
+// fetch the preset's safetensors into LTX-2/IC-LoRA/ under the upstream filename (the core
+// downloader would strip the dots out of names like "ltx-2.3-...-ref0.5"). Download state is
+// tracked per preset id (module-level, shared by every entry using that preset); progress
+// repaints only the tagged hint elements so the websocket stream never forces a full strip
+// re-render.
 
 /** Attribute the detail strip puts on an entry's auto-status hint element (value = preset id). */
 export const IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
@@ -107,12 +109,8 @@ export const ensureIcLoraAutoWeights = (
     }
     statuses.set(preset.id, { state: "downloading", percent: 0 });
     makeWSRequest(
-        "DoModelDownloadWS",
-        {
-            url: preset.weightsUrl,
-            type: "LoRA",
-            name: icLoraAutoModelName(preset),
-        },
+        "VideoStagesDownloadIcLoraWS",
+        { presetId: preset.id },
         (data) => {
             // overall_percent is the workflow-step indicator (a constant 0.2
             // while transferring); the live transfer progress is current_percent.

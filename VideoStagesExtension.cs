@@ -36,6 +36,7 @@ public class VideoStagesExtension : Extension
         RegisterComfyDependencies();
         RegisterParameters();
         RegisterComfyNodes();
+        VideoStagesApi.Register();
         AttachPromptMetadataRestorer("prompt");
         AttachPromptMetadataRestorer("negativeprompt");
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(

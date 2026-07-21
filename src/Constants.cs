@@ -42,9 +42,10 @@ public static class Constants
     public const string IcLoraControlCanny = "canny";
     public const string IcLoraControlDepth = "depth";
     public const string IcLoraControlNormal = "normal";
-    // "[AUTO]" as an entry's Lora means "the selected preset's weights": the frontend downloads
-    // them to <lora dir>/LTX-2/IC-LoRA/<preset id>.safetensors, and the backend resolves the same
-    // path by convention. Mirrors IC_LORA_AUTO / IC_LORA_AUTO_FOLDER in frontend/constants.ts.
+    // "[AUTO]" as an entry's Lora means "the selected preset's weights": the frontend triggers
+    // VideoStagesDownloadIcLoraWS, which saves them to <lora dir>/LTX-2/IC-LoRA/<original upstream
+    // filename>, and the backend resolves the same path via IcLoraWeights. Mirrors IC_LORA_AUTO /
+    // IC_LORA_AUTO_FOLDER in frontend/constants.ts.
     public const string IcLoraAutoModel = "[AUTO]";
     public const string IcLoraAutoModelFolder = "LTX-2/IC-LoRA";
     // Geometry-estimation models (ComfyUI/models/geometry_estimation/). Depth renders through core

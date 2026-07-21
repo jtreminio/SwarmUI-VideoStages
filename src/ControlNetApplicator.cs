@@ -629,8 +629,8 @@ internal class ControlNetApplicator(WorkflowGenerator g)
 
     /// <summary>
     /// Resolves an entry's LoRA model, expanding the "[AUTO]" sentinel to the preset's
-    /// conventional download path (LTX-2/IC-LoRA/&lt;preset id&gt;, where the frontend's [AUTO]
-    /// downloader puts the weights). [AUTO] failures throw user errors instead of the plain
+    /// conventional download path (IcLoraWeights.ModelNameFor — where the [AUTO] downloader
+    /// puts the weights). [AUTO] failures throw user errors instead of the plain
     /// resolver's log-and-skip: a silent skip would look like the preset just didn't work.
     /// </summary>
     private static T2IModel ResolveIcLoraEntryModel(IcLoraSpec entry)
@@ -646,7 +646,10 @@ internal class ControlNetApplicator(WorkflowGenerator g)
                 "An IC-LoRA is set to [AUTO] but has no preset selected. "
                 + "Pick a preset (which names the weights to download) or choose a specific LoRA.");
         }
-        string autoName = $"{Constants.IcLoraAutoModelFolder}/{preset}";
+        string autoName = IcLoraWeights.ModelNameFor(preset)
+            ?? throw new SwarmUserErrorException(
+                $"IC-LoRA [AUTO] preset '{preset}' has no known weights to download. "
+                + "Pick a curated preset or choose a specific LoRA.");
         return ResolveLoraModel(autoName)
             ?? throw new SwarmUserErrorException(
                 $"IC-LoRA [AUTO] weights '{autoName}' are not installed. The automatic download "

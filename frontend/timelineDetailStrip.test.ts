@@ -16,7 +16,6 @@ import {
 } from "./__test_helpers__/dom";
 import { IC_LORA_AUTO } from "./constants";
 import { resetIcLoraAutoDownloads } from "./icLoraAutoDownload";
-import { findIcLoraPreset } from "./icLoraPresets";
 import * as persistence from "./persistence";
 import {
     createTimelineDetailStrip,
@@ -464,8 +463,43 @@ describe("createTimelineDetailStrip", () => {
         expect(clips[0].icLoras[0].strength).toBe(1);
     });
 
-    // The per-entry selects render in a fixed order: Preset, LoRA, Control,
-    // Apply on, then Source (refine-stage placements only).
+    it("shows the Control select only for Custom and Union Control presets", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const labels = (): (string | null)[] =>
+            Array.from(
+                document.querySelectorAll(
+                    ".vst-detail-iclora .vst-audio-field-label",
+                ),
+            ).map((el) => el.textContent);
+        const pickPreset = (value: string): void => {
+            const select =
+                fieldByLabel("Preset").querySelector<HTMLSelectElement>(
+                    "select",
+                );
+            if (!select) {
+                throw new Error("preset select missing");
+            }
+            select.value = value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        // Custom (no preset) could be a third-party control LoRA, so Control shows.
+        expect(labels()).toContain("Control");
+        pickPreset("deblur");
+        expect(labels()).not.toContain("Control");
+        pickPreset("union-control");
+        expect(labels()).toContain("Control");
+    });
+
+    // The per-entry selects render in a fixed order: Preset, LoRA, Control
+    // (Custom / Union Control presets only), Apply on, then Source
+    // (refine-stage placements only).
     const IC_LORA_SELECTS = ["preset", "lora", "control", "apply", "source"];
     type IcLoraSelectName = "preset" | "lora" | "apply" | "source";
     const icLoraSelect = (which: IcLoraSelectName): HTMLSelectElement => {
@@ -584,12 +618,8 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledWith(
-            "DoModelDownloadWS",
-            {
-                url: findIcLoraPreset("deblur")?.weightsUrl,
-                type: "LoRA",
-                name: "LTX-2/IC-LoRA/deblur",
-            },
+            "VideoStagesDownloadIcLoraWS",
+            { presetId: "deblur" },
             expect.any(Function),
             0,
             expect.any(Function),
@@ -627,7 +657,7 @@ describe("createTimelineDetailStrip", () => {
         onData({ success: true });
         expect(swarmGlobals.refreshParameterValues).toHaveBeenCalledWith(true);
         expect(detail()?.textContent).toContain(
-            "Downloaded to LTX-2/IC-LoRA/deblur",
+            "Downloaded to LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9",
         );
     });
 
@@ -663,11 +693,16 @@ describe("createTimelineDetailStrip", () => {
                     icLoras: [{ lora: IC_LORA_AUTO, preset: "deblur" }],
                 },
             ],
-            ["lora-x.safetensors", "LTX-2/IC-LoRA/deblur"],
+            [
+                "lora-x.safetensors",
+                "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9",
+            ],
         );
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
-        expect(detail()?.textContent).toContain("Using LTX-2/IC-LoRA/deblur");
+        expect(detail()?.textContent).toContain(
+            "Using LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9",
+        );
     });
 
     it("offers IC-LoRAs with [AUTO] even when no LoRAs are installed", () => {

@@ -310,6 +310,7 @@
 
   // frontend/icLoraPresets.ts
   var IC_LORA_PRESET_CUSTOM_ID = "custom";
+  var IC_LORA_PRESET_UNION_CONTROL_ID = "union-control";
   var HF = "https://huggingface.co";
   var IC_LORA_PRESETS = [
     {
@@ -428,7 +429,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer/resolve/main/LTX-2.3-22b-IC-LoRA-Colorizer-0.9.safetensors`,
-      note: "Community. Colorizes black & white footage; feed the grayscale clip. Confirm trigger in README."
+      note: "Colorizes black & white footage; feed the grayscale clip. Confirm trigger in README."
     },
     {
       id: "restyle",
@@ -437,7 +438,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors`,
-      note: "Community. Style transfer over an existing clip; see README for style prompts."
+      note: "Style transfer over an existing clip; see README for style prompts."
     },
     {
       id: "cameraman",
@@ -446,7 +447,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors`,
-      note: "Community. Camera-motion control driven by the reference video's movement."
+      note: "Camera-motion control driven by the reference video's movement."
     },
     {
       id: "crossview-prompt",
@@ -455,7 +456,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors`,
-      note: "Community. Re-renders the scene from a prompted new camera viewpoint."
+      note: "Re-renders the scene from a prompted new camera viewpoint."
     },
     {
       id: "outpaint",
@@ -464,7 +465,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors`,
-      note: "Community. Extends the frame beyond the source video's borders."
+      note: "Extends the frame beyond the source video's borders."
     },
     {
       id: "refocus",
@@ -473,7 +474,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors`,
-      note: "Community. Fixes lens blur / refocuses; feed the blurred clip directly."
+      note: "Fixes lens blur / refocuses; feed the blurred clip directly."
     },
     {
       id: "vr360-outpaint",
@@ -482,7 +483,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors`,
-      note: "Community. Outpaints to an equirectangular 360° panorama."
+      note: "Outpaints to an equirectangular 360° panorama."
     }
   ];
   var findIcLoraPreset = (id) => {
@@ -492,7 +493,13 @@
     }
     return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
   };
-  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${preset.id}`;
+  var icLoraAutoModelName = (preset) => {
+    const file = preset.weightsUrl.slice(
+      preset.weightsUrl.lastIndexOf("/") + 1
+    );
+    return `${IC_LORA_AUTO_FOLDER}/${file.replace(/\.safetensors$/i, "")}`;
+  };
+  var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
   var icLoraTriggerHint = (preset) => {
     if (!preset?.triggerPhrase) {
       return "";
@@ -4366,12 +4373,8 @@
     }
     statuses.set(preset.id, { state: "downloading", percent: 0 });
     makeWSRequest(
-      "DoModelDownloadWS",
-      {
-        url: preset.weightsUrl,
-        type: "LoRA",
-        name: icLoraAutoModelName(preset)
-      },
+      "VideoStagesDownloadIcLoraWS",
+      { presetId: preset.id },
       (data) => {
         if (typeof data?.current_percent === "number") {
           setStatus(preset, {
@@ -5979,24 +5982,27 @@
           }
         });
         fields.appendChild(buildField("Attention", attention));
-        const controlSelect = buildOptionSelect(
-          [
-            { value: "none", label: "None (raw video)" },
-            { value: "canny", label: "Canny edges" },
-            { value: "depth", label: "Depth map" },
-            { value: "normal", label: "Normal map" }
-          ],
-          entry.controlType,
-          (value) => {
-            commit((clips) => {
-              const target = entryField(clips, entryIdx);
-              if (target) {
-                target.controlType = value;
-              }
-            });
-          }
-        );
-        fields.appendChild(buildField("Control", controlSelect));
+        const preset = findIcLoraPreset(entry.preset);
+        if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
+          const controlSelect = buildOptionSelect(
+            [
+              { value: "none", label: "None (raw video)" },
+              { value: "canny", label: "Canny edges" },
+              { value: "depth", label: "Depth map" },
+              { value: "normal", label: "Normal map" }
+            ],
+            entry.controlType,
+            (value) => {
+              commit((clips) => {
+                const target = entryField(clips, entryIdx);
+                if (target) {
+                  target.controlType = value;
+                }
+              });
+            }
+          );
+          fields.appendChild(buildField("Control", controlSelect));
+        }
         const applySelect = buildOptionSelect(
           [
             { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
@@ -6081,16 +6087,19 @@
           slot.textContent = `Driven by ${entry.source} (legacy source)`;
           fields.appendChild(slot);
         }
-        const preset = findIcLoraPreset(entry.preset);
-        const hintText = [
-          preset?.note ?? "",
-          icLoraTriggerHint(preset),
-          !entry.video && entry.source === IC_LORA_SOURCE_UPLOAD ? "No drive video: the LoRA still applies to the model (fine for HDR/text-driven use)." : ""
-        ].filter(Boolean).join(" ");
-        if (hintText) {
+        const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
+        if (hintText || preset) {
           const hint = document.createElement("small");
           hint.className = "vst-audio-field-hint";
-          hint.textContent = hintText;
+          hint.textContent = hintText ? `${hintText} ` : "";
+          if (preset) {
+            const link = document.createElement("a");
+            link.href = icLoraRepoUrl(preset);
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "repo";
+            hint.appendChild(link);
+          }
           fields.appendChild(hint);
         }
         ensureIcLoraAutoWeights(entry, defaults.loraValues, render);

@@ -76,7 +76,7 @@ public sealed record UploadedAudioSpec(
 
 /// <summary>
 /// One in-context LoRA on a clip. <c>Lora</c> is the LoRA model name, or "[AUTO]" to resolve the
-/// preset's conventional download path (Constants.IcLoraAutoModelFolder/<c>Preset</c>); <c>Preset</c> is
+/// preset's conventional download path (IcLoraWeights.ModelNameFor(<c>Preset</c>)); <c>Preset</c> is
 /// the frontend catalog id — otherwise editor guidance only; <c>Strength</c> is the LoRA model
 /// strength (loader <c>strength_model</c>); <c>AttentionStrength</c> below 1.0 selects the Advanced guide
 /// node for per-guide self-attention influence; <c>ControlType</c> optionally renders the drive video

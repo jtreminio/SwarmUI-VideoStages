@@ -73,7 +73,9 @@ import {
 import {
     findIcLoraPreset,
     IC_LORA_PRESET_CUSTOM_ID,
+    IC_LORA_PRESET_UNION_CONTROL_ID,
     IC_LORA_PRESETS,
+    icLoraRepoUrl,
     icLoraTriggerHint,
 } from "./icLoraPresets";
 import {
@@ -1949,24 +1951,30 @@ export const createTimelineDetailStrip = (
             });
             fields.appendChild(buildField("Attention", attention));
 
-            const controlSelect = buildOptionSelect(
-                [
-                    { value: "none", label: "None (raw video)" },
-                    { value: "canny", label: "Canny edges" },
-                    { value: "depth", label: "Depth map" },
-                    { value: "normal", label: "Normal map" },
-                ],
-                entry.controlType,
-                (value) => {
-                    commit((clips) => {
-                        const target = entryField(clips, entryIdx);
-                        if (target) {
-                            target.controlType = value as IcLoraControlType;
-                        }
-                    });
-                },
-            );
-            fields.appendChild(buildField("Control", controlSelect));
+            // Control renders the drive video into a signal; only Union Control
+            // (or a custom control LoRA) consumes one, so other curated presets
+            // hide the select (their preset pick already reset it to "none").
+            const preset = findIcLoraPreset(entry.preset);
+            if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
+                const controlSelect = buildOptionSelect(
+                    [
+                        { value: "none", label: "None (raw video)" },
+                        { value: "canny", label: "Canny edges" },
+                        { value: "depth", label: "Depth map" },
+                        { value: "normal", label: "Normal map" },
+                    ],
+                    entry.controlType,
+                    (value) => {
+                        commit((clips) => {
+                            const target = entryField(clips, entryIdx);
+                            if (target) {
+                                target.controlType = value as IcLoraControlType;
+                            }
+                        });
+                    },
+                );
+                fields.appendChild(buildField("Control", controlSelect));
+            }
 
             const applySelect = buildOptionSelect(
                 [
@@ -2068,20 +2076,21 @@ export const createTimelineDetailStrip = (
                 fields.appendChild(slot);
             }
 
-            const preset = findIcLoraPreset(entry.preset);
-            const hintText = [
-                preset?.note ?? "",
-                icLoraTriggerHint(preset),
-                !entry.video && entry.source === IC_LORA_SOURCE_UPLOAD
-                    ? "No drive video: the LoRA still applies to the model (fine for HDR/text-driven use)."
-                    : "",
-            ]
+            const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)]
                 .filter(Boolean)
                 .join(" ");
-            if (hintText) {
+            if (hintText || preset) {
                 const hint = document.createElement("small");
                 hint.className = "vst-audio-field-hint";
-                hint.textContent = hintText;
+                hint.textContent = hintText ? `${hintText} ` : "";
+                if (preset) {
+                    const link = document.createElement("a");
+                    link.href = icLoraRepoUrl(preset);
+                    link.target = "_blank";
+                    link.rel = "noopener";
+                    link.textContent = "repo";
+                    hint.appendChild(link);
+                }
                 fields.appendChild(hint);
             }
 

@@ -5,11 +5,11 @@ import type { IcLoraControlType } from "./types";
 // strength / control-type defaults and surfaces a trigger-phrase hint. Guidance only — presets never
 // touch the prompt or gate behavior (any installed LoRA works via "Custom"), and the preset id rides
 // in the JSON purely so the editor reopens with the same context. The exception is the "[AUTO]"
-// LoRA choice, which downloads `weightsUrl` to `LTX-2/IC-LoRA/<id>.safetensors` and resolves the
-// entry to that model by convention (see icLoraAutoModelName).
+// LoRA choice, which downloads the weights to `LTX-2/IC-LoRA/<original upstream filename>` and
+// resolves the entry to that model by convention (see icLoraAutoModelName).
 
 export interface IcLoraPreset {
-    /** Stable id used as the Preset dropdown value AND the [AUTO] weights file stem — never rename. */
+    /** Stable id used as the Preset dropdown value AND the backend IcLoraWeights key — never rename. */
     id: string;
     displayName: string;
     /** Prompt phrase to prepend by hand; "" when none. */
@@ -25,6 +25,9 @@ export interface IcLoraPreset {
 
 /** Sentinel id for the "Custom" (no preset) choice. */
 export const IC_LORA_PRESET_CUSTOM_ID = "custom";
+
+/** The one curated preset whose LoRA consumes rendered control signals (canny/depth/normal). */
+export const IC_LORA_PRESET_UNION_CONTROL_ID = "union-control";
 
 const HF = "https://huggingface.co";
 
@@ -145,7 +148,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer/resolve/main/LTX-2.3-22b-IC-LoRA-Colorizer-0.9.safetensors`,
-        note: "Community. Colorizes black & white footage; feed the grayscale clip. Confirm trigger in README.",
+        note: "Colorizes black & white footage; feed the grayscale clip. Confirm trigger in README.",
     },
     {
         id: "restyle",
@@ -154,7 +157,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors`,
-        note: "Community. Style transfer over an existing clip; see README for style prompts.",
+        note: "Style transfer over an existing clip; see README for style prompts.",
     },
     {
         id: "cameraman",
@@ -163,7 +166,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors`,
-        note: "Community. Camera-motion control driven by the reference video's movement.",
+        note: "Camera-motion control driven by the reference video's movement.",
     },
     {
         id: "crossview-prompt",
@@ -172,7 +175,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors`,
-        note: "Community. Re-renders the scene from a prompted new camera viewpoint.",
+        note: "Re-renders the scene from a prompted new camera viewpoint.",
     },
     {
         id: "outpaint",
@@ -181,7 +184,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors`,
-        note: "Community. Extends the frame beyond the source video's borders.",
+        note: "Extends the frame beyond the source video's borders.",
     },
     {
         id: "refocus",
@@ -190,7 +193,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors`,
-        note: "Community. Fixes lens blur / refocuses; feed the blurred clip directly.",
+        note: "Fixes lens blur / refocuses; feed the blurred clip directly.",
     },
     {
         id: "vr360-outpaint",
@@ -199,7 +202,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors`,
-        note: "Community. Outpaints to an equirectangular 360° panorama.",
+        note: "Outpaints to an equirectangular 360° panorama.",
     },
 ];
 
@@ -214,10 +217,19 @@ export const findIcLoraPreset = (id: string): IcLoraPreset | null => {
 
 /**
  * The model name an [AUTO] entry resolves to — where the preset's weights land in the LoRA
- * folder. Mirrored by the backend's Constants.IcLoraAutoModelFolder + preset id convention.
+ * folder, keeping the upstream filename. Mirrored by the backend's IcLoraWeights, which
+ * derives the same name from the same URL.
  */
-export const icLoraAutoModelName = (preset: IcLoraPreset): string =>
-    `${IC_LORA_AUTO_FOLDER}/${preset.id}`;
+export const icLoraAutoModelName = (preset: IcLoraPreset): string => {
+    const file = preset.weightsUrl.slice(
+        preset.weightsUrl.lastIndexOf("/") + 1,
+    );
+    return `${IC_LORA_AUTO_FOLDER}/${file.replace(/\.safetensors$/i, "")}`;
+};
+
+/** The Hugging Face repo page a preset's weights come from. */
+export const icLoraRepoUrl = (preset: IcLoraPreset): string =>
+    preset.weightsUrl.split("/resolve/")[0];
 
 export const icLoraTriggerHint = (preset: IcLoraPreset | null): string => {
     if (!preset?.triggerPhrase) {
