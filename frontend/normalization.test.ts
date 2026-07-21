@@ -4,6 +4,7 @@ import {
     buildDefaultClip,
     buildDefaultRef,
     buildDefaultStage,
+    hasSlotSourcedIcLora,
     normalizeAudioSegments,
     normalizeClip,
     normalizeRef,
@@ -250,6 +251,36 @@ describe("normalization", () => {
             data: "data:video/mp4;base64,QUJD",
             fileName: "d.mp4",
         });
+    });
+
+    it("normalizeClip reads the IC-LoRA stage and Stage Input source", () => {
+        const clip = normalizeClip(
+            {
+                icLoras: [
+                    { lora: "a", stage: 1, source: "Stage Input" },
+                    { lora: "b", stage: 2.7 },
+                    { lora: "c", stage: -5 },
+                    { lora: "d", stage: null },
+                ],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.icLoras.map((e) => e.stage)).toEqual([1, 2, -1, -1]);
+        expect(clip.icLoras[0].source).toBe("Stage Input");
+        expect(clip.icLoras[1].source).toBe("Upload");
+        // Stage Input is not a captured "ControlNet N" slot source.
+        expect(hasSlotSourcedIcLora(clip.icLoras)).toBe(false);
+    });
+
+    it("normalizeClip resets a Stage Input source without a refine-stage target", () => {
+        const clip = normalizeClip(
+            { icLoras: [{ lora: "a", source: "Stage Input" }] },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.icLoras[0].source).toBe("Upload");
+        expect(clip.icLoras[0].stage).toBe(-1);
     });
 
     it("normalizeClip prefers the icLoras array over legacy fields", () => {

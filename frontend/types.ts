@@ -118,14 +118,17 @@ export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
  * (per-guide self-attention influence); `controlType` renders the drive video
  * into a control signal before guiding; `video` is the uploaded drive video
  * (data URI + name). An entry with no video still applies the LoRA to the
- * model (loader-only — e.g. HDR). `source` is "Upload" for per-entry uploads;
- * legacy JSON may carry "ControlNet N" captured-branch sources, preserved but
- * not authorable in the UI.
+ * model (loader-only — e.g. HDR). `source` is "Upload" for per-entry uploads
+ * or "Stage Input" for the frames entering the target stage (requires
+ * `stage` >= 1); legacy JSON may carry "ControlNet N" captured-branch sources,
+ * preserved but not authorable in the UI. `stage` restricts the entry to one
+ * stage index (-1 = every stage).
  */
 export interface IcLora {
     lora: string;
     preset: string;
     source: string;
+    stage: number;
     strength: number;
     attentionStrength: number;
     controlType: IcLoraControlType;

@@ -47,7 +47,9 @@ internal class StageRunner(
                 clip,
                 stage.ControlNetStrength,
                 clipContext.Clip.Frames,
-                clip.ClipLengthFromControlNet);
+                clip.ClipLengthFromControlNet,
+                stage.ClipStageRawIndex,
+                ResolveIcLoraStageInput(clip, stageFrame));
             if (needsCrop)
             {
                 stageFrame.NeedsCropGuidesAfterSampler = true;
@@ -311,6 +313,28 @@ internal class StageRunner(
 
         g.CurrentMedia = source;
         return source;
+    }
+
+    /// <summary>
+    /// The drive media for "Stage Input" IC-LoRA entries. Must not read the live post-video
+    /// chain: its decode gets re-pointed to this stage's own sampler output, which would close a
+    /// cycle through the guide (latent upscale stages keep SourceMedia attached to that chain;
+    /// pixel/model upscale stages already detached it in ApplyStageUpscaleIfNeeded).
+    /// </summary>
+    private WGNodeData ResolveIcLoraStageInput(ClipSpec clip, StageFrame stageFrame)
+    {
+        WGNodeData source = stageFrame.SourceMedia;
+        LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
+        bool wantsStageInput = clip.IcLoras is not null && clip.IcLoras.Any(entry =>
+            StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput)
+            && entry.Stage == stageFrame.Stage.ClipStageRawIndex);
+        if (!wantsStageInput
+            || postVideoChain is null
+            || !ReferencesPostVideoChainOutput(source, postVideoChain))
+        {
+            return source;
+        }
+        return postVideoChain.CreateDetachedGuideMedia(g.CurrentVae) ?? source;
     }
 
     private WGNodeData ResolveUpscaleSourceMedia(

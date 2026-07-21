@@ -17,7 +17,9 @@ import {
     IC_LORA_ATTENTION_MIN,
     IC_LORA_ATTENTION_STEP,
     IC_LORA_AUTO,
+    IC_LORA_SOURCE_STAGE_INPUT,
     IC_LORA_SOURCE_UPLOAD,
+    IC_LORA_STAGE_ALL,
     IC_LORA_STRENGTH_MAX,
     IC_LORA_STRENGTH_MIN,
     IC_LORA_STRENGTH_STEP,
@@ -1950,9 +1952,74 @@ export const createTimelineDetailStrip = (
             );
             fields.appendChild(buildField("Control", controlSelect));
 
-            // Legacy slot-sourced entries keep their captured-branch source and
-            // hide the upload row; everything authored here is upload-driven.
-            if (entry.source === IC_LORA_SOURCE_UPLOAD) {
+            const applySelect = buildOptionSelect(
+                [
+                    { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
+                    ...clip.stages.map((_, stageIdx) => ({
+                        value: `${stageIdx}`,
+                        label: `Stage ${stageIdx}`,
+                    })),
+                ],
+                `${entry.stage}`,
+                (value) => {
+                    commit((clips) => {
+                        const target = entryField(clips, entryIdx);
+                        if (!target) {
+                            return;
+                        }
+                        const stage = Number(value);
+                        target.stage =
+                            Number.isInteger(stage) && stage >= 0
+                                ? stage
+                                : IC_LORA_STAGE_ALL;
+                        if (
+                            target.stage < 1 &&
+                            target.source === IC_LORA_SOURCE_STAGE_INPUT
+                        ) {
+                            target.source = IC_LORA_SOURCE_UPLOAD;
+                        }
+                    });
+                    render();
+                },
+            );
+            fields.appendChild(buildField("Apply on", applySelect));
+
+            // "Stage input" (the previous stage's output as drive media) only
+            // exists on refine-stage placements; legacy captured-branch entries
+            // keep their source and get no select.
+            if (
+                entry.stage >= 1 &&
+                (entry.source === IC_LORA_SOURCE_UPLOAD ||
+                    entry.source === IC_LORA_SOURCE_STAGE_INPUT)
+            ) {
+                const sourceSelect = buildOptionSelect(
+                    [
+                        { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
+                        {
+                            value: IC_LORA_SOURCE_STAGE_INPUT,
+                            label: "Stage input",
+                        },
+                    ],
+                    entry.source,
+                    (value) => {
+                        commit((clips) => {
+                            const target = entryField(clips, entryIdx);
+                            if (target) {
+                                target.source = value;
+                            }
+                        });
+                        render();
+                    },
+                );
+                fields.appendChild(buildField("Source", sourceSelect));
+            }
+
+            if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+                const hint = document.createElement("small");
+                hint.className = "vst-audio-field-hint";
+                hint.textContent = `Driven by stage ${entry.stage}'s input (the previous stage's output).`;
+                fields.appendChild(hint);
+            } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
                 fields.appendChild(
                     buildUploadRow(
                         "Drive Media",

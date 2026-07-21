@@ -183,6 +183,8 @@
   var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
   var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
   var IC_LORA_SOURCE_UPLOAD = "Upload";
+  var IC_LORA_SOURCE_STAGE_INPUT = "Stage Input";
+  var IC_LORA_STAGE_ALL = -1;
   var IC_LORA_STRENGTH_MIN = 0;
   var IC_LORA_STRENGTH_MAX = 2;
   var IC_LORA_STRENGTH_STEP = 0.05;
@@ -712,6 +714,7 @@
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
     source: IC_LORA_SOURCE_UPLOAD,
+    stage: IC_LORA_STAGE_ALL,
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
     controlType: "none",
@@ -738,7 +741,17 @@
     if (!compact || compact === "upload") {
       return IC_LORA_SOURCE_UPLOAD;
     }
+    if (compact === "stageinput") {
+      return IC_LORA_SOURCE_STAGE_INPUT;
+    }
     return normalizeControlNetSource(value);
+  };
+  var normalizeIcLoraStage = (value) => {
+    if (value == null || `${value}`.trim() === "") {
+      return IC_LORA_STAGE_ALL;
+    }
+    const stage = Math.trunc(Number(value));
+    return Number.isFinite(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
   };
   var normalizeIcLora = (raw) => {
     if (!isRecord(raw)) {
@@ -749,10 +762,16 @@
       return null;
     }
     const preset = `${readProp(raw, "preset", "Preset") ?? ""}`.trim();
+    const stage = normalizeIcLoraStage(readProp(raw, "stage", "Stage"));
+    let source = normalizeIcLoraSource(readProp(raw, "source", "Source"));
+    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1) {
+      source = IC_LORA_SOURCE_UPLOAD;
+    }
     return {
       lora,
       preset: preset || IC_LORA_PRESET_CUSTOM_ID,
-      source: normalizeIcLoraSource(readProp(raw, "source", "Source")),
+      source,
+      stage,
       strength: snapStrengthToStep(
         readProp(raw, "strength", "Strength"),
         IC_LORA_STRENGTH_DEFAULT,
@@ -796,7 +815,9 @@
       })
     ];
   };
-  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => entry.source !== IC_LORA_SOURCE_UPLOAD);
+  var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
+    (entry) => entry.source !== IC_LORA_SOURCE_UPLOAD && entry.source !== IC_LORA_SOURCE_STAGE_INPUT
+  );
   var normalizeStageRefStrengthValue = (value) => snapStrengthToStep(
     value,
     STAGE_REF_STRENGTH_DEFAULT,
@@ -1770,6 +1791,7 @@
         lora: entry.lora,
         preset: entry.preset,
         source: entry.source,
+        stage: entry.stage,
         strength: entry.strength,
         attentionStrength: entry.attentionStrength,
         controlType: entry.controlType,
@@ -5959,7 +5981,59 @@
           }
         );
         fields.appendChild(buildField("Control", controlSelect));
-        if (entry.source === IC_LORA_SOURCE_UPLOAD) {
+        const applySelect = buildOptionSelect(
+          [
+            { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
+            ...clip.stages.map((_, stageIdx) => ({
+              value: `${stageIdx}`,
+              label: `Stage ${stageIdx}`
+            }))
+          ],
+          `${entry.stage}`,
+          (value) => {
+            commit((clips) => {
+              const target = entryField(clips, entryIdx);
+              if (!target) {
+                return;
+              }
+              const stage = Number(value);
+              target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
+              if (target.stage < 1 && target.source === IC_LORA_SOURCE_STAGE_INPUT) {
+                target.source = IC_LORA_SOURCE_UPLOAD;
+              }
+            });
+            render();
+          }
+        );
+        fields.appendChild(buildField("Apply on", applySelect));
+        if (entry.stage >= 1 && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
+          const sourceSelect = buildOptionSelect(
+            [
+              { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
+              {
+                value: IC_LORA_SOURCE_STAGE_INPUT,
+                label: "Stage input"
+              }
+            ],
+            entry.source,
+            (value) => {
+              commit((clips) => {
+                const target = entryField(clips, entryIdx);
+                if (target) {
+                  target.source = value;
+                }
+              });
+              render();
+            }
+          );
+          fields.appendChild(buildField("Source", sourceSelect));
+        }
+        if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+          const hint = document.createElement("small");
+          hint.className = "vst-audio-field-hint";
+          hint.textContent = `Driven by stage ${entry.stage}'s input (the previous stage's output).`;
+          fields.appendChild(hint);
+        } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
           fields.appendChild(
             buildUploadRow(
               "Drive Media",

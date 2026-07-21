@@ -31,9 +31,11 @@ public static class Constants
     public const string ControlNetSourceTwo = "ControlNet 2";
     public const string ControlNetSourceThree = "ControlNet 3";
 
-    // IC-LoRA drive-video sources: an embedded per-entry upload, or one of the captured core
+    // IC-LoRA drive-video sources: an embedded per-entry upload, the frames entering the entry's
+    // target stage (= previous stage's output; requires Stage >= 1), or one of the captured core
     // "ControlNet N" branches above.
     public const string IcLoraSourceUpload = "Upload";
+    public const string IcLoraSourceStageInput = "Stage Input";
     // IC-LoRA control-signal renderings of the drive video. "none" feeds the raw frames (the common
     // case for v2v effect/restoration LoRAs); the rest target Union-Control-style structural LoRAs.
     public const string IcLoraControlNone = "none";

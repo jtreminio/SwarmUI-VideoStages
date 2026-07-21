@@ -298,6 +298,7 @@ public class VideoStagesSpecParserClipsTests
                 {
                     ["Lora"] = "clip-lora",
                     ["Preset"] = "deblur",
+                    ["Stage"] = 1,
                     ["Source"] = Constants.ControlNetSourceTwo,
                     ["Strength"] = 0.7,
                     ["AttentionStrength"] = 0.4,
@@ -320,6 +321,7 @@ public class VideoStagesSpecParserClipsTests
         IcLoraSpec entry = Assert.Single(clips[0].IcLoras);
         Assert.Equal("clip-lora", entry.Lora);
         Assert.Equal("deblur", entry.Preset);
+        Assert.Equal(1, entry.Stage);
         Assert.Equal(Constants.ControlNetSourceTwo, entry.Source);
         Assert.Equal(0.7, entry.Strength);
         Assert.Equal(0.4, entry.AttentionStrength);

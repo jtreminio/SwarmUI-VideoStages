@@ -164,6 +164,9 @@ internal static class VideoStagesSpecParser
                 {
                     Id = globalStageIndex,
                     ClipStageIndex = clipStageIndex,
+                    // The position in the clip's authored stage list (skipped stages included) —
+                    // the index space the editor uses, e.g. for IcLoraSpec.Stage targeting.
+                    ClipStageRawIndex = stage.Id,
                 });
                 clipStageIndex++;
                 globalStageIndex++;
@@ -990,6 +993,8 @@ internal static class VideoStagesSpecParser
             entries.Add(new IcLoraSpec(
                 Lora: lora,
                 Preset: GetString(entryObj, "Preset")?.Trim(),
+                Stage: Math.Max(-1,
+                    (int)GetOptionalDouble(entryObj, "Stage", -1, "Clip IcLora")),
                 Source: NormalizeIcLoraSource(GetString(entryObj, "Source")),
                 Strength: Math.Clamp(
                     GetOptionalDouble(entryObj, "Strength", 1, "Clip IcLora"), 0, 5),
@@ -1022,6 +1027,10 @@ internal static class VideoStagesSpecParser
         if (compact.Length == 0 || StringUtils.Equals(compact, Constants.IcLoraSourceUpload))
         {
             return Constants.IcLoraSourceUpload;
+        }
+        if (StringUtils.Equals(compact, StringUtils.Compact(Constants.IcLoraSourceStageInput)))
+        {
+            return Constants.IcLoraSourceStageInput;
         }
         return NormalizeControlNetSource(source);
     }

@@ -16,7 +16,9 @@ import {
     IC_LORA_ATTENTION_MAX,
     IC_LORA_ATTENTION_MIN,
     IC_LORA_ATTENTION_STEP,
+    IC_LORA_SOURCE_STAGE_INPUT,
     IC_LORA_SOURCE_UPLOAD,
+    IC_LORA_STAGE_ALL,
     IC_LORA_STRENGTH_DEFAULT,
     IC_LORA_STRENGTH_MAX,
     IC_LORA_STRENGTH_MIN,
@@ -308,6 +310,7 @@ export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
     source: IC_LORA_SOURCE_UPLOAD,
+    stage: IC_LORA_STAGE_ALL,
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
     controlType: "none",
@@ -341,7 +344,18 @@ const normalizeIcLoraSource = (value: unknown): string => {
     if (!compact || compact === "upload") {
         return IC_LORA_SOURCE_UPLOAD;
     }
+    if (compact === "stageinput") {
+        return IC_LORA_SOURCE_STAGE_INPUT;
+    }
     return normalizeControlNetSource(value);
+};
+
+const normalizeIcLoraStage = (value: unknown): number => {
+    if (value == null || `${value}`.trim() === "") {
+        return IC_LORA_STAGE_ALL;
+    }
+    const stage = Math.trunc(Number(value));
+    return Number.isFinite(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
 };
 
 /** Drops entries with no LoRA name; everything else is clamped to valid ranges. */
@@ -354,10 +368,17 @@ export const normalizeIcLora = (raw: unknown): IcLora | null => {
         return null;
     }
     const preset = `${readProp(raw, "preset", "Preset") ?? ""}`.trim();
+    const stage = normalizeIcLoraStage(readProp(raw, "stage", "Stage"));
+    let source = normalizeIcLoraSource(readProp(raw, "source", "Source"));
+    // Stage Input means "this stage's incoming frames" — meaningless without a refine-stage target.
+    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1) {
+        source = IC_LORA_SOURCE_UPLOAD;
+    }
     return {
         lora,
         preset: preset || IC_LORA_PRESET_CUSTOM_ID,
-        source: normalizeIcLoraSource(readProp(raw, "source", "Source")),
+        source,
+        stage,
         strength: snapStrengthToStep(
             readProp(raw, "strength", "Strength"),
             IC_LORA_STRENGTH_DEFAULT,
@@ -413,7 +434,11 @@ export const normalizeIcLoras = (
 
 /** True when any entry is driven by a captured core "ControlNet N" branch. */
 export const hasSlotSourcedIcLora = (icLoras: IcLora[]): boolean =>
-    icLoras.some((entry) => entry.source !== IC_LORA_SOURCE_UPLOAD);
+    icLoras.some(
+        (entry) =>
+            entry.source !== IC_LORA_SOURCE_UPLOAD &&
+            entry.source !== IC_LORA_SOURCE_STAGE_INPUT,
+    );
 
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
     snapStrengthToStep(

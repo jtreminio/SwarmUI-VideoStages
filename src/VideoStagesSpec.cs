@@ -44,6 +44,7 @@ public sealed record StageSpec(
     string Scheduler,
     string ImageReference,
     int ClipStageIndex = 0,
+    int ClipStageRawIndex = 0,
     double? ControlNetStrength = null,
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
@@ -80,8 +81,11 @@ public sealed record UploadedAudioSpec(
 /// strength (loader <c>strength_model</c>); <c>AttentionStrength</c> below 1.0 selects the Advanced guide
 /// node for per-guide self-attention influence; <c>ControlType</c> optionally renders the drive video
 /// into a control signal (canny/depth/normal) before guiding; <c>Source</c> is where the drive video
-/// comes from — "Upload" (embedded <c>Video</c> blob) or a captured core "ControlNet N" branch. An entry
-/// with no drive video still applies the LoRA to the model (loader-only; e.g. HDR, text-driven use).
+/// comes from — "Upload" (embedded <c>Video</c> blob), "Stage Input" (the frames entering the target
+/// stage), or a captured core "ControlNet N" branch. <c>Stage</c> restricts the entry to one stage
+/// (-1 = every stage), indexed by the clip's authored stage list (StageSpec.ClipStageRawIndex).
+/// An entry with no drive video still applies the LoRA to the model (loader-only; e.g. HDR,
+/// text-driven use).
 /// The guide's latent_downscale_factor is wired from the loader's safetensors-metadata output.
 /// </summary>
 public sealed record IcLoraSpec(
@@ -91,7 +95,8 @@ public sealed record IcLoraSpec(
     double AttentionStrength,
     string ControlType,
     UploadedAudioSpec Video,
-    string Preset = null
+    string Preset = null,
+    int Stage = -1
 );
 
 /// <summary>
@@ -140,7 +145,8 @@ public sealed record ClipSpec(
     /// <summary>First IC-LoRA entry driven by a captured core "ControlNet N" branch, or null. That
     /// entry's slot doubles as the clip's audio-capture and clip-length-from-controlnet source.</summary>
     public IcLoraSpec PrimarySlotEntry => IcLoras?.FirstOrDefault(
-        entry => !StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload));
+        entry => !StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload)
+            && !StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput));
 
     public bool HasIcLoras => IcLoras is { Count: > 0 };
 }

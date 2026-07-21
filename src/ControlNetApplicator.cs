@@ -194,19 +194,24 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         && resize.ResizeType.LiteralAsString() == "scale to multiple";
 
     /// <summary>
-    /// Applies every IC-LoRA on the clip to this stage: a loader chain on the model (array order),
-    /// then one guide per entry that has a drive video — uploaded per-entry or a captured core
-    /// "ControlNet N" branch. Entries without a drive video stay loader-only (e.g. HDR, text-driven
-    /// use). Each guide's latent_downscale_factor is wired from its own loader's metadata output, and
-    /// an entry with AttentionStrength below 1 uses the Advanced guide node. Returns true when any
-    /// guide extended the latent (the caller then crops guide frames after the sampler).
+    /// Applies the clip's IC-LoRAs to this stage: a loader chain on the model (array order), then
+    /// one guide per entry that has drive media — uploaded per-entry, the stage's own input frames
+    /// ("Stage Input" = previous stage's output), or a captured core "ControlNet N" branch. An
+    /// entry with Stage >= 0 only applies on that stage index. Entries without drive media stay
+    /// loader-only (e.g. HDR, text-driven use). Non-slot drive media is resized to the stage's
+    /// dimensions before the guide (matching the official IC-LoRA workflows). Each guide's
+    /// latent_downscale_factor is wired from its own loader's metadata output, and an entry with
+    /// AttentionStrength below 1 uses the Advanced guide node. Returns true when any guide
+    /// extended the latent (the caller then crops guide frames after the sampler).
     /// </summary>
     public bool ApplyIcLoras(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         ClipSpec clip,
         double? stageControlNetStrength,
         int? frameCount,
-        bool clipLengthFromControlNet = false)
+        bool clipLengthFromControlNet = false,
+        int stageIndex = 0,
+        WGNodeData stageInput = null)
     {
         if (!clip.HasIcLoras
             || genInfo.Model is null
@@ -218,6 +223,10 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         List<(IcLoraSpec Entry, int EntryIdx, T2IModel Lora)> resolved = [];
         for (int i = 0; i < clip.IcLoras.Count; i++)
         {
+            if (clip.IcLoras[i].Stage >= 0 && clip.IcLoras[i].Stage != stageIndex)
+            {
+                continue;
+            }
             T2IModel lora = ResolveIcLoraEntryModel(clip.IcLoras[i]);
             if (lora is not null)
             {
@@ -260,7 +269,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         for (int i = 0; i < resolved.Count; i++)
         {
             (IcLoraSpec entry, int entryIdx, _) = resolved[i];
-            if (!TryResolveDriveImages(bridge, clip, entry, entryIdx, out JArray driveImages, out string slotSource))
+            if (!TryResolveDriveImages(bridge, clip, entry, entryIdx, stageInput, out JArray driveImages, out string slotSource))
             {
                 continue;
             }
@@ -270,6 +279,10 @@ internal class ControlNetApplicator(WorkflowGenerator g)
                 continue;
             }
             JArray controlImages = ApplyControlSignal(bridge, clip, entry, entryIdx, driveImages);
+            if (slotSource is null)
+            {
+                controlImages = ResizeToStageDims(bridge, controlImages, genInfo);
+            }
             JToken guideFrames = ResolveGuideFrameCount(
                 genInfo,
                 frameCount,
@@ -297,6 +310,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         ClipSpec clip,
         IcLoraSpec entry,
         int entryIdx,
+        WGNodeData stageInput,
         out JArray images,
         out string slotSource)
     {
@@ -311,6 +325,25 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             images = GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, entry.Video);
             return images is not null;
         }
+        if (StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput))
+        {
+            if (entry.Stage < 1)
+            {
+                throw new SwarmUserErrorException(
+                    "An IC-LoRA uses the Stage Input drive source but is not applied to a refine "
+                    + "stage. Set 'Apply on' to Stage 1 or later, or switch the source to Upload.");
+            }
+            if (stageInput is null
+                || (stageInput.DataType != WGNodeData.DT_IMAGE
+                    && stageInput.DataType != WGNodeData.DT_VIDEO))
+            {
+                throw new SwarmUserErrorException(
+                    $"IC-LoRA Stage Input is not available on stage {entry.Stage}: the stage has "
+                    + "no image-stream input. Use an uploaded drive video instead.");
+            }
+            images = new JArray(stageInput.Path[0], stageInput.Path[1]);
+            return true;
+        }
         if (!TryParseControlNetSourceIndex(entry.Source, out int index)
             || !TryGetCapturedCoreControlImage(index, out WGNodeData controlImage))
         {
@@ -319,6 +352,28 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         slotSource = entry.Source;
         images = new JArray(controlImage.Path[0], controlImage.Path[1]);
         return true;
+    }
+
+    // The official IC-LoRA workflows resize the drive to the generation dimensions before the
+    // guide, per stage (each stage of a multi-stage flow re-adds the guide at its own size).
+    private JArray ResizeToStageDims(
+        WorkflowBridge bridge,
+        JArray images,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        if (genInfo?.Width is null || genInfo.Height is null)
+        {
+            return images;
+        }
+        ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode()).With(
+            ResizeType: "scale dimensions",
+            ScaleMethod: "lanczos");
+        resize.Input.TryConnectFromPath(bridge, images);
+        resize.ExtraInputs["resize_type.width"] = genInfo.Width.DeepClone();
+        resize.ExtraInputs["resize_type.height"] = genInfo.Height.DeepClone();
+        resize.ExtraInputs["resize_type.crop"] = "center";
+        bridge.SyncNode(resize);
+        return WorkflowBridge.ToPath(resize.Resized);
     }
 
     // The load + component split for an uploaded drive video (or a still image — e.g. an

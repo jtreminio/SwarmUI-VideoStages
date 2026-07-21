@@ -78,6 +78,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
                 lora: entry.lora,
                 preset: entry.preset,
                 source: entry.source,
+                stage: entry.stage,
                 strength: entry.strength,
                 attentionStrength: entry.attentionStrength,
                 controlType: entry.controlType,

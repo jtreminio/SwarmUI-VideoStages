@@ -409,6 +409,7 @@ describe("createTimelineDetailStrip", () => {
             lora: "lora-x.safetensors",
             preset: "custom",
             source: "Upload",
+            stage: -1,
             strength: 1,
             attentionStrength: 1,
             controlType: "none",
@@ -463,16 +464,93 @@ describe("createTimelineDetailStrip", () => {
         expect(clips[0].icLoras[0].strength).toBe(1);
     });
 
-    // The per-entry selects render in a fixed order: Preset, LoRA, Control.
-    const icLoraSelect = (which: "preset" | "lora"): HTMLSelectElement => {
+    // The per-entry selects render in a fixed order: Preset, LoRA, Control,
+    // Apply on, then Source (refine-stage placements only).
+    const IC_LORA_SELECTS = ["preset", "lora", "control", "apply", "source"];
+    type IcLoraSelectName = "preset" | "lora" | "apply" | "source";
+    const icLoraSelect = (which: IcLoraSelectName): HTMLSelectElement => {
         const row = document.querySelector<HTMLElement>(".vst-detail-iclora");
         const select =
-            row?.querySelectorAll("select")[which === "preset" ? 0 : 1];
+            row?.querySelectorAll("select")[IC_LORA_SELECTS.indexOf(which)];
         if (!select) {
             throw new Error(`IC-LoRA ${which} select missing`);
         }
         return select as HTMLSelectElement;
     };
+
+    const changeIcLoraSelect = (
+        which: IcLoraSelectName,
+        value: string,
+    ): void => {
+        const select = icLoraSelect(which);
+        select.value = value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    it("Apply on lists every stage plus All stages", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const options = Array.from(icLoraSelect("apply").options).map((o) => [
+            o.value,
+            o.textContent,
+        ]);
+        expect(options).toEqual([
+            ["-1", "All stages"],
+            ["0", "Stage 0"],
+            ["1", "Stage 1"],
+        ]);
+        // Source select only exists on refine-stage placements.
+        expect(
+            document.querySelectorAll(".vst-detail-iclora select"),
+        ).toHaveLength(4);
+    });
+
+    it("refine-stage placement offers Stage input and swaps the upload row for a hint", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        changeIcLoraSelect("apply", "1");
+        expect(savedClips(saveSpy)[0].icLoras[0].stage).toBe(1);
+
+        changeIcLoraSelect("source", "Stage Input");
+        const entry = savedClips(saveSpy)[0].icLoras[0];
+        expect(entry.source).toBe("Stage Input");
+        expect(controlNetLabels()).not.toContain("Drive Media");
+        expect(detail()?.textContent).toContain("Driven by stage 1's input");
+    });
+
+    it("moving a Stage input entry off refine stages resets its source to Upload", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 1,
+                        source: "Stage Input",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        changeIcLoraSelect("apply", "-1");
+        const entry = savedClips(saveSpy)[0].icLoras[0];
+        expect(entry.stage).toBe(-1);
+        expect(entry.source).toBe("Upload");
+        expect(controlNetLabels()).toContain("Drive Media");
+    });
 
     it("leads the IC-LoRA LoRA dropdown with [AUTO]", () => {
         setup([

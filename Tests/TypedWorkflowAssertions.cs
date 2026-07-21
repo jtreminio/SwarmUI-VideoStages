@@ -9,6 +9,36 @@ public readonly record struct WorkflowNode(string Id, JObject Node);
 
 internal static class TypedWorkflowAssertions
 {
+    /// <summary>Fails when the graph has a dependency cycle (Comfy refuses to run such a workflow).</summary>
+    public static void AssertAcyclic(WorkflowBridge bridge)
+    {
+        Dictionary<string, int> state = [];
+        void Visit(ComfyNode node)
+        {
+            if (state.TryGetValue(node.Id, out int seen))
+            {
+                if (seen == 1)
+                {
+                    Assert.Fail($"Workflow contains a cycle through node {node.Id} ({node.ClassTypeName}).");
+                }
+                return;
+            }
+            state[node.Id] = 1;
+            foreach (INodeInput input in node.Inputs)
+            {
+                if (input.Connection?.Node is ComfyNode upstream)
+                {
+                    Visit(upstream);
+                }
+            }
+            state[node.Id] = 2;
+        }
+        foreach (ComfyNode node in bridge.Graph.Nodes.Values)
+        {
+            Visit(node);
+        }
+    }
+
     public static List<SwarmKSamplerNode> SamplerNodesOrdered(WorkflowBridge bridge)
     {
         return bridge.Graph.NodesOfType<SwarmKSamplerNode>()
