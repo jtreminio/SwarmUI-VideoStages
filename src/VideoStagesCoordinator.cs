@@ -67,6 +67,7 @@ internal sealed class VideoStagesCoordinator(
             clipAudioMaps.UploadedAudios,
             rootStageHandoff);
         EnsureFinalStageOutputSaved();
+        new ControlNetApplicator(g).ApplyHdrPostprocessToFinalSaves(clips);
     }
 
     private bool TryInstallRefineSourceVideo(IReadOnlyList<ClipSpec> clips)

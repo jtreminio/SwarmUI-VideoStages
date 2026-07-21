@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
@@ -19,7 +20,10 @@ internal class ControlNetApplicator(WorkflowGenerator g)
     private const string CapturedControlNetFrameCountKeyPrefix = "videostages.controlnet.framecount.";
     private const string CapturedControlNetAudioKeyPrefix = "videostages.controlnet.audio.";
     private const string UploadedDriveImagesKeyPrefix = "videostages.iclora.upload.";
+    private const string UploadedDriveAudioKeyPrefix = "videostages.iclora.uploadaudio.";
     private const string ControlSignalKeyPrefix = "videostages.iclora.control.";
+    private const string VoiceRefSampleKeyPrefix = "videostages.voiceref.sample.";
+    internal const string VoiceRefStageAudioKeyPrefix = "videostages.voiceref.stageaudio.";
 
     private static readonly (string ApplyClass, string LoaderInputName)[] KnownControlNetApplyNodes =
     [
@@ -288,10 +292,194 @@ internal class ControlNetApplicator(WorkflowGenerator g)
                 frameCount,
                 slotSource,
                 clipLengthFromControlNet && slotSource is not null);
-            ApplyLtxIcloraGuide(bridge, genInfo, entry, loaders[i], controlImages, strength, guideFrames);
+            bool stillImageDrive = slotSource is null
+                && StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload)
+                && entry.Video?.Data is string uploadData
+                && IsImageDataUri(uploadData);
+            ApplyLtxIcloraGuide(
+                bridge, genInfo, entry, loaders[i], controlImages, strength, guideFrames, stillImageDrive);
             anyGuide = true;
         }
         return anyGuide;
+    }
+
+    /// <summary>
+    /// Splices the HDR LogC3 postprocess (pure math, no aux weights) between the decoded frames
+    /// and every animation save when any clip has an active HDR IC-LoRA — without it the saved
+    /// video is flat log-encoded footage. The tonemapped SDR output feeds the save; EXR export
+    /// stays off (Swarm's save path has no 16-bit format). Spec-wide: mixing HDR and non-HDR
+    /// clips in one run is inherently inconsistent, so every save gets the same treatment.
+    /// </summary>
+    public void ApplyHdrPostprocessToFinalSaves(IReadOnlyList<ClipSpec> clips)
+    {
+        if (clips is null || !clips.Any(HasActiveHdrIcLora))
+        {
+            return;
+        }
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
+        {
+            if (save.Images.Connection is not INodeOutput imagesSource
+                || imagesSource.Node is LTXVHDRDecodePostprocessNode)
+            {
+                continue;
+            }
+            LTXVHDRDecodePostprocessNode post = bridge.AddNode(new LTXVHDRDecodePostprocessNode());
+            post.Image.ConnectToUntyped(imagesSource);
+            save.Images.ConnectTo(post.Tonemapped);
+            bridge.SyncNode(post);
+            bridge.SyncNode(save);
+        }
+    }
+
+    private static bool HasActiveHdrIcLora(ClipSpec clip) => clip.IcLoras?.Any(entry =>
+        StringUtils.Equals(entry.Preset?.Trim(), "hdr")
+        || (entry.Lora?.Contains("ic-lora-hdr", StringComparison.OrdinalIgnoreCase) ?? false)) == true;
+
+    /// <summary>
+    /// The largest known reference-downscale factor among the clip's IC-LoRA entries applicable to
+    /// <paramref name="stageIndex"/>. The guide node hard-errors unless the video latent's spatial
+    /// dims are divisible by this factor — i.e. pixel dims must be multiples of 32×factor (the
+    /// official workflows snap dims via a math node wired from the loader's metadata output). The
+    /// true value lives in safetensors metadata only readable graph-side, so this is a static
+    /// preset-id/filename-convention lookup; unrecognized custom LoRAs return 1.
+    /// </summary>
+    internal static int MaxKnownIcLoraDownscaleFactor(ClipSpec clip, int stageIndex)
+    {
+        int max = 1;
+        foreach (IcLoraSpec entry in clip?.IcLoras ?? [])
+        {
+            if (entry.Stage < 0 || entry.Stage == stageIndex)
+            {
+                max = Math.Max(max, KnownIcLoraDownscaleFactor(entry));
+            }
+        }
+        return max;
+    }
+
+    private static int KnownIcLoraDownscaleFactor(IcLoraSpec entry)
+    {
+        string name = $"{entry.Preset} {entry.Lora}".ToLowerInvariant();
+        if (name.Contains("upscaler-x4"))
+        {
+            return 4;
+        }
+        if (name.Contains("ref0.5")
+            || name.Contains("union-control")
+            || name.Contains("motion-track")
+            || name.Contains("upscaler-x2"))
+        {
+            return 2;
+        }
+        return 1;
+    }
+
+    /// <summary>
+    /// Wraps this stage's conditioning in an LTXVSetAudioRefTokens node for voice-reference clips:
+    /// the sample provides speaker identity as context tokens, and the model GENERATES the speech
+    /// matching the prompt — so the clip's audio is never injected as a locked sampling track
+    /// (ClipAudioWorkflowHelper resolves a voice-ref source to null). The sample is the flagged
+    /// entry's drive-video audio, else the clip's "Voice Reference" upload. Refine stages prefer the
+    /// previous stage's generated audio latent (stashed by CropGuidesAfterSampler), matching the
+    /// official LipDub two-stage graph. No-op off LTX-2 or when no sample resolves.
+    /// </summary>
+    public void ApplyVoiceRefTokens(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        ClipSpec clip,
+        StageFrame stageFrame,
+        bool isGeneratingStage)
+    {
+        if (!clip.UsesVoiceRefAudio
+            || genInfo?.Model is null
+            || genInfo.VideoModel?.ModelClass?.CompatClass?.ID != T2IModelClassSorter.CompatLtxv2.ID
+            || genInfo.PosCond is null
+            || genInfo.NegCond is null)
+        {
+            return;
+        }
+
+        JArray audioLatentPath = ResolveVoiceRefAudioLatent(clip, isGeneratingStage);
+        if (audioLatentPath is null)
+        {
+            return;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        stageFrame.VoiceRefPreWrapPosCond = genInfo.PosCond;
+        stageFrame.VoiceRefPreWrapNegCond = genInfo.NegCond;
+        LTXVSetAudioRefTokensNode refTokens = bridge.AddNode(new LTXVSetAudioRefTokensNode());
+        refTokens.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
+        refTokens.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
+        refTokens.AudioLatent.TryConnectFromPath(bridge, audioLatentPath);
+        bridge.SyncNode(refTokens);
+        genInfo.PosCond = WorkflowBridge.ToPath(refTokens.Positive);
+        genInfo.NegCond = WorkflowBridge.ToPath(refTokens.Negative);
+        stageFrame.VoiceRefActive = true;
+    }
+
+    // The encoded sample latent is built once per clip and reused by every stage's wrap.
+    private JArray ResolveVoiceRefAudioLatent(ClipSpec clip, bool isGeneratingStage)
+    {
+        if (!isGeneratingStage
+            && TryGetCachedPath(g, null, $"{VoiceRefStageAudioKeyPrefix}{clip.Id}", out JArray staged))
+        {
+            return staged;
+        }
+        string sampleKey = $"{VoiceRefSampleKeyPrefix}{clip.Id}";
+        if (TryGetCachedPath(g, null, sampleKey, out JArray cached))
+        {
+            return cached;
+        }
+        if (g.CurrentAudioVae is null)
+        {
+            Logs.Warning("VideoStages: voice-reference audio needs an audio VAE; skipping ref tokens.");
+            return null;
+        }
+        JArray samplePath;
+        using (WorkflowBridge bridge = BridgeSync.For(g))
+        {
+            samplePath = ResolveVoiceRefSampleAudio(bridge, clip);
+        }
+        if (samplePath is null)
+        {
+            return null;
+        }
+        // Encoded outside any bridge scope (EncodeToLatent writes to the workflow directly).
+        WGNodeData sample = new(samplePath, g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
+        JArray encoded = sample.EncodeToLatent(g.CurrentAudioVae).Path;
+        CachePath(g, sampleKey, encoded);
+        return encoded;
+    }
+
+    private JArray ResolveVoiceRefSampleAudio(WorkflowBridge bridge, ClipSpec clip)
+    {
+        if (clip.VoiceRefDriveEntry is IcLoraSpec driveEntry)
+        {
+            if (IsImageDataUri(driveEntry.Video.Data))
+            {
+                throw new SwarmUserErrorException(
+                    "An IC-LoRA drive image has no audio to use as a voice reference. Upload a "
+                    + "drive video with sound, or set the clip's Audio source to Voice Reference.");
+            }
+            int entryIdx = 0;
+            while (entryIdx < clip.IcLoras.Count && !ReferenceEquals(clip.IcLoras[entryIdx], driveEntry))
+            {
+                entryIdx++;
+            }
+            _ = GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, driveEntry.Video);
+            return TryGetCachedPath(
+                g, bridge, $"{UploadedDriveAudioKeyPrefix}{clip.Id}.{entryIdx}", out JArray driveAudio)
+                ? driveAudio
+                : null;
+        }
+        AudioFile uploaded = VideoStagesSpecParser.MaterializeUploadedAudioForClip(g, clip);
+        if (uploaded is null)
+        {
+            Logs.Warning(
+                "VideoStages: clip audio is 'Voice Reference' but no audio file was uploaded.");
+            return null;
+        }
+        return new JArray(g.CreateAudioLoadNode(uploaded, "${vsvoiceref}"), 0);
     }
 
     private double ResolveSlotGuideStrength(string slotSource)
@@ -407,6 +595,10 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             bridge.SyncNode(load);
             bridge.SyncNode(components);
             path = WorkflowBridge.ToPath(components.Images);
+            CachePath(
+                g,
+                $"{UploadedDriveAudioKeyPrefix}{clipId}.{entryIdx}",
+                WorkflowBridge.ToPath(components.Audio));
         }
         CachePath(g, key, path);
         return path;
@@ -563,9 +755,11 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         LTXICLoRALoaderModelOnlyNode loader,
         JArray controlImages,
         double strength,
-        JToken frameCount)
+        JToken frameCount,
+        bool stillImageDrive = false)
     {
-        JArray guideImagePath = ControlImageForLtxIcloraGuide(bridge, controlImages, frameCount);
+        JArray guideImagePath = ControlImageForLtxIcloraGuide(
+            bridge, controlImages, frameCount, stillImageDrive);
 
         ComfyNode guideNode;
         NodeInput<VaeType> vae;
@@ -675,11 +869,26 @@ internal class ControlNetApplicator(WorkflowGenerator g)
     private JArray ControlImageForLtxIcloraGuide(
         WorkflowBridge bridge,
         JArray controlImagePath,
-        JToken frames)
+        JToken frames,
+        bool stillImageDrive = false)
     {
         if (frames is null)
         {
             return new JArray(controlImagePath[0], controlImagePath[1]);
+        }
+
+        // A still image (e.g. an Ingredients reference sheet) is REPEATED to the clip's frame
+        // count — the official Ingredients workflow tiles the sheet across the full video length
+        // so the reference occupies every temporal position. The ImageFromBatch trim below would
+        // clamp a 1-frame batch to a single guide frame instead.
+        if (stillImageDrive)
+        {
+            RepeatImageBatchNode repeat = bridge.AddNode(new RepeatImageBatchNode());
+            repeat.Image.TryConnectFromPath(
+                bridge, new JArray(controlImagePath[0], controlImagePath[1]));
+            repeat.Amount.SetFromToken(bridge, frames.DeepClone());
+            bridge.SyncNode(repeat);
+            return WorkflowBridge.ToPath(repeat.IMAGE);
         }
 
         JArray guideSource = PeelSingleFrameWrap(bridge, controlImagePath);

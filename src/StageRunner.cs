@@ -42,7 +42,8 @@ internal class StageRunner(
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
-            bool needsCrop = new ControlNetApplicator(g).ApplyIcLoras(
+            ControlNetApplicator applicator = new(g);
+            bool needsCrop = applicator.ApplyIcLoras(
                 currentGenInfo,
                 clip,
                 stage.ControlNetStrength,
@@ -54,6 +55,11 @@ internal class StageRunner(
             {
                 stageFrame.NeedsCropGuidesAfterSampler = true;
             }
+            applicator.ApplyVoiceRefTokens(
+                currentGenInfo,
+                clip,
+                stageFrame,
+                clipContext.IsFirstStage(stage));
         });
 
         if (ltxManager.TryRunLocalStage(
@@ -167,6 +173,12 @@ internal class StageRunner(
 
         (string positivePrompt, string negativePrompt) = BuildClipPrompts(clip, stage);
 
+        (int stageWidth, int stageHeight) = SnapDimsForIcLoraFactor(
+            clip,
+            stage,
+            sourceMedia.Width ?? dimensions.Width,
+            sourceMedia.Height ?? dimensions.Height);
+
         WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
         {
             Generator = g,
@@ -176,8 +188,8 @@ internal class StageRunner(
             Frames = ResolveFrames(sourceMedia, sectionId, replaceTextToVideoRootStage),
             VideoCFG = stage.CfgScale,
             VideoFPS = spec.FPS,
-            Width = sourceMedia.Width ?? dimensions.Width,
-            Height = sourceMedia.Height ?? dimensions.Height,
+            Width = stageWidth,
+            Height = stageHeight,
             Prompt = positivePrompt,
             NegativePrompt = negativePrompt,
             Steps = stage.Steps,
@@ -188,6 +200,30 @@ internal class StageRunner(
             VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
         };
         return genInfo;
+    }
+
+    // IC-LoRAs with a reference-downscale factor (ref0.5 / spatial upscalers) hard-error in the
+    // guide node unless pixel dims are multiples of 32×factor; the official workflows snap dims
+    // the same way (a `factor*32` math node feeding "scale to multiple").
+    private static (int Width, int Height) SnapDimsForIcLoraFactor(
+        ClipSpec clip,
+        StageSpec stage,
+        int width,
+        int height)
+    {
+        int multiple = 32 * ControlNetApplicator.MaxKnownIcLoraDownscaleFactor(
+            clip, stage.ClipStageRawIndex);
+        if (multiple <= 32 || (width % multiple == 0 && height % multiple == 0))
+        {
+            return (width, height);
+        }
+        int snappedWidth = Math.Max(multiple, width / multiple * multiple);
+        int snappedHeight = Math.Max(multiple, height / multiple * multiple);
+        Logs.Info(
+            $"VideoStages: stage {stage.Id} dims {width}x{height} snapped to "
+            + $"{snappedWidth}x{snappedHeight} — the active IC-LoRA's reference downscale factor "
+            + $"requires multiples of {multiple}.");
+        return (snappedWidth, snappedHeight);
     }
 
     private int? ResolveFrames(WGNodeData sourceMedia, int sectionId, bool replaceTextToVideoRootStage = false)
@@ -269,6 +305,8 @@ internal class StageRunner(
         int targetHeight = Math.Max(16, (int)Math.Round(height * stage.Upscale));
         targetWidth = (targetWidth / 16) * 16;
         targetHeight = (targetHeight / 16) * 16;
+        (targetWidth, targetHeight) = SnapDimsForIcLoraFactor(
+            clipContext.Clip, stage, targetWidth, targetHeight);
 
         T2IModel stageVideoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId);
         bool isLtxv2Stage = VideoStageModelCompat.IsLtxV2VideoModel(stageVideoModel);

@@ -600,12 +600,22 @@ describe("renderTimeline (DOM)", () => {
             ...makeClip(2, 1, 0),
             audioSource: "audio1",
         } as unknown as Clip;
-        renderTimeline(body, [makeClip(2, 1, 0), withAudio, withAce]);
+        const withVoiceRef = {
+            ...makeClip(2, 1, 0),
+            audioSource: "Voice Reference",
+        } as unknown as Clip;
+        renderTimeline(body, [
+            makeClip(2, 1, 0),
+            withAudio,
+            withAce,
+            withVoiceRef,
+        ]);
         const segments = body
             .querySelector(".vst-track-audio")
             ?.querySelectorAll(".vst-audio-clip");
-        expect(segments).toHaveLength(3);
-        // Clip 0 Native, clip 1 Upload, clip 2 AceStepFun — distinct tints.
+        expect(segments).toHaveLength(4);
+        // Clip 0 Native, clip 1 Upload, clip 2 AceStepFun, clip 3 Voice
+        // Reference — distinct tints.
         expect(segments?.[0].classList.contains("vst-audio-kind-native")).toBe(
             true,
         );
@@ -617,6 +627,12 @@ describe("renderTimeline (DOM)", () => {
         );
         expect(segments?.[2].classList.contains("vst-audio-kind-ace")).toBe(
             true,
+        );
+        expect(
+            segments?.[3].classList.contains("vst-audio-kind-voiceref"),
+        ).toBe(true);
+        expect(segments?.[3].classList.contains("vst-audio-kind-upload")).toBe(
+            false,
         );
         expect(
             uploadSeg?.querySelectorAll(".vst-audio-wave span").length,

@@ -39,4 +39,15 @@ internal sealed class StageFrame
     public bool ParallelMultiClip { get; }
 
     public bool NeedsCropGuidesAfterSampler { get; set; }
+
+    /// <summary>Set when this stage's conditioning was wrapped in an LTXVSetAudioRefTokens node
+    /// (voice-reference clip). Drives the frozen-audio carry in CropGuidesAfterSampler.</summary>
+    public bool VoiceRefActive { get; set; }
+
+    /// <summary>The conditioning paths as they were BEFORE the voice-ref wrap. LTXVCropGuides
+    /// branches from these (matching the official LipDub graph, where the ref-token wrap feeds only
+    /// the sampler's guider and never flows into the crop).</summary>
+    public JArray VoiceRefPreWrapPosCond { get; set; }
+
+    public JArray VoiceRefPreWrapNegCond { get; set; }
 }

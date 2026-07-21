@@ -614,6 +614,131 @@ public sealed class LtxIcLoraTests
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count());
     }
 
+    [Fact]
+    public void Still_image_drive_is_repeated_to_the_clip_frame_count()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(
+            MakeIcLora("UnitTest_IcLoraA", videoData: "data:image/png;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        // The official Ingredients workflow tiles a still reference across the full video length;
+        // an ImageFromBatch trim would clamp the 1-frame batch to a single guide frame.
+        RepeatImageBatchNode repeat =
+            Assert.Single(bridge.Graph.NodesOfType<RepeatImageBatchNode>());
+        LTXAddVideoICLoRAGuideNode guide =
+            Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.True(GuideImageTracesTo(bridge, guide, repeat));
+    }
+
+    [Fact]
+    public void Hdr_entry_splices_the_logc3_postprocess_before_the_save()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraHdr");
+
+        JObject entry = MakeIcLora("UnitTest_IcLoraHdr");
+        entry["Preset"] = "hdr";
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        Assert.NotEmpty(bridge.Graph.NodesOfType<LTXVHDRDecodePostprocessNode>());
+        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
+        {
+            Assert.IsType<LTXVHDRDecodePostprocessNode>(save.Images.Connection?.Node);
+        }
+    }
+
+    [Theory]
+    [InlineData("union-control", "some-lora", 2)]
+    [InlineData("custom", "ltx-2.3-22b-ic-lora-motion-track-control-ref0.5", 2)]
+    [InlineData("pixel-spatial-upscaler-x4", "[AUTO]", 4)]
+    [InlineData("pixel-spatial-upscaler-x2", "[AUTO]", 2)]
+    [InlineData("deblur", "ltx-2.3-22b-ic-lora-deblur-0.9", 1)]
+    public void Known_downscale_factor_derives_from_preset_or_filename(
+        string preset,
+        string lora,
+        int expected)
+    {
+        ClipSpec clip = new(
+            Id: 0,
+            Frames: null,
+            AudioSource: null,
+            IcLoras: [new IcLoraSpec(lora, Constants.IcLoraSourceUpload, 1, 1,
+                Constants.IcLoraControlNone, null, Preset: preset)],
+            SaveAudioTrack: false,
+            ClipLengthFromAudio: false,
+            ClipLengthFromControlNet: false,
+            ReuseAudio: false,
+            UploadedAudio: null,
+            ImageRefs: [],
+            Stages: []);
+        Assert.Equal(expected, ControlNetApplicator.MaxKnownIcLoraDownscaleFactor(clip, 0));
+    }
+
+    [Fact]
+    public void Drive_audio_voice_ref_wraps_conditioning_after_the_guide()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject entry = MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD");
+        entry["DriveAudioRef"] = true;
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        List<LTXVSetAudioRefTokensNode> refTokens =
+            [.. bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>()];
+        Assert.NotEmpty(refTokens);
+        // The generating stage's wrap sits after the IC-LoRA guide (official LipDub order) and its
+        // sample latent traces back to the uploaded drive video's audio split.
+        LTXVSetAudioRefTokensNode stageWrap = Assert.Single(
+            refTokens,
+            node => node.PositiveInput.Connection?.Node is LTXAddVideoICLoRAGuideNode);
+        ComfyNode audioStart = stageWrap.AudioLatent.Connection?.Node;
+        Assert.NotNull(audioStart);
+        Assert.True(
+            audioStart is GetVideoComponentsNode
+            || bridge.Graph.FindNearestUpstream<GetVideoComponentsNode>(audioStart) is not null);
+    }
+
+    [Fact]
+    public void Clip_voice_ref_upload_wraps_conditioning_without_ic_loras()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["AudioSource"] = Constants.AudioSourceVoiceRef;
+        clip["UploadedAudio"] = new JObject
+        {
+            ["Data"] = "data:audio/wav;base64,QUFB",
+            ["FileName"] = "voice.wav",
+        };
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LTXVSetAudioRefTokensNode refTokens =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        Assert.NotNull(refTokens.PositiveInput.Connection);
+        Assert.NotNull(refTokens.AudioLatent.Connection);
+    }
+
     private static bool GuideImageTracesTo(WorkflowBridge bridge, ComfyNode guide, ComfyNode wanted)
     {
         ComfyNode start = guide.FindInput("image")?.Connection?.Node;

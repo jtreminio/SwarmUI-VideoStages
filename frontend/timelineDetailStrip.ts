@@ -1,5 +1,6 @@
 import {
     AUDIO_SOURCE_UPLOAD,
+    AUDIO_SOURCE_VOICE_REF,
     buildAudioSourceOptions,
     buildSegmentAudioSourceOptions,
     canUseClipLengthFromAudio,
@@ -2069,6 +2070,25 @@ export const createTimelineDetailStrip = (
                         },
                     ),
                 );
+                if (entry.video?.data?.startsWith("data:video/")) {
+                    const voiceRow = buildCheckbox(
+                        "Voice ref from drive audio",
+                        entry.driveAudioRef === true,
+                        (value) => {
+                            commit((clips) => {
+                                const target = entryField(clips, entryIdx);
+                                if (target) {
+                                    target.driveAudioRef = value;
+                                }
+                            });
+                        },
+                    );
+                    voiceRow.title =
+                        "Use this video's audio as the speaker sample " +
+                        "(LipDub): new speech matching the prompt is " +
+                        "generated in that voice.";
+                    fields.appendChild(voiceRow);
+                }
             } else {
                 const slot = document.createElement("small");
                 slot.className = "vst-audio-field-hint";
@@ -2355,7 +2375,8 @@ export const createTimelineDetailStrip = (
                     isAceStepFunAudioSource(nextSource) &&
                     target.saveAudioTrack;
                 target.uploadedAudio =
-                    nextSource === AUDIO_SOURCE_UPLOAD
+                    nextSource === AUDIO_SOURCE_UPLOAD ||
+                    nextSource === AUDIO_SOURCE_VOICE_REF
                         ? target.uploadedAudio
                         : null;
             });
@@ -2408,10 +2429,15 @@ export const createTimelineDetailStrip = (
         );
         body.appendChild(saveRow);
 
-        if (source === AUDIO_SOURCE_UPLOAD) {
+        if (
+            source === AUDIO_SOURCE_UPLOAD ||
+            source === AUDIO_SOURCE_VOICE_REF
+        ) {
             body.appendChild(
                 buildUploadRow(
-                    "Audio Upload",
+                    source === AUDIO_SOURCE_VOICE_REF
+                        ? "Voice Sample"
+                        : "Audio Upload",
                     "audio/*",
                     clip.uploadedAudio?.fileName,
                     (data, fileName) => {
@@ -2428,6 +2454,14 @@ export const createTimelineDetailStrip = (
                     },
                 ),
             );
+        }
+        if (source === AUDIO_SOURCE_VOICE_REF) {
+            const hint = document.createElement("small");
+            hint.className = "vst-audio-field-hint";
+            hint.textContent =
+                "Speaker sample only — new speech is generated to match the " +
+                "prompt in this voice. Put the spoken words in the clip prompt.";
+            body.appendChild(hint);
         }
 
         const segCount = clip.audioSegments?.length ?? 0;

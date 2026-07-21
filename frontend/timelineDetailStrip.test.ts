@@ -413,6 +413,7 @@ describe("createTimelineDetailStrip", () => {
             attentionStrength: 1,
             controlType: "none",
             video: null,
+            driveAudioRef: false,
         });
         // The rebuilt panel shows the entry editor with a drive-video upload.
         expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();

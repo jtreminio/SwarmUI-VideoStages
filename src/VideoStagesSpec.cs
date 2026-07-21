@@ -87,6 +87,8 @@ public sealed record UploadedAudioSpec(
 /// An entry with no drive video still applies the LoRA to the model (loader-only; e.g. HDR,
 /// text-driven use).
 /// The guide's latent_downscale_factor is wired from the loader's safetensors-metadata output.
+/// <c>DriveAudioRef</c> uses the uploaded drive video's own audio track as the clip's
+/// voice-reference sample (LTXVSetAudioRefTokens) — the official LipDub one-file flow.
 /// </summary>
 public sealed record IcLoraSpec(
     string Lora,
@@ -96,7 +98,8 @@ public sealed record IcLoraSpec(
     string ControlType,
     UploadedAudioSpec Video,
     string Preset = null,
-    int Stage = -1
+    int Stage = -1,
+    bool DriveAudioRef = false
 );
 
 /// <summary>
@@ -149,6 +152,19 @@ public sealed record ClipSpec(
             && !StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput));
 
     public bool HasIcLoras => IcLoras is { Count: > 0 };
+
+    /// <summary>First IC-LoRA entry whose uploaded drive video doubles as the clip's
+    /// voice-reference sample, or null. Takes precedence over a clip-level
+    /// "Voice Reference" audio upload (the official LipDub one-file flow).</summary>
+    public IcLoraSpec VoiceRefDriveEntry => IcLoras?.FirstOrDefault(
+        entry => entry.DriveAudioRef
+            && StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload)
+            && !string.IsNullOrWhiteSpace(entry.Video?.Data));
+
+    /// <summary>True when this clip conditions audio generation on a voice-reference sample
+    /// (per-entry drive audio or clip-level "Voice Reference" upload) instead of locking a track.</summary>
+    public bool UsesVoiceRefAudio => VoiceRefDriveEntry is not null
+        || StringUtils.Equals(AudioSource, Constants.AudioSourceVoiceRef);
 }
 
 public sealed record VideoStagesSpec(

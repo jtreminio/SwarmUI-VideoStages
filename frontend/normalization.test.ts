@@ -232,6 +232,7 @@ describe("normalization", () => {
                             data: "data:video/mp4;base64,QUJD",
                             fileName: "d.mp4",
                         },
+                        DriveAudioRef: true,
                     },
                     { lora: "" },
                 ],
@@ -251,6 +252,7 @@ describe("normalization", () => {
             data: "data:video/mp4;base64,QUJD",
             fileName: "d.mp4",
         });
+        expect(entry.driveAudioRef).toBe(true);
     });
 
     it("normalizeClip reads the IC-LoRA stage and Stage Input source", () => {

@@ -39,7 +39,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "depth",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
-        note: "Structural control from depth/canny/normal signals; pick the control type to render.",
+        note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64.",
     },
     {
         id: "motion-track-control",
@@ -48,7 +48,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
-        note: "Guide motion with sparse point trajectories; feed a pre-rendered track video.",
+        note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64.",
     },
     {
         id: "in-outpainting",
@@ -57,7 +57,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors`,
-        note: "Fill or extend a masked clip; feed the masked video directly.",
+        note: "Feed a pre-masked clip: masked region must be hard #66FF00 green, slightly dilated, losslessly encoded. Kept regions are still re-generated, not composited back.",
     },
     {
         id: "ingredients",
@@ -66,7 +66,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors`,
-        note: "Consistent characters/props from a reference sheet; feed the sheet as the drive video.",
+        note: "Feed the reference sheet as drive media (a still image works). Prompt pattern: '### Reference Sheet Description' per cell, then '### Target Description'.",
     },
     {
         id: "lipdub",
@@ -75,7 +75,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
-        note: "New lip movements matching target audio; pair with this clip's audio track.",
+        note: "Generates new speech + lips from the prompt's words. Upload the source video as drive media and enable 'Voice ref from drive audio' (or set the clip's Audio to Voice Reference).",
     },
     {
         id: "hdr",
@@ -85,7 +85,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         controlType: "none",
         // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
-        note: "16-bit HDR (LogC3) generation; works with no drive video (LoRA-only).",
+        note: "HDR generation; feed the SDR clip as the drive video. Output is auto-tonemapped to SDR (LogC3 decompressed). Suggested prompt: 'HDR footage'.",
     },
     {
         id: "pixel-spatial-upscaler-x2",
@@ -94,7 +94,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
-        note: "Creative 2× upscale; feed the low-res clip directly.",
+        note: "Apply on a refine stage with Upscale ×2 and source Stage Input. Dims snap to multiples of 64.",
     },
     {
         id: "pixel-spatial-upscaler-x4",
@@ -103,7 +103,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
-        note: "Creative 4× upscale; feed the low-res clip directly.",
+        note: "Apply on a refine stage with Upscale ×4 and source Stage Input. Dims snap to multiples of 128.",
     },
     {
         id: "deblur",
@@ -142,13 +142,31 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear.",
     },
     {
-        id: "colorizer",
-        displayName: "Colorizer",
+        id: "colorization",
+        displayName: "Colorization",
         triggerPhrase: "COLORIZE",
         strength: 1,
         controlType: "none",
-        weightsUrl: `${HF}/DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer/resolve/main/LTX-2.3-22b-IC-LoRA-Colorizer-0.9.safetensors`,
-        note: "Colorizes black & white footage; feed the grayscale clip. Confirm trigger in README.",
+        weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors`,
+        note: "Feed the grayscale clip; describe the restored colors after the COLORIZE trigger.",
+    },
+    {
+        id: "cross-eyed",
+        displayName: "Cross-Eyed",
+        triggerPhrase: "",
+        strength: 1,
+        controlType: "none",
+        weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors`,
+        note: "Turns straight eyes inward (convergent strabismus) in close-up portrait clips; describe the effect in the prompt.",
+    },
+    {
+        id: "day-to-night",
+        displayName: "Day to Night",
+        triggerPhrase: "",
+        strength: 1,
+        controlType: "none",
+        weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors`,
+        note: "Relights a daytime clip to night. Prompt the night look and add 'Only the lighting changes from day to night'. Best at ~4s clips.",
     },
     {
         id: "restyle",

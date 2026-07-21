@@ -27,6 +27,9 @@ public static class Constants
     public const string AudioSourceNative = "Native";
     public const string AudioSourceUpload = "Upload";
     public const string AudioSourceControlNet = "ControlNet";
+    // The uploaded audio is a speaker-identity sample (LTXVSetAudioRefTokens), not a locked track:
+    // the model generates new speech matching the prompt in that voice. LTX-2 only.
+    public const string AudioSourceVoiceRef = "Voice Reference";
     public const string ControlNetSourceOne = "ControlNet 1";
     public const string ControlNetSourceTwo = "ControlNet 2";
     public const string ControlNetSourceThree = "ControlNet 3";

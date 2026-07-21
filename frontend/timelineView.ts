@@ -1,4 +1,4 @@
-import { isAceStepFunAudioSource } from "./audioSource";
+import { AUDIO_SOURCE_VOICE_REF, isAceStepFunAudioSource } from "./audioSource";
 import { clipHueCss } from "./clipColor";
 import { clamp, mediaPreviewSrc } from "./constants";
 import { matchPresetKey } from "./dimensionPresets";
@@ -646,9 +646,13 @@ export const renderAudioTrackRow = (
                 ? " vst-audio-native vst-audio-kind-native"
                 : isAceStepFunAudioSource(clip.audioSource ?? "")
                   ? " vst-audio-kind-ace"
-                  : " vst-audio-kind-upload";
+                  : clip.audioSource === AUDIO_SOURCE_VOICE_REF
+                    ? " vst-audio-kind-voiceref"
+                    : " vst-audio-kind-upload";
             const upload =
-                !native && clip.audioSource === "Upload"
+                !native &&
+                (clip.audioSource === "Upload" ||
+                    clip.audioSource === AUDIO_SOURCE_VOICE_REF)
                     ? clip.uploadedAudio?.fileName
                     : null;
             const labelText = upload

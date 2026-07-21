@@ -47,6 +47,12 @@ internal static class ClipAudioWorkflowHelper
                 throw new SwarmReadableErrorException($"Unhandled ClipAudioSourceNormalization value: {normalization}");
         }
 
+        // A voice-reference sample conditions generation (LTXVSetAudioRefTokens); it is never a
+        // lockable sampling track, so it resolves to nothing here — audio is model-generated.
+        if (IsVoiceRefAudioSource(source))
+        {
+            return null;
+        }
         if (!IsExternalClipAudioSource(source))
         {
             return suppressNativeFallback ? null : nativeFallback;
@@ -70,6 +76,14 @@ internal static class ClipAudioWorkflowHelper
         string trimmed = audioSource?.Trim();
         return string.Equals(trimmed, Constants.AudioSourceUpload, StringComparison.OrdinalIgnoreCase)
             || AudioHandler.TryParseAceStepFunAudioSource(trimmed, out _);
+    }
+
+    internal static bool IsVoiceRefAudioSource(string audioSource)
+    {
+        return string.Equals(
+            audioSource?.Trim(),
+            Constants.AudioSourceVoiceRef,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     internal static bool IsControlNetAudioSource(string audioSource)

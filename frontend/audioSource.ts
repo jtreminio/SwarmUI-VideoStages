@@ -15,6 +15,12 @@ export interface AudioSourceContext {
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
 export const AUDIO_SOURCE_CONTROLNET = "ControlNet";
+/**
+ * The uploaded audio is a speaker-identity sample (LTXVSetAudioRefTokens), not
+ * a locked track: the model generates new speech matching the prompt in that
+ * voice. LTX-2 only.
+ */
+export const AUDIO_SOURCE_VOICE_REF = "Voice Reference";
 
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
@@ -109,6 +115,7 @@ export const buildAudioSourceOptions = (
     const options: AudioSourceOption[] = [
         { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
         { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
+        { value: AUDIO_SOURCE_VOICE_REF, label: AUDIO_SOURCE_VOICE_REF },
     ];
     appendAceStepFunRefs(options);
     if (context.controlNetEnabled) {

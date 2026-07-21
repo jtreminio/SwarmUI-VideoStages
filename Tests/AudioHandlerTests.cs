@@ -102,11 +102,11 @@ public class AudioHandlerTests
             VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(0));
 
             SaveAudioMP3Node mp3 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-            mp3.Audio.ConnectTo(decode.AUDIO);
+            mp3.AudioInput.ConnectTo(decode.AUDIO);
             bridge.AddNode(mp3, "64170");
 
             SaveAudioNode wav = new();
-            wav.Audio.ConnectTo(decode.AUDIO);
+            wav.AudioInput.ConnectTo(decode.AUDIO);
             bridge.AddNode(wav, "64171");
 
             SaveAudioMP3Node unrelated = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
@@ -132,7 +132,7 @@ public class AudioHandlerTests
             VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(0));
 
             SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-            save1.Audio.ConnectTo(decode.AUDIO);
+            save1.AudioInput.ConnectTo(decode.AUDIO);
             bridge.AddNode(save1, "64170");
         }
 
@@ -153,11 +153,11 @@ public class AudioHandlerTests
             VAEDecodeAudioNode decode1 = bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(1));
 
             SaveAudioMP3Node save0 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-            save0.Audio.ConnectTo(decode0.AUDIO);
+            save0.AudioInput.ConnectTo(decode0.AUDIO);
             bridge.AddNode(save0, "64170");
 
             SaveAudioMP3Node save1 = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_2_");
-            save1.Audio.ConnectTo(decode1.AUDIO);
+            save1.AudioInput.ConnectTo(decode1.AUDIO);
             bridge.AddNode(save1, "64270");
         }
 
@@ -180,7 +180,7 @@ public class AudioHandlerTests
         {
             VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(0));
             SaveAudioMP3Node save = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
-            save.Audio.ConnectTo(decode.AUDIO);
+            save.AudioInput.ConnectTo(decode.AUDIO);
             bridge.AddNode(save, "64170");
         }
 

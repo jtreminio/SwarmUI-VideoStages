@@ -315,6 +315,7 @@ export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
     controlType: "none",
     video: null,
+    driveAudioRef: false,
     ...overrides,
 });
 
@@ -408,6 +409,7 @@ export const normalizeIcLora = (
             readProp(raw, "controlType", "ControlType"),
         ),
         video: normalizeUploadedAudio(readProp(raw, "video", "Video")),
+        driveAudioRef: readProp(raw, "driveAudioRef", "DriveAudioRef") === true,
     };
 };
 

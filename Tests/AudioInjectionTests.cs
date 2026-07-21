@@ -191,7 +191,7 @@ public class AudioInjectionTests
             UnknownNode audioSource = buildBridge.AddStub("UnitTest_AudioSource", "300").WithOutputs(WGNodeData.DT_AUDIO);
 
             SaveAudioMP3Node save = new();
-            save.Audio.ConnectToUntyped(audioSource.GetOutput(0));
+            save.AudioInput.ConnectToUntyped(audioSource.GetOutput(0));
             buildBridge.AddNode(save, "301");
 
             UnknownNode latentAudit = buildBridge.AddStub("UnitTest_LatentAudit", "400");

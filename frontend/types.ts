@@ -133,6 +133,12 @@ export interface IcLora {
     attentionStrength: number;
     controlType: IcLoraControlType;
     video: UploadedAudio | null;
+    /**
+     * Use the uploaded drive video's own audio as the clip's voice-reference
+     * sample (LTXVSetAudioRefTokens) — the official LipDub one-file flow. The
+     * model then GENERATES new speech matching the prompt in that voice.
+     */
+    driveAudioRef: boolean;
 }
 
 export interface Clip {

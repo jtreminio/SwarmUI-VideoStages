@@ -1013,7 +1013,8 @@ internal static class VideoStagesSpecParser
                 AttentionStrength: Math.Clamp(
                     GetOptionalDouble(entryObj, "AttentionStrength", 1, "Clip IcLora"), 0, 1),
                 ControlType: NormalizeIcLoraControlType(GetString(entryObj, "ControlType")),
-                Video: GetEmbeddedUploadSpec(entryObj, "Video")));
+                Video: GetEmbeddedUploadSpec(entryObj, "Video"),
+                DriveAudioRef: GetOptionalBool(entryObj, "DriveAudioRef", false)));
         }
         if (entries.Count == 0)
         {

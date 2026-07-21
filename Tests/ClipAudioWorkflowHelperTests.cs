@@ -113,6 +113,37 @@ public class ClipAudioWorkflowHelperTests
     }
 
     [Fact]
+    public void IsVoiceRefAudioSource_matches_only_canonical_value()
+    {
+        Assert.True(ClipAudioWorkflowHelper.IsVoiceRefAudioSource(Constants.AudioSourceVoiceRef));
+        Assert.True(ClipAudioWorkflowHelper.IsVoiceRefAudioSource("  voice reference  "));
+        Assert.False(ClipAudioWorkflowHelper.IsVoiceRefAudioSource(Constants.AudioSourceUpload));
+        Assert.False(ClipAudioWorkflowHelper.IsVoiceRefAudioSource(null));
+    }
+
+    [Fact]
+    public void Resolve_voice_ref_never_yields_injectable_audio()
+    {
+        // A voice-reference sample conditions generation via ref tokens; it must never resolve to
+        // a lockable sampling track — not even the native fallback.
+        Dictionary<int, WGNodeData> uploaded = new()
+        {
+            [7] = UploadMark
+        };
+        foreach (ClipAudioWorkflowHelper.ClipAudioSourceNormalization normalization in
+            Enum.GetValues<ClipAudioWorkflowHelper.ClipAudioSourceNormalization>())
+        {
+            WGNodeData r = Resolve(
+                7,
+                Constants.AudioSourceVoiceRef,
+                suppressNativeFallback: false,
+                normalization,
+                uploaded);
+            Assert.Null(r);
+        }
+    }
+
+    [Fact]
     public void IsExternalClipAudioSource_includes_upload_acestepfun_and_controlnet()
     {
         Assert.True(ClipAudioWorkflowHelper.IsExternalClipAudioSource(Constants.AudioSourceUpload));

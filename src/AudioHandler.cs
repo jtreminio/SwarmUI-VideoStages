@@ -81,14 +81,14 @@ public sealed class AudioHandler(WorkflowGenerator g)
         List<ComfyNode> toRemove = [];
         foreach (SaveAudioMP3Node save in bridge.Graph.NodesOfType<SaveAudioMP3Node>())
         {
-            if (save.Audio.Connection?.Node?.Id == decode.Id)
+            if (save.AudioInput.Connection?.Node?.Id == decode.Id)
             {
                 toRemove.Add(save);
             }
         }
         foreach (SaveAudioNode save in bridge.Graph.NodesOfType<SaveAudioNode>())
         {
-            if (save.Audio.Connection?.Node?.Id == decode.Id)
+            if (save.AudioInput.Connection?.Node?.Id == decode.Id)
             {
                 toRemove.Add(save);
             }
