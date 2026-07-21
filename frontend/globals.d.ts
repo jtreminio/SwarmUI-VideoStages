@@ -139,3 +139,16 @@ declare class MovableGenTab {
     navElem: HTMLElement;
     update(): void;
 }
+
+/** Core websocket API caller (site.js); used for DoModelDownloadWS streaming downloads. */
+declare function makeWSRequest(
+    url: string,
+    in_data: Record<string, unknown>,
+    callback: (data: Record<string, unknown>) => void,
+    depth?: number,
+    errorHandle?: ((error: string) => void) | null,
+    onOpenHandle?: ((socket: WebSocket) => void) | null,
+): void;
+
+/** Core param refresh (genpage); re-lists models server-side and rebuilds param dropdowns. */
+declare function refreshParameterValues(callAlways?: boolean): void;

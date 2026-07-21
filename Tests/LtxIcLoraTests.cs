@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -77,6 +78,62 @@ public sealed class LtxIcLoraTests
             input,
             BuildCoreVideoWorkflowSteps());
         return (workflow, WorkflowBridge.Create(workflow));
+    }
+
+    [Fact]
+    public void Auto_ic_lora_resolves_the_presets_downloaded_weights()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("LTX-2/IC-LoRA/deblur");
+
+        JObject entry = MakeIcLora(
+            Constants.IcLoraAutoModel, videoData: "data:video/mp4;base64,QUJD");
+        entry["Preset"] = "deblur";
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LTXICLoRALoaderModelOnlyNode loader =
+            Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Equal("LTX-2/IC-LoRA/deblur.safetensors", loader.LoraName.LiteralAsString());
+        Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+    }
+
+    [Fact]
+    public void Auto_ic_lora_without_preset_is_a_user_error()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(MakeIcLora(Constants.IcLoraAutoModel));
+
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel, models.VideoModel, new JArray(clip).ToString());
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps()));
+        Assert.Contains("no preset", ex.Message);
+    }
+
+    [Fact]
+    public void Auto_ic_lora_with_uninstalled_weights_is_a_user_error()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject entry = MakeIcLora(Constants.IcLoraAutoModel);
+        entry["Preset"] = "unit-test-never-downloaded";
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel, models.VideoModel, new JArray(clip).ToString());
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps()));
+        Assert.Contains("LTX-2/IC-LoRA/unit-test-never-downloaded", ex.Message);
     }
 
     [Fact]

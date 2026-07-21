@@ -297,6 +297,7 @@ public class VideoStagesSpecParserClipsTests
                 icLoras: new JArray(new JObject
                 {
                     ["Lora"] = "clip-lora",
+                    ["Preset"] = "deblur",
                     ["Source"] = Constants.ControlNetSourceTwo,
                     ["Strength"] = 0.7,
                     ["AttentionStrength"] = 0.4,
@@ -318,6 +319,7 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(0, clips[0].Id);
         IcLoraSpec entry = Assert.Single(clips[0].IcLoras);
         Assert.Equal("clip-lora", entry.Lora);
+        Assert.Equal("deblur", entry.Preset);
         Assert.Equal(Constants.ControlNetSourceTwo, entry.Source);
         Assert.Equal(0.7, entry.Strength);
         Assert.Equal(0.4, entry.AttentionStrength);

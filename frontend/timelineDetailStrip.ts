@@ -16,6 +16,7 @@ import {
     IC_LORA_ATTENTION_MAX,
     IC_LORA_ATTENTION_MIN,
     IC_LORA_ATTENTION_STEP,
+    IC_LORA_AUTO,
     IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STRENGTH_MAX,
     IC_LORA_STRENGTH_MIN,
@@ -61,6 +62,12 @@ import {
     presetBadgeElements,
     presetDimensions,
 } from "./dimensionPresets";
+import {
+    clearIcLoraAutoFailure,
+    ensureIcLoraAutoWeights,
+    IC_LORA_AUTO_HINT_ATTR,
+    icLoraAutoHint,
+} from "./icLoraAutoDownload";
 import {
     findIcLoraPreset,
     IC_LORA_PRESET_CUSTOM_ID,
@@ -1817,14 +1824,6 @@ export const createTimelineDetailStrip = (
         col.className = "vst-detail-col vst-detail-iclora-col";
         wrap.appendChild(col);
 
-        if (defaults.loraValues.length === 0) {
-            const empty = document.createElement("small");
-            empty.className = "vst-audio-field-hint";
-            empty.textContent = "(no LoRAs available)";
-            col.appendChild(empty);
-            return wrap;
-        }
-
         const entryField = (
             clips: Clip[],
             entryIdx: number,
@@ -1873,14 +1872,16 @@ export const createTimelineDetailStrip = (
                             target.controlType = preset.controlType;
                         }
                     });
+                    // A rejected [AUTO] download retries when its preset is re-picked.
+                    clearIcLoraAutoFailure(value);
                     render();
                 },
             );
             fields.appendChild(buildField("Preset", presetSelect));
 
             const loraSelect = buildSelect(
-                defaults.loraValues,
-                defaults.loraLabels,
+                [IC_LORA_AUTO, ...defaults.loraValues],
+                [IC_LORA_AUTO, ...defaults.loraLabels],
                 entry.lora,
                 (value) => {
                     commit((clips) => {
@@ -1889,6 +1890,10 @@ export const createTimelineDetailStrip = (
                             target.lora = value;
                         }
                     });
+                    if (value === IC_LORA_AUTO) {
+                        clearIcLoraAutoFailure(entry.preset);
+                    }
+                    render();
                 },
             );
             fields.appendChild(buildField("LoRA", loraSelect));
@@ -1997,6 +2002,20 @@ export const createTimelineDetailStrip = (
                 fields.appendChild(hint);
             }
 
+            // [AUTO] fulfillment: start the preset-weights download when needed and surface its
+            // state on a tagged line the downloader repaints in place as progress streams in.
+            ensureIcLoraAutoWeights(entry, defaults.loraValues, render);
+            const autoText = icLoraAutoHint(entry, defaults.loraValues);
+            if (autoText) {
+                const autoHint = document.createElement("small");
+                autoHint.className = "vst-audio-field-hint";
+                if (preset) {
+                    autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
+                }
+                autoHint.textContent = autoText;
+                fields.appendChild(autoHint);
+            }
+
             col.appendChild(row);
         });
 
@@ -2013,7 +2032,9 @@ export const createTimelineDetailStrip = (
                     return null;
                 }
                 target.icLoras.push(
-                    defaultIcLora({ lora: defaults.loraValues[0] ?? "" }),
+                    defaultIcLora({
+                        lora: defaults.loraValues[0] ?? IC_LORA_AUTO,
+                    }),
                 );
                 return "render";
             });

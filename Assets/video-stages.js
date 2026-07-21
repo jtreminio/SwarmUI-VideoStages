@@ -191,6 +191,8 @@
   var IC_LORA_ATTENTION_MAX = 1;
   var IC_LORA_ATTENTION_STEP = 0.05;
   var IC_LORA_ATTENTION_DEFAULT = 1;
+  var IC_LORA_AUTO = "[AUTO]";
+  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
   var parseBase2EditStageIndex = (value) => {
     const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
     if (!match) {
@@ -306,167 +308,178 @@
 
   // frontend/icLoraPresets.ts
   var IC_LORA_PRESET_CUSTOM_ID = "custom";
+  var HF = "https://huggingface.co";
   var IC_LORA_PRESETS = [
     {
       id: "union-control",
       displayName: "Union Control",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control
       triggerPhrase: "",
       strength: 1,
       controlType: "depth",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
       note: "Structural control from depth/canny/normal signals; pick the control type to render."
     },
     {
       id: "motion-track-control",
       displayName: "Motion Track Control",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
       note: "Guide motion with sparse point trajectories; feed a pre-rendered track video."
     },
     {
       id: "in-outpainting",
       displayName: "In/Outpainting",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors`,
       note: "Fill or extend a masked clip; feed the masked video directly."
     },
     {
       id: "ingredients",
       displayName: "Ingredients",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors`,
       note: "Consistent characters/props from a reference sheet; feed the sheet as the drive video."
     },
     {
       id: "lipdub",
       displayName: "LipDub",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-LipDub
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
       note: "New lip movements matching target audio; pair with this clip's audio track."
     },
     {
       id: "hdr",
       displayName: "HDR",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-HDR
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
       note: "16-bit HDR (LogC3) generation; works with no drive video (LoRA-only)."
     },
     {
-      id: "pixel-spatial-upscaler",
-      displayName: "Pixel Spatial Upscaler",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler
+      id: "pixel-spatial-upscaler-x2",
+      displayName: "Pixel Spatial Upscaler ×2",
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
-      note: "Creative 2×/4× upscale; feed the low-res clip directly."
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
+      note: "Creative 2× upscale; feed the low-res clip directly."
+    },
+    {
+      id: "pixel-spatial-upscaler-x4",
+      displayName: "Pixel Spatial Upscaler ×4",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
+      note: "Creative 4× upscale; feed the low-res clip directly."
     },
     {
       id: "deblur",
       displayName: "Deblur",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Deblur
       triggerPhrase: "DEBLUR",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`,
       note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
     },
     {
       id: "decompression",
       displayName: "Decompression",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Decompression
       triggerPhrase: "ENHANCE QUALITY",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors`,
       note: "Removes compression artifacts; feed a low-bitrate clip directly."
     },
     {
       id: "water-simulation",
       displayName: "Water Simulation",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation
       triggerPhrase: "ADD WATER",
       strength: 1.2,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors`,
       note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
     },
     {
       id: "instant-shave",
       displayName: "Instant Shave",
-      // weights: Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave
       triggerPhrase: "REMOVEBEARD",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors`,
       note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
     },
     {
       id: "colorizer",
       displayName: "Colorizer",
-      // weights: DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer
       triggerPhrase: "COLORIZE",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/DoctorDiffusion/LTX-2.3-IC-LoRA-Colorizer/resolve/main/LTX-2.3-22b-IC-LoRA-Colorizer-0.9.safetensors`,
       note: "Community. Colorizes black & white footage; feed the grayscale clip. Confirm trigger in README."
     },
     {
       id: "restyle",
       displayName: "ReStyle",
-      // weights: Cseti/LTX2.3-22B_ReStyle_IC-LoRA
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors`,
       note: "Community. Style transfer over an existing clip; see README for style prompts."
     },
     {
       id: "cameraman",
       displayName: "Cameraman",
-      // weights: Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors`,
       note: "Community. Camera-motion control driven by the reference video's movement."
     },
     {
       id: "crossview-prompt",
       displayName: "CrossView Prompt",
-      // weights: Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors`,
       note: "Community. Re-renders the scene from a prompted new camera viewpoint."
     },
     {
       id: "outpaint",
       displayName: "Outpaint",
-      // weights: oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors`,
       note: "Community. Extends the frame beyond the source video's borders."
     },
     {
       id: "refocus",
       displayName: "ReFocus",
-      // weights: oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors`,
       note: "Community. Fixes lens blur / refocuses; feed the blurred clip directly."
     },
     {
       id: "vr360-outpaint",
       displayName: "VR 360 Outpaint",
-      // weights: TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
+      weightsUrl: `${HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors`,
       note: "Community. Outpaints to an equirectangular 360° panorama."
     }
   ];
@@ -477,6 +490,7 @@
     }
     return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
   };
+  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${preset.id}`;
   var icLoraTriggerHint = (preset) => {
     if (!preset?.triggerPhrase) {
       return "";
@@ -4271,6 +4285,101 @@
     return sec;
   };
 
+  // frontend/icLoraAutoDownload.ts
+  var IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
+  var statuses = /* @__PURE__ */ new Map();
+  var clearIcLoraAutoFailure = (presetId) => {
+    if (statuses.get(`${presetId ?? ""}`.trim())?.state === "error") {
+      statuses.delete(`${presetId ?? ""}`.trim());
+    }
+  };
+  var hasAutoWeights = (preset, installedLoras) => {
+    const wanted = icLoraAutoModelName(preset).toLowerCase();
+    return installedLoras.some((name) => `${name}`.toLowerCase() === wanted);
+  };
+  var statusTextFor = (preset, status) => {
+    switch (status.state) {
+      case "downloading":
+        return `Downloading ${preset.displayName} weights… ${Math.round(status.percent * 100)}%`;
+      case "done":
+        return `Downloaded to ${icLoraAutoModelName(preset)}.`;
+      case "error":
+        return `Download failed: ${status.message} Reselect the preset to retry.`;
+    }
+  };
+  var setStatus = (preset, status) => {
+    statuses.set(preset.id, status);
+    const text = statusTextFor(preset, status);
+    document.querySelectorAll(`[${IC_LORA_AUTO_HINT_ATTR}="${preset.id}"]`).forEach((el) => {
+      el.textContent = text;
+    });
+  };
+  var finish = (preset, onSettled) => {
+    setStatus(preset, { state: "done" });
+    if (typeof refreshParameterValues === "function") {
+      refreshParameterValues(true);
+    }
+    onSettled();
+  };
+  var ensureIcLoraAutoWeights = (entry, installedLoras, onSettled) => {
+    if (entry.lora !== IC_LORA_AUTO) {
+      return;
+    }
+    const preset = findIcLoraPreset(entry.preset);
+    if (!preset || hasAutoWeights(preset, installedLoras) || statuses.has(preset.id)) {
+      return;
+    }
+    if (typeof makeWSRequest !== "function") {
+      statuses.set(preset.id, {
+        state: "error",
+        message: "Model downloader is unavailable."
+      });
+      return;
+    }
+    statuses.set(preset.id, { state: "downloading", percent: 0 });
+    makeWSRequest(
+      "DoModelDownloadWS",
+      {
+        url: preset.weightsUrl,
+        type: "LoRA",
+        name: icLoraAutoModelName(preset)
+      },
+      (data) => {
+        if (typeof data?.overall_percent === "number") {
+          setStatus(preset, {
+            state: "downloading",
+            percent: data.overall_percent
+          });
+        } else if (data?.success) {
+          finish(preset, onSettled);
+        }
+      },
+      0,
+      (error) => {
+        if (`${error}` === "Model at that save path already exists.") {
+          finish(preset, onSettled);
+          return;
+        }
+        setStatus(preset, { state: "error", message: `${error}` });
+        onSettled();
+      }
+    );
+  };
+  var icLoraAutoHint = (entry, installedLoras) => {
+    if (entry.lora !== IC_LORA_AUTO) {
+      return "";
+    }
+    const preset = findIcLoraPreset(entry.preset);
+    if (!preset) {
+      return "[AUTO] needs a preset — pick one to download its weights.";
+    }
+    if (hasAutoWeights(preset, installedLoras)) {
+      return `Using ${icLoraAutoModelName(preset)}.`;
+    }
+    const status = statuses.get(preset.id);
+    return status ? statusTextFor(preset, status) : "Preparing preset weights download…";
+  };
+
   // frontend/imageSource.ts
   var buildImageSourceOptions = (currentValue = "") => {
     const options = [
@@ -5735,13 +5844,6 @@
       const col = document.createElement("div");
       col.className = "vst-detail-col vst-detail-iclora-col";
       wrap.appendChild(col);
-      if (defaults.loraValues.length === 0) {
-        const empty = document.createElement("small");
-        empty.className = "vst-audio-field-hint";
-        empty.textContent = "(no LoRAs available)";
-        col.appendChild(empty);
-        return wrap;
-      }
       const entryField = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
       clip.icLoras.forEach((entry, entryIdx) => {
         const { row, fields } = buildInstanceRow({
@@ -5786,13 +5888,14 @@
                 target.controlType = preset2.controlType;
               }
             });
+            clearIcLoraAutoFailure(value);
             render();
           }
         );
         fields.appendChild(buildField("Preset", presetSelect));
         const loraSelect = buildSelect(
-          defaults.loraValues,
-          defaults.loraLabels,
+          [IC_LORA_AUTO, ...defaults.loraValues],
+          [IC_LORA_AUTO, ...defaults.loraLabels],
           entry.lora,
           (value) => {
             commit((clips) => {
@@ -5801,6 +5904,10 @@
                 target.lora = value;
               }
             });
+            if (value === IC_LORA_AUTO) {
+              clearIcLoraAutoFailure(entry.preset);
+            }
+            render();
           }
         );
         fields.appendChild(buildField("LoRA", loraSelect));
@@ -5896,6 +6003,17 @@
           hint.textContent = hintText;
           fields.appendChild(hint);
         }
+        ensureIcLoraAutoWeights(entry, defaults.loraValues, render);
+        const autoText = icLoraAutoHint(entry, defaults.loraValues);
+        if (autoText) {
+          const autoHint = document.createElement("small");
+          autoHint.className = "vst-audio-field-hint";
+          if (preset) {
+            autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
+          }
+          autoHint.textContent = autoText;
+          fields.appendChild(autoHint);
+        }
         col.appendChild(row);
       });
       const addBtn = document.createElement("button");
@@ -5910,7 +6028,9 @@
             return null;
           }
           target.icLoras.push(
-            defaultIcLora({ lora: defaults.loraValues[0] ?? "" })
+            defaultIcLora({
+              lora: defaults.loraValues[0] ?? IC_LORA_AUTO
+            })
           );
           return "render";
         });

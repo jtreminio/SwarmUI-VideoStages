@@ -218,7 +218,7 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         List<(IcLoraSpec Entry, int EntryIdx, T2IModel Lora)> resolved = [];
         for (int i = 0; i < clip.IcLoras.Count; i++)
         {
-            T2IModel lora = ResolveLoraModel(clip.IcLoras[i].Lora);
+            T2IModel lora = ResolveIcLoraEntryModel(clip.IcLoras[i]);
             if (lora is not null)
             {
                 resolved.Add((clip.IcLoras[i], i, lora));
@@ -570,6 +570,33 @@ internal class ControlNetApplicator(WorkflowGenerator g)
             latentOut,
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);
+    }
+
+    /// <summary>
+    /// Resolves an entry's LoRA model, expanding the "[AUTO]" sentinel to the preset's
+    /// conventional download path (LTX-2/IC-LoRA/&lt;preset id&gt;, where the frontend's [AUTO]
+    /// downloader puts the weights). [AUTO] failures throw user errors instead of the plain
+    /// resolver's log-and-skip: a silent skip would look like the preset just didn't work.
+    /// </summary>
+    private static T2IModel ResolveIcLoraEntryModel(IcLoraSpec entry)
+    {
+        if (!StringUtils.Equals(entry.Lora?.Trim(), Constants.IcLoraAutoModel))
+        {
+            return ResolveLoraModel(entry.Lora);
+        }
+        string preset = entry.Preset?.Trim();
+        if (string.IsNullOrWhiteSpace(preset) || StringUtils.Equals(preset, "custom"))
+        {
+            throw new SwarmUserErrorException(
+                "An IC-LoRA is set to [AUTO] but has no preset selected. "
+                + "Pick a preset (which names the weights to download) or choose a specific LoRA.");
+        }
+        string autoName = $"{Constants.IcLoraAutoModelFolder}/{preset}";
+        return ResolveLoraModel(autoName)
+            ?? throw new SwarmUserErrorException(
+                $"IC-LoRA [AUTO] weights '{autoName}' are not installed. The automatic download "
+                + "may still be running — wait for it to finish in the timeline editor, or select "
+                + "the LoRA manually.");
     }
 
     internal static T2IModel ResolveLoraModel(string loraName)

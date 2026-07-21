@@ -989,6 +989,7 @@ internal static class VideoStagesSpecParser
             }
             entries.Add(new IcLoraSpec(
                 Lora: lora,
+                Preset: GetString(entryObj, "Preset")?.Trim(),
                 Source: NormalizeIcLoraSource(GetString(entryObj, "Source")),
                 Strength: Math.Clamp(
                     GetOptionalDouble(entryObj, "Strength", 1, "Clip IcLora"), 0, 5),

@@ -14,6 +14,9 @@ import {
     mountSelect,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
+import { IC_LORA_AUTO } from "./constants";
+import { resetIcLoraAutoDownloads } from "./icLoraAutoDownload";
+import { findIcLoraPreset } from "./icLoraPresets";
 import * as persistence from "./persistence";
 import {
     createTimelineDetailStrip,
@@ -212,6 +215,7 @@ describe("createTimelineDetailStrip", () => {
     beforeEach(() => {
         resetSelectionForTests();
         persistence.__resetPersistenceForTests();
+        resetIcLoraAutoDownloads();
         collapsed = false;
         // Spy but call through, so persistence actually updates and the
         // strip's `getClips()` reflects each live-apply write.
@@ -225,7 +229,15 @@ describe("createTimelineDetailStrip", () => {
         jest.restoreAllMocks();
         resetSelectionForTests();
         document.body.innerHTML = "";
+        delete swarmGlobals.makeWSRequest;
+        delete swarmGlobals.refreshParameterValues;
     });
+
+    // The [AUTO] downloader reaches these SwarmUI globals; tests stub them here.
+    const swarmGlobals = globalThis as unknown as {
+        makeWSRequest?: jest.Mock;
+        refreshParameterValues?: jest.Mock;
+    };
 
     let refreshSpy: jest.Mock;
 
@@ -449,6 +461,128 @@ describe("createTimelineDetailStrip", () => {
         expect(clips[0].icLoras[0].preset).toBe("union-control");
         expect(clips[0].icLoras[0].controlType).toBe("depth");
         expect(clips[0].icLoras[0].strength).toBe(1);
+    });
+
+    // The per-entry selects render in a fixed order: Preset, LoRA, Control.
+    const icLoraSelect = (which: "preset" | "lora"): HTMLSelectElement => {
+        const row = document.querySelector<HTMLElement>(".vst-detail-iclora");
+        const select =
+            row?.querySelectorAll("select")[which === "preset" ? 0 : 1];
+        if (!select) {
+            throw new Error(`IC-LoRA ${which} select missing`);
+        }
+        return select as HTMLSelectElement;
+    };
+
+    it("leads the IC-LoRA LoRA dropdown with [AUTO]", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const options = Array.from(icLoraSelect("lora").options).map(
+            (o) => o.value,
+        );
+        expect(options).toEqual([IC_LORA_AUTO, "lora-x.safetensors"]);
+    });
+
+    it("selecting [AUTO] with a preset starts the preset weights download", () => {
+        swarmGlobals.makeWSRequest = jest.fn();
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: "lora-x.safetensors", preset: "deblur" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const loraSelect = icLoraSelect("lora");
+        loraSelect.value = IC_LORA_AUTO;
+        loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(savedClips(saveSpy)[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledWith(
+            "DoModelDownloadWS",
+            {
+                url: findIcLoraPreset("deblur")?.weightsUrl,
+                type: "LoRA",
+                name: "LTX-2/IC-LoRA/deblur",
+            },
+            expect.any(Function),
+            0,
+            expect.any(Function),
+        );
+        expect(
+            document.querySelector('[data-vst-iclora-auto="deblur"]')
+                ?.textContent,
+        ).toContain("Downloading Deblur weights");
+    });
+
+    it("selecting a preset while on [AUTO] starts the download and refreshes on success", () => {
+        swarmGlobals.makeWSRequest = jest.fn();
+        swarmGlobals.refreshParameterValues = jest.fn();
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: IC_LORA_AUTO }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        // No preset yet: nothing to download, and the hint says so.
+        expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
+        expect(detail()?.textContent).toContain("[AUTO] needs a preset");
+
+        const presetSelect = icLoraSelect("preset");
+        presetSelect.value = "deblur";
+        presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
+
+        // Completion refreshes the host's model lists and settles the hint.
+        const onData = swarmGlobals.makeWSRequest.mock.calls[0][2] as (
+            data: Record<string, unknown>,
+        ) => void;
+        onData({ success: true });
+        expect(swarmGlobals.refreshParameterValues).toHaveBeenCalledWith(true);
+        expect(detail()?.textContent).toContain(
+            "Downloaded to LTX-2/IC-LoRA/deblur",
+        );
+    });
+
+    it("skips the [AUTO] download when the preset weights are already installed", () => {
+        swarmGlobals.makeWSRequest = jest.fn();
+        setup(
+            [
+                {
+                    duration: 4,
+                    stages: [{}],
+                    icLoras: [{ lora: IC_LORA_AUTO, preset: "deblur" }],
+                },
+            ],
+            ["lora-x.safetensors", "LTX-2/IC-LoRA/deblur"],
+        );
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
+        expect(detail()?.textContent).toContain("Using LTX-2/IC-LoRA/deblur");
+    });
+
+    it("offers IC-LoRAs with [AUTO] even when no LoRAs are installed", () => {
+        setup([{ duration: 4, stages: [{}] }], []);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const addBtn = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-iclora",
+        );
+        if (!addBtn) {
+            throw new Error("add IC-LoRA button missing");
+        }
+        addBtn.click();
+        const clips = savedClips(saveSpy);
+        expect(clips[0].icLoras).toHaveLength(1);
+        expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
     });
 
     it("removes an IC-LoRA entry via its Remove button", () => {

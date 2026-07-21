@@ -44,6 +44,12 @@ export const IC_LORA_ATTENTION_MIN = 0;
 export const IC_LORA_ATTENTION_MAX = 1;
 export const IC_LORA_ATTENTION_STEP = 0.05;
 export const IC_LORA_ATTENTION_DEFAULT = 1;
+// "[AUTO]" as an entry's lora value means "use the selected preset's weights, downloading them
+// on demand into <lora dir>/LTX-2/IC-LoRA/<preset id>.safetensors". The folder + preset-id naming
+// is a convention shared with the backend (Constants.IcLoraAutoModel*), which resolves "[AUTO]"
+// to the same path at generation time — keep the two in sync.
+export const IC_LORA_AUTO = "[AUTO]";
+export const IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
 
 export const parseBase2EditStageIndex = (value: string): number | null => {
     const match = `${value || ""}`
