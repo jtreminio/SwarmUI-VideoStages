@@ -631,6 +631,28 @@ describe("createTimelineDetailStrip", () => {
         );
     });
 
+    it("shows the transfer progress from current_percent, not the 0.2 step marker", () => {
+        swarmGlobals.makeWSRequest = jest.fn();
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: IC_LORA_AUTO, preset: "deblur" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const onData = swarmGlobals.makeWSRequest.mock.calls[0][2] as (
+            data: Record<string, unknown>,
+        ) => void;
+        // The core downloader pins overall_percent to 0.2 for the whole
+        // transfer; the live percentage is current_percent.
+        onData({ current_percent: 0.57, overall_percent: 0.2, per_second: 1 });
+        expect(
+            document.querySelector('[data-vst-iclora-auto="deblur"]')
+                ?.textContent,
+        ).toContain("Downloading Deblur weights… 57%");
+    });
+
     it("skips the [AUTO] download when the preset weights are already installed", () => {
         swarmGlobals.makeWSRequest = jest.fn();
         setup(

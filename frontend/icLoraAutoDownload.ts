@@ -114,10 +114,12 @@ export const ensureIcLoraAutoWeights = (
             name: icLoraAutoModelName(preset),
         },
         (data) => {
-            if (typeof data?.overall_percent === "number") {
+            // overall_percent is the workflow-step indicator (a constant 0.2
+            // while transferring); the live transfer progress is current_percent.
+            if (typeof data?.current_percent === "number") {
                 setStatus(preset, {
                     state: "downloading",
-                    percent: data.overall_percent,
+                    percent: data.current_percent,
                 });
             } else if (data?.success) {
                 finish(preset, onSettled);
