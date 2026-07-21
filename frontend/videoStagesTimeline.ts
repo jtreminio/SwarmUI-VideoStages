@@ -7,6 +7,7 @@ import { createGestureRouter } from "./gestureRouter";
 import { buildDefaultClip } from "./normalization";
 import { getClips, getState, getTimelineStore, saveClips } from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import { setSelection, subscribeSelection } from "./selection";
 import type { UpdateMeta } from "./store";
 import {
     getGroupToggle,
@@ -38,7 +39,10 @@ import {
     zoomAnchorScrollLeft,
     zoomAnchorTime,
 } from "./timelineView";
-import { setSelection, subscribeSelection } from "./uiState";
+import {
+    loadViewState as readStoredViewState,
+    saveViewState as writeStoredViewState,
+} from "./timelineViewState";
 
 export interface VideoStagesTimeline {
     init(): void;
@@ -90,40 +94,23 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         write: (value) => restoreCarrierSnapshot(value),
     });
 
-    const VIEW_STATE_KEY = "videostages.timeline.viewState";
     const loadViewState = (): void => {
-        try {
-            const raw = localStorage.getItem(VIEW_STATE_KEY);
-            if (!raw) {
-                return;
-            }
-            const parsed = JSON.parse(raw) as {
-                pxPerSecond?: unknown;
-                unit?: unknown;
-                stripCollapsed?: unknown;
-            };
-            if (typeof parsed.pxPerSecond === "number") {
-                pxPerSecond = clampPxPerSecond(parsed.pxPerSecond);
-            }
-            if (parsed.unit === "frames" || parsed.unit === "seconds") {
-                unit = parsed.unit;
-            }
-            if (typeof parsed.stripCollapsed === "boolean") {
-                stripCollapsed = parsed.stripCollapsed;
-            }
-        } catch {}
+        const stored = readStoredViewState();
+        if (!stored) {
+            return;
+        }
+        if (stored.pxPerSecond !== undefined) {
+            pxPerSecond = clampPxPerSecond(stored.pxPerSecond);
+        }
+        if (stored.unit) {
+            unit = stored.unit;
+        }
+        if (stored.stripCollapsed !== undefined) {
+            stripCollapsed = stored.stripCollapsed;
+        }
     };
     const saveViewState = (): void => {
-        try {
-            localStorage.setItem(
-                VIEW_STATE_KEY,
-                JSON.stringify({
-                    pxPerSecond,
-                    unit,
-                    stripCollapsed,
-                }),
-            );
-        } catch {}
+        writeStoredViewState({ pxPerSecond, unit, stripCollapsed });
     };
 
     const toggleUnit = (): void => {

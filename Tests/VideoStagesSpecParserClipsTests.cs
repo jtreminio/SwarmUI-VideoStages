@@ -192,7 +192,7 @@ public class VideoStagesSpecParserClipsTests
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json, prompt)).Clips);
 
         List<(string Prompt, double Seconds)> tiled =
-            VideoStages.LTX2.LtxStageExecutor.TilePromptWindows(parsed.PromptWindows, clipSeconds: 8.0);
+            VideoStages.LTX2.PromptWindowTiler.TilePromptWindows(parsed.PromptWindows, clipSeconds: 8.0);
 
         Assert.Equal("clip early", tiled[0].Prompt);
         Assert.Contains(tiled, segment => segment.Prompt == "clip late");

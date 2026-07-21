@@ -1,10 +1,10 @@
 import { parseBase2EditStageIndex } from "./constants";
+import { utils } from "./hostDom";
 import {
     type ClipTextInput,
     extractGlobalPrompt,
     serializeClipPrompts,
 } from "./promptSegments";
-import { utils } from "./utils";
 
 const DATA_INPUT_ID = "input_videostages";
 let warnedMissingDataInput = false;
@@ -38,7 +38,6 @@ export const getDataInput = ():
 
 export const readDataParam = (): string => getDataInput()?.value ?? "";
 
-/** Write the Data param without dispatching host change events (store save path). */
 export const writeDataParam = (json: string): void => {
     const el = getDataInput();
     if (!el) {
@@ -75,7 +74,6 @@ const withSuppressedPromptTabComplete = (fn: () => void): void => {
     }
 };
 
-/** Write clip prompt sections without dispatching host change events (store save path). */
 export const writeClipPrompts = (clips: ClipTextInput[]): void => {
     const el = getPromptInput();
     if (!el) {

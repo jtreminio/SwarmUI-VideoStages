@@ -66,14 +66,12 @@ const ensureTextarea = (id: string): HTMLTextAreaElement => {
     return el;
 };
 
-/** Mounts (or reuses) the hidden VideoStages Data param input with structured JSON. */
 export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
     const el = ensureTextarea("input_videostages");
     el.value = typeof state === "string" ? state : JSON.stringify(state);
     return el;
 };
 
-/** Mounts (or reuses) the positive-prompt textarea with the given prose + tags. */
 export const mountPromptBox = (value = ""): HTMLTextAreaElement => {
     const el = ensureTextarea("input_prompt");
     el.value = value;

@@ -1,42 +1,20 @@
-"""ComfyUI node package for SwarmUI Video Stages."""
+from __future__ import annotations
 
-from comfy_api.latest import ComfyExtension, io
-
-from .SwarmAudioLengthToFrames import SwarmAudioLengthToFrames
-from .SwarmPreviewVideo import SwarmPreviewVideo
-from .SwarmPromptRelayEncode import SwarmPromptRelayEncode
-from .SwarmSetAudioMaskWindows import SwarmSetAudioMaskWindows
-
-
-class SwarmVideoStagesExtension(ComfyExtension):
-    """Extension entrypoint exposing SwarmUI Video Stages nodes."""
-
-    async def get_node_list(self) -> list[type[io.ComfyNode]]:
-        return [SwarmAudioLengthToFrames, SwarmPreviewVideo, SwarmPromptRelayEncode, SwarmSetAudioMaskWindows]
-
-
-async def comfy_entrypoint() -> ComfyExtension:
-    """Create the extension instance for ComfyUI runtime loading."""
-    return SwarmVideoStagesExtension()
-
-
-NODE_CLASS_MAPPINGS = {
-    "SwarmAudioLengthToFrames": SwarmAudioLengthToFrames,
-    "SwarmPreviewVideo": SwarmPreviewVideo,
-    "SwarmPromptRelayEncode": SwarmPromptRelayEncode,
-    "SwarmSetAudioMaskWindows": SwarmSetAudioMaskWindows,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "SwarmAudioLengthToFrames": "Swarm Audio Length To Frames",
-    "SwarmPreviewVideo": "Swarm Preview Video",
-    "SwarmPromptRelayEncode": "Swarm Prompt Relay Encode",
-    "SwarmSetAudioMaskWindows": "Swarm Set Audio Mask Windows",
-}
+from typing import Any
 
 __all__ = [
-    "SwarmVideoStagesExtension",
-    "comfy_entrypoint",
     "NODE_CLASS_MAPPINGS",
     "NODE_DISPLAY_NAME_MAPPINGS",
+    "SwarmVideoStagesExtension",
+    "comfy_entrypoint",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name not in __all__:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from . import extension
+
+    value = getattr(extension, name)
+    globals()[name] = value
+    return value

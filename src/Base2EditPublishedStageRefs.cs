@@ -1,9 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using ComfyTyped.Core;
-using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
@@ -73,30 +71,9 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
             return null;
         }
 
-        string dataType = data.Value<string>("dataType") ?? WGNodeData.DT_IMAGE;
-        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, data.Value<string>("compatId"));
-        return new WGNodeData(WorkflowBridge.ToPath(output), g, dataType, compat)
-        {
-            Width = data.Value<int?>("width"),
-            Height = data.Value<int?>("height"),
-            Frames = data.Value<int?>("frames"),
-            FPS = data.Value<int?>("fps") is int fps ? new JValue(fps) : null
-        };
-    }
-
-    private T2IModelCompatClass ResolveCompatFor(string dataType, WGNodeData fallbackVae, string compatId)
-    {
-        if (!string.IsNullOrWhiteSpace(compatId)
-            && T2IModelClassSorter.CompatClasses.TryGetValue(
-                compatId.ToLowerFast(),
-                out T2IModelCompatClass explicitCompat))
-        {
-            return explicitCompat;
-        }
-        if (dataType == WGNodeData.DT_VAE && g.CurrentVae is not null)
-        {
-            return g.CurrentVae.Compat;
-        }
-        return fallbackVae?.Compat ?? g.CurrentVae?.Compat ?? g.CurrentCompat();
+        return WGNodeDataMarkerCodec.Build(
+            g, output, data.Value<string>("dataType"), data.Value<string>("compatId"), fallbackVae,
+            data.Value<int?>("width"), data.Value<int?>("height"),
+            data.Value<int?>("frames"), data.Value<int?>("fps"));
     }
 }

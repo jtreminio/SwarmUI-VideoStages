@@ -1,8 +1,6 @@
 using ComfyTyped.Core;
-using FreneticUtilities.FreneticExtensions;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
 namespace VideoStages;
@@ -130,33 +128,9 @@ public class StageRefStore(WorkflowGenerator g)
             Logs.Warning($"VideoStages: slot {slot} on node '{nodeId}' not found; treating as not captured.");
             return null;
         }
-        string dataType = string.IsNullOrEmpty(parts[2]) ? WGNodeData.DT_IMAGE : parts[2];
-        T2IModelCompatClass compat = ResolveCompatFor(dataType, fallbackVae, parts[7]);
-        return new WGNodeData(WorkflowBridge.ToPath(output), g, dataType, compat)
-        {
-            Width = Nullable(parts[3]),
-            Height = Nullable(parts[4]),
-            Frames = Nullable(parts[5]),
-            FPS = Nullable(parts[6]) is int fps ? new JValue(fps) : null
-        };
-    }
-
-    private T2IModelCompatClass ResolveCompatFor(string dataType, WGNodeData fallbackVae, string compatId)
-    {
-        if (!string.IsNullOrWhiteSpace(compatId)
-            && T2IModelClassSorter.CompatClasses.TryGetValue(compatId.ToLowerFast(), out T2IModelCompatClass c))
-        {
-            return c;
-        }
-        if (dataType == WGNodeData.DT_AUDIO || dataType == WGNodeData.DT_LATENT_AUDIO || dataType == WGNodeData.DT_AUDIOVAE)
-        {
-            return g.CurrentAudioVae?.Compat;
-        }
-        if (dataType == WGNodeData.DT_VAE && g.CurrentVae is not null)
-        {
-            return g.CurrentVae.Compat;
-        }
-        return fallbackVae?.Compat ?? g.CurrentVae?.Compat ?? g.CurrentCompat();
+        return WGNodeDataMarkerCodec.Build(
+            g, output, parts[2], parts[7], fallbackVae,
+            Nullable(parts[3]), Nullable(parts[4]), Nullable(parts[5]), Nullable(parts[6]));
     }
 
     private static int? Nullable(string s) =>

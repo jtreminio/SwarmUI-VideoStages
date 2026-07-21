@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using FreneticUtilities.FreneticExtensions;
-using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
@@ -796,17 +795,10 @@ internal static class PromptParser
             return false;
         }
 
-        WorkflowGenerator generator = new()
-        {
-            UserInput = input,
-            Features = [],
-            ModelFolderFormat = "/"
-        };
-
         VideoStagesSpec spec;
         try
         {
-            spec = generator.GetVideoStagesSpec();
+            spec = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
         }
         catch (SwarmUserErrorException)
         {

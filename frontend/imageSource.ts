@@ -1,4 +1,5 @@
 import { parseBase2EditStageIndex } from "./constants";
+import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
 import { getBase2EditStageRefs } from "./swarmInputs";
 import {
     type ImageSourceOption,
@@ -22,25 +23,18 @@ export const buildImageSourceOptions = (
             label: `Base2Edit Edit ${editStage} Output`,
         });
     }
-    const selected = `${currentValue || ""}`.trim();
-    if (selected && !options.some((option) => option.value === selected)) {
-        const isBase2Edit = parseBase2EditStageIndex(selected) != null;
-        options.unshift({
-            value: selected,
-            label: isBase2Edit ? `Missing Base2Edit ${selected}` : selected,
+    preserveSelectedOption(options, currentValue, "start", (value) => {
+        const isBase2Edit = parseBase2EditStageIndex(value) != null;
+        return {
+            value,
+            label: isBase2Edit ? `Missing Base2Edit ${value}` : value,
             disabled: isBase2Edit,
-        });
-    }
+        };
+    });
     return options;
 };
 
 export const resolveImageSourceValue = (
     currentValue: string,
     options: ImageSourceOption[],
-): string => {
-    const desired = `${currentValue || ""}`;
-    if (options.some((option) => option.value === desired)) {
-        return desired;
-    }
-    return REF_SOURCE_REFINER;
-};
+): string => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);

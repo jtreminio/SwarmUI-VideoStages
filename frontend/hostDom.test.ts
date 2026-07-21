@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { utils } from "./utils";
+import { utils } from "./hostDom";
 
 describe("utils", () => {
     describe("getInputElement", () => {

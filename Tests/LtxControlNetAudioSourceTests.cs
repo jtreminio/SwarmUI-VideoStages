@@ -45,7 +45,7 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        bool ok = new ControlNetApplicator(generator)
+        bool ok = new ControlNetCapture(generator)
             .TryGetCapturedControlNetAudio(Constants.ControlNetSourceOne, out WGNodeData audio);
 
         Assert.True(ok);
@@ -60,7 +60,7 @@ public class LtxControlNetAudioSourceTests
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
 
-        bool ok = new ControlNetApplicator(generator)
+        bool ok = new ControlNetCapture(generator)
             .TryGetCapturedControlNetAudio(Constants.ControlNetSourceTwo, out WGNodeData audio);
 
         Assert.False(ok);
@@ -75,7 +75,7 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        bool ok = new ControlNetApplicator(generator)
+        bool ok = new ControlNetCapture(generator)
             .TryGetCapturedControlNetAudio(Constants.ControlNetSourceOne, out WGNodeData audio);
 
         Assert.False(ok);
@@ -94,7 +94,7 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.2"] =
             new JArray("701", 1).ToString(Formatting.None);
 
-        ControlNetApplicator applicator = new(generator);
+        ControlNetCapture applicator = new(generator);
 
         Assert.True(applicator.TryGetCapturedControlNetAudio(Constants.ControlNetSourceOne, out WGNodeData a0));
         Assert.True(JToken.DeepEquals(a0.Path, new JArray("301", 1)));
@@ -114,7 +114,7 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        ControlNetApplicator applicator = new(generator);
+        ControlNetCapture applicator = new(generator);
 
         Assert.False(applicator.TryGetCapturedControlNetAudio("", out _));
         Assert.False(applicator.TryGetCapturedControlNetAudio("   ", out _));

@@ -193,11 +193,6 @@ const renderRegionThumb = (clip: Clip): string => {
 };
 
 /**
- * Hatched retake range overlaid on the clip region: draggable body (move),
- * left/right resize grips, click to select, shift+click to delete. Positioned
- * as a percentage of the clip duration so it tracks the region width.
- */
-/**
  * Shared markup for a draggable window span on a clip lane (retake overlay,
  * audio segment): clamped left/width percentages, two resize grips, a label,
  * and the shift-click-delete affordance in the tooltip.
@@ -673,8 +668,6 @@ export const renderAudioTrackRow = (
                 ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>`
                 : "";
             const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-            // Per clip: the audio clip (source/waveform) mini-row on top,
-            // then one mini lane per segment plus a blank add-lane beneath.
             return (
                 `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeHtml(title)}" aria-label="Edit audio for clip ${l.index}">` +
                 `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +

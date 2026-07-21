@@ -9,12 +9,12 @@ import {
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
+import { getSelection, resetSelectionForTests } from "./selection";
 import {
     createTimelineAudioSegmentTrack,
     type TimelineAudioSegmentTrack,
 } from "./timelineAudioSegmentTrack";
 import type { AudioSegment, Clip } from "./types";
-import { getSelection, resetSelectionForTests } from "./uiState";
 
 const PPS = 44;
 
@@ -196,7 +196,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         const body = oneSegment();
         const seg = el(body, ".vst-audio-seg[data-seg-idx='0']");
         seg.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS)); // +2s
+        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS));
         document.dispatchEvent(mouse("mouseup", 100 + 2 * PPS));
 
         const s = savedSegments(saveSpy)[0];
@@ -227,7 +227,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         const body = oneSegment();
         const edge = el(body, ".vst-audio-seg-resize-r");
         edge.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS)); // +2s
+        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS));
         document.dispatchEvent(mouse("mouseup", 100 + 2 * PPS));
 
         const s = savedSegments(saveSpy)[0];
@@ -240,7 +240,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         const body = oneSegment();
         const edge = el(body, ".vst-audio-seg-resize-l");
         edge.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 1 * PPS)); // +1s
+        document.dispatchEvent(mouse("mousemove", 100 + 1 * PPS));
         document.dispatchEvent(mouse("mouseup", 100 + 1 * PPS));
 
         const s = savedSegments(saveSpy)[0];
@@ -254,7 +254,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         const body = oneSegment();
         const edge = el(body, ".vst-audio-seg-resize-l");
         edge.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 - 3 * PPS)); // -3s
+        document.dispatchEvent(mouse("mousemove", 100 - 3 * PPS));
         document.dispatchEvent(mouse("mouseup", 100 - 3 * PPS));
 
         const s = savedSegments(saveSpy)[0];
@@ -303,8 +303,6 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
             segIdx: 0,
         });
     });
-
-    // ---- blank-lane create + overlap-allowed bounds ------------
 
     it("clicking empty lane space adds a default-length segment and selects it", () => {
         const body = setup([{ duration: 10 }]);
@@ -404,7 +402,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
         expect(a.startSeconds + a.lengthSeconds).toBeLessThanOrEqual(
             b.startSeconds + 1e-6,
         );
-        expect(a.lengthSeconds).toBeCloseTo(3, 5); // length preserved
+        expect(a.lengthSeconds).toBeCloseTo(3, 5);
     });
 
     it("right-edge resize extends past the next segment (overlap allowed)", () => {

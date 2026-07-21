@@ -43,6 +43,10 @@ export const formatTimeLabel = (
     return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
 };
 
+/** A frame count expressed as seconds at `fps`, e.g. "0.33s". */
+export const formatOverlapSeconds = (frames: number, fps: number): string =>
+    `${(frames / Math.max(1, fps)).toFixed(2)}s`;
+
 export interface RulerTick {
     x: number;
     seconds: number;

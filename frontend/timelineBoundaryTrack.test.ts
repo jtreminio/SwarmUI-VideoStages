@@ -7,16 +7,16 @@ import {
     jest,
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { crossfadePlanForClips } from "./boundaryPlan";
 import * as persistence from "./persistence";
+import { getSelection, resetSelectionForTests } from "./selection";
 import {
     createTimelineBoundaryTrack,
-    crossfadePlanForClips,
     nextBoundary,
     type TimelineBoundaryTrack,
 } from "./timelineBoundaryTrack";
 import { computeRegionLayout, renderBoundarySeams } from "./timelineView";
 import type { BoundaryOut, Clip } from "./types";
-import { getSelection, resetSelectionForTests } from "./uiState";
 
 const PPS = 44;
 
@@ -72,10 +72,8 @@ describe("crossfadePlanForClips", () => {
     });
 
     it("falls back to a cut when a clip is too short for the overlap", () => {
-        // A degenerate 1-frame clip (duration 0) has budget 0, so it cannot fund
-        // even a single overlap frame; the whole plan degrades to a hard cut.
-        // (With real normalized durations the 8-frame alignment floor keeps this
-        // unreachable, but the guard mirrors the backend math.)
+        // duration 0 -> budget 0, unreachable with real 8-frame-aligned durations;
+        // guard still mirrors backend math.
         const plan = crossfadePlanForClips(
             [clipFor("crossfade", 0), clipFor("cut", 2)],
             24,

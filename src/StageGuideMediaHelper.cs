@@ -83,7 +83,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        if (TryNormalizeExistingImageScale(
+        if (ImageScaleReuse.TryNormalizeExisting(
             bridge,
             resolvedGuideMedia.Path,
             targetWidth,
@@ -110,11 +110,12 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
             }
             else
             {
-                ImageScaleNode scale = CreateCenterLanczosImageScale(
+                ImageScaleNode scale = ImageScaleReuse.Create(
                     bridge,
                     resolvedGuideMedia.Path,
                     targetWidth,
-                    targetHeight);
+                    targetHeight,
+                    "center");
                 resolvedGuideMedia = resolvedGuideMedia.WithPath(scale.IMAGE);
             }
         }
@@ -123,58 +124,4 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         resolvedGuideMedia.Height = targetHeight;
         return resolvedGuideMedia;
     }
-
-    private ImageScaleNode CreateCenterLanczosImageScale(
-        WorkflowBridge bridge,
-        JArray sourcePath,
-        int width,
-        int height)
-    {
-        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
-            Width: width,
-            Height: height,
-            UpscaleMethod: "lanczos",
-            Crop: "center"));
-        scale.Image.ConnectFromPath(bridge, sourcePath);
-        return scale;
-    }
-
-    private static bool TryNormalizeExistingImageScale(
-        WorkflowBridge bridge,
-        JArray sourcePath,
-        int targetWidth,
-        int targetHeight,
-        out string scaleNodeId)
-    {
-        scaleNodeId = null;
-        if (sourcePath is not { Count: 2 }
-            || bridge.NodeAt(sourcePath) is not ImageScaleNode scale)
-        {
-            return false;
-        }
-
-        ImageScaleNode collapsed = scale;
-        if (scale.Image.Connection?.Node is ImageScaleNode upstream)
-        {
-            INodeOutput outerOutput = bridge.ResolvePath(sourcePath);
-            if (outerOutput is not null && !bridge.Graph.FindDownstream(outerOutput).Any())
-            {
-                bridge.RemoveNode(scale);
-            }
-            collapsed = upstream;
-        }
-
-        collapsed.With(
-            Width: targetWidth,
-            Height: targetHeight,
-            Crop: "center");
-        if (!collapsed.UpscaleMethod.HasValue)
-        {
-            collapsed.UpscaleMethod.Set("lanczos");
-        }
-        bridge.SyncNode(collapsed);
-        scaleNodeId = collapsed.Id;
-        return true;
-    }
-
 }

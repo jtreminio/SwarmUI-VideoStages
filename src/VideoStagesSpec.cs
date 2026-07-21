@@ -52,6 +52,8 @@ public sealed record StageSpec(
     RetakeWindowSpec RetakeWindow = null
 )
 {
+    // Intentional read-only workflow projections: the upscale-method prefix dispatch below encodes
+    // generation policy but is colocated with the data it reads, by design (no behavior, no host state).
     public bool IsLatentModelUpscale => HasUpscaleMethodPrefix("latentmodel-");
     public bool IsLatentUpscale => HasUpscaleMethodPrefix("latent-");
     public bool IsPixelUpscale => HasUpscaleMethodPrefix("pixel-");
@@ -145,6 +147,10 @@ public sealed record ClipSpec(
     string BoundaryOut = Constants.BoundaryOutCut
 )
 {
+    // The selection rules below (PrimarySlotEntry / VoiceRefDriveEntry / UsesVoiceRefAudio) are
+    // intentional read-only workflow projections: generation policy expressed against, and colocated
+    // with, the clip data — pure derivations of the record's own fields, not behavior.
+
     /// <summary>First IC-LoRA entry driven by a captured core "ControlNet N" branch, or null. That
     /// entry's slot doubles as the clip's audio-capture and clip-length-from-controlnet source.</summary>
     public IcLoraSpec PrimarySlotEntry => IcLoras?.FirstOrDefault(
@@ -152,6 +158,10 @@ public sealed record ClipSpec(
             && !StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput));
 
     public bool HasIcLoras => IcLoras is { Count: > 0 };
+
+    /// <summary>Audio latents may be reused across this clip's stages: the clip opts in and has
+    /// enough stages for a distinct capture-then-reuse split.</summary>
+    public bool CanReuseAudio => ReuseAudio && Stages.Count >= 3;
 
     /// <summary>First IC-LoRA entry whose uploaded drive video doubles as the clip's
     /// voice-reference sample, or null. Takes precedence over a clip-level

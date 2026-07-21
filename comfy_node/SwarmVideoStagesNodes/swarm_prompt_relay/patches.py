@@ -3,18 +3,30 @@
 Ported from WhatDreamsCost-ComfyUI/patches.py
 """
 
+from __future__ import annotations
+
 import logging
 import types
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import comfy.ldm.modules.attention
 
+if TYPE_CHECKING:
+    import torch
+    from comfy.model_patcher import ModelPatcher
+
+    from .prompt_relay import MaskFn
+
 log = logging.getLogger(__name__)
 
+AttentionFn = Callable[..., "torch.Tensor"]
 
-def _make_masked_override(prev_override):
+
+def _make_masked_override(prev_override: AttentionFn | None) -> AttentionFn:
     """Route mask-bearing attention through attention_pytorch (sage/etc. drop arbitrary
     masks); chain to prior override when unmasked so other backends aren't clobbered."""
-    def override(func, *args, **kwargs):
+    def override(func: AttentionFn, *args: Any, **kwargs: Any) -> torch.Tensor:
         if kwargs.get("mask") is not None:
             return comfy.ldm.modules.attention.attention_pytorch(*args, **kwargs)
         if prev_override is not None:
@@ -23,12 +35,20 @@ def _make_masked_override(prev_override):
     return override
 
 
-def _make_ltx_mask_wrapper(underlying, mask_fn, attr):
+def _make_ltx_mask_wrapper(underlying: AttentionFn, mask_fn: MaskFn, attr: str) -> AttentionFn:
     """Wrap an LTX cross-attn forward (default or another node's patch), adding
     PromptRelay's mask via the `mask` kwarg the upstream signature already accepts.
     `underlying` must already be bound to its module.
     """
-    def wrapped(_self, x, context=None, mask=None, pe=None, k_pe=None, transformer_options={}):
+    def wrapped(
+        _self: object,
+        x: torch.Tensor,
+        context: torch.Tensor | None = None,
+        mask: torch.Tensor | None = None,
+        pe: torch.Tensor | None = None,
+        k_pe: torch.Tensor | None = None,
+        transformer_options: dict[str, Any] = {},
+    ) -> torch.Tensor:
         if context is not None:
             opts = {**transformer_options, "promptrelay_attn_type": attr}
             pr_mask = mask_fn(x.shape[1], context.shape[1], x.dtype, x.device, opts)
@@ -50,7 +70,7 @@ def _make_ltx_mask_wrapper(underlying, mask_fn, attr):
     return wrapped
 
 
-def detect_ltx(model):
+def detect_ltx(model: ModelPatcher) -> int:
     """Validate the model is LTX; return its VAE temporal stride (the pixel->latent
     temporal compression, for converting pixel frame counts to latent frames).
     """
@@ -65,7 +85,7 @@ def detect_ltx(model):
     )
 
 
-def apply_patches(model_clone, mask_fn):
+def apply_patches(model_clone: ModelPatcher, mask_fn: MaskFn) -> None:
     diffusion_model = model_clone.get_model_object("diffusion_model")
 
     for idx, block in enumerate(diffusion_model.transformer_blocks):

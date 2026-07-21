@@ -22,19 +22,19 @@ import {
     type GestureSession,
 } from "./gestureRouter";
 import { getClips, saveClips } from "./persistence";
+import { setSelection } from "./selection";
 import type { UpdateOrigin } from "./store";
 import { readStateToken } from "./swarmInputs";
-import { livePxPerSecond } from "./timelineLinking";
 import {
     clipDurationOf,
     isActivateKey,
     isStaleToken,
     leftPct,
+    livePxPerSecond,
     parseIntAttr,
     widthPct,
 } from "./trackDomUtils";
 import type { Clip, TimelineSelection } from "./types";
-import { setSelection } from "./uiState";
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -50,6 +50,69 @@ export interface SpanGeom {
     length: number;
 }
 
+/**
+ * The shared "tap places a default-length span vs a drag sizes it" create math
+ * for the window tracks. Everything is clamped into the free interval [lo, hi]
+ * with a `minLen` floor; returns null when the interval can't hold a
+ * minimum-length span.
+ */
+export const createDefaultOrDraggedSpan = (
+    startSec: number,
+    endSec: number | null,
+    lo: number,
+    hi: number,
+    minLen: number,
+    defaultLen: number,
+): SpanGeom | null => {
+    const gap = hi - lo;
+    if (gap < minLen) {
+        return null;
+    }
+    let start: number;
+    let length: number;
+    if (endSec === null) {
+        length = Math.min(defaultLen, gap);
+        start = clamp(startSec, lo, hi - length);
+    } else {
+        const a = clamp(Math.min(startSec, endSec), lo, hi);
+        const b = clamp(Math.max(startSec, endSec), lo, hi);
+        start = a;
+        length = Math.max(minLen, b - a);
+        if (start + length > hi) {
+            length = hi - start;
+        }
+    }
+    return length < minLen ? null : { start, length };
+};
+
+/**
+ * The shared min-length edge-resize clamp. Right edge: keep the start, clamp
+ * the end into [start+minLen, hi]. Left edge: keep the end, clamp the start
+ * into [lo, end-minLen]. `lo`/`hi` are the surrounding walls (clip bounds or
+ * free-interval walls); a caller whose trim follows the edge passes a `lo`
+ * below 0.
+ */
+export const resizeSpanEdge = (
+    edge: "left" | "right",
+    press: PressSpan,
+    deltaSec: number,
+    minLen: number,
+    lo: number,
+    hi: number,
+): SpanGeom => {
+    if (edge === "right") {
+        const end = clamp(
+            press.start + press.length + deltaSec,
+            press.start + minLen,
+            hi,
+        );
+        return { start: press.start, length: end - press.start };
+    }
+    const end = press.start + press.length;
+    const start = clamp(press.start + deltaSec, lo, end - minLen);
+    return { start, length: end - start };
+};
+
 export interface WindowTrackConfig {
     routeId: string;
     priority: number;
@@ -58,7 +121,6 @@ export interface WindowTrackConfig {
     spanSelector: string;
     /** Per-item index attribute on the span; null = one span per clip (index 0). */
     itemIdxAttr: string | null;
-    /** Resize grip inside the span. */
     edgeSelector: string;
     /** Attribute on the grip holding "left" (anything else = right). */
     edgeAttr: string;

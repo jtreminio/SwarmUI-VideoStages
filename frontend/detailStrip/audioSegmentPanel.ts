@@ -1,0 +1,190 @@
+import {
+    AUDIO_SOURCE_UPLOAD,
+    buildSegmentAudioSourceOptions,
+    isAceStepFunAudioSource,
+} from "../audioSource";
+import {
+    AUDIO_SEGMENT_MIN_LENGTH,
+    AUDIO_SEGMENT_STEP,
+    CLIP_DURATION_MAX,
+} from "../constants";
+import {
+    buildField,
+    buildInstanceRow,
+    buildNumber,
+    buildOptionSelect,
+    buildUploadRow,
+    clampStartLength,
+    wrapForm,
+} from "../detailWidgets";
+import { setSelection } from "../selection";
+import type { Clip, TimelineSelection } from "../types";
+import type { DetailStripContext } from "./context";
+
+const GROUP_AUDIOSEG = "vstdock_audioseg";
+
+/**
+ * The audio-segment panel lists EVERY overlay segment of the clip, stacked.
+ * The selected segment is highlighted; touching any segment's control
+ * re-points the selection to it (targeted swap, no rebuild) and per-segment
+ * keys keep edits distinct.
+ */
+export const buildAudioSegmentBody = (
+    ctx: DetailStripContext,
+    sel: Extract<TimelineSelection, { kind: "audio-segment" }>,
+    clips: Clip[],
+): HTMLElement => {
+    const { clipIdx } = sel;
+    const clip = clips[clipIdx];
+    const segments = clip?.audioSegments ?? [];
+    const body = document.createElement("div");
+    body.className =
+        "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
+    const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
+
+    /**
+     * Segments live on per-segment lanes and may overlap in time (the
+     * backend mixes them additively) — start/length clamp only to the
+     * clip's own bounds.
+     */
+    const clampSegment = (
+        start: number,
+        length: number,
+    ): { start: number; length: number } =>
+        clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
+
+    segments.forEach((segment, segIdx) => {
+        const { row, fields } = buildInstanceRow({
+            rowClass: "vst-detail-seg-row",
+            indexAttr: "data-vst-seg-index",
+            index: segIdx,
+            active: segIdx === sel.segIdx,
+            title: `S${segIdx + 1}`,
+            deleteLabel: "Remove segment",
+            onDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
+            repoint: () =>
+                setSelection({ kind: "audio-segment", clipIdx, segIdx }),
+        });
+
+        // Source select: an upload, or an AceStepFun generated track ref.
+        const segSourceRef =
+            typeof segment.source === "string" ? segment.source : "";
+        const segSourceValue = segSourceRef || AUDIO_SOURCE_UPLOAD;
+        const segSourceSelect = buildOptionSelect(
+            buildSegmentAudioSourceOptions(segSourceRef),
+            segSourceValue,
+            (value) => {
+                ctx.commit((cs) => {
+                    const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                    if (!seg) {
+                        return;
+                    }
+                    if (isAceStepFunAudioSource(value)) {
+                        seg.source = value;
+                    } else if (typeof seg.source === "string") {
+                        seg.source = null;
+                    }
+                });
+                ctx.render();
+            },
+        );
+        fields.appendChild(buildField("Source", segSourceSelect));
+
+        if (!segSourceRef) {
+            fields.appendChild(
+                buildUploadRow(
+                    "Audio Upload",
+                    "audio/*",
+                    typeof segment.source === "string"
+                        ? undefined
+                        : segment.source?.fileName,
+                    (data, fileName) => {
+                        ctx.commit((cs) => {
+                            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                            if (seg) {
+                                seg.source = { data, fileName };
+                            }
+                        });
+                        ctx.render();
+                    },
+                    () => {
+                        ctx.commit((cs) => {
+                            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                            if (seg) {
+                                seg.source = null;
+                            }
+                        });
+                        ctx.render();
+                    },
+                ),
+            );
+        }
+
+        const startInput = ctx.buildClampedNumber({
+            key: `seg-${segIdx}-start`,
+            value: segment.startSeconds,
+            min: 0,
+            max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
+            step: AUDIO_SEGMENT_STEP,
+            readBack: (cs) =>
+                cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
+            mutate: (cs, value) => {
+                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                if (seg) {
+                    const next = clampSegment(value, seg.lengthSeconds);
+                    seg.startSeconds = next.start;
+                    seg.lengthSeconds = next.length;
+                }
+            },
+        });
+        fields.appendChild(buildField("Start (s)", startInput));
+
+        const trimInput = buildNumber(
+            segment.trimStartSeconds,
+            0,
+            CLIP_DURATION_MAX,
+            AUDIO_SEGMENT_STEP,
+            (value) => {
+                ctx.debouncedCommit(`seg-${segIdx}-trim`, (cs) => {
+                    const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                    if (seg) {
+                        seg.trimStartSeconds = Math.max(
+                            0,
+                            Math.round(value * 10) / 10,
+                        );
+                    }
+                });
+            },
+        );
+        trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
+        fields.appendChild(buildField("Trim start (s)", trimInput));
+
+        const lengthInput = ctx.buildClampedNumber({
+            key: `seg-${segIdx}-length`,
+            value: segment.lengthSeconds,
+            min: AUDIO_SEGMENT_MIN_LENGTH,
+            max: clipDur,
+            step: AUDIO_SEGMENT_STEP,
+            readBack: (cs) =>
+                cs[clipIdx]?.audioSegments?.[segIdx]?.lengthSeconds ?? null,
+            mutate: (cs, value) => {
+                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                if (seg) {
+                    const next = clampSegment(seg.startSeconds, value);
+                    seg.startSeconds = next.start;
+                    seg.lengthSeconds = next.length;
+                }
+            },
+        });
+        fields.appendChild(buildField("Length (s)", lengthInput));
+        body.appendChild(row);
+    });
+
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent =
+        "Overlaid additively over the base audio; overlapping segments mix together.";
+    body.appendChild(note);
+
+    return wrapForm(GROUP_AUDIOSEG, body);
+};

@@ -403,8 +403,7 @@ describe("renderTimeline (DOM)", () => {
         } as unknown as Clip;
         renderTimeline(body, [clip]);
         const thumb = body.querySelector<HTMLElement>(".vst-region-thumb");
-        // The class carries `pointer-events: none` in CSS; assert it is applied
-        // and is not inside any interactive wrapper of its own.
+        // pointer-events:none lives in CSS; assert the marker class + aria-hidden here.
         expect(thumb?.getAttribute("aria-hidden")).toBe("true");
         expect(thumb?.classList.contains("vst-region-thumb")).toBe(true);
     });

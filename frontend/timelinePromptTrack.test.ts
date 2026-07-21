@@ -10,11 +10,15 @@ import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
+    getSelection,
+    resetSelectionForTests,
+    setSelection,
+} from "./selection";
+import {
     createTimelinePromptTrack,
     type TimelinePromptTrack,
 } from "./timelinePromptTrack";
 import type { Clip, PromptWindow } from "./types";
-import { getSelection, resetSelectionForTests, setSelection } from "./uiState";
 
 const PPS = 44;
 
@@ -174,7 +178,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
     it("clicking empty lane space adds a default-width minor window at the click point", () => {
         const body = setup([{ duration: 10 }]);
         const lane = el(body, ".vst-minor-lane[data-clip-idx='0']");
-        lane.dispatchEvent(mouse("mousedown", 2 * PPS)); // t = 2s
+        lane.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mouseup", 2 * PPS));
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
@@ -188,7 +192,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
     it("selects the newly created window so the dock opens it ready to type", () => {
         const body = setup([{ duration: 10 }]);
         const lane = el(body, ".vst-minor-lane[data-clip-idx='0']");
-        lane.dispatchEvent(mouse("mousedown", 2 * PPS)); // t = 2s
+        lane.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mouseup", 2 * PPS));
 
         // A brand-new window is the only one, so its index is 0.
@@ -222,8 +226,8 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
     it("click-dragging on empty lane space adds a window sized to the drag", () => {
         const body = setup([{ duration: 10 }]);
         const lane = el(body, ".vst-minor-lane[data-clip-idx='0']");
-        lane.dispatchEvent(mouse("mousedown", 1 * PPS)); // start 1s
-        document.dispatchEvent(mouse("mousemove", 4 * PPS)); // drag to 4s
+        lane.dispatchEvent(mouse("mousedown", 1 * PPS));
+        document.dispatchEvent(mouse("mousemove", 4 * PPS));
         document.dispatchEvent(mouse("mouseup", 4 * PPS));
 
         const windows = savedWindows(saveSpy);
@@ -238,7 +242,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         ]);
         const seg = el(body, ".vst-minor-seg[data-window-idx='0']");
         seg.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS)); // +2s
+        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS));
         document.dispatchEvent(mouse("mouseup", 100 + 2 * PPS));
 
         const windows = savedWindows(saveSpy);
@@ -293,9 +297,9 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
             { duration: 10, windows: [{ start: 4, duration: 2 }] },
         ]);
         const seg = el(body, ".vst-minor-seg[data-window-idx='0']");
-        const before = seg.style.left; // rendered inline position
+        const before = seg.style.left;
         seg.dispatchEvent(mouse("mousedown", 200));
-        document.dispatchEvent(mouse("mouseup", 200)); // no movement
+        document.dispatchEvent(mouse("mouseup", 200));
         seg.dispatchEvent(mouse("click", 200));
 
         // The segment must not have collapsed to left:0 — its inline left is preserved.
@@ -323,7 +327,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         const [a, b] = savedWindows(saveSpy).sort((x, y) => x.start - y.start);
         // A must not extend past B's start (10s); no overlap.
         expect(a.start + a.duration).toBeLessThanOrEqual(b.start + 1e-6);
-        expect(a.duration).toBeCloseTo(4, 5); // duration preserved
+        expect(a.duration).toBeCloseTo(4, 5);
     });
 
     it("resizing the right edge changes duration and keeps start", () => {
@@ -332,7 +336,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         ]);
         const grip = el(body, ".vst-minor-resize-r");
         grip.dispatchEvent(mouse("mousedown", 200));
-        document.dispatchEvent(mouse("mousemove", 200 + 1 * PPS)); // +1s
+        document.dispatchEvent(mouse("mousemove", 200 + 1 * PPS));
         document.dispatchEvent(mouse("mouseup", 200 + 1 * PPS));
 
         const windows = savedWindows(saveSpy);
@@ -346,7 +350,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         ]);
         const grip = el(body, ".vst-minor-resize-l");
         grip.dispatchEvent(mouse("mousedown", 200));
-        document.dispatchEvent(mouse("mousemove", 200 - 1 * PPS)); // -1s
+        document.dispatchEvent(mouse("mousemove", 200 - 1 * PPS));
         document.dispatchEvent(mouse("mouseup", 200 - 1 * PPS));
 
         const windows = savedWindows(saveSpy);
@@ -379,7 +383,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         ]);
         const seg = el(body, ".vst-minor-seg[data-window-idx='0']");
         seg.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mouseup", 100)); // no movement
+        document.dispatchEvent(mouse("mouseup", 100));
         seg.dispatchEvent(mouse("click", 100));
 
         expect(getSelection()).toEqual({

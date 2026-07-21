@@ -9,16 +9,15 @@ import {
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
+import { resetSelectionForTests } from "./selection";
 import {
     createTimelineLinking,
-    livePxPerSecond,
-    parseClipIdx,
     resolveSelectedIndex,
     type TimelineLinking,
 } from "./timelineLinking";
 import { DEFAULT_PX_PER_SECOND } from "./timelineView";
+import { livePxPerSecond, parseIntAttr } from "./trackDomUtils";
 import type { Clip } from "./types";
-import { resetSelectionForTests } from "./uiState";
 
 describe("resolveSelectedIndex", () => {
     it("keeps a valid in-range index", () => {
@@ -38,19 +37,21 @@ describe("resolveSelectedIndex", () => {
     });
 });
 
-describe("parseClipIdx", () => {
+describe("parseIntAttr (data-clip-idx)", () => {
     it("parses a valid data-clip-idx", () => {
         const el = document.createElement("div");
         el.setAttribute("data-clip-idx", "2");
-        expect(parseClipIdx(el)).toBe(2);
+        expect(parseIntAttr(el, "data-clip-idx")).toBe(2);
     });
 
     it("returns null for missing/invalid/null", () => {
-        expect(parseClipIdx(null)).toBeNull();
-        expect(parseClipIdx(document.createElement("div"))).toBeNull();
+        expect(parseIntAttr(null, "data-clip-idx")).toBeNull();
+        expect(
+            parseIntAttr(document.createElement("div"), "data-clip-idx"),
+        ).toBeNull();
         const bad = document.createElement("div");
         bad.setAttribute("data-clip-idx", "x");
-        expect(parseClipIdx(bad)).toBeNull();
+        expect(parseIntAttr(bad, "data-clip-idx")).toBeNull();
     });
 });
 
@@ -291,7 +292,6 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
             2, 1, 3,
         ]);
         expect(body.querySelectorAll(".vst-drop-indicator")).toHaveLength(0);
-        // The moved clip is now at index 1.
         expect(linking?.getSelectedIndex()).toBe(1);
     });
 

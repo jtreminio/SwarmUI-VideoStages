@@ -21,7 +21,7 @@ internal sealed class VideoStagesCoordinator(
     public void RunConfiguredStages()
     {
         VideoStagesSpec spec = g.GetVideoStagesSpec();
-        if (!VideoStagesSpecParser.HasUsableVideoModel(g, spec))
+        if (!VideoStagesGate.HasUsableVideoModel(g, spec))
         {
             return;
         }
@@ -67,7 +67,7 @@ internal sealed class VideoStagesCoordinator(
             clipAudioMaps.UploadedAudios,
             rootStageHandoff);
         EnsureFinalStageOutputSaved();
-        new ControlNetApplicator(g).ApplyHdrPostprocessToFinalSaves(clips);
+        new HdrPostprocessApplicator(g).ApplyHdrPostprocessToFinalSaves(clips);
     }
 
     private bool TryInstallRefineSourceVideo(IReadOnlyList<ClipSpec> clips)
@@ -161,7 +161,7 @@ internal sealed class VideoStagesCoordinator(
         IReadOnlyList<ClipSpec> clips)
     {
         Dictionary<int, WGNodeData> audios = new(BuildPerClipAudioDetections(audioHandler, clips));
-        ControlNetApplicator applicator = new(g);
+        ControlNetCapture applicator = new(g);
         foreach (ClipSpec clip in clips)
         {
             if (!ClipAudioWorkflowHelper.IsControlNetAudioSource(clip.AudioSource))

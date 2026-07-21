@@ -4,15 +4,18 @@ import {
     PROMPT_WINDOW_MIN_DURATION,
 } from "./constants";
 import type { GestureRouter } from "./gestureRouter";
-import { freeIntervalAt, type Span } from "./intervals";
+import { freeIntervalAt } from "./intervals";
 import { getClips } from "./persistence";
+import { otherSpans } from "./promptWindowEdits";
+import { setSelection } from "./selection";
 import { clipDurationOf, parseIntAttr } from "./trackDomUtils";
 import type { Clip, PromptWindow } from "./types";
-import { setSelection } from "./uiState";
 import { roundToTenth } from "./utils";
 import {
+    createDefaultOrDraggedSpan,
     createWindowTrack,
     type PressSpan,
+    resizeSpanEdge,
     type SpanGeom,
 } from "./windowTrack";
 
@@ -22,101 +25,6 @@ export interface TimelinePromptTrack {
     attach(body: HTMLElement, router: GestureRouter): void;
     dispose(): void;
 }
-
-const otherSpans = (
-    windows: PromptWindow[],
-    excludeIdx: number,
-    clipDuration: number,
-): Span[] =>
-    windows
-        .map((w, k) => ({
-            k,
-            start: clamp(w.start, 0, clipDuration),
-            end: clamp(w.start + w.duration, 0, clipDuration),
-        }))
-        .filter((s) => s.k !== excludeIdx && s.end > s.start)
-        .sort((a, b) => a.start - b.start)
-        .map((s) => ({ start: s.start, end: s.end }));
-
-/**
- * Move a prompt window's BEGIN edge to `desiredBegin` (seconds), keeping its end
- * fixed — the exact rule the timeline's left-edge resize gesture applies
- * (see the track config's `resizeTarget`, edge "left"): clamp the new start into
- * the free interval ending at this window's end (so it can't cross an adjacent
- * window or leave the clip) with a minimum-duration floor, then recompute
- * duration. Mutates in place.
- */
-export const applyPromptWindowBegin = (
-    clip: Clip,
-    windowIdx: number,
-    desiredBegin: number,
-): void => {
-    const window = clip.promptWindows?.[windowIdx];
-    if (!window) {
-        return;
-    }
-    const clipDur = clipDurationOf(clip);
-    const end = window.start + window.duration;
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
-    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
-    const start = clamp(desiredBegin, lo, end - PROMPT_WINDOW_MIN_DURATION);
-    window.start = roundToTenth(start);
-    window.duration = roundToTenth(end - start);
-};
-
-/**
- * Move a prompt window's END edge to `desiredEnd` (seconds), keeping its start
- * fixed — the exact rule the timeline's right-edge resize gesture applies
- * (see the track config's `resizeTarget`, edge "right"): clamp the new end into
- * the free interval starting at this window's start with a minimum-duration
- * floor, then recompute duration. Mutates in place.
- */
-export const applyPromptWindowEnd = (
-    clip: Clip,
-    windowIdx: number,
-    desiredEnd: number,
-): void => {
-    const window = clip.promptWindows?.[windowIdx];
-    if (!window) {
-        return;
-    }
-    const clipDur = clipDurationOf(clip);
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
-    const [, hi] = freeIntervalAt(spans, clipDur, window.start);
-    const end = clamp(
-        desiredEnd,
-        window.start + PROMPT_WINDOW_MIN_DURATION,
-        hi,
-    );
-    window.start = roundToTenth(window.start);
-    window.duration = roundToTenth(end - window.start);
-};
-
-/**
- * NEIGHBOUR bounds for a window's begin/end edges — the same interval walls
- * applyPromptWindowBegin/End clamp against. The dock's begin/end number inputs
- * use these as min (begin) / max (end) so spinner arrows stop AT a
- * neighbouring window instead of marching past it and snapping back on commit.
- * Only the neighbour walls belong in static input attributes: neighbours move
- * via gestures/deletes that rebuild the panel (fresh attrs), whereas the
- * window's OWN begin↔end coupling changes on value-only edits that don't
- * rebuild — that coupling stays with the commit clamp + display write-back.
- */
-export const promptWindowNeighborBounds = (
-    clip: Clip,
-    windowIdx: number,
-): { beginMin: number; endMax: number } | null => {
-    const window = clip.promptWindows?.[windowIdx];
-    if (!window) {
-        return null;
-    }
-    const clipDur = clipDurationOf(clip);
-    const end = window.start + window.duration;
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
-    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
-    const [, hi] = freeIntervalAt(spans, clipDur, window.start);
-    return { beginMin: roundToTenth(lo), endMax: roundToTenth(hi) };
-};
 
 /** The free-interval walls around a window at its press-time position. */
 const wallsFor = (
@@ -188,27 +96,21 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack =>
                 windowIdx,
                 clipDur,
             );
-            if (edge === "right") {
-                const [, hi] = freeIntervalAt(spans, clipDur, press.start);
-                const end = clamp(
-                    press.start + press.length + deltaSec,
-                    press.start + PROMPT_WINDOW_MIN_DURATION,
-                    hi,
-                );
-                return { start: press.start, length: end - press.start };
-            }
+            const [, hi] = freeIntervalAt(spans, clipDur, press.start);
             const end = press.start + press.length;
             const [lo] = freeIntervalAt(
                 spans,
                 clipDur,
                 Math.max(0, end - 1e-3),
             );
-            const start = clamp(
-                press.start + deltaSec,
+            return resizeSpanEdge(
+                edge,
+                press,
+                deltaSec,
+                PROMPT_WINDOW_MIN_DURATION,
                 lo,
-                end - PROMPT_WINDOW_MIN_DURATION,
+                hi,
             );
-            return { start, length: end - start };
         },
         writeResize: (clip, windowIdx, _edge, _press, geom) => {
             const window = clip.promptWindows?.[windowIdx];
@@ -222,31 +124,21 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack =>
             const clipDur = clipDurationOf(clip);
             const spans = otherSpans(clip.promptWindows ?? [], -1, clipDur);
             const [lo, hi] = freeIntervalAt(spans, clipDur, startSec);
-            const gap = hi - lo;
-            if (gap < PROMPT_WINDOW_MIN_DURATION) {
-                return null;
-            }
-            let start: number;
-            let duration: number;
-            if (endSec === null) {
-                duration = Math.min(PROMPT_WINDOW_DEFAULT_DURATION, gap);
-                start = clamp(startSec, lo, hi - duration);
-            } else {
-                const a = clamp(Math.min(startSec, endSec), lo, hi);
-                const b = clamp(Math.max(startSec, endSec), lo, hi);
-                start = a;
-                duration = Math.max(PROMPT_WINDOW_MIN_DURATION, b - a);
-                if (start + duration > hi) {
-                    duration = hi - start;
-                }
-            }
-            if (duration < PROMPT_WINDOW_MIN_DURATION) {
+            const geom = createDefaultOrDraggedSpan(
+                startSec,
+                endSec,
+                lo,
+                hi,
+                PROMPT_WINDOW_MIN_DURATION,
+                PROMPT_WINDOW_DEFAULT_DURATION,
+            );
+            if (!geom) {
                 return null;
             }
             const window: PromptWindow = {
                 prompt: "",
-                start: roundToTenth(start),
-                duration: roundToTenth(duration),
+                start: roundToTenth(geom.start),
+                duration: roundToTenth(geom.length),
             };
             clip.promptWindows.push(window);
             clip.promptWindows.sort((x, y) => x.start - y.start);

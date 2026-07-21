@@ -1,0 +1,107 @@
+[
+  {
+    "id": "union-control",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-union-control-ref0.5"
+  },
+  {
+    "id": "motion-track-control",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5"
+  },
+  {
+    "id": "in-outpainting",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-in-outpainting-0.9"
+  },
+  {
+    "id": "ingredients",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-ingredients-0.9"
+  },
+  {
+    "id": "lipdub",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-lipdub-0.9"
+  },
+  {
+    "id": "hdr",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-hdr-0.9"
+  },
+  {
+    "id": "pixel-spatial-upscaler-x2",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9"
+  },
+  {
+    "id": "pixel-spatial-upscaler-x4",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9"
+  },
+  {
+    "id": "deblur",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9"
+  },
+  {
+    "id": "decompression",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-decompression-0.9"
+  },
+  {
+    "id": "water-simulation",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-water-simulation-0.9"
+  },
+  {
+    "id": "instant-shave",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-instant-shave-0.9"
+  },
+  {
+    "id": "colorization",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-colorization-0.9"
+  },
+  {
+    "id": "cross-eyed",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-cross-eyed-0.9"
+  },
+  {
+    "id": "day-to-night",
+    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-day-to-night-0.9"
+  },
+  {
+    "id": "restyle",
+    "weightsUrl": "https://huggingface.co/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1"
+  },
+  {
+    "id": "cameraman",
+    "weightsUrl": "https://huggingface.co/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000"
+  },
+  {
+    "id": "crossview-prompt",
+    "weightsUrl": "https://huggingface.co/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700"
+  },
+  {
+    "id": "outpaint",
+    "weightsUrl": "https://huggingface.co/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-outpaint"
+  },
+  {
+    "id": "refocus",
+    "weightsUrl": "https://huggingface.co/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-refocus"
+  },
+  {
+    "id": "vr360-outpaint",
+    "weightsUrl": "https://huggingface.co/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors",
+    "autoModelName": "LTX-2/IC-LoRA/360vroutpaint_v2_step09000"
+  }
+]

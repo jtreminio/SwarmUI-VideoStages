@@ -1,0 +1,157 @@
+import { clamp, mediaPreviewSrc, REF_FRAME_MIN } from "../constants";
+import {
+    buildCheckbox,
+    buildField,
+    buildInstanceRow,
+    buildNumber,
+    buildOptionSelect,
+    buildUploadRow,
+    wrapForm,
+} from "../detailWidgets";
+import {
+    buildImageSourceOptions,
+    resolveImageSourceValue,
+} from "../imageSource";
+import { getReferenceFrameMax } from "../normalization";
+import { getRootDefaults } from "../rootDefaults";
+import { setSelection } from "../selection";
+import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
+import type { DetailStripContext } from "./context";
+
+const GROUP_REF = "vstdock_ref";
+
+/**
+ * The ref panel lists EVERY reference of the clip, stacked. The selected ref
+ * is highlighted; touching any ref's control re-points the selection to it
+ * and per-ref keys keep edits distinct.
+ */
+export const buildRefBody = (
+    ctx: DetailStripContext,
+    sel: Extract<TimelineSelection, { kind: "ref" }>,
+    clips: Clip[],
+): HTMLElement => {
+    const { clipIdx } = sel;
+    const clip = clips[clipIdx];
+    const body = document.createElement("div");
+    body.className =
+        "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
+    const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+
+    clip.refs.forEach((ref, refIdx) => {
+        const options = buildImageSourceOptions(ref.source ?? "");
+        const source = resolveImageSourceValue(ref.source ?? "", options);
+        const isUpload = source === REF_SOURCE_UPLOAD;
+        const { row, fields } = buildInstanceRow({
+            rowClass: "vst-detail-ref-row",
+            indexAttr: "data-vst-ref-index",
+            index: refIdx,
+            active: refIdx === sel.refIdx,
+            title: `R${refIdx + 1}`,
+            deleteLabel: "Delete",
+            onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
+            repoint: () => setSelection({ kind: "ref", clipIdx, refIdx }),
+        });
+
+        const select = buildOptionSelect(options, source, (value) => {
+            ctx.commit((cs) => {
+                const r = cs[clipIdx]?.refs[refIdx];
+                if (!r) {
+                    return;
+                }
+                const resolved = resolveImageSourceValue(
+                    value,
+                    buildImageSourceOptions(value),
+                );
+                r.source = resolved;
+                if (resolved !== REF_SOURCE_UPLOAD) {
+                    r.uploadedImage = null;
+                    r.uploadFileName = null;
+                }
+            });
+            ctx.render();
+        });
+        fields.appendChild(buildField("Image Source", select));
+
+        if (isUpload) {
+            const preview = document.createElement("div");
+            preview.className = "vst-refs-thumb-preview";
+            const data = ref.uploadedImage?.data;
+            if (data) {
+                preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
+                preview.classList.add("vst-refs-thumb-preview-set");
+            }
+            fields.appendChild(preview);
+        }
+
+        const frameInput = buildNumber(
+            ref.frame,
+            REF_FRAME_MIN,
+            frameMax,
+            1,
+            (value) => {
+                ctx.debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
+                    const r = cs[clipIdx]?.refs[refIdx];
+                    if (r) {
+                        r.frame = clamp(
+                            Math.round(value),
+                            REF_FRAME_MIN,
+                            frameMax,
+                        );
+                    }
+                });
+            },
+        );
+        frameInput.setAttribute("data-vst-focus-key", `ref-${refIdx}-frame`);
+        fields.appendChild(
+            buildField(`Attach at Frame (1–${frameMax})`, frameInput),
+        );
+
+        fields.appendChild(
+            buildCheckbox(
+                "Count from clip end",
+                ref.fromEnd === true,
+                (value) => {
+                    ctx.commit((cs) => {
+                        const r = cs[clipIdx]?.refs[refIdx];
+                        if (r) {
+                            r.fromEnd = value;
+                        }
+                    });
+                },
+            ),
+        );
+
+        if (isUpload) {
+            fields.appendChild(
+                buildUploadRow(
+                    "Image Upload",
+                    "image/*",
+                    ref.uploadedImage?.fileName,
+                    (data, fileName) => {
+                        ctx.commit((cs) => {
+                            const r = cs[clipIdx]?.refs[refIdx];
+                            if (r) {
+                                r.uploadedImage = { data, fileName };
+                                r.uploadFileName = fileName;
+                            }
+                        });
+                        ctx.render();
+                    },
+                    () => {
+                        ctx.commit((cs) => {
+                            const r = cs[clipIdx]?.refs[refIdx];
+                            if (r) {
+                                r.uploadedImage = null;
+                                r.uploadFileName = null;
+                            }
+                        });
+                        ctx.render();
+                    },
+                ),
+            );
+        }
+        body.appendChild(row);
+    });
+
+    return wrapForm(GROUP_REF, body);
+};

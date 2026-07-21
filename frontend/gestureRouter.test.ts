@@ -89,7 +89,6 @@ describe("createGestureRouter", () => {
         );
     };
     const click = (): boolean => {
-        // Returns whether a bubble-phase click listener on the body saw it.
         let seen = false;
         const listener = (): void => {
             seen = true;

@@ -9,8 +9,10 @@ import { clipDurationOf } from "./trackDomUtils";
 import type { Clip } from "./types";
 import { roundToTenth } from "./utils";
 import {
+    createDefaultOrDraggedSpan,
     createWindowTrack,
     type PressSpan,
+    resizeSpanEdge,
     type SpanGeom,
 } from "./windowTrack";
 
@@ -49,7 +51,6 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack =>
                       trim: 0,
                   }
                 : null,
-        // A clip holds at most one retake; the lane only creates when none exists.
         canCreate: (clip) => !clip.retake,
         moveTargetStart: (clip, _itemIdx, press, desiredStart) => {
             const clipDur = clipDurationOf(clip);
@@ -67,24 +68,15 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack =>
                 Math.min(length, clipDur - clip.retake.startSeconds),
             );
         },
-        resizeTarget: (clip, _itemIdx, edge, press, deltaSec): SpanGeom => {
-            const clipDur = clipDurationOf(clip);
-            if (edge === "right") {
-                const end = clamp(
-                    press.start + press.length + deltaSec,
-                    press.start + RETAKE_MIN_DURATION,
-                    clipDur,
-                );
-                return { start: press.start, length: end - press.start };
-            }
-            const end = press.start + press.length;
-            const start = clamp(
-                press.start + deltaSec,
+        resizeTarget: (clip, _itemIdx, edge, press, deltaSec): SpanGeom =>
+            resizeSpanEdge(
+                edge,
+                press,
+                deltaSec,
+                RETAKE_MIN_DURATION,
                 0,
-                end - RETAKE_MIN_DURATION,
-            );
-            return { start, length: end - start };
-        },
+                clipDurationOf(clip),
+            ),
         writeResize: (clip, _itemIdx, _edge, _press, geom) => {
             if (!clip.retake) {
                 return;
@@ -95,30 +87,20 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack =>
         // A plain tap places a default-length window at the pressed time; a
         // drag sizes it.
         createSpan: (clip, clipIdx, startSec, endSec) => {
-            const clipDur = clipDurationOf(clip);
-            if (clipDur < RETAKE_MIN_DURATION) {
-                return null;
-            }
-            let start: number;
-            let length: number;
-            if (endSec === null) {
-                length = Math.min(RETAKE_DEFAULT_DURATION, clipDur);
-                start = clamp(startSec, 0, clipDur - length);
-            } else {
-                const a = clamp(Math.min(startSec, endSec), 0, clipDur);
-                const b = clamp(Math.max(startSec, endSec), 0, clipDur);
-                start = a;
-                length = Math.max(RETAKE_MIN_DURATION, b - a);
-                if (start + length > clipDur) {
-                    length = clipDur - start;
-                }
-            }
-            if (length < RETAKE_MIN_DURATION) {
+            const geom = createDefaultOrDraggedSpan(
+                startSec,
+                endSec,
+                0,
+                clipDurationOf(clip),
+                RETAKE_MIN_DURATION,
+                RETAKE_DEFAULT_DURATION,
+            );
+            if (!geom) {
                 return null;
             }
             clip.retake = {
-                startSeconds: roundToTenth(start),
-                lengthSeconds: roundToTenth(length),
+                startSeconds: roundToTenth(geom.start),
+                lengthSeconds: roundToTenth(geom.length),
                 strength: RETAKE_STRENGTH_DEFAULT,
             };
             return { kind: "retake", clipIdx };

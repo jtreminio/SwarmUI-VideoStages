@@ -42,8 +42,7 @@ internal class StageRunner(
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
-            ControlNetApplicator applicator = new(g);
-            bool needsCrop = applicator.ApplyIcLoras(
+            bool needsCrop = new IcLoraApplicator(g).ApplyIcLoras(
                 currentGenInfo,
                 clip,
                 stage.ControlNetStrength,
@@ -55,7 +54,7 @@ internal class StageRunner(
             {
                 stageFrame.NeedsCropGuidesAfterSampler = true;
             }
-            applicator.ApplyVoiceRefTokens(
+            new VoiceRefApplicator(g).ApplyVoiceRefTokens(
                 currentGenInfo,
                 clip,
                 stageFrame,
@@ -211,7 +210,7 @@ internal class StageRunner(
         int width,
         int height)
     {
-        int multiple = 32 * ControlNetApplicator.MaxKnownIcLoraDownscaleFactor(
+        int multiple = 32 * IcLoraApplicator.MaxKnownIcLoraDownscaleFactor(
             clip, stage.ClipStageRawIndex);
         if (multiple <= 32 || (width % multiple == 0 && height % multiple == 0))
         {
@@ -406,13 +405,7 @@ internal class StageRunner(
     private ImageScaleNode AddDisabledCropImageScale(JArray sourcePath, int width, int height, string upscaleMethod)
     {
         using WorkflowBridge bridge = BridgeSync.For(g);
-        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
-            Width: width,
-            Height: height,
-            UpscaleMethod: upscaleMethod,
-            Crop: "disabled"));
-        scale.Image.ConnectFromPath(bridge, sourcePath);
-        return scale;
+        return ImageScaleReuse.Create(bridge, sourcePath, width, height, "disabled", upscaleMethod);
     }
 
     private ImageScaleNode AddModelUpscaleChain(JArray sourcePath, string modelName, int targetWidth, int targetHeight)
@@ -477,27 +470,19 @@ internal class StageRunner(
         INodeOutput newAudioOutput = newAudioPath is not null ? bridge.ResolvePath(newAudioPath) : null;
         HashSet<string> staleAudioNodeIds = [];
 
-        foreach (SwarmSaveAnimationWSNode saveNode in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
-        {
-            if (saveNode.Images.Connection != oldOutput)
-            {
-                continue;
-            }
-
-            saveNode.Images.ConnectToUntyped(newOutput);
-            if (retargetAudio)
+        SaveAnimationRetargeter.Retarget(
+            bridge,
+            saveNode => saveNode.Images.Connection == oldOutput,
+            newOutput,
+            newAudioOutput,
+            retargetAudio,
+            saveNode =>
             {
                 if (saveNode.Audio.Connection is INodeOutput oldAudioOutput)
                 {
                     staleAudioNodeIds.Add(oldAudioOutput.Node.Id);
                 }
-                if (!saveNode.Audio.TryConnectToUntyped(newAudioOutput))
-                {
-                    saveNode.Audio.Clear();
-                }
-            }
-            bridge.SyncNode(saveNode);
-        }
+            });
 
         HashSet<string> protectedNodes = [];
         AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);

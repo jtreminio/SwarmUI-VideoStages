@@ -1,13 +1,7 @@
-"""Unit tests for the pure PromptRelay helpers (no ComfyUI / GPU required)."""
-
-import os
-import sys
-
 import torch
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-from swarm_prompt_relay.prompt_relay import (  # noqa: E402
+from SwarmVideoStagesNodes.swarm_prompt_relay.prompt_relay import (
+    _detect_attention_mode,
     build_segments,
     convert_to_latent_lengths,
     create_mask_fn,
@@ -17,7 +11,7 @@ from swarm_prompt_relay.prompt_relay import (  # noqa: E402
 )
 
 
-def test_parse_windows_returns_parallel_prompt_and_seconds_lists():
+def test_parse_windows_returns_parallel_prompt_and_seconds_lists() -> None:
     prompts, seconds = parse_windows(
         '[{"prompt": " a red car ", "seconds": 1.5}, {"prompt": "a blue boat", "seconds": 2}]'
     )
@@ -26,13 +20,13 @@ def test_parse_windows_returns_parallel_prompt_and_seconds_lists():
     assert seconds == [1.5, 2.0]
 
 
-def test_parse_windows_keeps_lists_parallel_with_empty_prompt_and_coerces_seconds():
+def test_parse_windows_keeps_lists_parallel_with_empty_prompt_and_coerces_seconds() -> None:
     prompts, seconds = parse_windows('[{"seconds": "0.5"}, {"prompt": "x", "seconds": 2}]')
     assert prompts == ["", "x"]
     assert seconds == [0.5, 2.0]
 
 
-def test_parse_windows_blank_or_malformed_yields_empty():
+def test_parse_windows_blank_or_malformed_yields_empty() -> None:
     assert parse_windows("") == ([], [])
     assert parse_windows("   ") == ([], [])
     assert parse_windows("not json") == ([], [])
@@ -43,13 +37,13 @@ def test_parse_windows_blank_or_malformed_yields_empty():
 class _FakeTokenizer:
     """Whitespace tokenizer returning {'input_ids': [...]} like an HF tokenizer."""
 
-    add_eos = False
+    add_eos: bool = False
 
-    def __call__(self, text):
+    def __call__(self, text: str) -> dict[str, list[str]]:
         return {"input_ids": text.split()}
 
 
-def test_distribute_segment_lengths_caps_to_latent_frames():
+def test_distribute_segment_lengths_caps_to_latent_frames() -> None:
     assert distribute_segment_lengths(2, 10, [4, 4]) == [4, 4]
     # Overshoot is clamped so the cursor never exceeds latent_frames.
     assert distribute_segment_lengths(2, 6, [4, 4]) == [4, 2]
@@ -57,19 +51,19 @@ def test_distribute_segment_lengths_caps_to_latent_frames():
     assert distribute_segment_lengths(3, 10) == [4, 4, 2]
 
 
-def test_convert_to_latent_lengths_full_coverage_pins_to_latent_frames():
+def test_convert_to_latent_lengths_full_coverage_pins_to_latent_frames() -> None:
     # 40+40 = 8*10 = full coverage, so it pins to 10.
     result = convert_to_latent_lengths([40, 40], temporal_stride=8, latent_frames=10)
     assert sum(result) == 10
     assert all(v >= 1 for v in result)
 
 
-def test_convert_to_latent_lengths_partial_stays_partial():
+def test_convert_to_latent_lengths_partial_stays_partial() -> None:
     result = convert_to_latent_lengths([8, 8], temporal_stride=8, latent_frames=100)
     assert sum(result) == 2
 
 
-def test_map_token_indices_ranges_are_contiguous():
+def test_map_token_indices_ranges_are_contiguous() -> None:
     tok = _FakeTokenizer()
     full, ranges = map_token_indices(tok, "a global", ["red car", "blue boat"])
     assert full == "a global red car blue boat"
@@ -77,7 +71,7 @@ def test_map_token_indices_ranges_are_contiguous():
     assert ranges == [(2, 4), (4, 6)]
 
 
-def test_build_segments_midpoints_advance_with_cursor():
+def test_build_segments_midpoints_advance_with_cursor() -> None:
     tok = _FakeTokenizer()
     _, ranges = map_token_indices(tok, "g", ["car", "boat"])
     segs = build_segments(ranges, [4, 4], epsilon=1e-3)
@@ -86,11 +80,36 @@ def test_build_segments_midpoints_advance_with_cursor():
     assert torch.equal(segs[0]["local_token_idx"], torch.arange(ranges[0][0], ranges[0][1]))
 
 
-def _penalized_columns(mask):
+def test_detect_attention_mode_audio_branch_is_scaled() -> None:
+    assert _detect_attention_mode("audio_attn2", 100, 50, 8, 1, None, 10) == ("scaled", None)
+
+
+def test_detect_attention_mode_grid_sizes_drive_tokens_per_frame() -> None:
+    # grid_sizes[1]*[2] = 6 tokens/frame, latent_frames=8 -> video_lq=48.
+    assert _detect_attention_mode("attn2", 48, 20, 8, 1, (1, 2, 3), 10) == ("video", 6)
+    # Lq != video_lq falls back to the scaled (fractional-position) penalty.
+    assert _detect_attention_mode("attn2", 40, 20, 8, 1, (1, 2, 3), 10) == ("scaled", 6)
+
+
+def test_detect_attention_mode_without_grid_uses_divisibility_then_fallback() -> None:
+    # Lq divisible by latent_frames -> tokens/frame inferred as Lq//latent_frames.
+    assert _detect_attention_mode("attn2", 48, 20, 8, 1, None, 10) == ("video", 6)
+    # Non-divisible Lq -> the supplied fallback tokens/frame.
+    assert _detect_attention_mode("attn2", 50, 20, 8, 7, None, 10) == ("scaled", 7)
+
+
+def test_detect_attention_mode_skips_cross_modal_keys() -> None:
+    # Lk equal to the video token length -> cross-modal, leave unmasked.
+    assert _detect_attention_mode("attn2", 48, 48, 8, 1, (1, 2, 3), 10) is None
+    # Lk shorter than the prompt token count -> not the text keys, leave unmasked.
+    assert _detect_attention_mode("attn2", 48, 5, 8, 1, (1, 2, 3), 10) is None
+
+
+def _penalized_columns(mask: torch.Tensor) -> set[int]:
     return set(torch.nonzero(mask < 0)[:, 1].tolist())
 
 
-def test_mask_fn_left_padded_keys_shift_token_columns_to_the_end():
+def test_mask_fn_left_padded_keys_shift_token_columns_to_the_end() -> None:
     # Ranges 1..3 and 3..5 within a 5-token prompt ("g" + 2x2 local tokens).
     tok = _FakeTokenizer()
     _, ranges = map_token_indices(tok, "g", ["red car", "blue boat"])
@@ -106,7 +125,7 @@ def test_mask_fn_left_padded_keys_shift_token_columns_to_the_end():
     assert not cols & set(range(15))
 
 
-def test_mask_fn_right_padded_keys_keep_zero_based_columns():
+def test_mask_fn_right_padded_keys_keep_zero_based_columns() -> None:
     tok = _FakeTokenizer()
     _, ranges = map_token_indices(tok, "g", ["red car", "blue boat"])
     segs = build_segments(ranges, [4, 4], epsilon=1e-3)

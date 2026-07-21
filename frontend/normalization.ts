@@ -39,6 +39,7 @@ import {
     STAGE_REF_STRENGTH_MIN,
     STAGE_REF_STRENGTH_STEP,
 } from "./constants";
+import { utils } from "./hostDom";
 import { IC_LORA_PRESET_CUSTOM_ID } from "./icLoraPresets";
 import { framesForClip, snapDurationToFps } from "./renderUtils";
 import {
@@ -56,9 +57,12 @@ import {
     type StageLora,
     type UploadedAudio,
 } from "./types";
-import { isRecord, roundToTenth, utils } from "./utils";
+import { isRecord, roundToTenth } from "./utils";
 
-const readProp = (raw: Record<string, unknown>, ...keys: string[]): unknown => {
+export const readProp = (
+    raw: Record<string, unknown>,
+    ...keys: string[]
+): unknown => {
     for (const key of keys) {
         if (Object.hasOwn(raw, key)) {
             return raw[key];
@@ -101,12 +105,6 @@ export const normalizePromptWindows = (
         .sort((a, b) => a.start - b.start);
 };
 
-/**
- * Normalizes an optional per-clip retake window against the clip duration.
- * Returns null when absent or invalid (non-positive length, or a window that
- * cannot fit inside the clip). Start is clamped to >= 0 and start+length is
- * clamped to the clip duration; strength is clamped to [0, 1] (default 1).
- */
 /**
  * Clamp a (start, length) window inside [0, clipDuration] with a minimum
  * length: start is clamped so at least minLength fits, then length is clamped
@@ -305,7 +303,6 @@ export const normalizeControlNetSource = (value: unknown): string => {
     return CONTROLNET_SOURCE_OPTIONS[0];
 };
 
-/** A fresh IC-LoRA entry with every knob at its default. */
 export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
@@ -364,7 +361,6 @@ const normalizeIcLoraStage = (value: unknown, stageCount: number): number => {
     return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
 };
 
-/** Drops entries with no LoRA name; everything else is clamped to valid ranges. */
 export const normalizeIcLora = (
     raw: unknown,
     stageCount: number = 0,
@@ -444,6 +440,17 @@ export const normalizeIcLoras = (
             ),
         }),
     ];
+};
+
+/**
+ * Heals an IC-LoRA entry after its stage target changes (a stage delete/shift or
+ * a re-target): "Stage Input" media only exists on a refine stage, so an entry
+ * that dropped below stage 1 falls its source back to Upload. Mutates in place.
+ */
+export const reconcileIcLoraStage = (entry: IcLora): void => {
+    if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+        entry.source = IC_LORA_SOURCE_UPLOAD;
+    }
 };
 
 /** True when any entry is driven by a captured core "ControlNet N" branch. */

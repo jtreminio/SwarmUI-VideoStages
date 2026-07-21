@@ -1,15 +1,21 @@
 /**
- * Small DOM/model helpers shared by the timeline track modules. These were
- * copy-pasted per track while the tracks were built incrementally; keep new
- * track code importing from here instead of re-deriving them.
+ * Small DOM/model helpers shared by the timeline track modules
  */
 
 import { clamp } from "./constants";
+import { getClips, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
+import type { UpdateOrigin } from "./store";
 import { readStateToken } from "./swarmInputs";
+import { DEFAULT_PX_PER_SECOND } from "./timelineView";
 import type { Clip } from "./types";
 
-/** Read a non-negative integer data attribute, else null. */
+/** The timeline body's live px-per-second (its zoom), with the default fallback. */
+export const livePxPerSecond = (body: HTMLElement): number => {
+    const pps = Number.parseFloat(body.dataset.vstPps ?? "");
+    return Number.isFinite(pps) && pps > 0 ? pps : DEFAULT_PX_PER_SECOND;
+};
+
 export const parseIntAttr = (
     el: Element | null,
     name: string,
@@ -43,6 +49,28 @@ export const widthPct = (length: number, duration: number): number =>
 export const isStaleToken = (sourceToken: string): boolean =>
     readStateToken() !== sourceToken;
 
+/**
+ * The clip-track gesture-commit skeleton: bail when the carriers changed since
+ * the gesture began, otherwise run `mutate` on the live clips and save the
+ * array it returns (or a new array, e.g. a reordered one) under `origin`. Any
+ * selection change belongs inside `mutate`; returns true when a save happened.
+ */
+export const commitClipMutation = (
+    sourceToken: string,
+    origin: UpdateOrigin,
+    mutate: (clips: Clip[]) => Clip[] | null,
+): boolean => {
+    if (isStaleToken(sourceToken)) {
+        return false;
+    }
+    const next = mutate(getClips());
+    if (!next) {
+        return false;
+    }
+    saveClips(next, { origin });
+    return true;
+};
+
 /** The timeline's fps for frame math, with the 24fps fallback. */
 export const currentTimelineFps = (): number => {
     try {
@@ -55,7 +83,7 @@ export const currentTimelineFps = (): number => {
 
 /**
  * Keyboard-activation check for click-selectable track elements: Enter or
- * Space (including the legacy "Spacebar" key value some engines report).
+ * Space.
  */
 export const isActivateKey = (ke: KeyboardEvent): boolean =>
     ke.key === "Enter" || ke.key === " " || ke.key === "Spacebar";

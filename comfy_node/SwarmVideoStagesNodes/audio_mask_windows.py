@@ -1,43 +1,29 @@
-"""Pure helpers for SwarmSetAudioMaskWindows (no ComfyUI imports, unit-testable)."""
-
 from __future__ import annotations
 
-import json
 import math
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 import torch
 
+from .json_windows import parse_json_windows
 
-def parse_mask_windows(windows_json):
-    """Parse a JSON array of ``{"start": float, "end": float}`` seconds windows.
 
-    Malformed JSON / non-array input yields ``[]``. Windows with non-numeric or
-    inverted bounds are dropped. Returns a list of (start, end) tuples.
-    """
-    text = (windows_json or "").strip()
-    if not text:
-        return []
-    try:
-        data = json.loads(text)
-    except (ValueError, TypeError):
-        return []
-    if not isinstance(data, list):
-        return []
-    windows = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
+def parse_mask_windows(windows_json: str | None) -> list[tuple[float, float]]:
+    def parse_item(item: dict[str, Any]) -> tuple[float, float] | None:
         try:
             start = float(item.get("start", 0))
             end = float(item.get("end", 0))
         except (TypeError, ValueError):
-            continue
+            return None
         if end > start >= 0:
-            windows.append((start, end))
-    return windows
+            return start, end
+        return None
+
+    return parse_json_windows(windows_json, parse_item)
 
 
-def audio_latents_per_second(audio_vae, latent_downsample_factor) -> float:
+def audio_latents_per_second(audio_vae: Any, latent_downsample_factor: int) -> float:
     """Latent frames per second of audio, from the audio VAE's mel geometry.
 
     Handles both the comfy VAE wrapper (``.autoencoder`` hack attr exposing
@@ -52,7 +38,12 @@ def audio_latents_per_second(audio_vae, latent_downsample_factor) -> float:
     return rate / inner.mel_hop_length / latent_downsample_factor
 
 
-def build_windowed_audio_mask(latent_shape, windows, latents_per_second, gap_mask_value):
+def build_windowed_audio_mask(
+    latent_shape: Sequence[int],
+    windows: Iterable[tuple[float, float]],
+    latents_per_second: float,
+    gap_mask_value: float,
+) -> torch.Tensor:
     """Build the 3D [B, F, H] audio noise mask: 0.0 inside windows, gap value outside.
 
     3D (not 4D) deliberately — the LTX Director reference notes a 4D 128-channel

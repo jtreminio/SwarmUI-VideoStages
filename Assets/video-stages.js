@@ -80,6 +80,100 @@
     return body;
   };
 
+  // frontend/selectOption.ts
+  var preserveSelectedOption = (options, selectedValue, position, build) => {
+    const value = `${selectedValue || ""}`.trim();
+    if (!value || options.some((option2) => option2.value === value)) {
+      return;
+    }
+    const option = build(value);
+    if (!option) {
+      return;
+    }
+    if (position === "start") {
+      options.unshift(option);
+    } else {
+      options.push(option);
+    }
+  };
+  var resolveSelectValue = (currentValue, options, fallback) => {
+    const desired = `${currentValue || ""}`;
+    return options.some((option) => option.value === desired) ? desired : fallback;
+  };
+
+  // frontend/audioSource.ts
+  var AUDIO_SOURCE_NATIVE = "Native";
+  var AUDIO_SOURCE_UPLOAD = "Upload";
+  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
+  var AUDIO_SOURCE_VOICE_REF = "Voice Reference";
+  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
+  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
+  var canUseClipLengthFromAudio = (source) => {
+    const normalized = `${source ?? ""}`.trim();
+    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
+  };
+  var getAceStepFunRefs = () => {
+    const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
+    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+      return [];
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const refs = [];
+    for (const raw of snapshot.refs) {
+      const ref = `${raw || ""}`.trim();
+      if (!ref || seen.has(ref)) {
+        continue;
+      }
+      seen.add(ref);
+      refs.push(ref);
+    }
+    return refs;
+  };
+  var getAceStepFunRefLabel = (ref) => {
+    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
+    if (audioRef) {
+      return `AceStepFun Audio ${audioRef[1]}`;
+    }
+    return ref;
+  };
+  var appendAceStepFunRefs = (options) => {
+    for (const ref of getAceStepFunRefs()) {
+      options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+  };
+  var appendMissingSelectedRef = (options, currentValue) => preserveSelectedOption(
+    options,
+    currentValue,
+    "end",
+    (value) => isAceStepFunAudioSource(value) ? { value, label: getAceStepFunRefLabel(value) } : null
+  );
+  var buildSegmentAudioSourceOptions = (currentValue = "") => {
+    const options = [
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    appendAceStepFunRefs(options);
+    appendMissingSelectedRef(options, currentValue);
+    return options;
+  };
+  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
+    const options = [
+      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
+      { value: AUDIO_SOURCE_VOICE_REF, label: AUDIO_SOURCE_VOICE_REF }
+    ];
+    appendAceStepFunRefs(options);
+    if (context.controlNetEnabled) {
+      options.push({
+        value: AUDIO_SOURCE_CONTROLNET,
+        label: AUDIO_SOURCE_CONTROLNET
+      });
+    }
+    appendMissingSelectedRef(options, currentValue);
+    return options;
+  };
+  var resolveAudioSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, AUDIO_SOURCE_NATIVE);
+
   // frontend/clipColor.ts
   var HUE_MIN = 0;
   var HUE_MAX = 359;
@@ -219,95 +313,20 @@
     return `${prefix}/${value}`;
   };
 
-  // frontend/debugLog.ts
-  var videoStagesDebugEnabled = () => typeof window !== "undefined" && !!window.__VIDEO_STAGES_DEBUG__;
-  var videoStagesDebugLog = (area, message, ...details) => {
-    if (!videoStagesDebugEnabled()) {
-      return;
-    }
-    console.debug(`[VideoStages debug ${area}]`, message, ...details);
+  // frontend/hostDom.ts
+  var getElementByType = (id, ctor) => {
+    const element = document.getElementById(id);
+    return element instanceof ctor ? element : null;
   };
-
-  // frontend/audioSource.ts
-  var AUDIO_SOURCE_NATIVE = "Native";
-  var AUDIO_SOURCE_UPLOAD = "Upload";
-  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
-  var AUDIO_SOURCE_VOICE_REF = "Voice Reference";
-  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
-  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
-  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
-  var canUseClipLengthFromAudio = (source) => {
-    const normalized = `${source ?? ""}`.trim();
-    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
-  };
-  var getAceStepFunRefs = () => {
-    const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
-    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
-      return [];
+  var utils = {
+    getInputElement: (id) => getElementByType(id, HTMLInputElement),
+    getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
+    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
+    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
+    toNumber: (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
     }
-    const seen = /* @__PURE__ */ new Set();
-    const refs = [];
-    for (const raw of snapshot.refs) {
-      const ref = `${raw || ""}`.trim();
-      if (!ref || seen.has(ref)) {
-        continue;
-      }
-      seen.add(ref);
-      refs.push(ref);
-    }
-    return refs;
-  };
-  var getAceStepFunRefLabel = (ref) => {
-    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
-    if (audioRef) {
-      return `AceStepFun Audio ${audioRef[1]}`;
-    }
-    return ref;
-  };
-  var appendAceStepFunRefs = (options) => {
-    for (const ref of getAceStepFunRefs()) {
-      options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
-    }
-  };
-  var appendMissingSelectedRef = (options, currentValue) => {
-    const selected = `${currentValue || ""}`.trim();
-    if (isAceStepFunAudioSource(selected) && !options.some((option) => option.value === selected)) {
-      options.push({
-        value: selected,
-        label: getAceStepFunRefLabel(selected)
-      });
-    }
-  };
-  var buildSegmentAudioSourceOptions = (currentValue = "") => {
-    const options = [
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
-    ];
-    appendAceStepFunRefs(options);
-    appendMissingSelectedRef(options, currentValue);
-    return options;
-  };
-  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
-    const options = [
-      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
-      { value: AUDIO_SOURCE_VOICE_REF, label: AUDIO_SOURCE_VOICE_REF }
-    ];
-    appendAceStepFunRefs(options);
-    if (context.controlNetEnabled) {
-      options.push({
-        value: AUDIO_SOURCE_CONTROLNET,
-        label: AUDIO_SOURCE_CONTROLNET
-      });
-    }
-    appendMissingSelectedRef(options, currentValue);
-    return options;
-  };
-  var resolveAudioSourceValue = (currentValue, options) => {
-    const desired = `${currentValue || ""}`;
-    if (options.some((option) => option.value === desired)) {
-      return desired;
-    }
-    return AUDIO_SOURCE_NATIVE;
   };
 
   // frontend/icLoraPresets.ts
@@ -553,18 +572,16 @@
   // frontend/utils.ts
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var roundToTenth = (seconds) => Math.round(seconds * 10) / 10;
-  var getElementByType = (id, ctor) => {
-    const element = document.getElementById(id);
-    return element instanceof ctor ? element : null;
-  };
-  var utils = {
-    getInputElement: (id) => getElementByType(id, HTMLInputElement),
-    getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
-    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
-    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
-    toNumber: (value, fallback) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : fallback;
+  var gridCeil = (seconds) => Math.ceil(seconds * 10) / 10;
+  var gridFloor = (seconds) => Math.floor(seconds * 10) / 10;
+  var safeJsonParse = (raw, fallback) => {
+    if (raw == null) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return fallback;
     }
   };
 
@@ -849,6 +866,11 @@
         )
       })
     ];
+  };
+  var reconcileIcLoraStage = (entry) => {
+    if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+      entry.source = IC_LORA_SOURCE_UPLOAD;
+    }
   };
   var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
     (entry) => entry.source !== IC_LORA_SOURCE_UPLOAD && entry.source !== IC_LORA_SOURCE_STAGE_INPUT
@@ -1182,6 +1204,15 @@
       stages
     };
     return clip;
+  };
+
+  // frontend/debugLog.ts
+  var videoStagesDebugEnabled = () => typeof window !== "undefined" && !!window.__VIDEO_STAGES_DEBUG__;
+  var videoStagesDebugLog = (area, message, ...details) => {
+    if (!videoStagesDebugEnabled()) {
+      return;
+    }
+    console.debug(`[VideoStages debug ${area}]`, message, ...details);
   };
 
   // frontend/promptSegments.ts
@@ -1696,58 +1727,6 @@
 
   // frontend/uiState.ts
   var UI_STATE_KEY = "videostages_ui_state";
-  var NO_SELECTION = { kind: "none" };
-  var selection = NO_SELECTION;
-  var selectionSubscribers = /* @__PURE__ */ new Set();
-  var clipIdxOf = (sel) => sel.kind === "none" || sel.kind === "boundary" ? null : sel.clipIdx;
-  var sameSelection = (a, b) => {
-    if (a.kind !== b.kind) {
-      return false;
-    }
-    if (a.kind === "none" || b.kind === "none") {
-      return true;
-    }
-    if (a.kind === "boundary" || b.kind === "boundary") {
-      return a.kind === "boundary" && b.kind === "boundary" && a.leftClipIdx === b.leftClipIdx;
-    }
-    if (a.clipIdx !== clipIdxOf(b)) {
-      return false;
-    }
-    if (a.kind === "clip" && b.kind === "clip") {
-      return a.stageIdx === b.stageIdx;
-    }
-    if (a.kind === "ref" && b.kind === "ref") {
-      return a.refIdx === b.refIdx;
-    }
-    if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
-      return a.windowIdx === b.windowIdx;
-    }
-    if (a.kind === "audio-segment" && b.kind === "audio-segment") {
-      return a.segIdx === b.segIdx;
-    }
-    return true;
-  };
-  var isSameSelection = (a, b) => sameSelection(a, b);
-  var getSelection = () => selection;
-  var getSelectedClipIndex = () => clipIdxOf(selection);
-  var setSelection = (next) => {
-    if (sameSelection(selection, next)) {
-      return;
-    }
-    selection = next;
-    for (const cb of [...selectionSubscribers]) {
-      try {
-        cb(selection);
-      } catch {
-      }
-    }
-  };
-  var subscribeSelection = (cb) => {
-    selectionSubscribers.add(cb);
-    return () => {
-      selectionSubscribers.delete(cb);
-    };
-  };
   var serializeUiState = (clips) => {
     const state = {
       clips: clips.map((clip) => ({
@@ -1760,12 +1739,7 @@
     if (!raw) {
       return;
     }
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return;
-    }
+    const parsed = safeJsonParse(raw, null);
     const storedClips = isRecord(parsed) && Array.isArray(parsed.clips) ? parsed.clips : [];
     for (let i = 0; i < clips.length; i++) {
       const stored = storedClips[i];
@@ -1996,25 +1970,24 @@
   // frontend/refineVideoButton.ts
   var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs clip 0 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
   var countActiveStagesInMetadataClip0 = (videostagesJson) => {
-    let parsed;
-    try {
-      parsed = JSON.parse(videostagesJson);
-    } catch {
+    const parsed = safeJsonParse(videostagesJson, null);
+    if (!isRecord(parsed)) {
       return 0;
     }
-    if (!parsed || typeof parsed !== "object") {
-      return 0;
-    }
-    const clips = parsed.clips;
+    const clips = readProp(parsed, "clips");
     if (!Array.isArray(clips) || clips.length === 0) {
       return 0;
     }
     const clip0 = clips[0];
-    if (clip0.skipped === true || !Array.isArray(clip0.stages)) {
+    if (!isRecord(clip0) || readProp(clip0, "skipped") === true) {
       return 0;
     }
-    return clip0.stages.filter(
-      (stage) => stage.skipped !== true
+    const stages = readProp(clip0, "stages");
+    if (!Array.isArray(stages)) {
+      return 0;
+    }
+    return stages.filter(
+      (stage) => !(isRecord(stage) && readProp(stage, "skipped") === true)
     ).length;
   };
   var hasRefinementWorkToDo = (state, enabled, skipCount) => {
@@ -2047,7 +2020,8 @@
             );
           }
         }
-        const sourceVideostages = parsedMetadata?.sui_image_params?.videostages;
+        const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
+        const sourceVideostages = isRecord(params) ? readProp(params, "videostages") : void 0;
         const skipCount = Math.max(
           1,
           typeof sourceVideostages === "string" ? countActiveStagesInMetadataClip0(sourceVideostages) : 0
@@ -2066,7 +2040,7 @@
             videostagesrefineskipstages: skipCount,
             images: 1
           };
-          const seed = parsedMetadata?.sui_image_params?.seed;
+          const seed = isRecord(params) ? readProp(params, "seed") : void 0;
           if (typeof seed === "number") {
             inputOverrides.seed = seed;
           }
@@ -2225,121 +2199,59 @@
     };
   };
 
-  // frontend/trackDomUtils.ts
-  var parseIntAttr = (el, name) => {
-    if (!el) {
-      return null;
-    }
-    const raw = el.getAttribute(name);
-    if (raw === null) {
-      return null;
-    }
-    const value = Number.parseInt(raw, 10);
-    return Number.isInteger(value) && value >= 0 ? value : null;
-  };
-  var clipDurationOf = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
-  var leftPct = (start, duration) => duration > 0 ? clamp(start, 0, duration) / duration * 100 : 0;
-  var widthPct = (length, duration) => duration > 0 ? clamp(length, 0, duration) / duration * 100 : 0;
-  var isStaleToken = (sourceToken) => readStateToken() !== sourceToken;
-  var currentTimelineFps = () => {
-    try {
-      const fps = getRootDefaults().fps;
-      return typeof fps === "number" && fps > 0 ? fps : 24;
-    } catch {
-      return 24;
-    }
-  };
-  var isActivateKey = (ke) => ke.key === "Enter" || ke.key === " " || ke.key === "Spacebar";
-  var bindClickSelectableTrack = (body, selector, activate) => {
-    const fromTarget = (target) => {
-      const el = target.closest(selector);
-      if (el instanceof HTMLElement) {
-        activate(el);
-      }
-    };
-    const onClick = (event) => {
-      if (event.target instanceof Element) {
-        fromTarget(event.target);
-      }
-    };
-    const onKeyDown = (event) => {
-      const ke = event;
-      if (!isActivateKey(ke)) {
-        return;
-      }
-      if (!(ke.target instanceof Element) || !ke.target.closest(selector)) {
-        return;
-      }
-      ke.preventDefault();
-      fromTarget(ke.target);
-    };
-    body.addEventListener("click", onClick);
-    body.addEventListener("keydown", onKeyDown);
-    return () => {
-      body.removeEventListener("click", onClick);
-      body.removeEventListener("keydown", onKeyDown);
-    };
-  };
-
-  // frontend/timelineEdit.ts
-  var pxToDuration = (px, pxPerSecond, fps) => {
-    if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
-      return CLIP_DURATION_MIN;
-    }
-    const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
-    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
-  };
-  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd) => {
-    const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
-    const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
-    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps2));
-    if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
-      return REF_FRAME_MIN;
-    }
-    const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
-    const time = fraction * duration;
-    const rawFrame = fromEnd ? (duration - time) * safeFps2 : time * safeFps2;
-    return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
-  };
-  var clampClipRefsToDuration = (clip, getRootDefaults2) => {
-    const frameMax = getReferenceFrameMax(getRootDefaults2, clip);
-    for (const ref of clip.refs) {
-      ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
-    }
-  };
-  var applyClipDurationResize = (clip, newDuration, getRootDefaults2) => {
-    if (clip.duration === newDuration) {
+  // frontend/selection.ts
+  var NO_SELECTION = { kind: "none" };
+  var selection = NO_SELECTION;
+  var selectionSubscribers = /* @__PURE__ */ new Set();
+  var clipIdxOf = (sel) => sel.kind === "none" || sel.kind === "boundary" ? null : sel.clipIdx;
+  var sameSelection = (a, b) => {
+    if (a.kind !== b.kind) {
       return false;
     }
-    clip.duration = newDuration;
-    clampClipRefsToDuration(clip, getRootDefaults2);
+    if (a.kind === "none" || b.kind === "none") {
+      return true;
+    }
+    if (a.kind === "boundary" || b.kind === "boundary") {
+      return a.kind === "boundary" && b.kind === "boundary" && a.leftClipIdx === b.leftClipIdx;
+    }
+    if (a.clipIdx !== clipIdxOf(b)) {
+      return false;
+    }
+    if (a.kind === "clip" && b.kind === "clip") {
+      return a.stageIdx === b.stageIdx;
+    }
+    if (a.kind === "ref" && b.kind === "ref") {
+      return a.refIdx === b.refIdx;
+    }
+    if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
+      return a.windowIdx === b.windowIdx;
+    }
+    if (a.kind === "audio-segment" && b.kind === "audio-segment") {
+      return a.segIdx === b.segIdx;
+    }
     return true;
   };
-
-  // frontend/timelineReorder.ts
-  var computeDropIndex = (pointerX, regions) => {
-    for (let i = 0; i < regions.length; i++) {
-      const region = regions[i];
-      const midpoint = region.startPx + region.widthPx / 2;
-      if (pointerX < midpoint) {
-        return i;
+  var isSameSelection = (a, b) => sameSelection(a, b);
+  var getSelection = () => selection;
+  var getSelectedClipIndex = () => clipIdxOf(selection);
+  var setSelection = (next) => {
+    if (sameSelection(selection, next)) {
+      return;
+    }
+    selection = next;
+    for (const cb of [...selectionSubscribers]) {
+      try {
+        cb(selection);
+      } catch {
       }
     }
-    return regions.length;
   };
-  var finalIndexAfterMove = (from, to) => to > from ? to - 1 : to;
-  var moveItem = (array, from, to) => {
-    const result = array.slice();
-    if (!Number.isInteger(from) || from < 0 || from >= result.length) {
-      return result;
-    }
-    const [item] = result.splice(from, 1);
-    const insertAt = to > from ? to - 1 : to;
-    const clamped = Math.max(0, Math.min(insertAt, result.length));
-    result.splice(clamped, 0, item);
-    return result;
+  var subscribeSelection = (cb) => {
+    selectionSubscribers.add(cb);
+    return () => {
+      selectionSubscribers.delete(cb);
+    };
   };
-  var isNoOpMove = (from, to) => to === from || to === from + 1;
 
   // frontend/dimensionPresets.ts
   var DIMENSION_PRESET_METADATA = {
@@ -2486,6 +2398,7 @@
     const rounded = Math.round((seconds || 0) * 10) / 10;
     return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
   };
+  var formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
   var RULER_MIN_TICK_SPACING_PX = 60;
   var RULER_STEP_LADDER_SECONDS = [
     0.5,
@@ -3187,343 +3100,113 @@
     wireScroll();
   };
 
-  // frontend/timelineLinking.ts
-  var REGION_SELECTOR = ".vst-region[data-clip-idx]";
-  var REGION_ACTION_SELECTOR = "[data-vst-region-action]";
-  var REGION_RESIZE_SELECTOR = ".vst-region-resize";
-  var CLIP_SHIFT_SELECTOR = ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
-  var REGION_SELECTED_CLASS = "vst-region-selected";
-  var DRAGGING_CLASS = "vst-dragging";
-  var RESIZING_CLASS = "vst-resizing";
-  var DROP_INDICATOR_CLASS = "vst-drop-indicator";
-  var DRAG_THRESHOLD_PX = 5;
-  var MIN_RESIZE_WIDTH_PX = 24;
-  var REGION_DRAGGING_CLASS = "vst-region-dragging";
+  // frontend/trackDomUtils.ts
   var livePxPerSecond = (body) => {
     const pps = Number.parseFloat(body.dataset.vstPps ?? "");
     return Number.isFinite(pps) && pps > 0 ? pps : DEFAULT_PX_PER_SECOND;
   };
-  var resolveSelectedIndex = (selectedIndex, clipCount) => {
-    if (selectedIndex === null || !Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= clipCount) {
-      return null;
-    }
-    return selectedIndex;
-  };
-  var parseClipIdx = (el) => {
+  var parseIntAttr = (el, name) => {
     if (!el) {
       return null;
     }
-    const raw = el.getAttribute("data-clip-idx");
+    const raw = el.getAttribute(name);
     if (raw === null) {
       return null;
     }
-    const idx = Number.parseInt(raw, 10);
-    return Number.isInteger(idx) && idx >= 0 ? idx : null;
+    const value = Number.parseInt(raw, 10);
+    return Number.isInteger(value) && value >= 0 ? value : null;
   };
-  var shiftClipsAfter = (body, idx, deltaPx) => {
-    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
-      const elIdx = parseClipIdx(el);
-      if (elIdx !== null && elIdx > idx) {
-        el.style.transform = deltaPx !== 0 ? `translateX(${deltaPx}px)` : "";
-      }
+  var clipDurationOf = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
+  var leftPct = (start, duration) => duration > 0 ? clamp(start, 0, duration) / duration * 100 : 0;
+  var widthPct = (length, duration) => duration > 0 ? clamp(length, 0, duration) / duration * 100 : 0;
+  var isStaleToken = (sourceToken) => readStateToken() !== sourceToken;
+  var commitClipMutation = (sourceToken, origin, mutate) => {
+    if (isStaleToken(sourceToken)) {
+      return false;
+    }
+    const next = mutate(getClips());
+    if (!next) {
+      return false;
+    }
+    saveClips(next, { origin });
+    return true;
+  };
+  var currentTimelineFps = () => {
+    try {
+      const fps = getRootDefaults().fps;
+      return typeof fps === "number" && fps > 0 ? fps : 24;
+    } catch {
+      return 24;
     }
   };
-  var clearClipShifts = (body) => {
-    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
-      el.style.transform = "";
-    }
-  };
-  var createTimelineLinking = () => {
-    let attachedBody = null;
-    const selectedClip = () => getSelectedClipIndex();
-    const stageForClip = (clipIdx) => {
-      const sel = getSelection();
-      return sel.kind === "clip" && sel.clipIdx === clipIdx ? sel.stageIdx : 0;
-    };
-    const selectClip = (clipIdx, stageIdx) => {
-      setSelection({ kind: "clip", clipIdx, stageIdx });
-    };
-    let dropIndicator = null;
-    const findRegion = (body, idx) => body.querySelector(`.vst-region[data-clip-idx="${idx}"]`);
-    const markSelection = (body) => {
-      for (const region of body.querySelectorAll(
-        `.${REGION_SELECTED_CLASS}`
-      )) {
-        region.classList.remove(REGION_SELECTED_CLASS);
+  var isActivateKey = (ke) => ke.key === "Enter" || ke.key === " " || ke.key === "Spacebar";
+  var bindClickSelectableTrack = (body, selector, activate) => {
+    const fromTarget = (target) => {
+      const el = target.closest(selector);
+      if (el instanceof HTMLElement) {
+        activate(el);
       }
-      const idx = selectedClip();
-      if (idx === null) {
+    };
+    const onClick = (event) => {
+      if (event.target instanceof Element) {
+        fromTarget(event.target);
+      }
+    };
+    const onKeyDown = (event) => {
+      const ke = event;
+      if (!isActivateKey(ke)) {
         return;
       }
-      findRegion(body, idx)?.classList.add(REGION_SELECTED_CLASS);
-    };
-    const onRegionClick = (body, event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
+      if (!(ke.target instanceof Element) || !ke.target.closest(selector)) {
         return;
       }
-      const actionButton = target.closest(REGION_ACTION_SELECTOR);
-      if (actionButton) {
-        event.stopPropagation();
-        const actionRegion = actionButton.closest(REGION_SELECTOR);
-        const actionIdx = parseClipIdx(actionRegion);
-        if (actionIdx === null) {
-          return;
-        }
-        const action = actionButton.getAttribute("data-vst-region-action");
-        if (action === "skip") {
-          applySkip(actionIdx);
-        }
-        return;
-      }
-      const region = target.closest(REGION_SELECTOR);
-      const idx = parseClipIdx(region);
-      if (idx === null) {
-        return;
-      }
-      if (event.shiftKey) {
-        applyDelete(idx);
-        return;
-      }
-      selectClip(idx, 0);
-      markSelection(body);
+      ke.preventDefault();
+      fromTarget(ke.target);
     };
-    const readRegions = (body) => {
-      const els = Array.from(
-        body.querySelectorAll(REGION_SELECTOR)
-      );
-      const rects = els.map((el) => {
-        const r = el.getBoundingClientRect();
-        return { startPx: r.left, widthPx: r.width };
-      });
-      return { els, rects };
+    body.addEventListener("click", onClick);
+    body.addEventListener("keydown", onKeyDown);
+    return () => {
+      body.removeEventListener("click", onClick);
+      body.removeEventListener("keydown", onKeyDown);
     };
-    const removeDropIndicator = () => {
-      dropIndicator?.remove();
-      dropIndicator = null;
-    };
-    const showDropIndicator = (els, gap) => {
-      if (els.length === 0) {
-        return;
-      }
-      const track = els[0].parentElement;
-      if (!track) {
-        return;
-      }
-      if (!dropIndicator) {
-        dropIndicator = document.createElement("div");
-        dropIndicator.className = DROP_INDICATOR_CLASS;
-      }
-      if (dropIndicator.parentElement !== track) {
-        track.appendChild(dropIndicator);
-      }
-      const left = gap < els.length ? els[gap].offsetLeft : els[els.length - 1].offsetLeft + els[els.length - 1].offsetWidth;
-      dropIndicator.style.left = `${left}px`;
-    };
-    const applySkip = (idx) => {
-      const clips = getClips();
-      if (idx < 0 || idx >= clips.length) {
-        return;
-      }
-      clips[idx].skipped = !clips[idx].skipped;
-      saveClips(clips, { origin: "linking" });
-    };
-    const applyDelete = (idx) => {
-      const clips = getClips();
-      if (idx < 0 || idx >= clips.length) {
-        return;
-      }
-      clips.splice(idx, 1);
-      const sel = getSelection();
-      if (sel.kind === "clip") {
-        if (sel.clipIdx === idx) {
-          setSelection({ kind: "none" });
-        } else if (sel.clipIdx > idx) {
-          setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
-        }
-      }
-      saveClips(clips, { origin: "linking" });
-    };
-    const resizeSession = (body, state) => {
-      const restore = () => {
-        state.el.style.width = `${state.originalWidthPx}px`;
-        clearClipShifts(body);
-        body.classList.remove(RESIZING_CLASS);
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX,
-        suppressEscapeClick: true,
-        onMove: (ctx) => {
-          const width = Math.max(
-            MIN_RESIZE_WIDTH_PX,
-            ctx.event.clientX - state.startLeftPx
-          );
-          body.classList.add(RESIZING_CLASS);
-          state.el.style.width = `${width}px`;
-          shiftClipsAfter(body, state.idx, width - state.originalWidthPx);
-        },
-        onCommit: (ctx) => {
-          const width = ctx.event.clientX - state.startLeftPx;
-          let committed = false;
-          if (readStateToken() === state.sourceJson) {
-            const clips = getClips();
-            if (state.idx >= 0 && state.idx < clips.length && !clips[state.idx].clipLengthFromAudio && !clips[state.idx].clipLengthFromControlNet) {
-              const newDuration = pxToDuration(
-                width,
-                livePxPerSecond(body),
-                currentTimelineFps()
-              );
-              if (applyClipDurationResize(
-                clips[state.idx],
-                newDuration,
-                getRootDefaults
-              )) {
-                selectClip(state.idx, stageForClip(state.idx));
-                saveClips(clips, { origin: "linking" });
-                committed = true;
-              }
-            }
-          }
-          if (committed) {
-            body.classList.remove(RESIZING_CLASS);
-          } else {
-            restore();
-          }
-        },
-        onTap: restore,
-        onCancel: restore
-      };
-    };
-    const dragSession = (body, state) => {
-      const cleanup = () => {
-        findRegion(body, state.sourceIdx)?.classList.remove(
-          REGION_DRAGGING_CLASS
-        );
-        removeDropIndicator();
-        body.classList.remove(DRAGGING_CLASS);
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX,
-        axis: "xy",
-        suppressEscapeClick: true,
-        onMove: (ctx) => {
-          body.classList.add(DRAGGING_CLASS);
-          findRegion(body, state.sourceIdx)?.classList.add(
-            REGION_DRAGGING_CLASS
-          );
-          const { els, rects } = readRegions(body);
-          showDropIndicator(
-            els,
-            computeDropIndex(ctx.event.clientX, rects)
-          );
-        },
-        onCommit: (ctx) => {
-          cleanup();
-          const { rects } = readRegions(body);
-          const gap = computeDropIndex(ctx.event.clientX, rects);
-          const from = state.sourceIdx;
-          if (isNoOpMove(from, gap)) {
-            selectClip(from, stageForClip(from));
-            markSelection(body);
-            return;
-          }
-          if (readStateToken() !== state.sourceJson) {
-            return;
-          }
-          const clips = getClips();
-          if (from < 0 || from >= clips.length) {
-            return;
-          }
-          const destIdx = finalIndexAfterMove(from, gap);
-          selectClip(destIdx, stageForClip(from));
-          saveClips(moveItem(clips, from, gap), {
-            origin: "linking"
-          });
-        },
-        onCancel: cleanup
-      };
-    };
-    const onPress = (me, body) => {
-      if (!(me.target instanceof Element)) {
-        return null;
-      }
-      if (me.target.closest(REGION_ACTION_SELECTOR)) {
-        return null;
-      }
-      if (me.shiftKey) {
-        me.preventDefault();
-        return null;
-      }
-      const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
-      if (resizeGrip) {
-        const region = resizeGrip.closest(REGION_SELECTOR);
-        const idx2 = parseClipIdx(region);
-        if (idx2 === null || !(region instanceof HTMLElement)) {
-          return null;
-        }
-        const rect = region.getBoundingClientRect();
-        me.preventDefault();
-        return resizeSession(body, {
-          idx: idx2,
-          el: region,
-          startLeftPx: rect.left,
-          originalWidthPx: rect.width,
-          sourceJson: readStateToken()
-        });
-      }
-      const target = me.target.closest(REGION_SELECTOR);
-      const idx = parseClipIdx(target);
-      if (idx === null) {
-        return null;
-      }
-      return dragSession(body, {
-        sourceIdx: idx,
-        sourceJson: readStateToken()
-      });
-    };
-    let bodyClickHandler = null;
-    let unregister = null;
-    const attach = (body, router) => {
-      if (attachedBody === body) {
-        return;
-      }
-      if (attachedBody) {
-        dispose();
-      }
-      bodyClickHandler = (e) => onRegionClick(body, e);
-      body.addEventListener("click", bodyClickHandler);
-      unregister = router.register({
-        id: "linking",
-        priority: 10,
-        onPress
-      });
-      attachedBody = body;
-    };
-    const reapplySelection = (body, clipCount) => {
-      const idx = selectedClip();
-      if (idx !== null && resolveSelectedIndex(idx, clipCount) === null) {
-        setSelection({ kind: "none" });
-      }
-      markSelection(body);
-    };
-    const dispose = () => {
-      if (attachedBody) {
-        if (bodyClickHandler) {
-          attachedBody.removeEventListener("click", bodyClickHandler);
-        }
-      }
-      removeDropIndicator();
-      unregister?.();
-      unregister = null;
-      bodyClickHandler = null;
-      attachedBody = null;
-    };
-    const getSelectedIndex = () => selectedClip();
-    return { attach, reapplySelection, getSelectedIndex, dispose };
   };
 
   // frontend/windowTrack.ts
-  var DRAG_THRESHOLD_PX2 = 4;
+  var DRAG_THRESHOLD_PX = 4;
+  var createDefaultOrDraggedSpan = (startSec, endSec, lo, hi, minLen, defaultLen) => {
+    const gap = hi - lo;
+    if (gap < minLen) {
+      return null;
+    }
+    let start;
+    let length;
+    if (endSec === null) {
+      length = Math.min(defaultLen, gap);
+      start = clamp(startSec, lo, hi - length);
+    } else {
+      const a = clamp(Math.min(startSec, endSec), lo, hi);
+      const b = clamp(Math.max(startSec, endSec), lo, hi);
+      start = a;
+      length = Math.max(minLen, b - a);
+      if (start + length > hi) {
+        length = hi - start;
+      }
+    }
+    return length < minLen ? null : { start, length };
+  };
+  var resizeSpanEdge = (edge, press, deltaSec, minLen, lo, hi) => {
+    if (edge === "right") {
+      const end2 = clamp(
+        press.start + press.length + deltaSec,
+        press.start + minLen,
+        hi
+      );
+      return { start: press.start, length: end2 - press.start };
+    }
+    const end = press.start + press.length;
+    const start = clamp(press.start + deltaSec, lo, end - minLen);
+    return { start, length: end - start };
+  };
   var createWindowTrack = (config) => {
     let boundBody = null;
     let unregister = null;
@@ -3595,7 +3278,7 @@
         state.el.style.left = state.originalLeft;
       };
       return {
-        threshold: DRAG_THRESHOLD_PX2,
+        threshold: DRAG_THRESHOLD_PX,
         onMove: (ctx) => {
           body.classList.add(config.draggingClass);
           const pps = livePxPerSecond(body);
@@ -3624,7 +3307,7 @@
         state.el.style.width = state.originalWidth;
       };
       return {
-        threshold: DRAG_THRESHOLD_PX2,
+        threshold: DRAG_THRESHOLD_PX,
         onMove: (ctx) => {
           body.classList.add(config.draggingClass);
           const pps = livePxPerSecond(body);
@@ -3665,7 +3348,7 @@
         state.ghost = null;
       };
       return {
-        threshold: DRAG_THRESHOLD_PX2,
+        threshold: DRAG_THRESHOLD_PX,
         // A plain lane tap creates a default-length span at the pressed
         // time, so the concluding click is always consumed.
         suppressTapClick: true,
@@ -3907,24 +3590,21 @@
         Math.min(length, clipDur - segment.startSeconds)
       );
     },
-    resizeTarget: (clip, _segIdx, edge, press, deltaSec) => {
-      const clipDur = clipDurationOf(clip);
-      if (edge === "right") {
-        const end2 = clamp(
-          press.start + press.length + deltaSec,
-          press.start + AUDIO_SEGMENT_MIN_LENGTH,
-          clipDur
-        );
-        return { start: press.start, length: end2 - press.start };
-      }
-      const end = press.start + press.length;
-      const start = clamp(
-        press.start + deltaSec,
-        Math.min(0, end - AUDIO_SEGMENT_MIN_LENGTH),
-        end - AUDIO_SEGMENT_MIN_LENGTH
-      );
-      return { start, length: end - start };
-    },
+    resizeTarget: (clip, _segIdx, edge, press, deltaSec) => (
+      // Left edge: trim follows, lower wall dips below 0 (un-trims further).
+      // Right edge: walled by clip end.
+      resizeSpanEdge(
+        edge,
+        press,
+        deltaSec,
+        AUDIO_SEGMENT_MIN_LENGTH,
+        Math.min(
+          0,
+          press.start + press.length - AUDIO_SEGMENT_MIN_LENGTH
+        ),
+        clipDurationOf(clip)
+      )
+    ),
     writeResize: (clip, segIdx, edge, press, geom) => {
       const segment = segmentOf(clip, segIdx);
       if (!segment) {
@@ -3942,32 +3622,22 @@
       segment.lengthSeconds = roundToTenth(geom.length);
     },
     createSpan: (clip, clipIdx, startSec, endSec) => {
-      const clipDur = clipDurationOf(clip);
-      if (clipDur < AUDIO_SEGMENT_MIN_LENGTH) {
-        return null;
-      }
-      let start;
-      let length;
-      if (endSec === null) {
-        length = Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDur);
-        start = clamp(startSec, 0, clipDur - length);
-      } else {
-        const a = clamp(Math.min(startSec, endSec), 0, clipDur);
-        const b = clamp(Math.max(startSec, endSec), 0, clipDur);
-        start = a;
-        length = Math.max(AUDIO_SEGMENT_MIN_LENGTH, b - a);
-        if (start + length > clipDur) {
-          length = clipDur - start;
-        }
-      }
-      if (length < AUDIO_SEGMENT_MIN_LENGTH) {
+      const geom = createDefaultOrDraggedSpan(
+        startSec,
+        endSec,
+        0,
+        clipDurationOf(clip),
+        AUDIO_SEGMENT_MIN_LENGTH,
+        AUDIO_SEGMENT_DEFAULT_LENGTH
+      );
+      if (!geom) {
         return null;
       }
       const segment = {
         source: null,
-        startSeconds: roundToTenth(start),
+        startSeconds: roundToTenth(geom.start),
         trimStartSeconds: 0,
-        lengthSeconds: roundToTenth(length)
+        lengthSeconds: roundToTenth(geom.length)
       };
       const segments = [...clip.audioSegments ?? [], segment];
       clip.audioSegments = segments;
@@ -4022,53 +3692,9 @@
   // frontend/timelineBoundaryTrack.ts
   var CHIP_SELECTOR = "[data-vst-boundary-cycle]";
   var CYCLE = ["cut", "continue", "crossfade"];
-  var DEFAULT_CROSSFADE_OVERLAP_FRAMES = 8;
   var nextBoundary = (current) => {
     const idx = CYCLE.indexOf(current);
     return CYCLE[(idx + 1) % CYCLE.length];
-  };
-  var crossfadePlanForClips = (clips, fps) => {
-    const count = clips.length;
-    const boundaryCount = Math.max(0, count - 1);
-    const noOverlap = () => new Array(boundaryCount).fill(0);
-    if (count < 2) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    const crossfade = [];
-    const cont = [];
-    let requested = 0;
-    for (let i = 0; i < count - 1; i++) {
-      const b = clips[i].boundaryOut ?? "cut";
-      crossfade[i] = b === "crossfade";
-      cont[i] = b === "continue";
-      if (crossfade[i] || cont[i]) {
-        requested++;
-      }
-    }
-    if (requested === 0) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    const frames = clips.map((c) => framesForClip(c.duration, fps));
-    let overlap = DEFAULT_CROSSFADE_OVERLAP_FRAMES;
-    for (let i = 0; i < count; i++) {
-      const fixedTrim = (i > 0 && cont[i - 1] ? 1 : 0) + (i < count - 1 && cont[i] ? 1 : 0);
-      const crossSides = (i > 0 && crossfade[i - 1] ? 1 : 0) + (i < count - 1 && crossfade[i] ? 1 : 0);
-      if (fixedTrim === 0 && crossSides === 0) {
-        continue;
-      }
-      const budget = frames[i] - 1 - fixedTrim;
-      if (budget < 0 || crossSides > 0 && Math.floor(budget / crossSides) < 1) {
-        return { overlaps: noOverlap(), fallback: true };
-      }
-      if (crossSides > 0) {
-        overlap = Math.min(overlap, Math.floor(budget / crossSides));
-      }
-    }
-    const overlaps = [];
-    for (let i = 0; i < count - 1; i++) {
-      overlaps[i] = crossfade[i] ? overlap : cont[i] ? 1 : 0;
-    }
-    return { overlaps, fallback: false };
   };
   var parseLeftClipIdx = (el) => {
     if (!el) {
@@ -4141,14 +3767,13 @@
     input.addEventListener("change", () => apply(true));
   };
   var boxClassFor = (control) => {
-    const cl = control.classList;
-    if (cl.contains("auto-dropdown")) {
+    if (control.classList.contains("auto-dropdown")) {
       return "auto-dropdown-box";
     }
-    if (cl.contains("auto-number")) {
+    if (control.classList.contains("auto-number")) {
       return "auto-number-box";
     }
-    if (cl.contains("auto-text")) {
+    if (control.classList.contains("auto-text")) {
       return "auto-text-box";
     }
     return null;
@@ -4342,6 +3967,406 @@
     sec.textContent = text;
     return sec;
   };
+  var clampStartLength = (start, length, clipDur, minLength) => {
+    const s = clamp(start, 0, Math.max(0, clipDur - minLength));
+    const l = clamp(length, minLength, Math.max(minLength, clipDur - s));
+    return { start: s, length: l };
+  };
+  var buildGroup = (groupId, content) => {
+    const group = document.createElement("div");
+    group.className = "input-group input-group-open";
+    group.id = `auto-group-${groupId}`;
+    const contentEl = document.createElement("div");
+    contentEl.className = "input-group-content";
+    contentEl.id = `input_group_content_${groupId}`;
+    contentEl.appendChild(content);
+    group.appendChild(contentEl);
+    return group;
+  };
+  var wrapForm = (groupId, content) => {
+    const body = document.createElement("div");
+    body.className = "vst-detail-body";
+    body.appendChild(buildGroup(groupId, content));
+    return body;
+  };
+  var tagFocus = (field, key) => {
+    const control = field.querySelector("input.auto-slider-number") ?? field.querySelector("input, select") ?? (field.matches("input, select") ? field : null);
+    control?.setAttribute("data-vst-focus-key", key);
+    return field;
+  };
+  var buildStackSection = (label, colClass) => {
+    const wrap = document.createElement("div");
+    wrap.className = "vst-detail-stages-wrap";
+    wrap.appendChild(sectionLabel(label));
+    const col = document.createElement("div");
+    col.className = `vst-detail-col ${colClass}`;
+    wrap.appendChild(col);
+    return { wrap, col };
+  };
+  var buildAddButton = (label, extraClass, onClick) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `basic-button small-button vst-detail-rail-btn ${extraClass}`;
+    btn.textContent = label;
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      onClick();
+    });
+    return btn;
+  };
+
+  // frontend/detailStrip/audioPanel.ts
+  var GROUP_AUDIO = "vstdock_audio";
+  var buildAudioBody = (ctx, sel, clips) => {
+    const { clipIdx } = sel;
+    const clip = clips[clipIdx];
+    const controlNetEnabled = hasSlotSourcedIcLora(clip.icLoras);
+    const options = buildAudioSourceOptions(clip.audioSource ?? "", {
+      controlNetEnabled
+    });
+    const source = resolveAudioSourceValue(clip.audioSource ?? "", options);
+    const canLength = canUseClipLengthFromAudio(source);
+    const isAce = isAceStepFunAudioSource(source);
+    const commitAudio = (mutate) => {
+      ctx.commit((cs) => {
+        const target = cs[clipIdx];
+        if (!target) {
+          return;
+        }
+        mutate(target);
+        const cnEnabled = hasSlotSourcedIcLora(target.icLoras);
+        const nextSource = resolveAudioSourceValue(
+          target.audioSource,
+          buildAudioSourceOptions(target.audioSource, {
+            controlNetEnabled: cnEnabled
+          })
+        );
+        target.audioSource = nextSource;
+        target.clipLengthFromAudio = canUseClipLengthFromAudio(nextSource) && target.clipLengthFromAudio;
+        if (target.clipLengthFromAudio) {
+          target.clipLengthFromControlNet = false;
+        }
+        target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
+        target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD || nextSource === AUDIO_SOURCE_VOICE_REF ? target.uploadedAudio : null;
+      });
+    };
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body";
+    const select = buildOptionSelect(
+      options.map((o) => ({ value: o.value, label: o.label })),
+      source,
+      (value) => {
+        commitAudio((c) => {
+          c.audioSource = value;
+        });
+        ctx.render();
+      }
+    );
+    body.appendChild(buildField("Audio Source", select));
+    body.appendChild(
+      buildCheckbox("Reuse Audio", clip.reuseAudio === true, (value) => {
+        commitAudio((c) => {
+          c.reuseAudio = value;
+        });
+      })
+    );
+    const lengthRow = buildCheckbox(
+      "Clip Length from Audio",
+      clip.clipLengthFromAudio === true && canLength,
+      (value) => {
+        commitAudio((c) => {
+          c.clipLengthFromAudio = value;
+        });
+      },
+      { disabled: !canLength }
+    );
+    body.appendChild(lengthRow);
+    const saveRow = buildCheckbox(
+      "Save Audio Track",
+      clip.saveAudioTrack === true && isAce,
+      (value) => {
+        commitAudio((c) => {
+          c.saveAudioTrack = value;
+        });
+      },
+      { disabled: !isAce }
+    );
+    body.appendChild(saveRow);
+    if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
+      body.appendChild(
+        buildUploadRow(
+          source === AUDIO_SOURCE_VOICE_REF ? "Voice Sample" : "Audio Upload",
+          "audio/*",
+          clip.uploadedAudio?.fileName,
+          (data, fileName) => {
+            commitAudio((c) => {
+              c.uploadedAudio = { data, fileName };
+            });
+            ctx.render();
+          },
+          () => {
+            commitAudio((c) => {
+              c.uploadedAudio = null;
+            });
+            ctx.render();
+          }
+        )
+      );
+    }
+    if (source === AUDIO_SOURCE_VOICE_REF) {
+      const hint = document.createElement("small");
+      hint.className = "vst-audio-field-hint";
+      hint.textContent = "Speaker sample only — new speech is generated to match the prompt in this voice. Put the spoken words in the clip prompt.";
+      body.appendChild(hint);
+    }
+    const segCount = clip.audioSegments?.length ?? 0;
+    const addSegment = document.createElement("button");
+    addSegment.type = "button";
+    addSegment.className = "basic-button small-button vst-detail-add-segment";
+    addSegment.textContent = "+ Add segment";
+    addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
+    addSegment.addEventListener("click", (event) => {
+      event.preventDefault();
+      ctx.addAudioSegment(clipIdx);
+    });
+    body.appendChild(addSegment);
+    if (segCount > 0) {
+      const note = document.createElement("p");
+      note.className = "vst-detail-note";
+      note.textContent = segCount === 1 ? "1 overlay segment · mixed additively over the base audio." : `${segCount} overlay segments · mixed additively over the base audio.`;
+      body.appendChild(note);
+    }
+    return wrapForm(GROUP_AUDIO, body);
+  };
+
+  // frontend/detailStrip/audioSegmentPanel.ts
+  var GROUP_AUDIOSEG = "vstdock_audioseg";
+  var buildAudioSegmentBody = (ctx, sel, clips) => {
+    const { clipIdx } = sel;
+    const clip = clips[clipIdx];
+    const segments = clip?.audioSegments ?? [];
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
+    const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
+    const clampSegment = (start, length) => clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
+    segments.forEach((segment, segIdx) => {
+      const { row, fields } = buildInstanceRow({
+        rowClass: "vst-detail-seg-row",
+        indexAttr: "data-vst-seg-index",
+        index: segIdx,
+        active: segIdx === sel.segIdx,
+        title: `S${segIdx + 1}`,
+        deleteLabel: "Remove segment",
+        onDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
+        repoint: () => setSelection({ kind: "audio-segment", clipIdx, segIdx })
+      });
+      const segSourceRef = typeof segment.source === "string" ? segment.source : "";
+      const segSourceValue = segSourceRef || AUDIO_SOURCE_UPLOAD;
+      const segSourceSelect = buildOptionSelect(
+        buildSegmentAudioSourceOptions(segSourceRef),
+        segSourceValue,
+        (value) => {
+          ctx.commit((cs) => {
+            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+            if (!seg) {
+              return;
+            }
+            if (isAceStepFunAudioSource(value)) {
+              seg.source = value;
+            } else if (typeof seg.source === "string") {
+              seg.source = null;
+            }
+          });
+          ctx.render();
+        }
+      );
+      fields.appendChild(buildField("Source", segSourceSelect));
+      if (!segSourceRef) {
+        fields.appendChild(
+          buildUploadRow(
+            "Audio Upload",
+            "audio/*",
+            typeof segment.source === "string" ? void 0 : segment.source?.fileName,
+            (data, fileName) => {
+              ctx.commit((cs) => {
+                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                if (seg) {
+                  seg.source = { data, fileName };
+                }
+              });
+              ctx.render();
+            },
+            () => {
+              ctx.commit((cs) => {
+                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                if (seg) {
+                  seg.source = null;
+                }
+              });
+              ctx.render();
+            }
+          )
+        );
+      }
+      const startInput = ctx.buildClampedNumber({
+        key: `seg-${segIdx}-start`,
+        value: segment.startSeconds,
+        min: 0,
+        max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
+        step: AUDIO_SEGMENT_STEP,
+        readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
+        mutate: (cs, value) => {
+          const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+          if (seg) {
+            const next = clampSegment(value, seg.lengthSeconds);
+            seg.startSeconds = next.start;
+            seg.lengthSeconds = next.length;
+          }
+        }
+      });
+      fields.appendChild(buildField("Start (s)", startInput));
+      const trimInput = buildNumber(
+        segment.trimStartSeconds,
+        0,
+        CLIP_DURATION_MAX,
+        AUDIO_SEGMENT_STEP,
+        (value) => {
+          ctx.debouncedCommit(`seg-${segIdx}-trim`, (cs) => {
+            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+            if (seg) {
+              seg.trimStartSeconds = Math.max(
+                0,
+                Math.round(value * 10) / 10
+              );
+            }
+          });
+        }
+      );
+      trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
+      fields.appendChild(buildField("Trim start (s)", trimInput));
+      const lengthInput = ctx.buildClampedNumber({
+        key: `seg-${segIdx}-length`,
+        value: segment.lengthSeconds,
+        min: AUDIO_SEGMENT_MIN_LENGTH,
+        max: clipDur,
+        step: AUDIO_SEGMENT_STEP,
+        readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.lengthSeconds ?? null,
+        mutate: (cs, value) => {
+          const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+          if (seg) {
+            const next = clampSegment(seg.startSeconds, value);
+            seg.startSeconds = next.start;
+            seg.lengthSeconds = next.length;
+          }
+        }
+      });
+      fields.appendChild(buildField("Length (s)", lengthInput));
+      body.appendChild(row);
+    });
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "Overlaid additively over the base audio; overlapping segments mix together.";
+    body.appendChild(note);
+    return wrapForm(GROUP_AUDIOSEG, body);
+  };
+
+  // frontend/boundaryPlan.ts
+  var DEFAULT_CROSSFADE_OVERLAP_FRAMES = 8;
+  var crossfadePlanForClips = (clips, fps) => {
+    const count = clips.length;
+    const boundaryCount = Math.max(0, count - 1);
+    const noOverlap = () => new Array(boundaryCount).fill(0);
+    if (count < 2) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    const crossfade = [];
+    const cont = [];
+    let requested = 0;
+    for (let i = 0; i < count - 1; i++) {
+      const b = clips[i].boundaryOut ?? "cut";
+      crossfade[i] = b === "crossfade";
+      cont[i] = b === "continue";
+      if (crossfade[i] || cont[i]) {
+        requested++;
+      }
+    }
+    if (requested === 0) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    const frames = clips.map((c) => framesForClip(c.duration, fps));
+    let overlap = DEFAULT_CROSSFADE_OVERLAP_FRAMES;
+    for (let i = 0; i < count; i++) {
+      const fixedTrim = (i > 0 && cont[i - 1] ? 1 : 0) + (i < count - 1 && cont[i] ? 1 : 0);
+      const crossSides = (i > 0 && crossfade[i - 1] ? 1 : 0) + (i < count - 1 && crossfade[i] ? 1 : 0);
+      if (fixedTrim === 0 && crossSides === 0) {
+        continue;
+      }
+      const budget = frames[i] - 1 - fixedTrim;
+      if (budget < 0 || crossSides > 0 && Math.floor(budget / crossSides) < 1) {
+        return { overlaps: noOverlap(), fallback: true };
+      }
+      if (crossSides > 0) {
+        overlap = Math.min(overlap, Math.floor(budget / crossSides));
+      }
+    }
+    const overlaps = [];
+    for (let i = 0; i < count - 1; i++) {
+      overlaps[i] = crossfade[i] ? overlap : cont[i] ? 1 : 0;
+    }
+    return { overlaps, fallback: false };
+  };
+
+  // frontend/detailStrip/boundaryPanel.ts
+  var GROUP_BOUNDARY = "vstdock_boundary";
+  var buildBoundaryBody = (ctx, sel, clips) => {
+    const { leftClipIdx } = sel;
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body vst-detail-boundary";
+    const clip = clips[leftClipIdx];
+    const value = clip?.boundaryOut ?? "cut";
+    const state = getState();
+    const fps = state.fps > 0 ? Math.round(state.fps) : 24;
+    const joinSpecs = ["cut", "continue", "crossfade"].map((mode) => ({
+      value: mode,
+      label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
+    }));
+    const select = buildOptionSelect(joinSpecs, value, (next) => {
+      ctx.commit((cs) => {
+        const c = cs[leftClipIdx];
+        if (c) {
+          c.boundaryOut = next ?? "cut";
+        }
+      });
+      ctx.render();
+    });
+    body.appendChild(
+      buildField(`Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`, select)
+    );
+    const info = document.createElement("div");
+    info.className = "vst-boundary-info";
+    if (value === "cut") {
+      info.textContent = "Hard cut — clips are concatenated with no overlap.";
+    } else if (value === "continue") {
+      info.textContent = `Continue — 1 frame (~${formatOverlapSeconds(1, fps)}) overlap. The next clip generates from this clip's final frame and the merge collapses the duplicated seam frame.`;
+    } else {
+      const plan = crossfadePlanForClips(clips, fps);
+      const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
+      if (plan.fallback || overlapFrames <= 0) {
+        info.classList.add("vst-boundary-warn");
+        info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
+      } else {
+        info.textContent = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
+      }
+    }
+    body.appendChild(info);
+    if (value !== "cut") {
+      const note = document.createElement("div");
+      note.className = "vst-boundary-note";
+      note.textContent = "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
+      body.appendChild(note);
+    }
+    return wrapForm(GROUP_BOUNDARY, body);
+  };
 
   // frontend/icLoraAutoDownload.ts
   var IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
@@ -4434,37 +4459,865 @@
     return status ? statusTextFor(preset, status) : "Preparing preset weights download…";
   };
 
-  // frontend/imageSource.ts
-  var buildImageSourceOptions = (currentValue = "") => {
-    const options = [
-      { value: REF_SOURCE_BASE, label: "Base Output" },
-      { value: REF_SOURCE_REFINER, label: "Refiner Output" },
-      { value: REF_SOURCE_UPLOAD, label: "Upload" }
-    ];
-    for (const editRef of getBase2EditStageRefs()) {
-      const editStage = parseBase2EditStageIndex(editRef);
-      options.push({
-        value: editRef,
-        label: `Base2Edit Edit ${editStage} Output`
-      });
+  // frontend/timelineEdit.ts
+  var pxToDuration = (px, pxPerSecond, fps) => {
+    if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
+      return CLIP_DURATION_MIN;
     }
-    const selected = `${currentValue || ""}`.trim();
-    if (selected && !options.some((option) => option.value === selected)) {
-      const isBase2Edit = parseBase2EditStageIndex(selected) != null;
-      options.unshift({
-        value: selected,
-        label: isBase2Edit ? `Missing Base2Edit ${selected}` : selected,
-        disabled: isBase2Edit
-      });
-    }
-    return options;
+    const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
+    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
   };
-  var resolveImageSourceValue = (currentValue, options) => {
-    const desired = `${currentValue || ""}`;
-    if (options.some((option) => option.value === desired)) {
-      return desired;
+  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd) => {
+    const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
+    const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps2));
+    if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
+      return REF_FRAME_MIN;
     }
-    return REF_SOURCE_REFINER;
+    const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
+    const time = fraction * duration;
+    const rawFrame = fromEnd ? (duration - time) * safeFps2 : time * safeFps2;
+    return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
+  };
+  var clampClipRefsToDuration = (clip, getRootDefaults2) => {
+    const frameMax = getReferenceFrameMax(getRootDefaults2, clip);
+    for (const ref of clip.refs) {
+      ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
+    }
+  };
+  var applyClipDurationResize = (clip, newDuration, getRootDefaults2) => {
+    if (clip.duration === newDuration) {
+      return false;
+    }
+    clip.duration = newDuration;
+    clampClipRefsToDuration(clip, getRootDefaults2);
+    return true;
+  };
+
+  // frontend/detailStrip/clipPanel.ts
+  var GROUP_STAGES = "vstdock_stages";
+  var GROUP_ICLORA = "vstdock_iclora";
+  var GROUP_RETAKE = "vstdock_retake";
+  var DURATION_STEP = 0.1;
+  var UPSCALE_EPSILON = 1e-6;
+  var LORA_WEIGHT_STEP = 0.05;
+  var LORA_WEIGHT_DEFAULT = 1;
+  var buildClipColumn = (ctx, clip, clipIdx) => {
+    const col = document.createElement("div");
+    col.className = "vst-detail-col vst-detail-clip";
+    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+    const durationInput = buildNumber(
+      clip.duration,
+      CLIP_DURATION_MIN,
+      CLIP_DURATION_MAX,
+      DURATION_STEP,
+      (value) => {
+        ctx.debouncedCommit("duration", (clips) => {
+          const target = clips[clipIdx];
+          if (target && !lengthDerived2) {
+            applyClipDurationResize(target, value, getRootDefaults);
+          }
+        });
+      }
+    );
+    durationInput.setAttribute("data-vst-focus-key", "duration");
+    const durationField = buildField(
+      "Duration (s)",
+      durationInput,
+      lengthDerived2 ? "(derived from audio/ControlNet source)" : void 0
+    );
+    if (lengthDerived2) {
+      durationInput.disabled = true;
+      durationField.classList.add("vst-field-disabled");
+    }
+    col.appendChild(durationField);
+    col.appendChild(
+      buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
+        ctx.commit((clips) => {
+          const target = clips[clipIdx];
+          if (target) {
+            target.skipped = value;
+          }
+        });
+      })
+    );
+    return col;
+  };
+  var buildStageRail = (ctx, clip, clipIdx, stageIdx) => {
+    const col = document.createElement("div");
+    col.className = "vst-detail-col vst-detail-rail";
+    const list = document.createElement("div");
+    list.className = "vst-detail-rail-list";
+    clip.stages.forEach((stage, idx) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "vst-chip vst-stage-tab";
+      if (idx === stageIdx) {
+        chip.classList.add("vst-stage-tab-active");
+      }
+      if (stage.skipped) {
+        chip.classList.add("vst-stage-tab-skipped");
+      }
+      chip.textContent = stageChipLabel(idx);
+      chip.title = `${stageChipTitle(stage, idx)} · click to edit · Shift+click to delete`;
+      chip.addEventListener("click", (event) => {
+        if (event.shiftKey) {
+          ctx.deleteStage(clipIdx, idx);
+        } else {
+          ctx.selectStage(clipIdx, idx);
+        }
+      });
+      list.appendChild(chip);
+    });
+    col.appendChild(list);
+    const actions = document.createElement("div");
+    actions.className = "vst-detail-rail-actions";
+    const addBtn = buildAddButton(
+      "Add stage",
+      "vst-detail-add-stage",
+      () => ctx.addStage(clipIdx)
+    );
+    addBtn.title = "Add a refine stage";
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
+    deleteBtn.textContent = "Delete stage";
+    deleteBtn.disabled = clip.stages.length <= 1;
+    deleteBtn.title = deleteBtn.disabled ? "A clip always keeps at least one stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
+    deleteBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      ctx.deleteStage(clipIdx, stageIdx);
+    });
+    actions.append(addBtn, deleteBtn);
+    col.appendChild(actions);
+    return col;
+  };
+  var buildParamsColumn = (ctx, clip, clipIdx, stageIdx, stage, defaults) => {
+    const col = document.createElement("div");
+    col.className = "vst-detail-col vst-detail-params";
+    const isRefine = stageIdx >= 1;
+    const stageCommit = (mutate) => {
+      ctx.commit((clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) {
+          mutate(target);
+        }
+      });
+    };
+    const stageDebounced = (key, mutate) => {
+      ctx.debouncedCommit(key, (clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) {
+          mutate(target);
+        }
+      });
+    };
+    const stageSlider = (label, focusKey, value, min, max, step, assign, opts) => tagFocus(
+      buildSlider(
+        label,
+        value,
+        min,
+        max,
+        step,
+        (v) => {
+          opts?.onValue?.(v);
+          stageDebounced(focusKey, (target) => assign(target, v));
+        },
+        opts?.title ? { title: opts.title } : void 0
+      ),
+      focusKey
+    );
+    const stageSelect = (values, labels, selected, assign) => buildSelect(
+      values,
+      labels,
+      selected,
+      (v) => stageCommit((target) => assign(target, v))
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-fields";
+    const applyMute = () => {
+      fields.classList.toggle(
+        "vst-stage-fields-muted",
+        stage.skipped === true
+      );
+    };
+    let railSkipSync = () => {
+    };
+    col.appendChild(
+      buildCheckbox("Skip this stage", stage.skipped === true, (value) => {
+        stage.skipped = value;
+        applyMute();
+        railSkipSync(value);
+        stageCommit((target) => {
+          target.skipped = value;
+        });
+      })
+    );
+    col.appendChild(fields);
+    applyMute();
+    const modelField = buildField(
+      "Model",
+      stageSelect(
+        defaults.modelValues,
+        defaults.modelLabels,
+        `${stage.model ?? ""}`,
+        (target, value) => {
+          target.model = value;
+        }
+      )
+    );
+    modelField.classList.add("vst-detail-span-2");
+    fields.appendChild(modelField);
+    fields.appendChild(
+      stageSlider(
+        "Steps",
+        "steps",
+        stage.steps,
+        defaults.stepsMin,
+        defaults.stepsMax,
+        defaults.stepsStep,
+        (target, value) => {
+          target.steps = Math.round(value);
+        }
+      )
+    );
+    fields.appendChild(
+      stageSlider(
+        "CFG Scale",
+        "cfg",
+        stage.cfgScale,
+        defaults.cfgScaleMin,
+        defaults.cfgScaleMax,
+        defaults.cfgScaleStep,
+        (target, value) => {
+          target.cfgScale = value;
+        }
+      )
+    );
+    if (isRefine) {
+      fields.appendChild(
+        stageSlider(
+          "Control",
+          "control",
+          stage.control,
+          defaults.controlMin,
+          defaults.controlMax,
+          defaults.controlStep,
+          (target, value) => {
+            target.control = value;
+          },
+          {
+            title: "Regen strength — higher = more of the stage is re-generated"
+          }
+        )
+      );
+      const methodSelect = stageSelect(
+        defaults.upscaleMethodValues,
+        defaults.upscaleMethodLabels,
+        `${stage.upscaleMethod ?? ""}`,
+        (target, value) => {
+          target.upscaleMethod = value;
+        }
+      );
+      const methodField = buildField("Upscale Method", methodSelect);
+      methodField.classList.add("vst-detail-span-2");
+      const syncMethod = (upscale) => {
+        const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
+        methodSelect.disabled = disabled;
+        methodField.classList.toggle("vst-field-disabled", disabled);
+        methodField.title = disabled ? "Set Upscale above 1× to choose a method" : "";
+      };
+      fields.appendChild(
+        stageSlider(
+          "Upscale",
+          "upscale",
+          stage.upscale,
+          defaults.upscaleMin,
+          defaults.upscaleMax,
+          defaults.upscaleStep,
+          (target, value) => {
+            target.upscale = value;
+          },
+          { onValue: syncMethod }
+        )
+      );
+      fields.appendChild(methodField);
+      syncMethod(stage.upscale);
+    }
+    fields.appendChild(
+      buildField(
+        "Sampler",
+        stageSelect(
+          defaults.samplerValues,
+          defaults.samplerLabels,
+          `${stage.sampler ?? ""}`,
+          (target, value) => {
+            target.sampler = value;
+          }
+        )
+      )
+    );
+    fields.appendChild(
+      buildField(
+        "Scheduler",
+        stageSelect(
+          defaults.schedulerValues,
+          defaults.schedulerLabels,
+          `${stage.scheduler ?? ""}`,
+          (target, value) => {
+            target.scheduler = value;
+          }
+        )
+      )
+    );
+    if (clip.refs.length > 0) {
+      const refsHeader = document.createElement("div");
+      refsHeader.className = "vst-detail-sec vst-detail-span-full";
+      refsHeader.textContent = "Reference Strengths";
+      fields.appendChild(refsHeader);
+      const setRefHover = (refIdx, on) => {
+        ctx.getBoundBody()?.querySelector(
+          `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
+        )?.classList.toggle("vst-ref-hover", on);
+      };
+      clip.refs.forEach((ref, refIdx) => {
+        const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
+        const slider = buildSlider(
+          `R${refIdx}`,
+          current,
+          STAGE_REF_STRENGTH_MIN,
+          STAGE_REF_STRENGTH_MAX,
+          STAGE_REF_STRENGTH_STEP,
+          (value) => {
+            stageDebounced(`refstrength-${refIdx}`, (target) => {
+              if (refIdx < target.refStrengths.length) {
+                target.refStrengths[refIdx] = value;
+              }
+            });
+          },
+          {
+            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
+          }
+        );
+        slider.classList.add("vst-stage-ref-slider");
+        tagFocus(slider, `ref-${refIdx}`);
+        slider.addEventListener(
+          "mouseenter",
+          () => setRefHover(refIdx, true)
+        );
+        slider.addEventListener(
+          "mouseleave",
+          () => setRefHover(refIdx, false)
+        );
+        fields.appendChild(slider);
+      });
+    }
+    if (clip.icLoras.length > 0) {
+      const controlNetSlider = buildSlider(
+        "IC-LoRA Guide Strength",
+        stage.controlNetStrength,
+        STAGE_CONTROLNET_STRENGTH_MIN,
+        STAGE_CONTROLNET_STRENGTH_MAX,
+        STAGE_CONTROLNET_STRENGTH_STEP,
+        (value) => {
+          stageDebounced("controlnet", (target) => {
+            target.controlNetStrength = value;
+          });
+        },
+        { hint: "Drive-video conditioning strength for this stage" }
+      );
+      tagFocus(controlNetSlider, "controlnet");
+      fields.appendChild(controlNetSlider);
+    }
+    fields.appendChild(
+      buildLorasSection(ctx, clipIdx, stageIdx, stage, defaults)
+    );
+    railSkipSync = (skipped) => {
+      const railChip = ctx.getDockEl()?.querySelector(
+        `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
+      );
+      railChip?.classList.toggle("vst-stage-tab-skipped", skipped);
+    };
+    return { col, railSkipSync };
+  };
+  var buildLorasSection = (ctx, clipIdx, stageIdx, stage, defaults) => {
+    const section = document.createElement("div");
+    section.className = "vst-audio-field vst-stage-loras vst-detail-span-full";
+    const label = document.createElement("div");
+    label.className = "vst-detail-sec";
+    label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
+    section.appendChild(label);
+    if (defaults.loraValues.length === 0) {
+      const empty = document.createElement("small");
+      empty.className = "vst-audio-field-hint";
+      empty.textContent = "(no LoRAs available)";
+      section.appendChild(empty);
+    } else {
+      const list = document.createElement("div");
+      list.className = "vst-stage-lora-list";
+      stage.loras.forEach((lora, index) => {
+        const row = document.createElement("div");
+        row.className = "vst-stage-lora-row";
+        const select = buildSelect(
+          defaults.loraValues,
+          defaults.loraLabels,
+          lora.name,
+          (value) => {
+            ctx.commit((clips) => {
+              const target = clips[clipIdx]?.stages[stageIdx];
+              const entry = target?.loras[index];
+              if (entry) {
+                entry.name = value;
+              }
+            });
+          }
+        );
+        const weight = buildNumber(
+          lora.weight,
+          -10,
+          10,
+          LORA_WEIGHT_STEP,
+          (value) => {
+            ctx.debouncedCommit(`lora-${index}-weight`, (clips) => {
+              const target = clips[clipIdx]?.stages[stageIdx];
+              const entry = target?.loras[index];
+              if (entry) {
+                entry.weight = value;
+              }
+            });
+          }
+        );
+        weight.classList.add("vst-stage-lora-weight");
+        weight.setAttribute("data-vst-focus-key", `lora-${index}-weight`);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "basic-button vst-stage-lora-remove";
+        remove.textContent = "×";
+        remove.title = "Remove this LoRA";
+        remove.addEventListener("click", () => {
+          ctx.structuralCommit((clips) => {
+            const target = clips[clipIdx]?.stages[stageIdx];
+            if (!target) {
+              return null;
+            }
+            target.loras.splice(index, 1);
+            return "render";
+          });
+        });
+        row.append(select, weight, remove);
+        list.appendChild(row);
+      });
+      section.appendChild(list);
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "basic-button small-button vst-stage-lora-add";
+      addBtn.textContent = "+ Add LoRA";
+      addBtn.addEventListener("click", () => {
+        ctx.structuralCommit((clips) => {
+          const target = clips[clipIdx]?.stages[stageIdx];
+          if (!target) {
+            return null;
+          }
+          target.loras.push({
+            name: defaults.loraValues[0] ?? "",
+            weight: LORA_WEIGHT_DEFAULT
+          });
+          return "render";
+        });
+      });
+      section.appendChild(addBtn);
+    }
+    return section;
+  };
+  var buildRetakeSection = (ctx, clip, clipIdx) => {
+    const { wrap, col } = buildStackSection("Retake", "vst-detail-retake-col");
+    const retake = clip.retake;
+    if (!retake) {
+      const hint = document.createElement("small");
+      hint.className = "vst-audio-field-hint";
+      hint.textContent = "Regenerates a sub-range when refining a base video.";
+      col.append(
+        hint,
+        buildAddButton(
+          "Add retake",
+          "vst-detail-add-retake",
+          () => ctx.createRetake(clipIdx)
+        )
+      );
+      return wrap;
+    }
+    const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
+    const clampRetake = (start, length) => clampStartLength(start, length, clipDur, RETAKE_MIN_DURATION);
+    const startInput = ctx.buildClampedNumber({
+      key: "retake-start",
+      value: retake.startSeconds,
+      min: 0,
+      max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
+      step: RETAKE_DURATION_STEP,
+      readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
+      mutate: (cs, value) => {
+        const r = cs[clipIdx]?.retake;
+        if (r) {
+          const next = clampRetake(value, r.lengthSeconds);
+          r.startSeconds = next.start;
+          r.lengthSeconds = next.length;
+        }
+      }
+    });
+    col.appendChild(buildField("Start (s)", startInput));
+    const lengthInput = ctx.buildClampedNumber({
+      key: "retake-length",
+      value: retake.lengthSeconds,
+      min: RETAKE_MIN_DURATION,
+      max: clipDur,
+      step: RETAKE_DURATION_STEP,
+      readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
+      mutate: (cs, value) => {
+        const r = cs[clipIdx]?.retake;
+        if (r) {
+          const next = clampRetake(r.startSeconds, value);
+          r.startSeconds = next.start;
+          r.lengthSeconds = next.length;
+        }
+      }
+    });
+    col.appendChild(buildField("Length (s)", lengthInput));
+    col.appendChild(
+      buildSlider(
+        "Strength",
+        retake.strength,
+        RETAKE_STRENGTH_MIN,
+        RETAKE_STRENGTH_MAX,
+        RETAKE_STRENGTH_STEP,
+        (value) => {
+          ctx.debouncedCommit("retake-strength", (cs) => {
+            const r = cs[clipIdx]?.retake;
+            if (r) {
+              r.strength = clamp(
+                value,
+                RETAKE_STRENGTH_MIN,
+                RETAKE_STRENGTH_MAX
+              );
+            }
+          });
+        }
+      )
+    );
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
+    col.appendChild(note);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+    del.textContent = "Remove retake";
+    del.addEventListener("click", (event) => {
+      event.preventDefault();
+      ctx.removeRetake(clipIdx);
+    });
+    col.appendChild(del);
+    return wrap;
+  };
+  var buildIcLorasSection = (ctx, clip, clipIdx, defaults) => {
+    const { wrap, col } = buildStackSection(
+      "IC-LoRAs",
+      "vst-detail-iclora-col"
+    );
+    const entryField = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
+    clip.icLoras.forEach((entry, entryIdx) => {
+      const { row, fields } = buildInstanceRow({
+        rowClass: "vst-detail-iclora",
+        indexAttr: "data-vst-iclora-idx",
+        index: entryIdx,
+        active: false,
+        title: `IC-LoRA ${entryIdx + 1}`,
+        deleteLabel: "Remove",
+        onDelete: () => {
+          ctx.structuralCommit((clips) => {
+            const target = clips[clipIdx];
+            if (!target || entryIdx >= target.icLoras.length) {
+              return null;
+            }
+            target.icLoras.splice(entryIdx, 1);
+            return "render";
+          });
+        },
+        repoint: () => {
+        }
+      });
+      const presetSelect = buildOptionSelect(
+        [
+          { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+          ...IC_LORA_PRESETS.map((preset2) => ({
+            value: preset2.id,
+            label: preset2.displayName
+          }))
+        ],
+        entry.preset,
+        (value) => {
+          ctx.commit((clips) => {
+            const target = entryField(clips, entryIdx);
+            if (!target) {
+              return;
+            }
+            target.preset = value;
+            const preset2 = findIcLoraPreset(value);
+            if (preset2) {
+              target.strength = preset2.strength;
+              target.controlType = preset2.controlType;
+            }
+          });
+          clearIcLoraAutoFailure(value);
+          ctx.render();
+        }
+      );
+      fields.appendChild(buildField("Preset", presetSelect));
+      const loraSelect = buildSelect(
+        [IC_LORA_AUTO, ...defaults.loraValues],
+        [IC_LORA_AUTO, ...defaults.loraLabels],
+        entry.lora,
+        (value) => {
+          ctx.commit((clips) => {
+            const target = entryField(clips, entryIdx);
+            if (target) {
+              target.lora = value;
+            }
+          });
+          if (value === IC_LORA_AUTO) {
+            clearIcLoraAutoFailure(entry.preset);
+          }
+          ctx.render();
+        }
+      );
+      fields.appendChild(buildField("LoRA", loraSelect));
+      const strength = ctx.buildClampedNumber({
+        key: `iclora-${entryIdx}-strength`,
+        value: entry.strength,
+        min: IC_LORA_STRENGTH_MIN,
+        max: IC_LORA_STRENGTH_MAX,
+        step: IC_LORA_STRENGTH_STEP,
+        readBack: (cs) => entryField(cs, entryIdx)?.strength ?? null,
+        mutate: (cs, value) => {
+          const target = entryField(cs, entryIdx);
+          if (target) {
+            target.strength = value;
+          }
+        }
+      });
+      fields.appendChild(buildField("Strength", strength));
+      const attention = ctx.buildClampedNumber({
+        key: `iclora-${entryIdx}-attention`,
+        value: entry.attentionStrength,
+        min: IC_LORA_ATTENTION_MIN,
+        max: IC_LORA_ATTENTION_MAX,
+        step: IC_LORA_ATTENTION_STEP,
+        readBack: (cs) => entryField(cs, entryIdx)?.attentionStrength ?? null,
+        mutate: (cs, value) => {
+          const target = entryField(cs, entryIdx);
+          if (target) {
+            target.attentionStrength = value;
+          }
+        }
+      });
+      fields.appendChild(buildField("Attention", attention));
+      const preset = findIcLoraPreset(entry.preset);
+      if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
+        const controlSelect = buildOptionSelect(
+          [
+            { value: "none", label: "None (raw video)" },
+            { value: "canny", label: "Canny edges" },
+            { value: "depth", label: "Depth map" },
+            { value: "normal", label: "Normal map" }
+          ],
+          entry.controlType,
+          (value) => {
+            ctx.commit((clips) => {
+              const target = entryField(clips, entryIdx);
+              if (target) {
+                target.controlType = value;
+              }
+            });
+          }
+        );
+        fields.appendChild(buildField("Control", controlSelect));
+      }
+      const applySelect = buildOptionSelect(
+        [
+          { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
+          ...clip.stages.map((_, stageIdx) => ({
+            value: `${stageIdx}`,
+            label: `Stage ${stageIdx}`
+          }))
+        ],
+        `${entry.stage}`,
+        (value) => {
+          ctx.commit((clips) => {
+            const target = entryField(clips, entryIdx);
+            if (!target) {
+              return;
+            }
+            const stage = Number(value);
+            target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
+            reconcileIcLoraStage(target);
+          });
+          ctx.render();
+        }
+      );
+      fields.appendChild(buildField("Apply on", applySelect));
+      if (entry.stage >= 1 && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
+        const sourceSelect = buildOptionSelect(
+          [
+            { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
+            {
+              value: IC_LORA_SOURCE_STAGE_INPUT,
+              label: "Stage input"
+            }
+          ],
+          entry.source,
+          (value) => {
+            ctx.commit((clips) => {
+              const target = entryField(clips, entryIdx);
+              if (target) {
+                target.source = value;
+              }
+            });
+            ctx.render();
+          }
+        );
+        fields.appendChild(buildField("Source", sourceSelect));
+      }
+      if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+        const hint = document.createElement("small");
+        hint.className = "vst-audio-field-hint";
+        hint.textContent = `Driven by stage ${entry.stage}'s input (the previous stage's output).`;
+        fields.appendChild(hint);
+      } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
+        fields.appendChild(
+          buildUploadRow(
+            "Drive Media",
+            "video/*,image/*",
+            entry.video?.fileName,
+            (data, fileName) => {
+              ctx.commit((clips) => {
+                const target = entryField(clips, entryIdx);
+                if (target) {
+                  target.video = { data, fileName };
+                }
+              });
+              ctx.render();
+            },
+            () => {
+              ctx.commit((clips) => {
+                const target = entryField(clips, entryIdx);
+                if (target) {
+                  target.video = null;
+                }
+              });
+              ctx.render();
+            }
+          )
+        );
+        if (entry.video?.data?.startsWith("data:video/")) {
+          const voiceRow = buildCheckbox(
+            "Voice ref from drive audio",
+            entry.driveAudioRef === true,
+            (value) => {
+              ctx.commit((clips) => {
+                const target = entryField(clips, entryIdx);
+                if (target) {
+                  target.driveAudioRef = value;
+                }
+              });
+            }
+          );
+          voiceRow.title = "Use this video's audio as the speaker sample (LipDub): new speech matching the prompt is generated in that voice.";
+          fields.appendChild(voiceRow);
+        }
+      } else {
+        const slot = document.createElement("small");
+        slot.className = "vst-audio-field-hint";
+        slot.textContent = `Driven by ${entry.source} (legacy source)`;
+        fields.appendChild(slot);
+      }
+      const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
+      if (hintText || preset) {
+        const hint = document.createElement("small");
+        hint.className = "vst-audio-field-hint";
+        hint.textContent = hintText ? `${hintText} ` : "";
+        if (preset) {
+          const link = document.createElement("a");
+          link.href = icLoraRepoUrl(preset);
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = "repo";
+          hint.appendChild(link);
+        }
+        fields.appendChild(hint);
+      }
+      ensureIcLoraAutoWeights(entry, defaults.loraValues, ctx.render);
+      const autoText = icLoraAutoHint(entry, defaults.loraValues);
+      if (autoText) {
+        const autoHint = document.createElement("small");
+        autoHint.className = "vst-audio-field-hint";
+        if (preset) {
+          autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
+        }
+        autoHint.textContent = autoText;
+        fields.appendChild(autoHint);
+      }
+      col.appendChild(row);
+    });
+    col.appendChild(
+      buildAddButton("+ Add IC-LoRA", "vst-detail-add-iclora", () => {
+        ctx.structuralCommit((clips) => {
+          const target = clips[clipIdx];
+          if (!target) {
+            return null;
+          }
+          target.icLoras.push(
+            defaultIcLora({
+              lora: defaults.loraValues[0] ?? IC_LORA_AUTO
+            })
+          );
+          return "render";
+        });
+      })
+    );
+    return wrap;
+  };
+  var buildClipBody = (ctx, sel, clips) => {
+    const body = document.createElement("div");
+    body.className = "vst-detail-body vst-detail-clip-body";
+    const clip = clips[sel.clipIdx];
+    const stage = clip.stages[sel.stageIdx];
+    const defaults = getRootDefaults();
+    body.appendChild(buildClipColumn(ctx, clip, sel.clipIdx));
+    const params = buildParamsColumn(
+      ctx,
+      clip,
+      sel.clipIdx,
+      sel.stageIdx,
+      stage,
+      defaults
+    );
+    const stagesWrap = document.createElement("div");
+    stagesWrap.className = "vst-detail-stages-wrap";
+    stagesWrap.append(
+      sectionLabel("Stages"),
+      buildStageRail(ctx, clip, sel.clipIdx, sel.stageIdx),
+      params.col
+    );
+    body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
+    body.appendChild(
+      buildGroup(
+        GROUP_ICLORA,
+        buildIcLorasSection(ctx, clip, sel.clipIdx, defaults)
+      )
+    );
+    body.appendChild(
+      buildGroup(GROUP_RETAKE, buildRetakeSection(ctx, clip, sel.clipIdx))
+    );
+    return body;
   };
 
   // frontend/intervals.ts
@@ -4487,8 +5340,7 @@
     return [lo, hi];
   };
 
-  // frontend/timelinePromptTrack.ts
-  var MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
+  // frontend/promptWindowEdits.ts
   var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
     k,
     start: clamp(w.start, 0, clipDuration),
@@ -4535,177 +5387,272 @@
     const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
     return { beginMin: roundToTenth(lo), endMax: roundToTenth(hi) };
   };
-  var wallsFor = (clip, windowIdx, press) => {
-    const clipDur = clipDurationOf(clip);
-    return freeIntervalAt(
-      otherSpans(clip.promptWindows ?? [], windowIdx, clipDur),
-      clipDur,
-      press.start
-    );
-  };
-  var createTimelinePromptTrack = () => createWindowTrack({
-    routeId: "prompt-track",
-    priority: 20,
-    origin: "prompt-track",
-    spanSelector: ".vst-minor-seg[data-clip-idx]",
-    itemIdxAttr: "data-window-idx",
-    edgeSelector: "[data-vst-minor-edge]",
-    edgeAttr: "data-vst-minor-edge",
-    laneSelector: ".vst-minor-lane[data-clip-idx]",
-    draggingClass: "vst-prompt-dragging",
-    ghostClass: "vst-minor-ghost",
-    unit: "px",
-    keyboardSelect: false,
-    isolateClicks: false,
-    readSpan: (clip, windowIdx) => {
-      const window2 = clip.promptWindows?.[windowIdx];
-      return window2 ? { start: window2.start, length: window2.duration, trim: 0 } : null;
-    },
-    moveTargetStart: (clip, windowIdx, press, desiredStart) => {
-      const clipDur = clipDurationOf(clip);
-      const [lo, hi] = wallsFor(clip, windowIdx, press);
-      const dur = Math.min(press.length, clipDur);
-      return clamp(desiredStart, lo, Math.max(lo, hi - dur));
-    },
-    writeMove: (clip, windowIdx, press, start) => {
-      const window2 = clip.promptWindows?.[windowIdx];
-      if (!window2) {
-        return;
-      }
-      const clipDur = clipDurationOf(clip);
-      const [, hi] = wallsFor(clip, windowIdx, press);
-      const dur = Math.min(press.length, clipDur);
-      window2.start = roundToTenth(start);
-      window2.duration = roundToTenth(
-        Math.max(
-          PROMPT_WINDOW_MIN_DURATION,
-          Math.min(dur, hi - window2.start)
-        )
-      );
-    },
-    resizeTarget: (clip, windowIdx, edge, press, deltaSec) => {
-      const clipDur = clipDurationOf(clip);
-      const spans = otherSpans(
-        clip.promptWindows ?? [],
-        windowIdx,
-        clipDur
-      );
-      if (edge === "right") {
-        const [, hi] = freeIntervalAt(spans, clipDur, press.start);
-        const end2 = clamp(
-          press.start + press.length + deltaSec,
-          press.start + PROMPT_WINDOW_MIN_DURATION,
-          hi
-        );
-        return { start: press.start, length: end2 - press.start };
-      }
-      const end = press.start + press.length;
-      const [lo] = freeIntervalAt(
-        spans,
-        clipDur,
-        Math.max(0, end - 1e-3)
-      );
-      const start = clamp(
-        press.start + deltaSec,
-        lo,
-        end - PROMPT_WINDOW_MIN_DURATION
-      );
-      return { start, length: end - start };
-    },
-    writeResize: (clip, windowIdx, _edge, _press, geom) => {
-      const window2 = clip.promptWindows?.[windowIdx];
-      if (!window2) {
-        return;
-      }
-      window2.start = roundToTenth(geom.start);
-      window2.duration = roundToTenth(geom.length);
-    },
-    createSpan: (clip, clipIdx, startSec, endSec) => {
-      const clipDur = clipDurationOf(clip);
-      const spans = otherSpans(clip.promptWindows ?? [], -1, clipDur);
-      const [lo, hi] = freeIntervalAt(spans, clipDur, startSec);
-      const gap = hi - lo;
-      if (gap < PROMPT_WINDOW_MIN_DURATION) {
-        return null;
-      }
-      let start;
-      let duration;
-      if (endSec === null) {
-        duration = Math.min(PROMPT_WINDOW_DEFAULT_DURATION, gap);
-        start = clamp(startSec, lo, hi - duration);
-      } else {
-        const a = clamp(Math.min(startSec, endSec), lo, hi);
-        const b = clamp(Math.max(startSec, endSec), lo, hi);
-        start = a;
-        duration = Math.max(PROMPT_WINDOW_MIN_DURATION, b - a);
-        if (start + duration > hi) {
-          duration = hi - start;
-        }
-      }
-      if (duration < PROMPT_WINDOW_MIN_DURATION) {
-        return null;
-      }
-      const window2 = {
-        prompt: "",
-        start: roundToTenth(start),
-        duration: roundToTenth(duration)
-      };
-      clip.promptWindows.push(window2);
-      clip.promptWindows.sort((x, y) => x.start - y.start);
-      const newIdx = clip.promptWindows.indexOf(window2);
-      return newIdx >= 0 ? { kind: "prompt-minor", clipIdx, windowIdx: newIdx } : null;
-    },
-    deleteItem: (clip, windowIdx) => {
-      if (!clip.promptWindows?.[windowIdx]) {
-        return false;
-      }
-      clip.promptWindows.splice(windowIdx, 1);
-      return true;
-    },
-    selectionFor: (clipIdx, windowIdx) => ({
-      kind: "prompt-minor",
-      clipIdx,
-      windowIdx
-    }),
-    // Clicks that land on the MAJOR (whole-clip prompt) row select it.
-    onClickFallthrough: (_event, target) => {
-      const major = target.closest(MAJOR_SELECTOR);
-      if (!(major instanceof HTMLElement)) {
-        return;
-      }
-      const clipIdx = parseIntAttr(major, "data-clip-idx");
-      if (clipIdx === null || !getClips()[clipIdx]) {
-        return;
-      }
-      setSelection({ kind: "prompt-major", clipIdx });
-    }
-  });
 
-  // frontend/timelineDetailStrip.ts
-  var STAGE_SELECTOR = "[data-vst-stage]";
-  var MODEL_SELECTOR = "[data-vst-model]";
-  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
-  var clampStartLength = (start, length, clipDur, minLength) => {
-    const s = clamp(start, 0, Math.max(0, clipDur - minLength));
-    const l = clamp(length, minLength, Math.max(minLength, clipDur - s));
-    return { start: s, length: l };
-  };
-  var DETAIL_CLASS = "vst-detail";
-  var GROUP_STAGES = "vstdock_stages";
-  var GROUP_ICLORA = "vstdock_iclora";
-  var GROUP_REF = "vstdock_ref";
-  var GROUP_AUDIO = "vstdock_audio";
-  var GROUP_AUDIOSEG = "vstdock_audioseg";
+  // frontend/detailStrip/promptPanels.ts
   var GROUP_PROMPTMAJOR = "vstdock_promptmajor";
   var GROUP_PROMPTMINOR = "vstdock_promptminor";
-  var GROUP_RETAKE = "vstdock_retake";
-  var GROUP_BOUNDARY = "vstdock_boundary";
+  var buildPromptMajorBody = (ctx, sel, clips) => {
+    const { clipIdx } = sel;
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body vst-detail-prompt-body";
+    body.appendChild(
+      buildTextarea(
+        clips[clipIdx].prompt ?? "",
+        "Clip prompt (blank inherits the global prompt)…",
+        "prompt-major",
+        (value) => {
+          ctx.debouncedCommit("prompt-major", (cs) => {
+            const c = cs[clipIdx];
+            if (c) {
+              c.prompt = value.trim();
+            }
+          });
+        }
+      )
+    );
+    return wrapForm(GROUP_PROMPTMAJOR, body);
+  };
+  var buildPromptMinorBody = (ctx, sel, clips) => {
+    const { clipIdx, windowIdx } = sel;
+    const clip = clips[clipIdx];
+    const windows = clip?.promptWindows ?? [];
+    const clipDur = Math.max(PROMPT_WINDOW_MIN_DURATION, clip?.duration || 0);
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body vst-detail-prompt-body vst-detail-minor-body";
+    windows.forEach((w, idx) => {
+      const row = document.createElement("div");
+      row.className = "vst-detail-minor-window";
+      row.setAttribute("data-vst-minor-window", `${idx}`);
+      if (idx === windowIdx) {
+        row.classList.add("vst-detail-minor-active");
+      }
+      const head = document.createElement("div");
+      head.className = "vst-detail-minor-head";
+      const title = document.createElement("span");
+      title.className = "vst-detail-minor-title";
+      title.textContent = `W${idx + 1}`;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-minor-delete";
+      del.textContent = "Delete";
+      del.title = "Delete this prompt window";
+      del.addEventListener("click", (event) => {
+        event.preventDefault();
+        ctx.deleteWindowEntry(clipIdx, idx);
+      });
+      head.append(title, del);
+      row.appendChild(head);
+      const range = document.createElement("div");
+      range.className = "vst-detail-minor-range";
+      const bounds = clip ? promptWindowNeighborBounds(clip, idx) : null;
+      const beginInput = ctx.buildClampedNumber({
+        key: `minor-${idx}-begin`,
+        value: roundToTenth(w.start),
+        min: bounds?.beginMin ?? 0,
+        max: gridFloor(Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION)),
+        step: 0.1,
+        readBack: (cs) => {
+          const win = cs[clipIdx]?.promptWindows?.[idx];
+          return win ? roundToTenth(win.start) : null;
+        },
+        mutate: (cs, value) => {
+          const c = cs[clipIdx];
+          if (c) {
+            applyPromptWindowBegin(c, idx, value);
+          }
+        }
+      });
+      range.appendChild(buildField("Begin (s)", beginInput));
+      const endInput = ctx.buildClampedNumber({
+        key: `minor-${idx}-end`,
+        value: roundToTenth(w.start + w.duration),
+        min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
+        max: bounds?.endMax ?? clipDur,
+        step: 0.1,
+        readBack: (cs) => {
+          const win = cs[clipIdx]?.promptWindows?.[idx];
+          return win ? roundToTenth(win.start + win.duration) : null;
+        },
+        mutate: (cs, value) => {
+          const c = cs[clipIdx];
+          if (c) {
+            applyPromptWindowEnd(c, idx, value);
+          }
+        }
+      });
+      range.appendChild(buildField("End (s)", endInput));
+      row.appendChild(range);
+      const editor = buildTextarea(
+        w.prompt ?? "",
+        "Minor prompt for this window…",
+        `minor-${idx}`,
+        (value) => {
+          ctx.debouncedCommit(`minor-${idx}`, (cs) => {
+            const win = cs[clipIdx]?.promptWindows?.[idx];
+            if (win) {
+              win.prompt = value.trim();
+            }
+          });
+        }
+      );
+      editor.addEventListener("focus", () => {
+        setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
+      });
+      row.appendChild(editor);
+      body.appendChild(row);
+    });
+    return wrapForm(GROUP_PROMPTMINOR, body);
+  };
+
+  // frontend/imageSource.ts
+  var buildImageSourceOptions = (currentValue = "") => {
+    const options = [
+      { value: REF_SOURCE_BASE, label: "Base Output" },
+      { value: REF_SOURCE_REFINER, label: "Refiner Output" },
+      { value: REF_SOURCE_UPLOAD, label: "Upload" }
+    ];
+    for (const editRef of getBase2EditStageRefs()) {
+      const editStage = parseBase2EditStageIndex(editRef);
+      options.push({
+        value: editRef,
+        label: `Base2Edit Edit ${editStage} Output`
+      });
+    }
+    preserveSelectedOption(options, currentValue, "start", (value) => {
+      const isBase2Edit = parseBase2EditStageIndex(value) != null;
+      return {
+        value,
+        label: isBase2Edit ? `Missing Base2Edit ${value}` : value,
+        disabled: isBase2Edit
+      };
+    });
+    return options;
+  };
+  var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
+
+  // frontend/detailStrip/refPanel.ts
+  var GROUP_REF = "vstdock_ref";
+  var buildRefBody = (ctx, sel, clips) => {
+    const { clipIdx } = sel;
+    const clip = clips[clipIdx];
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
+    const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+    clip.refs.forEach((ref, refIdx) => {
+      const options = buildImageSourceOptions(ref.source ?? "");
+      const source = resolveImageSourceValue(ref.source ?? "", options);
+      const isUpload = source === REF_SOURCE_UPLOAD;
+      const { row, fields } = buildInstanceRow({
+        rowClass: "vst-detail-ref-row",
+        indexAttr: "data-vst-ref-index",
+        index: refIdx,
+        active: refIdx === sel.refIdx,
+        title: `R${refIdx + 1}`,
+        deleteLabel: "Delete",
+        onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
+        repoint: () => setSelection({ kind: "ref", clipIdx, refIdx })
+      });
+      const select = buildOptionSelect(options, source, (value) => {
+        ctx.commit((cs) => {
+          const r = cs[clipIdx]?.refs[refIdx];
+          if (!r) {
+            return;
+          }
+          const resolved = resolveImageSourceValue(
+            value,
+            buildImageSourceOptions(value)
+          );
+          r.source = resolved;
+          if (resolved !== REF_SOURCE_UPLOAD) {
+            r.uploadedImage = null;
+            r.uploadFileName = null;
+          }
+        });
+        ctx.render();
+      });
+      fields.appendChild(buildField("Image Source", select));
+      if (isUpload) {
+        const preview = document.createElement("div");
+        preview.className = "vst-refs-thumb-preview";
+        const data = ref.uploadedImage?.data;
+        if (data) {
+          preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
+          preview.classList.add("vst-refs-thumb-preview-set");
+        }
+        fields.appendChild(preview);
+      }
+      const frameInput = buildNumber(
+        ref.frame,
+        REF_FRAME_MIN,
+        frameMax,
+        1,
+        (value) => {
+          ctx.debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
+            const r = cs[clipIdx]?.refs[refIdx];
+            if (r) {
+              r.frame = clamp(
+                Math.round(value),
+                REF_FRAME_MIN,
+                frameMax
+              );
+            }
+          });
+        }
+      );
+      frameInput.setAttribute("data-vst-focus-key", `ref-${refIdx}-frame`);
+      fields.appendChild(
+        buildField(`Attach at Frame (1–${frameMax})`, frameInput)
+      );
+      fields.appendChild(
+        buildCheckbox(
+          "Count from clip end",
+          ref.fromEnd === true,
+          (value) => {
+            ctx.commit((cs) => {
+              const r = cs[clipIdx]?.refs[refIdx];
+              if (r) {
+                r.fromEnd = value;
+              }
+            });
+          }
+        )
+      );
+      if (isUpload) {
+        fields.appendChild(
+          buildUploadRow(
+            "Image Upload",
+            "image/*",
+            ref.uploadedImage?.fileName,
+            (data, fileName) => {
+              ctx.commit((cs) => {
+                const r = cs[clipIdx]?.refs[refIdx];
+                if (r) {
+                  r.uploadedImage = { data, fileName };
+                  r.uploadFileName = fileName;
+                }
+              });
+              ctx.render();
+            },
+            () => {
+              ctx.commit((cs) => {
+                const r = cs[clipIdx]?.refs[refIdx];
+                if (r) {
+                  r.uploadedImage = null;
+                  r.uploadFileName = null;
+                }
+              });
+              ctx.render();
+            }
+          )
+        );
+      }
+      body.appendChild(row);
+    });
+    return wrapForm(GROUP_REF, body);
+  };
+
+  // frontend/detailStrip/settingsPanel.ts
   var GROUP_SETTINGS = "vstdock_settings";
-  var DURATION_STEP = 0.1;
-  var UPSCALE_EPSILON = 1e-6;
-  var LORA_WEIGHT_STEP = 0.05;
-  var LORA_WEIGHT_DEFAULT = 1;
-  var DEBOUNCE_MS = 200;
   var SETTINGS_INHERIT = "inherit";
   var SETTINGS_CUSTOM = "custom";
   var clampDimension = (value) => clamp(
@@ -4714,6 +5661,152 @@
     ROOT_DIMENSION_MAX
   );
   var clampFps = (value) => clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
+  var buildSettingsBody = (ctx) => {
+    const state = getState();
+    const defaults = getRootDefaults();
+    const core = {
+      width: defaults.width,
+      height: defaults.height,
+      fps: defaults.fps
+    };
+    const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchPresetKey(state.width, state.height) ?? SETTINGS_CUSTOM;
+    const mode = ctx.getSettingsMode() ?? defaultMode;
+    const isCustom = mode === SETTINGS_CUSTOM;
+    const displayed = mode === SETTINGS_CUSTOM ? {
+      width: clampDimension(state.width),
+      height: clampDimension(state.height)
+    } : mode === SETTINGS_INHERIT ? { width: core.width, height: core.height } : presetDimensions(mode) ?? {
+      width: clampDimension(state.width),
+      height: clampDimension(state.height)
+    };
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body vst-detail-settings";
+    const resSpecs = [
+      {
+        value: SETTINGS_INHERIT,
+        label: `Use image resolution (${core.width}×${core.height})`
+      },
+      ...DIMENSION_PRESET_KEYS.map((key) => ({
+        value: key,
+        label: key.replace("x", " × ")
+      })),
+      { value: SETTINGS_CUSTOM, label: "Custom" }
+    ];
+    const resSelect = buildOptionSelect(resSpecs, mode, (value) => {
+      ctx.setSettingsMode(value);
+      ctx.commitState((next) => {
+        if (value === SETTINGS_INHERIT) {
+          next.dimsExplicit = false;
+        } else if (value === SETTINGS_CUSTOM) {
+          next.dimsExplicit = true;
+          next.width = clampDimension(displayed.width);
+          next.height = clampDimension(displayed.height);
+        } else {
+          const dims = presetDimensions(value);
+          if (dims) {
+            next.dimsExplicit = true;
+            next.width = dims.width;
+            next.height = dims.height;
+          }
+        }
+      });
+      ctx.render();
+    });
+    body.appendChild(buildField("Resolution", resSelect));
+    const widthInput = buildNumber(
+      displayed.width,
+      ROOT_DIMENSION_MIN,
+      ROOT_DIMENSION_MAX,
+      ROOT_DIMENSION_STEP,
+      (value) => {
+        ctx.debouncedCommitState("settings-width", (next) => {
+          next.dimsExplicit = true;
+          next.width = clampDimension(value);
+        });
+      }
+    );
+    widthInput.classList.add("vst-settings-num");
+    widthInput.disabled = !isCustom;
+    widthInput.setAttribute("data-vst-focus-key", "settings-width");
+    const heightInput = buildNumber(
+      displayed.height,
+      ROOT_DIMENSION_MIN,
+      ROOT_DIMENSION_MAX,
+      ROOT_DIMENSION_STEP,
+      (value) => {
+        ctx.debouncedCommitState("settings-height", (next) => {
+          next.dimsExplicit = true;
+          next.height = clampDimension(value);
+        });
+      }
+    );
+    heightInput.classList.add("vst-settings-num");
+    heightInput.disabled = !isCustom;
+    heightInput.setAttribute("data-vst-focus-key", "settings-height");
+    const dimsPair = document.createElement("div");
+    dimsPair.className = "vst-settings-dims";
+    const dimsSep = document.createElement("span");
+    dimsSep.className = "vst-settings-dims-sep";
+    dimsSep.textContent = "×";
+    dimsPair.append(widthInput, dimsSep, heightInput);
+    const dimsField = buildField("Dimensions", dimsPair);
+    if (!isCustom) {
+      dimsField.classList.add("vst-audio-disabled");
+    }
+    body.appendChild(dimsField);
+    const badges = document.createElement("div");
+    badges.className = "vst-settings-badges";
+    if (mode !== SETTINGS_CUSTOM && mode !== SETTINGS_INHERIT) {
+      const els = presetBadgeElements(mode);
+      if (els.length > 0) {
+        badges.append(...els);
+      }
+    }
+    badges.hidden = badges.childElementCount === 0;
+    body.appendChild(badges);
+    const fpsRow = buildCheckbox(
+      "Custom FPS",
+      state.fpsExplicit === true,
+      (value) => {
+        ctx.commitState((next) => {
+          next.fpsExplicit = value;
+          if (value) {
+            next.fps = clampFps(next.fps);
+          }
+        });
+        ctx.render();
+      }
+    );
+    body.appendChild(fpsRow);
+    const fpsInput = buildNumber(
+      state.fpsExplicit ? clampFps(state.fps) : core.fps,
+      ROOT_FPS_MIN,
+      ROOT_FPS_MAX,
+      1,
+      (value) => {
+        ctx.debouncedCommitState("settings-fps", (next) => {
+          next.fpsExplicit = true;
+          next.fps = clampFps(value);
+        });
+      }
+    );
+    fpsInput.classList.add("vst-settings-num");
+    fpsInput.disabled = state.fpsExplicit !== true;
+    fpsInput.setAttribute("data-vst-focus-key", "settings-fps");
+    const fpsField = buildField("FPS", fpsInput);
+    if (state.fpsExplicit !== true) {
+      fpsField.classList.add("vst-audio-disabled");
+    }
+    body.appendChild(fpsField);
+    return wrapForm(GROUP_SETTINGS, body);
+  };
+
+  // frontend/timelineDetailStrip.ts
+  var STAGE_SELECTOR = "[data-vst-stage]";
+  var MODEL_SELECTOR = "[data-vst-model]";
+  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
+  var DETAIL_CLASS = "vst-detail";
+  var DEBOUNCE_MS = 200;
   var clampSelection = (sel, clips) => {
     if (sel.kind === "none") {
       return sel;
@@ -4840,11 +5933,6 @@
         } catch {
         }
       }
-    };
-    const tagFocus = (field, key) => {
-      const control = field.querySelector("input.auto-slider-number") ?? field.querySelector("input, select") ?? (field.matches("input, select") ? field : null);
-      control?.setAttribute("data-vst-focus-key", key);
-      return field;
     };
     const isStale = () => readStateToken() !== sourceToken;
     const pending = /* @__PURE__ */ new Map();
@@ -5020,32 +6108,38 @@
       }
       setSelection(outcome);
     };
+    const commitRemoval = (remove, index, neighbour, fallback) => structuralCommit((clips) => {
+      const remaining = remove(clips);
+      if (remaining === null) {
+        return null;
+      }
+      return remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
+    });
     const deleteRefEntry = (clipIdx, refIdx) => {
-      structuralCommit((clips) => {
-        const clip = clips[clipIdx];
-        if (!clip || !removeRefAt(clip, refIdx)) {
-          return null;
-        }
-        return clip.refs.length > 0 ? {
-          kind: "ref",
-          clipIdx,
-          refIdx: Math.min(refIdx, clip.refs.length - 1)
-        } : { kind: "clip", clipIdx, stageIdx: 0 };
-      });
+      commitRemoval(
+        (clips) => {
+          const clip = clips[clipIdx];
+          return clip && removeRefAt(clip, refIdx) ? clip.refs.length : null;
+        },
+        refIdx,
+        (idx) => ({ kind: "ref", clipIdx, refIdx: idx }),
+        { kind: "clip", clipIdx, stageIdx: 0 }
+      );
     };
     const deleteWindowEntry = (clipIdx, windowIdx) => {
-      structuralCommit((clips) => {
-        const windows = clips[clipIdx]?.promptWindows;
-        if (!windows || windowIdx < 0 || windowIdx >= windows.length) {
-          return null;
-        }
-        windows.splice(windowIdx, 1);
-        return windows.length > 0 ? {
-          kind: "prompt-minor",
-          clipIdx,
-          windowIdx: Math.min(windowIdx, windows.length - 1)
-        } : { kind: "prompt-major", clipIdx };
-      });
+      commitRemoval(
+        (clips) => {
+          const windows = clips[clipIdx]?.promptWindows;
+          if (!windows || windowIdx < 0 || windowIdx >= windows.length) {
+            return null;
+          }
+          windows.splice(windowIdx, 1);
+          return windows.length;
+        },
+        windowIdx,
+        (idx) => ({ kind: "prompt-minor", clipIdx, windowIdx: idx }),
+        { kind: "prompt-major", clipIdx }
+      );
     };
     const createRetake = (clipIdx) => {
       structuralCommit((clips) => {
@@ -5107,20 +6201,21 @@
       });
     };
     const removeAudioSegment = (clipIdx, segIdx) => {
-      structuralCommit((clips) => {
-        const clip = clips[clipIdx];
-        if (!clip?.audioSegments?.[segIdx]) {
-          return null;
-        }
-        clip.audioSegments = clip.audioSegments.filter(
-          (_, i) => i !== segIdx
-        );
-        return clip.audioSegments.length > 0 ? {
-          kind: "audio-segment",
-          clipIdx,
-          segIdx: Math.min(segIdx, clip.audioSegments.length - 1)
-        } : { kind: "audio", clipIdx };
-      });
+      commitRemoval(
+        (clips) => {
+          const clip = clips[clipIdx];
+          if (!clip?.audioSegments?.[segIdx]) {
+            return null;
+          }
+          clip.audioSegments = clip.audioSegments.filter(
+            (_, i) => i !== segIdx
+          );
+          return clip.audioSegments.length;
+        },
+        segIdx,
+        (idx) => ({ kind: "audio-segment", clipIdx, segIdx: idx }),
+        { kind: "audio", clipIdx }
+      );
     };
     const selectStage = (clipIdx, stageIdx) => {
       setSelection({ kind: "clip", clipIdx, stageIdx });
@@ -5167,9 +6262,7 @@
             } else if (entry.stage > stageIdx) {
               entry.stage -= 1;
             }
-            if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
-              entry.source = IC_LORA_SOURCE_UPLOAD;
-            }
+            reconcileIcLoraStage(entry);
           }
           return {
             kind: "clip",
@@ -5280,23 +6373,6 @@
       }
       return dockEl;
     };
-    const buildGroup = (groupId, content) => {
-      const group = document.createElement("div");
-      group.className = "input-group input-group-open";
-      group.id = `auto-group-${groupId}`;
-      const contentEl = document.createElement("div");
-      contentEl.className = "input-group-content";
-      contentEl.id = `input_group_content_${groupId}`;
-      contentEl.appendChild(content);
-      group.appendChild(contentEl);
-      return group;
-    };
-    const wrapForm = (groupId, content) => {
-      const body = document.createElement("div");
-      body.className = "vst-detail-body";
-      body.appendChild(buildGroup(groupId, content));
-      return body;
-    };
     const breadcrumbFor = (sel) => {
       switch (sel.kind) {
         case "clip":
@@ -5369,1550 +6445,54 @@
       head.append(crumb, clear, toggle);
       return head;
     };
-    const buildClipColumn = (clip, clipIdx) => {
-      const col = document.createElement("div");
-      col.className = "vst-detail-col vst-detail-clip";
-      const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
-      const durationInput = buildNumber(
-        clip.duration,
-        CLIP_DURATION_MIN,
-        CLIP_DURATION_MAX,
-        DURATION_STEP,
-        (value) => {
-          debouncedCommit("duration", (clips) => {
-            const target = clips[clipIdx];
-            if (target && !lengthDerived2) {
-              applyClipDurationResize(target, value, getRootDefaults);
-            }
-          });
-        }
-      );
-      durationInput.setAttribute("data-vst-focus-key", "duration");
-      const durationField = buildField(
-        "Duration (s)",
-        durationInput,
-        lengthDerived2 ? "(derived from audio/ControlNet source)" : void 0
-      );
-      if (lengthDerived2) {
-        durationInput.disabled = true;
-        durationField.classList.add("vst-field-disabled");
+    const ctx = {
+      commit,
+      commitState,
+      debouncedCommit,
+      debouncedCommitState,
+      buildClampedNumber,
+      structuralCommit,
+      render: () => render(),
+      deleteRefEntry,
+      deleteWindowEntry,
+      createRetake,
+      removeRetake,
+      addAudioSegment,
+      removeAudioSegment,
+      addStage,
+      deleteStage,
+      selectStage,
+      getBoundBody: () => boundBody,
+      getDockEl: () => dockEl,
+      getSettingsMode: () => settingsMode,
+      setSettingsMode: (mode) => {
+        settingsMode = mode;
       }
-      col.appendChild(durationField);
-      col.appendChild(
-        buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
-          commit((clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-              target.skipped = value;
-            }
-          });
-        })
-      );
-      return col;
-    };
-    const buildStageRail = (clip, clipIdx, stageIdx) => {
-      const col = document.createElement("div");
-      col.className = "vst-detail-col vst-detail-rail";
-      const list = document.createElement("div");
-      list.className = "vst-detail-rail-list";
-      clip.stages.forEach((stage, idx) => {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "vst-chip vst-stage-tab";
-        if (idx === stageIdx) {
-          chip.classList.add("vst-stage-tab-active");
-        }
-        if (stage.skipped) {
-          chip.classList.add("vst-stage-tab-skipped");
-        }
-        chip.textContent = stageChipLabel(idx);
-        chip.title = `${stageChipTitle(stage, idx)} · click to edit · Shift+click to delete`;
-        chip.addEventListener("click", (event) => {
-          if (event.shiftKey) {
-            deleteStage(clipIdx, idx);
-          } else {
-            selectStage(clipIdx, idx);
-          }
-        });
-        list.appendChild(chip);
-      });
-      col.appendChild(list);
-      const actions = document.createElement("div");
-      actions.className = "vst-detail-rail-actions";
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "basic-button small-button vst-detail-rail-btn vst-detail-add-stage";
-      addBtn.textContent = "Add stage";
-      addBtn.title = "Add a refine stage";
-      addBtn.addEventListener("click", (event) => {
-        event.preventDefault();
-        addStage(clipIdx);
-      });
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
-      deleteBtn.textContent = "Delete stage";
-      deleteBtn.disabled = clip.stages.length <= 1;
-      deleteBtn.title = deleteBtn.disabled ? "A clip always keeps at least one stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
-      deleteBtn.addEventListener("click", (event) => {
-        event.preventDefault();
-        deleteStage(clipIdx, stageIdx);
-      });
-      actions.append(addBtn, deleteBtn);
-      col.appendChild(actions);
-      return col;
-    };
-    const buildParamsColumn = (clip, clipIdx, stageIdx, stage, defaults) => {
-      const col = document.createElement("div");
-      col.className = "vst-detail-col vst-detail-params";
-      const isRefine = stageIdx >= 1;
-      const stageCommit = (mutate) => {
-        commit((clips) => {
-          const target = clips[clipIdx]?.stages[stageIdx];
-          if (target) {
-            mutate(target);
-          }
-        });
-      };
-      const stageDebounced = (key, mutate) => {
-        debouncedCommit(key, (clips) => {
-          const target = clips[clipIdx]?.stages[stageIdx];
-          if (target) {
-            mutate(target);
-          }
-        });
-      };
-      const stageSlider = (label, focusKey, value, min, max, step, assign, opts) => tagFocus(
-        buildSlider(
-          label,
-          value,
-          min,
-          max,
-          step,
-          (v) => {
-            opts?.onValue?.(v);
-            stageDebounced(focusKey, (target) => assign(target, v));
-          },
-          opts?.title ? { title: opts.title } : void 0
-        ),
-        focusKey
-      );
-      const stageSelect = (values, labels, selected, assign) => buildSelect(
-        values,
-        labels,
-        selected,
-        (v) => stageCommit((target) => assign(target, v))
-      );
-      const fields = document.createElement("div");
-      fields.className = "vst-detail-fields";
-      const applyMute = () => {
-        fields.classList.toggle(
-          "vst-stage-fields-muted",
-          stage.skipped === true
-        );
-      };
-      let railSkipSync = () => {
-      };
-      col.appendChild(
-        buildCheckbox(
-          "Skip this stage",
-          stage.skipped === true,
-          (value) => {
-            stage.skipped = value;
-            applyMute();
-            railSkipSync(value);
-            stageCommit((target) => {
-              target.skipped = value;
-            });
-          }
-        )
-      );
-      col.appendChild(fields);
-      applyMute();
-      const modelField = buildField(
-        "Model",
-        stageSelect(
-          defaults.modelValues,
-          defaults.modelLabels,
-          `${stage.model ?? ""}`,
-          (target, value) => {
-            target.model = value;
-          }
-        )
-      );
-      modelField.classList.add("vst-detail-span-2");
-      fields.appendChild(modelField);
-      fields.appendChild(
-        stageSlider(
-          "Steps",
-          "steps",
-          stage.steps,
-          defaults.stepsMin,
-          defaults.stepsMax,
-          defaults.stepsStep,
-          (target, value) => {
-            target.steps = Math.round(value);
-          }
-        )
-      );
-      fields.appendChild(
-        stageSlider(
-          "CFG Scale",
-          "cfg",
-          stage.cfgScale,
-          defaults.cfgScaleMin,
-          defaults.cfgScaleMax,
-          defaults.cfgScaleStep,
-          (target, value) => {
-            target.cfgScale = value;
-          }
-        )
-      );
-      if (isRefine) {
-        fields.appendChild(
-          stageSlider(
-            "Control",
-            "control",
-            stage.control,
-            defaults.controlMin,
-            defaults.controlMax,
-            defaults.controlStep,
-            (target, value) => {
-              target.control = value;
-            },
-            {
-              title: "Regen strength — higher = more of the stage is re-generated"
-            }
-          )
-        );
-        const methodSelect = stageSelect(
-          defaults.upscaleMethodValues,
-          defaults.upscaleMethodLabels,
-          `${stage.upscaleMethod ?? ""}`,
-          (target, value) => {
-            target.upscaleMethod = value;
-          }
-        );
-        const methodField = buildField("Upscale Method", methodSelect);
-        methodField.classList.add("vst-detail-span-2");
-        const syncMethod = (upscale) => {
-          const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
-          methodSelect.disabled = disabled;
-          methodField.classList.toggle("vst-field-disabled", disabled);
-          methodField.title = disabled ? "Set Upscale above 1× to choose a method" : "";
-        };
-        fields.appendChild(
-          stageSlider(
-            "Upscale",
-            "upscale",
-            stage.upscale,
-            defaults.upscaleMin,
-            defaults.upscaleMax,
-            defaults.upscaleStep,
-            (target, value) => {
-              target.upscale = value;
-            },
-            { onValue: syncMethod }
-          )
-        );
-        fields.appendChild(methodField);
-        syncMethod(stage.upscale);
-      }
-      fields.appendChild(
-        buildField(
-          "Sampler",
-          stageSelect(
-            defaults.samplerValues,
-            defaults.samplerLabels,
-            `${stage.sampler ?? ""}`,
-            (target, value) => {
-              target.sampler = value;
-            }
-          )
-        )
-      );
-      fields.appendChild(
-        buildField(
-          "Scheduler",
-          stageSelect(
-            defaults.schedulerValues,
-            defaults.schedulerLabels,
-            `${stage.scheduler ?? ""}`,
-            (target, value) => {
-              target.scheduler = value;
-            }
-          )
-        )
-      );
-      if (clip.refs.length > 0) {
-        const refsHeader = document.createElement("div");
-        refsHeader.className = "vst-detail-sec vst-detail-span-full";
-        refsHeader.textContent = "Reference Strengths";
-        fields.appendChild(refsHeader);
-        const setRefHover = (refIdx, on) => {
-          boundBody?.querySelector(
-            `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
-          )?.classList.toggle("vst-ref-hover", on);
-        };
-        clip.refs.forEach((ref, refIdx) => {
-          const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
-          const slider = buildSlider(
-            `R${refIdx}`,
-            current,
-            STAGE_REF_STRENGTH_MIN,
-            STAGE_REF_STRENGTH_MAX,
-            STAGE_REF_STRENGTH_STEP,
-            (value) => {
-              stageDebounced(`refstrength-${refIdx}`, (target) => {
-                if (refIdx < target.refStrengths.length) {
-                  target.refStrengths[refIdx] = value;
-                }
-              });
-            },
-            {
-              title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
-            }
-          );
-          slider.classList.add("vst-stage-ref-slider");
-          tagFocus(slider, `ref-${refIdx}`);
-          slider.addEventListener(
-            "mouseenter",
-            () => setRefHover(refIdx, true)
-          );
-          slider.addEventListener(
-            "mouseleave",
-            () => setRefHover(refIdx, false)
-          );
-          fields.appendChild(slider);
-        });
-      }
-      if (clip.icLoras.length > 0) {
-        const controlNetSlider = buildSlider(
-          "IC-LoRA Guide Strength",
-          stage.controlNetStrength,
-          STAGE_CONTROLNET_STRENGTH_MIN,
-          STAGE_CONTROLNET_STRENGTH_MAX,
-          STAGE_CONTROLNET_STRENGTH_STEP,
-          (value) => {
-            stageDebounced("controlnet", (target) => {
-              target.controlNetStrength = value;
-            });
-          },
-          { hint: "Drive-video conditioning strength for this stage" }
-        );
-        tagFocus(controlNetSlider, "controlnet");
-        fields.appendChild(controlNetSlider);
-      }
-      fields.appendChild(
-        buildLorasSection(clipIdx, stageIdx, stage, defaults)
-      );
-      railSkipSync = (skipped) => {
-        const railChip = dockEl?.querySelector(
-          `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
-        );
-        railChip?.classList.toggle("vst-stage-tab-skipped", skipped);
-      };
-      return { col, railSkipSync };
-    };
-    const buildLorasSection = (clipIdx, stageIdx, stage, defaults) => {
-      const section = document.createElement("div");
-      section.className = "vst-audio-field vst-stage-loras vst-detail-span-full";
-      const label = document.createElement("div");
-      label.className = "vst-detail-sec";
-      label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
-      section.appendChild(label);
-      if (defaults.loraValues.length === 0) {
-        const empty = document.createElement("small");
-        empty.className = "vst-audio-field-hint";
-        empty.textContent = "(no LoRAs available)";
-        section.appendChild(empty);
-      } else {
-        const list = document.createElement("div");
-        list.className = "vst-stage-lora-list";
-        stage.loras.forEach((lora, index) => {
-          const row = document.createElement("div");
-          row.className = "vst-stage-lora-row";
-          const select = buildSelect(
-            defaults.loraValues,
-            defaults.loraLabels,
-            lora.name,
-            (value) => {
-              commit((clips) => {
-                const target = clips[clipIdx]?.stages[stageIdx];
-                const entry = target?.loras[index];
-                if (entry) {
-                  entry.name = value;
-                }
-              });
-            }
-          );
-          const weight = buildNumber(
-            lora.weight,
-            -10,
-            10,
-            LORA_WEIGHT_STEP,
-            (value) => {
-              debouncedCommit(`lora-${index}-weight`, (clips) => {
-                const target = clips[clipIdx]?.stages[stageIdx];
-                const entry = target?.loras[index];
-                if (entry) {
-                  entry.weight = value;
-                }
-              });
-            }
-          );
-          weight.classList.add("vst-stage-lora-weight");
-          weight.setAttribute(
-            "data-vst-focus-key",
-            `lora-${index}-weight`
-          );
-          const remove = document.createElement("button");
-          remove.type = "button";
-          remove.className = "basic-button vst-stage-lora-remove";
-          remove.textContent = "×";
-          remove.title = "Remove this LoRA";
-          remove.addEventListener("click", () => {
-            structuralCommit((clips) => {
-              const target = clips[clipIdx]?.stages[stageIdx];
-              if (!target) {
-                return null;
-              }
-              target.loras.splice(index, 1);
-              return "render";
-            });
-          });
-          row.append(select, weight, remove);
-          list.appendChild(row);
-        });
-        section.appendChild(list);
-        const addBtn = document.createElement("button");
-        addBtn.type = "button";
-        addBtn.className = "basic-button small-button vst-stage-lora-add";
-        addBtn.textContent = "+ Add LoRA";
-        addBtn.addEventListener("click", () => {
-          structuralCommit((clips) => {
-            const target = clips[clipIdx]?.stages[stageIdx];
-            if (!target) {
-              return null;
-            }
-            target.loras.push({
-              name: defaults.loraValues[0] ?? "",
-              weight: LORA_WEIGHT_DEFAULT
-            });
-            return "render";
-          });
-        });
-        section.appendChild(addBtn);
-      }
-      return section;
-    };
-    const buildRetakeSection = (clip, clipIdx) => {
-      const wrap = document.createElement("div");
-      wrap.className = "vst-detail-stages-wrap";
-      wrap.appendChild(sectionLabel("Retake"));
-      const col = document.createElement("div");
-      col.className = "vst-detail-col vst-detail-retake-col";
-      wrap.appendChild(col);
-      const retake = clip.retake;
-      if (!retake) {
-        const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
-        hint.textContent = "Regenerates a sub-range when refining a base video.";
-        const addBtn = document.createElement("button");
-        addBtn.type = "button";
-        addBtn.className = "basic-button small-button vst-detail-rail-btn vst-detail-add-retake";
-        addBtn.textContent = "Add retake";
-        addBtn.addEventListener("click", (event) => {
-          event.preventDefault();
-          createRetake(clipIdx);
-        });
-        col.append(hint, addBtn);
-        return wrap;
-      }
-      const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
-      const clampRetake = (start, length) => clampStartLength(start, length, clipDur, RETAKE_MIN_DURATION);
-      const startInput = buildClampedNumber({
-        key: "retake-start",
-        value: retake.startSeconds,
-        min: 0,
-        max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
-        step: RETAKE_DURATION_STEP,
-        readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
-        mutate: (cs, value) => {
-          const r = cs[clipIdx]?.retake;
-          if (r) {
-            const next = clampRetake(value, r.lengthSeconds);
-            r.startSeconds = next.start;
-            r.lengthSeconds = next.length;
-          }
-        }
-      });
-      col.appendChild(buildField("Start (s)", startInput));
-      const lengthInput = buildClampedNumber({
-        key: "retake-length",
-        value: retake.lengthSeconds,
-        min: RETAKE_MIN_DURATION,
-        max: clipDur,
-        step: RETAKE_DURATION_STEP,
-        readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
-        mutate: (cs, value) => {
-          const r = cs[clipIdx]?.retake;
-          if (r) {
-            const next = clampRetake(r.startSeconds, value);
-            r.startSeconds = next.start;
-            r.lengthSeconds = next.length;
-          }
-        }
-      });
-      col.appendChild(buildField("Length (s)", lengthInput));
-      col.appendChild(
-        buildSlider(
-          "Strength",
-          retake.strength,
-          RETAKE_STRENGTH_MIN,
-          RETAKE_STRENGTH_MAX,
-          RETAKE_STRENGTH_STEP,
-          (value) => {
-            debouncedCommit("retake-strength", (cs) => {
-              const r = cs[clipIdx]?.retake;
-              if (r) {
-                r.strength = clamp(
-                  value,
-                  RETAKE_STRENGTH_MIN,
-                  RETAKE_STRENGTH_MAX
-                );
-              }
-            });
-          }
-        )
-      );
-      const note = document.createElement("p");
-      note.className = "vst-detail-note";
-      note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
-      col.appendChild(note);
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
-      del.textContent = "Remove retake";
-      del.addEventListener("click", (event) => {
-        event.preventDefault();
-        removeRetake(clipIdx);
-      });
-      col.appendChild(del);
-      return wrap;
-    };
-    const buildIcLorasSection = (clip, clipIdx, defaults) => {
-      const wrap = document.createElement("div");
-      wrap.className = "vst-detail-stages-wrap";
-      wrap.appendChild(sectionLabel("IC-LoRAs"));
-      const col = document.createElement("div");
-      col.className = "vst-detail-col vst-detail-iclora-col";
-      wrap.appendChild(col);
-      const entryField = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
-      clip.icLoras.forEach((entry, entryIdx) => {
-        const { row, fields } = buildInstanceRow({
-          rowClass: "vst-detail-iclora",
-          indexAttr: "data-vst-iclora-idx",
-          index: entryIdx,
-          active: false,
-          title: `IC-LoRA ${entryIdx + 1}`,
-          deleteLabel: "Remove",
-          onDelete: () => {
-            structuralCommit((clips) => {
-              const target = clips[clipIdx];
-              if (!target || entryIdx >= target.icLoras.length) {
-                return null;
-              }
-              target.icLoras.splice(entryIdx, 1);
-              return "render";
-            });
-          },
-          repoint: () => {
-          }
-        });
-        const presetSelect = buildOptionSelect(
-          [
-            { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
-            ...IC_LORA_PRESETS.map((preset2) => ({
-              value: preset2.id,
-              label: preset2.displayName
-            }))
-          ],
-          entry.preset,
-          (value) => {
-            commit((clips) => {
-              const target = entryField(clips, entryIdx);
-              if (!target) {
-                return;
-              }
-              target.preset = value;
-              const preset2 = findIcLoraPreset(value);
-              if (preset2) {
-                target.strength = preset2.strength;
-                target.controlType = preset2.controlType;
-              }
-            });
-            clearIcLoraAutoFailure(value);
-            render();
-          }
-        );
-        fields.appendChild(buildField("Preset", presetSelect));
-        const loraSelect = buildSelect(
-          [IC_LORA_AUTO, ...defaults.loraValues],
-          [IC_LORA_AUTO, ...defaults.loraLabels],
-          entry.lora,
-          (value) => {
-            commit((clips) => {
-              const target = entryField(clips, entryIdx);
-              if (target) {
-                target.lora = value;
-              }
-            });
-            if (value === IC_LORA_AUTO) {
-              clearIcLoraAutoFailure(entry.preset);
-            }
-            render();
-          }
-        );
-        fields.appendChild(buildField("LoRA", loraSelect));
-        const strength = buildClampedNumber({
-          key: `iclora-${entryIdx}-strength`,
-          value: entry.strength,
-          min: IC_LORA_STRENGTH_MIN,
-          max: IC_LORA_STRENGTH_MAX,
-          step: IC_LORA_STRENGTH_STEP,
-          readBack: (cs) => entryField(cs, entryIdx)?.strength ?? null,
-          mutate: (cs, value) => {
-            const target = entryField(cs, entryIdx);
-            if (target) {
-              target.strength = value;
-            }
-          }
-        });
-        fields.appendChild(buildField("Strength", strength));
-        const attention = buildClampedNumber({
-          key: `iclora-${entryIdx}-attention`,
-          value: entry.attentionStrength,
-          min: IC_LORA_ATTENTION_MIN,
-          max: IC_LORA_ATTENTION_MAX,
-          step: IC_LORA_ATTENTION_STEP,
-          readBack: (cs) => entryField(cs, entryIdx)?.attentionStrength ?? null,
-          mutate: (cs, value) => {
-            const target = entryField(cs, entryIdx);
-            if (target) {
-              target.attentionStrength = value;
-            }
-          }
-        });
-        fields.appendChild(buildField("Attention", attention));
-        const preset = findIcLoraPreset(entry.preset);
-        if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
-          const controlSelect = buildOptionSelect(
-            [
-              { value: "none", label: "None (raw video)" },
-              { value: "canny", label: "Canny edges" },
-              { value: "depth", label: "Depth map" },
-              { value: "normal", label: "Normal map" }
-            ],
-            entry.controlType,
-            (value) => {
-              commit((clips) => {
-                const target = entryField(clips, entryIdx);
-                if (target) {
-                  target.controlType = value;
-                }
-              });
-            }
-          );
-          fields.appendChild(buildField("Control", controlSelect));
-        }
-        const applySelect = buildOptionSelect(
-          [
-            { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
-            ...clip.stages.map((_, stageIdx) => ({
-              value: `${stageIdx}`,
-              label: `Stage ${stageIdx}`
-            }))
-          ],
-          `${entry.stage}`,
-          (value) => {
-            commit((clips) => {
-              const target = entryField(clips, entryIdx);
-              if (!target) {
-                return;
-              }
-              const stage = Number(value);
-              target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
-              if (target.stage < 1 && target.source === IC_LORA_SOURCE_STAGE_INPUT) {
-                target.source = IC_LORA_SOURCE_UPLOAD;
-              }
-            });
-            render();
-          }
-        );
-        fields.appendChild(buildField("Apply on", applySelect));
-        if (entry.stage >= 1 && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
-          const sourceSelect = buildOptionSelect(
-            [
-              { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
-              {
-                value: IC_LORA_SOURCE_STAGE_INPUT,
-                label: "Stage input"
-              }
-            ],
-            entry.source,
-            (value) => {
-              commit((clips) => {
-                const target = entryField(clips, entryIdx);
-                if (target) {
-                  target.source = value;
-                }
-              });
-              render();
-            }
-          );
-          fields.appendChild(buildField("Source", sourceSelect));
-        }
-        if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
-          const hint = document.createElement("small");
-          hint.className = "vst-audio-field-hint";
-          hint.textContent = `Driven by stage ${entry.stage}'s input (the previous stage's output).`;
-          fields.appendChild(hint);
-        } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
-          fields.appendChild(
-            buildUploadRow(
-              "Drive Media",
-              "video/*,image/*",
-              entry.video?.fileName,
-              (data, fileName) => {
-                commit((clips) => {
-                  const target = entryField(clips, entryIdx);
-                  if (target) {
-                    target.video = { data, fileName };
-                  }
-                });
-                render();
-              },
-              () => {
-                commit((clips) => {
-                  const target = entryField(clips, entryIdx);
-                  if (target) {
-                    target.video = null;
-                  }
-                });
-                render();
-              }
-            )
-          );
-          if (entry.video?.data?.startsWith("data:video/")) {
-            const voiceRow = buildCheckbox(
-              "Voice ref from drive audio",
-              entry.driveAudioRef === true,
-              (value) => {
-                commit((clips) => {
-                  const target = entryField(clips, entryIdx);
-                  if (target) {
-                    target.driveAudioRef = value;
-                  }
-                });
-              }
-            );
-            voiceRow.title = "Use this video's audio as the speaker sample (LipDub): new speech matching the prompt is generated in that voice.";
-            fields.appendChild(voiceRow);
-          }
-        } else {
-          const slot = document.createElement("small");
-          slot.className = "vst-audio-field-hint";
-          slot.textContent = `Driven by ${entry.source} (legacy source)`;
-          fields.appendChild(slot);
-        }
-        const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
-        if (hintText || preset) {
-          const hint = document.createElement("small");
-          hint.className = "vst-audio-field-hint";
-          hint.textContent = hintText ? `${hintText} ` : "";
-          if (preset) {
-            const link = document.createElement("a");
-            link.href = icLoraRepoUrl(preset);
-            link.target = "_blank";
-            link.rel = "noopener";
-            link.textContent = "repo";
-            hint.appendChild(link);
-          }
-          fields.appendChild(hint);
-        }
-        ensureIcLoraAutoWeights(entry, defaults.loraValues, render);
-        const autoText = icLoraAutoHint(entry, defaults.loraValues);
-        if (autoText) {
-          const autoHint = document.createElement("small");
-          autoHint.className = "vst-audio-field-hint";
-          if (preset) {
-            autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
-          }
-          autoHint.textContent = autoText;
-          fields.appendChild(autoHint);
-        }
-        col.appendChild(row);
-      });
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "basic-button small-button vst-detail-rail-btn vst-detail-add-iclora";
-      addBtn.textContent = "+ Add IC-LoRA";
-      addBtn.addEventListener("click", (event) => {
-        event.preventDefault();
-        structuralCommit((clips) => {
-          const target = clips[clipIdx];
-          if (!target) {
-            return null;
-          }
-          target.icLoras.push(
-            defaultIcLora({
-              lora: defaults.loraValues[0] ?? IC_LORA_AUTO
-            })
-          );
-          return "render";
-        });
-      });
-      col.appendChild(addBtn);
-      return wrap;
-    };
-    const buildClipBody = (sel, clips) => {
-      const body = document.createElement("div");
-      body.className = "vst-detail-body vst-detail-clip-body";
-      const clip = clips[sel.clipIdx];
-      const stage = clip.stages[sel.stageIdx];
-      const defaults = getRootDefaults();
-      body.appendChild(buildClipColumn(clip, sel.clipIdx));
-      const params = buildParamsColumn(
-        clip,
-        sel.clipIdx,
-        sel.stageIdx,
-        stage,
-        defaults
-      );
-      const stagesWrap = document.createElement("div");
-      stagesWrap.className = "vst-detail-stages-wrap";
-      stagesWrap.append(
-        sectionLabel("Stages"),
-        buildStageRail(clip, sel.clipIdx, sel.stageIdx),
-        params.col
-      );
-      body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
-      body.appendChild(
-        buildGroup(
-          GROUP_ICLORA,
-          buildIcLorasSection(clip, sel.clipIdx, defaults)
-        )
-      );
-      body.appendChild(
-        buildGroup(GROUP_RETAKE, buildRetakeSection(clip, sel.clipIdx))
-      );
-      return body;
-    };
-    const buildRefBody = (sel, clips) => {
-      const { clipIdx } = sel;
-      const clip = clips[clipIdx];
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
-      const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-      clip.refs.forEach((ref, refIdx) => {
-        const options2 = buildImageSourceOptions(ref.source ?? "");
-        const source = resolveImageSourceValue(ref.source ?? "", options2);
-        const isUpload = source === REF_SOURCE_UPLOAD;
-        const { row, fields } = buildInstanceRow({
-          rowClass: "vst-detail-ref-row",
-          indexAttr: "data-vst-ref-index",
-          index: refIdx,
-          active: refIdx === sel.refIdx,
-          title: `R${refIdx + 1}`,
-          deleteLabel: "Delete",
-          onDelete: () => deleteRefEntry(clipIdx, refIdx),
-          repoint: () => setSelection({ kind: "ref", clipIdx, refIdx })
-        });
-        const select = buildOptionSelect(options2, source, (value) => {
-          commit((cs) => {
-            const r = cs[clipIdx]?.refs[refIdx];
-            if (!r) {
-              return;
-            }
-            const resolved = resolveImageSourceValue(
-              value,
-              buildImageSourceOptions(value)
-            );
-            r.source = resolved;
-            if (resolved !== REF_SOURCE_UPLOAD) {
-              r.uploadedImage = null;
-              r.uploadFileName = null;
-            }
-          });
-          render();
-        });
-        fields.appendChild(buildField("Image Source", select));
-        if (isUpload) {
-          const preview = document.createElement("div");
-          preview.className = "vst-refs-thumb-preview";
-          const data = ref.uploadedImage?.data;
-          if (data) {
-            preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-            preview.classList.add("vst-refs-thumb-preview-set");
-          }
-          fields.appendChild(preview);
-        }
-        const frameInput = buildNumber(
-          ref.frame,
-          REF_FRAME_MIN,
-          frameMax,
-          1,
-          (value) => {
-            debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
-              const r = cs[clipIdx]?.refs[refIdx];
-              if (r) {
-                r.frame = clamp(
-                  Math.round(value),
-                  REF_FRAME_MIN,
-                  frameMax
-                );
-              }
-            });
-          }
-        );
-        frameInput.setAttribute(
-          "data-vst-focus-key",
-          `ref-${refIdx}-frame`
-        );
-        fields.appendChild(
-          buildField(`Attach at Frame (1–${frameMax})`, frameInput)
-        );
-        fields.appendChild(
-          buildCheckbox(
-            "Count from clip end",
-            ref.fromEnd === true,
-            (value) => {
-              commit((cs) => {
-                const r = cs[clipIdx]?.refs[refIdx];
-                if (r) {
-                  r.fromEnd = value;
-                }
-              });
-            }
-          )
-        );
-        if (isUpload) {
-          fields.appendChild(
-            buildUploadRow(
-              "Image Upload",
-              "image/*",
-              ref.uploadedImage?.fileName,
-              (data, fileName) => {
-                commit((cs) => {
-                  const r = cs[clipIdx]?.refs[refIdx];
-                  if (r) {
-                    r.uploadedImage = { data, fileName };
-                    r.uploadFileName = fileName;
-                  }
-                });
-                render();
-              },
-              () => {
-                commit((cs) => {
-                  const r = cs[clipIdx]?.refs[refIdx];
-                  if (r) {
-                    r.uploadedImage = null;
-                    r.uploadFileName = null;
-                  }
-                });
-                render();
-              }
-            )
-          );
-        }
-        body.appendChild(row);
-      });
-      return wrapForm(GROUP_REF, body);
-    };
-    const buildAudioBody = (sel, clips) => {
-      const { clipIdx } = sel;
-      const clip = clips[clipIdx];
-      const controlNetEnabled = hasSlotSourcedIcLora(clip.icLoras);
-      const options2 = buildAudioSourceOptions(clip.audioSource ?? "", {
-        controlNetEnabled
-      });
-      const source = resolveAudioSourceValue(clip.audioSource ?? "", options2);
-      const canLength = canUseClipLengthFromAudio(source);
-      const isAce = isAceStepFunAudioSource(source);
-      const commitAudio = (mutate) => {
-        commit((cs) => {
-          const target = cs[clipIdx];
-          if (!target) {
-            return;
-          }
-          mutate(target);
-          const cnEnabled = hasSlotSourcedIcLora(target.icLoras);
-          const nextSource = resolveAudioSourceValue(
-            target.audioSource,
-            buildAudioSourceOptions(target.audioSource, {
-              controlNetEnabled: cnEnabled
-            })
-          );
-          target.audioSource = nextSource;
-          target.clipLengthFromAudio = canUseClipLengthFromAudio(nextSource) && target.clipLengthFromAudio;
-          if (target.clipLengthFromAudio) {
-            target.clipLengthFromControlNet = false;
-          }
-          target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
-          target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD || nextSource === AUDIO_SOURCE_VOICE_REF ? target.uploadedAudio : null;
-        });
-      };
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body";
-      const select = buildOptionSelect(
-        options2.map((o) => ({ value: o.value, label: o.label })),
-        source,
-        (value) => {
-          commitAudio((c) => {
-            c.audioSource = value;
-          });
-          render();
-        }
-      );
-      body.appendChild(buildField("Audio Source", select));
-      body.appendChild(
-        buildCheckbox("Reuse Audio", clip.reuseAudio === true, (value) => {
-          commitAudio((c) => {
-            c.reuseAudio = value;
-          });
-        })
-      );
-      const lengthRow = buildCheckbox(
-        "Clip Length from Audio",
-        clip.clipLengthFromAudio === true && canLength,
-        (value) => {
-          commitAudio((c) => {
-            c.clipLengthFromAudio = value;
-          });
-        },
-        { disabled: !canLength }
-      );
-      body.appendChild(lengthRow);
-      const saveRow = buildCheckbox(
-        "Save Audio Track",
-        clip.saveAudioTrack === true && isAce,
-        (value) => {
-          commitAudio((c) => {
-            c.saveAudioTrack = value;
-          });
-        },
-        { disabled: !isAce }
-      );
-      body.appendChild(saveRow);
-      if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
-        body.appendChild(
-          buildUploadRow(
-            source === AUDIO_SOURCE_VOICE_REF ? "Voice Sample" : "Audio Upload",
-            "audio/*",
-            clip.uploadedAudio?.fileName,
-            (data, fileName) => {
-              commitAudio((c) => {
-                c.uploadedAudio = { data, fileName };
-              });
-              render();
-            },
-            () => {
-              commitAudio((c) => {
-                c.uploadedAudio = null;
-              });
-              render();
-            }
-          )
-        );
-      }
-      if (source === AUDIO_SOURCE_VOICE_REF) {
-        const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
-        hint.textContent = "Speaker sample only — new speech is generated to match the prompt in this voice. Put the spoken words in the clip prompt.";
-        body.appendChild(hint);
-      }
-      const segCount = clip.audioSegments?.length ?? 0;
-      const addSegment = document.createElement("button");
-      addSegment.type = "button";
-      addSegment.className = "basic-button small-button vst-detail-add-segment";
-      addSegment.textContent = "+ Add segment";
-      addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
-      addSegment.addEventListener("click", (event) => {
-        event.preventDefault();
-        addAudioSegment(clipIdx);
-      });
-      body.appendChild(addSegment);
-      if (segCount > 0) {
-        const note = document.createElement("p");
-        note.className = "vst-detail-note";
-        note.textContent = segCount === 1 ? "1 overlay segment · mixed additively over the base audio." : `${segCount} overlay segments · mixed additively over the base audio.`;
-        body.appendChild(note);
-      }
-      return wrapForm(GROUP_AUDIO, body);
-    };
-    const buildAudioSegmentBody = (sel, clips) => {
-      const { clipIdx } = sel;
-      const clip = clips[clipIdx];
-      const segments = clip?.audioSegments ?? [];
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
-      const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
-      const clampSegment = (start, length) => clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
-      segments.forEach((segment, segIdx) => {
-        const { row, fields } = buildInstanceRow({
-          rowClass: "vst-detail-seg-row",
-          indexAttr: "data-vst-seg-index",
-          index: segIdx,
-          active: segIdx === sel.segIdx,
-          title: `S${segIdx + 1}`,
-          deleteLabel: "Remove segment",
-          onDelete: () => removeAudioSegment(clipIdx, segIdx),
-          repoint: () => setSelection({ kind: "audio-segment", clipIdx, segIdx })
-        });
-        const segSourceRef = typeof segment.source === "string" ? segment.source : "";
-        const segSourceValue = segSourceRef || AUDIO_SOURCE_UPLOAD;
-        const segSourceSelect = buildOptionSelect(
-          buildSegmentAudioSourceOptions(segSourceRef),
-          segSourceValue,
-          (value) => {
-            commit((cs) => {
-              const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-              if (!seg) {
-                return;
-              }
-              if (isAceStepFunAudioSource(value)) {
-                seg.source = value;
-              } else if (typeof seg.source === "string") {
-                seg.source = null;
-              }
-            });
-            render();
-          }
-        );
-        fields.appendChild(buildField("Source", segSourceSelect));
-        if (!segSourceRef) {
-          fields.appendChild(
-            buildUploadRow(
-              "Audio Upload",
-              "audio/*",
-              typeof segment.source === "string" ? void 0 : segment.source?.fileName,
-              (data, fileName) => {
-                commit((cs) => {
-                  const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                  if (seg) {
-                    seg.source = { data, fileName };
-                  }
-                });
-                render();
-              },
-              () => {
-                commit((cs) => {
-                  const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                  if (seg) {
-                    seg.source = null;
-                  }
-                });
-                render();
-              }
-            )
-          );
-        }
-        const startInput = buildClampedNumber({
-          key: `seg-${segIdx}-start`,
-          value: segment.startSeconds,
-          min: 0,
-          max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
-          step: AUDIO_SEGMENT_STEP,
-          readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
-          mutate: (cs, value) => {
-            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-            if (seg) {
-              const next = clampSegment(value, seg.lengthSeconds);
-              seg.startSeconds = next.start;
-              seg.lengthSeconds = next.length;
-            }
-          }
-        });
-        fields.appendChild(buildField("Start (s)", startInput));
-        const trimInput = buildNumber(
-          segment.trimStartSeconds,
-          0,
-          CLIP_DURATION_MAX,
-          AUDIO_SEGMENT_STEP,
-          (value) => {
-            debouncedCommit(`seg-${segIdx}-trim`, (cs) => {
-              const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-              if (seg) {
-                seg.trimStartSeconds = Math.max(
-                  0,
-                  Math.round(value * 10) / 10
-                );
-              }
-            });
-          }
-        );
-        trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
-        fields.appendChild(buildField("Trim start (s)", trimInput));
-        const lengthInput = buildClampedNumber({
-          key: `seg-${segIdx}-length`,
-          value: segment.lengthSeconds,
-          min: AUDIO_SEGMENT_MIN_LENGTH,
-          max: clipDur,
-          step: AUDIO_SEGMENT_STEP,
-          readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.lengthSeconds ?? null,
-          mutate: (cs, value) => {
-            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-            if (seg) {
-              const next = clampSegment(seg.startSeconds, value);
-              seg.startSeconds = next.start;
-              seg.lengthSeconds = next.length;
-            }
-          }
-        });
-        fields.appendChild(buildField("Length (s)", lengthInput));
-        body.appendChild(row);
-      });
-      const note = document.createElement("p");
-      note.className = "vst-detail-note";
-      note.textContent = "Overlaid additively over the base audio; overlapping segments mix together.";
-      body.appendChild(note);
-      return wrapForm(GROUP_AUDIOSEG, body);
-    };
-    const buildPromptMajorBody = (sel, clips) => {
-      const { clipIdx } = sel;
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body vst-detail-prompt-body";
-      body.appendChild(
-        buildTextarea(
-          clips[clipIdx].prompt ?? "",
-          "Clip prompt (blank inherits the global prompt)…",
-          "prompt-major",
-          (value) => {
-            debouncedCommit("prompt-major", (cs) => {
-              const c = cs[clipIdx];
-              if (c) {
-                c.prompt = value.trim();
-              }
-            });
-          }
-        )
-      );
-      return wrapForm(GROUP_PROMPTMAJOR, body);
-    };
-    const buildPromptMinorBody = (sel, clips) => {
-      const { clipIdx, windowIdx } = sel;
-      const clip = clips[clipIdx];
-      const windows = clip?.promptWindows ?? [];
-      const clipDur = Math.max(
-        PROMPT_WINDOW_MIN_DURATION,
-        clip?.duration || 0
-      );
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body vst-detail-prompt-body vst-detail-minor-body";
-      windows.forEach((w, idx) => {
-        const row = document.createElement("div");
-        row.className = "vst-detail-minor-window";
-        row.setAttribute("data-vst-minor-window", `${idx}`);
-        if (idx === windowIdx) {
-          row.classList.add("vst-detail-minor-active");
-        }
-        const head = document.createElement("div");
-        head.className = "vst-detail-minor-head";
-        const title = document.createElement("span");
-        title.className = "vst-detail-minor-title";
-        title.textContent = `W${idx + 1}`;
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-minor-delete";
-        del.textContent = "Delete";
-        del.title = "Delete this prompt window";
-        del.addEventListener("click", (event) => {
-          event.preventDefault();
-          deleteWindowEntry(clipIdx, idx);
-        });
-        head.append(title, del);
-        row.appendChild(head);
-        const range = document.createElement("div");
-        range.className = "vst-detail-minor-range";
-        const bounds = clip ? promptWindowNeighborBounds(clip, idx) : null;
-        const gridCeil = (v) => Math.ceil(v * 10) / 10;
-        const gridFloor = (v) => Math.floor(v * 10) / 10;
-        const beginInput = buildClampedNumber({
-          key: `minor-${idx}-begin`,
-          value: roundToTenth(w.start),
-          min: bounds?.beginMin ?? 0,
-          max: gridFloor(
-            Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION)
-          ),
-          step: 0.1,
-          readBack: (cs) => {
-            const win = cs[clipIdx]?.promptWindows?.[idx];
-            return win ? roundToTenth(win.start) : null;
-          },
-          mutate: (cs, value) => {
-            const c = cs[clipIdx];
-            if (c) {
-              applyPromptWindowBegin(c, idx, value);
-            }
-          }
-        });
-        range.appendChild(buildField("Begin (s)", beginInput));
-        const endInput = buildClampedNumber({
-          key: `minor-${idx}-end`,
-          value: roundToTenth(w.start + w.duration),
-          min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
-          max: bounds?.endMax ?? clipDur,
-          step: 0.1,
-          readBack: (cs) => {
-            const win = cs[clipIdx]?.promptWindows?.[idx];
-            return win ? roundToTenth(win.start + win.duration) : null;
-          },
-          mutate: (cs, value) => {
-            const c = cs[clipIdx];
-            if (c) {
-              applyPromptWindowEnd(c, idx, value);
-            }
-          }
-        });
-        range.appendChild(buildField("End (s)", endInput));
-        row.appendChild(range);
-        const editor = buildTextarea(
-          w.prompt ?? "",
-          "Minor prompt for this window…",
-          `minor-${idx}`,
-          (value) => {
-            debouncedCommit(`minor-${idx}`, (cs) => {
-              const win = cs[clipIdx]?.promptWindows?.[idx];
-              if (win) {
-                win.prompt = value.trim();
-              }
-            });
-          }
-        );
-        editor.addEventListener("focus", () => {
-          setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
-        });
-        row.appendChild(editor);
-        body.appendChild(row);
-      });
-      return wrapForm(GROUP_PROMPTMINOR, body);
-    };
-    const formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
-    const buildBoundaryBody = (sel, clips) => {
-      const { leftClipIdx } = sel;
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body vst-detail-boundary";
-      const clip = clips[leftClipIdx];
-      const value = clip?.boundaryOut ?? "cut";
-      const state = getState();
-      const fps = state.fps > 0 ? Math.round(state.fps) : 24;
-      const joinSpecs = ["cut", "continue", "crossfade"].map((mode) => ({
-        value: mode,
-        label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
-      }));
-      const select = buildOptionSelect(joinSpecs, value, (next) => {
-        commit((cs) => {
-          const c = cs[leftClipIdx];
-          if (c) {
-            c.boundaryOut = next ?? "cut";
-          }
-        });
-        render();
-      });
-      body.appendChild(
-        buildField(
-          `Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
-          select
-        )
-      );
-      const info = document.createElement("div");
-      info.className = "vst-boundary-info";
-      if (value === "cut") {
-        info.textContent = "Hard cut — clips are concatenated with no overlap.";
-      } else if (value === "continue") {
-        info.textContent = `Continue — 1 frame (~${formatOverlapSeconds(1, fps)}) overlap. The next clip generates from this clip's final frame and the merge collapses the duplicated seam frame.`;
-      } else {
-        const plan = crossfadePlanForClips(clips, fps);
-        const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
-        if (plan.fallback || overlapFrames <= 0) {
-          info.classList.add("vst-boundary-warn");
-          info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
-        } else {
-          info.textContent = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
-        }
-      }
-      body.appendChild(info);
-      if (value !== "cut") {
-        const note = document.createElement("div");
-        note.className = "vst-boundary-note";
-        note.textContent = "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
-        body.appendChild(note);
-      }
-      return wrapForm(GROUP_BOUNDARY, body);
-    };
-    const buildSettingsBody = () => {
-      const state = getState();
-      const defaults = getRootDefaults();
-      const core = {
-        width: defaults.width,
-        height: defaults.height,
-        fps: defaults.fps
-      };
-      const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchPresetKey(state.width, state.height) ?? SETTINGS_CUSTOM;
-      const mode = settingsMode ?? defaultMode;
-      const isCustom = mode === SETTINGS_CUSTOM;
-      const displayed = mode === SETTINGS_CUSTOM ? {
-        width: clampDimension(state.width),
-        height: clampDimension(state.height)
-      } : mode === SETTINGS_INHERIT ? { width: core.width, height: core.height } : presetDimensions(mode) ?? {
-        width: clampDimension(state.width),
-        height: clampDimension(state.height)
-      };
-      const body = document.createElement("div");
-      body.className = "vst-detail-form-body vst-detail-settings";
-      const resSpecs = [
-        {
-          value: SETTINGS_INHERIT,
-          label: `Use image resolution (${core.width}×${core.height})`
-        },
-        ...DIMENSION_PRESET_KEYS.map((key) => ({
-          value: key,
-          label: key.replace("x", " × ")
-        })),
-        { value: SETTINGS_CUSTOM, label: "Custom" }
-      ];
-      const resSelect = buildOptionSelect(resSpecs, mode, (value) => {
-        settingsMode = value;
-        commitState((next) => {
-          if (value === SETTINGS_INHERIT) {
-            next.dimsExplicit = false;
-          } else if (value === SETTINGS_CUSTOM) {
-            next.dimsExplicit = true;
-            next.width = clampDimension(displayed.width);
-            next.height = clampDimension(displayed.height);
-          } else {
-            const dims = presetDimensions(value);
-            if (dims) {
-              next.dimsExplicit = true;
-              next.width = dims.width;
-              next.height = dims.height;
-            }
-          }
-        });
-        render();
-      });
-      body.appendChild(buildField("Resolution", resSelect));
-      const widthInput = buildNumber(
-        displayed.width,
-        ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MAX,
-        ROOT_DIMENSION_STEP,
-        (value) => {
-          debouncedCommitState("settings-width", (next) => {
-            next.dimsExplicit = true;
-            next.width = clampDimension(value);
-          });
-        }
-      );
-      widthInput.classList.add("vst-settings-num");
-      widthInput.disabled = !isCustom;
-      widthInput.setAttribute("data-vst-focus-key", "settings-width");
-      const heightInput = buildNumber(
-        displayed.height,
-        ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MAX,
-        ROOT_DIMENSION_STEP,
-        (value) => {
-          debouncedCommitState("settings-height", (next) => {
-            next.dimsExplicit = true;
-            next.height = clampDimension(value);
-          });
-        }
-      );
-      heightInput.classList.add("vst-settings-num");
-      heightInput.disabled = !isCustom;
-      heightInput.setAttribute("data-vst-focus-key", "settings-height");
-      const dimsPair = document.createElement("div");
-      dimsPair.className = "vst-settings-dims";
-      const dimsSep = document.createElement("span");
-      dimsSep.className = "vst-settings-dims-sep";
-      dimsSep.textContent = "×";
-      dimsPair.append(widthInput, dimsSep, heightInput);
-      const dimsField = buildField("Dimensions", dimsPair);
-      if (!isCustom) {
-        dimsField.classList.add("vst-audio-disabled");
-      }
-      body.appendChild(dimsField);
-      const badges = document.createElement("div");
-      badges.className = "vst-settings-badges";
-      if (mode !== SETTINGS_CUSTOM && mode !== SETTINGS_INHERIT) {
-        const els = presetBadgeElements(mode);
-        if (els.length > 0) {
-          badges.append(...els);
-        }
-      }
-      badges.hidden = badges.childElementCount === 0;
-      body.appendChild(badges);
-      const fpsRow = buildCheckbox(
-        "Custom FPS",
-        state.fpsExplicit === true,
-        (value) => {
-          commitState((next) => {
-            next.fpsExplicit = value;
-            if (value) {
-              next.fps = clampFps(next.fps);
-            }
-          });
-          render();
-        }
-      );
-      body.appendChild(fpsRow);
-      const fpsInput = buildNumber(
-        state.fpsExplicit ? clampFps(state.fps) : core.fps,
-        ROOT_FPS_MIN,
-        ROOT_FPS_MAX,
-        1,
-        (value) => {
-          debouncedCommitState("settings-fps", (next) => {
-            next.fpsExplicit = true;
-            next.fps = clampFps(value);
-          });
-        }
-      );
-      fpsInput.classList.add("vst-settings-num");
-      fpsInput.disabled = state.fpsExplicit !== true;
-      fpsInput.setAttribute("data-vst-focus-key", "settings-fps");
-      const fpsField = buildField("FPS", fpsInput);
-      if (state.fpsExplicit !== true) {
-        fpsField.classList.add("vst-audio-disabled");
-      }
-      body.appendChild(fpsField);
-      return wrapForm(GROUP_SETTINGS, body);
     };
     const buildBody = (sel, clips) => {
       switch (sel.kind) {
         case "clip":
-          return buildClipBody(sel, clips);
+          return buildClipBody(ctx, sel, clips);
         case "ref":
-          return buildRefBody(sel, clips);
+          return buildRefBody(ctx, sel, clips);
         case "audio":
-          return buildAudioBody(sel, clips);
+          return buildAudioBody(ctx, sel, clips);
         case "audio-segment":
-          return buildAudioSegmentBody(sel, clips);
+          return buildAudioSegmentBody(ctx, sel, clips);
         case "prompt-major":
-          return buildPromptMajorBody(sel, clips);
+          return buildPromptMajorBody(ctx, sel, clips);
         case "prompt-minor":
-          return buildPromptMinorBody(sel, clips);
+          return buildPromptMinorBody(ctx, sel, clips);
         case "retake":
           return buildClipBody(
+            ctx,
             { kind: "clip", clipIdx: sel.clipIdx, stageIdx: 0 },
             clips
           );
         case "boundary":
-          return buildBoundaryBody(sel, clips);
+          return buildBoundaryBody(ctx, sel, clips);
         default:
-          return buildSettingsBody();
+          return buildSettingsBody(ctx);
       }
     };
     const syncValueDerivedUI = (sel) => {
@@ -7213,6 +6793,483 @@
     };
   };
 
+  // frontend/timelineReorder.ts
+  var computeDropIndex = (pointerX, regions) => {
+    for (let i = 0; i < regions.length; i++) {
+      const region = regions[i];
+      const midpoint = region.startPx + region.widthPx / 2;
+      if (pointerX < midpoint) {
+        return i;
+      }
+    }
+    return regions.length;
+  };
+  var finalIndexAfterMove = (from, to) => to > from ? to - 1 : to;
+  var moveItem = (array, from, to) => {
+    const result = array.slice();
+    if (!Number.isInteger(from) || from < 0 || from >= result.length) {
+      return result;
+    }
+    const [item] = result.splice(from, 1);
+    const insertAt = to > from ? to - 1 : to;
+    const clamped = Math.max(0, Math.min(insertAt, result.length));
+    result.splice(clamped, 0, item);
+    return result;
+  };
+  var isNoOpMove = (from, to) => to === from || to === from + 1;
+
+  // frontend/timelineLinking.ts
+  var REGION_SELECTOR = ".vst-region[data-clip-idx]";
+  var REGION_ACTION_SELECTOR = "[data-vst-region-action]";
+  var REGION_RESIZE_SELECTOR = ".vst-region-resize";
+  var CLIP_SHIFT_SELECTOR = ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
+  var REGION_SELECTED_CLASS = "vst-region-selected";
+  var DRAGGING_CLASS = "vst-dragging";
+  var RESIZING_CLASS = "vst-resizing";
+  var DROP_INDICATOR_CLASS = "vst-drop-indicator";
+  var DRAG_THRESHOLD_PX2 = 5;
+  var MIN_RESIZE_WIDTH_PX = 24;
+  var REGION_DRAGGING_CLASS = "vst-region-dragging";
+  var resolveSelectedIndex = (selectedIndex, clipCount) => {
+    if (selectedIndex === null || !Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= clipCount) {
+      return null;
+    }
+    return selectedIndex;
+  };
+  var shiftClipsAfter = (body, idx, deltaPx) => {
+    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
+      const elIdx = parseIntAttr(el, "data-clip-idx");
+      if (elIdx !== null && elIdx > idx) {
+        el.style.transform = deltaPx !== 0 ? `translateX(${deltaPx}px)` : "";
+      }
+    }
+  };
+  var clearClipShifts = (body) => {
+    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
+      el.style.transform = "";
+    }
+  };
+  var createTimelineLinking = () => {
+    let attachedBody = null;
+    const selectedClip = () => getSelectedClipIndex();
+    const stageForClip = (clipIdx) => {
+      const sel = getSelection();
+      return sel.kind === "clip" && sel.clipIdx === clipIdx ? sel.stageIdx : 0;
+    };
+    const selectClip = (clipIdx, stageIdx) => {
+      setSelection({ kind: "clip", clipIdx, stageIdx });
+    };
+    let dropIndicator = null;
+    const findRegion = (body, idx) => body.querySelector(`.vst-region[data-clip-idx="${idx}"]`);
+    const markSelection = (body) => {
+      for (const region of body.querySelectorAll(
+        `.${REGION_SELECTED_CLASS}`
+      )) {
+        region.classList.remove(REGION_SELECTED_CLASS);
+      }
+      const idx = selectedClip();
+      if (idx === null) {
+        return;
+      }
+      findRegion(body, idx)?.classList.add(REGION_SELECTED_CLASS);
+    };
+    const onRegionClick = (body, event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const actionButton = target.closest(REGION_ACTION_SELECTOR);
+      if (actionButton) {
+        event.stopPropagation();
+        const actionRegion = actionButton.closest(REGION_SELECTOR);
+        const actionIdx = parseIntAttr(actionRegion, "data-clip-idx");
+        if (actionIdx === null) {
+          return;
+        }
+        const action = actionButton.getAttribute("data-vst-region-action");
+        if (action === "skip") {
+          applySkip(actionIdx);
+        }
+        return;
+      }
+      const region = target.closest(REGION_SELECTOR);
+      const idx = parseIntAttr(region, "data-clip-idx");
+      if (idx === null) {
+        return;
+      }
+      if (event.shiftKey) {
+        applyDelete(idx);
+        return;
+      }
+      selectClip(idx, 0);
+      markSelection(body);
+    };
+    const readRegions = (body) => {
+      const els = Array.from(
+        body.querySelectorAll(REGION_SELECTOR)
+      );
+      const rects = els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { startPx: r.left, widthPx: r.width };
+      });
+      return { els, rects };
+    };
+    const removeDropIndicator = () => {
+      dropIndicator?.remove();
+      dropIndicator = null;
+    };
+    const showDropIndicator = (els, gap) => {
+      if (els.length === 0) {
+        return;
+      }
+      const track = els[0].parentElement;
+      if (!track) {
+        return;
+      }
+      if (!dropIndicator) {
+        dropIndicator = document.createElement("div");
+        dropIndicator.className = DROP_INDICATOR_CLASS;
+      }
+      if (dropIndicator.parentElement !== track) {
+        track.appendChild(dropIndicator);
+      }
+      const left = gap < els.length ? els[gap].offsetLeft : els[els.length - 1].offsetLeft + els[els.length - 1].offsetWidth;
+      dropIndicator.style.left = `${left}px`;
+    };
+    const applySkip = (idx) => {
+      const clips = getClips();
+      if (idx < 0 || idx >= clips.length) {
+        return;
+      }
+      clips[idx].skipped = !clips[idx].skipped;
+      saveClips(clips, { origin: "linking" });
+    };
+    const applyDelete = (idx) => {
+      const clips = getClips();
+      if (idx < 0 || idx >= clips.length) {
+        return;
+      }
+      clips.splice(idx, 1);
+      const sel = getSelection();
+      if (sel.kind === "clip") {
+        if (sel.clipIdx === idx) {
+          setSelection({ kind: "none" });
+        } else if (sel.clipIdx > idx) {
+          setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
+        }
+      }
+      saveClips(clips, { origin: "linking" });
+    };
+    const resizeSession = (body, state) => {
+      const restore = () => {
+        state.el.style.width = `${state.originalWidthPx}px`;
+        clearClipShifts(body);
+        body.classList.remove(RESIZING_CLASS);
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX2,
+        suppressEscapeClick: true,
+        onMove: (ctx) => {
+          const width = Math.max(
+            MIN_RESIZE_WIDTH_PX,
+            ctx.event.clientX - state.startLeftPx
+          );
+          body.classList.add(RESIZING_CLASS);
+          state.el.style.width = `${width}px`;
+          shiftClipsAfter(body, state.idx, width - state.originalWidthPx);
+        },
+        onCommit: (ctx) => {
+          const width = ctx.event.clientX - state.startLeftPx;
+          const committed = commitClipMutation(
+            state.sourceJson,
+            "linking",
+            (clips) => {
+              const clip = clips[state.idx];
+              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet) {
+                return null;
+              }
+              const newDuration = pxToDuration(
+                width,
+                livePxPerSecond(body),
+                currentTimelineFps()
+              );
+              if (!applyClipDurationResize(
+                clip,
+                newDuration,
+                getRootDefaults
+              )) {
+                return null;
+              }
+              selectClip(state.idx, stageForClip(state.idx));
+              return clips;
+            }
+          );
+          if (committed) {
+            body.classList.remove(RESIZING_CLASS);
+          } else {
+            restore();
+          }
+        },
+        onTap: restore,
+        onCancel: restore
+      };
+    };
+    const dragSession = (body, state) => {
+      const cleanup = () => {
+        findRegion(body, state.sourceIdx)?.classList.remove(
+          REGION_DRAGGING_CLASS
+        );
+        removeDropIndicator();
+        body.classList.remove(DRAGGING_CLASS);
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX2,
+        axis: "xy",
+        suppressEscapeClick: true,
+        onMove: (ctx) => {
+          body.classList.add(DRAGGING_CLASS);
+          findRegion(body, state.sourceIdx)?.classList.add(
+            REGION_DRAGGING_CLASS
+          );
+          const { els, rects } = readRegions(body);
+          showDropIndicator(
+            els,
+            computeDropIndex(ctx.event.clientX, rects)
+          );
+        },
+        onCommit: (ctx) => {
+          cleanup();
+          const { rects } = readRegions(body);
+          const gap = computeDropIndex(ctx.event.clientX, rects);
+          const from = state.sourceIdx;
+          if (isNoOpMove(from, gap)) {
+            selectClip(from, stageForClip(from));
+            markSelection(body);
+            return;
+          }
+          commitClipMutation(state.sourceJson, "linking", (clips) => {
+            if (from < 0 || from >= clips.length) {
+              return null;
+            }
+            const destIdx = finalIndexAfterMove(from, gap);
+            selectClip(destIdx, stageForClip(from));
+            return moveItem(clips, from, gap);
+          });
+        },
+        onCancel: cleanup
+      };
+    };
+    const onPress = (me, body) => {
+      if (!(me.target instanceof Element)) {
+        return null;
+      }
+      if (me.target.closest(REGION_ACTION_SELECTOR)) {
+        return null;
+      }
+      if (me.shiftKey) {
+        me.preventDefault();
+        return null;
+      }
+      const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
+      if (resizeGrip) {
+        const region = resizeGrip.closest(REGION_SELECTOR);
+        const idx2 = parseIntAttr(region, "data-clip-idx");
+        if (idx2 === null || !(region instanceof HTMLElement)) {
+          return null;
+        }
+        const rect = region.getBoundingClientRect();
+        me.preventDefault();
+        return resizeSession(body, {
+          idx: idx2,
+          el: region,
+          startLeftPx: rect.left,
+          originalWidthPx: rect.width,
+          sourceJson: readStateToken()
+        });
+      }
+      const target = me.target.closest(REGION_SELECTOR);
+      const idx = parseIntAttr(target, "data-clip-idx");
+      if (idx === null) {
+        return null;
+      }
+      return dragSession(body, {
+        sourceIdx: idx,
+        sourceJson: readStateToken()
+      });
+    };
+    let bodyClickHandler = null;
+    let unregister = null;
+    const attach = (body, router) => {
+      if (attachedBody === body) {
+        return;
+      }
+      if (attachedBody) {
+        dispose();
+      }
+      bodyClickHandler = (e) => onRegionClick(body, e);
+      body.addEventListener("click", bodyClickHandler);
+      unregister = router.register({
+        id: "linking",
+        priority: 10,
+        onPress
+      });
+      attachedBody = body;
+    };
+    const reapplySelection = (body, clipCount) => {
+      const idx = selectedClip();
+      if (idx !== null && resolveSelectedIndex(idx, clipCount) === null) {
+        setSelection({ kind: "none" });
+      }
+      markSelection(body);
+    };
+    const dispose = () => {
+      if (attachedBody) {
+        if (bodyClickHandler) {
+          attachedBody.removeEventListener("click", bodyClickHandler);
+        }
+      }
+      removeDropIndicator();
+      unregister?.();
+      unregister = null;
+      bodyClickHandler = null;
+      attachedBody = null;
+    };
+    const getSelectedIndex = () => selectedClip();
+    return { attach, reapplySelection, getSelectedIndex, dispose };
+  };
+
+  // frontend/timelinePromptTrack.ts
+  var MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
+  var wallsFor = (clip, windowIdx, press) => {
+    const clipDur = clipDurationOf(clip);
+    return freeIntervalAt(
+      otherSpans(clip.promptWindows ?? [], windowIdx, clipDur),
+      clipDur,
+      press.start
+    );
+  };
+  var createTimelinePromptTrack = () => createWindowTrack({
+    routeId: "prompt-track",
+    priority: 20,
+    origin: "prompt-track",
+    spanSelector: ".vst-minor-seg[data-clip-idx]",
+    itemIdxAttr: "data-window-idx",
+    edgeSelector: "[data-vst-minor-edge]",
+    edgeAttr: "data-vst-minor-edge",
+    laneSelector: ".vst-minor-lane[data-clip-idx]",
+    draggingClass: "vst-prompt-dragging",
+    ghostClass: "vst-minor-ghost",
+    unit: "px",
+    keyboardSelect: false,
+    isolateClicks: false,
+    readSpan: (clip, windowIdx) => {
+      const window2 = clip.promptWindows?.[windowIdx];
+      return window2 ? { start: window2.start, length: window2.duration, trim: 0 } : null;
+    },
+    moveTargetStart: (clip, windowIdx, press, desiredStart) => {
+      const clipDur = clipDurationOf(clip);
+      const [lo, hi] = wallsFor(clip, windowIdx, press);
+      const dur = Math.min(press.length, clipDur);
+      return clamp(desiredStart, lo, Math.max(lo, hi - dur));
+    },
+    writeMove: (clip, windowIdx, press, start) => {
+      const window2 = clip.promptWindows?.[windowIdx];
+      if (!window2) {
+        return;
+      }
+      const clipDur = clipDurationOf(clip);
+      const [, hi] = wallsFor(clip, windowIdx, press);
+      const dur = Math.min(press.length, clipDur);
+      window2.start = roundToTenth(start);
+      window2.duration = roundToTenth(
+        Math.max(
+          PROMPT_WINDOW_MIN_DURATION,
+          Math.min(dur, hi - window2.start)
+        )
+      );
+    },
+    resizeTarget: (clip, windowIdx, edge, press, deltaSec) => {
+      const clipDur = clipDurationOf(clip);
+      const spans = otherSpans(
+        clip.promptWindows ?? [],
+        windowIdx,
+        clipDur
+      );
+      const [, hi] = freeIntervalAt(spans, clipDur, press.start);
+      const end = press.start + press.length;
+      const [lo] = freeIntervalAt(
+        spans,
+        clipDur,
+        Math.max(0, end - 1e-3)
+      );
+      return resizeSpanEdge(
+        edge,
+        press,
+        deltaSec,
+        PROMPT_WINDOW_MIN_DURATION,
+        lo,
+        hi
+      );
+    },
+    writeResize: (clip, windowIdx, _edge, _press, geom) => {
+      const window2 = clip.promptWindows?.[windowIdx];
+      if (!window2) {
+        return;
+      }
+      window2.start = roundToTenth(geom.start);
+      window2.duration = roundToTenth(geom.length);
+    },
+    createSpan: (clip, clipIdx, startSec, endSec) => {
+      const clipDur = clipDurationOf(clip);
+      const spans = otherSpans(clip.promptWindows ?? [], -1, clipDur);
+      const [lo, hi] = freeIntervalAt(spans, clipDur, startSec);
+      const geom = createDefaultOrDraggedSpan(
+        startSec,
+        endSec,
+        lo,
+        hi,
+        PROMPT_WINDOW_MIN_DURATION,
+        PROMPT_WINDOW_DEFAULT_DURATION
+      );
+      if (!geom) {
+        return null;
+      }
+      const window2 = {
+        prompt: "",
+        start: roundToTenth(geom.start),
+        duration: roundToTenth(geom.length)
+      };
+      clip.promptWindows.push(window2);
+      clip.promptWindows.sort((x, y) => x.start - y.start);
+      const newIdx = clip.promptWindows.indexOf(window2);
+      return newIdx >= 0 ? { kind: "prompt-minor", clipIdx, windowIdx: newIdx } : null;
+    },
+    deleteItem: (clip, windowIdx) => {
+      if (!clip.promptWindows?.[windowIdx]) {
+        return false;
+      }
+      clip.promptWindows.splice(windowIdx, 1);
+      return true;
+    },
+    selectionFor: (clipIdx, windowIdx) => ({
+      kind: "prompt-minor",
+      clipIdx,
+      windowIdx
+    }),
+    // Clicks that land on the MAJOR (whole-clip prompt) row select it.
+    onClickFallthrough: (_event, target) => {
+      const major = target.closest(MAJOR_SELECTOR);
+      if (!(major instanceof HTMLElement)) {
+        return;
+      }
+      const clipIdx = parseIntAttr(major, "data-clip-idx");
+      if (clipIdx === null || !getClips()[clipIdx]) {
+        return;
+      }
+      setSelection({ kind: "prompt-major", clipIdx });
+    }
+  });
+
   // frontend/timelineReferencesTrack.ts
   var THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
   var LANE_SELECTOR = ".vst-refs-lane[data-vst-ref-add]";
@@ -7237,35 +7294,32 @@
       }
     };
     const addRefAtFrame = (clipIdx, frame, sourceJson) => {
-      if (isStaleToken(sourceJson)) {
-        return;
+      let newRefIdx = -1;
+      const saved = commitClipMutation(
+        sourceJson,
+        "references-track",
+        (clips) => {
+          const clip = clips[clipIdx];
+          if (!clip) {
+            return null;
+          }
+          const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+          const ref = buildDefaultRef();
+          ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
+          appendRefToClip(clip, ref);
+          newRefIdx = clip.refs.length - 1;
+          return clips;
+        }
+      );
+      if (saved) {
+        setSelection({ kind: "ref", clipIdx, refIdx: newRefIdx });
       }
-      const clips = getClips();
-      const clip = clips[clipIdx];
-      if (!clip) {
-        return;
-      }
-      const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-      const ref = buildDefaultRef();
-      ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
-      appendRefToClip(clip, ref);
-      saveClips(clips, { origin: "references-track" });
-      setSelection({
-        kind: "ref",
-        clipIdx,
-        refIdx: clip.refs.length - 1
-      });
     };
     const deleteRef = (clipIdx, refIdx, sourceJson) => {
-      if (isStaleToken(sourceJson)) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[clipIdx];
-      if (!clip || !removeRefAt(clip, refIdx)) {
-        return;
-      }
-      saveClips(clips, { origin: "references-track" });
+      commitClipMutation(sourceJson, "references-track", (clips) => {
+        const clip = clips[clipIdx];
+        return clip && removeRefAt(clip, refIdx) ? clips : null;
+      });
     };
     const dragFrameAt = (state, clientX) => {
       const rect = state.lane.getBoundingClientRect();
@@ -7304,14 +7358,21 @@
       onCommit: (ctx) => {
         body.classList.remove(DRAGGING_CLASS2);
         const newFrame = dragFrameAt(state, ctx.event.clientX);
-        const clips = getClips();
-        const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
-        if (isStaleToken(state.sourceJson) || !ref || ref.frame === newFrame) {
+        const saved = commitClipMutation(
+          state.sourceJson,
+          "references-track",
+          (clips) => {
+            const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
+            if (!ref || ref.frame === newFrame) {
+              return null;
+            }
+            ref.frame = newFrame;
+            return clips;
+          }
+        );
+        if (!saved) {
           restoreDragPreview(state);
-          return;
         }
-        ref.frame = newFrame;
-        saveClips(clips, { origin: "references-track" });
       },
       onTap: () => restoreDragPreview(state),
       onCancel: () => {
@@ -7469,7 +7530,6 @@
       length: clip.retake.lengthSeconds,
       trim: 0
     } : null,
-    // A clip holds at most one retake; the lane only creates when none exists.
     canCreate: (clip) => !clip.retake,
     moveTargetStart: (clip, _itemIdx, press, desiredStart) => {
       const clipDur = clipDurationOf(clip);
@@ -7487,24 +7547,14 @@
         Math.min(length, clipDur - clip.retake.startSeconds)
       );
     },
-    resizeTarget: (clip, _itemIdx, edge, press, deltaSec) => {
-      const clipDur = clipDurationOf(clip);
-      if (edge === "right") {
-        const end2 = clamp(
-          press.start + press.length + deltaSec,
-          press.start + RETAKE_MIN_DURATION,
-          clipDur
-        );
-        return { start: press.start, length: end2 - press.start };
-      }
-      const end = press.start + press.length;
-      const start = clamp(
-        press.start + deltaSec,
-        0,
-        end - RETAKE_MIN_DURATION
-      );
-      return { start, length: end - start };
-    },
+    resizeTarget: (clip, _itemIdx, edge, press, deltaSec) => resizeSpanEdge(
+      edge,
+      press,
+      deltaSec,
+      RETAKE_MIN_DURATION,
+      0,
+      clipDurationOf(clip)
+    ),
     writeResize: (clip, _itemIdx, _edge, _press, geom) => {
       if (!clip.retake) {
         return;
@@ -7515,30 +7565,20 @@
     // A plain tap places a default-length window at the pressed time; a
     // drag sizes it.
     createSpan: (clip, clipIdx, startSec, endSec) => {
-      const clipDur = clipDurationOf(clip);
-      if (clipDur < RETAKE_MIN_DURATION) {
-        return null;
-      }
-      let start;
-      let length;
-      if (endSec === null) {
-        length = Math.min(RETAKE_DEFAULT_DURATION, clipDur);
-        start = clamp(startSec, 0, clipDur - length);
-      } else {
-        const a = clamp(Math.min(startSec, endSec), 0, clipDur);
-        const b = clamp(Math.max(startSec, endSec), 0, clipDur);
-        start = a;
-        length = Math.max(RETAKE_MIN_DURATION, b - a);
-        if (start + length > clipDur) {
-          length = clipDur - start;
-        }
-      }
-      if (length < RETAKE_MIN_DURATION) {
+      const geom = createDefaultOrDraggedSpan(
+        startSec,
+        endSec,
+        0,
+        clipDurationOf(clip),
+        RETAKE_MIN_DURATION,
+        RETAKE_DEFAULT_DURATION
+      );
+      if (!geom) {
         return null;
       }
       clip.retake = {
-        startSeconds: roundToTenth(start),
-        lengthSeconds: roundToTenth(length),
+        startSeconds: roundToTenth(geom.start),
+        lengthSeconds: roundToTenth(geom.length),
         strength: RETAKE_STRENGTH_DEFAULT
       };
       return { kind: "retake", clipIdx };
@@ -7597,6 +7637,37 @@
     }
   };
 
+  // frontend/timelineViewState.ts
+  var VIEW_STATE_KEY = "videostages.timeline.viewState";
+  var loadViewState = () => {
+    try {
+      const raw = localStorage.getItem(VIEW_STATE_KEY);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      const state = {};
+      if (typeof parsed.pxPerSecond === "number") {
+        state.pxPerSecond = parsed.pxPerSecond;
+      }
+      if (parsed.unit === "frames" || parsed.unit === "seconds") {
+        state.unit = parsed.unit;
+      }
+      if (typeof parsed.stripCollapsed === "boolean") {
+        state.stripCollapsed = parsed.stripCollapsed;
+      }
+      return state;
+    } catch {
+      return null;
+    }
+  };
+  var saveViewState = (state) => {
+    try {
+      localStorage.setItem(VIEW_STATE_KEY, JSON.stringify(state));
+    } catch {
+    }
+  };
+
   // frontend/videoStagesTimeline.ts
   var INPUT_SYNC_INTERVAL_MS = 200;
   var videoStagesTimeline = () => {
@@ -7613,7 +7684,7 @@
       isCollapsed: () => stripCollapsed,
       setCollapsed: (collapsed) => {
         stripCollapsed = collapsed;
-        saveViewState();
+        saveViewState2();
       }
     });
     const linking = createTimelineLinking();
@@ -7626,7 +7697,7 @@
     const referencesTrack = createTimelineReferencesTrack();
     const openSettings = () => {
       stripCollapsed = false;
-      saveViewState();
+      saveViewState2();
       setSelection({ kind: "none" });
       detailStrip.render();
     };
@@ -7634,42 +7705,27 @@
       read: () => readCarrierSnapshot(),
       write: (value) => restoreCarrierSnapshot(value)
     });
-    const VIEW_STATE_KEY = "videostages.timeline.viewState";
-    const loadViewState = () => {
-      try {
-        const raw = localStorage.getItem(VIEW_STATE_KEY);
-        if (!raw) {
-          return;
-        }
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.pxPerSecond === "number") {
-          pxPerSecond = clampPxPerSecond(parsed.pxPerSecond);
-        }
-        if (parsed.unit === "frames" || parsed.unit === "seconds") {
-          unit = parsed.unit;
-        }
-        if (typeof parsed.stripCollapsed === "boolean") {
-          stripCollapsed = parsed.stripCollapsed;
-        }
-      } catch {
+    const loadViewState2 = () => {
+      const stored = loadViewState();
+      if (!stored) {
+        return;
+      }
+      if (stored.pxPerSecond !== void 0) {
+        pxPerSecond = clampPxPerSecond(stored.pxPerSecond);
+      }
+      if (stored.unit) {
+        unit = stored.unit;
+      }
+      if (stored.stripCollapsed !== void 0) {
+        stripCollapsed = stored.stripCollapsed;
       }
     };
-    const saveViewState = () => {
-      try {
-        localStorage.setItem(
-          VIEW_STATE_KEY,
-          JSON.stringify({
-            pxPerSecond,
-            unit,
-            stripCollapsed
-          })
-        );
-      } catch {
-      }
+    const saveViewState2 = () => {
+      saveViewState({ pxPerSecond, unit, stripCollapsed });
     };
     const toggleUnit = () => {
       unit = unit === "seconds" ? "frames" : "seconds";
-      saveViewState();
+      saveViewState2();
       refresh();
     };
     const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
@@ -7689,7 +7745,7 @@
     const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
     const setZoom = (value) => {
       pxPerSecond = clampPxPerSecond(value);
-      saveViewState();
+      saveViewState2();
       refresh();
     };
     const zoomIn = () => setZoom(pxPerSecond * ZOOM_FACTOR);
@@ -7868,7 +7924,7 @@
       }
     };
     const init = () => {
-      loadViewState();
+      loadViewState2();
       injectTimelineTab();
       const body = document.getElementById(TIMELINE_BODY_ID);
       if (body) {

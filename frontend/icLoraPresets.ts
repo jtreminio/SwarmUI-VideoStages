@@ -14,11 +14,11 @@ export interface IcLoraPreset {
     displayName: string;
     /** Prompt phrase to prepend by hand; "" when none. */
     triggerPhrase: string;
-    /** Recommended LoRA model strength; seeds the strength input when applied. */
+    /** Seeds the strength input when applied. */
     strength: number;
     /** Control signal the drive video should be rendered into. */
     controlType: IcLoraControlType;
-    /** Direct safetensors URL for the [AUTO] download (verified against the HF repo). */
+    /** Direct safetensors URL for the [AUTO] download. */
     weightsUrl: string;
     note: string;
 }

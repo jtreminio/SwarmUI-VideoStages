@@ -1,5 +1,5 @@
+import { setSelection } from "./selection";
 import { bindClickSelectableTrack, parseIntAttr } from "./trackDomUtils";
-import { setSelection } from "./uiState";
 
 const CLIP_SELECTOR = '.vst-audio-clip[data-vst-audio="clip"]';
 

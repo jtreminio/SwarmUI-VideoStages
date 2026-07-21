@@ -10,6 +10,11 @@ import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { createGestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
+    getSelection,
+    resetSelectionForTests,
+    setSelection,
+} from "./selection";
+import {
     createTimelineReferencesTrack,
     type TimelineReferencesTrack,
 } from "./timelineReferencesTrack";
@@ -19,7 +24,6 @@ import {
     renderTimeline,
 } from "./timelineView";
 import type { Clip } from "./types";
-import { getSelection, resetSelectionForTests, setSelection } from "./uiState";
 
 const PPS = 44;
 

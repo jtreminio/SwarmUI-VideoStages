@@ -4,16 +4,43 @@ Ported from WhatDreamsCost-ComfyUI/prompt_relay.py (the pure helpers) plus
 _convert_to_latent_lengths from ltx_director.py.
 """
 
-import json
+from __future__ import annotations
+
 import logging
 import math
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, Protocol, TypedDict
 
 import torch
+
+from ..json_windows import parse_json_windows
 
 log = logging.getLogger(__name__)
 
 
-def parse_windows(windows_json):
+class Segment(TypedDict):
+    """One local-prompt schedule segment, as built by :func:`build_segments`."""
+
+    local_token_idx: torch.Tensor
+    midpoint: int
+    window: float
+    sigma: float
+
+
+class RawTokenizer(Protocol):
+    """HF/SPiece-style tokenizer: callable returning a dict with ``input_ids``."""
+
+    def __call__(self, text: str) -> Mapping[str, Sequence[Any]]: ...
+
+
+# mask_fn(Lq, Lk, dtype, device, transformer_options) -> additive mask or None.
+MaskFn = Callable[
+    [int, int, torch.dtype, "torch.device | str", "dict[str, Any]"],
+    "torch.Tensor | None",
+]
+
+
+def parse_windows(windows_json: str | None) -> tuple[list[str], list[float]]:
     """Parse the JSON array of window objects into parallel (prompts, seconds) lists.
 
     Each element is an object with a ``prompt`` string and a ``seconds`` duration (float), in
@@ -22,31 +49,30 @@ def parse_windows(windows_json):
     caller can fill them from the global prompt. Non-numeric durations degrade to 0.0. The two lists
     are always the same length, so downstream duration/prompt counts never disagree.
     """
-    text = (windows_json or "").strip()
-    if not text:
-        return [], []
-    try:
-        data = json.loads(text)
-    except (ValueError, TypeError):
-        return [], []
-    if not isinstance(data, list):
-        return [], []
-
-    prompts = []
-    seconds = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        prompts.append(str(item.get("prompt", "")).strip())
+    def parse_item(item: dict[str, Any]) -> tuple[str, float]:
+        prompt = str(item.get("prompt", "")).strip()
         try:
             duration = float(item.get("seconds", 0))
         except (TypeError, ValueError):
             duration = 0.0
-        seconds.append(max(duration, 0.0))
+        return prompt, max(duration, 0.0)
+
+    pairs = parse_json_windows(windows_json, parse_item)
+    prompts = [prompt for prompt, _ in pairs]
+    seconds = [duration for _, duration in pairs]
     return prompts, seconds
 
 
-def build_temporal_cost(q_token_idx, Lq, Lk, device, dtype, tokens_per_frame=None, latent_frames=None, pad_offset=0):
+def build_temporal_cost(
+    q_token_idx: Sequence[Segment],
+    Lq: int,
+    Lk: int,
+    device: torch.device | str,
+    dtype: torch.dtype,
+    tokens_per_frame: int | None = None,
+    latent_frames: int | None = None,
+    pad_offset: int = 0,
+) -> torch.Tensor:
     """Gaussian penalty matrix [Lq, Lk] for cross-attention.
 
     With ``tokens_per_frame`` set, query rows map to whole frames (video attn).
@@ -72,7 +98,47 @@ def build_temporal_cost(q_token_idx, Lq, Lk, device, dtype, tokens_per_frame=Non
     return offset
 
 
-def create_mask_fn(q_token_idx, fallback_tokens_per_frame, latent_frames, total_tokens=None, pad_left=False):
+def _detect_attention_mode(
+    attn_type: str,
+    Lq: int,
+    Lk: int,
+    latent_frames: int,
+    fallback_tokens_per_frame: int,
+    grid_sizes: Sequence[int] | None,
+    max_token_idx: int,
+) -> tuple[str, int | None] | None:
+    """Resolve the penalty (mode, video_tokens_per_frame) for one cross-attention call.
+
+    Returns ``None`` when the call is cross-modal (text keys padded to a fixed length
+    that differs from the video token length, or shorter than the prompt) and must be
+    left unmasked. ``video_tokens_per_frame`` is ``None`` for the audio branch, where it
+    is unused ("scaled" mode).
+    """
+    if attn_type == "audio_attn2":
+        return "scaled", None
+
+    if grid_sizes is not None:
+        video_tpf = int(grid_sizes[1]) * int(grid_sizes[2])
+    elif Lq % latent_frames == 0:
+        video_tpf = Lq // latent_frames
+    else:
+        video_tpf = fallback_tokens_per_frame
+    video_lq = latent_frames * video_tpf
+
+    # Skip cross-modal attention: text keys pad to a fixed length >= max_token_idx and != video_lq
+    if Lk == video_lq or Lk < max_token_idx:
+        return None
+
+    return ("video" if Lq == video_lq else "scaled"), video_tpf
+
+
+def create_mask_fn(
+    q_token_idx: Sequence[Segment],
+    fallback_tokens_per_frame: int,
+    latent_frames: int,
+    total_tokens: int | None = None,
+    pad_left: bool = False,
+) -> MaskFn:
     """Closure: mask_fn(Lq, Lk, dtype, device, transformer_options) -> additive mask or None.
 
     Takes shapes/dtype/device instead of tensors so callers can compute the mask
@@ -84,10 +150,16 @@ def create_mask_fn(q_token_idx, fallback_tokens_per_frame, latent_frames, total_
     the real tokens occupy the END of the key axis, so every 0-based token index is
     shifted right by Lk - total_tokens before the penalty is written.
     """
-    cache = {}
+    cache: dict[tuple[int, int, str, torch.device | str], torch.Tensor] = {}
     max_token_idx = max(int(seg["local_token_idx"].max().item()) for seg in q_token_idx) + 1
 
-    def mask_fn(Lq, Lk, dtype, device, transformer_options):
+    def mask_fn(
+        Lq: int,
+        Lk: int,
+        dtype: torch.dtype,
+        device: torch.device | str,
+        transformer_options: dict[str, Any],
+    ) -> torch.Tensor | None:
         if Lq == Lk:
             return None
 
@@ -99,23 +171,12 @@ def create_mask_fn(q_token_idx, fallback_tokens_per_frame, latent_frames, total_
         grid_sizes = transformer_options.get("grid_sizes", None)
         attn_type = transformer_options.get("promptrelay_attn_type", "attn2")
 
-        if attn_type == "audio_attn2":
-            mode = "scaled"
-        else:
-            if grid_sizes is not None:
-                video_tpf = int(grid_sizes[1]) * int(grid_sizes[2])
-            else:
-                if Lq % latent_frames == 0:
-                    video_tpf = Lq // latent_frames
-                else:
-                    video_tpf = fallback_tokens_per_frame
-            video_lq = latent_frames * video_tpf
-
-            # Skip cross-modal attention: text keys pad to a fixed length >= max_token_idx and != video_lq
-            if Lk == video_lq or Lk < max_token_idx:
-                return None
-
-            mode = "video" if Lq == video_lq else "scaled"
+        detected = _detect_attention_mode(
+            attn_type, Lq, Lk, latent_frames, fallback_tokens_per_frame, grid_sizes, max_token_idx
+        )
+        if detected is None:
+            return None
+        mode, video_tpf = detected
 
         pad_offset = 0
         if pad_left and total_tokens is not None and Lk > total_tokens:
@@ -138,12 +199,16 @@ def create_mask_fn(q_token_idx, fallback_tokens_per_frame, latent_frames, total_
     return mask_fn
 
 
-def build_segments(token_ranges, segment_lengths, epsilon=1e-3):
+def build_segments(
+    token_ranges: Sequence[tuple[int, int]],
+    segment_lengths: Sequence[int],
+    epsilon: float = 1e-3,
+) -> list[Segment]:
     """Per-segment metadata for the temporal penalty."""
     # Paper uses a constant sigma regardless of segment length
     sigma = 1.0 / math.log(1.0 / epsilon) if 0 < epsilon < 1 else 0.1448
 
-    q_token_idx = []
+    q_token_idx: list[Segment] = []
     frame_cursor = 0
 
     for (tok_start, tok_end), L in zip(token_ranges, segment_lengths):
@@ -162,7 +227,7 @@ def build_segments(token_ranges, segment_lengths, epsilon=1e-3):
     return q_token_idx
 
 
-def get_tokenizer_wrapper(clip):
+def get_tokenizer_wrapper(clip: Any) -> Any:
     """Extract the SDTokenizer-style wrapper from a ComfyUI CLIP object.
 
     The wrapper owns the raw SPiece/HF tokenizer (``.tokenizer``) plus the padding
@@ -183,7 +248,11 @@ def get_tokenizer_wrapper(clip):
     )
 
 
-def map_token_indices(raw_tokenizer, global_prompt, local_prompts):
+def map_token_indices(
+    raw_tokenizer: RawTokenizer,
+    global_prompt: str,
+    local_prompts: Sequence[str],
+) -> tuple[str, list[tuple[int, int]]]:
     """Tokenize global + space-prefixed locals; return (full_prompt, per-local token ranges).
 
     Uses incremental tokenization to avoid SentencePiece context-dependency issues.
@@ -202,7 +271,7 @@ def map_token_indices(raw_tokenizer, global_prompt, local_prompts):
     eos_adj = 1 if has_eos else 0
 
     prev_len = len(raw_tokenizer(global_prompt)["input_ids"]) - eos_adj
-    token_ranges = []
+    token_ranges: list[tuple[int, int]] = []
     built = global_prompt
 
     for plp in prefixed_locals:
@@ -216,7 +285,11 @@ def map_token_indices(raw_tokenizer, global_prompt, local_prompts):
     return full_prompt, token_ranges
 
 
-def distribute_segment_lengths(num_segments, latent_frames, specified_lengths=None):
+def distribute_segment_lengths(
+    num_segments: int,
+    latent_frames: int,
+    specified_lengths: Sequence[int] | None = None,
+) -> list[int]:
     """Validate or auto-distribute segment frame counts, capped to fit within latent_frames."""
     if specified_lengths:
         if len(specified_lengths) != num_segments:
@@ -230,7 +303,7 @@ def distribute_segment_lengths(num_segments, latent_frames, specified_lengths=No
         step = -(-latent_frames // num_segments)
         lengths = [step] * num_segments
 
-    effective = []
+    effective: list[int] = []
     cursor = 0
     for L in lengths:
         end = min(cursor + L, latent_frames)
@@ -239,7 +312,11 @@ def distribute_segment_lengths(num_segments, latent_frames, specified_lengths=No
     return effective
 
 
-def convert_to_latent_lengths(pixel_lengths, temporal_stride, latent_frames):
+def convert_to_latent_lengths(
+    pixel_lengths: Sequence[int],
+    temporal_stride: int,
+    latent_frames: int,
+) -> list[int]:
     """Convert pixel-space segment lengths to integer latent-space lengths using the
     largest-remainder method. Targets the full `latent_frames` when the pixel sum looks
     like full coverage (within one stride of latent_frames * stride). Otherwise targets

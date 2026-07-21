@@ -14,7 +14,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// Pins the multi-IC-LoRA behaviors of <c>ControlNetApplicator.ApplyIcLoras</c>: the per-entry loader
+/// Pins the multi-IC-LoRA behaviors of <c>IcLoraApplicator.ApplyIcLoras</c>: the per-entry loader
 /// chain, guide stacking on conditioning + latent, metadata-driven downscale wiring, the Advanced
 /// guide for attention strength, uploaded drive videos, control-signal preprocessing, and loader-only
 /// entries.
@@ -683,7 +683,7 @@ public sealed class LtxIcLoraTests
             UploadedAudio: null,
             ImageRefs: [],
             Stages: []);
-        Assert.Equal(expected, ControlNetApplicator.MaxKnownIcLoraDownscaleFactor(clip, 0));
+        Assert.Equal(expected, IcLoraApplicator.MaxKnownIcLoraDownscaleFactor(clip, 0));
     }
 
     [Fact]

@@ -14,9 +14,14 @@ uses for whole-track audio injection.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from comfy.ldm.lightricks.vae.audio_vae import LATENT_DOWNSAMPLE_FACTOR
 from comfy_api.latest import io
+
+if TYPE_CHECKING:
+    import torch
+    from comfy.sd import VAE
 
 from .audio_mask_windows import (
     audio_latents_per_second,
@@ -61,8 +66,8 @@ class SwarmSetAudioMaskWindows(io.ComfyNode):
     @classmethod
     def execute(
         cls,
-        samples,
-        audio_vae,
+        samples: dict[str, torch.Tensor],
+        audio_vae: VAE,
         windows: str = "",
         gap_mask_value: float = 1.0,
     ) -> io.NodeOutput:

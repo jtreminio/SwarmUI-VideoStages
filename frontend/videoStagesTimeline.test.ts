@@ -8,11 +8,8 @@ import {
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { __resetPersistenceForTests, getClips, saveClips } from "./persistence";
-import {
-    clearUiStateForTests,
-    resetSelectionForTests,
-    setSelection,
-} from "./uiState";
+import { resetSelectionForTests, setSelection } from "./selection";
+import { clearUiStateForTests } from "./uiState";
 import {
     type VideoStagesTimeline,
     videoStagesTimeline,
@@ -51,7 +48,6 @@ const mountState = (json: string): void => {
     dataInput = mountVideoStagesData(json);
     promptInput = mountPromptBox("");
 };
-/** Change the clip structure carried in the Data param. */
 const setClips = (json: string): void => {
     dataInput.value = json;
 };

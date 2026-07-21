@@ -7,7 +7,6 @@ import {
     moveItem,
 } from "./timelineReorder";
 
-// midpoints 50/150/250
 const REGIONS: DropRegion[] = [
     { startPx: 0, widthPx: 100 },
     { startPx: 100, widthPx: 100 },
@@ -16,11 +15,11 @@ const REGIONS: DropRegion[] = [
 
 describe("computeDropIndex", () => {
     it("claims a region's leading half for the gap before it, trailing half for the gap after", () => {
-        expect(computeDropIndex(10, REGIONS)).toBe(0); // left half of region 0
-        expect(computeDropIndex(60, REGIONS)).toBe(1); // right half of region 0
-        expect(computeDropIndex(140, REGIONS)).toBe(1); // left half of region 1
-        expect(computeDropIndex(160, REGIONS)).toBe(2); // right half of region 1
-        expect(computeDropIndex(240, REGIONS)).toBe(2); // left half of region 2
+        expect(computeDropIndex(10, REGIONS)).toBe(0);
+        expect(computeDropIndex(60, REGIONS)).toBe(1);
+        expect(computeDropIndex(140, REGIONS)).toBe(1);
+        expect(computeDropIndex(160, REGIONS)).toBe(2);
+        expect(computeDropIndex(240, REGIONS)).toBe(2);
     });
 
     it("clamps to the ends", () => {

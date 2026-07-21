@@ -1,11 +1,11 @@
 import { ROOT_DIMENSION_MIN } from "./constants";
+import { utils } from "./hostDom";
 import {
     getDropdownOptions,
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
 import type { RootDefaults } from "./types";
-import { utils } from "./utils";
 
 const trimDomValue = (el: { value: string } | null | undefined): string =>
     `${el?.value ?? ""}`.trim();

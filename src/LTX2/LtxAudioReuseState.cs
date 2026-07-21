@@ -23,8 +23,7 @@ internal static class LtxAudioReuseState
 
         ClipSpec clip = clipContext.Clip;
         ClipAudioState audioReuse = clipContext.AudioReuse;
-        bool clipCanReuseAudio = clip.ReuseAudio && clip.Stages.Count >= 3;
-        if (!clipCanReuseAudio || stage.ClipStageIndex == 0)
+        if (!clip.CanReuseAudio || stage.ClipStageIndex == 0)
         {
             audioReuse.Clear();
             return;

@@ -1,27 +1,19 @@
-export interface AudioSourceOption {
-    value: string;
-    label: string;
-}
+import {
+    preserveSelectedOption,
+    resolveSelectValue,
+    type SelectOption,
+} from "./selectOption";
+
+export type AudioSourceOption = Pick<SelectOption, "value" | "label">;
 
 export interface AudioSourceContext {
-    /**
-     * True when the clip's ControlNet source dropdown is enabled (i.e. a
-     * controlNetLora is selected). Drives whether "ControlNet" is offered
-     * as an audio source.
-     */
     controlNetEnabled?: boolean;
 }
 
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
 export const AUDIO_SOURCE_CONTROLNET = "ControlNet";
-/**
- * The uploaded audio is a speaker-identity sample (LTXVSetAudioRefTokens), not
- * a locked track: the model generates new speech matching the prompt in that
- * voice. LTX-2 only.
- */
 export const AUDIO_SOURCE_VOICE_REF = "Voice Reference";
-
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
 export const isAceStepFunAudioSource = (source: string): boolean =>
@@ -65,38 +57,22 @@ const getAceStepFunRefLabel = (ref: string): string => {
     return ref;
 };
 
-/** Appends one option per AceStepFun generated track in the registry. */
 const appendAceStepFunRefs = (options: AudioSourceOption[]): void => {
     for (const ref of getAceStepFunRefs()) {
         options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
     }
 };
 
-/**
- * Keeps a still-selected AceStepFun ref that is no longer in the registry so
- * the select doesn't silently drop it. Always the last option.
- */
 const appendMissingSelectedRef = (
     options: AudioSourceOption[],
     currentValue: string,
-): void => {
-    const selected = `${currentValue || ""}`.trim();
-    if (
-        isAceStepFunAudioSource(selected) &&
-        !options.some((option) => option.value === selected)
-    ) {
-        options.push({
-            value: selected,
-            label: getAceStepFunRefLabel(selected),
-        });
-    }
-};
+): void =>
+    preserveSelectedOption(options, currentValue, "end", (value) =>
+        isAceStepFunAudioSource(value)
+            ? { value, label: getAceStepFunRefLabel(value) }
+            : null,
+    );
 
-/**
- * Options for an audio SEGMENT's source select: an upload, or any AceStepFun
- * generated track ("audio0", …). Unlike the clip-level options there is no
- * Native/ControlNet — segments are overlay pieces with their own audio.
- */
 export const buildSegmentAudioSourceOptions = (
     currentValue = "",
 ): AudioSourceOption[] => {
@@ -131,10 +107,4 @@ export const buildAudioSourceOptions = (
 export const resolveAudioSourceValue = (
     currentValue: string,
     options: AudioSourceOption[],
-): string => {
-    const desired = `${currentValue || ""}`;
-    if (options.some((option) => option.value === desired)) {
-        return desired;
-    }
-    return AUDIO_SOURCE_NATIVE;
-};
+): string => resolveSelectValue(currentValue, options, AUDIO_SOURCE_NATIVE);

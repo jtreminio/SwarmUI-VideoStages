@@ -270,7 +270,6 @@ describe("createTimelineStore", () => {
             expect(h.store.syncFromCarrier()).toBe(true);
             expect(seen).toHaveLength(1);
             expect(seen[0].origin).toBe("external");
-            // And the sync is idempotent afterwards.
             expect(h.store.syncFromCarrier()).toBe(false);
         });
 

@@ -41,36 +41,23 @@ internal static class MetadataSanitizer
 
     private static void ProcessClip(JObject clip)
     {
-        StripUploadContainer(clip, "UploadedAudio");
-        if (GetProperty(clip, "AudioSegments") is JArray audioSegments)
+        foreach ((string collection, string container) in UploadContainers.All)
         {
-            foreach (JToken segToken in audioSegments)
+            if (collection is null)
             {
-                if (segToken is JObject segObj)
-                {
-                    StripUploadContainer(segObj, "Source");
-                }
+                StripUploadContainer(clip, container);
+                continue;
             }
-        }
-        if (GetProperty(clip, "IcLoras") is JArray icLoras)
-        {
-            foreach (JToken entryToken in icLoras)
+            if (GetProperty(clip, collection) is not JArray items)
             {
-                if (entryToken is JObject entryObj)
-                {
-                    StripUploadContainer(entryObj, "Video");
-                }
+                continue;
             }
-        }
-        if (GetProperty(clip, "Refs") is not JArray refs)
-        {
-            return;
-        }
-        foreach (JToken refToken in refs)
-        {
-            if (refToken is JObject refObj)
+            foreach (JToken itemToken in items)
             {
-                StripUploadContainer(refObj, "UploadedImage");
+                if (itemToken is JObject itemObj)
+                {
+                    StripUploadContainer(itemObj, container);
+                }
             }
         }
     }

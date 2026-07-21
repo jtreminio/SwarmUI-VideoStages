@@ -6,8 +6,7 @@ namespace VideoStages.LTX2;
 
 internal static class LtxFrameCountConnector
 {
-    public static JArray CloneConnection(JArray connection) =>
-        connection is null ? null : new JArray(connection[0], connection[1]);
+    public static JArray CloneConnection(JArray connection) => PathUtils.Clone(connection);
 
     public static void ApplyToExistingSources(WorkflowGenerator g, JArray framesConnection)
     {

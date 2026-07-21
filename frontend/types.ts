@@ -161,41 +161,101 @@ export interface Clip {
     stages: Stage[];
 }
 
-export type StoredRefImage = Pick<
-    RefImage,
-    "source" | "uploadFileName" | "uploadedImage" | "frame" | "fromEnd"
->;
+/**
+ * Canonical lists of the fields each `Stored*` type persists. These are the
+ * single source of truth: the `Stored*` types below are derived from them, and
+ * `serializeStorageGuard.test.ts` round-trips them field-by-field. The
+ * `satisfies` clause rejects any listed key that is not a real field, and the
+ * `AssertClassified` aliases below reject any real field that is not listed —
+ * so adding a persisted field to `Clip`/`Stage`/`RefImage` fails to compile
+ * until it is classified as either stored here or intentionally carried
+ * elsewhere (`UNSTORED_CLIP_KEYS`).
+ */
+export const STORED_REF_KEYS = [
+    "source",
+    "uploadFileName",
+    "uploadedImage",
+    "frame",
+    "fromEnd",
+] as const satisfies readonly (keyof RefImage)[];
 
-export type StoredStage = Pick<
+export const STORED_STAGE_KEYS = [
+    "skipped",
+    "control",
+    "controlNetStrength",
+    "refStrengths",
+    "upscale",
+    "upscaleMethod",
+    "model",
+    "steps",
+    "cfgScale",
+    "sampler",
+    "scheduler",
+    "loras",
+] as const satisfies readonly (keyof Stage)[];
+
+export const STORED_CLIP_KEYS = [
+    "skipped",
+    "boundaryOut",
+    "duration",
+    "audioSource",
+    "icLoras",
+    "saveAudioTrack",
+    "clipLengthFromAudio",
+    "clipLengthFromControlNet",
+    "reuseAudio",
+    "uploadedAudio",
+    "audioSegments",
+    "retake",
+    "refs",
+    "stages",
+] as const satisfies readonly (keyof Clip)[];
+
+/**
+ * Clip fields deliberately NOT in the Data param: `prompt`/`promptWindows` ride
+ * the prompt carrier, `hue` rides the UI-state store. Listing them here is what
+ * keeps them out of the exhaustiveness error while still forcing a new Clip
+ * field to be a conscious choice between stored and carried-elsewhere.
+ */
+export const UNSTORED_CLIP_KEYS = [
+    "hue",
+    "prompt",
+    "promptWindows",
+] as const satisfies readonly (keyof Clip)[];
+
+/** never when U covers every key of T, else the offending keys (a compile error). */
+type AssertClassified<T, U extends keyof T> = [Exclude<keyof T, U>] extends [
+    never,
+]
+    ? true
+    : Exclude<keyof T, U>;
+
+/**
+ * Every field of these three interfaces must be accounted for. A new field
+ * that is neither stored nor (for Clip) explicitly unstored turns the matching
+ * alias into a non-`true` type, and the `true` assignment below stops the build.
+ */
+const _refKeysExhaustive: AssertClassified<
+    RefImage,
+    (typeof STORED_REF_KEYS)[number]
+> = true;
+const _stageKeysExhaustive: AssertClassified<
     Stage,
-    | "skipped"
-    | "control"
-    | "controlNetStrength"
-    | "refStrengths"
-    | "upscale"
-    | "upscaleMethod"
-    | "model"
-    | "steps"
-    | "cfgScale"
-    | "sampler"
-    | "scheduler"
-    | "loras"
->;
+    (typeof STORED_STAGE_KEYS)[number]
+> = true;
+const _clipKeysExhaustive: AssertClassified<
+    Clip,
+    (typeof STORED_CLIP_KEYS)[number] | (typeof UNSTORED_CLIP_KEYS)[number]
+> = true;
+void [_refKeysExhaustive, _stageKeysExhaustive, _clipKeysExhaustive];
+
+export type StoredRefImage = Pick<RefImage, (typeof STORED_REF_KEYS)[number]>;
+
+export type StoredStage = Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>;
 
 export type StoredClip = Pick<
     Clip,
-    | "skipped"
-    | "boundaryOut"
-    | "duration"
-    | "audioSource"
-    | "icLoras"
-    | "saveAudioTrack"
-    | "clipLengthFromAudio"
-    | "clipLengthFromControlNet"
-    | "reuseAudio"
-    | "uploadedAudio"
-    | "audioSegments"
-    | "retake"
+    Exclude<(typeof STORED_CLIP_KEYS)[number], "refs" | "stages">
 > & {
     refs: StoredRefImage[];
     stages: StoredStage[];
@@ -211,10 +271,6 @@ export interface ImageSourceOption {
     disabled?: boolean;
 }
 
-/**
- * Selection-driven state for the bottom detail strip. Phase 1 only produces
- * `none` and `clip`; the other kinds exist for the Phase 2 editors.
- */
 export type TimelineSelection =
     | { kind: "none" }
     | { kind: "clip"; clipIdx: number; stageIdx: number }

@@ -41,7 +41,7 @@ internal static class VideoStagesSpecParser
     public static AudioFile MaterializeUploadedAudioForClip(WorkflowGenerator g, ClipSpec clip) =>
         MaterializeUploadedAudio(g, clip?.UploadedAudio);
 
-    private static int CalculateAlignedFrameCount(double durationSeconds, int fps)
+    internal static int CalculateAlignedFrameCount(double durationSeconds, int fps)
     {
         int rawFrames = Math.Max(0, (int)Math.Ceiling(durationSeconds * fps));
         int alignedFrames = (int)Math.Ceiling(rawFrames / (double)FrameAlignment) * FrameAlignment;
@@ -79,39 +79,6 @@ internal static class VideoStagesSpecParser
         return 24;
     }
 
-    public static bool HasUsableVideoModel(WorkflowGenerator g, VideoStagesSpec spec)
-    {
-        if (g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel videoModel)
-            && videoModel is not null)
-        {
-            return true;
-        }
-        if (g.UserInput.TryGet(T2IParamTypes.Model, out T2IModel textToVideoModel)
-            && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true)
-        {
-            return true;
-        }
-        foreach (ClipSpec clip in spec.Clips)
-        {
-            foreach (StageSpec stage in clip.Stages)
-            {
-                if (!string.IsNullOrWhiteSpace(stage.Model) && CanResolveStageVideoModel(g, stage.Model))
-                {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private static bool CanResolveStageVideoModel(WorkflowGenerator g, string modelName)
-    {
-        g.UserInput.Set(T2IParamTypes.VideoModel.Type, modelName);
-        bool resolved = g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel m) && m is not null;
-        g.UserInput.Remove(T2IParamTypes.VideoModel);
-        return resolved;
-    }
-
     public static VideoStagesSpec Parse(WorkflowGenerator g)
     {
         (int? rawWidth, int? rawHeight, int? rawFps, List<JObject> rawEntries) = GetJsonTopLevelConfig(g);
@@ -124,8 +91,8 @@ internal static class VideoStagesSpecParser
         int height = ResolveTopLevelHeight(g, rawHeight);
         int fps = ResolveTopLevelFps(g, rawFps);
         bool isTextToVideo = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
-        bool refineMode = IsRefineSourceVideoMode(g);
-        int refineSkipStages = ResolveRefineSkipStages(g, refineMode);
+        bool refineMode = VideoStagesGate.IsRefineSourceVideoMode(g);
+        int refineSkipStages = VideoStagesGate.ResolveRefineSkipStages(g, refineMode);
         if (rawEntries.Count == 0)
         {
             return new VideoStagesSpec(width, height, fps, isTextToVideo, []);
@@ -335,33 +302,11 @@ internal static class VideoStagesSpecParser
             return null;
         }
 
-        string trimmed = spec.Data.Trim();
-        string material = trimmed;
-        if (trimmed.StartsWith("inputs/")
-            || trimmed.StartsWith("raw/")
-            || trimmed.StartsWith("Starred/"))
+        string material = UploadedMediaResolver.ResolveDataString(
+            g, spec.Data.Trim(), "uploaded audio", StringComparison.Ordinal);
+        if (material is null)
         {
-            if (g.UserInput?.SourceSession is null)
-            {
-                Logs.Warning(
-                    "VideoStages: uploaded audio uses a server-side path (inputs/, raw/, or Starred/) "
-                    + "but no session is available; cannot load the file.");
-                return null;
-            }
-
-            try
-            {
-                material = T2IParamTypes.FilePathToDataString(
-                    g.UserInput.SourceSession,
-                    trimmed,
-                    "for VideoStages uploaded audio");
-            }
-            catch (SwarmReadableErrorException ex)
-            {
-                Logs.Warning(
-                    $"VideoStages: Could not resolve uploaded audio path '{trimmed}': {ex.Message}");
-                return null;
-            }
+            return null;
         }
 
         try
@@ -381,21 +326,6 @@ internal static class VideoStagesSpecParser
 
     private static bool IsClipShape(JObject entry) =>
         JsonUtil.Get(entry, "Stages") is not null;
-
-    private static bool IsRefineSourceVideoMode(WorkflowGenerator g)
-    {
-        return g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image source)
-            && source is not null;
-    }
-
-    private static int ResolveRefineSkipStages(WorkflowGenerator g, bool refineMode)
-    {
-        if (!refineMode)
-        {
-            return 0;
-        }
-        return g.UserInput.TryGet(VideoStagesExtension.RefineSkipStages, out int value) ? value : 1;
-    }
 
     /// <summary>
     /// Reads the optional per-clip <c>Retake</c> object (seconds-based, matching every other timeline
@@ -439,7 +369,7 @@ internal static class VideoStagesSpecParser
     /// </summary>
     private static IReadOnlyList<AudioSegmentSpec> ParseAudioSegments(JObject clipObj, double clipDurationSeconds)
     {
-        List<JObject> raw = GetObjectArray(clipObj, "AudioSegments");
+        List<JObject> raw = GetObjectArray(clipObj, UploadContainers.SegmentsCollection);
         if (raw.Count == 0)
         {
             return [];
@@ -447,7 +377,7 @@ internal static class VideoStagesSpecParser
         List<AudioSegmentSpec> segments = [];
         foreach (JObject segObj in raw)
         {
-            UploadedAudioSpec source = GetEmbeddedUploadSpec(segObj, "Source");
+            UploadedAudioSpec source = GetEmbeddedUploadSpec(segObj, UploadContainers.SegmentSource);
             string aceSource = null;
             if (source is null)
             {
@@ -518,7 +448,7 @@ internal static class VideoStagesSpecParser
         bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
         IReadOnlyList<IcLoraSpec> icLoras = ParseIcLoras(clipObj);
         string boundaryOut = NormalizeBoundaryOut(GetString(clipObj, "BoundaryOut"));
-        UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, "UploadedAudio");
+        UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, UploadContainers.ClipAudio);
         IReadOnlyList<AudioSegmentSpec> audioSegments = ParseAudioSegments(clipObj, Math.Max(0, duration));
 
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
@@ -535,7 +465,7 @@ internal static class VideoStagesSpecParser
             }
         }
         List<StageSpec> stages = [];
-        List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
+        List<JObject> rawRefs = GetObjectArray(clipObj, UploadContainers.RefsCollection);
         List<ImageRefSpec> refs = [];
         for (int i = 0; i < rawRefs.Count; i++)
         {
@@ -643,7 +573,7 @@ internal static class VideoStagesSpecParser
         }
         string uploadFileName = GetString(refObj, "UploadFileName");
         string data = GetString(refObj, "Data");
-        UploadedAudioSpec embeddedImage = GetEmbeddedUploadSpec(refObj, "UploadedImage");
+        UploadedAudioSpec embeddedImage = GetEmbeddedUploadSpec(refObj, UploadContainers.RefImage);
         if (embeddedImage is not null)
         {
             data = embeddedImage.Data;
@@ -753,24 +683,12 @@ internal static class VideoStagesSpecParser
 
     private static StageDefaults BuildDefaults(WorkflowGenerator g)
     {
-        int steps = g.UserInput.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
-            ? explicitVideoSteps
-            : g.UserInput.Get(T2IParamTypes.Steps, 8, autoFixDefault: true);
-        double cfgScale = g.UserInput.TryGet(T2IParamTypes.VideoCFG, out double explicitVideoCfg)
-            ? explicitVideoCfg
-            : g.UserInput.Get(T2IParamTypes.CFGScale, 1, autoFixDefault: true);
-        string sampler = ComfyUIBackendExtension.SamplerParam is null
-            ? "euler"
-            : g.UserInput.Get(ComfyUIBackendExtension.SamplerParam, "euler", autoFixDefault: true);
-        string scheduler = ComfyUIBackendExtension.SchedulerParam is null
-            ? "normal"
-            : g.UserInput.Get(ComfyUIBackendExtension.SchedulerParam, "normal", autoFixDefault: true);
-
+        (int steps, double cfgScale, string sampler, string scheduler) = StageDefaultsProvider.ReadHostDefaults(g);
         return new StageDefaults(
             Control: NormalizeControl(DefaultControl),
             Upscale: NormalizeUpscale(DefaultUpscale),
             UpscaleMethod: DefaultUpscaleMethod,
-            Steps: Math.Max(1, steps),
+            Steps: steps,
             CfgScale: NormalizeCfgScale(cfgScale),
             Sampler: sampler,
             Scheduler: scheduler
@@ -849,10 +767,12 @@ internal static class VideoStagesSpecParser
         }
 
         double value = GetOptionalDouble(stage, "ControlNetStrength", Constants.DefaultStageControlNetStrength, locationPrefix);
-        return IsFinite(value)
-            ? Math.Clamp(value, 0.0, 1.0)
-            : Constants.DefaultStageControlNetStrength;
+        return ClampUnitOrDefault(value, Constants.DefaultStageControlNetStrength);
     }
+
+    // Clamp a finite value into [0, 1]; substitute the fallback for NaN/Infinity.
+    private static double ClampUnitOrDefault(double value, double fallback) =>
+        IsFinite(value) ? Math.Clamp(value, 0.0, 1.0) : fallback;
 
     private static IReadOnlyList<double> ParseStageRefStrengths(JObject stage, int clipRefCount)
     {
@@ -893,9 +813,7 @@ internal static class VideoStagesSpecParser
     }
 
     private static double ClampRefStrength(double value) =>
-        IsFinite(value)
-            ? Math.Clamp(value, 0.0, 1.0)
-            : Constants.DefaultStageRefStrength;
+        ClampUnitOrDefault(value, Constants.DefaultStageRefStrength);
 
     private static IReadOnlyList<LoraRef> ParseLoras(JObject obj)
     {
@@ -995,7 +913,7 @@ internal static class VideoStagesSpecParser
     private static IReadOnlyList<IcLoraSpec> ParseIcLoras(JObject clipObj)
     {
         List<IcLoraSpec> entries = [];
-        foreach (JObject entryObj in GetObjectArray(clipObj, "IcLoras"))
+        foreach (JObject entryObj in GetObjectArray(clipObj, UploadContainers.IcLorasCollection))
         {
             string lora = NormalizeControlNetLora(GetString(entryObj, "Lora"));
             if (lora.Length == 0)
@@ -1013,7 +931,7 @@ internal static class VideoStagesSpecParser
                 AttentionStrength: Math.Clamp(
                     GetOptionalDouble(entryObj, "AttentionStrength", 1, "Clip IcLora"), 0, 1),
                 ControlType: NormalizeIcLoraControlType(GetString(entryObj, "ControlType")),
-                Video: GetEmbeddedUploadSpec(entryObj, "Video"),
+                Video: GetEmbeddedUploadSpec(entryObj, UploadContainers.IcLoraVideo),
                 DriveAudioRef: GetOptionalBool(entryObj, "DriveAudioRef", false)));
         }
         if (entries.Count == 0)

@@ -54,7 +54,7 @@ internal sealed class LtxManager
         {
             return false;
         }
-        if (!new ControlNetApplicator(g).TryCreateCapturedControlImageFrameCount(
+        if (!new ControlNetCapture(g).TryCreateCapturedControlImageFrameCount(
                 controlNetSource,
                 out JArray framesConnection))
         {
@@ -78,11 +78,16 @@ internal sealed class LtxManager
 
     public void ApplyPostVideoChainCaptureIfPresent(
         ref WGNodeData referenceMedia,
-        ref WGNodeData referenceVae) =>
-        LtxStageRefCapture.ApplyPostVideoChainCaptureIfPresent(
-            g,
-            ref referenceMedia,
-            ref referenceVae);
+        ref WGNodeData referenceVae)
+    {
+        LtxPostVideoChainCapture postVideoChain = LtxPostVideoChainCapture.TryCapture(g);
+        if (postVideoChain is null)
+        {
+            return;
+        }
+        referenceMedia = postVideoChain.CreateStageInput();
+        referenceVae = postVideoChain.CreateStageInputVae();
+    }
 
     public bool TryRunLocalStage(
         StageRefStore.StageRef guideReference,

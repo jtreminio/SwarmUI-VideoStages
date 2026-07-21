@@ -2,6 +2,9 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
+/// <summary>Captures the raw values of the given param types at creation, then reverts them to
+/// that captured state on <see cref="Restore"/> (called by <see cref="Dispose"/>) — restoring
+/// values that existed and removing ones that did not.</summary>
 internal sealed class ParamSnapshot : IDisposable
 {
     private readonly T2IParamInput Input;
@@ -38,28 +41,6 @@ internal sealed class ParamSnapshot : IDisposable
             else
             {
                 Input.InternalSet.ValuesInput.Remove(entry.Id);
-            }
-        }
-    }
-
-    public void Remove()
-    {
-        foreach (Entry entry in Entries)
-        {
-            if (entry.Had)
-            {
-                Input.InternalSet.ValuesInput.Remove(entry.Id);
-            }
-        }
-    }
-
-    public void Reset()
-    {
-        foreach (Entry entry in Entries)
-        {
-            if (entry.Had)
-            {
-                Input.InternalSet.ValuesInput[entry.Id] = entry.Value;
             }
         }
     }

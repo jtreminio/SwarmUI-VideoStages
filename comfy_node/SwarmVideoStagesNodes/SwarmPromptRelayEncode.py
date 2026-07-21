@@ -11,16 +11,20 @@ lengths (the attention-time mask closure recovers the true tokens-per-frame).
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import torch
 from comfy_api.latest import io
 
-from .swarm_prompt_relay import (
-    apply_patches,
+if TYPE_CHECKING:
+    from comfy.model_patcher import ModelPatcher
+    from comfy.sd import CLIP
+
+from .swarm_prompt_relay.patches import apply_patches, detect_ltx
+from .swarm_prompt_relay.prompt_relay import (
     build_segments,
     convert_to_latent_lengths,
     create_mask_fn,
-    detect_ltx,
     distribute_segment_lengths,
     get_tokenizer_wrapper,
     map_token_indices,
@@ -87,13 +91,13 @@ class SwarmPromptRelayEncode(io.ComfyNode):
     @torch.inference_mode()
     def execute(
         cls,
-        model,
-        clip,
+        model: ModelPatcher,
+        clip: CLIP,
         global_prompt: str = "",
         windows: str = "",
         fps: float = 24.0,
         epsilon: float = 1e-3,
-        latent=None,
+        latent: dict[str, torch.Tensor] | None = None,
     ) -> io.NodeOutput:
         for name, val in (("global_prompt", global_prompt), ("windows", windows)):
             if val is None:

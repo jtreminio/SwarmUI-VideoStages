@@ -21,7 +21,25 @@ if (typeof globalThis.structuredClone !== "function") {
     globalThis.structuredClone = (value) => v8.deserialize(v8.serialize(value));
 }
 
-const SWARM_JS_DIR = path.resolve(__dirname, "..", "..", "..", "wwwroot", "js");
+// Locate SwarmUI's shared wwwroot/js by walking up from this file. The fixed
+// "../../../wwwroot/js" depth only holds for the main checkout; inside a git
+// worktree the extension is nested deeper, so search ancestors for the dir.
+const findSwarmJsDir = () => {
+    let dir = __dirname;
+    for (;;) {
+        const candidate = path.join(dir, "wwwroot", "js");
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            return path.resolve(__dirname, "..", "..", "..", "wwwroot", "js");
+        }
+        dir = parent;
+    }
+};
+
+const SWARM_JS_DIR = findSwarmJsDir();
 
 // biome-ignore lint/security/noGlobalEval: Indirect eval runs trusted local SwarmUI scripts in the global scope so their sloppy-mode declarations reach window.
 const indirectEval = eval;

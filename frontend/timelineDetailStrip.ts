@@ -1,171 +1,53 @@
 import {
-    AUDIO_SOURCE_UPLOAD,
-    AUDIO_SOURCE_VOICE_REF,
-    buildAudioSourceOptions,
-    buildSegmentAudioSourceOptions,
-    canUseClipLengthFromAudio,
-    isAceStepFunAudioSource,
-    resolveAudioSourceValue,
-} from "./audioSource";
-import {
     AUDIO_SEGMENT_DEFAULT_LENGTH,
     AUDIO_SEGMENT_MIN_LENGTH,
-    AUDIO_SEGMENT_STEP,
-    CLIP_DURATION_MAX,
-    CLIP_DURATION_MIN,
     clamp,
-    IC_LORA_ATTENTION_MAX,
-    IC_LORA_ATTENTION_MIN,
-    IC_LORA_ATTENTION_STEP,
-    IC_LORA_AUTO,
-    IC_LORA_SOURCE_STAGE_INPUT,
-    IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
-    IC_LORA_STRENGTH_MAX,
-    IC_LORA_STRENGTH_MIN,
-    IC_LORA_STRENGTH_STEP,
-    mediaPreviewSrc,
-    PROMPT_WINDOW_MIN_DURATION,
-    REF_FRAME_MIN,
     RETAKE_DEFAULT_DURATION,
-    RETAKE_DURATION_STEP,
     RETAKE_MIN_DURATION,
     RETAKE_STRENGTH_DEFAULT,
-    RETAKE_STRENGTH_MAX,
-    RETAKE_STRENGTH_MIN,
-    RETAKE_STRENGTH_STEP,
-    ROOT_DIMENSION_MAX,
-    ROOT_DIMENSION_MIN,
-    ROOT_DIMENSION_STEP,
-    ROOT_FPS_MAX,
-    ROOT_FPS_MIN,
-    STAGE_CONTROLNET_STRENGTH_MAX,
-    STAGE_CONTROLNET_STRENGTH_MIN,
-    STAGE_CONTROLNET_STRENGTH_STEP,
-    STAGE_REF_STRENGTH_MAX,
-    STAGE_REF_STRENGTH_MIN,
-    STAGE_REF_STRENGTH_STEP,
 } from "./constants";
+import { buildAudioBody } from "./detailStrip/audioPanel";
+import { buildAudioSegmentBody } from "./detailStrip/audioSegmentPanel";
+import { buildBoundaryBody } from "./detailStrip/boundaryPanel";
+import { buildClipBody } from "./detailStrip/clipPanel";
+import type {
+    ClampedNumberOpts,
+    DetailStripContext,
+} from "./detailStrip/context";
 import {
-    buildCheckbox,
-    buildField,
-    buildInstanceRow,
-    buildNumber,
-    buildOptionSelect,
-    buildSelect,
-    buildSlider,
-    buildTextarea,
-    buildUploadRow,
-    type OptionSpec,
-    sectionLabel,
-} from "./detailWidgets";
-import {
-    DIMENSION_PRESET_KEYS,
-    matchPresetKey,
-    presetBadgeElements,
-    presetDimensions,
-} from "./dimensionPresets";
-import {
-    clearIcLoraAutoFailure,
-    ensureIcLoraAutoWeights,
-    IC_LORA_AUTO_HINT_ATTR,
-    icLoraAutoHint,
-} from "./icLoraAutoDownload";
-import {
-    findIcLoraPreset,
-    IC_LORA_PRESET_CUSTOM_ID,
-    IC_LORA_PRESET_UNION_CONTROL_ID,
-    IC_LORA_PRESETS,
-    icLoraRepoUrl,
-    icLoraTriggerHint,
-} from "./icLoraPresets";
-import {
-    buildImageSourceOptions,
-    resolveImageSourceValue,
-} from "./imageSource";
+    buildPromptMajorBody,
+    buildPromptMinorBody,
+} from "./detailStrip/promptPanels";
+import { buildRefBody } from "./detailStrip/refPanel";
+import { buildSettingsBody } from "./detailStrip/settingsPanel";
+import { buildNumber } from "./detailWidgets";
 import {
     buildDefaultStage,
-    defaultIcLora,
-    getReferenceFrameMax,
-    hasSlotSourcedIcLora,
+    reconcileIcLoraStage,
     removeRefAt,
 } from "./normalization";
 import { getClips, getState, saveClips, saveState } from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
-import type { UpdateMeta } from "./store";
-import { isVideoStagesEnabled, readStateToken } from "./swarmInputs";
-import {
-    type BoundaryPlan,
-    crossfadePlanForClips,
-} from "./timelineBoundaryTrack";
-import {
-    refSourceLabel,
-    stageChipLabel,
-    stageChipTitle,
-} from "./timelineDetail";
-import { applyClipDurationResize } from "./timelineEdit";
-import {
-    applyPromptWindowBegin,
-    applyPromptWindowEnd,
-    promptWindowNeighborBounds,
-} from "./timelinePromptTrack";
-import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "./timelineView";
-import { parseIntAttr } from "./trackDomUtils";
-import {
-    type AudioSegment,
-    type BoundaryOut,
-    type Clip,
-    type IcLora,
-    type IcLoraControlType,
-    REF_SOURCE_UPLOAD,
-    type RootDefaults,
-    type Stage,
-    type TimelineSelection,
-} from "./types";
 import {
     getSelection,
     isSameSelection,
     setSelection,
     subscribeSelection,
-} from "./uiState";
+} from "./selection";
+import type { UpdateMeta } from "./store";
+import { isVideoStagesEnabled, readStateToken } from "./swarmInputs";
+import { stageChipLabel } from "./timelineDetail";
+import { parseIntAttr } from "./trackDomUtils";
+import type { AudioSegment, Clip, TimelineSelection } from "./types";
 import { roundToTenth } from "./utils";
 
 const STAGE_SELECTOR = "[data-vst-stage]";
 const MODEL_SELECTOR = "[data-vst-model]";
 const INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
 
-/** Clamp a (start, length) window inside [0, clipDur] with a minimum length. */
-const clampStartLength = (
-    start: number,
-    length: number,
-    clipDur: number,
-    minLength: number,
-): { start: number; length: number } => {
-    const s = clamp(start, 0, Math.max(0, clipDur - minLength));
-    const l = clamp(length, minLength, Math.max(minLength, clipDur - s));
-    return { start: s, length: l };
-};
-
 const DETAIL_CLASS = "vst-detail";
-// Stable, bounded group-section ids (never per-instance): collapse prefs persist
-// across selections and cookies stay bounded. Instance identity rides the counter.
-const GROUP_STAGES = "vstdock_stages";
-const GROUP_ICLORA = "vstdock_iclora";
-const GROUP_REF = "vstdock_ref";
-const GROUP_AUDIO = "vstdock_audio";
-const GROUP_AUDIOSEG = "vstdock_audioseg";
-const GROUP_PROMPTMAJOR = "vstdock_promptmajor";
-const GROUP_PROMPTMINOR = "vstdock_promptminor";
-const GROUP_RETAKE = "vstdock_retake";
-const GROUP_BOUNDARY = "vstdock_boundary";
-const GROUP_SETTINGS = "vstdock_settings";
-const DURATION_STEP = 0.1;
-const UPSCALE_EPSILON = 1e-6;
-const LORA_WEIGHT_STEP = 0.05;
-const LORA_WEIGHT_DEFAULT = 1;
 const DEBOUNCE_MS = 200;
-const SETTINGS_INHERIT = "inherit";
-const SETTINGS_CUSTOM = "custom";
 
 export interface TimelineDetailStrip {
     /**
@@ -188,16 +70,6 @@ export interface TimelineDetailStripOptions {
     isCollapsed: () => boolean;
     setCollapsed: (collapsed: boolean) => void;
 }
-
-const clampDimension = (value: number): number =>
-    clamp(
-        Math.round(value) || ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MAX,
-    );
-
-const clampFps = (value: number): number =>
-    clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
 
 const clampSelection = (
     sel: TimelineSelection,
@@ -251,7 +123,6 @@ const clampSelection = (
 export const createTimelineDetailStrip = (
     options: TimelineDetailStripOptions,
 ): TimelineDetailStrip => {
-    // Listener-host (tracks body) vs render-host (the `.vst-detail` dock).
     let boundBody: HTMLElement | null = null;
     let dockEl: HTMLElement | null = null;
     let unsubscribe: (() => void) | null = null;
@@ -260,15 +131,9 @@ export const createTimelineDetailStrip = (
     let flushing = false;
     let rendering = false;
     let suppressSelectionRender = false;
-    // A range-slider drag is in progress. Set on pointerdown (capture) over a
-    // range input inside the dock; cleared on pointerup / pointercancel anywhere
-    // (the pointer can leave the dock mid-drag). While set, debounced edits are
-    // HELD — the flush timer is never armed — so a mid-drag pause can't trigger a
-    // save → timeline refresh → dock rebuild that destroys the range node the
-    // browser's drag gesture is bound to. Complements the focus-based check in
-    // isSliderGesture: this latch covers Safari-style browsers where a range
-    // input does not take focus on mousedown, and drags whose focus sits
-    // elsewhere.
+    // Set on pointerdown over a range input, cleared on pointerup/pointercancel
+    // (pointer can leave the dock mid-drag). Covers Safari-style browsers where
+    // range inputs don't take focus on mousedown — see isSliderGesture.
     let sliderDragActive = false;
     // The resolution mode the user picked while editing timeline settings. Kept
     // across settings re-renders so an explicit "Custom" choice sticks even when
@@ -353,8 +218,6 @@ export const createTimelineDetailStrip = (
         );
     };
 
-    // --- focus preservation across the self-triggered refresh/rebuild ------
-
     const captureFocus = (): void => {
         // Focus has left the dock (or is about to, mid-focusout): there is no
         // live editing session to preserve, so never stash a field — that is the
@@ -415,17 +278,6 @@ export const createTimelineDetailStrip = (
             } catch {}
         }
     };
-
-    const tagFocus = (field: HTMLElement, key: string): HTMLElement => {
-        const control =
-            field.querySelector<HTMLElement>("input.auto-slider-number") ??
-            field.querySelector<HTMLElement>("input, select") ??
-            (field.matches("input, select") ? field : null);
-        control?.setAttribute("data-vst-focus-key", key);
-        return field;
-    };
-
-    // --- live-apply commit + coalesced debounce ---------------------------
 
     const isStale = (): boolean => readStateToken() !== sourceToken;
 
@@ -605,15 +457,7 @@ export const createTimelineDetailStrip = (
     // it back (see writeBackClamped). Because every contextually-clamped field is
     // built through here, `readBack` is a REQUIRED argument — a future such field
     // cannot forget the sync.
-    const buildClampedNumber = (opts: {
-        key: string;
-        value: number;
-        min: number;
-        max: number;
-        step: number;
-        readBack: (clips: Clip[]) => number | null;
-        mutate: (clips: Clip[], value: number) => void;
-    }): HTMLInputElement => {
+    const buildClampedNumber = (opts: ClampedNumberOpts): HTMLInputElement => {
         const input = buildNumber(
             opts.value,
             opts.min,
@@ -719,44 +563,54 @@ export const createTimelineDetailStrip = (
         setSelection(outcome);
     };
 
-    // --- shared field builders live in detailWidgets.ts ------------------
-
-    const deleteRefEntry = (clipIdx: number, refIdx: number): void => {
+    // Structural REMOVE that stays in context: drop an entry, then reselect the
+    // neighbour at the clamped index if any remain, else fall back. `remove`
+    // returns the surviving count, or null to abort with nothing saved.
+    const commitRemoval = (
+        remove: (clips: Clip[]) => number | null,
+        index: number,
+        neighbour: (idx: number) => TimelineSelection,
+        fallback: TimelineSelection,
+    ): void =>
         structuralCommit((clips) => {
-            const clip = clips[clipIdx];
-            if (!clip || !removeRefAt(clip, refIdx)) {
+            const remaining = remove(clips);
+            if (remaining === null) {
                 return null;
             }
-            // Stay in context: the neighbouring ref if one remains, else the clip.
-            return clip.refs.length > 0
-                ? {
-                      kind: "ref",
-                      clipIdx,
-                      refIdx: Math.min(refIdx, clip.refs.length - 1),
-                  }
-                : { kind: "clip", clipIdx, stageIdx: 0 };
+            return remaining > 0
+                ? neighbour(Math.min(index, remaining - 1))
+                : fallback;
         });
+
+    const deleteRefEntry = (clipIdx: number, refIdx: number): void => {
+        commitRemoval(
+            (clips) => {
+                const clip = clips[clipIdx];
+                return clip && removeRefAt(clip, refIdx)
+                    ? clip.refs.length
+                    : null;
+            },
+            refIdx,
+            (idx) => ({ kind: "ref", clipIdx, refIdx: idx }),
+            { kind: "clip", clipIdx, stageIdx: 0 },
+        );
     };
 
     const deleteWindowEntry = (clipIdx: number, windowIdx: number): void => {
-        structuralCommit((clips) => {
-            const windows = clips[clipIdx]?.promptWindows;
-            if (!windows || windowIdx < 0 || windowIdx >= windows.length) {
-                return null;
-            }
-            windows.splice(windowIdx, 1);
-            // Stay in context: the neighbouring window, else the major prompt.
-            return windows.length > 0
-                ? {
-                      kind: "prompt-minor",
-                      clipIdx,
-                      windowIdx: Math.min(windowIdx, windows.length - 1),
-                  }
-                : { kind: "prompt-major", clipIdx };
-        });
+        commitRemoval(
+            (clips) => {
+                const windows = clips[clipIdx]?.promptWindows;
+                if (!windows || windowIdx < 0 || windowIdx >= windows.length) {
+                    return null;
+                }
+                windows.splice(windowIdx, 1);
+                return windows.length;
+            },
+            windowIdx,
+            (idx) => ({ kind: "prompt-minor", clipIdx, windowIdx: idx }),
+            { kind: "prompt-major", clipIdx },
+        );
     };
-
-    // --- structural retake operations ------------------------------------
 
     const createRetake = (clipIdx: number): void => {
         structuralCommit((clips) => {
@@ -793,8 +647,6 @@ export const createTimelineDetailStrip = (
         });
     };
 
-    // --- structural audio-segment operations -----------------------------
-
     const addAudioSegment = (clipIdx: number): void => {
         structuralCommit((clips) => {
             const clip = clips[clipIdx];
@@ -828,23 +680,21 @@ export const createTimelineDetailStrip = (
     };
 
     const removeAudioSegment = (clipIdx: number, segIdx: number): void => {
-        structuralCommit((clips) => {
-            const clip = clips[clipIdx];
-            if (!clip?.audioSegments?.[segIdx]) {
-                return null;
-            }
-            clip.audioSegments = clip.audioSegments.filter(
-                (_, i) => i !== segIdx,
-            );
-            // Stay in context: the neighbouring segment, else the audio panel.
-            return clip.audioSegments.length > 0
-                ? {
-                      kind: "audio-segment",
-                      clipIdx,
-                      segIdx: Math.min(segIdx, clip.audioSegments.length - 1),
-                  }
-                : { kind: "audio", clipIdx };
-        });
+        commitRemoval(
+            (clips) => {
+                const clip = clips[clipIdx];
+                if (!clip?.audioSegments?.[segIdx]) {
+                    return null;
+                }
+                clip.audioSegments = clip.audioSegments.filter(
+                    (_, i) => i !== segIdx,
+                );
+                return clip.audioSegments.length;
+            },
+            segIdx,
+            (idx) => ({ kind: "audio-segment", clipIdx, segIdx: idx }),
+            { kind: "audio", clipIdx },
+        );
     };
 
     // --- structural stage operations -------------------------------------
@@ -899,12 +749,7 @@ export const createTimelineDetailStrip = (
                     } else if (entry.stage > stageIdx) {
                         entry.stage -= 1;
                     }
-                    if (
-                        entry.stage < 1 &&
-                        entry.source === IC_LORA_SOURCE_STAGE_INPUT
-                    ) {
-                        entry.source = IC_LORA_SOURCE_UPLOAD;
-                    }
+                    reconcileIcLoraStage(entry);
                 }
                 return {
                     kind: "clip",
@@ -915,8 +760,6 @@ export const createTimelineDetailStrip = (
             { rebuildAfterSelect: true },
         );
     };
-
-    // --- region interaction (stage chips / model badge on the video track) --
 
     const handleActivation = (target: Element, shiftKey: boolean): void => {
         const stageChip = target.closest(STAGE_SELECTOR);
@@ -1075,44 +918,11 @@ export const createTimelineDetailStrip = (
         flushPending();
     };
 
-    // --- rendering --------------------------------------------------------
-
     const ensureDetail = (): HTMLElement => {
         if (!dockEl) {
             throw new Error("detail strip not attached");
         }
         return dockEl;
-    };
-
-    // --- host-convention input-group sections -----------------------------
-
-    /**
-     * A headerless host `.input-group` container. The dock breadcrumb is the
-     * one label for the panel — section title rows only duplicated it — so a
-     * group is now purely structural chrome (border, background, content
-     * padding). `groupId` is a stable `vstdock_*` key kept as a CSS/test hook.
-     */
-    const buildGroup = (groupId: string, content: HTMLElement): HTMLElement => {
-        const group = document.createElement("div");
-        group.className = "input-group input-group-open";
-        group.id = `auto-group-${groupId}`;
-
-        const contentEl = document.createElement("div");
-        contentEl.className = "input-group-content";
-        contentEl.id = `input_group_content_${groupId}`;
-        contentEl.appendChild(content);
-
-        group.appendChild(contentEl);
-        return group;
-    };
-
-    // Wrap a single-panel editor's field container in one host group inside a
-    // `.vst-detail-body` scroll host.
-    const wrapForm = (groupId: string, content: HTMLElement): HTMLElement => {
-        const body = document.createElement("div");
-        body.className = "vst-detail-body";
-        body.appendChild(buildGroup(groupId, content));
-        return body;
     };
 
     const breadcrumbFor = (sel: TimelineSelection): string => {
@@ -1197,1885 +1007,61 @@ export const createTimelineDetailStrip = (
         return head;
     };
 
-    const buildClipColumn = (clip: Clip, clipIdx: number): HTMLElement => {
-        const col = document.createElement("div");
-        col.className = "vst-detail-col vst-detail-clip";
-
-        const lengthDerived =
-            clip.clipLengthFromAudio === true ||
-            clip.clipLengthFromControlNet === true;
-        const durationInput = buildNumber(
-            clip.duration,
-            CLIP_DURATION_MIN,
-            CLIP_DURATION_MAX,
-            DURATION_STEP,
-            (value) => {
-                debouncedCommit("duration", (clips) => {
-                    const target = clips[clipIdx];
-                    if (target && !lengthDerived) {
-                        applyClipDurationResize(target, value, getRootDefaults);
-                    }
-                });
-            },
-        );
-        durationInput.setAttribute("data-vst-focus-key", "duration");
-        const durationField = buildField(
-            "Duration (s)",
-            durationInput,
-            lengthDerived
-                ? "(derived from audio/ControlNet source)"
-                : undefined,
-        );
-        if (lengthDerived) {
-            durationInput.disabled = true;
-            durationField.classList.add("vst-field-disabled");
-        }
-        col.appendChild(durationField);
-
-        col.appendChild(
-            buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
-                commit((clips) => {
-                    const target = clips[clipIdx];
-                    if (target) {
-                        target.skipped = value;
-                    }
-                });
-            }),
-        );
-
-        return col;
-    };
-
-    const buildStageRail = (
-        clip: Clip,
-        clipIdx: number,
-        stageIdx: number,
-    ): HTMLElement => {
-        const col = document.createElement("div");
-        col.className = "vst-detail-col vst-detail-rail";
-
-        // Stage tabs, left-aligned and taking the full remaining width.
-        const list = document.createElement("div");
-        list.className = "vst-detail-rail-list";
-        clip.stages.forEach((stage, idx) => {
-            const chip = document.createElement("button");
-            chip.type = "button";
-            chip.className = "vst-chip vst-stage-tab";
-            if (idx === stageIdx) {
-                chip.classList.add("vst-stage-tab-active");
-            }
-            if (stage.skipped) {
-                chip.classList.add("vst-stage-tab-skipped");
-            }
-            chip.textContent = stageChipLabel(idx);
-            chip.title = `${stageChipTitle(stage, idx)} · click to edit · Shift+click to delete`;
-            chip.addEventListener("click", (event) => {
-                if (event.shiftKey) {
-                    deleteStage(clipIdx, idx);
-                } else {
-                    selectStage(clipIdx, idx);
-                }
-            });
-            list.appendChild(chip);
-        });
-        col.appendChild(list);
-
-        // Right-aligned action column: Add above Delete, both ALWAYS present;
-        // Delete disables (never hides) when there is nothing to delete.
-        const actions = document.createElement("div");
-        actions.className = "vst-detail-rail-actions";
-        const addBtn = document.createElement("button");
-        addBtn.type = "button";
-        addBtn.className =
-            "basic-button small-button vst-detail-rail-btn vst-detail-add-stage";
-        addBtn.textContent = "Add stage";
-        addBtn.title = "Add a refine stage";
-        addBtn.addEventListener("click", (event) => {
-            event.preventDefault();
-            addStage(clipIdx);
-        });
-        const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.className =
-            "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
-        deleteBtn.textContent = "Delete stage";
-        deleteBtn.disabled = clip.stages.length <= 1;
-        deleteBtn.title = deleteBtn.disabled
-            ? "A clip always keeps at least one stage"
-            : `Delete stage ${stageChipLabel(stageIdx)}`;
-        deleteBtn.addEventListener("click", (event) => {
-            event.preventDefault();
-            deleteStage(clipIdx, stageIdx);
-        });
-        actions.append(addBtn, deleteBtn);
-        col.appendChild(actions);
-        return col;
-    };
-
-    const buildParamsColumn = (
-        clip: Clip,
-        clipIdx: number,
-        stageIdx: number,
-        stage: Stage,
-        defaults: RootDefaults,
-    ): { col: HTMLElement; railSkipSync: (skipped: boolean) => void } => {
-        const col = document.createElement("div");
-        col.className = "vst-detail-col vst-detail-params";
-        const isRefine = stageIdx >= 1;
-
-        // Every field in this column edits the same stage: these two wrappers
-        // carry the clips[clipIdx]?.stages[stageIdx] guard once.
-        const stageCommit = (mutate: (target: Stage) => void): void => {
-            commit((clips) => {
-                const target = clips[clipIdx]?.stages[stageIdx];
-                if (target) {
-                    mutate(target);
-                }
-            });
-        };
-        const stageDebounced = (
-            key: string,
-            mutate: (target: Stage) => void,
-        ): void => {
-            debouncedCommit(key, (clips) => {
-                const target = clips[clipIdx]?.stages[stageIdx];
-                if (target) {
-                    mutate(target);
-                }
-            });
-        };
-        const stageSlider = (
-            label: string,
-            focusKey: string,
-            value: number,
-            min: number,
-            max: number,
-            step: number,
-            assign: (target: Stage, value: number) => void,
-            opts?: { title?: string; onValue?: (value: number) => void },
-        ): HTMLElement =>
-            tagFocus(
-                buildSlider(
-                    label,
-                    value,
-                    min,
-                    max,
-                    step,
-                    (v) => {
-                        opts?.onValue?.(v);
-                        stageDebounced(focusKey, (target) => assign(target, v));
-                    },
-                    opts?.title ? { title: opts.title } : undefined,
-                ),
-                focusKey,
-            );
-        const stageSelect = (
-            values: string[],
-            labels: string[],
-            selected: string,
-            assign: (target: Stage, value: string) => void,
-        ): HTMLSelectElement =>
-            buildSelect(values, labels, selected, (v) =>
-                stageCommit((target) => assign(target, v)),
-            );
-
-        const fields = document.createElement("div");
-        fields.className = "vst-detail-fields";
-        const applyMute = (): void => {
-            fields.classList.toggle(
-                "vst-stage-fields-muted",
-                stage.skipped === true,
-            );
-        };
-
-        let railSkipSync: (skipped: boolean) => void = () => {};
-        col.appendChild(
-            buildCheckbox(
-                "Skip this stage",
-                stage.skipped === true,
-                (value) => {
-                    // Mutating the render snapshot before the commit is safe
-                    // (the store deep-clones) but deliberate here only: the
-                    // mute/rail sync reads it synchronously. Don't copy this
-                    // pattern — go through stageCommit alone.
-                    stage.skipped = value;
-                    applyMute();
-                    railSkipSync(value);
-                    stageCommit((target) => {
-                        target.skipped = value;
-                    });
-                },
-            ),
-        );
-        col.appendChild(fields);
-        applyMute();
-
-        const modelField = buildField(
-            "Model",
-            stageSelect(
-                defaults.modelValues,
-                defaults.modelLabels,
-                `${stage.model ?? ""}`,
-                (target, value) => {
-                    target.model = value;
-                },
-            ),
-        );
-        modelField.classList.add("vst-detail-span-2");
-        fields.appendChild(modelField);
-
-        fields.appendChild(
-            stageSlider(
-                "Steps",
-                "steps",
-                stage.steps,
-                defaults.stepsMin,
-                defaults.stepsMax,
-                defaults.stepsStep,
-                (target, value) => {
-                    target.steps = Math.round(value);
-                },
-            ),
-        );
-        fields.appendChild(
-            stageSlider(
-                "CFG Scale",
-                "cfg",
-                stage.cfgScale,
-                defaults.cfgScaleMin,
-                defaults.cfgScaleMax,
-                defaults.cfgScaleStep,
-                (target, value) => {
-                    target.cfgScale = value;
-                },
-            ),
-        );
-
-        if (isRefine) {
-            fields.appendChild(
-                stageSlider(
-                    "Control",
-                    "control",
-                    stage.control,
-                    defaults.controlMin,
-                    defaults.controlMax,
-                    defaults.controlStep,
-                    (target, value) => {
-                        target.control = value;
-                    },
-                    {
-                        title: "Regen strength — higher = more of the stage is re-generated",
-                    },
-                ),
-            );
-            const methodSelect = stageSelect(
-                defaults.upscaleMethodValues,
-                defaults.upscaleMethodLabels,
-                `${stage.upscaleMethod ?? ""}`,
-                (target, value) => {
-                    target.upscaleMethod = value;
-                },
-            );
-            const methodField = buildField("Upscale Method", methodSelect);
-            methodField.classList.add("vst-detail-span-2");
-            const syncMethod = (upscale: number): void => {
-                const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
-                methodSelect.disabled = disabled;
-                methodField.classList.toggle("vst-field-disabled", disabled);
-                methodField.title = disabled
-                    ? "Set Upscale above 1× to choose a method"
-                    : "";
-            };
-            fields.appendChild(
-                stageSlider(
-                    "Upscale",
-                    "upscale",
-                    stage.upscale,
-                    defaults.upscaleMin,
-                    defaults.upscaleMax,
-                    defaults.upscaleStep,
-                    (target, value) => {
-                        target.upscale = value;
-                    },
-                    { onValue: syncMethod },
-                ),
-            );
-            fields.appendChild(methodField);
-            syncMethod(stage.upscale);
-        }
-
-        fields.appendChild(
-            buildField(
-                "Sampler",
-                stageSelect(
-                    defaults.samplerValues,
-                    defaults.samplerLabels,
-                    `${stage.sampler ?? ""}`,
-                    (target, value) => {
-                        target.sampler = value;
-                    },
-                ),
-            ),
-        );
-        fields.appendChild(
-            buildField(
-                "Scheduler",
-                stageSelect(
-                    defaults.schedulerValues,
-                    defaults.schedulerLabels,
-                    `${stage.scheduler ?? ""}`,
-                    (target, value) => {
-                        target.scheduler = value;
-                    },
-                ),
-            ),
-        );
-
-        if (clip.refs.length > 0) {
-            const refsHeader = document.createElement("div");
-            refsHeader.className = "vst-detail-sec vst-detail-span-full";
-            refsHeader.textContent = "Reference Strengths";
-            fields.appendChild(refsHeader);
-            // Hovering a strength row highlights its ref mark on the
-            // references track, so R0/R1/… map visibly to the right image.
-            const setRefHover = (refIdx: number, on: boolean): void => {
-                boundBody
-                    ?.querySelector<HTMLElement>(
-                        `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`,
-                    )
-                    ?.classList.toggle("vst-ref-hover", on);
-            };
-            clip.refs.forEach((ref, refIdx) => {
-                const current =
-                    refIdx < stage.refStrengths.length
-                        ? stage.refStrengths[refIdx]
-                        : STAGE_REF_STRENGTH_MAX;
-                const slider = buildSlider(
-                    `R${refIdx}`,
-                    current,
-                    STAGE_REF_STRENGTH_MIN,
-                    STAGE_REF_STRENGTH_MAX,
-                    STAGE_REF_STRENGTH_STEP,
-                    (value) => {
-                        stageDebounced(`refstrength-${refIdx}`, (target) => {
-                            if (refIdx < target.refStrengths.length) {
-                                target.refStrengths[refIdx] = value;
-                            }
-                        });
-                    },
-                    {
-                        title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`,
-                    },
-                );
-                slider.classList.add("vst-stage-ref-slider");
-                tagFocus(slider, `ref-${refIdx}`);
-                slider.addEventListener("mouseenter", () =>
-                    setRefHover(refIdx, true),
-                );
-                slider.addEventListener("mouseleave", () =>
-                    setRefHover(refIdx, false),
-                );
-                fields.appendChild(slider);
-            });
-        }
-
-        // Guide Strength is the per-stage conditioning strength shared by every
-        // IC-LoRA guide on the clip; only shown when the clip has IC-LoRAs.
-        if (clip.icLoras.length > 0) {
-            const controlNetSlider = buildSlider(
-                "IC-LoRA Guide Strength",
-                stage.controlNetStrength,
-                STAGE_CONTROLNET_STRENGTH_MIN,
-                STAGE_CONTROLNET_STRENGTH_MAX,
-                STAGE_CONTROLNET_STRENGTH_STEP,
-                (value) => {
-                    stageDebounced("controlnet", (target) => {
-                        target.controlNetStrength = value;
-                    });
-                },
-                { hint: "Drive-video conditioning strength for this stage" },
-            );
-            tagFocus(controlNetSlider, "controlnet");
-            fields.appendChild(controlNetSlider);
-        }
-
-        fields.appendChild(
-            buildLorasSection(clipIdx, stageIdx, stage, defaults),
-        );
-
-        railSkipSync = (skipped: boolean): void => {
-            const railChip = dockEl?.querySelector<HTMLElement>(
-                `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`,
-            );
-            railChip?.classList.toggle("vst-stage-tab-skipped", skipped);
-        };
-
-        return { col, railSkipSync };
-    };
-
-    const buildLorasSection = (
-        clipIdx: number,
-        stageIdx: number,
-        stage: Stage,
-        defaults: RootDefaults,
-    ): HTMLElement => {
-        const section = document.createElement("div");
-        section.className =
-            "vst-audio-field vst-stage-loras vst-detail-span-full";
-        // Same section-header treatment as "Reference Strengths" above.
-        const label = document.createElement("div");
-        label.className = "vst-detail-sec";
-        label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
-        section.appendChild(label);
-
-        if (defaults.loraValues.length === 0) {
-            const empty = document.createElement("small");
-            empty.className = "vst-audio-field-hint";
-            empty.textContent = "(no LoRAs available)";
-            section.appendChild(empty);
-        } else {
-            const list = document.createElement("div");
-            list.className = "vst-stage-lora-list";
-            stage.loras.forEach((lora, index) => {
-                const row = document.createElement("div");
-                row.className = "vst-stage-lora-row";
-                const select = buildSelect(
-                    defaults.loraValues,
-                    defaults.loraLabels,
-                    lora.name,
-                    (value) => {
-                        commit((clips) => {
-                            const target = clips[clipIdx]?.stages[stageIdx];
-                            const entry = target?.loras[index];
-                            if (entry) {
-                                entry.name = value;
-                            }
-                        });
-                    },
-                );
-                const weight = buildNumber(
-                    lora.weight,
-                    -10,
-                    10,
-                    LORA_WEIGHT_STEP,
-                    (value) => {
-                        debouncedCommit(`lora-${index}-weight`, (clips) => {
-                            const target = clips[clipIdx]?.stages[stageIdx];
-                            const entry = target?.loras[index];
-                            if (entry) {
-                                entry.weight = value;
-                            }
-                        });
-                    },
-                );
-                weight.classList.add("vst-stage-lora-weight");
-                weight.setAttribute(
-                    "data-vst-focus-key",
-                    `lora-${index}-weight`,
-                );
-                const remove = document.createElement("button");
-                remove.type = "button";
-                remove.className = "basic-button vst-stage-lora-remove";
-                remove.textContent = "×";
-                remove.title = "Remove this LoRA";
-                remove.addEventListener("click", () => {
-                    structuralCommit((clips) => {
-                        const target = clips[clipIdx]?.stages[stageIdx];
-                        if (!target) {
-                            return null;
-                        }
-                        target.loras.splice(index, 1);
-                        return "render";
-                    });
-                });
-                row.append(select, weight, remove);
-                list.appendChild(row);
-            });
-            section.appendChild(list);
-
-            const addBtn = document.createElement("button");
-            addBtn.type = "button";
-            addBtn.className = "basic-button small-button vst-stage-lora-add";
-            addBtn.textContent = "+ Add LoRA";
-            addBtn.addEventListener("click", () => {
-                structuralCommit((clips) => {
-                    const target = clips[clipIdx]?.stages[stageIdx];
-                    if (!target) {
-                        return null;
-                    }
-                    target.loras.push({
-                        name: defaults.loraValues[0] ?? "",
-                        weight: LORA_WEIGHT_DEFAULT,
-                    });
-                    return "render";
-                });
-            });
-            section.appendChild(addBtn);
-        }
-
-        return section;
-    };
-
-    // Retake section of the clip panel — lives alongside Stages, same shape:
-    // a plain section label plus the fields (or an add button when none).
-    const buildRetakeSection = (clip: Clip, clipIdx: number): HTMLElement => {
-        const wrap = document.createElement("div");
-        wrap.className = "vst-detail-stages-wrap";
-        wrap.appendChild(sectionLabel("Retake"));
-        const col = document.createElement("div");
-        col.className = "vst-detail-col vst-detail-retake-col";
-        wrap.appendChild(col);
-        const retake = clip.retake;
-
-        if (!retake) {
-            const hint = document.createElement("small");
-            hint.className = "vst-audio-field-hint";
-            hint.textContent =
-                "Regenerates a sub-range when refining a base video.";
-            const addBtn = document.createElement("button");
-            addBtn.type = "button";
-            addBtn.className =
-                "basic-button small-button vst-detail-rail-btn vst-detail-add-retake";
-            addBtn.textContent = "Add retake";
-            addBtn.addEventListener("click", (event) => {
-                event.preventDefault();
-                createRetake(clipIdx);
-            });
-            col.append(hint, addBtn);
-            return wrap;
-        }
-
-        const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
-        const clampRetake = (
-            start: number,
-            length: number,
-        ): { start: number; length: number } =>
-            clampStartLength(start, length, clipDur, RETAKE_MIN_DURATION);
-
-        const startInput = buildClampedNumber({
-            key: "retake-start",
-            value: retake.startSeconds,
-            min: 0,
-            max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
-            step: RETAKE_DURATION_STEP,
-            readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
-            mutate: (cs, value) => {
-                const r = cs[clipIdx]?.retake;
-                if (r) {
-                    const next = clampRetake(value, r.lengthSeconds);
-                    r.startSeconds = next.start;
-                    r.lengthSeconds = next.length;
-                }
-            },
-        });
-        col.appendChild(buildField("Start (s)", startInput));
-
-        const lengthInput = buildClampedNumber({
-            key: "retake-length",
-            value: retake.lengthSeconds,
-            min: RETAKE_MIN_DURATION,
-            max: clipDur,
-            step: RETAKE_DURATION_STEP,
-            readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
-            mutate: (cs, value) => {
-                const r = cs[clipIdx]?.retake;
-                if (r) {
-                    const next = clampRetake(r.startSeconds, value);
-                    r.startSeconds = next.start;
-                    r.lengthSeconds = next.length;
-                }
-            },
-        });
-        col.appendChild(buildField("Length (s)", lengthInput));
-
-        col.appendChild(
-            buildSlider(
-                "Strength",
-                retake.strength,
-                RETAKE_STRENGTH_MIN,
-                RETAKE_STRENGTH_MAX,
-                RETAKE_STRENGTH_STEP,
-                (value) => {
-                    debouncedCommit("retake-strength", (cs) => {
-                        const r = cs[clipIdx]?.retake;
-                        if (r) {
-                            r.strength = clamp(
-                                value,
-                                RETAKE_STRENGTH_MIN,
-                                RETAKE_STRENGTH_MAX,
-                            );
-                        }
-                    });
-                },
-            ),
-        );
-
-        const note = document.createElement("p");
-        note.className = "vst-detail-note";
-        note.textContent =
-            "Applies when refining a base video; audio inside the window regenerates with the frames.";
-        col.appendChild(note);
-
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className =
-            "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
-        del.textContent = "Remove retake";
-        del.addEventListener("click", (event) => {
-            event.preventDefault();
-            removeRetake(clipIdx);
-        });
-        col.appendChild(del);
-        return wrap;
-    };
-
-    // IC-LoRAs section of the clip panel — same shape as Retake: a section
-    // label plus stacked per-entry editors. Each entry pairs an in-context LoRA
-    // with an optional uploaded drive video; presets seed strength/control-type
-    // defaults and surface a trigger-phrase hint, nothing more.
-    const buildIcLorasSection = (
-        clip: Clip,
-        clipIdx: number,
-        defaults: RootDefaults,
-    ): HTMLElement => {
-        const wrap = document.createElement("div");
-        wrap.className = "vst-detail-stages-wrap";
-        wrap.appendChild(sectionLabel("IC-LoRAs"));
-        const col = document.createElement("div");
-        col.className = "vst-detail-col vst-detail-iclora-col";
-        wrap.appendChild(col);
-
-        const entryField = (
-            clips: Clip[],
-            entryIdx: number,
-        ): IcLora | undefined => clips[clipIdx]?.icLoras[entryIdx];
-
-        clip.icLoras.forEach((entry, entryIdx) => {
-            const { row, fields } = buildInstanceRow({
-                rowClass: "vst-detail-iclora",
-                indexAttr: "data-vst-iclora-idx",
-                index: entryIdx,
-                active: false,
-                title: `IC-LoRA ${entryIdx + 1}`,
-                deleteLabel: "Remove",
-                onDelete: () => {
-                    structuralCommit((clips) => {
-                        const target = clips[clipIdx];
-                        if (!target || entryIdx >= target.icLoras.length) {
-                            return null;
-                        }
-                        target.icLoras.splice(entryIdx, 1);
-                        return "render";
-                    });
-                },
-                repoint: () => {},
-            });
-
-            const presetSelect = buildOptionSelect(
-                [
-                    { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
-                    ...IC_LORA_PRESETS.map((preset) => ({
-                        value: preset.id,
-                        label: preset.displayName,
-                    })),
-                ],
-                entry.preset,
-                (value) => {
-                    commit((clips) => {
-                        const target = entryField(clips, entryIdx);
-                        if (!target) {
-                            return;
-                        }
-                        target.preset = value;
-                        const preset = findIcLoraPreset(value);
-                        if (preset) {
-                            target.strength = preset.strength;
-                            target.controlType = preset.controlType;
-                        }
-                    });
-                    // A rejected [AUTO] download retries when its preset is re-picked.
-                    clearIcLoraAutoFailure(value);
-                    render();
-                },
-            );
-            fields.appendChild(buildField("Preset", presetSelect));
-
-            const loraSelect = buildSelect(
-                [IC_LORA_AUTO, ...defaults.loraValues],
-                [IC_LORA_AUTO, ...defaults.loraLabels],
-                entry.lora,
-                (value) => {
-                    commit((clips) => {
-                        const target = entryField(clips, entryIdx);
-                        if (target) {
-                            target.lora = value;
-                        }
-                    });
-                    if (value === IC_LORA_AUTO) {
-                        clearIcLoraAutoFailure(entry.preset);
-                    }
-                    render();
-                },
-            );
-            fields.appendChild(buildField("LoRA", loraSelect));
-
-            const strength = buildClampedNumber({
-                key: `iclora-${entryIdx}-strength`,
-                value: entry.strength,
-                min: IC_LORA_STRENGTH_MIN,
-                max: IC_LORA_STRENGTH_MAX,
-                step: IC_LORA_STRENGTH_STEP,
-                readBack: (cs) => entryField(cs, entryIdx)?.strength ?? null,
-                mutate: (cs, value) => {
-                    const target = entryField(cs, entryIdx);
-                    if (target) {
-                        target.strength = value;
-                    }
-                },
-            });
-            fields.appendChild(buildField("Strength", strength));
-
-            const attention = buildClampedNumber({
-                key: `iclora-${entryIdx}-attention`,
-                value: entry.attentionStrength,
-                min: IC_LORA_ATTENTION_MIN,
-                max: IC_LORA_ATTENTION_MAX,
-                step: IC_LORA_ATTENTION_STEP,
-                readBack: (cs) =>
-                    entryField(cs, entryIdx)?.attentionStrength ?? null,
-                mutate: (cs, value) => {
-                    const target = entryField(cs, entryIdx);
-                    if (target) {
-                        target.attentionStrength = value;
-                    }
-                },
-            });
-            fields.appendChild(buildField("Attention", attention));
-
-            // Control renders the drive video into a signal; only Union Control
-            // (or a custom control LoRA) consumes one, so other curated presets
-            // hide the select (their preset pick already reset it to "none").
-            const preset = findIcLoraPreset(entry.preset);
-            if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
-                const controlSelect = buildOptionSelect(
-                    [
-                        { value: "none", label: "None (raw video)" },
-                        { value: "canny", label: "Canny edges" },
-                        { value: "depth", label: "Depth map" },
-                        { value: "normal", label: "Normal map" },
-                    ],
-                    entry.controlType,
-                    (value) => {
-                        commit((clips) => {
-                            const target = entryField(clips, entryIdx);
-                            if (target) {
-                                target.controlType = value as IcLoraControlType;
-                            }
-                        });
-                    },
-                );
-                fields.appendChild(buildField("Control", controlSelect));
-            }
-
-            const applySelect = buildOptionSelect(
-                [
-                    { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
-                    ...clip.stages.map((_, stageIdx) => ({
-                        value: `${stageIdx}`,
-                        label: `Stage ${stageIdx}`,
-                    })),
-                ],
-                `${entry.stage}`,
-                (value) => {
-                    commit((clips) => {
-                        const target = entryField(clips, entryIdx);
-                        if (!target) {
-                            return;
-                        }
-                        const stage = Number(value);
-                        target.stage =
-                            Number.isInteger(stage) && stage >= 0
-                                ? stage
-                                : IC_LORA_STAGE_ALL;
-                        if (
-                            target.stage < 1 &&
-                            target.source === IC_LORA_SOURCE_STAGE_INPUT
-                        ) {
-                            target.source = IC_LORA_SOURCE_UPLOAD;
-                        }
-                    });
-                    render();
-                },
-            );
-            fields.appendChild(buildField("Apply on", applySelect));
-
-            // "Stage input" (the previous stage's output as drive media) only
-            // exists on refine-stage placements; legacy captured-branch entries
-            // keep their source and get no select.
-            if (
-                entry.stage >= 1 &&
-                (entry.source === IC_LORA_SOURCE_UPLOAD ||
-                    entry.source === IC_LORA_SOURCE_STAGE_INPUT)
-            ) {
-                const sourceSelect = buildOptionSelect(
-                    [
-                        { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
-                        {
-                            value: IC_LORA_SOURCE_STAGE_INPUT,
-                            label: "Stage input",
-                        },
-                    ],
-                    entry.source,
-                    (value) => {
-                        commit((clips) => {
-                            const target = entryField(clips, entryIdx);
-                            if (target) {
-                                target.source = value;
-                            }
-                        });
-                        render();
-                    },
-                );
-                fields.appendChild(buildField("Source", sourceSelect));
-            }
-
-            if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
-                const hint = document.createElement("small");
-                hint.className = "vst-audio-field-hint";
-                hint.textContent = `Driven by stage ${entry.stage}'s input (the previous stage's output).`;
-                fields.appendChild(hint);
-            } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
-                fields.appendChild(
-                    buildUploadRow(
-                        "Drive Media",
-                        "video/*,image/*",
-                        entry.video?.fileName,
-                        (data, fileName) => {
-                            commit((clips) => {
-                                const target = entryField(clips, entryIdx);
-                                if (target) {
-                                    target.video = { data, fileName };
-                                }
-                            });
-                            render();
-                        },
-                        () => {
-                            commit((clips) => {
-                                const target = entryField(clips, entryIdx);
-                                if (target) {
-                                    target.video = null;
-                                }
-                            });
-                            render();
-                        },
-                    ),
-                );
-                if (entry.video?.data?.startsWith("data:video/")) {
-                    const voiceRow = buildCheckbox(
-                        "Voice ref from drive audio",
-                        entry.driveAudioRef === true,
-                        (value) => {
-                            commit((clips) => {
-                                const target = entryField(clips, entryIdx);
-                                if (target) {
-                                    target.driveAudioRef = value;
-                                }
-                            });
-                        },
-                    );
-                    voiceRow.title =
-                        "Use this video's audio as the speaker sample " +
-                        "(LipDub): new speech matching the prompt is " +
-                        "generated in that voice.";
-                    fields.appendChild(voiceRow);
-                }
-            } else {
-                const slot = document.createElement("small");
-                slot.className = "vst-audio-field-hint";
-                slot.textContent = `Driven by ${entry.source} (legacy source)`;
-                fields.appendChild(slot);
-            }
-
-            const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)]
-                .filter(Boolean)
-                .join(" ");
-            if (hintText || preset) {
-                const hint = document.createElement("small");
-                hint.className = "vst-audio-field-hint";
-                hint.textContent = hintText ? `${hintText} ` : "";
-                if (preset) {
-                    const link = document.createElement("a");
-                    link.href = icLoraRepoUrl(preset);
-                    link.target = "_blank";
-                    link.rel = "noopener";
-                    link.textContent = "repo";
-                    hint.appendChild(link);
-                }
-                fields.appendChild(hint);
-            }
-
-            // [AUTO] fulfillment: start the preset-weights download when needed and surface its
-            // state on a tagged line the downloader repaints in place as progress streams in.
-            ensureIcLoraAutoWeights(entry, defaults.loraValues, render);
-            const autoText = icLoraAutoHint(entry, defaults.loraValues);
-            if (autoText) {
-                const autoHint = document.createElement("small");
-                autoHint.className = "vst-audio-field-hint";
-                if (preset) {
-                    autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
-                }
-                autoHint.textContent = autoText;
-                fields.appendChild(autoHint);
-            }
-
-            col.appendChild(row);
-        });
-
-        const addBtn = document.createElement("button");
-        addBtn.type = "button";
-        addBtn.className =
-            "basic-button small-button vst-detail-rail-btn vst-detail-add-iclora";
-        addBtn.textContent = "+ Add IC-LoRA";
-        addBtn.addEventListener("click", (event) => {
-            event.preventDefault();
-            structuralCommit((clips) => {
-                const target = clips[clipIdx];
-                if (!target) {
-                    return null;
-                }
-                target.icLoras.push(
-                    defaultIcLora({
-                        lora: defaults.loraValues[0] ?? IC_LORA_AUTO,
-                    }),
-                );
-                return "render";
-            });
-        });
-        col.appendChild(addBtn);
-        return wrap;
-    };
-
-    const buildClipBody = (
-        sel: Extract<TimelineSelection, { kind: "clip" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const body = document.createElement("div");
-        body.className = "vst-detail-body vst-detail-clip-body";
-        const clip = clips[sel.clipIdx];
-        const stage = clip.stages[sel.stageIdx];
-        const defaults = getRootDefaults();
-        // The clip's own fields render bare (no group header/container — the
-        // dock breadcrumb already names the clip), followed by a Stages group
-        // (labelled rail + the selected stage's parameters) and a Retake group
-        // — retake editing lives in the clip panel, like stages.
-        body.appendChild(buildClipColumn(clip, sel.clipIdx));
-        const params = buildParamsColumn(
-            clip,
-            sel.clipIdx,
-            sel.stageIdx,
-            stage,
-            defaults,
-        );
-        const stagesWrap = document.createElement("div");
-        stagesWrap.className = "vst-detail-stages-wrap";
-        stagesWrap.append(
-            sectionLabel("Stages"),
-            buildStageRail(clip, sel.clipIdx, sel.stageIdx),
-            params.col,
-        );
-        body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
-        body.appendChild(
-            buildGroup(
-                GROUP_ICLORA,
-                buildIcLorasSection(clip, sel.clipIdx, defaults),
-            ),
-        );
-        body.appendChild(
-            buildGroup(GROUP_RETAKE, buildRetakeSection(clip, sel.clipIdx)),
-        );
-        return body;
-    };
-
-    // --- reference editor -------------------------------------------------
-
-    // The ref panel lists EVERY reference of the clip, stacked. The selected ref
-    // is highlighted; touching any ref's control re-points the selection to it
-    // (targeted highlight swap, no rebuild) and per-ref keys keep edits distinct.
-    const buildRefBody = (
-        sel: Extract<TimelineSelection, { kind: "ref" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const { clipIdx } = sel;
-        const clip = clips[clipIdx];
-        const body = document.createElement("div");
-        body.className =
-            "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
-        const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-
-        clip.refs.forEach((ref, refIdx) => {
-            const options = buildImageSourceOptions(ref.source ?? "");
-            const source = resolveImageSourceValue(ref.source ?? "", options);
-            const isUpload = source === REF_SOURCE_UPLOAD;
-            const { row, fields } = buildInstanceRow({
-                rowClass: "vst-detail-ref-row",
-                indexAttr: "data-vst-ref-index",
-                index: refIdx,
-                active: refIdx === sel.refIdx,
-                title: `R${refIdx + 1}`,
-                deleteLabel: "Delete",
-                onDelete: () => deleteRefEntry(clipIdx, refIdx),
-                repoint: () => setSelection({ kind: "ref", clipIdx, refIdx }),
-            });
-
-            const select = buildOptionSelect(options, source, (value) => {
-                commit((cs) => {
-                    const r = cs[clipIdx]?.refs[refIdx];
-                    if (!r) {
-                        return;
-                    }
-                    const resolved = resolveImageSourceValue(
-                        value,
-                        buildImageSourceOptions(value),
-                    );
-                    r.source = resolved;
-                    if (resolved !== REF_SOURCE_UPLOAD) {
-                        r.uploadedImage = null;
-                        r.uploadFileName = null;
-                    }
-                });
-                render();
-            });
-            fields.appendChild(buildField("Image Source", select));
-
-            if (isUpload) {
-                const preview = document.createElement("div");
-                preview.className = "vst-refs-thumb-preview";
-                const data = ref.uploadedImage?.data;
-                if (data) {
-                    preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-                    preview.classList.add("vst-refs-thumb-preview-set");
-                }
-                fields.appendChild(preview);
-            }
-
-            const frameInput = buildNumber(
-                ref.frame,
-                REF_FRAME_MIN,
-                frameMax,
-                1,
-                (value) => {
-                    debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
-                        const r = cs[clipIdx]?.refs[refIdx];
-                        if (r) {
-                            r.frame = clamp(
-                                Math.round(value),
-                                REF_FRAME_MIN,
-                                frameMax,
-                            );
-                        }
-                    });
-                },
-            );
-            frameInput.setAttribute(
-                "data-vst-focus-key",
-                `ref-${refIdx}-frame`,
-            );
-            fields.appendChild(
-                buildField(`Attach at Frame (1–${frameMax})`, frameInput),
-            );
-
-            fields.appendChild(
-                buildCheckbox(
-                    "Count from clip end",
-                    ref.fromEnd === true,
-                    (value) => {
-                        commit((cs) => {
-                            const r = cs[clipIdx]?.refs[refIdx];
-                            if (r) {
-                                r.fromEnd = value;
-                            }
-                        });
-                    },
-                ),
-            );
-
-            if (isUpload) {
-                fields.appendChild(
-                    buildUploadRow(
-                        "Image Upload",
-                        "image/*",
-                        ref.uploadedImage?.fileName,
-                        (data, fileName) => {
-                            commit((cs) => {
-                                const r = cs[clipIdx]?.refs[refIdx];
-                                if (r) {
-                                    r.uploadedImage = { data, fileName };
-                                    r.uploadFileName = fileName;
-                                }
-                            });
-                            render();
-                        },
-                        () => {
-                            commit((cs) => {
-                                const r = cs[clipIdx]?.refs[refIdx];
-                                if (r) {
-                                    r.uploadedImage = null;
-                                    r.uploadFileName = null;
-                                }
-                            });
-                            render();
-                        },
-                    ),
-                );
-            }
-            body.appendChild(row);
-        });
-
-        return wrapForm(GROUP_REF, body);
-    };
-
-    // --- audio editor -----------------------------------------------------
-
-    const buildAudioBody = (
-        sel: Extract<TimelineSelection, { kind: "audio" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const { clipIdx } = sel;
-        const clip = clips[clipIdx];
-        const controlNetEnabled = hasSlotSourcedIcLora(clip.icLoras);
-        const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-            controlNetEnabled,
-        });
-        const source = resolveAudioSourceValue(clip.audioSource ?? "", options);
-        const canLength = canUseClipLengthFromAudio(source);
-        const isAce = isAceStepFunAudioSource(source);
-
-        const commitAudio = (mutate: (clip: Clip) => void): void => {
-            commit((cs) => {
-                const target = cs[clipIdx];
-                if (!target) {
-                    return;
-                }
-                mutate(target);
-                const cnEnabled = hasSlotSourcedIcLora(target.icLoras);
-                const nextSource = resolveAudioSourceValue(
-                    target.audioSource,
-                    buildAudioSourceOptions(target.audioSource, {
-                        controlNetEnabled: cnEnabled,
-                    }),
-                );
-                target.audioSource = nextSource;
-                target.clipLengthFromAudio =
-                    canUseClipLengthFromAudio(nextSource) &&
-                    target.clipLengthFromAudio;
-                if (target.clipLengthFromAudio) {
-                    target.clipLengthFromControlNet = false;
-                }
-                target.saveAudioTrack =
-                    isAceStepFunAudioSource(nextSource) &&
-                    target.saveAudioTrack;
-                target.uploadedAudio =
-                    nextSource === AUDIO_SOURCE_UPLOAD ||
-                    nextSource === AUDIO_SOURCE_VOICE_REF
-                        ? target.uploadedAudio
-                        : null;
-            });
-        };
-
-        const body = document.createElement("div");
-        body.className = "vst-detail-form-body";
-
-        const select = buildOptionSelect(
-            options.map((o) => ({ value: o.value, label: o.label })),
-            source,
-            (value) => {
-                commitAudio((c) => {
-                    c.audioSource = value;
-                });
-                render();
-            },
-        );
-        body.appendChild(buildField("Audio Source", select));
-
-        body.appendChild(
-            buildCheckbox("Reuse Audio", clip.reuseAudio === true, (value) => {
-                commitAudio((c) => {
-                    c.reuseAudio = value;
-                });
-            }),
-        );
-
-        const lengthRow = buildCheckbox(
-            "Clip Length from Audio",
-            clip.clipLengthFromAudio === true && canLength,
-            (value) => {
-                commitAudio((c) => {
-                    c.clipLengthFromAudio = value;
-                });
-            },
-            { disabled: !canLength },
-        );
-        body.appendChild(lengthRow);
-
-        const saveRow = buildCheckbox(
-            "Save Audio Track",
-            clip.saveAudioTrack === true && isAce,
-            (value) => {
-                commitAudio((c) => {
-                    c.saveAudioTrack = value;
-                });
-            },
-            { disabled: !isAce },
-        );
-        body.appendChild(saveRow);
-
-        if (
-            source === AUDIO_SOURCE_UPLOAD ||
-            source === AUDIO_SOURCE_VOICE_REF
-        ) {
-            body.appendChild(
-                buildUploadRow(
-                    source === AUDIO_SOURCE_VOICE_REF
-                        ? "Voice Sample"
-                        : "Audio Upload",
-                    "audio/*",
-                    clip.uploadedAudio?.fileName,
-                    (data, fileName) => {
-                        commitAudio((c) => {
-                            c.uploadedAudio = { data, fileName };
-                        });
-                        render();
-                    },
-                    () => {
-                        commitAudio((c) => {
-                            c.uploadedAudio = null;
-                        });
-                        render();
-                    },
-                ),
-            );
-        }
-        if (source === AUDIO_SOURCE_VOICE_REF) {
-            const hint = document.createElement("small");
-            hint.className = "vst-audio-field-hint";
-            hint.textContent =
-                "Speaker sample only — new speech is generated to match the " +
-                "prompt in this voice. Put the spoken words in the clip prompt.";
-            body.appendChild(hint);
-        }
-
-        const segCount = clip.audioSegments?.length ?? 0;
-        const addSegment = document.createElement("button");
-        addSegment.type = "button";
-        addSegment.className =
-            "basic-button small-button vst-detail-add-segment";
-        addSegment.textContent = "+ Add segment";
-        addSegment.title =
-            "Overlay an extra uploaded audio piece on this clip's audio lane";
-        addSegment.addEventListener("click", (event) => {
-            event.preventDefault();
-            addAudioSegment(clipIdx);
-        });
-        body.appendChild(addSegment);
-        if (segCount > 0) {
-            const note = document.createElement("p");
-            note.className = "vst-detail-note";
-            note.textContent =
-                segCount === 1
-                    ? "1 overlay segment · mixed additively over the base audio."
-                    : `${segCount} overlay segments · mixed additively over the base audio.`;
-            body.appendChild(note);
-        }
-        return wrapForm(GROUP_AUDIO, body);
-    };
-
-    // --- audio segment editor ---------------------------------------------
-
-    // The audio-segment panel lists EVERY overlay segment of the clip, stacked.
-    // The selected segment is highlighted; touching any segment's control
-    // re-points the selection to it (targeted swap, no rebuild) and per-segment
-    // keys keep edits distinct.
-    const buildAudioSegmentBody = (
-        sel: Extract<TimelineSelection, { kind: "audio-segment" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const { clipIdx } = sel;
-        const clip = clips[clipIdx];
-        const segments = clip?.audioSegments ?? [];
-        const body = document.createElement("div");
-        body.className =
-            "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
-        const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
-
-        // Segments live on per-segment lanes and may overlap in time (the
-        // backend mixes them additively) — start/length clamp only to the
-        // clip's own bounds.
-        const clampSegment = (
-            start: number,
-            length: number,
-        ): { start: number; length: number } =>
-            clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
-
-        segments.forEach((segment, segIdx) => {
-            const { row, fields } = buildInstanceRow({
-                rowClass: "vst-detail-seg-row",
-                indexAttr: "data-vst-seg-index",
-                index: segIdx,
-                active: segIdx === sel.segIdx,
-                title: `S${segIdx + 1}`,
-                deleteLabel: "Remove segment",
-                onDelete: () => removeAudioSegment(clipIdx, segIdx),
-                repoint: () =>
-                    setSelection({ kind: "audio-segment", clipIdx, segIdx }),
-            });
-
-            // Source select: an upload, or an AceStepFun generated track ref.
-            const segSourceRef =
-                typeof segment.source === "string" ? segment.source : "";
-            const segSourceValue = segSourceRef || AUDIO_SOURCE_UPLOAD;
-            const segSourceSelect = buildOptionSelect(
-                buildSegmentAudioSourceOptions(segSourceRef),
-                segSourceValue,
-                (value) => {
-                    commit((cs) => {
-                        const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                        if (!seg) {
-                            return;
-                        }
-                        if (isAceStepFunAudioSource(value)) {
-                            seg.source = value;
-                        } else if (typeof seg.source === "string") {
-                            // Back to Upload: clear the ref so the upload
-                            // picker prompts for a file.
-                            seg.source = null;
-                        }
-                    });
-                    render();
-                },
-            );
-            fields.appendChild(buildField("Source", segSourceSelect));
-
-            if (!segSourceRef) {
-                fields.appendChild(
-                    buildUploadRow(
-                        "Audio Upload",
-                        "audio/*",
-                        typeof segment.source === "string"
-                            ? undefined
-                            : segment.source?.fileName,
-                        (data, fileName) => {
-                            commit((cs) => {
-                                const seg =
-                                    cs[clipIdx]?.audioSegments?.[segIdx];
-                                if (seg) {
-                                    seg.source = { data, fileName };
-                                }
-                            });
-                            render();
-                        },
-                        () => {
-                            commit((cs) => {
-                                const seg =
-                                    cs[clipIdx]?.audioSegments?.[segIdx];
-                                if (seg) {
-                                    seg.source = null;
-                                }
-                            });
-                            render();
-                        },
-                    ),
-                );
-            }
-
-            const startInput = buildClampedNumber({
-                key: `seg-${segIdx}-start`,
-                value: segment.startSeconds,
-                min: 0,
-                max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
-                step: AUDIO_SEGMENT_STEP,
-                readBack: (cs) =>
-                    cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
-                mutate: (cs, value) => {
-                    const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                    if (seg) {
-                        const next = clampSegment(value, seg.lengthSeconds);
-                        seg.startSeconds = next.start;
-                        seg.lengthSeconds = next.length;
-                    }
-                },
-            });
-            fields.appendChild(buildField("Start (s)", startInput));
-
-            const trimInput = buildNumber(
-                segment.trimStartSeconds,
-                0,
-                CLIP_DURATION_MAX,
-                AUDIO_SEGMENT_STEP,
-                (value) => {
-                    debouncedCommit(`seg-${segIdx}-trim`, (cs) => {
-                        const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                        if (seg) {
-                            seg.trimStartSeconds = Math.max(
-                                0,
-                                Math.round(value * 10) / 10,
-                            );
-                        }
-                    });
-                },
-            );
-            trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
-            fields.appendChild(buildField("Trim start (s)", trimInput));
-
-            const lengthInput = buildClampedNumber({
-                key: `seg-${segIdx}-length`,
-                value: segment.lengthSeconds,
-                min: AUDIO_SEGMENT_MIN_LENGTH,
-                max: clipDur,
-                step: AUDIO_SEGMENT_STEP,
-                readBack: (cs) =>
-                    cs[clipIdx]?.audioSegments?.[segIdx]?.lengthSeconds ?? null,
-                mutate: (cs, value) => {
-                    const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                    if (seg) {
-                        const next = clampSegment(seg.startSeconds, value);
-                        seg.startSeconds = next.start;
-                        seg.lengthSeconds = next.length;
-                    }
-                },
-            });
-            fields.appendChild(buildField("Length (s)", lengthInput));
-            body.appendChild(row);
-        });
-
-        const note = document.createElement("p");
-        note.className = "vst-detail-note";
-        note.textContent =
-            "Overlaid additively over the base audio; overlapping segments mix together.";
-        body.appendChild(note);
-
-        return wrapForm(GROUP_AUDIOSEG, body);
-    };
-
-    // --- prompt editors ---------------------------------------------------
-
-    const buildPromptMajorBody = (
-        sel: Extract<TimelineSelection, { kind: "prompt-major" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const { clipIdx } = sel;
-        const body = document.createElement("div");
-        body.className = "vst-detail-form-body vst-detail-prompt-body";
-        body.appendChild(
-            buildTextarea(
-                clips[clipIdx].prompt ?? "",
-                "Clip prompt (blank inherits the global prompt)…",
-                "prompt-major",
-                (value) => {
-                    debouncedCommit("prompt-major", (cs) => {
-                        const c = cs[clipIdx];
-                        if (c) {
-                            c.prompt = value.trim();
-                        }
-                    });
-                },
-            ),
-        );
-        return wrapForm(GROUP_PROMPTMAJOR, body);
-    };
-
-    // The relay panel lists EVERY minor prompt window of the clip, stacked. The
-    // selected window is highlighted and (on a selection change) scrolled into
-    // view and focused; focusing another window's textarea re-points the
-    // selection so the timeline highlight follows without disrupting typing.
-    const buildPromptMinorBody = (
-        sel: Extract<TimelineSelection, { kind: "prompt-minor" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const { clipIdx, windowIdx } = sel;
-        const clip = clips[clipIdx];
-        const windows = clip?.promptWindows ?? [];
-        const clipDur = Math.max(
-            PROMPT_WINDOW_MIN_DURATION,
-            clip?.duration || 0,
-        );
-        const body = document.createElement("div");
-        body.className =
-            "vst-detail-form-body vst-detail-prompt-body vst-detail-minor-body";
-
-        windows.forEach((w, idx) => {
-            const row = document.createElement("div");
-            row.className = "vst-detail-minor-window";
-            row.setAttribute("data-vst-minor-window", `${idx}`);
-            if (idx === windowIdx) {
-                row.classList.add("vst-detail-minor-active");
-            }
-
-            const head = document.createElement("div");
-            head.className = "vst-detail-minor-head";
-            const title = document.createElement("span");
-            title.className = "vst-detail-minor-title";
-            title.textContent = `W${idx + 1}`;
-            const del = document.createElement("button");
-            del.type = "button";
-            del.className =
-                "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-minor-delete";
-            del.textContent = "Delete";
-            del.title = "Delete this prompt window";
-            del.addEventListener("click", (event) => {
-                event.preventDefault();
-                deleteWindowEntry(clipIdx, idx);
-            });
-            head.append(title, del);
-            row.appendChild(head);
-
-            // Begin/end are editable, reusing the timeline's edge-resize clamp:
-            // begin holds the end fixed, end holds the begin fixed, both stay in
-            // the clip, keep a minimum duration, and can't cross a neighbouring
-            // window (applyPromptWindowBegin/End). The inputs' min/max are the
-            // SAME neighbour-aware intervals, so spinner arrows stop AT the
-            // neighbour instead of running past and snapping back on commit.
-            // Distinct pending keys per edge per window; the commit repaints the
-            // on-track segment.
-            const range = document.createElement("div");
-            range.className = "vst-detail-minor-range";
-            const bounds = clip ? promptWindowNeighborBounds(clip, idx) : null;
-
-            // The browser's number spinner steps on a grid anchored at the
-            // `min` attribute. A min of 0.25 puts whole-tenth values OFF the
-            // 0.1 grid, so a down-spin snaps to x.95 — which roundSeconds
-            // (half-up) rounds straight back to the original value: END could
-            // never decrease. Keep the attrs ON the 0.1 grid (min rounded up,
-            // max rounded down); the true 0.25-duration floor stays enforced
-            // by the commit clamp (applyPromptWindowBegin/End).
-            const gridCeil = (v: number): number => Math.ceil(v * 10) / 10;
-            const gridFloor = (v: number): number => Math.floor(v * 10) / 10;
-
-            const beginInput = buildClampedNumber({
-                key: `minor-${idx}-begin`,
-                value: roundToTenth(w.start),
-                min: bounds?.beginMin ?? 0,
-                max: gridFloor(
-                    Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION),
-                ),
-                step: 0.1,
-                readBack: (cs) => {
-                    const win = cs[clipIdx]?.promptWindows?.[idx];
-                    return win ? roundToTenth(win.start) : null;
-                },
-                mutate: (cs, value) => {
-                    const c = cs[clipIdx];
-                    if (c) {
-                        applyPromptWindowBegin(c, idx, value);
-                    }
-                },
-            });
-            range.appendChild(buildField("Begin (s)", beginInput));
-
-            const endInput = buildClampedNumber({
-                key: `minor-${idx}-end`,
-                value: roundToTenth(w.start + w.duration),
-                min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
-                max: bounds?.endMax ?? clipDur,
-                step: 0.1,
-                readBack: (cs) => {
-                    const win = cs[clipIdx]?.promptWindows?.[idx];
-                    return win ? roundToTenth(win.start + win.duration) : null;
-                },
-                mutate: (cs, value) => {
-                    const c = cs[clipIdx];
-                    if (c) {
-                        applyPromptWindowEnd(c, idx, value);
-                    }
-                },
-            });
-            range.appendChild(buildField("End (s)", endInput));
-            row.appendChild(range);
-
-            const editor = buildTextarea(
-                w.prompt ?? "",
-                "Minor prompt for this window…",
-                `minor-${idx}`,
-                (value) => {
-                    debouncedCommit(`minor-${idx}`, (cs) => {
-                        const win = cs[clipIdx]?.promptWindows?.[idx];
-                        if (win) {
-                            win.prompt = value.trim();
-                        }
-                    });
-                },
-            );
-            // Focusing this window's editor makes it the active selection so the
-            // timeline highlight follows. setSelection no-ops on an identical
-            // selection, so this is a no-op while typing in the already-selected
-            // window and never interrupts the caret.
-            editor.addEventListener("focus", () => {
-                setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
-            });
-            row.appendChild(editor);
-            body.appendChild(row);
-        });
-
-        return wrapForm(GROUP_PROMPTMINOR, body);
-    };
-
-    // --- boundary (seam) editor -------------------------------------------
-
-    const formatOverlapSeconds = (frames: number, fps: number): string =>
-        `${(frames / Math.max(1, fps)).toFixed(2)}s`;
-
-    const buildBoundaryBody = (
-        sel: Extract<TimelineSelection, { kind: "boundary" }>,
-        clips: Clip[],
-    ): HTMLElement => {
-        const { leftClipIdx } = sel;
-        const body = document.createElement("div");
-        body.className = "vst-detail-form-body vst-detail-boundary";
-        const clip = clips[leftClipIdx];
-        const value: BoundaryOut = clip?.boundaryOut ?? "cut";
-        const state = getState();
-        const fps = state.fps > 0 ? Math.round(state.fps) : 24;
-
-        const joinSpecs: OptionSpec[] = (
-            ["cut", "continue", "crossfade"] as BoundaryOut[]
-        ).map((mode) => ({
-            value: mode,
-            label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`,
-        }));
-        const select = buildOptionSelect(joinSpecs, value, (next) => {
-            commit((cs) => {
-                const c = cs[leftClipIdx];
-                if (c) {
-                    c.boundaryOut = (next as BoundaryOut) ?? "cut";
-                }
-            });
-            render();
-        });
-        body.appendChild(
-            buildField(
-                `Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
-                select,
-            ),
-        );
-
-        const info = document.createElement("div");
-        info.className = "vst-boundary-info";
-        if (value === "cut") {
-            info.textContent =
-                "Hard cut — clips are concatenated with no overlap.";
-        } else if (value === "continue") {
-            info.textContent =
-                `Continue — 1 frame (~${formatOverlapSeconds(1, fps)}) overlap. ` +
-                "The next clip generates from this clip's final frame and the merge collapses the duplicated seam frame.";
-        } else {
-            const plan: BoundaryPlan = crossfadePlanForClips(clips, fps);
-            const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
-            if (plan.fallback || overlapFrames <= 0) {
-                info.classList.add("vst-boundary-warn");
-                info.textContent =
-                    "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
-            } else {
-                info.textContent =
-                    `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} ` +
-                    `(~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
-            }
-        }
-        body.appendChild(info);
-
-        if (value !== "cut") {
-            const note = document.createElement("div");
-            note.className = "vst-boundary-note";
-            note.textContent =
-                "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
-            body.appendChild(note);
-        }
-        return wrapForm(GROUP_BOUNDARY, body);
-    };
-
-    // --- timeline settings (none selection) -------------------------------
-
-    const buildSettingsBody = (): HTMLElement => {
-        const state = getState();
-        const defaults = getRootDefaults();
-        const core = {
-            width: defaults.width,
-            height: defaults.height,
-            fps: defaults.fps,
-        };
-        const defaultMode = !state.dimsExplicit
-            ? SETTINGS_INHERIT
-            : (matchPresetKey(state.width, state.height) ?? SETTINGS_CUSTOM);
-        const mode = settingsMode ?? defaultMode;
-        const isCustom = mode === SETTINGS_CUSTOM;
-        const displayed =
-            mode === SETTINGS_CUSTOM
-                ? {
-                      width: clampDimension(state.width),
-                      height: clampDimension(state.height),
-                  }
-                : mode === SETTINGS_INHERIT
-                  ? { width: core.width, height: core.height }
-                  : (presetDimensions(mode) ?? {
-                        width: clampDimension(state.width),
-                        height: clampDimension(state.height),
-                    });
-
-        const body = document.createElement("div");
-        body.className = "vst-detail-form-body vst-detail-settings";
-
-        const resSpecs: OptionSpec[] = [
-            {
-                value: SETTINGS_INHERIT,
-                label: `Use image resolution (${core.width}×${core.height})`,
-            },
-            ...DIMENSION_PRESET_KEYS.map((key) => ({
-                value: key,
-                label: key.replace("x", " × "),
-            })),
-            { value: SETTINGS_CUSTOM, label: "Custom" },
-        ];
-        const resSelect = buildOptionSelect(resSpecs, mode, (value) => {
-            settingsMode = value;
-            commitState((next) => {
-                if (value === SETTINGS_INHERIT) {
-                    next.dimsExplicit = false;
-                } else if (value === SETTINGS_CUSTOM) {
-                    next.dimsExplicit = true;
-                    next.width = clampDimension(displayed.width);
-                    next.height = clampDimension(displayed.height);
-                } else {
-                    const dims = presetDimensions(value);
-                    if (dims) {
-                        next.dimsExplicit = true;
-                        next.width = dims.width;
-                        next.height = dims.height;
-                    }
-                }
-            });
-            render();
-        });
-        body.appendChild(buildField("Resolution", resSelect));
-
-        const widthInput = buildNumber(
-            displayed.width,
-            ROOT_DIMENSION_MIN,
-            ROOT_DIMENSION_MAX,
-            ROOT_DIMENSION_STEP,
-            (value) => {
-                debouncedCommitState("settings-width", (next) => {
-                    next.dimsExplicit = true;
-                    next.width = clampDimension(value);
-                });
-            },
-        );
-        widthInput.classList.add("vst-settings-num");
-        widthInput.disabled = !isCustom;
-        widthInput.setAttribute("data-vst-focus-key", "settings-width");
-
-        const heightInput = buildNumber(
-            displayed.height,
-            ROOT_DIMENSION_MIN,
-            ROOT_DIMENSION_MAX,
-            ROOT_DIMENSION_STEP,
-            (value) => {
-                debouncedCommitState("settings-height", (next) => {
-                    next.dimsExplicit = true;
-                    next.height = clampDimension(value);
-                });
-            },
-        );
-        heightInput.classList.add("vst-settings-num");
-        heightInput.disabled = !isCustom;
-        heightInput.setAttribute("data-vst-focus-key", "settings-height");
-
-        // Width and Height share one "Dimensions" row (W × H) to keep the
-        // wrapping settings flow dense.
-        const dimsPair = document.createElement("div");
-        dimsPair.className = "vst-settings-dims";
-        const dimsSep = document.createElement("span");
-        dimsSep.className = "vst-settings-dims-sep";
-        dimsSep.textContent = "×";
-        dimsPair.append(widthInput, dimsSep, heightInput);
-        const dimsField = buildField("Dimensions", dimsPair);
-        if (!isCustom) {
-            dimsField.classList.add("vst-audio-disabled");
-        }
-        body.appendChild(dimsField);
-
-        const badges = document.createElement("div");
-        badges.className = "vst-settings-badges";
-        if (mode !== SETTINGS_CUSTOM && mode !== SETTINGS_INHERIT) {
-            const els = presetBadgeElements(mode);
-            if (els.length > 0) {
-                badges.append(...els);
-            }
-        }
-        badges.hidden = badges.childElementCount === 0;
-        body.appendChild(badges);
-
-        const fpsRow = buildCheckbox(
-            "Custom FPS",
-            state.fpsExplicit === true,
-            (value) => {
-                commitState((next) => {
-                    next.fpsExplicit = value;
-                    if (value) {
-                        next.fps = clampFps(next.fps);
-                    }
-                });
-                render();
-            },
-        );
-        body.appendChild(fpsRow);
-
-        const fpsInput = buildNumber(
-            state.fpsExplicit ? clampFps(state.fps) : core.fps,
-            ROOT_FPS_MIN,
-            ROOT_FPS_MAX,
-            1,
-            (value) => {
-                debouncedCommitState("settings-fps", (next) => {
-                    next.fpsExplicit = true;
-                    next.fps = clampFps(value);
-                });
-            },
-        );
-        fpsInput.classList.add("vst-settings-num");
-        fpsInput.disabled = state.fpsExplicit !== true;
-        fpsInput.setAttribute("data-vst-focus-key", "settings-fps");
-        const fpsField = buildField("FPS", fpsInput);
-        if (state.fpsExplicit !== true) {
-            fpsField.classList.add("vst-audio-disabled");
-        }
-        body.appendChild(fpsField);
-        return wrapForm(GROUP_SETTINGS, body);
+    // The commit pipeline, structural ops and closure-state accessors each
+    // panel builder needs, passed explicitly instead of captured. `render`
+    // (declared below) is forwarded lazily so it resolves at call time.
+    const ctx: DetailStripContext = {
+        commit,
+        commitState,
+        debouncedCommit,
+        debouncedCommitState,
+        buildClampedNumber,
+        structuralCommit,
+        render: () => render(),
+        deleteRefEntry,
+        deleteWindowEntry,
+        createRetake,
+        removeRetake,
+        addAudioSegment,
+        removeAudioSegment,
+        addStage,
+        deleteStage,
+        selectStage,
+        getBoundBody: () => boundBody,
+        getDockEl: () => dockEl,
+        getSettingsMode: () => settingsMode,
+        setSettingsMode: (mode) => {
+            settingsMode = mode;
+        },
     };
 
     const buildBody = (sel: TimelineSelection, clips: Clip[]): HTMLElement => {
         switch (sel.kind) {
             case "clip":
-                return buildClipBody(sel, clips);
+                return buildClipBody(ctx, sel, clips);
             case "ref":
-                return buildRefBody(sel, clips);
+                return buildRefBody(ctx, sel, clips);
             case "audio":
-                return buildAudioBody(sel, clips);
+                return buildAudioBody(ctx, sel, clips);
             case "audio-segment":
-                return buildAudioSegmentBody(sel, clips);
+                return buildAudioSegmentBody(ctx, sel, clips);
             case "prompt-major":
-                return buildPromptMajorBody(sel, clips);
+                return buildPromptMajorBody(ctx, sel, clips);
             case "prompt-minor":
-                return buildPromptMinorBody(sel, clips);
+                return buildPromptMinorBody(ctx, sel, clips);
             case "retake":
                 // Retake editing lives in the clip panel (like Stages): a
                 // retake selection shows the owning clip's panel, whose Retake
                 // section carries the same "retake-*" focus keys.
                 return buildClipBody(
+                    ctx,
                     { kind: "clip", clipIdx: sel.clipIdx, stageIdx: 0 },
                     clips,
                 );
             case "boundary":
-                return buildBoundaryBody(sel, clips);
+                return buildBoundaryBody(ctx, sel, clips);
             default:
-                return buildSettingsBody();
+                return buildSettingsBody(ctx);
         }
     };
 
@@ -3370,7 +1356,6 @@ export const createTimelineDetailStrip = (
         body.addEventListener("keydown", onKeyDownCapture, true);
         // Escape-clears-selection lives on the dock (the render host).
         dock.addEventListener("keydown", onStripKeyDown);
-        // Flush-on-blur-out and live-number-change flushing (see handlers).
         dock.addEventListener("focusout", onDockFocusOut);
         dock.addEventListener("focusin", onDockFocusIn);
         dock.addEventListener("change", onDockChange);

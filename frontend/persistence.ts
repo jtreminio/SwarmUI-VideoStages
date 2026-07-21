@@ -1,6 +1,7 @@
 import { assignMissingHues } from "./clipColor";
 import { ROOT_DIMENSION_MIN, ROOT_FPS_MIN } from "./constants";
 import { videoStagesDebugLog } from "./debugLog";
+import { utils } from "./hostDom";
 import { normalizeClip } from "./normalization";
 import { parseClipPrompts } from "./promptSegments";
 import {
@@ -24,7 +25,7 @@ import {
 } from "./swarmInputs";
 import type { Clip, StoredClip, VideoStagesConfig } from "./types";
 import { applyUiState, saveUiState } from "./uiState";
-import { isRecord, utils } from "./utils";
+import { isRecord } from "./utils";
 
 type InheritedDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
 type RootDims = Pick<

@@ -1,6 +1,7 @@
 import type { GestureRouter, GestureSession } from "./gestureRouter";
 import { getClips, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
+import { getSelectedClipIndex, getSelection, setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
 import { applyClipDurationResize, pxToDuration } from "./timelineEdit";
 import {
@@ -10,9 +11,12 @@ import {
     isNoOpMove,
     moveItem,
 } from "./timelineReorder";
-import { DEFAULT_PX_PER_SECOND } from "./timelineView";
-import { currentTimelineFps } from "./trackDomUtils";
-import { getSelectedClipIndex, getSelection, setSelection } from "./uiState";
+import {
+    commitClipMutation,
+    currentTimelineFps,
+    livePxPerSecond,
+    parseIntAttr,
+} from "./trackDomUtils";
 
 const REGION_SELECTOR = ".vst-region[data-clip-idx]";
 const REGION_ACTION_SELECTOR = "[data-vst-region-action]";
@@ -29,11 +33,6 @@ const DRAG_THRESHOLD_PX = 5;
 const MIN_RESIZE_WIDTH_PX = 24;
 const REGION_DRAGGING_CLASS = "vst-region-dragging";
 
-export const livePxPerSecond = (body: HTMLElement): number => {
-    const pps = Number.parseFloat(body.dataset.vstPps ?? "");
-    return Number.isFinite(pps) && pps > 0 ? pps : DEFAULT_PX_PER_SECOND;
-};
-
 export const resolveSelectedIndex = (
     selectedIndex: number | null,
     clipCount: number,
@@ -49,25 +48,13 @@ export const resolveSelectedIndex = (
     return selectedIndex;
 };
 
-export const parseClipIdx = (el: Element | null): number | null => {
-    if (!el) {
-        return null;
-    }
-    const raw = el.getAttribute("data-clip-idx");
-    if (raw === null) {
-        return null;
-    }
-    const idx = Number.parseInt(raw, 10);
-    return Number.isInteger(idx) && idx >= 0 ? idx : null;
-};
-
 const shiftClipsAfter = (
     body: HTMLElement,
     idx: number,
     deltaPx: number,
 ): void => {
     for (const el of body.querySelectorAll<HTMLElement>(CLIP_SHIFT_SELECTOR)) {
-        const elIdx = parseClipIdx(el);
+        const elIdx = parseIntAttr(el, "data-clip-idx");
         if (elIdx !== null && elIdx > idx) {
             el.style.transform =
                 deltaPx !== 0 ? `translateX(${deltaPx}px)` : "";
@@ -91,11 +78,9 @@ export interface TimelineLinking {
 export const createTimelineLinking = (): TimelineLinking => {
     let attachedBody: HTMLElement | null = null;
 
-    // The clip index for the currently selected clip (any clip-bound
-    // selection kind), or null. Backed by the shared uiState selection.
+    // Any clip-bound selection kind, or null. Backed by shared uiState selection.
     const selectedClip = (): number | null => getSelectedClipIndex();
 
-    // Stage index to keep when re-selecting a clip we already have open.
     const stageForClip = (clipIdx: number): number => {
         const sel = getSelection();
         return sel.kind === "clip" && sel.clipIdx === clipIdx
@@ -134,7 +119,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         if (actionButton) {
             event.stopPropagation();
             const actionRegion = actionButton.closest(REGION_SELECTOR);
-            const actionIdx = parseClipIdx(actionRegion);
+            const actionIdx = parseIntAttr(actionRegion, "data-clip-idx");
             if (actionIdx === null) {
                 return;
             }
@@ -145,7 +130,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             return;
         }
         const region = target.closest(REGION_SELECTOR);
-        const idx = parseClipIdx(region);
+        const idx = parseIntAttr(region, "data-clip-idx");
         if (idx === null) {
             return;
         }
@@ -255,33 +240,37 @@ export const createTimelineLinking = (): TimelineLinking => {
             },
             onCommit: (ctx) => {
                 const width = ctx.event.clientX - state.startLeftPx;
-                let committed = false;
-                if (readStateToken() === state.sourceJson) {
-                    const clips = getClips();
-                    if (
-                        state.idx >= 0 &&
-                        state.idx < clips.length &&
-                        !clips[state.idx].clipLengthFromAudio &&
-                        !clips[state.idx].clipLengthFromControlNet
-                    ) {
+                const committed = commitClipMutation(
+                    state.sourceJson,
+                    "linking",
+                    (clips) => {
+                        const clip = clips[state.idx];
+                        if (
+                            state.idx < 0 ||
+                            state.idx >= clips.length ||
+                            clip.clipLengthFromAudio ||
+                            clip.clipLengthFromControlNet
+                        ) {
+                            return null;
+                        }
                         const newDuration = pxToDuration(
                             width,
                             livePxPerSecond(body),
                             currentTimelineFps(),
                         );
                         if (
-                            applyClipDurationResize(
-                                clips[state.idx],
+                            !applyClipDurationResize(
+                                clip,
                                 newDuration,
                                 getRootDefaults,
                             )
                         ) {
-                            selectClip(state.idx, stageForClip(state.idx));
-                            saveClips(clips, { origin: "linking" });
-                            committed = true;
+                            return null;
                         }
-                    }
-                }
+                        selectClip(state.idx, stageForClip(state.idx));
+                        return clips;
+                    },
+                );
                 if (committed) {
                     // Keep the preview width/shifts; the save's re-render
                     // replaces them with the real layout.
@@ -336,17 +325,13 @@ export const createTimelineLinking = (): TimelineLinking => {
                     markSelection(body);
                     return;
                 }
-                if (readStateToken() !== state.sourceJson) {
-                    return;
-                }
-                const clips = getClips();
-                if (from < 0 || from >= clips.length) {
-                    return;
-                }
-                const destIdx = finalIndexAfterMove(from, gap);
-                selectClip(destIdx, stageForClip(from));
-                saveClips(moveItem(clips, from, gap), {
-                    origin: "linking",
+                commitClipMutation(state.sourceJson, "linking", (clips) => {
+                    if (from < 0 || from >= clips.length) {
+                        return null;
+                    }
+                    const destIdx = finalIndexAfterMove(from, gap);
+                    selectClip(destIdx, stageForClip(from));
+                    return moveItem(clips, from, gap);
                 });
             },
             onCancel: cleanup,
@@ -372,7 +357,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
         if (resizeGrip) {
             const region = resizeGrip.closest(REGION_SELECTOR);
-            const idx = parseClipIdx(region);
+            const idx = parseIntAttr(region, "data-clip-idx");
             if (idx === null || !(region instanceof HTMLElement)) {
                 return null;
             }
@@ -387,7 +372,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             });
         }
         const target = me.target.closest(REGION_SELECTOR);
-        const idx = parseClipIdx(target);
+        const idx = parseIntAttr(target, "data-clip-idx");
         if (idx === null) {
             return null;
         }

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { getClips } from "./persistence";
+import { getSelection, resetSelectionForTests } from "./selection";
 import {
     createTimelineAudioTrack,
     type TimelineAudioTrack,
 } from "./timelineAudioTrack";
 import { computeRegionLayout, renderAudioTrackRow } from "./timelineView";
 import type { Clip } from "./types";
-import { getSelection, resetSelectionForTests } from "./uiState";
 
 const PPS = 44;
 
@@ -124,7 +124,6 @@ describe("renderAudioTrackRow (segment spans)", () => {
         const seg = segs[0] as HTMLElement;
         expect(seg.getAttribute("data-clip-idx")).toBe("0");
         expect(seg.getAttribute("data-seg-idx")).toBe("0");
-        // start 2/10 = 20%, length 4/10 = 40%.
         expect(seg.style.left).toBe("20%");
         expect(seg.style.width).toBe("40%");
         expect(seg.querySelector(".vst-audio-seg-resize-l")).not.toBeNull();

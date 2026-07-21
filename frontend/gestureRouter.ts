@@ -99,8 +99,7 @@ export const createGestureRouter = (): GestureRouter => {
     });
 
     const onMouseDown = (event: Event): void => {
-        // A fresh press voids any pending click swallow, exactly like the old
-        // per-module `suppressClick = false` at the top of each handler.
+        // A fresh press voids any pending click swallow.
         swallowNextClick = false;
         const me = event as MouseEvent;
         // An earlier capture listener on this body (the detail strip's chip
@@ -126,8 +125,7 @@ export const createGestureRouter = (): GestureRouter => {
                     startY: me.clientY,
                     active: (session.threshold ?? DEFAULT_THRESHOLD_PX) <= 0,
                 };
-                // No bubble handler may double-act on a claimed press
-                // (replaces the tracks' stopImmediatePropagation calls).
+                // Prevent any bubble handler from double-acting on this claimed press.
                 me.stopPropagation();
                 return;
             }

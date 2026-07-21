@@ -92,7 +92,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
     let lastGoodSerialized = "";
     const subscribers = new Set<StoreSubscriber>();
 
-    /** Today's getState read path: live param, else last-good, else empty. */
+    /** getState read path: live param, else last-good, else empty. */
     const parseCurrent = (): VideoStagesConfig => {
         const serialized = deps.readDataParam() || lastGoodSerialized;
         if (!serialized) {
@@ -120,9 +120,8 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         canonical = parseCurrent();
         cachedToken = token;
         if (syncedToken === null) {
-            // First read adopts the current carrier as the sync baseline —
-            // the same "start from whatever is there" the orchestrator's old
-            // refresh() did. Later reads never touch syncedToken.
+            // First read adopts the current carrier as the sync baseline.
+            // Later reads never touch syncedToken.
             syncedToken = token;
         }
         return canonical;

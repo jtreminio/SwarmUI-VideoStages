@@ -8,8 +8,10 @@ import { clipDurationOf } from "./trackDomUtils";
 import type { AudioSegment, Clip } from "./types";
 import { roundToTenth } from "./utils";
 import {
+    createDefaultOrDraggedSpan,
     createWindowTrack,
     type PressSpan,
+    resizeSpanEdge,
     type SpanGeom,
 } from "./windowTrack";
 
@@ -76,24 +78,20 @@ export const createTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack =>
                 Math.min(length, clipDur - segment.startSeconds),
             );
         },
-        resizeTarget: (clip, _segIdx, edge, press, deltaSec): SpanGeom => {
-            const clipDur = clipDurationOf(clip);
-            if (edge === "right") {
-                const end = clamp(
-                    press.start + press.length + deltaSec,
-                    press.start + AUDIO_SEGMENT_MIN_LENGTH,
-                    clipDur,
-                );
-                return { start: press.start, length: end - press.start };
-            }
-            const end = press.start + press.length;
-            const start = clamp(
-                press.start + deltaSec,
-                Math.min(0, end - AUDIO_SEGMENT_MIN_LENGTH),
-                end - AUDIO_SEGMENT_MIN_LENGTH,
-            );
-            return { start, length: end - start };
-        },
+        resizeTarget: (clip, _segIdx, edge, press, deltaSec): SpanGeom =>
+            // Left edge: trim follows, lower wall dips below 0 (un-trims further).
+            // Right edge: walled by clip end.
+            resizeSpanEdge(
+                edge,
+                press,
+                deltaSec,
+                AUDIO_SEGMENT_MIN_LENGTH,
+                Math.min(
+                    0,
+                    press.start + press.length - AUDIO_SEGMENT_MIN_LENGTH,
+                ),
+                clipDurationOf(clip),
+            ),
         writeResize: (clip, segIdx, edge, press, geom) => {
             const segment = segmentOf(clip, segIdx);
             if (!segment) {
@@ -111,35 +109,23 @@ export const createTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack =>
             segment.lengthSeconds = roundToTenth(geom.length);
         },
         createSpan: (clip, clipIdx, startSec, endSec) => {
-            const clipDur = clipDurationOf(clip);
-            if (clipDur < AUDIO_SEGMENT_MIN_LENGTH) {
-                return null;
-            }
-            let start: number;
-            let length: number;
-            if (endSec === null) {
-                length = Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDur);
-                start = clamp(startSec, 0, clipDur - length);
-            } else {
-                const a = clamp(Math.min(startSec, endSec), 0, clipDur);
-                const b = clamp(Math.max(startSec, endSec), 0, clipDur);
-                start = a;
-                length = Math.max(AUDIO_SEGMENT_MIN_LENGTH, b - a);
-                if (start + length > clipDur) {
-                    length = clipDur - start;
-                }
-            }
-            if (length < AUDIO_SEGMENT_MIN_LENGTH) {
+            const geom = createDefaultOrDraggedSpan(
+                startSec,
+                endSec,
+                0,
+                clipDurationOf(clip),
+                AUDIO_SEGMENT_MIN_LENGTH,
+                AUDIO_SEGMENT_DEFAULT_LENGTH,
+            );
+            if (!geom) {
                 return null;
             }
             const segment: AudioSegment = {
                 source: null,
-                startSeconds: roundToTenth(start),
+                startSeconds: roundToTenth(geom.start),
                 trimStartSeconds: 0,
-                lengthSeconds: roundToTenth(length),
+                lengthSeconds: roundToTenth(geom.length),
             };
-            // Appended, never sorted: the array index IS the lane, and lanes
-            // must not reshuffle as segments move around in time.
             const segments = [...(clip.audioSegments ?? []), segment];
             clip.audioSegments = segments;
             return {

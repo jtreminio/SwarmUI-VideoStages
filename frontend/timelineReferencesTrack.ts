@@ -10,18 +10,18 @@ import {
     getReferenceFrameMax,
     removeRefAt,
 } from "./normalization";
-import { getClips, saveClips } from "./persistence";
+import { getClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
+import { setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
 import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
 import {
+    commitClipMutation,
     currentTimelineFps,
     isActivateKey,
-    isStaleToken,
     parseIntAttr,
 } from "./trackDomUtils";
-import { setSelection } from "./uiState";
 
 const THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
 const LANE_SELECTOR = ".vst-refs-lane[data-vst-ref-add]";
@@ -82,27 +82,29 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         frame: number,
         sourceJson: string,
     ): void => {
-        if (isStaleToken(sourceJson)) {
-            return;
+        let newRefIdx = -1;
+        const saved = commitClipMutation(
+            sourceJson,
+            "references-track",
+            (clips) => {
+                const clip = clips[clipIdx];
+                if (!clip) {
+                    return null;
+                }
+                const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+                const ref = buildDefaultRef();
+                ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
+                appendRefToClip(clip, ref);
+                newRefIdx = clip.refs.length - 1;
+                return clips;
+            },
+        );
+        if (saved) {
+            // Open the new ref in the dock — after the save, so the rebuilt
+            // ref panel already contains its row (works even when another ref
+            // was selected: the same-panel path is a targeted highlight swap).
+            setSelection({ kind: "ref", clipIdx, refIdx: newRefIdx });
         }
-        const clips = getClips();
-        const clip = clips[clipIdx];
-        if (!clip) {
-            return;
-        }
-        const frameMax = getReferenceFrameMax(getRootDefaults, clip);
-        const ref = buildDefaultRef();
-        ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
-        appendRefToClip(clip, ref);
-        saveClips(clips, { origin: "references-track" });
-        // Open the new ref in the dock — after the save, so the rebuilt ref
-        // panel already contains its row (works even when another ref was
-        // selected: the same-panel path is a targeted highlight swap).
-        setSelection({
-            kind: "ref",
-            clipIdx,
-            refIdx: clip.refs.length - 1,
-        });
     };
 
     const deleteRef = (
@@ -110,15 +112,10 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         refIdx: number,
         sourceJson: string,
     ): void => {
-        if (isStaleToken(sourceJson)) {
-            return;
-        }
-        const clips = getClips();
-        const clip = clips[clipIdx];
-        if (!clip || !removeRefAt(clip, refIdx)) {
-            return;
-        }
-        saveClips(clips, { origin: "references-track" });
+        commitClipMutation(sourceJson, "references-track", (clips) => {
+            const clip = clips[clipIdx];
+            return clip && removeRefAt(clip, refIdx) ? clips : null;
+        });
     };
 
     const dragFrameAt = (state: RefDragState, clientX: number): number => {
@@ -163,18 +160,21 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         onCommit: (ctx) => {
             body.classList.remove(DRAGGING_CLASS);
             const newFrame = dragFrameAt(state, ctx.event.clientX);
-            const clips = getClips();
-            const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
-            if (
-                isStaleToken(state.sourceJson) ||
-                !ref ||
-                ref.frame === newFrame
-            ) {
+            const saved = commitClipMutation(
+                state.sourceJson,
+                "references-track",
+                (clips) => {
+                    const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
+                    if (!ref || ref.frame === newFrame) {
+                        return null;
+                    }
+                    ref.frame = newFrame;
+                    return clips;
+                },
+            );
+            if (!saved) {
                 restoreDragPreview(state);
-                return;
             }
-            ref.frame = newFrame;
-            saveClips(clips, { origin: "references-track" });
         },
         onTap: () => restoreDragPreview(state),
         onCancel: () => {

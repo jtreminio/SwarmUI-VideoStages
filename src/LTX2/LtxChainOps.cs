@@ -214,18 +214,12 @@ internal static class LtxChainOps
             return;
         }
 
-        bridge.Graph.RetargetConnections(
-            oldOutput,
+        SaveAnimationRetargeter.Retarget(
+            bridge,
+            save => save.Images.Connection == oldOutput,
             newOutput,
-            (node, input) => node is SwarmSaveAnimationWSNode && input.Name == "images");
-
-        foreach (ComfyNode downstream in bridge.Graph.FindDownstream(newOutput))
-        {
-            if (downstream is SwarmSaveAnimationWSNode)
-            {
-                bridge.SyncNode(downstream);
-            }
-        }
+            newAudio: null,
+            retargetAudio: false);
     }
 
     private static void ReplaceVideoDecode(

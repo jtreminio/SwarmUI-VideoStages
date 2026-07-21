@@ -19,7 +19,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     // Per-boundary overlap window in frames (0 = hard cut at that boundary). Crossfade boundaries share
     // one clamped window K (uniform K keeps the ramp mask reusable); a "continue" boundary is a fixed
     // 1-frame overlap that collapses the seam frame duplicated by generation-time continuity.
-    private sealed record CrossfadePlan(int[] BoundaryOverlap, int RemovedFrames);
+    internal sealed record CrossfadePlan(int[] BoundaryOverlap, int RemovedFrames);
 
     public void Apply(
         IReadOnlyList<WGNodeData> clipOutputsInOrder,
@@ -272,7 +272,9 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     /// frames collapse into one. Callers must only pass "continue" for boundaries where that conditioning
     /// was actually applied (StageSequenceRunner degrades unarmed ones to "cut").
     /// </summary>
-    private static CrossfadePlan ResolveCrossfadePlan(
+    // internal (not private): the cross-language crossfade-plan drift test (M1) pins this against the
+    // frontend boundaryPlan.crossfadePlanForClips mirror.
+    internal static CrossfadePlan ResolveCrossfadePlan(
         IReadOnlyList<WGNodeData> clips,
         IReadOnlyList<string> clipBoundaryOuts,
         bool allFramesKnown)
@@ -483,20 +485,12 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             return;
         }
 
-        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
-        {
-            if (save.Images.Connection is not INodeOutput existingImages
-                || !terminalKeys.Contains(OutputKey(existingImages)))
-            {
-                continue;
-            }
-
-            save.Images.ConnectToUntyped(images);
-            if (!save.Audio.TryConnectToUntyped(audio))
-            {
-                save.Audio.Clear();
-            }
-            bridge.SyncNode(save);
-        }
+        SaveAnimationRetargeter.Retarget(
+            bridge,
+            save => save.Images.Connection is INodeOutput existingImages
+                && terminalKeys.Contains(OutputKey(existingImages)),
+            images,
+            audio,
+            retargetAudio: true);
     }
 }

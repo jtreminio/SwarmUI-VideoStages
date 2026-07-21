@@ -18,12 +18,16 @@ import { IC_LORA_AUTO } from "./constants";
 import { resetIcLoraAutoDownloads } from "./icLoraAutoDownload";
 import * as persistence from "./persistence";
 import {
+    getSelection,
+    resetSelectionForTests,
+    setSelection,
+} from "./selection";
+import {
     createTimelineDetailStrip,
     type TimelineDetailStrip,
 } from "./timelineDetailStrip";
 import { renderTimeline } from "./timelineView";
 import type { Clip } from "./types";
-import { getSelection, resetSelectionForTests, setSelection } from "./uiState";
 
 interface StageFixture {
     model?: string;
@@ -286,7 +290,6 @@ describe("createTimelineDetailStrip", () => {
         expect(detail()).not.toBeNull();
         expect(crumbText()).toBe("Timeline settings");
         expect(detail()?.querySelector(".vst-detail-settings")).not.toBeNull();
-        // Resolution / Dimensions / FPS controls are present.
         const labels = Array.from(
             document.querySelectorAll<HTMLElement>(
                 ".vst-detail .vst-audio-field-label",
@@ -295,7 +298,6 @@ describe("createTimelineDetailStrip", () => {
         expect(labels).toEqual(
             expect.arrayContaining(["Resolution", "Dimensions", "FPS"]),
         );
-        // Width and Height inputs live side-by-side in the Dimensions pair.
         const dims = detail()?.querySelector<HTMLElement>(".vst-settings-dims");
         expect(dims).not.toBeNull();
         expect(dims?.querySelectorAll("input")).toHaveLength(2);
@@ -415,7 +417,6 @@ describe("createTimelineDetailStrip", () => {
             video: null,
             driveAudioRef: false,
         });
-        // The rebuilt panel shows the entry editor with a drive-video upload.
         expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();
         expect(controlNetLabels()).toContain("Drive Media");
     });
@@ -642,7 +643,6 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        // No preset yet: nothing to download, and the hint says so.
         expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
         expect(detail()?.textContent).toContain("[AUTO] needs a preset");
 
@@ -763,7 +763,6 @@ describe("createTimelineDetailStrip", () => {
         const steps = sliderNumberByLabel("Steps");
         steps.value = "14";
         steps.dispatchEvent(new Event("input", { bubbles: true }));
-        // Not written until the debounce window elapses.
         expect(saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         expect(saveSpy).toHaveBeenCalledTimes(1);
@@ -792,7 +791,6 @@ describe("createTimelineDetailStrip", () => {
         detail()?.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
         );
-        // "none" now renders the timeline settings panel.
         expect(crumbText()).toBe("Timeline settings");
         expect(getSelection().kind).toBe("none");
     });
@@ -856,7 +854,6 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].stages).toHaveLength(2);
         expect(activeRailLabel()).toBe("S1");
         expect(crumbText()).toBe("Clip 0 · S1");
-        // With two stages the Delete button is live.
         expect(
             document.querySelector<HTMLButtonElement>(
                 ".vst-detail-delete-stage",
@@ -1107,7 +1104,6 @@ describe("createTimelineDetailStrip", () => {
         expect(weight.getAttribute("data-vst-focus-key")).toBe("lora-0-weight");
         weight.value = "0.4";
         weight.dispatchEvent(new Event("input", { bubbles: true }));
-        // Not written until the debounce window elapses.
         expect(saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         expect(saveSpy).toHaveBeenCalledTimes(1);
@@ -1187,7 +1183,6 @@ describe("createTimelineDetailStrip", () => {
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
         expect(crumbText()).toBe("Clip 1 · S0");
 
-        // Remove clip 1 from the carrier, re-render the tracks + strip.
         const clips = persistence.getClips().slice(0, 1);
         persistence.saveClips(clips, { notifyDomChange: false });
         renderTimeline(body, persistence.getClips());
@@ -1195,8 +1190,6 @@ describe("createTimelineDetailStrip", () => {
         expect(getSelection().kind).toBe("none");
         expect(crumbText()).toBe("Timeline settings");
     });
-
-    // ---- Phase 2: ref / audio / prompt / settings editors ----------------
 
     const refRow = (idx: number): HTMLElement => {
         const row = document.querySelector<HTMLElement>(
@@ -1230,7 +1223,6 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 1 });
         expect(crumbText()).toBe("Ref 1 · Clip 0");
-        // Both refs are rendered, stacked; only the selected one is highlighted.
         expect(document.querySelectorAll(".vst-detail-ref-row")).toHaveLength(
             2,
         );
@@ -1355,7 +1347,6 @@ describe("createTimelineDetailStrip", () => {
         expect(Array.from(select.options).map((o) => o.value)).toContain(
             "ControlNet",
         );
-        // Clip Length from Audio is disabled for Native.
         expect(
             fieldByLabel("Clip Length from Audio").querySelector("input")
                 ?.disabled,
@@ -1375,7 +1366,6 @@ describe("createTimelineDetailStrip", () => {
         select.value = "Upload";
         select.dispatchEvent(new Event("change", { bubbles: true }));
         expect(savedClips(saveSpy)[0].audioSource).toBe("Upload");
-        // Now upload-only length gating is available.
         expect(
             fieldByLabel("Clip Length from Audio").querySelector("input")
                 ?.disabled,
@@ -1520,7 +1510,6 @@ describe("createTimelineDetailStrip", () => {
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
 
-        // Both segments render, stacked; only the selected one is highlighted.
         expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
             2,
         );
@@ -1530,7 +1519,6 @@ describe("createTimelineDetailStrip", () => {
         expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
             false,
         );
-        // Each row has its own Start field + per-row delete.
         expect(
             segRow(0).querySelector(".vst-detail-instance-delete"),
         ).not.toBeNull();
@@ -1631,7 +1619,6 @@ describe("createTimelineDetailStrip", () => {
         const segs = savedClips(saveSpy)[0].audioSegments;
         expect(segs).toHaveLength(1);
         expect(segs[0].startSeconds).toBe(1); // the surviving first segment
-        // Selection re-points to the surviving neighbour segment.
         expect(getSelection()).toEqual({
             kind: "audio-segment",
             clipIdx: 0,
@@ -1669,7 +1656,6 @@ describe("createTimelineDetailStrip", () => {
         if (!editor) {
             throw new Error("prompt textarea missing");
         }
-        // The caret is ready to type at the end of the existing text.
         expect(document.activeElement).toBe(editor);
         expect(editor.selectionStart).toBe(editor.value.length);
         expect(editor.selectionEnd).toBe(editor.value.length);
@@ -1751,7 +1737,6 @@ describe("createTimelineDetailStrip", () => {
         expect(rows.every((r) => r.querySelector(".vst-detail-delete"))).toBe(
             true,
         );
-        // Only the selected window is highlighted, and it is focused ready to type.
         expect(rows[1].classList.contains("vst-detail-minor-active")).toBe(
             true,
         );
@@ -1779,7 +1764,6 @@ describe("createTimelineDetailStrip", () => {
             windowIdx: 0,
         });
 
-        // Focusing window 1's editor updates the selection to window 1.
         minorEditor(1).focus();
         expect(getSelection()).toEqual({
             kind: "prompt-minor",
@@ -1849,7 +1833,6 @@ describe("createTimelineDetailStrip", () => {
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(savedClips(saveSpy)[0].promptWindows).toHaveLength(1);
         expect(savedClips(saveSpy)[0].promptWindows[0].prompt).toBe("keep");
-        // Selection re-points to the surviving neighbour window.
         expect(getSelection()).toEqual({
             kind: "prompt-minor",
             clipIdx: 0,
@@ -1976,7 +1959,6 @@ describe("createTimelineDetailStrip", () => {
         }
         rows[1].dispatchEvent(new MouseEvent("mouseenter"));
         expect(mark.classList.contains("vst-ref-hover")).toBe(true);
-        // The OTHER ref's mark is untouched.
         expect(
             body
                 .querySelector('.vst-refs-mark[data-ref-idx="0"]')
@@ -2101,7 +2083,6 @@ describe("createTimelineDetailStrip", () => {
             wireLiveRenders();
             setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
             const before = refRow(0).querySelector<HTMLSelectElement>("select");
-            // No upload row yet.
             expect(detail()?.querySelector(".vst-audio-upload")).toBeNull();
             const select = refRow(0).querySelector<HTMLSelectElement>("select");
             if (!select) {
@@ -2409,8 +2390,6 @@ describe("createTimelineDetailStrip", () => {
         expect(detailBody()).not.toBeNull();
     });
 
-    // ---- debounce coalescing / flush regression (no silent data loss) ----
-
     it("persists both fields when two debounced sliders change within one window", () => {
         setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
@@ -2421,7 +2400,6 @@ describe("createTimelineDetailStrip", () => {
         const cfg = sliderNumberByLabel("CFG Scale");
         cfg.value = "9";
         cfg.dispatchEvent(new Event("input", { bubbles: true }));
-        // Neither has been written yet.
         expect(saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         // A single coalesced write carries BOTH edits — no silent revert.
@@ -2461,8 +2439,6 @@ describe("createTimelineDetailStrip", () => {
         jest.advanceTimersByTime(200);
         expect(saveSpy).not.toHaveBeenCalled();
     });
-
-    // ---- slider-drag pointer latch (no mid-drag flush/rebuild) -----------
 
     describe("slider drag", () => {
         const rangeByLabel = (label: string): HTMLInputElement => {
@@ -2530,7 +2506,6 @@ describe("createTimelineDetailStrip", () => {
             pointer(range, "pointerup");
             expect(saveSpy).toHaveBeenCalledTimes(1);
             expect(savedClips(saveSpy)[0].stages[0].refStrengths[0]).toBe(0.4);
-            // No trailing timer re-writes after release.
             jest.advanceTimersByTime(1000);
             expect(saveSpy).toHaveBeenCalledTimes(1);
             jest.useRealTimers();
@@ -2573,8 +2548,6 @@ describe("createTimelineDetailStrip", () => {
             expect(removed).toContain("pointercancel");
         });
     });
-
-    // ---- left-dock host-convention input-group sections ------------------
 
     describe("dock groups & collapse", () => {
         const group = (key: string): HTMLElement | null =>
@@ -2630,7 +2603,6 @@ describe("createTimelineDetailStrip", () => {
             // The breadcrumb is the panel's one label; the group has no header.
             expect(crumbText()).toBe("Audio · Clip 0");
             expect(audio?.querySelector(".input-group-header")).toBeNull();
-            // Only one group in a single-panel body.
             expect(detail()?.querySelectorAll(".input-group")).toHaveLength(1);
         });
 
@@ -2669,7 +2641,6 @@ describe("createTimelineDetailStrip", () => {
             expect(detail()?.classList.contains("vst-detail-collapsed")).toBe(
                 true,
             );
-            // Collapsed hides the panel body entirely.
             expect(detailBody()).toBeNull();
         });
     });
@@ -2748,8 +2719,6 @@ describe("createTimelineDetailStrip", () => {
         });
     });
 
-    // ---- #1/#5: defer writes while a keyboard field is focused -----------
-
     describe("defer-while-typing", () => {
         const blurOutOfDock = (el: HTMLElement): void => {
             el.dispatchEvent(
@@ -2774,10 +2743,8 @@ describe("createTimelineDetailStrip", () => {
             editor.focus();
             editor.value = "typed while focused";
             editor.dispatchEvent(new Event("input", { bubbles: true }));
-            // Held past the debounce window: no save fires mid-typing.
             jest.advanceTimersByTime(1000);
             expect(saveSpy).not.toHaveBeenCalled();
-            // Blur out of the dock flushes exactly once.
             blurOutOfDock(editor);
             expect(saveSpy).toHaveBeenCalledTimes(1);
             expect(savedClips(saveSpy)[0].prompt).toBe("typed while focused");
@@ -2850,7 +2817,6 @@ describe("createTimelineDetailStrip", () => {
             editor.focus();
             editor.value = "edited then left";
             editor.dispatchEvent(new Event("input", { bubbles: true }));
-            // User tabs OUT of the dock (focusout, relatedTarget outside).
             blurOutOfDock(editor);
             // A later refresh/render must NOT yank focus back into the prompt.
             strip.render();
@@ -2886,7 +2852,6 @@ describe("createTimelineDetailStrip", () => {
             e0.focus();
             e0.value = "typing in zero";
             e0.dispatchEvent(new Event("input", { bubbles: true }));
-            // Focus moves to another dock field (window 1's editor).
             e0.dispatchEvent(
                 new FocusEvent("focusout", {
                     bubbles: true,
@@ -2927,12 +2892,9 @@ describe("createTimelineDetailStrip", () => {
             blurOutOfDock(editor);
             readCarrier();
             expect(saveSpy).toHaveBeenCalledTimes(1);
-            // The carrier already carries the typed prompt when it is read.
             expect(promptAtReadTime).toContain("landscape at dusk");
         });
     });
-
-    // ---- #3: scroll preservation + targeted no-rebuild moves -------------
 
     describe("scroll + targeted updates", () => {
         it("preserves dock-body scrollTop across a value-change render", () => {
@@ -2993,11 +2955,24 @@ describe("createTimelineDetailStrip", () => {
     // controls read full-width and left-aligned (never narrow or centered).
 
     describe("native widget markup + dock override (CSSOM probe)", () => {
-        const injectCss = (id: string, relPath: string[]): void => {
-            const css = fs.readFileSync(
-                path.join(__dirname, ...relPath),
-                "utf8",
-            );
+        // The main checkout reaches host wwwroot at ../../../wwwroot; inside a
+        // git worktree the extension is nested deeper, so walk up for it.
+        const wwwrootDir = ((): string => {
+            let dir = __dirname;
+            for (;;) {
+                const candidate = path.join(dir, "wwwroot");
+                if (fs.existsSync(candidate)) {
+                    return candidate;
+                }
+                const parent = path.dirname(dir);
+                if (parent === dir) {
+                    return path.resolve(__dirname, "..", "..", "..", "wwwroot");
+                }
+                dir = parent;
+            }
+        })();
+        const injectCss = (id: string, filePath: string): void => {
+            const css = fs.readFileSync(filePath, "utf8");
             const style = document.createElement("style");
             style.id = id;
             style.textContent = css;
@@ -3010,26 +2985,20 @@ describe("createTimelineDetailStrip", () => {
         // (padding + align-items:center) at a specificity that beat our
         // single-class wrappers undetected until it was probed.
         const injectHostCss = (): void => {
-            injectCss("vst-probe-host-css", [
-                "..",
-                "..",
-                "..",
-                "wwwroot",
-                "css",
-                "site.css",
-            ]);
-            injectCss("vst-probe-theme-css", [
-                "..",
-                "..",
-                "..",
-                "wwwroot",
-                "css",
-                "themes",
-                "modern.css",
-            ]);
+            injectCss(
+                "vst-probe-host-css",
+                path.join(wwwrootDir, "css", "site.css"),
+            );
+            injectCss(
+                "vst-probe-theme-css",
+                path.join(wwwrootDir, "css", "themes", "modern.css"),
+            );
         };
         const injectDockCss = (): void =>
-            injectCss("vst-probe-css", ["..", "Assets", "video-stages.css"]);
+            injectCss(
+                "vst-probe-css",
+                path.join(__dirname, "..", "Assets", "video-stages.css"),
+            );
 
         const computed = (el: Element): CSSStyleDeclaration =>
             window.getComputedStyle(el);
@@ -3058,7 +3027,6 @@ describe("createTimelineDetailStrip", () => {
 
         it("(a) emits native SwarmUI `.auto-input` widget markup for every field type", () => {
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
-            // Dropdown → native `.auto-dropdown` inside an `.auto-input`.
             const modelSelect = fieldByLabel("Model").querySelector("select");
             expect(modelSelect?.classList.contains("auto-dropdown")).toBe(true);
             const modelRow = fieldByLabel("Model");
@@ -3067,7 +3035,6 @@ describe("createTimelineDetailStrip", () => {
             expect(
                 modelRow.querySelector(".auto-input-name")?.textContent,
             ).toBe("Model");
-            // Number → native `.auto-number`.
             const durInput =
                 fieldByLabel("Duration (s)").querySelector("input");
             expect(durInput?.classList.contains("auto-number")).toBe(true);
@@ -3076,7 +3043,6 @@ describe("createTimelineDetailStrip", () => {
                     "auto-number-box",
                 ),
             ).toBe(true);
-            // Checkbox → native `.auto-checkbox` in an `.auto-checkbox-box`.
             const skipRow = document.querySelector<HTMLElement>(
                 ".vst-detail .vst-audio-field-check",
             );
@@ -3087,7 +3053,6 @@ describe("createTimelineDetailStrip", () => {
                     ?.classList.contains("auto-checkbox"),
             ).toBe(true);
 
-            // Prompt textarea → native `.auto-text.auto-text-block`.
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             const editor = document.querySelector<HTMLTextAreaElement>(
                 ".vst-detail .vst-prompt-editor",
@@ -3106,13 +3071,11 @@ describe("createTimelineDetailStrip", () => {
             if (name) {
                 expect(computed(name).textAlign).toBe("left");
             }
-            // Native controls span the column.
             for (const control of document.querySelectorAll(
                 ".vst-detail .auto-dropdown, .vst-detail .auto-number",
             )) {
                 expect(computed(control).width).toBe("100%");
             }
-            // Checkbox rows stay a centered horizontal row.
             const check = document.querySelector(
                 ".vst-detail .auto-checkbox-box",
             );
@@ -3152,7 +3115,6 @@ describe("createTimelineDetailStrip", () => {
                 if (!ta) {
                     return;
                 }
-                // The textarea is a full-width BLOCK (not inline-block).
                 expect(computed(ta).width).toBe("100%");
                 expect(computed(ta).display).not.toBe("inline");
                 expect(computed(ta).display).not.toBe("inline-block");

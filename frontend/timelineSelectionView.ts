@@ -1,4 +1,4 @@
-import { getSelection } from "./uiState";
+import { getSelection } from "./selection";
 
 const SELECTED = "vst-selected";
 const REGION_SELECTED = "vst-region-selected";

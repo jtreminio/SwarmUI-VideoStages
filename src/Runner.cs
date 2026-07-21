@@ -31,7 +31,7 @@ public static class Runner
             return;
         }
 
-        new ControlNetApplicator(g).CaptureCoreVideoControlNetPreprocessors();
+        new ControlNetCapture(g).CaptureCoreVideoControlNetPreprocessors();
     }
 
     public static void CaptureBase(WorkflowGenerator g)
@@ -87,18 +87,7 @@ public static class Runner
             return;
         }
 
-        StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
-        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff);
-        StageGuideMediaHelper stageGuideMediaHelper = new(g);
-        Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
-        LtxManager ltxManager = new(
-            g,
-            rootVideoStageHandoff,
-            rootVideoStageResizer,
-            stageGuideMediaHelper,
-            base2EditPublishedStageRefs);
-        ltxManager.ApplyRootAudioMaskDimensionsAfterNativeVideo();
+        BuildPipeline(g).LtxManager.ApplyRootAudioMaskDimensionsAfterNativeVideo();
     }
 
     public static void RunConfiguredStages(WorkflowGenerator g)
@@ -108,35 +97,25 @@ public static class Runner
             return;
         }
 
-        StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
-        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff);
-        StageGuideMediaHelper stageGuideMediaHelper = new(g);
+        Pipeline pipeline = BuildPipeline(g);
         AudioHandler audioHandler = new(g);
-        Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
         MultiClipParallelMerger multiClipParallelMerger = new(g);
-        LtxManager ltxManager = new(
-            g,
-            rootVideoStageHandoff,
-            rootVideoStageResizer,
-            stageGuideMediaHelper,
-            base2EditPublishedStageRefs);
-        StageRunner stageRunner = new(g, stageGuideMediaHelper, ltxManager);
+        StageRunner stageRunner = new(g, pipeline.GuideMediaHelper, pipeline.LtxManager);
         StageSequenceRunner stageSequenceRunner = new(
             g,
-            stageRefStore,
+            pipeline.StageRefStore,
             stageRunner,
-            base2EditPublishedStageRefs,
-            rootVideoStageHandoff,
-            rootVideoStageResizer,
+            pipeline.Base2Edit,
+            pipeline.Handoff,
+            pipeline.Resizer,
             multiClipParallelMerger,
-            ltxManager);
+            pipeline.LtxManager);
         VideoStagesCoordinator coordinator = new(
             g,
-            rootVideoStageHandoff,
+            pipeline.Handoff,
             stageSequenceRunner,
             audioHandler,
-            ltxManager);
+            pipeline.LtxManager);
         coordinator.RunConfiguredStages();
     }
 
@@ -148,25 +127,29 @@ public static class Runner
         bool matchVideoLengthToAudio = true,
         IReadOnlyList<(double Start, double End)> preserveWindows = null)
     {
-        StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
-        RootVideoStageResizer rootVideoStageResizer = new(g, rootVideoStageHandoff);
-        StageGuideMediaHelper stageGuideMediaHelper = new(g);
-        Base2EditPublishedStageRefs base2EditPublishedStageRefs = new(g);
-        LtxManager ltxManager = new(
-            g,
-            rootVideoStageHandoff,
-            rootVideoStageResizer,
-            stageGuideMediaHelper,
-            base2EditPublishedStageRefs);
-        return ltxManager.TryInjectAudio(audio, matchVideoLengthToAudio, preserveWindows);
+        return BuildPipeline(g).LtxManager.TryInjectAudio(audio, matchVideoLengthToAudio, preserveWindows);
     }
 
-    internal static RootVideoStageResizer GetRootVideoStageResizer(WorkflowGenerator g)
+    internal static RootVideoStageResizer GetRootVideoStageResizer(WorkflowGenerator g) =>
+        BuildPipeline(g).Resizer;
+
+    private readonly record struct Pipeline(
+        StageRefStore StageRefStore,
+        RootVideoStageHandoff Handoff,
+        RootVideoStageResizer Resizer,
+        StageGuideMediaHelper GuideMediaHelper,
+        Base2EditPublishedStageRefs Base2Edit,
+        LtxManager LtxManager);
+
+    private static Pipeline BuildPipeline(WorkflowGenerator g)
     {
         StageRefStore stageRefStore = new(g);
-        RootVideoStageHandoff rootVideoStageHandoff = new(g, stageRefStore);
-        return new RootVideoStageResizer(g, rootVideoStageHandoff);
+        RootVideoStageHandoff handoff = new(g, stageRefStore);
+        RootVideoStageResizer resizer = new(g, handoff);
+        StageGuideMediaHelper guideMediaHelper = new(g);
+        Base2EditPublishedStageRefs base2Edit = new(g);
+        LtxManager ltxManager = new(g, handoff, resizer, guideMediaHelper, base2Edit);
+        return new Pipeline(stageRefStore, handoff, resizer, guideMediaHelper, base2Edit, ltxManager);
     }
 
     private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsActive(g);

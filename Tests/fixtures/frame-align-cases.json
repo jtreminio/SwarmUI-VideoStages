@@ -1,0 +1,11 @@
+[
+  { "durationSeconds": 0, "fps": 24, "expectedFrames": 1 },
+  { "durationSeconds": 0.5, "fps": 24, "expectedFrames": 17 },
+  { "durationSeconds": 1, "fps": 24, "expectedFrames": 25 },
+  { "durationSeconds": 2, "fps": 24, "expectedFrames": 49 },
+  { "durationSeconds": 1.05, "fps": 24, "expectedFrames": 33 },
+  { "durationSeconds": 0.33, "fps": 30, "expectedFrames": 17 },
+  { "durationSeconds": 3, "fps": 8, "expectedFrames": 25 },
+  { "durationSeconds": 1, "fps": 1, "expectedFrames": 9 },
+  { "durationSeconds": 0.001, "fps": 24, "expectedFrames": 9 }
+]

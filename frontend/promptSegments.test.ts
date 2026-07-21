@@ -160,7 +160,6 @@ describe("serializeClipPrompts", () => {
     });
 
     it("drops owned tags for clips that no longer exist (deletion renumber)", () => {
-        // Old prompt had two clips; state now has one (old clip 1 became clip 0).
         const out = serializeClipPrompts(
             "<videoclip[0]>fox<videoclip[1]>bear",
             [clip("bear")],
@@ -203,7 +202,6 @@ describe("round-trip: serialize -> parse is symmetric", () => {
         const initial = "cinematic <videoclip[0,seed]:42>";
         const serialized = serializeClipPrompts(initial, clips);
 
-        // Window ranges are authored in seconds.
         expect(serialized).toContain("<videoclip[0]:1.5-4>snow flurry");
         // Override tag preserved verbatim.
         expect(serialized).toContain("<videoclip[0,seed]:42>");
@@ -216,7 +214,6 @@ describe("round-trip: serialize -> parse is symmetric", () => {
         ]);
         expect(windows.get(1)).toBeUndefined();
 
-        // Re-serializing from the parsed state is stable.
         const reparsedClips: ClipTextInput[] = [
             clip(sections.get(0) ?? "", windows.get(0) ?? []),
             clip(sections.get(1) ?? "", windows.get(1) ?? []),

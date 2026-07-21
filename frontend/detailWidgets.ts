@@ -2,11 +2,6 @@ import { clamp } from "./constants";
 
 let sliderSeq = 0;
 
-/**
- * Shared parse→clamp→onChange wiring for a numeric input: live `input` events
- * commit without rewriting the field (so typing isn't fought), `change`
- * normalizes the display back to the clamped value.
- */
 const wireNumericInput = (
     input: HTMLInputElement,
     fallback: number,
@@ -30,32 +25,19 @@ const wireNumericInput = (
     input.addEventListener("change", () => apply(true));
 };
 
-/**
- * Pick the host `.auto-*-box` wrapper modifier that matches a control, so the
- * field row reads as a real SwarmUI `.auto-input` widget. Composite controls
- * (dims pair, sliders) carry no native control class and get no box modifier.
- */
 const boxClassFor = (control: HTMLElement): string | null => {
-    const cl = control.classList;
-    if (cl.contains("auto-dropdown")) {
+    if (control.classList.contains("auto-dropdown")) {
         return "auto-dropdown-box";
     }
-    if (cl.contains("auto-number")) {
+    if (control.classList.contains("auto-number")) {
         return "auto-number-box";
     }
-    if (cl.contains("auto-text")) {
+    if (control.classList.contains("auto-text")) {
         return "auto-text-box";
     }
     return null;
 };
 
-/**
- * Label + control row in SwarmUI's native `.auto-input` vocabulary: the wrapper
- * is `.auto-input` (host-styled), the label is `.auto-input-name` inside a
- * `<label>`, and the control keeps its native `.auto-*` class. The legacy
- * `.vst-audio-field` / `.vst-audio-field-label` classes ride along as hooks for
- * the focus/pending machinery and the tests — they no longer carry styling.
- */
 export const buildField = (
     label: string,
     control: HTMLElement,
@@ -108,7 +90,6 @@ export const buildOptionSelect = (
     return select;
 };
 
-/** Parallel-arrays convenience form of buildOptionSelect. */
 export const buildSelect = (
     values: string[],
     labels: string[],
@@ -319,17 +300,99 @@ export const buildInstanceRow = (
     const fields = document.createElement("div");
     fields.className = "vst-detail-instance-fields";
     row.appendChild(fields);
-    // Interacting with any control in this row re-points the selection so the
-    // timeline highlight follows. setSelection no-ops on an identical
-    // selection, so this never interrupts an in-progress edit.
     row.addEventListener("focusin", () => spec.repoint());
     return { row, fields };
 };
 
-/** Plain section label used between the strip's stacked sections. */
 export const sectionLabel = (text: string): HTMLElement => {
     const sec = document.createElement("div");
     sec.className = "vst-detail-sec vst-detail-wrap-sec";
     sec.textContent = text;
     return sec;
+};
+
+export const clampStartLength = (
+    start: number,
+    length: number,
+    clipDur: number,
+    minLength: number,
+): { start: number; length: number } => {
+    const s = clamp(start, 0, Math.max(0, clipDur - minLength));
+    const l = clamp(length, minLength, Math.max(minLength, clipDur - s));
+    return { start: s, length: l };
+};
+
+export const buildGroup = (
+    groupId: string,
+    content: HTMLElement,
+): HTMLElement => {
+    const group = document.createElement("div");
+    group.className = "input-group input-group-open";
+    group.id = `auto-group-${groupId}`;
+
+    const contentEl = document.createElement("div");
+    contentEl.className = "input-group-content";
+    contentEl.id = `input_group_content_${groupId}`;
+    contentEl.appendChild(content);
+
+    group.appendChild(contentEl);
+    return group;
+};
+
+export const wrapForm = (
+    groupId: string,
+    content: HTMLElement,
+): HTMLElement => {
+    const body = document.createElement("div");
+    body.className = "vst-detail-body";
+    body.appendChild(buildGroup(groupId, content));
+    return body;
+};
+
+/**
+ * Tag a field's inner control with a focus key so the strip can preserve and
+ * restore its caret across a self-triggered rebuild.
+ */
+export const tagFocus = (field: HTMLElement, key: string): HTMLElement => {
+    const control =
+        field.querySelector<HTMLElement>("input.auto-slider-number") ??
+        field.querySelector<HTMLElement>("input, select") ??
+        (field.matches("input, select") ? field : null);
+    control?.setAttribute("data-vst-focus-key", key);
+    return field;
+};
+
+/**
+ * The `wrap.vst-detail-stages-wrap` > [label, `col`] skeleton shared by the
+ * clip panel's Retake and IC-LoRA sections: a plain section label above a
+ * column that the caller fills with per-entry rows and a trailing Add button.
+ */
+export const buildStackSection = (
+    label: string,
+    colClass: string,
+): { wrap: HTMLElement; col: HTMLElement } => {
+    const wrap = document.createElement("div");
+    wrap.className = "vst-detail-stages-wrap";
+    wrap.appendChild(sectionLabel(label));
+    const col = document.createElement("div");
+    col.className = `vst-detail-col ${colClass}`;
+    wrap.appendChild(col);
+    return { wrap, col };
+};
+
+/** Trailing "Add" button for a stacked section. */
+export const buildAddButton = (
+    label: string,
+    extraClass: string,
+    onClick: () => void,
+): HTMLButtonElement => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `basic-button small-button vst-detail-rail-btn ${extraClass}`;
+    btn.textContent = label;
+    btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        onClick();
+    });
+    return btn;
 };

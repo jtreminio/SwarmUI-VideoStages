@@ -44,7 +44,7 @@ internal sealed class LtxPostVideoChainCapture
         StageSpec stage,
         bool mutateReuseAudioState)
     {
-        bool clipCanReuseAudio = clip?.ReuseAudio == true && clip.Stages.Count >= 3;
+        bool clipCanReuseAudio = clip?.CanReuseAudio == true;
         bool useReusedAudio = clipCanReuseAudio && stage.ClipStageIndex > 0;
         bool captureReusableAudio = clipCanReuseAudio && stage.ClipStageIndex == 1;
         if (mutateReuseAudioState && !useReusedAudio && !captureReusableAudio)
@@ -146,7 +146,7 @@ internal sealed class LtxPostVideoChainCapture
     public WGNodeData CreateStageInputVae()
     {
         return new WGNodeData(
-            new JArray(State.VideoVaePath[0], State.VideoVaePath[1]),
+            PathUtils.Clone(State.VideoVaePath),
             g,
             WGNodeData.DT_VAE,
             ResolveVideoCompat());
@@ -272,7 +272,7 @@ internal sealed class LtxPostVideoChainCapture
             return null;
         }
 
-        WGNodeData cloned = new(new JArray(path[0], path[1]), generator, media.DataType, media.Compat)
+        WGNodeData cloned = new(PathUtils.Clone(path), generator, media.DataType, media.Compat)
         {
             Width = media.Width,
             Height = media.Height,
@@ -282,7 +282,7 @@ internal sealed class LtxPostVideoChainCapture
         if (media.AttachedAudio?.Path is JArray { Count: 2 } audioPath)
         {
             cloned.AttachedAudio = new WGNodeData(
-                new JArray(audioPath[0], audioPath[1]),
+                PathUtils.Clone(audioPath),
                 generator,
                 media.AttachedAudio.DataType,
                 media.AttachedAudio.Compat)
@@ -303,7 +303,7 @@ internal sealed class LtxPostVideoChainCapture
             && audioReuse.TryGetPath(out JArray reusedAudioLatentPath))
         {
             return new WGNodeData(
-                new JArray(reusedAudioLatentPath[0], reusedAudioLatentPath[1]),
+                PathUtils.Clone(reusedAudioLatentPath),
                 g,
                 WGNodeData.DT_LATENT_AUDIO,
                 ResolveAudioCompat());
@@ -311,7 +311,7 @@ internal sealed class LtxPostVideoChainCapture
 
         if (IsExplicitUploadAudio(State.CurrentOutputMedia?.AttachedAudio))
         {
-            JArray currentAudioLatentPath = new(State.AudioLatentPath[0], State.AudioLatentPath[1]);
+            JArray currentAudioLatentPath = PathUtils.Clone(State.AudioLatentPath);
             if (State.CurrentOutputMedia.AttachedAudio?.Path is JArray { Count: 2 } explicitUploadPath
                 && IsAudioLatentDerivedFromUpload(currentAudioLatentPath, $"{explicitUploadPath[0]}"))
             {
@@ -325,7 +325,7 @@ internal sealed class LtxPostVideoChainCapture
         }
 
         return new WGNodeData(
-            new JArray(State.AudioLatentPath[0], State.AudioLatentPath[1]),
+            PathUtils.Clone(State.AudioLatentPath),
             g,
             WGNodeData.DT_LATENT_AUDIO,
             ResolveAudioCompat());
@@ -352,7 +352,7 @@ internal sealed class LtxPostVideoChainCapture
     private WGNodeData CloneAudioReference(WGNodeData audio)
     {
         return new WGNodeData(
-            new JArray(audio.Path[0], audio.Path[1]),
+            PathUtils.Clone(audio.Path),
             g,
             audio.DataType,
             audio.Compat)

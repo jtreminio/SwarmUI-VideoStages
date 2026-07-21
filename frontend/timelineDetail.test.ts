@@ -75,7 +75,7 @@ describe("ruler ticks", () => {
     });
 
     it("computeRulerTicks lays evenly spaced ticks up to total", () => {
-        const ticks = computeRulerTicks(4, 44); // 44px/s -> 2s step
+        const ticks = computeRulerTicks(4, 44); // step per chooseRulerStepSeconds
         expect(ticks.map((t) => t.seconds)).toEqual([0, 2, 4]);
         expect(ticks.map((t) => t.x)).toEqual([0, 88, 176]);
     });
