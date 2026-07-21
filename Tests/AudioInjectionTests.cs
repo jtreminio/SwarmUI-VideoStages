@@ -276,7 +276,7 @@ public class AudioInjectionTests
         Assert.Same(audioEncode.AudioLatent, maskNode.Samples.Connection);
 
         LTXVConcatAVLatentNode rootConcat = RequireTypedNode<LTXVConcatAVLatentNode>(bridge, "113");
-        Assert.Same(maskNode.LATENT, rootConcat.AudioLatent.Connection);
+        Assert.Same(maskNode.Latent, rootConcat.AudioLatent.Connection);
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public class AudioInjectionTests
         Assert.Equal(3.0, (double)window["end"]);
 
         IReadOnlyList<(ComfyNode Node, INodeInput Input)> maskConsumers =
-            bridge.Graph.FindInputsConnectedTo(maskNode.LATENT);
+            bridge.Graph.FindInputsConnectedTo(maskNode.Latent);
         Assert.Contains(maskConsumers, c => c.Input.Name == "audio_latent" && c.Node is LTXVConcatAVLatentNode);
     }
 

@@ -453,21 +453,20 @@ internal class ControlNetApplicator(WorkflowGenerator g)
         }
         else if (StringUtils.Equals(entry.ControlType, Constants.IcLoraControlDepth))
         {
-            LoadDa3ModelNode da3Model = bridge.AddNode(new LoadDa3ModelNode());
-            da3Model.ModelName.Set(Constants.Da3ModelFileName);
-            Da3InferenceNode inference = bridge.AddNode(new Da3InferenceNode());
-            inference.Da3Model.ConnectToUntyped(da3Model.Model);
+            LoadDA3ModelNode da3Model = bridge.AddNode(new LoadDA3ModelNode().With(
+                ModelName: Constants.Da3ModelFileName));
+            DA3InferenceNode inference = bridge.AddNode(new DA3InferenceNode().With(
+                Mode: "mono"));
+            inference.Da3Model.ConnectToUntyped(da3Model.DA3MODEL);
             inference.Image.TryConnectFromPath(bridge, driveImages);
-            Da3RenderNode render = new()
+            DA3RenderNode render = new DA3RenderNode().With(Output: "depth");
+            render.ExtraInputs = new JObject
             {
-                ExtraInputs = new JObject
-                {
-                    ["output.normalization"] = "v2_style",
-                    ["output.apply_sky_clip"] = false,
-                },
+                ["output.normalization"] = "v2_style",
+                ["output.apply_sky_clip"] = false,
             };
             bridge.AddNode(render);
-            render.Geometry.ConnectToUntyped(inference.Geometry);
+            render.Da3Geometry.ConnectToUntyped(inference.Da3Geometry);
             bridge.SyncNode(da3Model);
             bridge.SyncNode(inference);
             bridge.SyncNode(render);

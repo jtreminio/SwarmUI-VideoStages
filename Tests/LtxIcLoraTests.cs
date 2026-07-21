@@ -483,15 +483,15 @@ public sealed class LtxIcLoraTests
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
 
-        LoadDa3ModelNode da3Model = Assert.Single(bridge.Graph.NodesOfType<LoadDa3ModelNode>());
+        LoadDA3ModelNode da3Model = Assert.Single(bridge.Graph.NodesOfType<LoadDA3ModelNode>());
         Assert.Equal(Constants.Da3ModelFileName, da3Model.ModelName.LiteralAsString());
-        Da3InferenceNode inference = Assert.Single(bridge.Graph.NodesOfType<Da3InferenceNode>());
+        DA3InferenceNode inference = Assert.Single(bridge.Graph.NodesOfType<DA3InferenceNode>());
         Assert.Equal("mono", inference.Mode.LiteralAsString());
-        Da3RenderNode render = Assert.Single(bridge.Graph.NodesOfType<Da3RenderNode>());
+        DA3RenderNode render = Assert.Single(bridge.Graph.NodesOfType<DA3RenderNode>());
         Assert.Equal("depth", render.Output.LiteralAsString());
         Assert.Equal("v2_style", $"{render.ExtraInputs?["output.normalization"]}");
         Assert.Same(da3Model, inference.Da3Model.Connection?.Node);
-        Assert.Same(inference, render.Geometry.Connection?.Node);
+        Assert.Same(inference, render.Da3Geometry.Connection?.Node);
         LTXAddVideoICLoRAGuideNode guide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.True(
             GuideImageTracesTo(bridge, guide, render),

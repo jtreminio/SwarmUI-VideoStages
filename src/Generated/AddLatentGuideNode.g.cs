@@ -5,7 +5,7 @@ using ComfyTyped.Types;
 
 namespace VideoStages.Generated;
 
-/// <remarks>Category: conditioning/video_models</remarks>
+/// <remarks>Category: model/conditioning/ltxv</remarks>
 public sealed class AddLatentGuideNode : ComfyNode
 {
     /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
@@ -25,6 +25,8 @@ public sealed class AddLatentGuideNode : ComfyNode
     public NodeInput<ImageType> Image { get; }
     public NodeInput<IntType> FrameIdx { get; }
     public NodeInput<FloatType> Strength { get; }
+    public NodeInput<MaskType> AttentionMask { get; } // optional
+    public NodeInput<IcLoraParametersType> IcloraParameters { get; } // optional
 
     public AddLatentGuideNode()
     {
@@ -40,6 +42,8 @@ public sealed class AddLatentGuideNode : ComfyNode
         FrameIdx.Set(0L);
         Strength = AddInput<FloatType>("strength");
         Strength.Set(1.0);
+        AttentionMask = AddInput<MaskType>("attention_mask");
+        IcloraParameters = AddInput<IcLoraParametersType>("iclora_parameters");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
@@ -53,7 +57,9 @@ public sealed class AddLatentGuideNode : ComfyNode
         In<LatentType>? LatentInput = null,
         In<ImageType>? Image = null,
         IntArg? FrameIdx = null,
-        FloatArg? Strength = null
+        FloatArg? Strength = null,
+        In<MaskType>? AttentionMask = null,
+        In<IcLoraParametersType>? IcloraParameters = null
     )
     {
         PositiveInput?.ApplyTo(this.PositiveInput);
@@ -63,6 +69,8 @@ public sealed class AddLatentGuideNode : ComfyNode
         Image?.ApplyTo(this.Image);
         FrameIdx?.ApplyTo(this.FrameIdx);
         Strength?.ApplyTo(this.Strength);
+        AttentionMask?.ApplyTo(this.AttentionMask);
+        IcloraParameters?.ApplyTo(this.IcloraParameters);
         return this;
     }
 }

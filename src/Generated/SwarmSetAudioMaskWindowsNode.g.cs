@@ -14,7 +14,7 @@ public sealed class SwarmSetAudioMaskWindowsNode : ComfyNode
     public override string ClassTypeName => ClassType;
 
     // ── Outputs ──
-    public NodeOutput<LatentType> LATENT { get; }
+    public NodeOutput<LatentType> Latent { get; }
 
     // ── Inputs ──
     public NodeInput<LatentType> Samples { get; }
@@ -24,7 +24,7 @@ public sealed class SwarmSetAudioMaskWindowsNode : ComfyNode
 
     public SwarmSetAudioMaskWindowsNode()
     {
-        LATENT = AddOutput<LatentType>(0, "latent");
+        Latent = AddOutput<LatentType>(0, "latent");
         Samples = AddInput<LatentType>("samples");
         AudioVae = AddInput<VaeType>("audio_vae");
         Windows = AddInput<StringType>("windows");

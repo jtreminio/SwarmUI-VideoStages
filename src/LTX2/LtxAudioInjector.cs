@@ -62,7 +62,7 @@ internal sealed class LtxAudioInjector(
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
         bridge = WorkflowBridge.Create(g.Workflow);
         NodeOutput<LatentType> maskedLatent = preserveWindows is { Count: > 0 }
-            ? CreateWindowedAudioMaskNode(bridge, encodedAudio.Path, preserveWindows, stableIdSlot: 0).LATENT
+            ? CreateWindowedAudioMaskNode(bridge, encodedAudio.Path, preserveWindows, stableIdSlot: 0).Latent
             : CreateAudioMaskNode(bridge, encodedAudio.Path).LATENT;
         ReplaceAudioLatentConnections(bridge, concatIds, maskedLatent);
         RemoveUnusedSourceNodes(bridge, removableSourceIds);
@@ -93,7 +93,7 @@ internal sealed class LtxAudioInjector(
         SwarmSetAudioMaskWindowsNode mask = CreateWindowedAudioMaskNode(
             bridge, encodedAudio.Path, preserveWindows, stableIdSlot);
         return new WGNodeData(
-            WorkflowBridge.ToPath(mask.LATENT),
+            WorkflowBridge.ToPath(mask.Latent),
             g,
             WGNodeData.DT_LATENT_AUDIO,
             g.CurrentAudioVae.Compat);
