@@ -887,6 +887,22 @@ export const createTimelineDetailStrip = (
                     return null;
                 }
                 clip.stages.splice(stageIdx, 1);
+                // Keep IC-LoRA stage targeting in the new index space: entries
+                // on the deleted stage fall back to "all stages", later ones
+                // shift down (a stale index would be silently skipped).
+                for (const entry of clip.icLoras) {
+                    if (entry.stage === stageIdx) {
+                        entry.stage = IC_LORA_STAGE_ALL;
+                    } else if (entry.stage > stageIdx) {
+                        entry.stage -= 1;
+                    }
+                    if (
+                        entry.stage < 1 &&
+                        entry.source === IC_LORA_SOURCE_STAGE_INPUT
+                    ) {
+                        entry.source = IC_LORA_SOURCE_UPLOAD;
+                    }
+                }
                 return {
                     kind: "clip",
                     clipIdx,

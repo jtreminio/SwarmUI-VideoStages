@@ -522,6 +522,18 @@ internal static class VideoStagesSpecParser
         IReadOnlyList<AudioSegmentSpec> audioSegments = ParseAudioSegments(clipObj, Math.Max(0, duration));
 
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
+        // A stage target beyond the authored stage list would silently skip the whole
+        // IC-LoRA (loader and guide) on every stage that runs — fail loudly instead.
+        for (int i = 0; i < icLoras.Count; i++)
+        {
+            if (icLoras[i].Stage >= rawStages.Count)
+            {
+                throw new SwarmUserErrorException(
+                    $"VideoStages: Clip {clipIndex} IC-LoRA {i} is set to apply on stage "
+                    + $"{icLoras[i].Stage}, but the clip only has {rawStages.Count} stage(s). "
+                    + "Set its 'Apply on' to an existing stage or to All stages.");
+            }
+        }
         List<StageSpec> stages = [];
         List<JObject> rawRefs = GetObjectArray(clipObj, "Refs");
         List<ImageRefSpec> refs = [];

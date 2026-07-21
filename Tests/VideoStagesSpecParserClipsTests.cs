@@ -298,7 +298,7 @@ public class VideoStagesSpecParserClipsTests
                 {
                     ["Lora"] = "clip-lora",
                     ["Preset"] = "deblur",
-                    ["Stage"] = 1,
+                    ["Stage"] = 0,
                     ["Source"] = Constants.ControlNetSourceTwo,
                     ["Strength"] = 0.7,
                     ["AttentionStrength"] = 0.4,
@@ -321,7 +321,7 @@ public class VideoStagesSpecParserClipsTests
         IcLoraSpec entry = Assert.Single(clips[0].IcLoras);
         Assert.Equal("clip-lora", entry.Lora);
         Assert.Equal("deblur", entry.Preset);
-        Assert.Equal(1, entry.Stage);
+        Assert.Equal(0, entry.Stage);
         Assert.Equal(Constants.ControlNetSourceTwo, entry.Source);
         Assert.Equal(0.7, entry.Strength);
         Assert.Equal(0.4, entry.AttentionStrength);
@@ -621,6 +621,27 @@ public class VideoStagesSpecParserClipsTests
             () => VideoStagesSpecParser.Parse(parser));
         Assert.Contains("Clip 0 stage 0", ex.Message);
         Assert.Contains("'Model'", ex.Message);
+    }
+
+    [Fact]
+    public void ParseClips_IcLoraStageBeyondStageList_ThrowsUserError()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                stages: [MakeStage("model-a")],
+                icLoras: new JArray(new JObject
+                {
+                    ["Lora"] = "clip-lora",
+                    ["Stage"] = 2,
+                    ["Source"] = Constants.IcLoraSourceUpload,
+                }))
+        ));
+        WorkflowGenerator parser = BuildParser(json);
+
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
+            () => VideoStagesSpecParser.Parse(parser));
+        Assert.Contains("apply on stage 2", ex.Message);
+        Assert.Contains("All stages", ex.Message);
     }
 
     [Fact]

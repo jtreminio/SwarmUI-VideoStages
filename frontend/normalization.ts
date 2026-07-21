@@ -350,16 +350,24 @@ const normalizeIcLoraSource = (value: unknown): string => {
     return normalizeControlNetSource(value);
 };
 
-const normalizeIcLoraStage = (value: unknown): number => {
+const normalizeIcLoraStage = (value: unknown, stageCount: number): number => {
     if (value == null || `${value}`.trim() === "") {
         return IC_LORA_STAGE_ALL;
     }
     const stage = Math.trunc(Number(value));
-    return Number.isFinite(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
+    if (!Number.isFinite(stage) || stage < 0) {
+        return IC_LORA_STAGE_ALL;
+    }
+    // A target beyond the clip's stage list (stale after stage deletion) would
+    // be silently skipped by every stage the backend runs — heal it to "all".
+    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
 };
 
 /** Drops entries with no LoRA name; everything else is clamped to valid ranges. */
-export const normalizeIcLora = (raw: unknown): IcLora | null => {
+export const normalizeIcLora = (
+    raw: unknown,
+    stageCount: number = 0,
+): IcLora | null => {
     if (!isRecord(raw)) {
         return null;
     }
@@ -368,7 +376,10 @@ export const normalizeIcLora = (raw: unknown): IcLora | null => {
         return null;
     }
     const preset = `${readProp(raw, "preset", "Preset") ?? ""}`.trim();
-    const stage = normalizeIcLoraStage(readProp(raw, "stage", "Stage"));
+    const stage = normalizeIcLoraStage(
+        readProp(raw, "stage", "Stage"),
+        stageCount,
+    );
     let source = normalizeIcLoraSource(readProp(raw, "source", "Source"));
     // Stage Input means "this stage's incoming frames" — meaningless without a refine-stage target.
     if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1) {
@@ -406,11 +417,12 @@ export const normalizeIcLora = (raw: unknown): IcLora | null => {
  */
 export const normalizeIcLoras = (
     rawClip: Record<string, unknown>,
+    stageCount: number = 0,
 ): IcLora[] => {
     const raw = readProp(rawClip, "icLoras", "IcLoras");
     if (Array.isArray(raw)) {
         const entries = raw
-            .map(normalizeIcLora)
+            .map((entry) => normalizeIcLora(entry, stageCount))
             .filter((entry): entry is IcLora => entry !== null);
         if (entries.length > 0) {
             return entries;
@@ -788,7 +800,8 @@ export const normalizeClip = (
 ): Clip => {
     const defaults = getRootDefaults();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
-    const icLoras = normalizeIcLoras(rawClip);
+    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+    const icLoras = normalizeIcLoras(rawClip, stagesRaw.length);
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
         controlNetEnabled: hasSlotSourcedIcLora(icLoras),
     });
@@ -803,7 +816,6 @@ export const normalizeClip = (
     );
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
     const refFrameMax = getReferenceFrameMax(getRootDefaults, { duration });
-    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
     const refs = refsRaw.map((rawRef) =>
         normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
     );

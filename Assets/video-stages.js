@@ -746,14 +746,17 @@
     }
     return normalizeControlNetSource(value);
   };
-  var normalizeIcLoraStage = (value) => {
+  var normalizeIcLoraStage = (value, stageCount) => {
     if (value == null || `${value}`.trim() === "") {
       return IC_LORA_STAGE_ALL;
     }
     const stage = Math.trunc(Number(value));
-    return Number.isFinite(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
+    if (!Number.isFinite(stage) || stage < 0) {
+      return IC_LORA_STAGE_ALL;
+    }
+    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
   };
-  var normalizeIcLora = (raw) => {
+  var normalizeIcLora = (raw, stageCount = 0) => {
     if (!isRecord(raw)) {
       return null;
     }
@@ -762,7 +765,10 @@
       return null;
     }
     const preset = `${readProp(raw, "preset", "Preset") ?? ""}`.trim();
-    const stage = normalizeIcLoraStage(readProp(raw, "stage", "Stage"));
+    const stage = normalizeIcLoraStage(
+      readProp(raw, "stage", "Stage"),
+      stageCount
+    );
     let source = normalizeIcLoraSource(readProp(raw, "source", "Source"));
     if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1) {
       source = IC_LORA_SOURCE_UPLOAD;
@@ -792,10 +798,10 @@
       video: normalizeUploadedAudio(readProp(raw, "video", "Video"))
     };
   };
-  var normalizeIcLoras = (rawClip) => {
+  var normalizeIcLoras = (rawClip, stageCount = 0) => {
     const raw = readProp(rawClip, "icLoras", "IcLoras");
     if (Array.isArray(raw)) {
-      const entries = raw.map(normalizeIcLora).filter((entry) => entry !== null);
+      const entries = raw.map((entry) => normalizeIcLora(entry, stageCount)).filter((entry) => entry !== null);
       if (entries.length > 0) {
         return entries;
       }
@@ -1080,7 +1086,8 @@
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
-    const icLoras = normalizeIcLoras(rawClip);
+    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+    const icLoras = normalizeIcLoras(rawClip, stagesRaw.length);
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
       controlNetEnabled: hasSlotSourcedIcLora(icLoras)
     });
@@ -1095,7 +1102,6 @@
     );
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
     const refFrameMax = getReferenceFrameMax(getRootDefaults2, { duration });
-    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
     const refs = refsRaw.map(
       (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
     );
@@ -5129,6 +5135,16 @@
             return null;
           }
           clip.stages.splice(stageIdx, 1);
+          for (const entry of clip.icLoras) {
+            if (entry.stage === stageIdx) {
+              entry.stage = IC_LORA_STAGE_ALL;
+            } else if (entry.stage > stageIdx) {
+              entry.stage -= 1;
+            }
+            if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+              entry.source = IC_LORA_SOURCE_UPLOAD;
+            }
+          }
           return {
             kind: "clip",
             clipIdx,

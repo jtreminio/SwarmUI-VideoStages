@@ -760,6 +760,28 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
     });
 
+    it("remaps IC-LoRA stage targets when a stage is deleted", () => {
+        const body = setup([
+            {
+                duration: 4,
+                stages: [{}, {}, {}],
+                icLoras: [
+                    { lora: "a", stage: 2 },
+                    { lora: "b", stage: 1, source: "Stage Input" },
+                    { lora: "c", stage: 0 },
+                    { lora: "d", stage: -1 },
+                ],
+            },
+        ]);
+        clickRegionStageChip(body, 0, 1, true);
+        const clip = savedClips(saveSpy)[0];
+        expect(clip.stages).toHaveLength(2);
+        // Above the deleted stage shifts down; on it falls back to all stages
+        // (which also invalidates a Stage Input source); below is untouched.
+        expect(clip.icLoras.map((e) => e.stage)).toEqual([1, -1, 0, -1]);
+        expect(clip.icLoras[1].source).toBe("Upload");
+    });
+
     it("adds a stage from the rail's Add button and selects it", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });

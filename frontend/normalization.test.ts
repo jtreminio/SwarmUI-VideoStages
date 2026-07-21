@@ -283,6 +283,24 @@ describe("normalization", () => {
         expect(clip.icLoras[0].stage).toBe(-1);
     });
 
+    it("normalizeClip heals an IC-LoRA stage target beyond the clip's stage list", () => {
+        const clip = normalizeClip(
+            {
+                icLoras: [
+                    { lora: "a", stage: 2 },
+                    { lora: "b", stage: 1, source: "Stage Input" },
+                    { lora: "c", stage: 0 },
+                ],
+                stages: [{}],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.icLoras.map((e) => e.stage)).toEqual([-1, -1, 0]);
+        // The healed target is no longer a refine stage, so Stage Input resets.
+        expect(clip.icLoras[1].source).toBe("Upload");
+    });
+
     it("normalizeClip prefers the icLoras array over legacy fields", () => {
         const clip = normalizeClip(
             {
