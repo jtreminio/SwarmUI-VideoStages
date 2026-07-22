@@ -41,7 +41,7 @@ internal sealed class SourcedClipInstaller(WorkflowGenerator g)
         resample.FpsIn.TryConnectFromPath(bridge, (JArray)loaded.FPS);
 
         SwarmFrameWindowNode window = bridge.AddNode(new SwarmFrameWindowNode().With(
-            Images: resample.Images,
+            ImagesInput: resample.Images,
             StartFrame: startFrame,
             FrameCount: frames));
 

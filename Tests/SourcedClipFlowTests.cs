@@ -74,7 +74,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
         Assert.Equal((int)Math.Round(SourcedStartSeconds * 24), window.StartFrame.LiteralAsInt());
         Assert.Equal(SourcedClipFrames, window.FrameCount.LiteralAsInt());
-        Assert.Equal(resample.Id, window.Images.Connection!.Node.Id);
+        Assert.Equal(resample.Id, window.ImagesInput.Connection!.Node.Id);
 
         ImageScaleNode scale = Assert.Single(
             bridge.Graph.NodesOfType<ImageScaleNode>(),

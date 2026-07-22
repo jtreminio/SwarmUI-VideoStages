@@ -11,6 +11,7 @@ from .SwarmFrameWindow import SwarmFrameWindow
 from .SwarmPreviewVideo import SwarmPreviewVideo
 from .SwarmPromptRelayEncode import SwarmPromptRelayEncode
 from .SwarmRampMaskBatch import SwarmRampMaskBatch
+from .SwarmSaveHDRAnimationWS import SwarmSaveHDRAnimationWS
 from .SwarmSetAudioMaskWindows import SwarmSetAudioMaskWindows
 
 
@@ -21,6 +22,10 @@ NODES: list[tuple[type[io.ComfyNode], str]] = [
     (SwarmPromptRelayEncode, "Swarm Prompt Relay Encode"),
     (SwarmRampMaskBatch, "Swarm Ramp Mask Batch"),
     (SwarmSetAudioMaskWindows, "Swarm Set Audio Mask Windows"),
+]
+
+LEGACY_NODES: list[tuple[type, str]] = [
+    (SwarmSaveHDRAnimationWS, "Swarm Save HDR Animation WS"),
 ]
 
 
@@ -36,6 +41,8 @@ async def comfy_entrypoint() -> ComfyExtension:
     return SwarmVideoStagesExtension()
 
 
-NODE_CLASS_MAPPINGS: dict[str, type[io.ComfyNode]] = {node.__name__: node for node, _ in NODES}
+NODE_CLASS_MAPPINGS: dict[str, type] = {node.__name__: node for node, _ in NODES}
+NODE_CLASS_MAPPINGS.update({node.__name__: node for node, _ in LEGACY_NODES})
 
 NODE_DISPLAY_NAME_MAPPINGS: dict[str, str] = {node.__name__: display_name for node, display_name in NODES}
+NODE_DISPLAY_NAME_MAPPINGS.update({node.__name__: display_name for node, display_name in LEGACY_NODES})

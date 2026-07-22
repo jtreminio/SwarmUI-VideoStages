@@ -11,9 +11,8 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
     /// <summary>
     /// Splices the HDR LogC3 postprocess (pure math, no aux weights) between the decoded frames
     /// and every animation save when any clip has an active HDR IC-LoRA — without it the saved
-    /// video is flat log-encoded footage. The tonemapped SDR output feeds the save; EXR export
-    /// stays off (Swarm's save path has no 16-bit format). Spec-wide: mixing HDR and non-HDR
-    /// clips in one run is inherently inconsistent, so every save gets the same treatment.
+    /// video is flat log-encoded footage. The postprocess's linear HDR output feeds our own
+    /// SwarmSaveHDRAnimationWS node (PQ-encodes to Rec.2020 and writes a 10-bit HDR10 mp4).
     /// </summary>
     public void ApplyHdrPostprocessToFinalSaves(IReadOnlyList<ClipSpec> clips)
     {
@@ -24,16 +23,31 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
         using WorkflowBridge bridge = BridgeSync.For(g);
         foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
         {
-            if (save.Images.Connection is not INodeOutput imagesSource
-                || imagesSource.Node is LTXVHDRDecodePostprocessNode)
+            if (save.Images.Connection is not INodeOutput imagesSource)
             {
                 continue;
             }
             LTXVHDRDecodePostprocessNode post = bridge.AddNode(new LTXVHDRDecodePostprocessNode());
             post.Image.ConnectToUntyped(imagesSource);
-            save.Images.ConnectTo(post.Tonemapped);
+
+            SwarmSaveHDRAnimationWSNode hdrSave = bridge.AddNode(new SwarmSaveHDRAnimationWSNode());
+            hdrSave.Images.ConnectTo(post.HdrLinear);
+            if (save.Fps.Connection is INodeOutput fpsSource)
+            {
+                hdrSave.Fps.ConnectToUntyped(fpsSource);
+            }
+            else if (save.Fps.LiteralAsDouble() is double fps)
+            {
+                hdrSave.Fps.Set(fps);
+            }
+            if (save.Audio.Connection is INodeOutput audioSource)
+            {
+                hdrSave.Audio.ConnectToUntyped(audioSource);
+            }
+
             bridge.SyncNode(post);
-            bridge.SyncNode(save);
+            bridge.SyncNode(hdrSave);
+            bridge.RemoveNode(save);
         }
     }
 

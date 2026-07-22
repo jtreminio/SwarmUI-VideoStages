@@ -652,11 +652,14 @@ public sealed class LtxIcLoraTests
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
 
-        Assert.NotEmpty(bridge.Graph.NodesOfType<LTXVHDRDecodePostprocessNode>());
-        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
-        {
-            Assert.IsType<LTXVHDRDecodePostprocessNode>(save.Images.Connection?.Node);
-        }
+        // The core SDR save is replaced by our HDR save, fed the postprocess's linear HDR output.
+        LTXVHDRDecodePostprocessNode post =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVHDRDecodePostprocessNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        SwarmSaveHDRAnimationWSNode hdrSave =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmSaveHDRAnimationWSNode>());
+        Assert.Same(post, hdrSave.Images.Connection?.Node);
+        Assert.Same(post.HdrLinear, hdrSave.Images.Connection);
     }
 
     [Theory]

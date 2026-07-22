@@ -14,17 +14,17 @@ public sealed class SwarmFrameWindowNode : ComfyNode
     public override string ClassTypeName => ClassType;
 
     // ── Outputs ──
-    public NodeOutput<ImageType> IMAGE { get; }
+    public NodeOutput<ImageType> Images { get; }
 
     // ── Inputs ──
-    public NodeInput<ImageType> Images { get; }
+    public NodeInput<ImageType> ImagesInput { get; }
     public NodeInput<IntType> StartFrame { get; }
     public NodeInput<IntType> FrameCount { get; }
 
     public SwarmFrameWindowNode()
     {
-        IMAGE = AddOutput<ImageType>(0, "images");
-        Images = AddInput<ImageType>("images");
+        Images = AddOutput<ImageType>(0, "images");
+        ImagesInput = AddInput<ImageType>("images");
         StartFrame = AddInput<IntType>("start_frame");
         StartFrame.Set(0L);
         FrameCount = AddInput<IntType>("frame_count");
@@ -36,12 +36,12 @@ public sealed class SwarmFrameWindowNode : ComfyNode
     /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
     /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public SwarmFrameWindowNode With(
-        In<ImageType>? Images = null,
+        In<ImageType>? ImagesInput = null,
         IntArg? StartFrame = null,
         IntArg? FrameCount = null
     )
     {
-        Images?.ApplyTo(this.Images);
+        ImagesInput?.ApplyTo(this.ImagesInput);
         StartFrame?.ApplyTo(this.StartFrame);
         FrameCount?.ApplyTo(this.FrameCount);
         return this;
