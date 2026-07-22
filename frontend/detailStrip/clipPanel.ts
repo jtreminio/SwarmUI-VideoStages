@@ -1246,16 +1246,10 @@ export const buildClipBody = (
     /**
      * The clip's own fields render bare (no group header/container — the
      * dock breadcrumb already names the clip), followed by a Stages group
-     * (labelled rail + the selected stage's parameters) and a Retake group
-     * — retake editing lives in the clip panel, like stages.
+     * (labelled rail + the selected stage's parameters), IC-LoRAs,
+     * Source Video, and Retake last.
      */
     body.appendChild(buildClipColumn(ctx, clip, sel.clipIdx));
-    body.appendChild(
-        buildGroup(
-            GROUP_SOURCE,
-            buildSourceVideoSection(ctx, clip, sel.clipIdx),
-        ),
-    );
     const params = buildParamsColumn(
         ctx,
         clip,
@@ -1276,6 +1270,12 @@ export const buildClipBody = (
         buildGroup(
             GROUP_ICLORA,
             buildIcLorasSection(ctx, clip, sel.clipIdx, defaults),
+        ),
+    );
+    body.appendChild(
+        buildGroup(
+            GROUP_SOURCE,
+            buildSourceVideoSection(ctx, clip, sel.clipIdx),
         ),
     );
     body.appendChild(

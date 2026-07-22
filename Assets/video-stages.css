@@ -7,7 +7,7 @@
     --vst-header-w: 168px;
     --vst-ruler-h: 26px;
     /* Clip regions + a retake mini-lane beneath them (prompt-track idiom). */
-    --vst-lane-video-h: 158px;
+    --vst-lane-video-h: 118px;
     --vst-retake-lane-h: 20px;
     /* Audio track: a clip mini-row on top, then one mini lane PER audio
        segment plus a blank add-lane — the row height scales with
@@ -223,7 +223,6 @@
     padding-left: 10px;
     background: var(--vst-panel);
     border-right: 1px solid var(--vst-hairline);
-    font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
     font-weight: 500;
     color: var(--text-soft);
@@ -337,7 +336,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-/* Lane tags: uppercase mono pills hugging the head's right edge, one per
+/* Lane tags: uppercase pills hugging the head's right edge, one per
    mini-lane, each with a hairline tick pointing at the lane it names. Pure
    annotation — pointer-events:none, no new hit targets. Per-track vertical
    placement rules below copy the lane's own top/bottom/height math. */
@@ -357,7 +356,6 @@
     min-width: 0;
 }
 .vst-head-tag-pill {
-    font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
     font-weight: 500;
     letter-spacing: 0.08em;
@@ -1661,7 +1659,6 @@
 .vst-detail-crumb {
     flex: 1 1 auto;
     min-width: 0;
-    font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -1819,7 +1816,6 @@
 }
 .vst-detail-minor-title,
 .vst-detail-instance-title {
-    font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -2018,7 +2014,6 @@
 }
 .vst-detail-sec {
     margin: 8px 0 2px;
-    font-family: var(--vst-mono);
     font-size: var(--vst-font-3xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
