@@ -6,7 +6,7 @@ const TAB_HREF = "#VideoStages-Timeline-Tab";
 const mountNav = (): HTMLAnchorElement => {
     document.body.innerHTML =
         `<ul id="bottombartabcollection">` +
-        `<li class="nav-item"><a class="nav-link" href="${TAB_HREF}">Timeline</a></li>` +
+        `<li class="nav-item"><a class="nav-link" href="${TAB_HREF}">VideoStages</a></li>` +
         `</ul>`;
     return document.querySelector(`a[href="${TAB_HREF}"]`) as HTMLAnchorElement;
 };
@@ -45,7 +45,7 @@ describe("updateTimelineTabIndicator", () => {
         const navLink = mountNav();
         updateTimelineTabIndicator(true);
         updateTimelineTabIndicator(false);
-        expect(navLink.textContent).toBe("Timeline");
+        expect(navLink.textContent).toBe("VideoStages");
     });
 
     it("is a no-op when the tab nav link is absent", () => {

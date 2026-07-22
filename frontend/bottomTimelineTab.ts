@@ -58,7 +58,7 @@ export const injectTimelineTab = (): HTMLElement | null => {
     const li = document.createElement("li");
     li.className = "nav-item";
     li.setAttribute("role", "presentation");
-    li.innerHTML = `<a class="nav-link translate" data-bs-toggle="tab" href="#${TAB_ID}" aria-selected="false" tabindex="-1" role="tab">Timeline</a>`;
+    li.innerHTML = `<a class="nav-link translate" data-bs-toggle="tab" href="#${TAB_ID}" aria-selected="false" tabindex="-1" role="tab">VideoStages</a>`;
     const toolsNav = nav.querySelector('a[href="#Tools-Tab"]');
     if (toolsNav?.parentElement) {
         nav.insertBefore(li, toolsNav.parentElement);
