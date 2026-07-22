@@ -1816,6 +1816,39 @@ describe("createTimelineDetailStrip", () => {
         jest.useRealTimers();
     });
 
+    it("flushes a held prompt edit on a press outside the dock (timeline click)", () => {
+        const body = setup([
+            {
+                duration: 12,
+                stages: [{}],
+                prompt: "old prompt",
+                windows: [{ start: 1, duration: 2, prompt: "w0" }],
+            },
+        ]);
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+        jest.useFakeTimers();
+
+        // Typing in the focused major editor is HELD past the debounce window.
+        const editor = document.querySelector<HTMLTextAreaElement>(
+            'textarea[data-vst-focus-key="prompt-major"]',
+        );
+        if (!editor) {
+            throw new Error("major editor missing");
+        }
+        editor.value = "new prompt";
+        editor.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        expect(saveSpy).not.toHaveBeenCalled();
+
+        // A press on the timeline never blurs the editor (track gestures
+        // preventDefault their mousedown), but its concluding click can commit
+        // a structural save that would stale-drop the held edit. The
+        // document-level pointerdown must flush FIRST.
+        body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+        expect(savedClips(saveSpy)[0].prompt).toBe("new prompt");
+        jest.useRealTimers();
+    });
+
     it("deletes a single relay window via its per-row delete button", () => {
         setup([
             {

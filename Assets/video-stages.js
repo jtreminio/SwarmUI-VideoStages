@@ -6418,7 +6418,11 @@
     };
     const onDocPointerDown = (event) => {
       const target = event.target;
-      if (!(target instanceof Element) || !dockEl?.contains(target)) {
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (!dockEl?.contains(target)) {
+        flushPending();
         return;
       }
       if (target.closest('input[type="range"]')) {

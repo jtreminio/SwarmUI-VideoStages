@@ -170,9 +170,11 @@ export const createTimelineDetailStrip = (
     // number). While one does, debounced edits are HELD — the timer is not armed,
     // so no save + timeline repaint fires mid-typing. Sliders (range), selects
     // and checkboxes are not keyboard fields, so they keep their live/debounced
-    // behavior. Held edits flush on blur out of the dock, on a number field's
-    // live `change` (spinner / Enter), on Escape, on a selection change, before
-    // any structural op, and on dispose.
+    // behavior. Held edits flush on blur out of the dock, on any press outside
+    // the dock (onDocPointerDown — track presses preventDefault, so blur alone
+    // can't be relied on), on a number field's live `change` (spinner / Enter),
+    // on Escape, on a selection change, before any structural op, and on
+    // dispose.
     const isTypingInDock = (): boolean => {
         if (!dockEl) {
             return false;
@@ -896,9 +898,21 @@ export const createTimelineDetailStrip = (
     // whole gesture holds its debounced edit (see isSliderGesture). Capture-phase
     // so we see it before any per-widget handler. Document-level: the release
     // half must fire even after the pointer leaves the dock mid-drag.
+    //
+    // A press OUTSIDE the dock flushes the held edit instead. Track gestures
+    // preventDefault their mousedown, so a focused dock textarea never blurs and
+    // the focusout flush never runs — yet the concluding click/drag may commit a
+    // structural save (create/move/resize a window), which bumps the carrier
+    // token and would make flushPending stale-drop the held edit. pointerdown
+    // precedes every mousedown/click, so flushing here writes the edit first and
+    // the gesture's own save lands on top of it.
     const onDocPointerDown = (event: Event): void => {
         const target = event.target;
-        if (!(target instanceof Element) || !dockEl?.contains(target)) {
+        if (!(target instanceof Element)) {
+            return;
+        }
+        if (!dockEl?.contains(target)) {
+            flushPending();
             return;
         }
         if (target.closest('input[type="range"]')) {
