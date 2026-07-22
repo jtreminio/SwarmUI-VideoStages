@@ -270,7 +270,7 @@ internal sealed class LtxStageExecutor(
 
         if (stageFrame.ReplacesTextToVideoRoot)
         {
-            return CreateEmptyVideoLatent(genInfo, clip, sourceMedia, controlNetLengthFrames);
+            return CreateEmptyVideoLatent(genInfo, stageFrame, sourceMedia, controlNetLengthFrames);
         }
 
         if (postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true)
@@ -285,8 +285,7 @@ internal sealed class LtxStageExecutor(
         }
         if (sourceMedia?.DataType == WGNodeData.DT_IMAGE)
         {
-            int width = Math.Max(sourceMedia.Width ?? g.UserInput.GetImageWidth(), 16);
-            int height = Math.Max(sourceMedia.Height ?? g.UserInput.GetImageHeight(), 16);
+            (int width, int height) = ResolveStageLatentDims(stageFrame, sourceMedia);
             return CreateEmptyVideoLatentWithOptionalAudioLength(
                 clip,
                 genInfo,
@@ -383,16 +382,15 @@ internal sealed class LtxStageExecutor(
 
     private WGNodeData CreateEmptyVideoLatent(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        ClipSpec clip,
+        StageFrame stageFrame,
         WGNodeData sourceMedia,
         JArray controlNetLengthFrames = null)
     {
-        int width = Math.Max(sourceMedia?.Width ?? g.UserInput.GetImageWidth(), 16);
-        int height = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
+        (int width, int height) = ResolveStageLatentDims(stageFrame, sourceMedia);
         int frames = genInfo.Frames ?? sourceMedia?.Frames ?? DefaultFrameCount;
         WGNodeData attachedAudio = sourceMedia?.AttachedAudio;
         return CreateEmptyVideoLatentWithOptionalAudioLength(
-            clip,
+            stageFrame.ClipContext.Clip,
             genInfo,
             sourceMedia,
             width,
@@ -400,6 +398,20 @@ internal sealed class LtxStageExecutor(
             frames,
             attachedAudio,
             controlNetLengthFrames);
+    }
+
+    /// <summary>
+    /// The clip's configured timeline resolution wins over the incoming media's size: e.g. with a
+    /// sourced FIRST clip, the footage conforms to the spec dims while the kept-alive root generation
+    /// stays at the core params' — sizing later clips from that root media would splinter the timeline
+    /// across resolutions (and degrade every overlap boundary merge to a hard cut).
+    /// </summary>
+    private (int Width, int Height) ResolveStageLatentDims(StageFrame stageFrame, WGNodeData sourceMedia)
+    {
+        ClipDimensionState dims = stageFrame.ClipContext.Dimensions;
+        int width = dims.Width > 0 ? dims.Width : sourceMedia?.Width ?? g.UserInput.GetImageWidth();
+        int height = dims.Height > 0 ? dims.Height : sourceMedia?.Height ?? g.UserInput.GetImageHeight();
+        return (Math.Max(width, 16), Math.Max(height, 16));
     }
 
     private (JArray FramesConnection, WGNodeData EffectiveAudio) BuildAudioLengthFramesNode(

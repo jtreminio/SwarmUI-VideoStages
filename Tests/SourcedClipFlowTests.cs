@@ -203,6 +203,36 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Continue_from_sourced_clip_keeps_spec_dims_for_the_generated_clip()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // Spec dims deliberately differ from the harness's core-param (root media) dims: the
+        // surviving root media must be conformed to the SPEC resolution so the generated clip runs
+        // at the same dims as the sourced clip. Left at core dims, the merge degrades to a hard cut
+        // that repeats the continuity overlap frames.
+        JObject sourced = MakeSourcedClip(models);
+        sourced["BoundaryOut"] = "continue";
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(768, 1024, sourced, MakeGeneratedClip(models)).ToString());
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeSteps(attachAudioToCurrentMedia: true),
+            features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // The overlap plan survived: seam blend + ramp instead of a plain full concat.
+        SwarmRampMaskBatchNode ramp = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(Constants.ContinueOverlapDefaultFrames + 1, ramp.Frames.LiteralAsInt());
+        Assert.NotEmpty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
     public void Continue_into_sourced_clip_degrades_to_cut()
     {
         using SwarmUiTestContext _ = new();

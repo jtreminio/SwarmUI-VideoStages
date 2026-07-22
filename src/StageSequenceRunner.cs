@@ -57,6 +57,16 @@ internal sealed class StageSequenceRunner(
             {
                 rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
             }
+            else if (clips.Count > 0
+                && clips[0].SourceVideo is not null
+                && clips.Any(clip => clip.SourceVideo is null))
+            {
+                // A sourced first clip keeps the root generation alive as the GENERATED clips'
+                // source/audio donor; conform its pixels to the timeline resolution so every clip
+                // (and the cross-clip merge) runs at the same dims. With no generated clip the root
+                // is dropped outright — leave it untouched so its save retarget/prune still matches.
+                rootVideoStageResizer.ApplyConfiguredRootStageResolutionToSurvivingRootMedia();
+            }
             CaptureGeneratedReference();
             WGNodeData rootSourceMedia = g.CurrentMedia?.Duplicate();
             WGNodeData rootSourceVae = g.CurrentVae?.Duplicate();
