@@ -186,6 +186,39 @@ describe("normalization", () => {
         expect(rawDefaultClip.stages[0].controlNetStrength).toBe(0.8);
     });
 
+    it("buildDefaultClip copies base settings from a previous clip", () => {
+        const prev = buildDefaultClip(getRootDefaults, getDefaultStageModel);
+        prev.duration = 3;
+        prev.boundaryOut = "continue";
+        prev.boundaryOutOverlap = 16;
+        prev.stages[0].sampler = "res_multistep";
+        prev.stages[0].scheduler = "sgm_uniform";
+        prev.stages[0].model = "ltx-big";
+        prev.stages[0].steps = 20;
+        prev.stages[0].cfgScale = 4;
+        prev.stages[0].loras = [{ name: "look", weight: 0.6 }];
+
+        const clip = buildDefaultClip(
+            getRootDefaults,
+            getDefaultStageModel,
+            false,
+            prev,
+        );
+        expect(clip.duration).toBe(3);
+        const stage = clip.stages[0];
+        expect(stage.sampler).toBe("res_multistep");
+        expect(stage.scheduler).toBe("sgm_uniform");
+        expect(stage.model).toBe("ltx-big");
+        expect(stage.steps).toBe(20);
+        expect(stage.cfgScale).toBe(4);
+        expect(stage.loras).toEqual([{ name: "look", weight: 0.6 }]);
+        expect(stage.loras).not.toBe(prev.stages[0].loras);
+        // The new clip is the trailing one — its own join stays the default.
+        expect(clip.boundaryOut).toBe("cut");
+        expect(clip.prompt).toBe("");
+        expect(clip.refs).toEqual([]);
+    });
+
     it("normalizeClip defaults to no IC-LoRAs and migrates legacy ControlNet fields", () => {
         const defaultClip = normalizeClip(
             {},

@@ -1053,7 +1053,7 @@
     }
     return true;
   };
-  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false) => {
+  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
     return {
@@ -1061,7 +1061,7 @@
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
       boundaryOutOverlap: DEFAULT_CONTINUE_OVERLAP_FRAMES,
-      duration: snapDurationToFps(
+      duration: previousClip ? previousClip.duration : snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
       ),
@@ -1082,7 +1082,7 @@
           ...buildDefaultStage(
             getRootDefaults2,
             getDefaultStageModel2,
-            null,
+            previousClip?.stages[0] ?? null,
             refs.length
           ),
           refStrengths: buildDefaultStageRefStrengths(
@@ -7870,7 +7870,20 @@
     };
     const addClip = () => {
       const clips = getClips();
-      clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
+      const prev = clips[clips.length - 1] ?? null;
+      if (prev && clips.length >= 2) {
+        const prevJoin = clips[clips.length - 2];
+        prev.boundaryOut = prevJoin.boundaryOut;
+        prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
+      }
+      clips.push(
+        buildDefaultClip(
+          getRootDefaults,
+          getDefaultStageModel,
+          false,
+          prev
+        )
+      );
       saveClips(clips, { origin: "timeline" });
     };
     const renderAll = (meta) => {

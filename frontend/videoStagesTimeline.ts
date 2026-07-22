@@ -206,7 +206,22 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
 
     const addClip = (): void => {
         const clips = getClips();
-        clips.push(buildDefaultClip(getRootDefaults, getDefaultStageModel));
+        const prev = clips[clips.length - 1] ?? null;
+        // The new join (prev → new clip) mirrors the join between the
+        // previous two clips, when one exists.
+        if (prev && clips.length >= 2) {
+            const prevJoin = clips[clips.length - 2];
+            prev.boundaryOut = prevJoin.boundaryOut;
+            prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
+        }
+        clips.push(
+            buildDefaultClip(
+                getRootDefaults,
+                getDefaultStageModel,
+                false,
+                prev,
+            ),
+        );
         saveClips(clips, { origin: "timeline" });
     };
 

@@ -14,7 +14,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     private const int BatchImagesNodeMaxInputs = 50;
     // Crossfade dissolve length when no per-clip BoundaryOutOverlap preference is supplied; each
     // boundary's request is clamped so every crossfaded clip keeps >=1 non-overlapped core frame
-    // (see ResolveCrossfadePlan).
     private const int DefaultCrossfadeOverlapFrames = 8;
 
     // Per-boundary overlap window in frames (0 = hard cut at that boundary). A crossfade boundary's

@@ -619,6 +619,7 @@ export const buildDefaultClip = (
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
     includeDefaultRef = false,
+    previousClip: Clip | null = null,
 ): Clip => {
     const defaults = getRootDefaults();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
@@ -627,10 +628,12 @@ export const buildDefaultClip = (
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
         boundaryOutOverlap: DEFAULT_CONTINUE_OVERLAP_FRAMES,
-        duration: snapDurationToFps(
-            Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
-            defaults.fps,
-        ),
+        duration: previousClip
+            ? previousClip.duration
+            : snapDurationToFps(
+                  Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
+                  defaults.fps,
+              ),
         audioSource: AUDIO_SOURCE_NATIVE,
         icLoras: [],
         saveAudioTrack: false,
@@ -648,7 +651,7 @@ export const buildDefaultClip = (
                 ...buildDefaultStage(
                     getRootDefaults,
                     getDefaultStageModel,
-                    null,
+                    previousClip?.stages[0] ?? null,
                     refs.length,
                 ),
                 refStrengths: buildDefaultStageRefStrengths(

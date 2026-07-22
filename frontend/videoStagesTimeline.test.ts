@@ -231,6 +231,59 @@ describe("videoStagesTimeline", () => {
         expect(regionCount()).toBe(2);
     });
 
+    it("+ Clip copies the previous clip's base settings and mirrors the prior join", () => {
+        mountState(
+            JSON.stringify({
+                clips: [
+                    {
+                        duration: 2,
+                        boundaryOut: "continue",
+                        boundaryOutOverlap: 16,
+                        stages: [{}] as unknown[],
+                        refs: [] as unknown[],
+                    },
+                    {
+                        duration: 3,
+                        stages: [
+                            {
+                                sampler: "res_multistep",
+                                scheduler: "sgm_uniform",
+                                model: "ltx-big",
+                                steps: 20,
+                                cfgScale: 4,
+                                loras: [{ name: "look", weight: 0.6 }],
+                            },
+                        ],
+                        refs: [] as unknown[],
+                    },
+                ],
+            }),
+        );
+        timeline = videoStagesTimeline();
+        timeline.init();
+
+        document
+            .querySelector<HTMLButtonElement>(
+                ".vst-topbar-tools [data-vst-add-clip]",
+            )
+            ?.click();
+
+        const clips = getClips();
+        expect(clips).toHaveLength(3);
+        // The join into the new clip mirrors the join between the previous two.
+        expect(clips[1].boundaryOut).toBe("continue");
+        expect(clips[1].boundaryOutOverlap).toBe(16);
+        // The new clip inherits the previous clip's base settings.
+        expect(clips[2].duration).toBe(3);
+        const stage = clips[2].stages[0];
+        expect(stage.sampler).toBe("res_multistep");
+        expect(stage.scheduler).toBe("sgm_uniform");
+        expect(stage.model).toBe("ltx-big");
+        expect(stage.steps).toBe(20);
+        expect(stage.cfgScale).toBe(4);
+        expect(stage.loras).toEqual([{ name: "look", weight: 0.6 }]);
+    });
+
     it("keeps the region count stable when only surrounding prompt prose changes", () => {
         mountState(makeClipsJson(2));
 
