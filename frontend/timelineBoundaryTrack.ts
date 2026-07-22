@@ -1,16 +1,7 @@
-import { getClips, saveClips } from "./persistence";
 import { setSelection } from "./selection";
 import { bindClickSelectableTrack } from "./trackDomUtils";
-import type { BoundaryOut } from "./types";
 
-const CHIP_SELECTOR = "[data-vst-boundary-cycle]";
-
-const CYCLE: BoundaryOut[] = ["cut", "continue", "crossfade"];
-
-export const nextBoundary = (current: BoundaryOut): BoundaryOut => {
-    const idx = CYCLE.indexOf(current);
-    return CYCLE[(idx + 1) % CYCLE.length];
-};
+const CHIP_SELECTOR = "[data-vst-boundary-chip]";
 
 export interface TimelineBoundaryTrack {
     attach(body: HTMLElement): void;
@@ -30,9 +21,8 @@ const parseLeftClipIdx = (el: Element | null): number | null => {
 };
 
 /**
- * Interior seam chips: clicking (or Enter/Space) cycles clip N's outgoing boundary to the next mode
- * AND selects that boundary so the bottom detail strip renders its editor. The strip mirrors the new
- * mode immediately (it reads the clip live after saveClips re-renders the timeline).
+ * Interior seam chips: clicking (or Enter/Space) selects clip N's outgoing boundary so the bottom
+ * detail strip renders its editor. The strip's boundary section is the sole editor for the join mode.
  */
 export const createTimelineBoundaryTrack = (): TimelineBoundaryTrack => {
     let boundBody: HTMLElement | null = null;
@@ -48,14 +38,6 @@ export const createTimelineBoundaryTrack = (): TimelineBoundaryTrack => {
             return;
         }
         setSelection({ kind: "boundary", leftClipIdx });
-        const clips = getClips();
-        const clip = clips[leftClipIdx];
-        // Only interior clips (not the final one) own an outgoing boundary.
-        if (!clip || leftClipIdx >= clips.length - 1) {
-            return;
-        }
-        clip.boundaryOut = nextBoundary(clip.boundaryOut ?? "cut");
-        saveClips(clips, { origin: "boundary-track" });
     };
 
     const attach = (body: HTMLElement): void => {

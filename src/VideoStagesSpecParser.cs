@@ -167,6 +167,7 @@ internal static class VideoStagesSpecParser
             ["cliplengthfromcontrolnet"] = ("ClipLengthFromControlNet", OverrideKind.Bool),
             ["reuseaudio"] = ("ReuseAudio", OverrideKind.Bool),
             ["boundaryout"] = ("BoundaryOut", OverrideKind.String),
+            ["boundaryoutoverlap"] = ("BoundaryOutOverlap", OverrideKind.Int),
             ["skipped"] = ("Skipped", OverrideKind.Bool),
         };
 
@@ -448,6 +449,8 @@ internal static class VideoStagesSpecParser
         bool reuseAudio = GetOptionalBool(clipObj, "ReuseAudio", defaultValue: false);
         IReadOnlyList<IcLoraSpec> icLoras = ParseIcLoras(clipObj);
         string boundaryOut = NormalizeBoundaryOut(GetString(clipObj, "BoundaryOut"));
+        int boundaryOutOverlap = NormalizeBoundaryOutOverlap(GetOptionalInt(
+            clipObj, "BoundaryOutOverlap", Constants.ContinueOverlapDefaultFrames, $"Clip {clipIndex}"));
         UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, UploadContainers.ClipAudio);
         IReadOnlyList<AudioSegmentSpec> audioSegments = ParseAudioSegments(clipObj, Math.Max(0, duration));
 
@@ -525,9 +528,16 @@ internal static class VideoStagesSpecParser
             AudioSegments: audioSegments,
             Loras: ParseLoras(clipObj),
             PromptWindows: SortWindows(tags.ClipWindows.GetValueOrDefault(clipIndex)),
-            BoundaryOut: boundaryOut
+            BoundaryOut: boundaryOut,
+            BoundaryOutOverlap: boundaryOutOverlap
         );
     }
+
+    // Multiple of 8 in [ContinueOverlapDefaultFrames, ContinueOverlapMaxFrames], snapped down
+    private static int NormalizeBoundaryOutOverlap(int raw) =>
+        raw < Constants.ContinueOverlapDefaultFrames
+            ? Constants.ContinueOverlapDefaultFrames
+            : Math.Min(Constants.ContinueOverlapMaxFrames, raw - (raw % 8));
 
     private static string NormalizeBoundaryOut(string raw)
     {

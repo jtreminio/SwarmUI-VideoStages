@@ -3,6 +3,7 @@
     "name": "single clip has no boundaries",
     "frames": [17],
     "boundaries": ["cut"],
+    "boundaryOverlaps": [8],
     "expectedOverlaps": [],
     "expectedFallback": false
   },
@@ -10,20 +11,55 @@
     "name": "all-cut two clips remove nothing",
     "frames": [17, 17],
     "boundaries": ["cut", "cut"],
+    "boundaryOverlaps": [8, 8],
     "expectedOverlaps": [0],
     "expectedFallback": false
   },
   {
-    "name": "continue boundary is a fixed 1-frame overlap",
+    "name": "continue boundary takes its overlap+1 window",
     "frames": [17, 17],
     "boundaries": ["continue", "cut"],
+    "boundaryOverlaps": [8, 8],
+    "expectedOverlaps": [9],
+    "expectedFallback": false
+  },
+  {
+    "name": "continue overlap 24 is honored on long clips",
+    "frames": [49, 49],
+    "boundaries": ["continue", "cut"],
+    "boundaryOverlaps": [24, 8],
+    "expectedOverlaps": [25],
+    "expectedFallback": false
+  },
+  {
+    "name": "continue window steps down for short clips",
+    "frames": [17, 17],
+    "boundaries": ["continue", "cut"],
+    "boundaryOverlaps": [48, 8],
+    "expectedOverlaps": [9],
+    "expectedFallback": false
+  },
+  {
+    "name": "continue degrades to a single frame when the window cannot fit",
+    "frames": [9, 9],
+    "boundaries": ["continue", "cut"],
+    "boundaryOverlaps": [8, 8],
     "expectedOverlaps": [1],
+    "expectedFallback": false
+  },
+  {
+    "name": "back-to-back continues reserve for the right window",
+    "frames": [17, 17, 17],
+    "boundaries": ["continue", "continue", "cut"],
+    "boundaryOverlaps": [8, 8, 8],
+    "expectedOverlaps": [9, 1],
     "expectedFallback": false
   },
   {
     "name": "crossfade boundary takes the default window",
     "frames": [17, 17],
     "boundaries": ["crossfade", "cut"],
+    "boundaryOverlaps": [8, 8],
     "expectedOverlaps": [8],
     "expectedFallback": false
   },
@@ -31,13 +67,39 @@
     "name": "mixed continue then crossfade use per-boundary overlaps",
     "frames": [17, 17, 17],
     "boundaries": ["continue", "crossfade", "cut"],
-    "expectedOverlaps": [1, 8],
+    "boundaryOverlaps": [8, 8, 8],
+    "expectedOverlaps": [9, 7],
     "expectedFallback": false
   },
   {
-    "name": "two crossfades share one clamped window",
+    "name": "crossfade honors a larger requested overlap",
+    "frames": [49, 49],
+    "boundaries": ["crossfade", "cut"],
+    "boundaryOverlaps": [24, 8],
+    "expectedOverlaps": [24],
+    "expectedFallback": false
+  },
+  {
+    "name": "crossfade clamps to the clip budget",
+    "frames": [17, 17],
+    "boundaries": ["crossfade", "cut"],
+    "boundaryOverlaps": [48, 8],
+    "expectedOverlaps": [16],
+    "expectedFallback": false
+  },
+  {
+    "name": "unequal crossfade requests resolve per boundary",
+    "frames": [33, 33, 33],
+    "boundaries": ["crossfade", "crossfade", "cut"],
+    "boundaryOverlaps": [24, 8, 8],
+    "expectedOverlaps": [16, 8],
+    "expectedFallback": false
+  },
+  {
+    "name": "two default crossfades keep the shared window",
     "frames": [17, 17, 17],
     "boundaries": ["crossfade", "crossfade", "cut"],
+    "boundaryOverlaps": [8, 8, 8],
     "expectedOverlaps": [8, 8],
     "expectedFallback": false
   },
@@ -45,6 +107,7 @@
     "name": "double crossfade clamps below the default for short clips",
     "frames": [9, 9, 9],
     "boundaries": ["crossfade", "crossfade", "cut"],
+    "boundaryOverlaps": [8, 8, 8],
     "expectedOverlaps": [4, 4],
     "expectedFallback": false
   },
@@ -52,7 +115,16 @@
     "name": "clip too short to fund its overlaps falls back to cut",
     "frames": [17, 1, 17],
     "boundaries": ["crossfade", "crossfade", "cut"],
+    "boundaryOverlaps": [8, 8, 8],
     "expectedOverlaps": [0, 0],
+    "expectedFallback": true
+  },
+  {
+    "name": "continue into a too-short clip falls back to cut",
+    "frames": [17, 1],
+    "boundaries": ["continue", "cut"],
+    "boundaryOverlaps": [8, 8],
+    "expectedOverlaps": [0],
     "expectedFallback": true
   }
 ]

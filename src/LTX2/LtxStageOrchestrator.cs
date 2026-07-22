@@ -36,9 +36,10 @@ internal sealed class LtxStageOrchestrator(
         if (stageFrame.ClipContext.ContinuityFrame is WGNodeData continuityFrame
             && stageFrame.ClipContext.IsFirstStage(stage))
         {
-            // "continue" boundary: generate this clip from the previous clip's final frame. The sequence
-            // runner only arms ContinuityFrame when the clip has no explicit first-frame ref, so this can
-            // only ever displace the implicit image-to-video default ref.
+            // "continue" boundary: generate this clip with the previous clip's tail frames frozen as its
+            // opening latent context (LTXVImgToVideoInplace encodes the whole batch). The sequence runner
+            // only arms ContinuityFrame when the clip has no explicit first-frame ref, so this can only
+            // ever displace the implicit image-to-video default ref.
             primaryGuideClipRef = new ResolvedClipRef(
                 continuityFrame,
                 new ImageRefSpec("Continue", Frame: 1, FromEnd: false, UploadFileName: null),

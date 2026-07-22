@@ -12,7 +12,6 @@ import * as persistence from "./persistence";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
     createTimelineBoundaryTrack,
-    nextBoundary,
     type TimelineBoundaryTrack,
 } from "./timelineBoundaryTrack";
 import { computeRegionLayout, renderBoundarySeams } from "./timelineView";
@@ -36,14 +35,6 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
 const clipFor = (boundaryOut: BoundaryOut, duration = 2): Clip =>
     ({ duration, boundaryOut, stages: [], refs: [] }) as unknown as Clip;
 
-describe("nextBoundary", () => {
-    it("cycles cut → continue → crossfade → cut", () => {
-        expect(nextBoundary("cut")).toBe("continue");
-        expect(nextBoundary("continue")).toBe("crossfade");
-        expect(nextBoundary("crossfade")).toBe("cut");
-    });
-});
-
 describe("crossfadePlanForClips", () => {
     it("reports no overlap when every boundary is a cut", () => {
         const plan = crossfadePlanForClips(
@@ -53,12 +44,13 @@ describe("crossfadePlanForClips", () => {
         expect(plan).toEqual({ overlaps: [0], fallback: false });
     });
 
-    it("gives a continue boundary a fixed 1-frame overlap", () => {
+    it("resolves a continue boundary to the requested overlap + 1", () => {
+        // Default overlap 8 -> window 9 (8n+1), ample for 2s @ 24fps clips.
         const plan = crossfadePlanForClips(
             [clipFor("continue"), clipFor("cut")],
             24,
         );
-        expect(plan.overlaps[0]).toBe(1);
+        expect(plan.overlaps[0]).toBe(9);
         expect(plan.fallback).toBe(false);
     });
 
@@ -83,7 +75,7 @@ describe("crossfadePlanForClips", () => {
     });
 });
 
-describe("createTimelineBoundaryTrack (cycle + select wiring)", () => {
+describe("createTimelineBoundaryTrack (select wiring)", () => {
     let track: TimelineBoundaryTrack | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
@@ -115,39 +107,28 @@ describe("createTimelineBoundaryTrack (cycle + select wiring)", () => {
         return body;
     };
 
-    const savedClips = (): Clip[] =>
-        saveSpy.mock.calls[saveSpy.mock.calls.length - 1][0] as Clip[];
-
     const clickSeam = (body: HTMLElement, leftClipIdx: number): void => {
         body.querySelector<HTMLElement>(
-            `[data-vst-boundary-cycle][data-left-clip-idx="${leftClipIdx}"]`,
+            `[data-vst-boundary-chip][data-left-clip-idx="${leftClipIdx}"]`,
         )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     };
 
-    it("cycles the outgoing boundary and selects it on click", () => {
+    it("selects the boundary without mutating or saving on click", () => {
         const body = setup([{ duration: 5 }, { duration: 5 }]);
         clickSeam(body, 0);
         expect(getSelection()).toEqual({ kind: "boundary", leftClipIdx: 0 });
-        expect(savedClips()[0].boundaryOut).toBe("continue");
-    });
-
-    it("cycles continue → crossfade on a second activation", () => {
-        const body = setup([
-            { duration: 5, boundaryOut: "continue" },
-            { duration: 5 },
-        ]);
-        clickSeam(body, 0);
-        expect(savedClips()[0].boundaryOut).toBe("crossfade");
+        expect(persistence.getClips()[0].boundaryOut).toBe("cut");
+        expect(saveSpy).not.toHaveBeenCalled();
     });
 
     it("activates via keyboard (Enter)", () => {
         const body = setup([{ duration: 5 }, { duration: 5 }]);
         body.querySelector<HTMLElement>(
-            '[data-vst-boundary-cycle][data-left-clip-idx="0"]',
+            '[data-vst-boundary-chip][data-left-clip-idx="0"]',
         )?.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
         );
         expect(getSelection()).toEqual({ kind: "boundary", leftClipIdx: 0 });
-        expect(savedClips()[0].boundaryOut).toBe("continue");
+        expect(saveSpy).not.toHaveBeenCalled();
     });
 });

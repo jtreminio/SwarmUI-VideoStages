@@ -93,19 +93,18 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(2, CountOf<AudioConcatNode>(bridge));
         Assert.Equal(0, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
         Assert.Equal(0, CountOf<ImageFromBatchNode>(bridge));
-        Assert.Equal(0, CountOf<SolidMaskNode>(bridge));
-        Assert.Equal(0, CountOf<BatchMasksNodeNode>(bridge));
+        Assert.Equal(0, CountOf<SwarmRampMaskBatchNode>(bridge));
         Assert.Equal(0, CountOf<TrimAudioDurationNode>(bridge));
         // Full length preserved (no overlap removed).
         Assert.Equal(51, gB.CurrentMedia.Frames);
     }
 
     [Fact]
-    public void Continue_CollapsesSeamFrame_WithOneFrameBlendAndAudioTrim()
+    public void Continue_WithoutWindows_DefaultsToOneFrameBlendAndAudioTrim()
     {
-        // An armed "continue" boundary: generation-time continuity duplicated the seam frame (clip 1's
-        // first frame was conditioned on clip 0's last), so the merge collapses it via a 1-frame overlap —
-        // a 50/50 blend of the two duplicates — and trims clip 0's audio by that frame to stay in sync.
+        // No continueWindows supplied: an armed "continue" boundary falls back to the conservative
+        // 1-frame window — a 50/50 blend of the two duplicated seam frames — and trims clip 0's audio
+        // by that frame to stay in sync.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
         new MultiClipParallelMerger(g).Apply(clips, null, ["continue", "cut"]);
@@ -118,11 +117,10 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(4, CountOf<ImageFromBatchNode>(bridge));
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
 
-        // K==1 window: a single 50/50 mask frame.
-        SolidMaskNode mask = Assert.Single(bridge.Graph.NodesOfType<SolidMaskNode>());
-        Assert.Equal(0.5, mask.Value.LiteralAsDouble()!.Value, 6);
-        BatchMasksNodeNode rampBatch = Assert.Single(bridge.Graph.NodesOfType<BatchMasksNodeNode>());
-        Assert.Equal(rampBatch.Id, blend.Mask.Connection!.Node.Id);
+        // K==1 window: a single one-frame ramp mask (the node emits 0.5 for a lone frame).
+        SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(1, ramp.Frames.LiteralAsInt());
+        Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id);
 
         // Clip 0's audio drops its final frame; clip 1's audio is untouched.
         TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
@@ -134,36 +132,73 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void ContinueAndCrossfade_MixedBoundaries_UsePerBoundaryOverlaps()
+    public void Continue_WithResolvedWindow_CollapsesTheOverlapWindow()
     {
-        // Boundary 0 is an armed "continue" (K=1), boundary 1 a crossfade (K clamps to 8: the middle clip
-        // spends 1 frame on the continue side, leaving 17-1-1=15 >= 8). Each boundary gets its own ramp mask.
+        // Production path: StageSequenceRunner resolved the default overlap 8 to a 9-frame window
+        // (overlap+1) and passes it in. The merge blends the 9 duplicated frames with a full ramp and
+        // trims clip 0's audio by the window.
         (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(g).Apply(clips, null, ["continue", "crossfade", "cut"]);
+            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
+        int[] windows = MultiClipParallelMerger.ResolveContinueWindows(
+            [17, 17], ["continue", "cut"], [8, 8]);
+        Assert.Equal([9], windows);
+        new MultiClipParallelMerger(g).Apply(clips, null, ["continue", "cut"], windows);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        const int k = 8;
+        const int k = 9;
+
+        LTXVLaplacianPyramidBlendNode blend =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Equal(4, CountOf<ImageFromBatchNode>(bridge));
+        SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(k, ramp.Frames.LiteralAsInt());
+        Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id);
+
+        TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal((17 - k) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
+        Assert.Equal(AudioId(0), trim.Audio.Connection!.Node.Id);
+
+        Assert.Equal(34 - k, g.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void ContinueAndCrossfade_MixedBoundaries_UsePerBoundaryOverlaps()
+    {
+        // Boundary 0 is an armed "continue" (window 9), boundary 1 a crossfade whose K clamps to 7: the
+        // middle clip spends 9 frames on the continue side, leaving 17-1-9=7. Each boundary gets its own
+        // ramp mask.
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
+        int[] windows = MultiClipParallelMerger.ResolveContinueWindows(
+            [17, 17, 17], ["continue", "crossfade", "cut"], [8, 8, 8]);
+        Assert.Equal([9, 0], windows);
+        new MultiClipParallelMerger(g).Apply(clips, null, ["continue", "crossfade", "cut"], windows);
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        const int contK = 9;
+        const int crossK = 7;
 
         // One blend per boundary; 3 cores + 2x(tail+head) slices.
         Assert.Equal(2, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
         Assert.Equal(7, CountOf<ImageFromBatchNode>(bridge));
 
-        // Two distinct ramp masks: the K=1 50/50 frame plus the K=8 ramp.
-        Assert.Equal(2, CountOf<BatchMasksNodeNode>(bridge));
-        Assert.Equal(1 + k, CountOf<SolidMaskNode>(bridge));
+        // Two distinct ramp masks: the K=9 continue ramp plus the K=7 crossfade ramp.
+        List<SwarmRampMaskBatchNode> ramps = [.. bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>()];
+        Assert.Equal(2, ramps.Count);
+        Assert.Contains(ramps, r => r.Frames.LiteralAsInt() == contK);
+        Assert.Contains(ramps, r => r.Frames.LiteralAsInt() == crossK);
 
-        // Audio: clip 0 sheds its 1-frame continue tail, clip 1 its K-frame crossfade tail.
+        // Audio: clip 0 sheds its 9-frame continue tail, clip 1 its 7-frame crossfade tail.
         List<TrimAudioDurationNode> trims = [.. bridge.Graph.NodesOfType<TrimAudioDurationNode>()];
         Assert.Equal(2, trims.Count);
         Dictionary<string, double> trimBySource = trims.ToDictionary(
             t => t.Audio.Connection!.Node.Id,
             t => t.Duration.LiteralAsDouble()!.Value);
-        Assert.Equal((17 - 1) / (double)Fps, trimBySource[AudioId(0)], 6);
-        Assert.Equal((17 - k) / (double)Fps, trimBySource[AudioId(1)], 6);
+        Assert.Equal((17 - contK) / (double)Fps, trimBySource[AudioId(0)], 6);
+        Assert.Equal((17 - crossK) / (double)Fps, trimBySource[AudioId(1)], 6);
 
-        // 51 total minus 1 (continue) minus 8 (crossfade).
-        Assert.Equal(51 - 1 - k, g.CurrentMedia.Frames);
+        // 51 total minus 9 (continue) minus 7 (crossfade).
+        Assert.Equal(51 - contK - crossK, g.CurrentMedia.Frames);
     }
 
     [Fact]
@@ -187,11 +222,14 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
         Assert.Equal(2, CountOf<AudioConcatNode>(bridge));
 
-        // One shared ramp mask (built once, reused by both blends): K solid frames + one batch.
-        Assert.Equal(k, CountOf<SolidMaskNode>(bridge));
-        BatchMasksNodeNode rampBatch = Assert.Single(bridge.Graph.NodesOfType<BatchMasksNodeNode>());
+        // One shared ramp mask node (built once, reused by both blends). The per-frame white->black
+        // values live inside SwarmRampMaskBatch, pinned by comfy_node/.../tests/test_ramp_mask.py.
+        SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(k, ramp.Frames.LiteralAsInt());
+        Assert.Equal(512, ramp.Width.LiteralAsInt());
+        Assert.Equal(512, ramp.Height.LiteralAsInt());
         Assert.All(blends, blend =>
-            Assert.Equal(rampBatch.Id, blend.Mask.Connection!.Node.Id));
+            Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id));
 
         // Every blend's image_a/image_b come from ImageFromBatch slices (clip tail / next clip head).
         Assert.All(blends, blend =>
@@ -199,23 +237,6 @@ public class MultiClipCrossfadeMergerTests
             Assert.IsType<ImageFromBatchNode>(blend.ImageA.Connection!.Node);
             Assert.IsType<ImageFromBatchNode>(blend.ImageB.Connection!.Node);
         });
-
-        // Per-frame ramp: white(1.0)=image_a=clip N at the window start, black(0.0)=image_b=clip N+1 at
-        // the end, strictly decreasing in mask-index order.
-        JObject rampInputs = (JObject)g.Workflow[rampBatch.Id]!["inputs"]!;
-        List<double> ramp = [];
-        for (int j = 0; j < k; j++)
-        {
-            // Input-list children serialize under "{slotName}.{prefix}{index}" (here "masks.mask{j}").
-            string solidId = $"{((JArray)rampInputs[$"masks.mask{j}"]!)[0]}";
-            ramp.Add(bridge.Graph.GetNode<SolidMaskNode>(solidId)!.Value.LiteralAsDouble()!.Value);
-        }
-        Assert.Equal(1.0, ramp[0], 6);
-        Assert.Equal(0.0, ramp[^1], 6);
-        for (int j = 1; j < ramp.Count; j++)
-        {
-            Assert.True(ramp[j] < ramp[j - 1], "ramp must strictly decrease white->black");
-        }
 
         // Audio aligns PER crossfaded boundary: each clip whose outgoing boundary crossfades (clip 0, 1)
         // drops its tail K frames before the concat, keeping later clips' audio synced with their K-earlier
@@ -289,6 +310,26 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(trim.Id, concat.Audio1.Connection!.Node.Id);
         Assert.Equal(AudioId(1), concat.Audio2.Connection!.Node.Id);
         Assert.Equal(34 - k, g.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void Crossfade_WithRequestedOverlap_UsesPerBoundaryDissolve()
+    {
+        // Production path: the per-clip BoundaryOutOverlap prefs ride into the plan, so a crossfade
+        // boundary dissolves over its requested 24 frames instead of the default 8.
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([49, 49], T2IModelClassSorter.CompatLtxv2);
+        new MultiClipParallelMerger(g).Apply(clips, null, ["crossfade", "cut"], null, [24, 8]);
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        const int k = 24;
+
+        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(k, ramp.Frames.LiteralAsInt());
+        TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal((49 - k) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
+        Assert.Equal(98 - k, g.CurrentMedia.Frames);
     }
 
     [Fact]

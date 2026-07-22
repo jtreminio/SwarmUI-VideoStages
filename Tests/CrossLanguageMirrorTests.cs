@@ -57,6 +57,7 @@ public class CrossLanguageMirrorTests
             string name = c.Value<string>("name");
             int[] frames = [.. c.Value<JArray>("frames").Select(f => (int)f)];
             string[] boundaries = [.. c.Value<JArray>("boundaries").Select(b => (string)b)];
+            int[] boundaryOverlaps = [.. c.Value<JArray>("boundaryOverlaps").Select(o => (int)o)];
             int[] expectedOverlaps = [.. c.Value<JArray>("expectedOverlaps").Select(o => (int)o)];
             bool expectedFallback = c.Value<bool>("expectedFallback");
 
@@ -72,8 +73,12 @@ public class CrossLanguageMirrorTests
                 });
             }
 
-            MultiClipParallelMerger.CrossfadePlan plan =
-                MultiClipParallelMerger.ResolveCrossfadePlan(clips, boundaries, allFramesKnown: true);
+            // Same two-step flow as StageSequenceRunner: resolve continue windows, then plan with them
+            // plus the raw prefs (each crossfade boundary's requested dissolve).
+            int[] windows = MultiClipParallelMerger.ResolveContinueWindows(
+                [.. frames.Select(f => (int?)f)], boundaries, boundaryOverlaps);
+            MultiClipParallelMerger.CrossfadePlan plan = MultiClipParallelMerger.ResolveCrossfadePlan(
+                clips, boundaries, allFramesKnown: true, windows, boundaryOverlaps);
 
             int boundaryCount = Math.Max(0, frames.Length - 1);
             int[] actualOverlaps = plan?.BoundaryOverlap ?? new int[boundaryCount];

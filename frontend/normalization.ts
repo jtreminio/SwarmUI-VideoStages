@@ -5,6 +5,10 @@ import {
     isAceStepFunAudioSource,
     resolveAudioSourceValue,
 } from "./audioSource";
+import {
+    CONTINUE_OVERLAP_MAX_FRAMES,
+    DEFAULT_CONTINUE_OVERLAP_FRAMES,
+} from "./boundaryPlan";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import {
     AUDIO_SEGMENT_MIN_LENGTH,
@@ -291,6 +295,16 @@ export const normalizeAudioSegments = (
 export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
     const raw = `${value ?? ""}`.trim().toLowerCase();
     return raw === "continue" || raw === "crossfade" ? raw : "cut";
+};
+
+// Mirrors the backend NormalizeBoundaryOutOverlap: multiple of 8 in
+// [DEFAULT_CONTINUE_OVERLAP_FRAMES, CONTINUE_OVERLAP_MAX_FRAMES], snapped down.
+export const normalizeContinueOverlap = (value: unknown): number => {
+    const num = Math.trunc(Number(value));
+    if (!Number.isFinite(num) || num < DEFAULT_CONTINUE_OVERLAP_FRAMES) {
+        return DEFAULT_CONTINUE_OVERLAP_FRAMES;
+    }
+    return Math.min(CONTINUE_OVERLAP_MAX_FRAMES, num - (num % 8));
 };
 
 export const normalizeControlNetSource = (value: unknown): string => {
@@ -612,6 +626,7 @@ export const buildDefaultClip = (
         skipped: false,
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
+        boundaryOutOverlap: DEFAULT_CONTINUE_OVERLAP_FRAMES,
         duration: snapDurationToFps(
             Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
             defaults.fps,
@@ -861,6 +876,9 @@ export const normalizeClip = (
         hue: normalizeStoredHue(rawClip.hue),
         boundaryOut: normalizeBoundaryOut(
             rawClip.boundaryOut ?? rawClip.BoundaryOut,
+        ),
+        boundaryOutOverlap: normalizeContinueOverlap(
+            rawClip.boundaryOutOverlap ?? rawClip.BoundaryOutOverlap,
         ),
         duration,
         audioSource,

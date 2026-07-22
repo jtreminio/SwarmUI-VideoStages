@@ -145,6 +145,13 @@ export interface Clip {
     skipped: boolean;
     hue: number;
     boundaryOut: BoundaryOut;
+    /**
+     * "continue" boundary overlap in frames (multiple of 8): the next clip is
+     * generated with this clip's last overlap+1 frames as frozen latent
+     * context, and the merge collapses the duplicated frames. Ignored for
+     * "cut"/"crossfade".
+     */
+    boundaryOutOverlap: number;
     duration: number;
     audioSource: string;
     icLoras: IcLora[];
@@ -197,6 +204,7 @@ export const STORED_STAGE_KEYS = [
 export const STORED_CLIP_KEYS = [
     "skipped",
     "boundaryOut",
+    "boundaryOutOverlap",
     "duration",
     "audioSource",
     "icLoras",

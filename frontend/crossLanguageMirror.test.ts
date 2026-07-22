@@ -40,6 +40,7 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
         name: string;
         frames: number[];
         boundaries: string[];
+        boundaryOverlaps: number[];
         expectedOverlaps: number[];
         expectedFallback: boolean;
     }
@@ -47,10 +48,15 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
 
     // The frontend derives frame counts from duration via framesForClip; feed a duration (at fps 1)
     // that reproduces the fixture's exact frame count so both sides plan on identical inputs.
-    const clipFor = (frames: number, boundaryOut: string): Clip =>
+    const clipFor = (
+        frames: number,
+        boundaryOut: string,
+        boundaryOutOverlap: number,
+    ): Clip =>
         ({
             duration: frames - 1,
             boundaryOut,
+            boundaryOutOverlap,
             stages: [],
             refs: [],
         }) as unknown as Clip;
@@ -58,13 +64,16 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
     it.each(cases)("$name", ({
         frames,
         boundaries,
+        boundaryOverlaps,
         expectedOverlaps,
         expectedFallback,
     }) => {
         for (const f of frames) {
             expect(framesForClip(f - 1, 1)).toBe(f);
         }
-        const clips = frames.map((f, i) => clipFor(f, boundaries[i]));
+        const clips = frames.map((f, i) =>
+            clipFor(f, boundaries[i], boundaryOverlaps[i]),
+        );
         const plan = crossfadePlanForClips(clips, 1);
         expect(plan.overlaps).toEqual(expectedOverlaps);
         expect(plan.fallback).toBe(expectedFallback);

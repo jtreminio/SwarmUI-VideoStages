@@ -58,11 +58,17 @@ public static class Constants
     internal const string MoGeModelFileName = "moge_2_vitl_normal_fp16.safetensors";
 
     // Outgoing boundary between clip N and N+1; mirrors the frontend BoundaryOut union.
-    // "continue" = generation-time continuity: the next clip is generated from this clip's final frame
-    // (first-frame guide at strength 1) and the merge collapses the duplicated seam frame via a 1-frame
-    // overlap. Degrades to "cut" when the next clip can't consume it (non-LTX-2 first stage, explicit
-    // first-frame ref, or unknown frame count).
+    // "continue" = generation-time continuity: the next clip is generated with this clip's last
+    // overlap+1 frames as frozen latent context (LTXVImgToVideoInplace at strength 1) and the merge
+    // collapses the duplicated frames. Degrades to "cut" when the next clip can't consume it
+    // (non-LTX-2 first stage, explicit first-frame ref, or unknown frame count).
     public const string BoundaryOutCut = "cut";
     public const string BoundaryOutContinue = "continue";
     public const string BoundaryOutCrossfade = "crossfade";
+
+    // Boundary overlap bounds, in frames; multiples of 8 so a continue window (overlap+1) sits on the
+    // LTX causal VAE's 8n+1 temporal grid ("crossfade" reuses the same value vocabulary as its dissolve
+    // length). Mirror frontend boundaryPlan constants.
+    public const int ContinueOverlapDefaultFrames = 8;
+    public const int ContinueOverlapMaxFrames = 48;
 }

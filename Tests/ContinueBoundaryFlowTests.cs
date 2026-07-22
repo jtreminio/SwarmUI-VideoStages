@@ -12,9 +12,12 @@ namespace VideoStages.Tests;
 
 public partial class StageFlowTests
 {
-    // BuildNativeInput sets VideoFrames=16 and refine-type clip stages carry the source frame count
-    // through, so each clip's rendered output is 16 frames; the continuity frame is batch index 15.
+    // Each clip's Duration (0.6s at 24 fps) aligns to 17 spec frames, which funds the continue-window
+    // resolution: the default overlap (8) resolves to a 9-frame window (overlap+1). The refine-type
+    // stages themselves carry the native source's 16 frames through, so each RENDERED clip is 16 frames
+    // — the window's tail slice and the merge trims index off that actual output count.
     private const int ContinueClipFrames = 16;
+    private const int ContinueWindowFrames = Constants.ContinueOverlapDefaultFrames + 1;
 
     private static string TwoClipContinueStagesJson(TestModelBundle models, JObject secondClip = null)
     {
@@ -24,6 +27,11 @@ public partial class StageFlowTests
 
         secondClip ??= MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+
+        // The continue-window resolution reads spec frame counts, which come from Duration (0.6s at the
+        // harness's 24 fps aligns to 17); without one the window degrades to the conservative 1 frame.
+        firstClip["Duration"] = 0.6;
+        secondClip["Duration"] ??= 0.6;
 
         return MakeRootConfig(512, 512, firstClip, secondClip).ToString();
     }
@@ -40,27 +48,27 @@ public partial class StageFlowTests
             input, BuildNativeSteps(attachAudioToCurrentMedia: true));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The continuity frame: clip 0's final rendered frame, sliced out as a single image. (The merger's
-        // K=1 tail slice shares the same index/length, so there are two such nodes in the graph.)
-        List<ImageFromBatchNode> lastFrameSlices = [.. bridge.Graph.NodesOfType<ImageFromBatchNode>()
-            .Where(n => n.BatchIndex.LiteralAsInt() == ContinueClipFrames - 1
-                && n.Length.LiteralAsInt() == 1)];
-        Assert.NotEmpty(lastFrameSlices);
+        // The continuity tail: clip 0's last overlap+1 frames, sliced out as one batch. (The merger's
+        // K=9 tail slice shares the same index/length, so there are two such nodes in the graph.)
+        List<ImageFromBatchNode> tailSlices = [.. bridge.Graph.NodesOfType<ImageFromBatchNode>()
+            .Where(n => n.BatchIndex.LiteralAsInt() == ContinueClipFrames - ContinueWindowFrames
+                && n.Length.LiteralAsInt() == ContinueWindowFrames)];
+        Assert.NotEmpty(tailSlices);
 
-        // Clip 1's first stage consumes it as a full-strength first-frame guide (img-to-video inplace).
+        // Clip 1's first stage freezes it as full-strength opening latent context (img-to-video inplace).
         List<LTXVImgToVideoInplaceNode> inplaceNodes =
             [.. bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()];
         Assert.Contains(inplaceNodes, n =>
             n.Strength.LiteralAsDouble() == 1.0
-            && lastFrameSlices.Any(slice => ReachesUpstream(bridge, n, slice.Id)));
+            && tailSlices.Any(slice => ReachesUpstream(bridge, n, slice.Id)));
 
-        // The merge collapses the duplicated seam frame: one K=1 blend with a single 50/50 mask frame.
+        // The merge collapses the duplicated window: one K=9 blend fed a single 9-frame ramp mask node.
         LTXVLaplacianPyramidBlendNode blend = Assert.Single(
             bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
-        SolidMaskNode mask = Assert.Single(bridge.Graph.NodesOfType<SolidMaskNode>());
-        Assert.Equal(0.5, mask.Value.LiteralAsDouble()!.Value, 6);
-        Assert.NotNull(blend.Mask.Connection);
-        Assert.Equal(2 * ContinueClipFrames - 1, g.CurrentMedia.Frames);
+        SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(ContinueWindowFrames, ramp.Frames.LiteralAsInt());
+        Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id);
+        Assert.Equal(2 * ContinueClipFrames - ContinueWindowFrames, g.CurrentMedia.Frames);
         AssertWorkflowHasNoCycles(workflow);
     }
 
@@ -84,7 +92,8 @@ public partial class StageFlowTests
         // No continuity slice, no seam blend — the boundary degraded to a plain cut.
         Assert.DoesNotContain(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
-            n => n.BatchIndex.LiteralAsInt() == ContinueClipFrames - 1 && n.Length.LiteralAsInt() == 1);
+            n => n.BatchIndex.LiteralAsInt() == ContinueClipFrames - ContinueWindowFrames
+                && n.Length.LiteralAsInt() == ContinueWindowFrames);
         Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
         Assert.Equal(2 * ContinueClipFrames, g.CurrentMedia.Frames);
         AssertWorkflowHasNoCycles(workflow);

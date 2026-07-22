@@ -10,7 +10,7 @@ internal sealed class LtxGuidePreprocessReuse(
     WorkflowGenerator g,
     RootVideoStageResizer rootVideoStageResizer)
 {
-    private const int ImgCompression = 18;
+    private const int ImgCompression = 25;
 
     internal JArray ResolvePreprocessedGuidePath(JArray guideImagePath, WGNodeData targetMedia)
     {

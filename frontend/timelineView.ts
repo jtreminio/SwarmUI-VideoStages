@@ -354,9 +354,9 @@ export const BOUNDARY_LABEL: Record<BoundaryOut, string> = {
 };
 
 /**
- * Chips sitting on each interior seam (between clip N and N+1) that cycle clip N's outgoing boundary
- * (cut → continue → crossfade) and select the boundary for the detail strip. Omitted after the final
- * clip (no following clip). `data-vst-boundary-cycle` + `data-left-clip-idx` drive timelineBoundaryTrack.
+ * Chips sitting on each interior seam (between clip N and N+1) that select clip N's outgoing boundary
+ * for the detail strip, whose boundary section edits the join mode. Omitted after the final clip (no
+ * following clip). `data-vst-boundary-chip` + `data-left-clip-idx` drive timelineBoundaryTrack.
  */
 export const renderBoundarySeams = (
     clips: Clip[],
@@ -372,10 +372,10 @@ export const renderBoundarySeams = (
         const value: BoundaryOut = clip.boundaryOut ?? "cut";
         const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
         const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-        const title = `Boundary clip ${leftClipIdx} → ${i}: ${label}. Click to cycle (cut → continue → crossfade).`;
-        const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}. Click to cycle and edit.`;
+        const title = `Boundary clip ${leftClipIdx} → ${i}: ${label}. Click to edit.`;
+        const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}. Click to edit.`;
         seams.push(
-            `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-cycle data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
+            `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
                 `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
                 `</button>`,
         );

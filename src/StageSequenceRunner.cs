@@ -68,6 +68,11 @@ internal sealed class StageSequenceRunner(
             int totalStageCount = TotalStageCount(clips);
             VideoStagesSpec spec = g.GetVideoStagesSpec();
             List<string> effectiveBoundaryOuts = [.. clips.Select(clip => clip.BoundaryOut)];
+            int[] boundaryOverlapPrefs = [.. clips.Select(clip => clip.BoundaryOutOverlap)];
+            int[] continueWindows = MultiClipParallelMerger.ResolveContinueWindows(
+                [.. clips.Select(clip => clip.Frames)],
+                effectiveBoundaryOuts,
+                boundaryOverlapPrefs);
             ClipSpec previousClip = null;
             WGNodeData previousClipOutput = null;
             int clipIndex = 0;
@@ -92,7 +97,8 @@ internal sealed class StageSequenceRunner(
 
                     if (StringUtils.Equals(previousClip.BoundaryOut, Constants.BoundaryOutContinue))
                     {
-                        clipContext.ContinuityFrame = TryBuildContinuityFrame(previousClip, previousClipOutput, clip);
+                        clipContext.ContinuityFrame = TryBuildContinuityFrame(
+                            previousClip, previousClipOutput, clip, continueWindows[clipIndex - 1]);
                         if (clipContext.ContinuityFrame is null)
                         {
                             effectiveBoundaryOuts[clipIndex - 1] = Constants.BoundaryOutCut;
@@ -146,7 +152,12 @@ internal sealed class StageSequenceRunner(
                 // clips and clipParallelOutputs are index-aligned (one output per active clip), so BoundaryOut
                 // zips by index. "continue" entries survive only where continuity conditioning was actually
                 // armed above (else the boundary was degraded to "cut").
-                multiClipParallelMerger.Apply(clipParallelOutputs, rootSourceMedia, effectiveBoundaryOuts);
+                multiClipParallelMerger.Apply(
+                    clipParallelOutputs,
+                    rootSourceMedia,
+                    effectiveBoundaryOuts,
+                    continueWindows,
+                    boundaryOverlapPrefs);
             }
         }
         finally
@@ -164,12 +175,14 @@ internal sealed class StageSequenceRunner(
     }
 
     /// <summary>
-    /// Arms generation-time continuity for a "continue" boundary: extracts the previous clip's final
-    /// rendered frame so the next clip's first stage can use it as a first-frame guide. Returns null
-    /// (degrading the boundary to a cut) when the next clip can't consume it — a non-LTX-2 first stage,
-    /// an explicit user first-frame ref, or an unknown previous frame count.
+    /// Arms generation-time continuity for a "continue" boundary: extracts the previous clip's last
+    /// <paramref name="window"/> rendered frames (the resolved overlap+1) so the next clip's first
+    /// stage can freeze them as its opening latent context. Returns null (degrading the boundary to a
+    /// cut) when the next clip can't consume it — a non-LTX-2 first stage, an explicit user
+    /// first-frame ref, or an unknown/too-short previous frame count.
     /// </summary>
-    private WGNodeData TryBuildContinuityFrame(ClipSpec previousClip, WGNodeData previousOutput, ClipSpec clip)
+    private WGNodeData TryBuildContinuityFrame(
+        ClipSpec previousClip, WGNodeData previousOutput, ClipSpec clip, int window)
     {
         if (clip.Stages.Count == 0 || !VideoStageModelCompat.IsLtxV2VideoModel(clip.Stages[0].Model))
         {
@@ -196,17 +209,26 @@ internal sealed class StageSequenceRunner(
                 + "previous clip's output; treating the boundary as a cut.");
             return null;
         }
+        if (window > lastFrameCount)
+        {
+            // The window was planned from spec frame counts; if the rendered output came up shorter, a
+            // partial slice would desync generation from the merge plan — degrade to a cut instead.
+            Logs.Warning(
+                $"VideoStages: Clip {previousClip.Id} boundary 'continue' needs {window} overlap frames but "
+                + $"its output has {lastFrameCount}; treating the boundary as a cut.");
+            return null;
+        }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        ImageFromBatchNode lastFrame = bridge.AddNode(new ImageFromBatchNode().With(
-            BatchIndex: lastFrameCount - 1,
-            Length: 1));
-        lastFrame.Image.TryConnectFromPath(bridge, previousOutputPath);
-        return new WGNodeData(WorkflowBridge.ToPath(lastFrame.IMAGE), g, WGNodeData.DT_IMAGE, previousOutput.Compat)
+        ImageFromBatchNode tailFrames = bridge.AddNode(new ImageFromBatchNode().With(
+            BatchIndex: lastFrameCount - window,
+            Length: window));
+        tailFrames.Image.TryConnectFromPath(bridge, previousOutputPath);
+        return new WGNodeData(WorkflowBridge.ToPath(tailFrames.IMAGE), g, WGNodeData.DT_IMAGE, previousOutput.Compat)
         {
             Width = previousOutput.Width,
             Height = previousOutput.Height,
-            Frames = 1
+            Frames = window
         };
     }
 

@@ -66,6 +66,7 @@ const maximalClip = (): Clip =>
     minimalClip({
         skipped: true,
         boundaryOut: "crossfade",
+        boundaryOutOverlap: 16,
         duration: 4,
         audioSource: "Native",
         icLoras: [

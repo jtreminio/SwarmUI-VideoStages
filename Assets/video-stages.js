@@ -174,6 +174,101 @@
   };
   var resolveAudioSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, AUDIO_SOURCE_NATIVE);
 
+  // frontend/renderUtils.ts
+  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  var FRAME_ALIGNMENT = 8;
+  var framesForClip = (durationSeconds, fps) => Math.max(
+    1,
+    Math.ceil(
+      Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / FRAME_ALIGNMENT
+    ) * FRAME_ALIGNMENT + 1
+  );
+  var snapDurationToFps = (seconds, fps) => {
+    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
+      return seconds;
+    }
+    const frames = Math.max(1, Math.ceil(seconds * fps));
+    const aligned = frames / fps;
+    return Math.max(0.1, Math.floor(aligned * 10) / 10);
+  };
+
+  // frontend/boundaryPlan.ts
+  var DEFAULT_CROSSFADE_OVERLAP_FRAMES = 8;
+  var DEFAULT_CONTINUE_OVERLAP_FRAMES = 8;
+  var CONTINUE_OVERLAP_MAX_FRAMES = 48;
+  var CONTINUE_OVERLAP_CHOICES = [8, 16, 24, 32, 40, 48];
+  var resolveContinueWindows = (frames, cont, crossfade, requested) => {
+    const windows = new Array(cont.length).fill(0);
+    for (let i = 0; i < cont.length; i++) {
+      if (!cont[i]) {
+        continue;
+      }
+      let k = (requested[i] ?? DEFAULT_CONTINUE_OVERLAP_FRAMES) + 1;
+      const leftReserve = i > 0 && cont[i - 1] ? windows[i - 1] : i > 0 && crossfade[i - 1] ? 1 : 0;
+      const rightReserve = i < cont.length - 1 && (cont[i + 1] || crossfade[i + 1]) ? 1 : 0;
+      const kMax = Math.min(
+        frames[i] - 1 - leftReserve,
+        frames[i + 1] - 1 - rightReserve
+      );
+      while (k > 1 && k > kMax) {
+        k -= 8;
+      }
+      windows[i] = Math.max(1, k);
+    }
+    return windows;
+  };
+  var crossfadePlanForClips = (clips, fps) => {
+    const count = clips.length;
+    const boundaryCount = Math.max(0, count - 1);
+    const noOverlap = () => new Array(boundaryCount).fill(0);
+    if (count < 2) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    const crossfade = [];
+    const cont = [];
+    let requested = 0;
+    for (let i = 0; i < count - 1; i++) {
+      const b = clips[i].boundaryOut ?? "cut";
+      crossfade[i] = b === "crossfade";
+      cont[i] = b === "continue";
+      if (crossfade[i] || cont[i]) {
+        requested++;
+      }
+    }
+    if (requested === 0) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    const frames = clips.map((c) => framesForClip(c.duration, fps));
+    const prefs = clips.map(
+      (c) => c.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES
+    );
+    const windows = resolveContinueWindows(frames, cont, crossfade, prefs);
+    const crossfadeMaxPerSide = new Array(count).fill(0);
+    for (let i = 0; i < count; i++) {
+      const fixedTrim = (i > 0 && cont[i - 1] ? windows[i - 1] : 0) + (i < count - 1 && cont[i] ? windows[i] : 0);
+      const crossSides = (i > 0 && crossfade[i - 1] ? 1 : 0) + (i < count - 1 && crossfade[i] ? 1 : 0);
+      if (fixedTrim === 0 && crossSides === 0) {
+        continue;
+      }
+      const budget = frames[i] - 1 - fixedTrim;
+      if (budget < 0 || crossSides > 0 && Math.floor(budget / crossSides) < 1) {
+        return { overlaps: noOverlap(), fallback: true };
+      }
+      if (crossSides > 0) {
+        crossfadeMaxPerSide[i] = Math.floor(budget / crossSides);
+      }
+    }
+    const overlaps = [];
+    for (let i = 0; i < count - 1; i++) {
+      overlaps[i] = crossfade[i] ? Math.min(
+        Math.max(1, prefs[i] ?? DEFAULT_CROSSFADE_OVERLAP_FRAMES),
+        crossfadeMaxPerSide[i],
+        crossfadeMaxPerSide[i + 1]
+      ) : cont[i] ? windows[i] : 0;
+    }
+    return { overlaps, fallback: false };
+  };
+
   // frontend/clipColor.ts
   var HUE_MIN = 0;
   var HUE_MAX = 359;
@@ -546,24 +641,6 @@
     return `Prepend "${preset.triggerPhrase}" to your prompt`;
   };
 
-  // frontend/renderUtils.ts
-  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var FRAME_ALIGNMENT = 8;
-  var framesForClip = (durationSeconds, fps) => Math.max(
-    1,
-    Math.ceil(
-      Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / FRAME_ALIGNMENT
-    ) * FRAME_ALIGNMENT + 1
-  );
-  var snapDurationToFps = (seconds, fps) => {
-    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
-      return seconds;
-    }
-    const frames = Math.max(1, Math.ceil(seconds * fps));
-    const aligned = frames / fps;
-    return Math.max(0.1, Math.floor(aligned * 10) / 10);
-  };
-
   // frontend/types.ts
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
@@ -744,6 +821,13 @@
   var normalizeBoundaryOut = (value) => {
     const raw = `${value ?? ""}`.trim().toLowerCase();
     return raw === "continue" || raw === "crossfade" ? raw : "cut";
+  };
+  var normalizeContinueOverlap = (value) => {
+    const num = Math.trunc(Number(value));
+    if (!Number.isFinite(num) || num < DEFAULT_CONTINUE_OVERLAP_FRAMES) {
+      return DEFAULT_CONTINUE_OVERLAP_FRAMES;
+    }
+    return Math.min(CONTINUE_OVERLAP_MAX_FRAMES, num - num % 8);
   };
   var normalizeControlNetSource = (value) => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
@@ -976,6 +1060,7 @@
       skipped: false,
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
+      boundaryOutOverlap: DEFAULT_CONTINUE_OVERLAP_FRAMES,
       duration: snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
@@ -1181,6 +1266,9 @@
       hue: normalizeStoredHue(rawClip.hue),
       boundaryOut: normalizeBoundaryOut(
         rawClip.boundaryOut ?? rawClip.BoundaryOut
+      ),
+      boundaryOutOverlap: normalizeContinueOverlap(
+        rawClip.boundaryOutOverlap ?? rawClip.BoundaryOutOverlap
       ),
       duration,
       audioSource,
@@ -1794,6 +1882,7 @@
     (clip) => ({
       skipped: clip.skipped,
       boundaryOut: clip.boundaryOut,
+      boundaryOutOverlap: clip.boundaryOutOverlap,
       duration: clip.duration,
       audioSource: clip.audioSource,
       icLoras: clip.icLoras.map((entry) => ({
@@ -2698,10 +2787,10 @@
       const value = clip.boundaryOut ?? "cut";
       const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
       const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-      const title = `Boundary clip ${leftClipIdx} → ${i}: ${label}. Click to cycle (cut → continue → crossfade).`;
-      const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}. Click to cycle and edit.`;
+      const title = `Boundary clip ${leftClipIdx} → ${i}: ${label}. Click to edit.`;
+      const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}. Click to edit.`;
       seams.push(
-        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-cycle data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
+        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
       );
     }
     return seams.join("");
@@ -3690,12 +3779,7 @@
   };
 
   // frontend/timelineBoundaryTrack.ts
-  var CHIP_SELECTOR = "[data-vst-boundary-cycle]";
-  var CYCLE = ["cut", "continue", "crossfade"];
-  var nextBoundary = (current) => {
-    const idx = CYCLE.indexOf(current);
-    return CYCLE[(idx + 1) % CYCLE.length];
-  };
+  var CHIP_SELECTOR = "[data-vst-boundary-chip]";
   var parseLeftClipIdx = (el) => {
     if (!el) {
       return null;
@@ -3720,13 +3804,6 @@
         return;
       }
       setSelection({ kind: "boundary", leftClipIdx });
-      const clips = getClips();
-      const clip = clips[leftClipIdx];
-      if (!clip || leftClipIdx >= clips.length - 1) {
-        return;
-      }
-      clip.boundaryOut = nextBoundary(clip.boundaryOut ?? "cut");
-      saveClips(clips, { origin: "boundary-track" });
     };
     const attach = (body) => {
       if (boundBody === body) {
@@ -4270,52 +4347,6 @@
     return wrapForm(GROUP_AUDIOSEG, body);
   };
 
-  // frontend/boundaryPlan.ts
-  var DEFAULT_CROSSFADE_OVERLAP_FRAMES = 8;
-  var crossfadePlanForClips = (clips, fps) => {
-    const count = clips.length;
-    const boundaryCount = Math.max(0, count - 1);
-    const noOverlap = () => new Array(boundaryCount).fill(0);
-    if (count < 2) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    const crossfade = [];
-    const cont = [];
-    let requested = 0;
-    for (let i = 0; i < count - 1; i++) {
-      const b = clips[i].boundaryOut ?? "cut";
-      crossfade[i] = b === "crossfade";
-      cont[i] = b === "continue";
-      if (crossfade[i] || cont[i]) {
-        requested++;
-      }
-    }
-    if (requested === 0) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    const frames = clips.map((c) => framesForClip(c.duration, fps));
-    let overlap = DEFAULT_CROSSFADE_OVERLAP_FRAMES;
-    for (let i = 0; i < count; i++) {
-      const fixedTrim = (i > 0 && cont[i - 1] ? 1 : 0) + (i < count - 1 && cont[i] ? 1 : 0);
-      const crossSides = (i > 0 && crossfade[i - 1] ? 1 : 0) + (i < count - 1 && crossfade[i] ? 1 : 0);
-      if (fixedTrim === 0 && crossSides === 0) {
-        continue;
-      }
-      const budget = frames[i] - 1 - fixedTrim;
-      if (budget < 0 || crossSides > 0 && Math.floor(budget / crossSides) < 1) {
-        return { overlaps: noOverlap(), fallback: true };
-      }
-      if (crossSides > 0) {
-        overlap = Math.min(overlap, Math.floor(budget / crossSides));
-      }
-    }
-    const overlaps = [];
-    for (let i = 0; i < count - 1; i++) {
-      overlaps[i] = crossfade[i] ? overlap : cont[i] ? 1 : 0;
-    }
-    return { overlaps, fallback: false };
-  };
-
   // frontend/detailStrip/boundaryPanel.ts
   var GROUP_BOUNDARY = "vstdock_boundary";
   var buildBoundaryBody = (ctx, sel, clips) => {
@@ -4342,12 +4373,47 @@
     body.appendChild(
       buildField(`Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`, select)
     );
+    if (value !== "cut") {
+      const overlapValue = clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES;
+      const overlapSpecs = CONTINUE_OVERLAP_CHOICES.map(
+        (frames) => ({
+          value: `${frames}`,
+          label: `${frames} frames (~${formatOverlapSeconds(frames, fps)})`
+        })
+      );
+      const overlapSelect = buildOptionSelect(
+        overlapSpecs,
+        `${overlapValue}`,
+        (next) => {
+          ctx.commit((cs) => {
+            const c = cs[leftClipIdx];
+            if (c) {
+              c.boundaryOutOverlap = normalizeContinueOverlap(next);
+            }
+          });
+          ctx.render();
+        }
+      );
+      body.appendChild(buildField("Overlap", overlapSelect));
+    }
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
     if (value === "cut") {
       info.textContent = "Hard cut — clips are concatenated with no overlap.";
     } else if (value === "continue") {
-      info.textContent = `Continue — 1 frame (~${formatOverlapSeconds(1, fps)}) overlap. The next clip generates from this clip's final frame and the merge collapses the duplicated seam frame.`;
+      const plan = crossfadePlanForClips(clips, fps);
+      const window2 = plan.overlaps[leftClipIdx] ?? 0;
+      if (plan.fallback || window2 <= 0) {
+        info.classList.add("vst-boundary-warn");
+        info.textContent = "This continue will fall back to a cut — a clip is too short for the overlap.";
+      } else {
+        const requested = (clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES) + 1;
+        let text = `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
+        if (window2 < requested) {
+          text += " The window was reduced because a clip is too short.";
+        }
+        info.textContent = text;
+      }
     } else {
       const plan = crossfadePlanForClips(clips, fps);
       const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
@@ -4355,16 +4421,15 @@
         info.classList.add("vst-boundary-warn");
         info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
       } else {
-        info.textContent = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
+        const requested = clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES;
+        let text = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
+        if (overlapFrames < requested) {
+          text += " The window was reduced because a clip is too short.";
+        }
+        info.textContent = text;
       }
     }
     body.appendChild(info);
-    if (value !== "cut") {
-      const note = document.createElement("div");
-      note.className = "vst-boundary-note";
-      note.textContent = "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
-      body.appendChild(note);
-    }
     return wrapForm(GROUP_BOUNDARY, body);
   };
 

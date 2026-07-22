@@ -2657,6 +2657,19 @@ describe("createTimelineDetailStrip", () => {
         const infoText = (): string =>
             detailBody()?.querySelector<HTMLElement>(".vst-boundary-info")
                 ?.textContent ?? "";
+        const overlapSelect = (): HTMLSelectElement | null => {
+            const fields = Array.from(
+                detailBody()?.querySelectorAll<HTMLElement>(
+                    ".vst-audio-field",
+                ) ?? [],
+            );
+            const field = fields.find(
+                (f) =>
+                    f.querySelector(".vst-audio-field-label")?.textContent ===
+                    "Overlap",
+            );
+            return field?.querySelector<HTMLSelectElement>("select") ?? null;
+        };
 
         it("renders a breadcrumb and join select for the seam", () => {
             setup([
@@ -2681,25 +2694,57 @@ describe("createTimelineDetailStrip", () => {
             expect(savedClips(saveSpy)[0].boundaryOut).toBe("crossfade");
         });
 
-        it("shows the 1-frame overlap note for a continue boundary", () => {
+        it("shows an Overlap selector and plan-aware info for a continue boundary", () => {
             setup([
                 { duration: 4, boundaryOut: "continue", stages: [{}] },
                 { duration: 4, stages: [{}] },
             ]);
             setSelection({ kind: "boundary", leftClipIdx: 0 });
-            expect(infoText()).toContain("1 frame");
-            expect(
-                detailBody()?.querySelector(".vst-boundary-note"),
-            ).not.toBeNull();
+            // Default overlap 8 -> window 9 for ample clips.
+            expect(infoText()).toContain("last 9 frames");
+            expect(overlapSelect()).not.toBeNull();
+            expect(overlapSelect()?.value).toBe("8");
         });
 
-        it("reports the computed crossfade overlap in frames", () => {
+        it("commits a chosen overlap to boundaryOutOverlap", () => {
+            setup([
+                { duration: 4, boundaryOut: "continue", stages: [{}] },
+                { duration: 4, stages: [{}] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+            const select = overlapSelect();
+            if (!select) {
+                throw new Error("overlap select missing");
+            }
+            select.value = "24";
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(savedClips(saveSpy)[0].boundaryOutOverlap).toBe(24);
+        });
+
+        it("shows an Overlap selector and dissolve info for a crossfade boundary", () => {
             setup([
                 { duration: 4, boundaryOut: "crossfade", stages: [{}] },
                 { duration: 4, stages: [{}] },
             ]);
             setSelection({ kind: "boundary", leftClipIdx: 0 });
+            expect(overlapSelect()).not.toBeNull();
+            expect(overlapSelect()?.value).toBe("8");
+            expect(
+                detailBody()?.querySelector(".vst-boundary-note"),
+            ).toBeNull();
             expect(infoText()).toContain("8 frames");
+        });
+
+        it("shows no Overlap selector and no LTX-2 note for a cut boundary", () => {
+            setup([
+                { duration: 4, boundaryOut: "cut", stages: [{}] },
+                { duration: 4, stages: [{}] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+            expect(overlapSelect()).toBeNull();
+            expect(
+                detailBody()?.querySelector(".vst-boundary-note"),
+            ).toBeNull();
         });
 
         it("clamps a boundary selection to none when its right clip is deleted", () => {

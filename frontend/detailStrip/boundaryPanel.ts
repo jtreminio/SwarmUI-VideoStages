@@ -1,10 +1,16 @@
-import { type BoundaryPlan, crossfadePlanForClips } from "../boundaryPlan";
+import {
+    type BoundaryPlan,
+    CONTINUE_OVERLAP_CHOICES,
+    crossfadePlanForClips,
+    DEFAULT_CONTINUE_OVERLAP_FRAMES,
+} from "../boundaryPlan";
 import {
     buildField,
     buildOptionSelect,
     type OptionSpec,
     wrapForm,
 } from "../detailWidgets";
+import { normalizeContinueOverlap } from "../normalization";
 import { getState } from "../persistence";
 import { formatOverlapSeconds } from "../timelineDetail";
 import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView";
@@ -45,14 +51,55 @@ export const buildBoundaryBody = (
         buildField(`Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`, select),
     );
 
+    if (value !== "cut") {
+        const overlapValue =
+            clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES;
+        const overlapSpecs: OptionSpec[] = CONTINUE_OVERLAP_CHOICES.map(
+            (frames) => ({
+                value: `${frames}`,
+                label: `${frames} frames (~${formatOverlapSeconds(frames, fps)})`,
+            }),
+        );
+        const overlapSelect = buildOptionSelect(
+            overlapSpecs,
+            `${overlapValue}`,
+            (next) => {
+                ctx.commit((cs) => {
+                    const c = cs[leftClipIdx];
+                    if (c) {
+                        c.boundaryOutOverlap = normalizeContinueOverlap(next);
+                    }
+                });
+                ctx.render();
+            },
+        );
+        body.appendChild(buildField("Overlap", overlapSelect));
+    }
+
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
     if (value === "cut") {
         info.textContent = "Hard cut — clips are concatenated with no overlap.";
     } else if (value === "continue") {
-        info.textContent =
-            `Continue — 1 frame (~${formatOverlapSeconds(1, fps)}) overlap. ` +
-            "The next clip generates from this clip's final frame and the merge collapses the duplicated seam frame.";
+        const plan: BoundaryPlan = crossfadePlanForClips(clips, fps);
+        const window = plan.overlaps[leftClipIdx] ?? 0;
+        if (plan.fallback || window <= 0) {
+            info.classList.add("vst-boundary-warn");
+            info.textContent =
+                "This continue will fall back to a cut — a clip is too short for the overlap.";
+        } else {
+            const requested =
+                (clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES) +
+                1;
+            let text =
+                `Continue — the next clip is generated with this clip's last ${window} ` +
+                `frame${window === 1 ? "" : "s"} (~${formatOverlapSeconds(window, fps)}) as frozen ` +
+                "context, and the merge collapses the duplicated frames.";
+            if (window < requested) {
+                text += " The window was reduced because a clip is too short.";
+            }
+            info.textContent = text;
+        }
     } else {
         const plan: BoundaryPlan = crossfadePlanForClips(clips, fps);
         const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
@@ -61,19 +108,18 @@ export const buildBoundaryBody = (
             info.textContent =
                 "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
         } else {
-            info.textContent =
+            const requested =
+                clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES;
+            let text =
                 `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} ` +
                 `(~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
+            if (overlapFrames < requested) {
+                text += " The window was reduced because a clip is too short.";
+            }
+            info.textContent = text;
         }
     }
     body.appendChild(info);
 
-    if (value !== "cut") {
-        const note = document.createElement("div");
-        note.className = "vst-boundary-note";
-        note.textContent =
-            "Requires the LTX-2 model family — the backend degrades this boundary to a cut otherwise.";
-        body.appendChild(note);
-    }
     return wrapForm(GROUP_BOUNDARY, body);
 };

@@ -12,19 +12,22 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 {
     internal const string NodeHelperKey = "videostages.parallel-multi-clip";
     private const int BatchImagesNodeMaxInputs = 50;
-    // Default overlap window at each crossfaded boundary; clamped down per-run so every crossfaded clip
-    // keeps >=1 non-overlapped core frame (see ResolveCrossfadePlan). Small = short dissolve, fewer nodes.
+    // Crossfade dissolve length when no per-clip BoundaryOutOverlap preference is supplied; each
+    // boundary's request is clamped so every crossfaded clip keeps >=1 non-overlapped core frame
+    // (see ResolveCrossfadePlan).
     private const int DefaultCrossfadeOverlapFrames = 8;
 
-    // Per-boundary overlap window in frames (0 = hard cut at that boundary). Crossfade boundaries share
-    // one clamped window K (uniform K keeps the ramp mask reusable); a "continue" boundary is a fixed
-    // 1-frame overlap that collapses the seam frame duplicated by generation-time continuity.
+    // Per-boundary overlap window in frames (0 = hard cut at that boundary). A crossfade boundary's
+    // window is its requested dissolve length clamped to both clips' budgets; a "continue" boundary's
+    // window is its resolved overlap+1 — the frames duplicated by generation-time continuity conditioning.
     internal sealed record CrossfadePlan(int[] BoundaryOverlap, int RemovedFrames);
 
     public void Apply(
         IReadOnlyList<WGNodeData> clipOutputsInOrder,
         WGNodeData parallelClipSourceMedia = null,
-        IReadOnlyList<string> clipBoundaryOuts = null)
+        IReadOnlyList<string> clipBoundaryOuts = null,
+        IReadOnlyList<int> continueWindows = null,
+        IReadOnlyList<int> boundaryOverlapPrefs = null)
     {
         if (clipOutputsInOrder is null || clipOutputsInOrder.Count < 2)
         {
@@ -88,7 +91,8 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         // Null plan => the pure-cut path below runs byte-for-byte as before: a regression guarantee for
         // all-cut, non-LTX, dimension/fps-mismatch, and unknown-frame configs. ("continue" reaches this
         // method only when generation-time continuity was actually armed; unarmed ones arrive as "cut".)
-        CrossfadePlan crossfadePlan = ResolveCrossfadePlan(clipOutputsInOrder, clipBoundaryOuts, allFramesKnown);
+        CrossfadePlan crossfadePlan = ResolveCrossfadePlan(
+            clipOutputsInOrder, clipBoundaryOuts, allFramesKnown, continueWindows, boundaryOverlapPrefs);
         // Crossfade indexes clips[i]/CrossfadeBoundary[i] against videoOutputs[i]/audioOutputs[i]; a failed
         // clip resolution shortens videoOutputs and desyncs the lists (wrong frames/audio). Require 1:1
         // here; the cut path tolerates a resolved subset.
@@ -212,7 +216,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 
     /// <summary>
     /// Concatenates per-clip audio aligned to the overlapped video. Plain cut: straight concat. An
-    /// overlapping boundary (crossfade K, or continue's fixed 1) drops that clip's tail K frames before
+    /// overlapping boundary (crossfade K, or continue's window) drops that clip's tail K frames before
     /// the concat (that tail is consumed by the video blend), so later audio starts where its K-earlier
     /// video does; a whole-track trim would instead drift +K per interior boundary. Seams are hard cuts,
     /// not audio cross-dissolves (overlap-add deferred). Plan non-null implies fps &gt; 0, known frame
@@ -264,20 +268,81 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     }
 
     /// <summary>
+    /// Resolves each "continue" boundary's overlap window: the requested overlap + 1 (an 8n+1 frame
+    /// count matching the LTX causal VAE grid), stepped down (… 17, 9, 1) until both adjacent clips
+    /// keep &gt;=1 core frame — reserving one frame on each neighbour that funds another overlapping
+    /// boundary of its own. Unknown frame counts degrade that boundary to the conservative 1-frame
+    /// window. Non-continue boundaries resolve to 0. StageSequenceRunner slices conditioning tails
+    /// with these windows and passes the same array to <see cref="Apply"/> so generation and merge
+    /// agree by construction.
+    /// </summary>
+    // internal (not private): half of the cross-language M1 drift pair with frontend
+    // boundaryPlan.resolveContinueWindows.
+    internal static int[] ResolveContinueWindows(
+        IReadOnlyList<int?> frames,
+        IReadOnlyList<string> boundaryOuts,
+        IReadOnlyList<int> requestedOverlaps)
+    {
+        int boundaryCount = Math.Max(0, frames.Count - 1);
+        bool[] cont = new bool[boundaryCount];
+        bool[] crossfade = new bool[boundaryCount];
+        for (int i = 0; i < boundaryCount; i++)
+        {
+            string boundary = boundaryOuts is not null && i < boundaryOuts.Count
+                ? boundaryOuts[i]
+                : Constants.BoundaryOutCut;
+            cont[i] = string.Equals(boundary, Constants.BoundaryOutContinue, StringComparison.OrdinalIgnoreCase);
+            crossfade[i] = string.Equals(boundary, Constants.BoundaryOutCrossfade, StringComparison.OrdinalIgnoreCase);
+        }
+
+        int[] windows = new int[boundaryCount];
+        for (int i = 0; i < boundaryCount; i++)
+        {
+            if (!cont[i])
+            {
+                continue;
+            }
+            if (frames[i] is not int left || frames[i + 1] is not int right)
+            {
+                windows[i] = 1;
+                continue;
+            }
+            int requested = requestedOverlaps is not null && i < requestedOverlaps.Count
+                ? requestedOverlaps[i]
+                : Constants.ContinueOverlapDefaultFrames;
+            int k = requested + 1;
+            int leftReserve = i > 0 && cont[i - 1] ? windows[i - 1] : i > 0 && crossfade[i - 1] ? 1 : 0;
+            int rightReserve = i < boundaryCount - 1 && (cont[i + 1] || crossfade[i + 1]) ? 1 : 0;
+            int kMax = Math.Min(left - 1 - leftReserve, right - 1 - rightReserve);
+            while (k > 1 && k > kMax)
+            {
+                k -= 8;
+            }
+            windows[i] = Math.Max(1, k);
+        }
+        return windows;
+    }
+
+    /// <summary>
     /// Decides the per-boundary overlap windows, or null to fall back to the pure-cut merge. Gated on:
     /// &gt;=1 boundary requesting an overlap ("crossfade" or "continue"), LTXV2 pixel output on every
-    /// clip, shared width/height/fps, and known frame counts. Crossfade boundaries share one clamped
-    /// window K; a "continue" boundary takes a fixed 1-frame overlap — generation-time continuity
-    /// conditions the next clip's first frame on the previous clip's last, so the two duplicated seam
-    /// frames collapse into one. Callers must only pass "continue" for boundaries where that conditioning
-    /// was actually applied (StageSequenceRunner degrades unarmed ones to "cut").
+    /// clip, shared width/height/fps, and known frame counts. A crossfade boundary takes its requested
+    /// dissolve length from <paramref name="boundaryOverlapPrefs"/> (the left clip's BoundaryOutOverlap;
+    /// absent list = 8), clamped so each adjacent clip keeps &gt;=1 core frame after its continue trims —
+    /// a clip funding two crossfades splits its budget evenly between them. A "continue" boundary takes
+    /// its entry from <paramref name="continueWindows"/> (its resolved overlap+1; absent list = 1) —
+    /// generation-time continuity conditions the next clip's first window frames on the previous clip's
+    /// last, so the duplicated frames collapse. Callers must only pass "continue" for boundaries where
+    /// that conditioning was actually applied (StageSequenceRunner degrades unarmed ones to "cut").
     /// </summary>
     // internal (not private): the cross-language crossfade-plan drift test (M1) pins this against the
     // frontend boundaryPlan.crossfadePlanForClips mirror.
     internal static CrossfadePlan ResolveCrossfadePlan(
         IReadOnlyList<WGNodeData> clips,
         IReadOnlyList<string> clipBoundaryOuts,
-        bool allFramesKnown)
+        bool allFramesKnown,
+        IReadOnlyList<int> continueWindows = null,
+        IReadOnlyList<int> boundaryOverlapPrefs = null)
     {
         int count = clips.Count;
         bool[] crossfadeBoundary = new bool[count - 1];
@@ -322,14 +387,21 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
         }
 
-        // Clamp the shared crossfade K so every clip keeps >=1 non-overlapped core frame, after first
-        // reserving the fixed 1-frame trims that adjacent "continue" boundaries impose. If a clip can't
-        // spare even those (budget < 0) or a crossfaded clip can't spare a single overlap frame, fall back.
-        int overlap = DefaultCrossfadeOverlapFrames;
+        // Per-clip crossfade budget: frames minus 1 core frame minus the window trims that adjacent
+        // "continue" boundaries impose, split evenly between the clip's crossfaded sides. If a clip
+        // can't spare its continue trims (budget < 0) or a crossfaded clip can't spare a single
+        // overlap frame, fall back.
+        int ContinueWindow(int i) => continueWindows is not null && i < continueWindows.Count
+            ? Math.Max(1, continueWindows[i])
+            : 1;
+        int CrossfadeRequested(int i) => boundaryOverlapPrefs is not null && i < boundaryOverlapPrefs.Count
+            ? Math.Max(1, boundaryOverlapPrefs[i])
+            : DefaultCrossfadeOverlapFrames;
+        int[] crossfadeMaxPerSide = new int[count];
         for (int i = 0; i < count; i++)
         {
-            int fixedTrim = (i > 0 && continueBoundary[i - 1] ? 1 : 0)
-                + (i < count - 1 && continueBoundary[i] ? 1 : 0);
+            int fixedTrim = (i > 0 && continueBoundary[i - 1] ? ContinueWindow(i - 1) : 0)
+                + (i < count - 1 && continueBoundary[i] ? ContinueWindow(i) : 0);
             int crossSides = (i > 0 && crossfadeBoundary[i - 1] ? 1 : 0)
                 + (i < count - 1 && crossfadeBoundary[i] ? 1 : 0);
             if (fixedTrim == 0 && crossSides == 0)
@@ -346,7 +418,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
             if (crossSides > 0)
             {
-                overlap = Math.Min(overlap, budget / crossSides);
+                crossfadeMaxPerSide[i] = budget / crossSides;
             }
         }
 
@@ -354,7 +426,9 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         int removedFrames = 0;
         for (int i = 0; i < count - 1; i++)
         {
-            boundaryOverlap[i] = crossfadeBoundary[i] ? overlap : continueBoundary[i] ? 1 : 0;
+            boundaryOverlap[i] = crossfadeBoundary[i]
+                ? Math.Min(CrossfadeRequested(i), Math.Min(crossfadeMaxPerSide[i], crossfadeMaxPerSide[i + 1]))
+                : continueBoundary[i] ? ContinueWindow(i) : 0;
             removedFrames += boundaryOverlap[i];
         }
         return new CrossfadePlan(boundaryOverlap, removedFrames);
@@ -372,9 +446,9 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     /// <summary>
     /// Builds the overlapped video: each clip emits its non-overlapped core, and after every overlapping
     /// boundary a per-frame pixel dissolve of clip N's tail K frames with clip N+1's head K frames. Per
-    /// pair: N[:-K] ++ blend(N.tail K, N+1.head K) ++ N+1[K:]; K is the boundary's overlap (shared clamp
-    /// for crossfades, fixed 1 for continue). All segments feed the same BatchImages concat as the cut
-    /// path (so &gt;50 segments still chunk).
+    /// pair: N[:-K] ++ blend(N.tail K, N+1.head K) ++ N+1[K:]; K is the boundary's overlap (the clamped
+    /// requested dissolve for crossfades, the resolved overlap+1 window for continue). All segments feed
+    /// the same BatchImages concat as the cut path (so &gt;50 segments still chunk).
     /// </summary>
     private INodeOutput MergeClipVideosWithCrossfade(
         WorkflowBridge bridge,
@@ -384,7 +458,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
     {
         // Ramp masks are built lazily per distinct window size and reused across boundaries. White (1.0)
         // selects clip N, black (0.0) selects clip N+1; the white->black ramp dissolves N into N+1 over K.
-        // A continue boundary's K==1 window blends the two duplicated seam frames 50/50.
+        // A continue boundary's frames are near-duplicates, so its ramp just smooths VAE re-encode drift.
         Dictionary<int, INodeOutput> rampMasks = [];
         INodeOutput RampMaskFor(int k)
         {
@@ -432,18 +506,13 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 
     private static INodeOutput BuildCrossfadeRampMask(WorkflowBridge bridge, int k, int width, int height)
     {
-        BatchMasksNodeNode batch = bridge.AddNode(new BatchMasksNodeNode());
-        for (int j = 0; j < k; j++)
-        {
-            // Linear ramp 1.0 -> 0.0 over the window; a lone-frame window (K==1) blends 50/50.
-            double value = k == 1 ? 0.5 : 1.0 - (j / (double)(k - 1));
-            SolidMaskNode solid = bridge.AddNode(new SolidMaskNode().With(
-                Value: value,
-                Width: width,
-                Height: height));
-            batch.Masks.AddFromUntyped(solid.MASK);
-        }
-        return batch.MASK;
+        // One node instead of K SolidMasks + a BatchMasks fan-in; the ramp values (1.0 -> 0.0 linear,
+        // lone frame 0.5) live in the node (comfy_node/SwarmVideoStagesNodes/ramp_mask.py).
+        SwarmRampMaskBatchNode ramp = bridge.AddNode(new SwarmRampMaskBatchNode().With(
+            Frames: k,
+            Width: width,
+            Height: height));
+        return ramp.Mask;
     }
 
     private static INodeOutput AddPyramidBlend(

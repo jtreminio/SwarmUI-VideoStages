@@ -7,6 +7,7 @@ import {
     hasSlotSourcedIcLora,
     normalizeAudioSegments,
     normalizeClip,
+    normalizeContinueOverlap,
     normalizeRef,
     normalizeRetake,
     normalizeStage,
@@ -470,6 +471,23 @@ describe("normalization", () => {
         expect(ref.source).toBe(REF_SOURCE_REFINER);
         expect(ref.frame).toBe(1);
         expect(ref.uploadedImage).toBeNull();
+    });
+});
+
+describe("normalizeContinueOverlap", () => {
+    it.each([
+        [undefined, 8],
+        [null, 8],
+        [Number.NaN, 8],
+        ["garbage", 8],
+        [7, 8],
+        [16, 16],
+        [20, 16],
+        [48, 48],
+        [100, 48],
+        ["24", 24],
+    ])("normalizes %s -> %s", (raw, expected) => {
+        expect(normalizeContinueOverlap(raw)).toBe(expected);
     });
 });
 

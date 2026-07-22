@@ -63,6 +63,7 @@ describe("persistence", () => {
                 {
                     skipped: false,
                     boundaryOut: "cut",
+                    boundaryOutOverlap: 8,
                     duration: 3,
                     audioSource: "Native",
                     icLoras: [

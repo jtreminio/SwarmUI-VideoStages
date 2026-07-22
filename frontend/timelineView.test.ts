@@ -175,10 +175,12 @@ describe("renderBoundarySeams", () => {
         const clips = [boundaryClip(), boundaryClip(), boundaryClip()];
         const host = document.createElement("div");
         host.innerHTML = renderBoundarySeams(clips, layoutFor(clips));
-        const chips = host.querySelectorAll("[data-vst-boundary-cycle]");
+        const chips = host.querySelectorAll("[data-vst-boundary-chip]");
         expect(chips).toHaveLength(2);
         expect(chips[0].getAttribute("data-left-clip-idx")).toBe("0");
         expect(chips[1].getAttribute("data-left-clip-idx")).toBe("1");
+        expect(chips[0].getAttribute("title")).toContain("Click to edit.");
+        expect(chips[0].getAttribute("title")).not.toContain("cycle");
     });
 
     it("emits nothing for a single clip", () => {
@@ -195,7 +197,7 @@ describe("renderBoundarySeams", () => {
         const host = document.createElement("div");
         host.innerHTML = renderBoundarySeams(clips, layoutFor(clips));
         const chips = Array.from(
-            host.querySelectorAll<HTMLElement>("[data-vst-boundary-cycle]"),
+            host.querySelectorAll<HTMLElement>("[data-vst-boundary-chip]"),
         );
         expect(chips[0].querySelector(".vst-boundary-glyph")?.textContent).toBe(
             "→",
@@ -215,7 +217,7 @@ describe("renderBoundarySeams", () => {
         const host = document.createElement("div");
         host.innerHTML = renderBoundarySeams(clips, layouts);
         const chip = host.querySelector<HTMLElement>(
-            "[data-vst-boundary-cycle]",
+            "[data-vst-boundary-chip]",
         );
         expect(chip?.style.left).toBe(`${layouts[1].startPx}px`);
     });

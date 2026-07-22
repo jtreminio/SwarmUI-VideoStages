@@ -141,10 +141,15 @@ public sealed record ClipSpec(
     IReadOnlyList<LoraRef> Loras = null,
     IReadOnlyList<PromptWindowSpec> PromptWindows = null,
     // Cross-clip continuity at THIS clip's outgoing boundary (clip N -> N+1): "cut" (hard concat),
-    // "continue" (generation-time continuity: the next clip generates from this clip's final frame, and
-    // the merge collapses the duplicated seam frame), or "crossfade" (pixel dissolve over an overlap
-    // window). Only meaningful for non-final clips in a parallel multi-clip run.
-    string BoundaryOut = Constants.BoundaryOutCut
+    // "continue" (generation-time continuity: the next clip generates with this clip's last
+    // BoundaryOutOverlap+1 frames as frozen latent context, and the merge collapses the duplicated
+    // frames), or "crossfade" (pixel dissolve over an overlap window). Only meaningful for non-final
+    // clips in a parallel multi-clip run.
+    string BoundaryOut = Constants.BoundaryOutCut,
+    // Boundary overlap in frames (multiple of 8, ContinueOverlapDefaultFrames..ContinueOverlapMaxFrames):
+    // for "continue" the frozen-context length (window = overlap+1), for "crossfade" the requested
+    // dissolve length; ignored for "cut".
+    int BoundaryOutOverlap = Constants.ContinueOverlapDefaultFrames
 )
 {
     // The selection rules below (PrimarySlotEntry / VoiceRefDriveEntry / UsesVoiceRefAudio) are
