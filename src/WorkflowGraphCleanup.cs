@@ -7,9 +7,11 @@ internal static class WorkflowGraphCleanup
     public static void RemoveUnusedUpstreamNodes(
         WorkflowBridge bridge,
         string startNodeId,
-        ISet<string> protectedNodeIds = null)
+        ISet<string> protectedNodeIds = null,
+        IDictionary<string, string> nodeHelpers = null)
     {
-        _ = RemoveUnusedUpstreamNodesAndCollect(bridge, startNodeId, protectedNodeIds);
+        HashSet<string> removed = RemoveUnusedUpstreamNodesAndCollect(bridge, startNodeId, protectedNodeIds);
+        InvalidateNodeHelperCacheForRemovedIds(nodeHelpers, removed);
     }
 
     public static HashSet<string> RemoveUnusedUpstreamNodesAndCollect(

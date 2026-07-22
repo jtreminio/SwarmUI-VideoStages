@@ -492,7 +492,7 @@ internal class StageRunner(
         }
         foreach (string staleAudioNodeId in staleAudioNodeIds)
         {
-            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, staleAudioNodeId, protectedNodes);
+            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, staleAudioNodeId, protectedNodes, g.NodeHelpers);
         }
     }
 
@@ -524,7 +524,7 @@ internal class StageRunner(
         HashSet<string> protectedNodes = [];
         AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{priorOutputPath[0]}", protectedNodes);
+        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{priorOutputPath[0]}", protectedNodes, g.NodeHelpers);
     }
 
     private static WGNodeData CloneMedia(WGNodeData media)
