@@ -40,9 +40,6 @@
     align-items: stretch;
     height: 100%;
     min-height: 240px;
-    color: var(--text);
-    font-size: var(--vst-font-md);
-    background: var(--background);
 }
 /* Green enable check on the bottom-bar "Timeline" tab selector. Lives outside
    .vst-timeline, so only host theme vars are available here. */
@@ -156,11 +153,6 @@
     color: var(--emphasis);
     font-weight: 500;
 }
-/* Topbar buttons ride the host .basic-button/.small-button chrome; the
-   .vst-* classes below are layout/sizing hooks only. */
-.vst-toggle {
-    white-space: nowrap;
-}
 .vst-toggle-unit {
     font-weight: 600;
     display: inline-grid;
@@ -182,12 +174,6 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-}
-.vst-zoom-btn {
-    min-width: 26px;
-    padding-left: 0.5em;
-    padding-right: 0.5em;
-    text-align: center;
 }
 .vst-zoom-pct {
     font-family: var(--vst-mono);

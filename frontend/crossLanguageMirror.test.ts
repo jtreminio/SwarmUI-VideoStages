@@ -100,8 +100,10 @@ describe("cross-language mirror: M4 IC-LoRA auto-model naming (icLoraPresets)", 
         autoModelName,
     }) => {
         const preset = IC_LORA_PRESETS.find((p) => p.id === id);
-        expect(preset).toBeDefined();
-        expect(preset!.weightsUrl).toBe(weightsUrl);
-        expect(icLoraAutoModelName(preset!)).toBe(autoModelName);
+        if (!preset) {
+            throw new Error(`preset ${id} not found`);
+        }
+        expect(preset.weightsUrl).toBe(weightsUrl);
+        expect(icLoraAutoModelName(preset)).toBe(autoModelName);
     });
 });

@@ -874,19 +874,19 @@ export const renderTimeline = (
         settingsChip +
         `</div>` +
         `<div class="vst-topbar-tools">` +
-        `<button type="button" class="basic-button small-button btn-primary vst-toggle vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button>` +
+        `<button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button>` +
         `<span class="vst-tool-sep" aria-hidden="true"></span>` +
         `<div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)">` +
-        `<button type="button" class="basic-button small-button vst-toggle vst-zoom-btn" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button>` +
+        `<button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button>` +
         `<span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span>` +
         `<input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)">` +
-        `<button type="button" class="basic-button small-button vst-toggle vst-zoom-btn" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button>` +
-        `<button type="button" class="basic-button small-button vst-toggle vst-zoom-btn" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button>` +
+        `<button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button>` +
+        `<button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button>` +
         `</div>` +
         `<span class="vst-tool-sep" aria-hidden="true"></span>` +
-        `<button type="button" class="basic-button small-button vst-toggle vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button>` +
-        `<button type="button" class="basic-button small-button vst-toggle vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>` +
-        `<button type="button" class="basic-button small-button vst-toggle vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button>` +
+        `<button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button>` +
+        `<button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>` +
+        `<button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button>` +
         `</div>` +
         readout +
         `</div>`;
@@ -977,7 +977,7 @@ export const renderTimeline = (
             `<div class="vst-empty-icon" aria-hidden="true">🎬</div>` +
             `<div class="vst-empty-title">No clips yet.</div>` +
             `<div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div>` +
-            `<button type="button" class="basic-button btn-primary vst-toggle vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button>` +
+            `<button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button>` +
             `</div>`;
         wireTopbar();
         return;
