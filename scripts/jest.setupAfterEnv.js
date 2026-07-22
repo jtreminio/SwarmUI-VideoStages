@@ -28,11 +28,15 @@
 
 beforeEach(() => {
     globalThis.postParamBuildSteps = [];
+    // SwarmUI's post-model/lora-refresh callback array (params.js). The timeline
+    // pushes a repaint hook into it so its dropdowns pick up refreshed options.
+    globalThis.refreshParamsExtra = [];
 });
 
 afterEach(() => {
     document.body.innerHTML = "";
     delete globalThis.postParamBuildSteps;
+    delete globalThis.refreshParamsExtra;
     delete window.acestepfunTrackRegistry;
     delete window.base2editStageRegistry;
 });

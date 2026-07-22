@@ -8088,6 +8088,7 @@
     let boundInput = null;
     let boundToggle = null;
     let inputSyncInterval = null;
+    let paramRefreshHook = null;
     let storeUnsub = null;
     let unit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
@@ -8331,6 +8332,15 @@
         getTimelineStore().syncFromCarrier();
       }, INPUT_SYNC_INTERVAL_MS);
     };
+    const registerParamRefreshHook = () => {
+      if (paramRefreshHook || typeof refreshParamsExtra === "undefined" || !Array.isArray(refreshParamsExtra)) {
+        return;
+      }
+      paramRefreshHook = () => {
+        setTimeout(() => refresh(), 0);
+      };
+      refreshParamsExtra.push(paramRefreshHook);
+    };
     const onKeydown = (event) => {
       if (!(event.ctrlKey || event.metaKey)) {
         return;
@@ -8387,6 +8397,7 @@
       document.removeEventListener("keydown", onKeydown);
       document.addEventListener("keydown", onKeydown);
       startInputSync();
+      registerParamRefreshHook();
       refresh();
     };
     const dispose = () => {
@@ -8403,6 +8414,13 @@
         boundToggle.removeEventListener("change", onEnabledToggled);
         boundToggle = null;
       }
+      if (paramRefreshHook && typeof refreshParamsExtra !== "undefined" && Array.isArray(refreshParamsExtra)) {
+        const idx = refreshParamsExtra.indexOf(paramRefreshHook);
+        if (idx !== -1) {
+          refreshParamsExtra.splice(idx, 1);
+        }
+      }
+      paramRefreshHook = null;
       retakeTrack.dispose();
       audioSegmentTrack.dispose();
       linking.dispose();

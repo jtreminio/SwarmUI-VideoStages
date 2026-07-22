@@ -6,7 +6,11 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    mountPromptBox,
+    mountSelect,
+    mountVideoStagesData,
+} from "./__test_helpers__/dom";
 import { __resetPersistenceForTests, getClips, saveClips } from "./persistence";
 import { resetSelectionForTests, setSelection } from "./selection";
 import { clearUiStateForTests } from "./uiState";
@@ -520,5 +524,75 @@ describe("videoStagesTimeline", () => {
         jest.advanceTimersByTime(POLL_ADVANCE_MS);
 
         expect(regionCount()).toBe(4);
+    });
+
+    it("repaints stage dropdowns when the host refreshes models/loras", () => {
+        mountState(makeClipsJson(1));
+        mountEnabledToggle();
+        mountSelect("input_videomodel", {
+            value: "model-a.safetensors",
+            options: ["model-a.safetensors", "model-b.safetensors"],
+        });
+        mountSelect("input_loras", { options: ["lora-x.safetensors"] });
+        mountSelect("input_sampler", { options: ["euler"] });
+        mountSelect("input_scheduler", { options: ["normal"] });
+        mountSelect("input_refinerupscalemethod", {
+            options: ["pixel-lanczos"],
+        });
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        const modelOptions = (): string[] => {
+            const selects = Array.from(
+                document.querySelectorAll<HTMLSelectElement>(
+                    ".vst-detail select",
+                ),
+            );
+            const model = selects.find((s) =>
+                Array.from(s.options).some(
+                    (o) => o.value === "model-a.safetensors",
+                ),
+            );
+            return Array.from(model?.options ?? []).map((o) => o.value);
+        };
+
+        expect(modelOptions()).toEqual([
+            "model-a.safetensors",
+            "model-b.safetensors",
+        ]);
+
+        // Host refresh button repopulates the core dropdown, then runs the
+        // refreshParamsExtra callbacks. Our hook defers a repaint one tick.
+        const hostModel = document.getElementById(
+            "input_videomodel",
+        ) as HTMLSelectElement;
+        const newOption = document.createElement("option");
+        newOption.value = "model-c.safetensors";
+        newOption.text = "model-c.safetensors";
+        hostModel.appendChild(newOption);
+
+        const extras = refreshParamsExtra as (() => unknown)[];
+        expect(extras.length).toBe(1);
+        for (const cb of extras) {
+            cb();
+        }
+        jest.advanceTimersByTime(1);
+
+        expect(modelOptions()).toContain("model-c.safetensors");
+    });
+
+    it("removes its host-refresh hook on dispose", () => {
+        mountState(makeClipsJson(1));
+        mountEnabledToggle();
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+        expect((refreshParamsExtra as (() => unknown)[]).length).toBe(1);
+
+        timeline.dispose();
+        timeline = null;
+        expect((refreshParamsExtra as (() => unknown)[]).length).toBe(0);
     });
 });

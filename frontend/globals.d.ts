@@ -27,6 +27,10 @@ declare function makeSliderInput(
 ): string;
 declare function enableSlidersIn(elem: HTMLElement): void;
 declare let postParamBuildSteps: (() => void)[] | undefined;
+// Callbacks run after the host refreshes model/lora/dropdown values (the
+// refresh button in the model browsers). Unlike postParamBuildSteps, this does
+// NOT re-run our init, so we hook it to re-read the fresh dropdown options.
+declare let refreshParamsExtra: (() => unknown)[] | undefined;
 
 declare function getImageOutPrefix(): string;
 

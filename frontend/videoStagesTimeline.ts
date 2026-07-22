@@ -56,6 +56,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let boundInput: HTMLInputElement | HTMLTextAreaElement | null = null;
     let boundToggle: HTMLInputElement | null = null;
     let inputSyncInterval: ReturnType<typeof setInterval> | null = null;
+    let paramRefreshHook: (() => unknown) | null = null;
     let storeUnsub: (() => void) | null = null;
     let unit: TimelineUnit = "seconds";
     let pxPerSecond = DEFAULT_PX_PER_SECOND;
@@ -351,6 +352,26 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         }, INPUT_SYNC_INTERVAL_MS);
     };
 
+    // The host's model/lora refresh button repopulates the core dropdowns but
+    // does NOT re-run our init, so our stage model / LoRA / IC-LoRA selects keep
+    // the stale option lists until the next full rebuild. Hook the host's
+    // post-refresh callback array to repaint from the fresh options.
+    const registerParamRefreshHook = (): void => {
+        if (
+            paramRefreshHook ||
+            typeof refreshParamsExtra === "undefined" ||
+            !Array.isArray(refreshParamsExtra)
+        ) {
+            return;
+        }
+        paramRefreshHook = () => {
+            // refreshParamsExtra fires BEFORE the host rebuilds the dropdown
+            // <option> elements, so defer a tick to read the fresh options.
+            setTimeout(() => refresh(), 0);
+        };
+        refreshParamsExtra.push(paramRefreshHook);
+    };
+
     const onKeydown = (event: KeyboardEvent): void => {
         if (!(event.ctrlKey || event.metaKey)) {
             return;
@@ -423,6 +444,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         document.removeEventListener("keydown", onKeydown);
         document.addEventListener("keydown", onKeydown);
         startInputSync();
+        registerParamRefreshHook();
         refresh();
     };
 
@@ -440,6 +462,17 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             boundToggle.removeEventListener("change", onEnabledToggled);
             boundToggle = null;
         }
+        if (
+            paramRefreshHook &&
+            typeof refreshParamsExtra !== "undefined" &&
+            Array.isArray(refreshParamsExtra)
+        ) {
+            const idx = refreshParamsExtra.indexOf(paramRefreshHook);
+            if (idx !== -1) {
+                refreshParamsExtra.splice(idx, 1);
+            }
+        }
+        paramRefreshHook = null;
         retakeTrack.dispose();
         audioSegmentTrack.dispose();
         linking.dispose();
