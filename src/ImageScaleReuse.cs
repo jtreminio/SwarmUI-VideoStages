@@ -65,6 +65,30 @@ internal static class ImageScaleReuse
         return scale;
     }
 
+    /// <summary>Scales <paramref name="sourcePath"/> to (width, height). When the source is itself an
+    /// ImageScale whose output nothing consumes yet, re-fits that node in place — one resample from
+    /// the raw source instead of two chained ones (its crop is kept: a conform's center crop frames
+    /// the enlarged dims identically since the aspect is preserved). Otherwise creates a new node.</summary>
+    public static ImageScaleNode RetargetOrCreate(
+        WorkflowBridge bridge,
+        JArray sourcePath,
+        int width,
+        int height,
+        string crop,
+        string upscaleMethod)
+    {
+        if (sourcePath is { Count: 2 }
+            && bridge.NodeAt(sourcePath) is ImageScaleNode existing
+            && bridge.ResolvePath(sourcePath) is INodeOutput output
+            && !bridge.Graph.FindDownstream(output).Any())
+        {
+            existing.With(Width: width, Height: height, UpscaleMethod: upscaleMethod);
+            bridge.SyncNode(existing);
+            return existing;
+        }
+        return Create(bridge, sourcePath, width, height, crop, upscaleMethod);
+    }
+
     /// <summary>When <paramref name="sourcePath"/> already points at an ImageScale node, re-fits it to
     /// (targetWidth, targetHeight) with center crop (collapsing a redundant upstream ImageScale) and
     /// returns its id. A second reuse strategy alongside <see cref="TryFind"/>.</summary>

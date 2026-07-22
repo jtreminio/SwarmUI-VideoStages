@@ -59,6 +59,16 @@ public sealed record StageSpec(
     public bool IsPixelUpscale => HasUpscaleMethodPrefix("pixel-");
     public bool IsModelUpscale => HasUpscaleMethodPrefix("model-");
 
+    /// <summary>
+    /// True when the stage performs no generation: Control 0 means nothing denoises, and no retake
+    /// window is present (a retake samples from step 0 behind its frame mask even at Control 0).
+    /// A configured latent scale (up or down) is excluded — it transforms the latent and needs the
+    /// encode/decode pipeline even without sampling.
+    /// </summary>
+    public bool IsPassthrough => Control <= 0
+        && RetakeWindow is null
+        && !(Upscale != 1 && (IsLatentUpscale || IsLatentModelUpscale));
+
     private bool HasUpscaleMethodPrefix(string prefix) =>
         UpscaleMethod?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ?? false;
 }

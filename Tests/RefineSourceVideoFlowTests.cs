@@ -90,24 +90,17 @@ public partial class StageFlowTests
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(2, samplers.Count);
-
-        Assert.Equal(stage0Steps, samplers[0].StartAtStep.LiteralAsInt());
-
+        // The refine-skipped stage 0 is a passthrough with no sampler; stage 1 refines the
+        // source footage directly.
+        SwarmKSamplerNode refine = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.Equal((int)Math.Floor(stage1Steps * 0.5), refine.StartAtStep.LiteralAsInt());
         Assert.True(
-            ReachesUpstream(bridge, samplers[0].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 0 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
-
-        Assert.True(
-            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, samplers[0].Id),
-            "Stage 1 sampler latent input does not chain back to stage 0's sampler output.");
-
-        Assert.Equal((int)Math.Floor(stage1Steps * 0.5), samplers[1].StartAtStep.LiteralAsInt());
+            ReachesUpstream(bridge, refine.LatentImage.Connection!.Node, loadVideo.Id),
+            "Stage 1 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
     }
 
     [Fact]
-    public void Refine_source_video_skip_two_passes_through_first_two_stage_samplers()
+    public void Refine_source_video_skip_two_emits_no_samplers_for_the_skipped_stages()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -134,20 +127,13 @@ public partial class StageFlowTests
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(3, samplers.Count);
-
-        Assert.Equal(stage0Steps, samplers[0].StartAtStep.LiteralAsInt());
-        Assert.Equal(stage1Steps, samplers[1].StartAtStep.LiteralAsInt());
-
+        // Both refine-skipped stages are samplerless passthroughs; only stage 2 samples, straight
+        // off the source footage.
+        SwarmKSamplerNode refine = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.Equal((int)Math.Floor(stage2Steps * 0.5), refine.StartAtStep.LiteralAsInt());
         Assert.True(
-            ReachesUpstream(bridge, samplers[0].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 0 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
-        Assert.True(
-            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 1 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
-
-        Assert.Equal((int)Math.Floor(stage2Steps * 0.5), samplers[2].StartAtStep.LiteralAsInt());
+            ReachesUpstream(bridge, refine.LatentImage.Connection!.Node, loadVideo.Id),
+            "Stage 2 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
     }
 
     private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrackStep(int trackIndex) =>

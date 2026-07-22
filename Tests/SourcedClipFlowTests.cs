@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Generated;
 using Xunit;
@@ -103,12 +104,12 @@ public partial class StageFlowTests
 
         SwarmFrameWindowNode window = AssertSourcedConformChain(bridge);
 
-        // Per-clip refine: the sourced clip's single stage is a full passthrough (start step ==
-        // steps, no denoise) fed by the conform chain, and its output joins the cross-clip merge.
-        SwarmKSamplerNode sourcedSampler = Assert.Single(
+        // Per-clip refine: the sourced clip's single stage is a full passthrough — no generation
+        // scaffold at all, the conformed footage IS the stage output — and joins the cross-clip
+        // merge directly. Only the generated clip samples.
+        Assert.DoesNotContain(
             SamplerNodesOrdered(bridge),
             sampler => ReachesUpstream(bridge, sampler, window.Id));
-        Assert.Equal(10, sourcedSampler.StartAtStep.LiteralAsInt());
         Assert.Contains(
             bridge.Graph.NodesOfType<BatchImagesNodeNode>(),
             batch => ReachesUpstream(bridge, batch, window.Id));
@@ -129,14 +130,100 @@ public partial class StageFlowTests
 
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        List<SwarmKSamplerNode> samplers = [.. SamplerNodesOrdered(bridge)
-            .Where(s => ReachesUpstream(bridge, s, window.Id))];
-        Assert.Equal(2, samplers.Count);
-        Assert.Equal(10, samplers[0].StartAtStep.LiteralAsInt());
-        Assert.Equal((int)Math.Floor(12 * 0.5), samplers[1].StartAtStep.LiteralAsInt());
+        // The passthrough stage 0 emits no sampler; the refine stage consumes the footage directly.
+        SwarmKSamplerNode refine = Assert.Single(
+            SamplerNodesOrdered(bridge),
+            s => ReachesUpstream(bridge, s, window.Id));
+        Assert.Equal((int)Math.Floor(12 * 0.5), refine.StartAtStep.LiteralAsInt());
         Assert.True(
-            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, samplers[0].Id),
-            "Refine stage does not chain back to the passthrough stage's output.");
+            ReachesUpstream(bridge, refine.LatentImage.Connection!.Node, window.Id),
+            "Refine stage does not chain back to the passthrough footage.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Sourced_clip_loader_only_ic_lora_applies_once_on_the_refine_stage_not_the_passthrough()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel icLora = new(
+            loraHandler, "/tmp", "/tmp/UnitTest_IcLoraUpscaler.safetensors", "UnitTest_IcLoraUpscaler.safetensors");
+        loraHandler.Models[icLora.Name] = icLora;
+
+        JObject sourced = MakeSourcedClip(models);
+        ((JArray)sourced["Stages"]).Add(
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
+        sourced["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_IcLoraUpscaler",
+            ["Source"] = Constants.IcLoraSourceUpload,
+        });
+        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // A stage:-1 loader-only entry must patch only the sampling stage's model — the passthrough
+        // stage 0 has no sampler, so a loader there would be a dangling node.
+        LTXICLoRALoaderModelOnlyNode loader = Assert.Single(
+            bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.True(
+            ReachesUpstream(bridge, sampler.Model.Connection!.Node, loader.Id),
+            "The IC-LoRA loader does not feed the refine sampler's model.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Sourced_clip_pixel_upscale_retargets_the_conform_scale_instead_of_chaining()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject sourced = MakeSourcedClip(models);
+        ((JArray)sourced["Stages"]).Add(
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
+        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        // The refine stage's ×2 pixel upscale re-fits the conform scale in place: one resample from
+        // the raw footage straight to the final dims, not a chained base-dims intermediate.
+        ImageScaleNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            n => ReachesUpstream(bridge, n, window.Id));
+        Assert.Equal(window.Id, scale.Image.Connection!.Node.Id);
+        Assert.Equal(1024, scale.Width.LiteralAsInt());
+        Assert.Equal(1024, scale.Height.LiteralAsInt());
+        Assert.Equal("center", scale.Crop.LiteralAsString());
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Later_stage_referencing_the_passthrough_does_not_refit_the_refine_stages_input_scale()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject sourced = MakeSourcedClip(models);
+        ((JArray)sourced["Stages"]).Add(
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
+        ((JArray)sourced["Stages"]).Add(
+            MakeStage(models.VideoModel.Name, "Stage0", control: 0.5, upscale: 2.0, steps: 12));
+        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // Stage 1 retargeted the conform scale to its own input dims (512×2). Stage 2's Stage0
+        // guide runs at stage 2's dims (×2 again) — it must not re-fit that now-load-bearing node
+        // out from under stage 1's encode.
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        ImageScaleNode conform = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            n => n.Image.Connection?.Node.Id == window.Id);
+        Assert.Equal(1024, conform.Width.LiteralAsInt());
+        Assert.Equal(1024, conform.Height.LiteralAsInt());
         AssertWorkflowHasNoCycles(workflow);
     }
 
@@ -273,10 +360,8 @@ public partial class StageFlowTests
         Assert.True(
             ReachesUpstream(bridge, currentOutput.Node, window.Id),
             "Final media does not trace back to the sourced footage chain.");
-        SwarmKSamplerNode sampler = Assert.Single(
-            SamplerNodesOrdered(bridge),
-            s => ReachesUpstream(bridge, s, window.Id));
-        Assert.Equal(10, sampler.StartAtStep.LiteralAsInt());
+        // Passthrough stage + pruned root generation: the workflow samples nothing at all.
+        Assert.Empty(SamplerNodesOrdered(bridge));
         AssertWorkflowHasNoCycles(workflow);
     }
 
@@ -299,10 +384,8 @@ public partial class StageFlowTests
         // rendered noise instead of the uploaded footage.
         SwarmFrameWindowNode window = AssertSourcedConformChain(bridge);
         Assert.Empty(bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
-        SwarmKSamplerNode sampler = Assert.Single(
-            SamplerNodesOrdered(bridge),
-            s => ReachesUpstream(bridge, s, window.Id));
-        Assert.Equal(10, sampler.StartAtStep.LiteralAsInt());
+        // Passthrough stage + pruned root generation: the workflow samples nothing at all.
+        Assert.Empty(SamplerNodesOrdered(bridge));
 
         SwarmSaveAnimationWSNode save = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());

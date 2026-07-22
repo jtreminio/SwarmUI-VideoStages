@@ -331,7 +331,7 @@ internal sealed class LtxStageExecutor(
         JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
 
         WGNodeData stageVideoInput;
-        if (dynamicLengthFrames is null && IsPixelOrModelUpscaleStage(stageFrame.Stage))
+        if (dynamicLengthFrames is null && IsPixelOrModelScaleStage(stageFrame.Stage))
         {
             stageVideoInput = sourceSnapshot.WithPath(sourceSnapshot.Path);
             stageVideoInput.Frames = Math.Min(genInfo.Frames ?? DefaultFrameCount, stageVideoInput.Frames ?? int.MaxValue);
@@ -365,9 +365,9 @@ internal sealed class LtxStageExecutor(
         return new LtxVideoRetakeMasker(g).Apply(encodedLatent, genInfo, stage.RetakeWindow);
     }
 
-    private static bool IsPixelOrModelUpscaleStage(StageSpec stage)
+    private static bool IsPixelOrModelScaleStage(StageSpec stage)
     {
-        return stage.Upscale > 1 && (stage.IsPixelUpscale || stage.IsModelUpscale);
+        return stage.Upscale != 1 && (stage.IsPixelUpscale || stage.IsModelUpscale);
     }
 
     private string AddImageFromBatch(JArray imagePath, int batchIndex, JToken length)

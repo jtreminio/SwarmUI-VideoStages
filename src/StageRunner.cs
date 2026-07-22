@@ -30,6 +30,12 @@ internal class StageRunner(
         }
 
         ClipSpec clip = clipContext.Clip;
+        if (stage.IsPassthrough && !ReplacesTextToVideoRoot(stage, clipContext))
+        {
+            RunPassthroughStage(stage, sectionId, clipContext);
+            return;
+        }
+
         using ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(g.UserInput, clip.Id, sectionId);
         using ParamSnapshot loraScope = ApplyStageLoras(g.UserInput, clip, stage);
 
@@ -82,13 +88,32 @@ internal class StageRunner(
         CleanupReplacedTextToVideoRootStage(stageFrame.PriorOutputPath, stageFrame.ReplacesTextToVideoRoot);
     }
 
+    /// <summary>
+    /// A passthrough stage's output IS its input (plus any pixel/model upscale): emit only the
+    /// pixel transform and skip the generation scaffold (loaders, conditioning, IC-LoRA patch,
+    /// audio latent, zero-step sampler) — the host's post-cleanup collapses that scaffold only
+    /// partially, leaving dead nodes (e.g. a dangling IC-LoRA loader) and a lossy
+    /// encode/preprocess/decode roundtrip in the live pixel path.
+    /// </summary>
+    private void RunPassthroughStage(StageSpec stage, int sectionId, ClipContext clipContext)
+    {
+        JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
+        ltxManager.PrepareReusableAudio(clipContext, stage);
+        LtxPostVideoChainCapture postVideoChain = ltxManager.TryCapturePostVideoChain(clipContext, stage);
+        _ = ApplyStageUpscaleIfNeeded(clipContext, stage, sectionId, postVideoChain);
+        RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
+    }
+
+    private bool ReplacesTextToVideoRoot(StageSpec stage, ClipContext clipContext) =>
+        clipContext.IsFirstStage(stage)
+        && clipContext.Clip.SourceVideo is null
+        && g.GetVideoStagesSpec().IsTextToVideo;
+
     private StageFrame PrepareStage(StageSpec stage, int sectionId, ClipContext clipContext)
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(clipContext, stage);
-        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage)
-            && clipContext.Clip.SourceVideo is null
-            && g.GetVideoStagesSpec().IsTextToVideo;
+        bool replaceTextToVideoRootStage = ReplacesTextToVideoRoot(stage, clipContext);
         LtxPostVideoChainCapture postVideoChain = replaceTextToVideoRootStage
             ? null
             : ltxManager.TryCapturePostVideoChain(clipContext, stage);
@@ -322,7 +347,7 @@ internal class StageRunner(
         if (stage.IsPixelUpscale)
         {
             string method = stage.UpscaleMethod["pixel-".Length..];
-            ImageScaleNode scaleNode = AddDisabledCropImageScale(upscaleSource.Path, targetWidth, targetHeight, method);
+            ImageScaleNode scaleNode = AddStagePixelScale(upscaleSource.Path, targetWidth, targetHeight, method);
             g.CurrentMedia = upscaleSource.WithPath(scaleNode.IMAGE);
             g.CurrentMedia.Width = targetWidth;
             g.CurrentMedia.Height = targetHeight;
@@ -404,10 +429,10 @@ internal class StageRunner(
                 || JToken.DeepEquals(mediaPath, postVideoChain.DecodeOutputPath));
     }
 
-    private ImageScaleNode AddDisabledCropImageScale(JArray sourcePath, int width, int height, string upscaleMethod)
+    private ImageScaleNode AddStagePixelScale(JArray sourcePath, int width, int height, string upscaleMethod)
     {
         using WorkflowBridge bridge = BridgeSync.For(g);
-        return ImageScaleReuse.Create(bridge, sourcePath, width, height, "disabled", upscaleMethod);
+        return ImageScaleReuse.RetargetOrCreate(bridge, sourcePath, width, height, "disabled", upscaleMethod);
     }
 
     private ImageScaleNode AddModelUpscaleChain(JArray sourcePath, string modelName, int targetWidth, int targetHeight)

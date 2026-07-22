@@ -696,6 +696,7 @@
     }
     return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
   };
+  var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
   var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
     if (!(lengthRaw > 0)) {
       return null;
@@ -1170,13 +1171,16 @@
       );
     } else {
       firstStageUpscale = {
-        upscale: clamp(
-          utils.toNumber(
-            `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
-            fallback.upscale
+        upscale: snapToStep(
+          clamp(
+            utils.toNumber(
+              `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+              fallback.upscale
+            ),
+            defaults.upscaleMin,
+            defaults.upscaleMax
           ),
-          defaults.upscaleMin,
-          defaults.upscaleMax
+          defaults.upscaleStep
         ),
         upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
       };

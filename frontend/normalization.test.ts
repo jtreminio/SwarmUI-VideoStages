@@ -460,6 +460,29 @@ describe("normalization", () => {
         expect(stage1.upscaleMethod).toBe("latentmodel-b.safetensors");
     });
 
+    it("normalizeStage snaps upscale to the 0.25 step", () => {
+        const stage0 = normalizeStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            { ...minimalStageRaw },
+            null,
+            0,
+            0,
+        );
+        const snap = (upscale: number): number =>
+            normalizeStage(
+                getRootDefaults,
+                getDefaultStageModel,
+                { ...minimalStageRaw, Upscale: upscale },
+                stage0,
+                0,
+                1,
+            ).upscale;
+        expect(snap(1.3)).toBe(1.25);
+        expect(snap(1.1)).toBe(1);
+        expect(snap(0.3)).toBe(0.25);
+    });
+
     it("normalizeStage forces first-stage control to the root default", () => {
         const stage0 = normalizeStage(
             getRootDefaults,

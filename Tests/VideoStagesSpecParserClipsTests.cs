@@ -1041,6 +1041,27 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseStage_Upscale_SnapsToQuarterSteps()
+    {
+        JObject stage1 = MakeStage("model-b");
+        stage1["Upscale"] = 1.3;
+        JObject stage2 = MakeStage("model-c");
+        stage2["Upscale"] = 1.1;
+        JObject stage3 = MakeStage("model-d");
+        stage3["Upscale"] = 0.3;
+
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a"), stage1, stage2, stage3])));
+        WorkflowGenerator parser = new() { UserInput = BuildInputWithJson(json) };
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Equal(1.25, spec.Clips[0].Stages[1].Upscale);
+        Assert.Equal(1.0, spec.Clips[0].Stages[2].Upscale);
+        Assert.Equal(0.25, spec.Clips[0].Stages[3].Upscale);
+    }
+
+    [Fact]
     public void ParseStage_RefineSkipStages_DefaultsToOneWhenParamUnset()
     {
         string json = JsonConvert.SerializeObject(new JArray(

@@ -215,7 +215,7 @@ public class ImageReferenceTests
 
         Assert.Equal(2, stages.Count);
         Assert.Equal(0.12, stages[1].Control);
-        Assert.Equal(1.23, stages[1].Upscale);
+        Assert.Equal(1.25, stages[1].Upscale);
         Assert.Equal(6.2, stages[1].CfgScale);
     }
 

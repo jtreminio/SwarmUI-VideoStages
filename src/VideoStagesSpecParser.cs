@@ -1195,8 +1195,9 @@ internal static class VideoStagesSpecParser
     private static double NormalizeControl(double control) =>
         TruncateToDecimals(Math.Clamp(control, 0, 1), 2);
 
+    // Upscale is only meaningful in 0.25 steps (matches the editor's upscaleStep).
     private static double NormalizeUpscale(double upscale) =>
-        TruncateToDecimals(upscale, 2);
+        Math.Round(upscale * 4, MidpointRounding.AwayFromZero) / 4;
 
     private static double NormalizeCfgScale(double cfgScale) =>
         TruncateToDecimals(cfgScale, 1);

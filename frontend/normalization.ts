@@ -110,6 +110,9 @@ export const normalizePromptWindows = (
         .sort((a, b) => a.start - b.start);
 };
 
+const snapToStep = (value: number, step: number): number =>
+    step > 0 ? Math.round(value / step) * step : value;
+
 /**
  * Clamp a (start, length) window inside [0, clipDuration] with a minimum
  * length: start is clamped so at least minLength fits, then length is clamped
@@ -762,13 +765,16 @@ export const normalizeStage = (
         );
     } else {
         firstStageUpscale = {
-            upscale: clamp(
-                utils.toNumber(
-                    `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
-                    fallback.upscale,
+            upscale: snapToStep(
+                clamp(
+                    utils.toNumber(
+                        `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+                        fallback.upscale,
+                    ),
+                    defaults.upscaleMin,
+                    defaults.upscaleMax,
                 ),
-                defaults.upscaleMin,
-                defaults.upscaleMax,
+                defaults.upscaleStep,
             ),
             upscaleMethod:
                 `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
