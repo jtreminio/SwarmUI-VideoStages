@@ -119,7 +119,8 @@ internal static class VideoStagesSpecParser
                 continue;
             }
             ClipSpec clip = ParseClip(clipObj, i, defaults, isTextToVideo, fps, refineMode, refineSkipStages, tags);
-            if (clip.Stages.Count == 0)
+            // A sourced clip legitimately has no stages — its content is its video file.
+            if (clip.Stages.Count == 0 && clip.SourceVideo is null)
             {
                 continue;
             }
@@ -138,7 +139,7 @@ internal static class VideoStagesSpecParser
                 clipStageIndex++;
                 globalStageIndex++;
             }
-            if (activeStages.Count == 0)
+            if (activeStages.Count == 0 && clip.SourceVideo is null)
             {
                 continue;
             }
@@ -325,6 +326,75 @@ internal static class VideoStagesSpecParser
         }
     }
 
+    /// <summary>
+    /// Materializes a clip's embedded source video (pre-existing footage replacing generation) as a
+    /// loadable media file, or <c>null</c> when absent or invalid. Mirrors
+    /// <see cref="MaterializeUploadedAudio"/> for the video case.
+    /// </summary>
+    public static ImageFile MaterializeSourceVideoForClip(WorkflowGenerator g, ClipSpec clip)
+    {
+        SourceVideoSpec spec = clip?.SourceVideo;
+        if (spec is null || string.IsNullOrWhiteSpace(spec.Data))
+        {
+            return null;
+        }
+
+        string material = UploadedMediaResolver.ResolveDataString(
+            g, spec.Data.Trim(), "source video", StringComparison.Ordinal);
+        if (material is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            ImageFile video = ImageFile.FromDataString(material);
+            if (video?.Type?.MetaType != MediaMetaType.Video)
+            {
+                Logs.Warning("VideoStages: Ignoring a clip source video whose media type is not video.");
+                return null;
+            }
+            video.SourceFilePath = string.IsNullOrWhiteSpace(spec.FileName)
+                ? null
+                : spec.FileName.Trim();
+            return video;
+        }
+        catch (Exception)
+        {
+            Logs.Warning("VideoStages: Ignoring invalid source video embedded in Video Stages JSON.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the optional per-clip <c>SourceVideo</c> container. Requires a positive clip duration and
+    /// fps — the used range's length IS the clip duration, so without one the file cannot be conformed
+    /// and the clip generates normally.
+    /// </summary>
+    private static SourceVideoSpec ResolveClipSourceVideo(
+        JObject clipObj, double durationSeconds, int fps, int clipIndex)
+    {
+        UploadedAudioSpec upload = GetEmbeddedUploadSpec(clipObj, UploadContainers.ClipSourceVideo);
+        if (upload is null)
+        {
+            return null;
+        }
+        if (durationSeconds <= 0 || fps <= 0)
+        {
+            Logs.Warning(
+                $"VideoStages: Clip {clipIndex} has a source video but no usable duration/fps; "
+                + "generating the clip normally instead.");
+            return null;
+        }
+        JObject container = GetObject(clipObj, UploadContainers.ClipSourceVideo);
+        double start = GetOptionalDouble(container, "StartSeconds", 0, $"Clip {clipIndex} SourceVideo");
+        if (!IsFinite(start) || start < 0)
+        {
+            start = 0;
+        }
+        return new SourceVideoSpec(upload.Data, upload.FileName, RoundTenth(start));
+    }
+
     private static bool IsClipShape(JObject entry) =>
         JsonUtil.Get(entry, "Stages") is not null;
 
@@ -334,7 +404,8 @@ internal static class VideoStagesSpecParser
     /// Returns <c>null</c> when absent, malformed, or resolving to a non-positive length — that is the
     /// enable gate (a zero-length retake regenerates nothing).
     /// </summary>
-    private static RetakeWindowSpec ResolveClipRetakeWindow(JObject clipObj, int fps, int clipIndex)
+    private static RetakeWindowSpec ResolveClipRetakeWindow(
+        JObject clipObj, int fps, int clipIndex, double clipDurationSeconds)
     {
         JObject retakeObj = GetObject(clipObj, "Retake");
         if (retakeObj is null || fps <= 0)
@@ -351,6 +422,16 @@ internal static class VideoStagesSpecParser
         }
         int startFrame = (int)Math.Round(startSeconds * fps);
         int lengthFrames = (int)Math.Round(lengthSeconds * fps);
+        // A retake dragged to the clip's end must cover the aligned tail: the clip's frame count
+        // rounds UP to 8n+1, so converting the seconds-end alone would leave the final latent
+        // frame(s) frozen at the original footage.
+        if (clipDurationSeconds > 0
+            && startSeconds + lengthSeconds >= clipDurationSeconds - 0.5 / fps)
+        {
+            lengthFrames = Math.Max(
+                lengthFrames,
+                CalculateAlignedFrameCount(clipDurationSeconds, fps) - startFrame);
+        }
         if (startFrame < 0 || lengthFrames <= 0)
         {
             return null;
@@ -453,6 +534,7 @@ internal static class VideoStagesSpecParser
             clipObj, "BoundaryOutOverlap", Constants.ContinueOverlapDefaultFrames, $"Clip {clipIndex}"));
         UploadedAudioSpec uploadedAudio = GetEmbeddedUploadSpec(clipObj, UploadContainers.ClipAudio);
         IReadOnlyList<AudioSegmentSpec> audioSegments = ParseAudioSegments(clipObj, Math.Max(0, duration));
+        SourceVideoSpec sourceVideo = ResolveClipSourceVideo(clipObj, duration, fps, clipIndex);
 
         List<JObject> rawStages = GetObjectArray(clipObj, "Stages");
         // A stage target beyond the authored stage list would silently skip the whole
@@ -493,15 +575,17 @@ internal static class VideoStagesSpecParser
                 refs.Count,
                 isTextToVideoRootWorkflow,
                 refineMode,
-                refineSkipStages);
+                refineSkipStages,
+                sourcedClip: sourceVideo is not null);
             stages.Add(parsed);
         }
 
-        // Retake only applies when refining a base video (it reuses the refine-source base). Carry the
-        // window on the LAST active stage — the one that re-renders — so earlier skip-range passthrough
-        // stages stay untouched. Only the LTX local path reads it; other models ignore it.
-        RetakeWindowSpec retakeWindow = refineMode
-            ? ResolveClipRetakeWindow(clipObj, fps, clipIndex)
+        // Retake needs a base video to regenerate against: the global refine source, or this clip's
+        // own source video. Carry the window on the LAST active stage — the one that re-renders — so
+        // earlier skip-range passthrough stages stay untouched. Only the LTX local path reads it;
+        // other models ignore it.
+        RetakeWindowSpec retakeWindow = refineMode || sourceVideo is not null
+            ? ResolveClipRetakeWindow(clipObj, fps, clipIndex, duration)
             : null;
         if (retakeWindow is not null && stages.Count > 0)
         {
@@ -529,7 +613,8 @@ internal static class VideoStagesSpecParser
             Loras: ParseLoras(clipObj),
             PromptWindows: SortWindows(tags.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: boundaryOut,
-            BoundaryOutOverlap: boundaryOutOverlap
+            BoundaryOutOverlap: boundaryOutOverlap,
+            SourceVideo: sourceVideo
         );
     }
 
@@ -713,7 +798,8 @@ internal static class VideoStagesSpecParser
         int clipRefCount,
         bool isTextToVideoRootWorkflow,
         bool refineMode,
-        int refineSkipStages)
+        int refineSkipStages,
+        bool sourcedClip = false)
     {
         string locationPrefix = $"Clip {clipIndex} stage {index}";
         string model = GetOptionalString(stage, "Model", defaultValue: null, locationPrefix, allowEmpty: false);
@@ -730,7 +816,10 @@ internal static class VideoStagesSpecParser
             defaults.UpscaleMethod,
             locationPrefix,
             allowEmpty: false);
-        bool isRefineSkipped = refineMode && clipIndex == 0 && index < refineSkipStages;
+        // A sourced clip is per-clip refine: its first stage passes the footage through (Control 0)
+        // and later stages refine/upscale it — the same shape the global refine source gives clip 0.
+        bool isRefineSkipped = (refineMode && clipIndex == 0 && index < refineSkipStages)
+            || (sourcedClip && index == 0);
         if (index == 0 || isRefineSkipped)
         {
             if (index == 0 && ShouldWarnFirstStageUpscaleIgnored(

@@ -6,7 +6,7 @@ import {
     serializeClipPrompts,
 } from "./promptSegments";
 
-const DATA_INPUT_ID = "input_videostages";
+export const DATA_INPUT_ID = "input_videostages";
 let warnedMissingDataInput = false;
 
 export const getPromptInput = ():

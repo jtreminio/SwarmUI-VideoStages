@@ -1,8 +1,27 @@
 import { injectTimelineTab } from "./bottomTimelineTab";
 import { refineVideoButton } from "./refineVideoButton";
+import { DATA_INPUT_ID } from "./swarmInputs";
 import { videoStagesTimeline } from "./videoStagesTimeline";
 
 const timeline = videoStagesTimeline();
+
+// One-shot diagnostic for the case where the Data input never gets built at
+// all (backend extension failed to load): the init gate below skips silently,
+// so without this a broken install would produce no signal.
+let dataInputWatchdog: ReturnType<typeof setTimeout> | null = null;
+const warnIfDataInputNeverAppears = (): void => {
+    if (dataInputWatchdog) {
+        return;
+    }
+    dataInputWatchdog = setTimeout(() => {
+        if (!document.getElementById(DATA_INPUT_ID)) {
+            console.warn(
+                `VideoStages: Data param input (#${DATA_INPUT_ID}) never appeared — ` +
+                    "is the VideoStages backend extension loaded?",
+            );
+        }
+    }, 10000);
+};
 
 const registerVideoStagesPromptPrefix = (): void => {
     if (typeof promptTabComplete === "undefined") {
@@ -21,7 +40,25 @@ const registerVideoStagesPromptPrefix = (): void => {
     );
 };
 
+const DATA_INPUT_RETRY_MS = 250;
+let dataInputRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
 const initTimeline = (): void => {
+    // The Data input is built by genpage's async param build, which can land
+    // after (or without re-running) the postParamBuildSteps pass that calls
+    // us. Initializing against a paramless DOM would parse an empty carrier
+    // and silently no-op every save, so keep retrying until the input exists;
+    // init is re-runnable by design, so a later host-triggered call is fine.
+    if (!document.getElementById(DATA_INPUT_ID)) {
+        warnIfDataInputNeverAppears();
+        if (!dataInputRetryTimer) {
+            dataInputRetryTimer = setTimeout(() => {
+                dataInputRetryTimer = null;
+                initTimeline();
+            }, DATA_INPUT_RETRY_MS);
+        }
+        return;
+    }
     try {
         timeline.init();
     } catch (error) {

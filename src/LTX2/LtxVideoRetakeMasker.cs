@@ -23,7 +23,15 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
     /// LTXV VAE temporal downscale: latent frames = (pixelFrames-1)/8 + 1, pixel index → latent
     /// floor(index/8). Matches ltx_director_guide.py's downscale_index_formula[0].
     /// </summary>
-    private const int TemporalDownscale = 8;
+    internal const int TemporalDownscale = 8;
+
+    /// <summary>
+    /// First pixel frame of latent frame <paramref name="latentIndex"/>: latent 0 holds pixel 0 alone,
+    /// latent k holds pixels [8k-7, 8k]. This is the boundary grid LTXVSetAudioVideoMaskByTime
+    /// searchsorts its start/end times against, so seconds snapped to it select exact latent indices.
+    /// </summary>
+    internal static int LatentFrameStartPixel(int latentIndex) =>
+        latentIndex <= 0 ? 0 : latentIndex * TemporalDownscale - (TemporalDownscale - 1);
 
     private const int DefaultFrameCount = LtxStageExecutor.DefaultFrameCountValue;
 

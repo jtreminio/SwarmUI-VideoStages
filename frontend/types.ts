@@ -98,6 +98,27 @@ export interface Retake {
     strength: number;
 }
 
+/**
+ * Pre-existing footage used as the clip's starting point instead of a
+ * from-scratch generation. `data`/`fileName` are the picked video (data URI +
+ * name — both browser uploads and server-picked files resolve to a data URI);
+ * `fps` and `durationSeconds` are the file's probed metadata (display only,
+ * 0 = unknown); `startSeconds`/`lengthSeconds` select the used range inside
+ * the file, and the clip's own duration follows `lengthSeconds`. The backend
+ * conforms the range to the timeline (fps resample, exact frame window,
+ * resize) and feeds it to the clip's stage chain as per-clip refine input:
+ * stage 0 passes it through, later stages refine/upscale it, and a retake
+ * window regenerates part of it.
+ */
+export interface SourceVideo {
+    data: string;
+    fileName: string | null;
+    fps: number;
+    durationSeconds: number;
+    startSeconds: number;
+    lengthSeconds: number;
+}
+
 export interface RefImage {
     source: string;
     uploadFileName: string | null;
@@ -164,6 +185,7 @@ export interface Clip {
     prompt: string;
     promptWindows: PromptWindow[];
     retake: Retake | null;
+    sourceVideo: SourceVideo | null;
     refs: RefImage[];
     stages: Stage[];
 }
@@ -215,6 +237,7 @@ export const STORED_CLIP_KEYS = [
     "uploadedAudio",
     "audioSegments",
     "retake",
+    "sourceVideo",
     "refs",
     "stages",
 ] as const satisfies readonly (keyof Clip)[];

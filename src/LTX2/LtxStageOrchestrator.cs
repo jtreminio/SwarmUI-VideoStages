@@ -6,7 +6,6 @@ namespace VideoStages.LTX2;
 internal sealed class LtxStageOrchestrator(
     WorkflowGenerator g,
     LtxStageExecutor stageExecutor,
-    RootVideoStageHandoff rootVideoStageHandoff,
     StageGuideMediaHelper stageGuideMediaHelper,
     LtxClipRefResolver clipRefResolver)
 {
@@ -47,7 +46,7 @@ internal sealed class LtxStageOrchestrator(
         }
         double guideMergeStrength = primaryGuideClipRef?.Strength ?? 1.0;
 
-        bool replacesTextToVideoRoot = rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);
+        bool replacesTextToVideoRoot = stageFrame.ReplacesTextToVideoRoot;
         bool skipGuideReinjection = primaryGuideClipRef is null
             && (replacesTextToVideoRoot
                 || clipRefs is { Count: > 0 }

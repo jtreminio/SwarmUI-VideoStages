@@ -17,17 +17,19 @@ public partial class StageFlowTests
     [Fact]
     public void Audio_retake_window_seconds_are_deterministic()
     {
+        // Frames [24, 48) → latent frames [3, 6): the seconds are snapped to the latent boundary
+        // pixels (17 and 41) so the mask-by-time node selects exactly those latent frames.
         LtxAudioWindowMasker.AudioMaskWindow w =
             LtxAudioWindowMasker.ComputeRetakeWindow(new RetakeWindowSpec(24, 24, 1.0), fps: 24, clipFrames: 97);
-        Assert.Equal(1.0, w.StartTime, 6);
-        Assert.Equal(2.0, w.EndTime, 6);
+        Assert.Equal(17.0 / 24, w.StartTime, 6);
+        Assert.Equal(41.0 / 24, w.EndTime, 6);
         Assert.False(w.IsEmpty);
 
-        // Over-long window is clamped to the clip length.
+        // Over-long window is clamped to the clip length (latents [6, 12) of 12 → pixels 41–89).
         LtxAudioWindowMasker.AudioMaskWindow clamped =
             LtxAudioWindowMasker.ComputeRetakeWindow(new RetakeWindowSpec(48, 999, 1.0), fps: 24, clipFrames: 96);
-        Assert.Equal(2.0, clamped.StartTime, 6);
-        Assert.Equal(4.0, clamped.EndTime, 6);
+        Assert.Equal(41.0 / 24, clamped.StartTime, 6);
+        Assert.Equal(89.0 / 24, clamped.EndTime, 6);
 
         // Zero-length retake => empty (no windowing).
         Assert.True(LtxAudioWindowMasker.ComputeRetakeWindow(new RetakeWindowSpec(0, 0, 1.0), 24, 97).IsEmpty);
@@ -56,18 +58,19 @@ public partial class StageFlowTests
         // Video retake mask is still applied to the video latent (unchanged path).
         Assert.Single(bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
 
-        // Audio channel is windowed by time via the stock mask-by-time node, audio-only.
+        // Both channels are windowed by time via the stock mask-by-time node. The node must own the
+        // video mask (its merge of a pre-existing mask only fires for per-frame scalar masks, and the
+        // retake mask is H×W-resized): mask_video=true over a frozen 0.0 base, matching windows.
         LTXVSetAudioVideoMaskByTimeNode maskByTime = Assert.Single(
             bridge.Graph.NodesOfType<LTXVSetAudioVideoMaskByTimeNode>());
         JObject inputs = (JObject)AsWorkflowNode(maskByTime, workflow).Node["inputs"];
-        Assert.False(inputs["mask_video"]!.Value<bool>());
+        Assert.True(inputs["mask_video"]!.Value<bool>());
         Assert.True(inputs["mask_audio"]!.Value<bool>());
-        // Video init MUST be 1.0 (identity): the node multiplies the retake video mask into this, so 0.0
-        // would zero it and freeze the entire video.
-        Assert.Equal(1.0, inputs["mask_init_value_video"]!.Value<double>(), 6);
+        Assert.Equal(0.0, inputs["mask_init_value_video"]!.Value<double>(), 6);
         Assert.Equal(0.0, inputs["mask_init_value_audio"]!.Value<double>(), 6);
-        Assert.Equal(1.0, maskByTime.StartTime.LiteralAsDouble()!.Value, 6);
-        Assert.Equal(2.0, maskByTime.EndTime.LiteralAsDouble()!.Value, 6);
+        // Latent-snapped seconds: frames [24, 48) → latents [3, 6) → boundary pixels 17 and 41.
+        Assert.Equal(17.0 / 24, maskByTime.StartTime.LiteralAsDouble()!.Value, 6);
+        Assert.Equal(41.0 / 24, maskByTime.EndTime.LiteralAsDouble()!.Value, 6);
 
         // Its rewritten av-latent + conditioning feed the sampler.
         SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));

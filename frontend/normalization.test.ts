@@ -10,6 +10,7 @@ import {
     normalizeContinueOverlap,
     normalizeRef,
     normalizeRetake,
+    normalizeSourceVideo,
     normalizeStage,
     normalizeStageLoras,
     normalizeStageRefStrengthValue,
@@ -879,5 +880,99 @@ describe("stage loras", () => {
             getDefaultStageModel,
         );
         expect(withoutRetake.retake).toBeNull();
+    });
+});
+
+describe("normalizeSourceVideo", () => {
+    const data = "data:video/mp4;base64,QUJD";
+
+    it("keeps a valid source video and rounds its seconds", () => {
+        expect(
+            normalizeSourceVideo({
+                data,
+                fileName: "shot.mp4",
+                fps: 24,
+                durationSeconds: 10.04,
+                startSeconds: 2.04,
+                lengthSeconds: 5.06,
+            }),
+        ).toEqual({
+            data,
+            fileName: "shot.mp4",
+            fps: 24,
+            durationSeconds: 10,
+            startSeconds: 2,
+            lengthSeconds: 5.1,
+        });
+    });
+
+    it("rejects a missing data blob or non-record value", () => {
+        expect(normalizeSourceVideo(null)).toBeNull();
+        expect(normalizeSourceVideo("x")).toBeNull();
+        expect(
+            normalizeSourceVideo({ data: " ", lengthSeconds: 2 }),
+        ).toBeNull();
+    });
+
+    it("clamps the range inside a known file duration", () => {
+        expect(
+            normalizeSourceVideo({
+                data,
+                fps: 0,
+                durationSeconds: 6,
+                startSeconds: 9,
+                lengthSeconds: 4,
+            }),
+        ).toEqual({
+            data,
+            fileName: null,
+            fps: 0,
+            durationSeconds: 6,
+            startSeconds: 5,
+            lengthSeconds: 1,
+        });
+    });
+
+    it("defaults a missing length to the rest of the file", () => {
+        expect(
+            normalizeSourceVideo({
+                data,
+                durationSeconds: 8,
+                startSeconds: 3,
+            }),
+        ).toEqual({
+            data,
+            fileName: null,
+            fps: 0,
+            durationSeconds: 8,
+            startSeconds: 3,
+            lengthSeconds: 5,
+        });
+    });
+
+    it("keeps a positive length even when the file duration is unknown", () => {
+        expect(
+            normalizeSourceVideo({ data, lengthSeconds: 3 })?.lengthSeconds,
+        ).toBe(3);
+        expect(normalizeSourceVideo({ data })).toBeNull();
+    });
+
+    it("drives the clip duration from the source range in normalizeClip", () => {
+        const clip = normalizeClip(
+            {
+                duration: 2,
+                stages: [minimalStageRaw],
+                sourceVideo: {
+                    data,
+                    durationSeconds: 10,
+                    startSeconds: 1,
+                    lengthSeconds: 3.5,
+                },
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.sourceVideo?.startSeconds).toBe(1);
+        expect(clip.duration).toBe(3.5);
     });
 });

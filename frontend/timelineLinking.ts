@@ -249,7 +249,8 @@ export const createTimelineLinking = (): TimelineLinking => {
                             state.idx < 0 ||
                             state.idx >= clips.length ||
                             clip.clipLengthFromAudio ||
-                            clip.clipLengthFromControlNet
+                            clip.clipLengthFromControlNet ||
+                            clip.sourceVideo
                         ) {
                             return null;
                         }

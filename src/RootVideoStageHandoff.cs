@@ -19,9 +19,13 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
             && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
     }
 
-    public bool ShouldReplaceTextToVideoRootStage(StageSpec stage)
+    /// <summary>A sourced clip's first stage refines its own footage, so it never absorbs the
+    /// text-to-video root generation.</summary>
+    public bool ShouldReplaceTextToVideoRootStage(StageSpec stage, ClipSpec clip)
     {
-        return stage.ClipStageIndex == 0 && g.GetVideoStagesSpec().IsTextToVideo;
+        return clip?.SourceVideo is null
+            && stage.ClipStageIndex == 0
+            && g.GetVideoStagesSpec().IsTextToVideo;
     }
 
     public bool ShouldHandoffRootStage()

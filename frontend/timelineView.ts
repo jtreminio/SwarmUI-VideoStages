@@ -229,6 +229,33 @@ const renderWindowSpan = (opts: {
     );
 };
 
+/**
+ * Hatched shade inside the clip region spanning the retake window below it —
+ * the same "this range is being replaced" cue the Major prompt segment gets
+ * from relay windows.
+ */
+const renderRetakeRegionShade = (
+    clip: Clip,
+    durationSeconds: number,
+): string => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+        return "";
+    }
+    const start = clamp(retake.startSeconds, 0, durationSeconds);
+    const end = clamp(
+        retake.startSeconds + retake.lengthSeconds,
+        start,
+        durationSeconds,
+    );
+    if (end <= start) {
+        return "";
+    }
+    const left = (start / durationSeconds) * 100;
+    const width = ((end - start) / durationSeconds) * 100;
+    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
+};
+
 const renderRetakeOverlay = (
     clip: Clip,
     clipIdx: number,
@@ -1043,6 +1070,7 @@ export const renderTimeline = (
             return (
                 `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +
+                renderRetakeRegionShade(clip, l.durationSeconds) +
                 renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) +
                 `<div class="vst-region-head">` +
                 `<span class="vst-region-name">Clip ${l.index}</span>` +

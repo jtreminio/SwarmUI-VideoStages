@@ -12,7 +12,6 @@ internal sealed class LtxManager
 
     public LtxManager(
         WorkflowGenerator g,
-        RootVideoStageHandoff rootVideoStageHandoff,
         RootVideoStageResizer rootVideoStageResizer,
         StageGuideMediaHelper stageGuideMediaHelper,
         Base2EditPublishedStageRefs base2EditPublishedStageRefs)
@@ -22,7 +21,6 @@ internal sealed class LtxManager
         audioInjector = new LtxAudioInjector(g, rootVideoStageResizer);
         LtxStageExecutor stageExecutor = new(
             g,
-            rootVideoStageHandoff,
             rootVideoStageResizer);
         LtxClipRefResolver clipRefResolver = new(
             g,
@@ -31,7 +29,6 @@ internal sealed class LtxManager
         stageOrchestrator = new LtxStageOrchestrator(
             g,
             stageExecutor,
-            rootVideoStageHandoff,
             stageGuideMediaHelper,
             clipRefResolver);
     }

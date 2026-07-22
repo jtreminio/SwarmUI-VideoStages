@@ -19,7 +19,11 @@ export const createTimelineHistory = (
     const max = deps.maxDepth ?? 50;
     const undoStack: string[] = [];
     let redoStack: string[] = [];
-    let last: string | null = deps.read();
+    // Lazily seeded (first capture, or init's syncBaseline): the factory runs
+    // at script load, before genpage has built the carrier inputs — an eager
+    // read here would snapshot an empty carrier and warn about the missing
+    // Data input.
+    let last: string | null = null;
     let suppress = false;
 
     const syncBaseline = (): void => {

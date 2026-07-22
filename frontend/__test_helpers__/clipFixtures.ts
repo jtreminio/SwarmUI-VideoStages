@@ -47,6 +47,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     prompt: "",
     promptWindows: [],
     retake: null,
+    sourceVideo: null,
     refs: [],
     stages: [minimalStage()],
     ...overrides,

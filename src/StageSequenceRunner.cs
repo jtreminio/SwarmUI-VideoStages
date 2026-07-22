@@ -75,40 +75,102 @@ internal sealed class StageSequenceRunner(
                 boundaryOverlapPrefs);
             ClipSpec previousClip = null;
             WGNodeData previousClipOutput = null;
+            SourcedClipInstaller sourcedClipInstaller = new(g);
             int clipIndex = 0;
             foreach (ClipSpec clip in clips)
             {
                 ClipContext clipContext = new(clip, spec.Width, spec.Height, rootSourceMedia, rootSourceVae);
-                if (parallelMultiClip && previousClip is not null)
+                WGNodeData sourcedMedia = null;
+                if (clip.SourceVideo is not null)
                 {
-                    if (clipContext.SourceMedia is null)
+                    sourcedMedia = sourcedClipInstaller.TryInstall(clip, spec);
+                    if (sourcedMedia is null)
                     {
                         Logs.Error(
-                            "VideoStages: parallel clips require root media before the first stage. "
+                            $"VideoStages: Clip {clip.Id} source video could not be installed. "
                             + "Stopping further stages.");
                         break;
                     }
-
-                    g.CurrentMedia = clipContext.SourceMedia.Duplicate();
-                    if (clipContext.SourceVae is not null)
+                }
+                if (parallelMultiClip && previousClip is not null)
+                {
+                    if (sourcedMedia is null)
                     {
-                        g.CurrentVae = clipContext.SourceVae.Duplicate();
+                        if (clipContext.SourceMedia is null)
+                        {
+                            Logs.Error(
+                                "VideoStages: parallel clips require root media before the first stage. "
+                                + "Stopping further stages.");
+                            break;
+                        }
+
+                        g.CurrentMedia = clipContext.SourceMedia.Duplicate();
+                        if (clipContext.SourceVae is not null)
+                        {
+                            g.CurrentVae = clipContext.SourceVae.Duplicate();
+                        }
                     }
 
                     if (StringUtils.Equals(previousClip.BoundaryOut, Constants.BoundaryOutContinue))
                     {
-                        clipContext.ContinuityFrame = TryBuildContinuityFrame(
-                            previousClip, previousClipOutput, clip, continueWindows[clipIndex - 1]);
-                        if (clipContext.ContinuityFrame is null)
+                        if (sourcedMedia is not null)
                         {
+                            // The sourced clip's opening frames are fixed footage passed through by
+                            // its first stage — there is no generation to condition on the previous
+                            // clip's tail.
+                            Logs.Warning(
+                                $"VideoStages: Clip {previousClip.Id} boundary 'continue' flows into "
+                                + $"sourced Clip {clip.Id}; treating the boundary as a cut.");
                             effectiveBoundaryOuts[clipIndex - 1] = Constants.BoundaryOutCut;
                         }
+                        else
+                        {
+                            clipContext.ContinuityFrame = TryBuildContinuityFrame(
+                                previousClip, previousClipOutput, clip, continueWindows[clipIndex - 1]);
+                            if (clipContext.ContinuityFrame is null)
+                            {
+                                effectiveBoundaryOuts[clipIndex - 1] = Constants.BoundaryOutCut;
+                            }
+                        }
+                    }
+                }
+                if (sourcedMedia is not null)
+                {
+                    // Per-clip refine: the conformed footage replaces root/generated media as the
+                    // stage chain's input — stage 0 passes it through, later stages refine/upscale,
+                    // a retake window regenerates part of it.
+                    g.CurrentMedia = sourcedMedia;
+                    if (clip.Stages.Count == 0)
+                    {
+                        // Every stage skipped: the footage itself is the clip's output.
+                        if (parallelMultiClip)
+                        {
+                            clipParallelOutputs.Add(sourcedMedia);
+                            previousClipOutput = sourcedMedia;
+                        }
+                        else
+                        {
+                            RetargetRootSavesToSourcedOutput(rootSourceMedia, sourcedMedia);
+                        }
+                        previousClip = clip;
+                        clipIndex++;
+                        continue;
                     }
                 }
 
                 StageSpec firstStage = clip.Stages[0];
                 ApplyControlNetClipLengthIfApplicable(clip, firstStage);
-                PrepareClipAudio(clip, firstStage, context, isFirstClip: clipIndex == 0);
+                // A sourced clip's "Native" audio is its own file's trimmed track, not the root's.
+                RunContext clipRunContext = sourcedMedia?.AttachedAudio is WGNodeData sourcedAudio
+                    ? new RunContext
+                    {
+                        NativeAudio = sourcedAudio,
+                        ClipAudios = context.ClipAudios,
+                        UploadedAudios = context.UploadedAudios,
+                        RootStageHandoff = context.RootStageHandoff
+                    }
+                    : context;
+                PrepareClipAudio(clip, firstStage, clipRunContext, isFirstClip: clipIndex == 0);
 
                 int clipStageIndex = 0;
                 foreach (StageSpec stage in clip.Stages)
@@ -143,6 +205,12 @@ internal sealed class StageSequenceRunner(
                     clipParallelOutputs.Add(g.CurrentMedia.Duplicate());
                     previousClipOutput = clipParallelOutputs[^1];
                 }
+                else if (sourcedMedia is not null)
+                {
+                    // A sourced clip never absorbs the root generation (its stages refine its own
+                    // footage), so the root's save still points at the unrelated root output.
+                    RetargetRootSavesToSourcedOutput(rootSourceMedia, g.CurrentMedia);
+                }
                 previousClip = clip;
                 clipIndex++;
             }
@@ -172,6 +240,57 @@ internal sealed class StageSequenceRunner(
                 g.UserInput.SectionParamOverrides.Remove(sectionId);
             }
         }
+    }
+
+    /// <summary>
+    /// A lone sourced clip has no merge step to retarget the core root generation's save, so point
+    /// any save consuming the root output at the sourced clip's result (the raw footage, or its
+    /// refined stage output) — otherwise the run would emit the unrelated root video alongside
+    /// (and execute a generation nobody consumes).
+    /// </summary>
+    private void RetargetRootSavesToSourcedOutput(WGNodeData rootSourceMedia, WGNodeData sourced)
+    {
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        INodeOutput rootOutput = bridge.ResolvePath(rootSourceMedia?.Path);
+        INodeOutput images = bridge.ResolvePath(sourced.Path);
+        if (rootOutput is null || images is null)
+        {
+            return;
+        }
+        INodeOutput audio = bridge.ResolvePath(sourced.AttachedAudio?.Path);
+        HashSet<string> staleAudioNodeIds = [];
+        SaveAnimationRetargeter.Retarget(
+            bridge,
+            save => save.Images.Connection is INodeOutput existing
+                && existing.Node.Id == rootOutput.Node.Id
+                && existing.SlotIndex == rootOutput.SlotIndex,
+            images,
+            audio,
+            retargetAudio: true,
+            save =>
+            {
+                if (save.Audio.Connection is INodeOutput oldAudioOutput)
+                {
+                    staleAudioNodeIds.Add(oldAudioOutput.Node.Id);
+                }
+            });
+
+        // The root generation (sampler, empty latents, conditioning) is now consumed by nothing —
+        // drop it so the workflow doesn't carry a dangling chain. The stale audio branch goes
+        // first: its decode keeps the root AV-separate alive until removed. Loaders shared with the
+        // sourced clip's stages keep their consumers and survive.
+        HashSet<string> protectedNodes = [images.Node.Id];
+        if (audio is not null)
+        {
+            protectedNodes.Add(audio.Node.Id);
+        }
+        foreach (string staleAudioNodeId in staleAudioNodeIds)
+        {
+            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
+                bridge, staleAudioNodeId, protectedNodes, g.NodeHelpers);
+        }
+        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
+            bridge, rootOutput.Node.Id, protectedNodes, g.NodeHelpers);
     }
 
     /// <summary>
@@ -251,7 +370,7 @@ internal sealed class StageSequenceRunner(
 
         WGNodeData currentMedia = g.CurrentMedia.Duplicate();
         bool suppressNative = context.RootStageHandoff
-            && rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage);
+            && rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage, clip);
         WGNodeData clipAudio = ClipAudioWorkflowHelper.ResolveClipAudio(
             clip.Id,
             clip.AudioSource,

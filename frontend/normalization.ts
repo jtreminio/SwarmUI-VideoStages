@@ -57,6 +57,7 @@ import {
     type RefImage,
     type Retake,
     type RootDefaults,
+    type SourceVideo,
     type Stage,
     type StageLora,
     type UploadedAudio,
@@ -202,6 +203,56 @@ const snapStrengthToStep = (
                 unitScale,
         ) / unitScale
     );
+};
+
+/**
+ * A stored source video needs at least a data blob and a positive used-range
+ * length. The range is clamped inside the probed file duration when one is
+ * known; unknown metadata (fps/duration 0) is preserved — the backend detects
+ * fps at runtime, so a failed probe still produces a usable clip.
+ */
+export const normalizeSourceVideo = (value: unknown): SourceVideo | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+    const data = `${value.data ?? ""}`.trim();
+    if (!data) {
+        return null;
+    }
+    const nonNegative = (raw: unknown): number =>
+        Math.max(0, utils.toNumber(`${raw ?? 0}`, 0));
+    const durationSeconds = nonNegative(
+        readProp(value, "durationSeconds", "DurationSeconds"),
+    );
+    let startSeconds = nonNegative(
+        readProp(value, "startSeconds", "StartSeconds"),
+    );
+    let lengthSeconds = nonNegative(
+        readProp(value, "lengthSeconds", "LengthSeconds"),
+    );
+    if (durationSeconds > 0) {
+        startSeconds = Math.min(
+            startSeconds,
+            Math.max(0, durationSeconds - CLIP_DURATION_MIN),
+        );
+        if (!(lengthSeconds > 0)) {
+            lengthSeconds = durationSeconds - startSeconds;
+        }
+        lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
+    }
+    if (!(lengthSeconds > 0)) {
+        return null;
+    }
+    return {
+        data,
+        fileName: normalizeUploadFileName(
+            value.fileName == null ? null : `${value.fileName}`,
+        ),
+        fps: nonNegative(readProp(value, "fps", "Fps")),
+        durationSeconds: roundToTenth(durationSeconds),
+        startSeconds: roundToTenth(startSeconds),
+        lengthSeconds: roundToTenth(lengthSeconds),
+    };
 };
 
 export const normalizeUploadedAudio = (
@@ -645,6 +696,7 @@ export const buildDefaultClip = (
         prompt: "",
         promptWindows: [],
         retake: null,
+        sourceVideo: null,
         refs,
         stages: [
             {
@@ -833,10 +885,13 @@ export const normalizeClip = (
         controlNetEnabled: hasSlotSourcedIcLora(icLoras),
     });
     const fps = Math.max(1, defaults.fps);
-    const rawDuration = utils.toNumber(
-        `${rawClip.duration}`,
-        defaults.frames / fps,
+    const sourceVideo = normalizeSourceVideo(
+        readProp(rawClip, "sourceVideo", "SourceVideo"),
     );
+    // A sourced clip's duration IS its used source range.
+    const rawDuration =
+        sourceVideo?.lengthSeconds ??
+        utils.toNumber(`${rawClip.duration}`, defaults.frames / fps);
     const duration = snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, rawDuration),
         fps,
@@ -901,6 +956,7 @@ export const normalizeClip = (
             readProp(rawClip, "retake", "Retake"),
             duration,
         ),
+        sourceVideo,
         refs,
         stages,
     };

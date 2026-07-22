@@ -84,6 +84,7 @@ describe("persistence", () => {
                     clipLengthFromControlNet: true,
                     reuseAudio: false,
                     uploadedAudio: null,
+                    sourceVideo: null,
                     audioSegments: [],
                     retake: null,
                     refs: [

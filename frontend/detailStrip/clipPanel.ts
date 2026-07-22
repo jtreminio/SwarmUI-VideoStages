@@ -36,6 +36,7 @@ import {
     buildSlider,
     buildStackSection,
     buildUploadRow,
+    buildVideoPickRow,
     clampStartLength,
     sectionLabel,
     tagFocus,
@@ -55,7 +56,9 @@ import {
     icLoraTriggerHint,
 } from "../icLoraPresets";
 import { defaultIcLora, reconcileIcLoraStage } from "../normalization";
+import { getClips, saveClips } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
+import { probeSourceVideo } from "../sourceVideoProbe";
 import {
     refSourceLabel,
     stageChipLabel,
@@ -70,11 +73,13 @@ import type {
     Stage,
     TimelineSelection,
 } from "../types";
+import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
 
 const GROUP_STAGES = "vstdock_stages";
 const GROUP_ICLORA = "vstdock_iclora";
 const GROUP_RETAKE = "vstdock_retake";
+const GROUP_SOURCE = "vstdock_source";
 const DURATION_STEP = 0.1;
 const UPSCALE_EPSILON = 1e-6;
 const LORA_WEIGHT_STEP = 0.05;
@@ -88,9 +93,11 @@ const buildClipColumn = (
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-clip";
 
+    const sourced = !!clip.sourceVideo;
     const lengthDerived =
         clip.clipLengthFromAudio === true ||
-        clip.clipLengthFromControlNet === true;
+        clip.clipLengthFromControlNet === true ||
+        sourced;
     const durationInput = buildNumber(
         clip.duration,
         CLIP_DURATION_MIN,
@@ -109,7 +116,11 @@ const buildClipColumn = (
     const durationField = buildField(
         "Duration (s)",
         durationInput,
-        lengthDerived ? "(derived from audio/ControlNet source)" : undefined,
+        lengthDerived
+            ? sourced
+                ? "(derived from the source video range)"
+                : "(derived from audio/ControlNet source)"
+            : undefined,
     );
     if (lengthDerived) {
         durationInput.disabled = true;
@@ -200,6 +211,16 @@ const buildParamsColumn = (
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-params";
     const isRefine = stageIdx >= 1;
+    // A sourced clip's stage 0 is a Control-0 passthrough of the footage (the
+    // backend discards its sampling params) — unless the clip's retake rides
+    // it: the retake attaches to the LAST active stage and samples with that
+    // stage's settings.
+    const retakeRidesStage0 =
+        clip.retake != null &&
+        !clip.stages.some((s, idx) => idx > 0 && s.skipped !== true);
+    const sourcedStage0 =
+        stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
+    const sourcedPassthrough = sourcedStage0 && !retakeRidesStage0;
 
     const stageCommit = (mutate: (target: Stage) => void): void => {
         ctx.commit((clips) => {
@@ -477,6 +498,23 @@ const buildParamsColumn = (
         buildLorasSection(ctx, clipIdx, stageIdx, stage, defaults),
     );
 
+    if (sourcedStage0) {
+        const note = document.createElement("p");
+        note.className = "vst-detail-note vst-stage-passthrough-note";
+        note.textContent = sourcedPassthrough
+            ? "Source footage passes through this stage unchanged — add a later stage to refine it."
+            : "This stage passes the source footage through; its settings apply only to the retake window.";
+        col.insertBefore(note, fields);
+        if (sourcedPassthrough) {
+            fields.classList.add("vst-stage-fields-passthrough");
+            for (const el of fields.querySelectorAll<
+                HTMLInputElement | HTMLSelectElement | HTMLButtonElement
+            >("input, select, button")) {
+                el.disabled = true;
+            }
+        }
+    }
+
     railSkipSync = (skipped: boolean): void => {
         const railChip = ctx
             .getDockEl()
@@ -586,6 +624,182 @@ const buildLorasSection = (
     }
 
     return section;
+};
+
+/**
+ * Source Video section of the clip panel: pick an existing video file (browser
+ * upload or SwarmUI's server-file browser) as the clip's starting point —
+ * stages refine/upscale it and retake regenerates part of it. Picking probes
+ * the file for duration/fps (display only; the timeline fps is never changed)
+ * and sets the clip's duration to the used range; Start/Length trim the range
+ * inside the file.
+ */
+const buildSourceVideoSection = (
+    ctx: DetailStripContext,
+    clip: Clip,
+    clipIdx: number,
+): HTMLElement => {
+    const { wrap, col } = buildStackSection(
+        "Source Video",
+        "vst-detail-source-col",
+    );
+    const source = clip.sourceVideo;
+
+    const applyPickedFile = (data: string, fileName: string): void => {
+        void probeSourceVideo(data).then((probe) => {
+            // Committed via the store directly, NOT the dock's commit
+            // pipeline: the probe takes seconds, and the dock's stale-guard
+            // would silently DISCARD a commit whose carrier token moved in
+            // the meantime (an external edit, or the Data input materializing
+            // after a slow page load). A fresh getClips() re-parses the
+            // current carrier; the clip is re-located by identity when the
+            // parse is still the same objects, by index after a re-parse.
+            const clips = getClips();
+            const target = clips.includes(clip) ? clip : clips[clipIdx];
+            if (!target) {
+                return;
+            }
+            const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+            const lengthSeconds =
+                durationSeconds > 0 ? durationSeconds : target.duration;
+            target.sourceVideo = {
+                data,
+                fileName,
+                fps: probe?.fps ?? 0,
+                durationSeconds,
+                startSeconds: 0,
+                lengthSeconds,
+            };
+            applyClipDurationResize(
+                target,
+                Math.max(CLIP_DURATION_MIN, lengthSeconds),
+                getRootDefaults,
+            );
+            saveClips(clips, { origin: "detail-strip" });
+            ctx.render();
+        });
+    };
+    const removeSource = (): void => {
+        ctx.structuralCommit((clips) => {
+            const target = clips[clipIdx];
+            if (!target?.sourceVideo) {
+                return null;
+            }
+            target.sourceVideo = null;
+            return "render";
+        });
+    };
+
+    col.appendChild(
+        buildVideoPickRow(
+            "Video file",
+            source?.fileName ?? null,
+            applyPickedFile,
+            removeSource,
+        ),
+    );
+
+    if (!source) {
+        const hint = document.createElement("small");
+        hint.className = "vst-audio-field-hint";
+        hint.textContent =
+            "Use an existing video file as this clip instead of generating it.";
+        col.appendChild(hint);
+        return wrap;
+    }
+
+    const info = document.createElement("small");
+    info.className = "vst-audio-field-hint";
+    info.textContent = `Detected: ${
+        source.fps > 0 ? `${source.fps} fps` : "unknown fps"
+    } · ${
+        source.durationSeconds > 0
+            ? `${source.durationSeconds.toFixed(1)} s`
+            : "unknown length"
+    }`;
+    col.appendChild(info);
+
+    // Unknown file duration (failed probe): let the current range act as the
+    // clamp ceiling instead of blocking the fields entirely.
+    const fileLimit =
+        source.durationSeconds > 0
+            ? source.durationSeconds
+            : source.startSeconds + source.lengthSeconds;
+    const syncClipDuration = (target: Clip): void => {
+        applyClipDurationResize(
+            target,
+            Math.max(
+                CLIP_DURATION_MIN,
+                target.sourceVideo?.lengthSeconds ?? target.duration,
+            ),
+            getRootDefaults,
+        );
+    };
+    const clampSource = (
+        start: number,
+        length: number,
+    ): { start: number; length: number } =>
+        clampStartLength(start, length, fileLimit, CLIP_DURATION_MIN);
+
+    const startInput = ctx.buildClampedNumber({
+        key: "source-start",
+        value: source.startSeconds,
+        min: 0,
+        max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
+        step: DURATION_STEP,
+        readBack: (cs) => cs[clipIdx]?.sourceVideo?.startSeconds ?? null,
+        mutate: (cs, value) => {
+            const target = cs[clipIdx];
+            const s = target?.sourceVideo;
+            if (target && s) {
+                const next = clampSource(value, s.lengthSeconds);
+                s.startSeconds = next.start;
+                s.lengthSeconds = next.length;
+                syncClipDuration(target);
+            }
+        },
+    });
+    col.appendChild(buildField("Start (s)", startInput));
+
+    const lengthInput = ctx.buildClampedNumber({
+        key: "source-length",
+        value: source.lengthSeconds,
+        min: CLIP_DURATION_MIN,
+        max: fileLimit,
+        step: DURATION_STEP,
+        readBack: (cs) => cs[clipIdx]?.sourceVideo?.lengthSeconds ?? null,
+        mutate: (cs, value) => {
+            const target = cs[clipIdx];
+            const s = target?.sourceVideo;
+            if (target && s) {
+                const next = clampSource(s.startSeconds, value);
+                s.startSeconds = next.start;
+                s.lengthSeconds = next.length;
+                syncClipDuration(target);
+            }
+        },
+    });
+    col.appendChild(buildField("Length (s)", lengthInput));
+
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent =
+        "This range (conformed to the timeline fps and size) is the clip's " +
+        "starting point: the first stage passes it through, further stages " +
+        "refine or upscale it, and a retake regenerates part of it.";
+    col.appendChild(note);
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className =
+        "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+    del.textContent = "Remove source video";
+    del.addEventListener("click", (event) => {
+        event.preventDefault();
+        removeSource();
+    });
+    col.appendChild(del);
+    return wrap;
 };
 
 /**
@@ -1036,6 +1250,12 @@ export const buildClipBody = (
      * — retake editing lives in the clip panel, like stages.
      */
     body.appendChild(buildClipColumn(ctx, clip, sel.clipIdx));
+    body.appendChild(
+        buildGroup(
+            GROUP_SOURCE,
+            buildSourceVideoSection(ctx, clip, sel.clipIdx),
+        ),
+    );
     const params = buildParamsColumn(
         ctx,
         clip,

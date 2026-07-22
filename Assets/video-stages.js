@@ -757,6 +757,48 @@
       clamp(utils.toNumber(`${value ?? fallback}`, fallback), min, max) * unitScale
     ) / unitScale;
   };
+  var normalizeSourceVideo = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = `${value.data ?? ""}`.trim();
+    if (!data) {
+      return null;
+    }
+    const nonNegative = (raw) => Math.max(0, utils.toNumber(`${raw ?? 0}`, 0));
+    const durationSeconds = nonNegative(
+      readProp(value, "durationSeconds", "DurationSeconds")
+    );
+    let startSeconds = nonNegative(
+      readProp(value, "startSeconds", "StartSeconds")
+    );
+    let lengthSeconds = nonNegative(
+      readProp(value, "lengthSeconds", "LengthSeconds")
+    );
+    if (durationSeconds > 0) {
+      startSeconds = Math.min(
+        startSeconds,
+        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
+      );
+      if (!(lengthSeconds > 0)) {
+        lengthSeconds = durationSeconds - startSeconds;
+      }
+      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
+    }
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : `${value.fileName}`
+      ),
+      fps: nonNegative(readProp(value, "fps", "Fps")),
+      durationSeconds: roundToTenth(durationSeconds),
+      startSeconds: roundToTenth(startSeconds),
+      lengthSeconds: roundToTenth(lengthSeconds)
+    };
+  };
   var normalizeUploadedAudio = (value) => {
     if (!isRecord(value)) {
       return null;
@@ -1076,6 +1118,7 @@
       prompt: "",
       promptWindows: [],
       retake: null,
+      sourceVideo: null,
       refs,
       stages: [
         {
@@ -1228,10 +1271,10 @@
       controlNetEnabled: hasSlotSourcedIcLora(icLoras)
     });
     const fps = Math.max(1, defaults.fps);
-    const rawDuration = utils.toNumber(
-      `${rawClip.duration}`,
-      defaults.frames / fps
+    const sourceVideo = normalizeSourceVideo(
+      readProp(rawClip, "sourceVideo", "SourceVideo")
     );
+    const rawDuration = sourceVideo?.lengthSeconds ?? utils.toNumber(`${rawClip.duration}`, defaults.frames / fps);
     const duration = snapDurationToFps(
       Math.max(CLIP_DURATION_MIN, rawDuration),
       fps
@@ -1288,6 +1331,7 @@
         readProp(rawClip, "retake", "Retake"),
         duration
       ),
+      sourceVideo,
       refs,
       stages
     };
@@ -1901,6 +1945,14 @@
       clipLengthFromControlNet: clip.clipLengthFromControlNet,
       reuseAudio: clip.reuseAudio,
       uploadedAudio: clip.uploadedAudio,
+      sourceVideo: clip.sourceVideo ? {
+        data: clip.sourceVideo.data,
+        fileName: clip.sourceVideo.fileName,
+        fps: clip.sourceVideo.fps,
+        durationSeconds: clip.sourceVideo.durationSeconds,
+        startSeconds: clip.sourceVideo.startSeconds,
+        lengthSeconds: clip.sourceVideo.lengthSeconds
+      } : null,
       audioSegments: clip.audioSegments.map((seg) => ({
         source: seg.source,
         startSeconds: seg.startSeconds,
@@ -2692,6 +2744,24 @@
     const width = (end - start) / opts.durationSeconds * 100;
     return `<div class="${opts.className}" ${opts.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(opts.title)}" aria-label="${escapeAttr(opts.ariaLabel)}"><span class="${opts.className}-resize ${opts.className}-resize-l" ${opts.edgeAttr}="left" aria-hidden="true"></span><span class="${opts.labelClass}">${escapeAttr(opts.label)}</span><span class="${opts.className}-resize ${opts.className}-resize-r" ${opts.edgeAttr}="right" aria-hidden="true"></span></div>`;
   };
+  var renderRetakeRegionShade = (clip, durationSeconds) => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+      return "";
+    }
+    const start = clamp(retake.startSeconds, 0, durationSeconds);
+    const end = clamp(
+      retake.startSeconds + retake.lengthSeconds,
+      start,
+      durationSeconds
+    );
+    if (end <= start) {
+      return "";
+    }
+    const left = start / durationSeconds * 100;
+    const width = (end - start) / durationSeconds * 100;
+    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
+  };
   var renderRetakeOverlay = (clip, clipIdx, durationSeconds) => {
     const retake = clip.retake;
     if (!retake || durationSeconds <= 0) {
@@ -3165,7 +3235,7 @@
       const rightGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
       const hue = clipHueCss(clip.hue);
       const renderWidth = clipInnerWidth(l.widthPx);
-      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span>` + renderStageChips(clip, l.index) + `<span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip, l.index) + controls + rightGrip + `</div><div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${renderWidth}px" title="Click empty space to add a retake window">` + renderRetakeOverlay(clip, l.index, l.durationSeconds) + `</div>`;
+      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, l.durationSeconds) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span>` + renderStageChips(clip, l.index) + `<span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip, l.index) + controls + rightGrip + `</div><div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${renderWidth}px" title="Click empty space to add a retake window">` + renderRetakeOverlay(clip, l.index, l.durationSeconds) + `</div>`;
     }).join("");
     const audioRow = renderAudioTrackRow(clips, layouts);
     const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
@@ -3974,6 +4044,16 @@
     }
     return editor;
   };
+  var readFileAsDataUri = (file, onFile) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = `${reader.result ?? ""}`;
+      if (data) {
+        onFile(data, file.name);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
   var buildUploadRow = (label, accept, name, onFile, onClear) => {
     const row = document.createElement("div");
     row.className = "auto-input vst-audio-field vst-audio-upload";
@@ -3993,20 +4073,69 @@
     clearBtn.hidden = !name;
     fileInput.addEventListener("change", () => {
       const file = fileInput.files?.[0];
-      if (!file) {
-        return;
+      if (file) {
+        readFileAsDataUri(file, onFile);
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const data = `${reader.result ?? ""}`;
-        if (data) {
-          onFile(data, file.name);
-        }
-      };
-      reader.readAsDataURL(file);
     });
     clearBtn.addEventListener("click", () => onClear());
     row.append(uploadLabel, fileInput, fileName, clearBtn);
+    return row;
+  };
+  var videoPickCounter = 0;
+  var buildVideoPickRow = (label, name, onFile, onClear) => {
+    const row = document.createElement("div");
+    row.className = "auto-input vst-audio-field vst-audio-upload";
+    const pickLabel = document.createElement("span");
+    pickLabel.className = "auto-input-name vst-audio-field-label";
+    pickLabel.textContent = label;
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "video/*";
+    fileInput.id = `vst-video-pick-${++videoPickCounter}`;
+    const fileName = document.createElement("span");
+    fileName.className = "vst-audio-upload-name";
+    fileName.textContent = name ? name : "No file chosen";
+    const preview = document.createElement("div");
+    preview.className = "auto-input-preview";
+    preview.hidden = true;
+    const previewName = document.createElement("span");
+    previewName.className = "auto-file-input-filename";
+    previewName.hidden = true;
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
+    clearBtn.textContent = "Clear";
+    clearBtn.hidden = !name;
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (file) {
+        readFileAsDataUri(file, onFile);
+        return;
+      }
+      const picked = fileInput.dataset.filedata ?? "";
+      if (!picked) {
+        return;
+      }
+      const pickedName = fileInput.dataset.filename ?? "server file";
+      if (picked.startsWith("data:")) {
+        onFile(picked, pickedName);
+        return;
+      }
+      toDataURL(picked, (data) => onFile(data, pickedName));
+    });
+    clearBtn.addEventListener("click", () => onClear());
+    row.append(pickLabel, fileInput, fileName, clearBtn, preview, previewName);
+    if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
+      const selectBtn = document.createElement("button");
+      selectBtn.type = "button";
+      selectBtn.className = "basic-button small-button vst-video-pick-select";
+      selectBtn.textContent = "Select";
+      selectBtn.addEventListener(
+        "click",
+        () => inputBrowserHelper.openInputBrowser(fileInput.id, ["video"])
+      );
+      clearBtn.before(selectBtn);
+    }
     return row;
   };
   var buildInstanceRow = (spec) => {
@@ -4524,6 +4653,73 @@
     return status ? statusTextFor(preset, status) : "Preparing preset weights download…";
   };
 
+  // frontend/sourceVideoProbe.ts
+  var FPS_SAMPLE_FRAMES = 12;
+  var MIN_FRAME_DELTA_SECONDS = 5e-4;
+  var MAX_PLAUSIBLE_FPS = 240;
+  var estimateFpsFromMediaTimes = (mediaTimes) => {
+    const deltas = [];
+    for (let i = 1; i < mediaTimes.length; i++) {
+      const delta = mediaTimes[i] - mediaTimes[i - 1];
+      if (delta > MIN_FRAME_DELTA_SECONDS) {
+        deltas.push(delta);
+      }
+    }
+    if (deltas.length < 4) {
+      return null;
+    }
+    deltas.sort((a, b) => a - b);
+    const median = deltas[Math.floor(deltas.length / 2)];
+    const fps = Math.round(1 / median);
+    return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
+  };
+  var probeSourceVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "auto";
+    let settled = false;
+    const finish2 = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish2(null), timeoutMs);
+    video.addEventListener("error", () => finish2(null));
+    video.addEventListener("loadedmetadata", () => {
+      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
+      if (!(durationSeconds > 0)) {
+        finish2(null);
+        return;
+      }
+      const requestFrame = video.requestVideoFrameCallback?.bind(video);
+      if (!requestFrame) {
+        finish2({ durationSeconds, fps: null });
+        return;
+      }
+      const mediaTimes = [];
+      const step = (_now, metadata) => {
+        mediaTimes.push(metadata.mediaTime);
+        if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
+          finish2({
+            durationSeconds,
+            fps: estimateFpsFromMediaTimes(mediaTimes)
+          });
+          return;
+        }
+        requestFrame(step);
+      };
+      requestFrame(step);
+      video.play()?.catch(() => finish2({ durationSeconds, fps: null }));
+    });
+    video.src = src;
+  });
+
   // frontend/timelineEdit.ts
   var pxToDuration = (px, pxPerSecond, fps) => {
     if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
@@ -4563,6 +4759,7 @@
   var GROUP_STAGES = "vstdock_stages";
   var GROUP_ICLORA = "vstdock_iclora";
   var GROUP_RETAKE = "vstdock_retake";
+  var GROUP_SOURCE = "vstdock_source";
   var DURATION_STEP = 0.1;
   var UPSCALE_EPSILON = 1e-6;
   var LORA_WEIGHT_STEP = 0.05;
@@ -4570,7 +4767,8 @@
   var buildClipColumn = (ctx, clip, clipIdx) => {
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-clip";
-    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+    const sourced = !!clip.sourceVideo;
+    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || sourced;
     const durationInput = buildNumber(
       clip.duration,
       CLIP_DURATION_MIN,
@@ -4589,7 +4787,7 @@
     const durationField = buildField(
       "Duration (s)",
       durationInput,
-      lengthDerived2 ? "(derived from audio/ControlNet source)" : void 0
+      lengthDerived2 ? sourced ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
     );
     if (lengthDerived2) {
       durationInput.disabled = true;
@@ -4661,6 +4859,9 @@
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-params";
     const isRefine = stageIdx >= 1;
+    const retakeRidesStage0 = clip.retake != null && !clip.stages.some((s, idx) => idx > 0 && s.skipped !== true);
+    const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
+    const sourcedPassthrough = sourcedStage0 && !retakeRidesStage0;
     const stageCommit = (mutate) => {
       ctx.commit((clips) => {
         const target = clips[clipIdx]?.stages[stageIdx];
@@ -4897,6 +5098,18 @@
     fields.appendChild(
       buildLorasSection(ctx, clipIdx, stageIdx, stage, defaults)
     );
+    if (sourcedStage0) {
+      const note = document.createElement("p");
+      note.className = "vst-detail-note vst-stage-passthrough-note";
+      note.textContent = sourcedPassthrough ? "Source footage passes through this stage unchanged — add a later stage to refine it." : "This stage passes the source footage through; its settings apply only to the retake window.";
+      col.insertBefore(note, fields);
+      if (sourcedPassthrough) {
+        fields.classList.add("vst-stage-fields-passthrough");
+        for (const el of fields.querySelectorAll("input, select, button")) {
+          el.disabled = true;
+        }
+      }
+    }
     railSkipSync = (skipped) => {
       const railChip = ctx.getDockEl()?.querySelector(
         `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
@@ -4993,6 +5206,132 @@
       section.appendChild(addBtn);
     }
     return section;
+  };
+  var buildSourceVideoSection = (ctx, clip, clipIdx) => {
+    const { wrap, col } = buildStackSection(
+      "Source Video",
+      "vst-detail-source-col"
+    );
+    const source = clip.sourceVideo;
+    const applyPickedFile = (data, fileName) => {
+      void probeSourceVideo(data).then((probe) => {
+        const clips = getClips();
+        const target = clips.includes(clip) ? clip : clips[clipIdx];
+        if (!target) {
+          return;
+        }
+        const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+        const lengthSeconds = durationSeconds > 0 ? durationSeconds : target.duration;
+        target.sourceVideo = {
+          data,
+          fileName,
+          fps: probe?.fps ?? 0,
+          durationSeconds,
+          startSeconds: 0,
+          lengthSeconds
+        };
+        applyClipDurationResize(
+          target,
+          Math.max(CLIP_DURATION_MIN, lengthSeconds),
+          getRootDefaults
+        );
+        saveClips(clips, { origin: "detail-strip" });
+        ctx.render();
+      });
+    };
+    const removeSource = () => {
+      ctx.structuralCommit((clips) => {
+        const target = clips[clipIdx];
+        if (!target?.sourceVideo) {
+          return null;
+        }
+        target.sourceVideo = null;
+        return "render";
+      });
+    };
+    col.appendChild(
+      buildVideoPickRow(
+        "Video file",
+        source?.fileName ?? null,
+        applyPickedFile,
+        removeSource
+      )
+    );
+    if (!source) {
+      const hint = document.createElement("small");
+      hint.className = "vst-audio-field-hint";
+      hint.textContent = "Use an existing video file as this clip instead of generating it.";
+      col.appendChild(hint);
+      return wrap;
+    }
+    const info = document.createElement("small");
+    info.className = "vst-audio-field-hint";
+    info.textContent = `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
+    col.appendChild(info);
+    const fileLimit = source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
+    const syncClipDuration = (target) => {
+      applyClipDurationResize(
+        target,
+        Math.max(
+          CLIP_DURATION_MIN,
+          target.sourceVideo?.lengthSeconds ?? target.duration
+        ),
+        getRootDefaults
+      );
+    };
+    const clampSource = (start, length) => clampStartLength(start, length, fileLimit, CLIP_DURATION_MIN);
+    const startInput = ctx.buildClampedNumber({
+      key: "source-start",
+      value: source.startSeconds,
+      min: 0,
+      max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
+      step: DURATION_STEP,
+      readBack: (cs) => cs[clipIdx]?.sourceVideo?.startSeconds ?? null,
+      mutate: (cs, value) => {
+        const target = cs[clipIdx];
+        const s = target?.sourceVideo;
+        if (target && s) {
+          const next = clampSource(value, s.lengthSeconds);
+          s.startSeconds = next.start;
+          s.lengthSeconds = next.length;
+          syncClipDuration(target);
+        }
+      }
+    });
+    col.appendChild(buildField("Start (s)", startInput));
+    const lengthInput = ctx.buildClampedNumber({
+      key: "source-length",
+      value: source.lengthSeconds,
+      min: CLIP_DURATION_MIN,
+      max: fileLimit,
+      step: DURATION_STEP,
+      readBack: (cs) => cs[clipIdx]?.sourceVideo?.lengthSeconds ?? null,
+      mutate: (cs, value) => {
+        const target = cs[clipIdx];
+        const s = target?.sourceVideo;
+        if (target && s) {
+          const next = clampSource(s.startSeconds, value);
+          s.startSeconds = next.start;
+          s.lengthSeconds = next.length;
+          syncClipDuration(target);
+        }
+      }
+    });
+    col.appendChild(buildField("Length (s)", lengthInput));
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage passes it through, further stages refine or upscale it, and a retake regenerates part of it.";
+    col.appendChild(note);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+    del.textContent = "Remove source video";
+    del.addEventListener("click", (event) => {
+      event.preventDefault();
+      removeSource();
+    });
+    col.appendChild(del);
+    return wrap;
   };
   var buildRetakeSection = (ctx, clip, clipIdx) => {
     const { wrap, col } = buildStackSection("Retake", "vst-detail-retake-col");
@@ -5357,6 +5696,12 @@
     const stage = clip.stages[sel.stageIdx];
     const defaults = getRootDefaults();
     body.appendChild(buildClipColumn(ctx, clip, sel.clipIdx));
+    body.appendChild(
+      buildGroup(
+        GROUP_SOURCE,
+        buildSourceVideoSection(ctx, clip, sel.clipIdx)
+      )
+    );
     const params = buildParamsColumn(
       ctx,
       clip,
@@ -6817,7 +7162,7 @@
     const max = deps.maxDepth ?? 50;
     const undoStack = [];
     let redoStack = [];
-    let last = deps.read();
+    let last = null;
     let suppress = false;
     const syncBaseline = () => {
       last = deps.read();
@@ -7054,7 +7399,7 @@
             "linking",
             (clips) => {
               const clip = clips[state.idx];
-              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet) {
+              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet || clip.sourceVideo) {
                 return null;
               }
               const newDuration = pxToDuration(
@@ -8080,6 +8425,19 @@
 
   // frontend/main.ts
   var timeline = videoStagesTimeline();
+  var dataInputWatchdog = null;
+  var warnIfDataInputNeverAppears = () => {
+    if (dataInputWatchdog) {
+      return;
+    }
+    dataInputWatchdog = setTimeout(() => {
+      if (!document.getElementById(DATA_INPUT_ID)) {
+        console.warn(
+          `VideoStages: Data param input (#${DATA_INPUT_ID}) never appeared — is the VideoStages backend extension loaded?`
+        );
+      }
+    }, 1e4);
+  };
   var registerVideoStagesPromptPrefix = () => {
     if (typeof promptTabComplete === "undefined") {
       return;
@@ -8095,7 +8453,19 @@
       true
     );
   };
+  var DATA_INPUT_RETRY_MS = 250;
+  var dataInputRetryTimer = null;
   var initTimeline = () => {
+    if (!document.getElementById(DATA_INPUT_ID)) {
+      warnIfDataInputNeverAppears();
+      if (!dataInputRetryTimer) {
+        dataInputRetryTimer = setTimeout(() => {
+          dataInputRetryTimer = null;
+          initTimeline();
+        }, DATA_INPUT_RETRY_MS);
+      }
+      return;
+    }
     try {
       timeline.init();
     } catch (error) {

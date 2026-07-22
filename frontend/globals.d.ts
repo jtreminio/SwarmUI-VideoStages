@@ -35,6 +35,12 @@ declare function toDataURL(
     callback: (dataUrl: string) => void,
 ): void;
 
+declare const inputBrowserHelper:
+    | {
+          openInputBrowser(inputElemId: string, type: string[]): void;
+      }
+    | undefined;
+
 declare let currentMetadataVal: string | null;
 
 declare function interpretMetadata(metadata: string | null): string | null;

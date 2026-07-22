@@ -92,6 +92,16 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] =>
             clipLengthFromControlNet: clip.clipLengthFromControlNet,
             reuseAudio: clip.reuseAudio,
             uploadedAudio: clip.uploadedAudio,
+            sourceVideo: clip.sourceVideo
+                ? {
+                      data: clip.sourceVideo.data,
+                      fileName: clip.sourceVideo.fileName,
+                      fps: clip.sourceVideo.fps,
+                      durationSeconds: clip.sourceVideo.durationSeconds,
+                      startSeconds: clip.sourceVideo.startSeconds,
+                      lengthSeconds: clip.sourceVideo.lengthSeconds,
+                  }
+                : null,
             audioSegments: clip.audioSegments.map((seg) => ({
                 source: seg.source,
                 startSeconds: seg.startSeconds,

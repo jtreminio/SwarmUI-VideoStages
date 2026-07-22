@@ -6,6 +6,7 @@ namespace VideoStages;
 internal static class UploadContainers
 {
     public const string ClipAudio = "UploadedAudio";
+    public const string ClipSourceVideo = "SourceVideo";
     public const string SegmentSource = "Source";
     public const string IcLoraVideo = "Video";
     public const string RefImage = "UploadedImage";
@@ -19,6 +20,7 @@ internal static class UploadContainers
     public static readonly (string Collection, string Container)[] All =
     [
         (null, ClipAudio),
+        (null, ClipSourceVideo),
         (SegmentsCollection, SegmentSource),
         (IcLorasCollection, IcLoraVideo),
         (RefsCollection, RefImage),

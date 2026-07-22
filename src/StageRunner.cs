@@ -86,7 +86,9 @@ internal class StageRunner(
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(clipContext, stage);
-        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage) && g.GetVideoStagesSpec().IsTextToVideo;
+        bool replaceTextToVideoRootStage = clipContext.IsFirstStage(stage)
+            && clipContext.Clip.SourceVideo is null
+            && g.GetVideoStagesSpec().IsTextToVideo;
         LtxPostVideoChainCapture postVideoChain = replaceTextToVideoRootStage
             ? null
             : ltxManager.TryCapturePostVideoChain(clipContext, stage);

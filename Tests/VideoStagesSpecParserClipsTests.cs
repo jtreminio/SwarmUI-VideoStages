@@ -1131,8 +1131,9 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseClips_Retake_ConvertsSecondsToFramesAtFpsAndAttachesToLastStage()
     {
+        // Mid-clip window (ends at 2.5s of a 3.0s clip): plain seconds→frames conversion.
         JObject clip = MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]);
-        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0, strength: 0.6);
+        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 1.5, strength: 0.6);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
@@ -1141,8 +1142,26 @@ public class VideoStagesSpecParserClipsTests
         RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
         Assert.NotNull(retake);
         Assert.Equal(24, retake.StartFrame);
-        Assert.Equal(48, retake.LengthFrames);
+        Assert.Equal(36, retake.LengthFrames);
         Assert.Equal(0.6, retake.Strength, 6);
+    }
+
+    [Fact]
+    public void ParseClips_Retake_ReachingClipEndExtendsToAlignedFrameCount()
+    {
+        // The 3.0s clip aligns UP to 73 frames (8n+1). A retake ending at the authored 3.0s must
+        // extend through that aligned tail instead of stopping at frame 72.
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+
+        RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
+        Assert.NotNull(retake);
+        Assert.Equal(24, retake.StartFrame);
+        Assert.Equal(parsed.Frames!.Value - 24, retake.LengthFrames);
+        Assert.Equal(73, parsed.Frames);
     }
 
     [Fact]

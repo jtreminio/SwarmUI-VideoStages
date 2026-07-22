@@ -93,6 +93,14 @@ const maximalClip = (): Clip =>
             data: "data:audio/wav;base64,AAAA",
             fileName: "v.wav",
         },
+        sourceVideo: {
+            data: "data:video/mp4;base64,CCCC",
+            fileName: "src.mp4",
+            fps: 24,
+            durationSeconds: 8,
+            startSeconds: 1,
+            lengthSeconds: 4,
+        },
         audioSegments: [
             {
                 source: {

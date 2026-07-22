@@ -61,6 +61,14 @@ interface ClipFixture {
         lengthSeconds: number;
         strength: number;
     };
+    sourceVideo?: {
+        data: string;
+        fileName: string;
+        fps: number;
+        durationSeconds: number;
+        startSeconds: number;
+        lengthSeconds: number;
+    };
     audioSegments?: {
         source: { data: string; fileName: string };
         startSeconds: number;
@@ -88,6 +96,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     refs: clip.refs ?? [],
     promptWindows: [],
     ...(clip.retake ? { retake: clip.retake } : {}),
+    ...(clip.sourceVideo ? { sourceVideo: clip.sourceVideo } : {}),
     ...(clip.audioSegments ? { audioSegments: clip.audioSegments } : {}),
 });
 
@@ -875,6 +884,92 @@ describe("createTimelineDetailStrip", () => {
         expect(fields?.classList.contains("vst-stage-fields-muted")).toBe(true);
         expect(saveSpy).toHaveBeenCalled();
         expect(savedClips(saveSpy)[0].stages[1].skipped).toBe(true);
+    });
+
+    describe("sourced clip stage 0 passthrough gating", () => {
+        const SOURCE_VIDEO = {
+            data: "data:video/mp4;base64,AA==",
+            fileName: "clip.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        const fields = (): HTMLElement | null =>
+            document.querySelector<HTMLElement>(".vst-detail-fields");
+        const note = (): string =>
+            document.querySelector(".vst-stage-passthrough-note")
+                ?.textContent ?? "";
+
+        it("disables stage 0 params when the footage passes through", () => {
+            setup([
+                {
+                    duration: 4,
+                    stages: [{}, {}],
+                    sourceVideo: SOURCE_VIDEO,
+                },
+            ]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            expect(
+                fields()?.classList.contains("vst-stage-fields-passthrough"),
+            ).toBe(true);
+            expect(note()).toContain("passes through this stage unchanged");
+            const someInput =
+                fields()?.querySelector<HTMLInputElement>("input");
+            const someSelect =
+                fields()?.querySelector<HTMLSelectElement>("select");
+            expect(someInput?.disabled).toBe(true);
+            expect(someSelect?.disabled).toBe(true);
+            // Later stages keep their live editors.
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+            expect(
+                fields()?.classList.contains("vst-stage-fields-passthrough"),
+            ).toBe(false);
+            expect(note()).toBe("");
+        });
+
+        it("still disables stage 0 when a retake rides a LATER active stage", () => {
+            setup([
+                {
+                    duration: 4,
+                    stages: [{}, {}],
+                    sourceVideo: SOURCE_VIDEO,
+                    retake: { startSeconds: 1, lengthSeconds: 2, strength: 1 },
+                },
+            ]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            expect(
+                fields()?.classList.contains("vst-stage-fields-passthrough"),
+            ).toBe(true);
+        });
+
+        it("keeps stage 0 params live when the retake rides stage 0", () => {
+            setup([
+                {
+                    duration: 4,
+                    stages: [{}, { skipped: true }],
+                    sourceVideo: SOURCE_VIDEO,
+                    retake: { startSeconds: 1, lengthSeconds: 2, strength: 1 },
+                },
+            ]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            expect(
+                fields()?.classList.contains("vst-stage-fields-passthrough"),
+            ).toBe(false);
+            expect(note()).toContain("apply only to the retake window");
+            expect(
+                fields()?.querySelector<HTMLInputElement>("input")?.disabled,
+            ).toBe(false);
+        });
+
+        it("leaves stage 0 of an unsourced clip untouched", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            expect(
+                fields()?.classList.contains("vst-stage-fields-passthrough"),
+            ).toBe(false);
+            expect(note()).toBe("");
+        });
     });
 
     it("commits a clip Duration edit through applyClipDurationResize", () => {

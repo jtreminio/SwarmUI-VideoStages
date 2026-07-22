@@ -61,6 +61,31 @@ public class MetadataSanitizerTests
     }
 
     [Fact]
+    public void StripUploadData_SourceVideo_KeepsRangeFieldsAndFileName()
+    {
+        string raw = new JObject
+        {
+            ["Clips"] = new JArray
+            {
+                new JObject
+                {
+                    ["SourceVideo"] = new JObject
+                    {
+                        ["Data"] = "data:video/mp4;base64,QUJD",
+                        ["FileName"] = "footage.mp4",
+                        ["StartSeconds"] = 1.5
+                    }
+                }
+            }
+        }.ToString();
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+        JObject clip = (JObject)JObject.Parse(sanitized)["Clips"]![0]!;
+        Assert.Null(clip["SourceVideo"]!["Data"]);
+        Assert.Equal("footage.mp4", $"{clip["SourceVideo"]!["FileName"]}");
+        Assert.Equal(1.5, (double)clip["SourceVideo"]!["StartSeconds"]!);
+    }
+
+    [Fact]
     public void StripUploadData_RemovesUploadContainerWhenOnlyPayloadWasPresent()
     {
         string raw = new JObject

@@ -8,15 +8,15 @@ using VideoStages.Generated;
 namespace VideoStages.LTX2;
 
 /// <summary>
-/// Windows the AUDIO channel of a combined av-latent to <c>[StartTime, EndTime]</c> seconds — audio is
-/// (re)generated inside the window, locked to the encoded reference outside. Pairs with the video-only
-/// <see cref="LtxVideoRetakeMasker"/> so a retake also regenerates the audio under the redone frames
-/// while preserved frames keep their original audio.
+/// Windows BOTH channels of a combined av-latent to the retake span — video and audio are
+/// (re)generated inside the window, locked to the encoded reference outside — via the stock
+/// <see cref="LTXVSetAudioVideoMaskByTimeNode"/> (mask value 1.0 regenerates, 0.0 preserves).
 ///
-/// Uses the stock <see cref="LTXVSetAudioVideoMaskByTimeNode"/>, which writes BOTH masks (1.0
-/// regenerates, 0.0 preserves). Video is left at <c>mask_video=false, init=1.0</c>: the node multiplies
-/// any pre-existing video mask INTO it, so 1.0 is the identity — a retake's video mask survives and a
-/// plain generation still regenerates all video. (Init 0.0 would zero the mask and freeze the video.)
+/// The node must own the video mask too (<c>mask_video=true, init=0.0</c>): its merge of a
+/// pre-existing video mask only fires for per-frame scalar masks (1,1,F,1,1), and the mask
+/// <see cref="LtxVideoRetakeMasker"/> attaches is H×W-resized, so it silently degenerates to the
+/// init value — 1.0 would regenerate the entire video. The window seconds are snapped to the same
+/// latent-frame blocks as the video retake mask so both mechanisms describe identical frames.
 /// </summary>
 internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
 {
@@ -28,22 +28,33 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
         public bool IsEmpty => EndTime - StartTime <= 1e-6;
     }
 
-    /// <summary>Retake window in seconds: regenerate audio inside the retake pixel-frame span, preserve outside.</summary>
+    /// <summary>
+    /// Retake window in seconds, snapped to latent-frame boundaries: the mask-by-time node
+    /// searchsorts these times against the latent pixel grid, so the snapped values select exactly
+    /// the latent frames <see cref="LtxVideoRetakeMasker.ComputeLatentWindow"/> regenerates.
+    /// </summary>
     internal static AudioMaskWindow ComputeRetakeWindow(RetakeWindowSpec retake, int fps, int? clipFrames)
     {
         if (retake is null || retake.LengthFrames <= 0 || fps <= 0)
         {
             return default;
         }
-        int limit = clipFrames is > 0 ? clipFrames.Value : int.MaxValue;
-        (int start, int end) = RetakeWindowSpec.ClampFrameWindow(retake.StartFrame, retake.LengthFrames, limit);
-        return new AudioMaskWindow((double)start / fps, (double)end / fps);
+        int pixelFrames = clipFrames is > 0 ? clipFrames.Value : LtxStageExecutor.DefaultFrameCountValue;
+        LtxVideoRetakeMasker.LatentWindow blocks =
+            LtxVideoRetakeMasker.ComputeLatentWindow(pixelFrames, retake.StartFrame, retake.LengthFrames);
+        if (blocks.Window <= 0)
+        {
+            return default;
+        }
+        int startPixel = LtxVideoRetakeMasker.LatentFrameStartPixel(blocks.Prefix);
+        int endPixel = LtxVideoRetakeMasker.LatentFrameStartPixel(blocks.Prefix + blocks.Window);
+        return new AudioMaskWindow((double)startPixel / fps, (double)endPixel / fps);
     }
 
     /// <summary>
-    /// Splices an audio-only time-windowed noise mask onto the current av-latent + conditioning; returns
-    /// true when applied, false (graph unchanged) when a precondition fails (not LTXV2, no audio VAE, the
-    /// latent carries no audio, or the resolved window is empty).
+    /// Splices the time-windowed audio+video noise mask onto the current av-latent + conditioning;
+    /// returns true when applied, false (graph unchanged) when a precondition fails (not LTXV2, no audio
+    /// VAE, the latent carries no audio, or the resolved window is empty).
     /// </summary>
     public bool Apply(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageFrame stageFrame)
     {
@@ -76,10 +87,11 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
                 StartTime: window.StartTime,
                 EndTime: window.EndTime,
                 VideoFps: fps,
-                MaskVideo: false,
+                MaskVideo: true,
                 MaskAudio: true,
-                // 1.0 = identity: the node multiplies any pre-existing video mask in; 0.0 would freeze all video.
-                MaskInitValueVideo: 1.0,
+                // The node overwrites the video mask (the H×W retake mask can't be merged in, see class
+                // doc), so it must write the window itself over a frozen (0.0) base.
+                MaskInitValueVideo: 0.0,
                 MaskInitValueAudio: 0.0),
             g.GetStableDynamicID(AudioWindowIdBase, stageFrame.SectionId));
         mask.AvLatentInput.ConnectFromPath(bridge, mediaPath);

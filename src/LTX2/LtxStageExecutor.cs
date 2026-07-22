@@ -14,7 +14,6 @@ internal sealed record ResolvedClipRef(WGNodeData Image, ImageRefSpec Spec, doub
 
 internal sealed class LtxStageExecutor(
     WorkflowGenerator g,
-    RootVideoStageHandoff rootVideoStageHandoff,
     RootVideoStageResizer rootVideoStageResizer)
 {
     private const double PromptRelayEpsilon = 0.001;
@@ -269,7 +268,7 @@ internal sealed class LtxStageExecutor(
         }
         JArray controlNetLengthFrames = TryResolveControlNetLengthFrames(clip);
 
-        if (rootVideoStageHandoff.ShouldReplaceTextToVideoRootStage(stage))
+        if (stageFrame.ReplacesTextToVideoRoot)
         {
             return CreateEmptyVideoLatent(genInfo, clip, sourceMedia, controlNetLengthFrames);
         }
@@ -643,8 +642,8 @@ internal sealed class LtxStageExecutor(
 
         g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
         LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
-        // Windows the AUDIO channel so preserved-frame audio stays locked while the retake range regenerates.
-        // No-op for plain clips with no retake window.
+        // Windows BOTH av channels to the retake span (preserved frames + their audio stay locked, the
+        // window regenerates). No-op for plain clips with no retake window.
         new LtxAudioWindowMasker(g).Apply(genInfo, stageFrame);
         string samplerNode = g.CreateKSampler(
             genInfo.Model.Path,

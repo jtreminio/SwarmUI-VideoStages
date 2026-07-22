@@ -148,7 +148,7 @@ public static class Runner
         RootVideoStageResizer resizer = new(g, handoff);
         StageGuideMediaHelper guideMediaHelper = new(g);
         Base2EditPublishedStageRefs base2Edit = new(g);
-        LtxManager ltxManager = new(g, handoff, resizer, guideMediaHelper, base2Edit);
+        LtxManager ltxManager = new(g, resizer, guideMediaHelper, base2Edit);
         return new Pipeline(stageRefStore, handoff, resizer, guideMediaHelper, base2Edit, ltxManager);
     }
 

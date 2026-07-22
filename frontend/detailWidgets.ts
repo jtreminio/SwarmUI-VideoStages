@@ -210,6 +210,20 @@ export const buildTextarea = (
     return editor;
 };
 
+const readFileAsDataUri = (
+    file: File,
+    onFile: (data: string, fileName: string) => void,
+): void => {
+    const reader = new FileReader();
+    reader.onload = () => {
+        const data = `${reader.result ?? ""}`;
+        if (data) {
+            onFile(data, file.name);
+        }
+    };
+    reader.readAsDataURL(file);
+};
+
 export const buildUploadRow = (
     label: string,
     accept: string,
@@ -235,20 +249,83 @@ export const buildUploadRow = (
     clearBtn.hidden = !name;
     fileInput.addEventListener("change", () => {
         const file = fileInput.files?.[0];
-        if (!file) {
-            return;
+        if (file) {
+            readFileAsDataUri(file, onFile);
         }
-        const reader = new FileReader();
-        reader.onload = () => {
-            const data = `${reader.result ?? ""}`;
-            if (data) {
-                onFile(data, file.name);
-            }
-        };
-        reader.readAsDataURL(file);
     });
     clearBtn.addEventListener("click", () => onClear());
     row.append(uploadLabel, fileInput, fileName, clearBtn);
+    return row;
+};
+
+let videoPickCounter = 0;
+
+/**
+ * Video file picker offering both a browser upload and (when the host page
+ * provides the input browser) SwarmUI's "Select" server-file browser — the
+ * same pairing core image params get. Both paths resolve to a data URI before
+ * `onFile`; a server pick lands as a View/ URL in `dataset.filedata` (written
+ * by site.js `setMediaFileDirect`, which also needs the hidden preview and
+ * filename nodes below) and is converted with the host's `toDataURL`.
+ */
+export const buildVideoPickRow = (
+    label: string,
+    name: string | null | undefined,
+    onFile: (data: string, fileName: string) => void,
+    onClear: () => void,
+): HTMLElement => {
+    const row = document.createElement("div");
+    row.className = "auto-input vst-audio-field vst-audio-upload";
+    const pickLabel = document.createElement("span");
+    pickLabel.className = "auto-input-name vst-audio-field-label";
+    pickLabel.textContent = label;
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "video/*";
+    fileInput.id = `vst-video-pick-${++videoPickCounter}`;
+    const fileName = document.createElement("span");
+    fileName.className = "vst-audio-upload-name";
+    fileName.textContent = name ? name : "No file chosen";
+    const preview = document.createElement("div");
+    preview.className = "auto-input-preview";
+    preview.hidden = true;
+    const previewName = document.createElement("span");
+    previewName.className = "auto-file-input-filename";
+    previewName.hidden = true;
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
+    clearBtn.textContent = "Clear";
+    clearBtn.hidden = !name;
+    fileInput.addEventListener("change", () => {
+        const file = fileInput.files?.[0];
+        if (file) {
+            readFileAsDataUri(file, onFile);
+            return;
+        }
+        const picked = fileInput.dataset.filedata ?? "";
+        if (!picked) {
+            return;
+        }
+        const pickedName = fileInput.dataset.filename ?? "server file";
+        if (picked.startsWith("data:")) {
+            onFile(picked, pickedName);
+            return;
+        }
+        toDataURL(picked, (data) => onFile(data, pickedName));
+    });
+    clearBtn.addEventListener("click", () => onClear());
+    row.append(pickLabel, fileInput, fileName, clearBtn, preview, previewName);
+    if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
+        const selectBtn = document.createElement("button");
+        selectBtn.type = "button";
+        selectBtn.className = "basic-button small-button vst-video-pick-select";
+        selectBtn.textContent = "Select";
+        selectBtn.addEventListener("click", () =>
+            inputBrowserHelper.openInputBrowser(fileInput.id, ["video"]),
+        );
+        clearBtn.before(selectBtn);
+    }
     return row;
 };
 

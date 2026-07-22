@@ -28,7 +28,13 @@ internal sealed class VideoStagesCoordinator(
 
         List<ClipSpec> clips = [.. spec.Clips];
         bool refineSourceVideo = TryInstallRefineSourceVideo(clips);
-        bool rootStageHandoff = !refineSourceVideo && rootVideoStageHandoff.ShouldHandoffRootStage();
+        // A sourced first clip contributes footage, not a generation, so it can't absorb the core
+        // root stage; keep the root alive as the guide/source for the generated clips (mirroring
+        // the refine-source rule).
+        bool firstClipSourced = clips.Count > 0 && clips[0].SourceVideo is not null;
+        bool rootStageHandoff = !refineSourceVideo
+            && !firstClipSourced
+            && rootVideoStageHandoff.ShouldHandoffRootStage();
         if (clips.Count == 0)
         {
             TryInjectConfiguredAudio(clips);
@@ -37,7 +43,7 @@ internal sealed class VideoStagesCoordinator(
         EnsureComfyDependencies(clips);
 
         ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
-        if (!rootStageHandoff)
+        if (!rootStageHandoff && !firstClipSourced)
         {
             ClipSpec firstClip = clips[0];
             StageSpec first = firstClip.Stages[0];

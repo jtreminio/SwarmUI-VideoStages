@@ -10,6 +10,9 @@ const make = (initial: string, maxDepth?: number) => {
         },
         maxDepth,
     });
+    // The baseline is lazily seeded in real usage too (timeline init calls
+    // syncBaseline once the carrier inputs exist); mirror that here.
+    history.syncBaseline();
     return {
         history,
         get: () => value,
@@ -77,5 +80,21 @@ describe("timelineHistory", () => {
         expect(history.undo()).toBe(true);
         expect(history.undo()).toBe(true);
         expect(history.undo()).toBe(false);
+    });
+});
+
+describe("timelineHistory construction", () => {
+    it("does not read the carrier at construction (seeds lazily)", () => {
+        let reads = 0;
+        const history = createTimelineHistory({
+            read: () => {
+                reads++;
+                return "A";
+            },
+            write: () => {},
+        });
+        expect(reads).toBe(0);
+        history.syncBaseline();
+        expect(reads).toBe(1);
     });
 });

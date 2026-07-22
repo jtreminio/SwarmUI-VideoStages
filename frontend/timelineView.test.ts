@@ -440,6 +440,27 @@ describe("renderTimeline (DOM)", () => {
         expect(body.querySelector(".vst-retake")).toBeNull();
     });
 
+    it("shades the clip region over the retake window, like the major prompt under relay windows", () => {
+        const clip = {
+            duration: 10,
+            stages: [{}],
+            refs: [],
+            retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const shade = body.querySelector<HTMLElement>(
+            ".vst-region .vst-region-off",
+        );
+        expect(shade).not.toBeNull();
+        expect(shade?.style.left).toBe("20%");
+        expect(shade?.style.width).toBe("30%");
+    });
+
+    it("renders no region shade when the clip has no retake", () => {
+        renderTimeline(body, [makeClip(2, 1, 0)]);
+        expect(body.querySelector(".vst-region-off")).toBeNull();
+    });
+
     it("wires the + Clip affordance in both the topbar and the empty state", () => {
         let added = 0;
         const onAddClip = () => {

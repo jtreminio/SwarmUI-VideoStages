@@ -985,7 +985,8 @@
     color: var(--text-soft);
     font-style: italic;
 }
-.vst-major-off {
+.vst-major-off,
+.vst-region-off {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -1241,7 +1242,8 @@
     text-decoration: line-through;
     border-style: dashed;
 }
-.vst-stage-fields-muted {
+.vst-stage-fields-muted,
+.vst-stage-fields-passthrough {
     opacity: 0.45;
     pointer-events: none;
 }

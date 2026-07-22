@@ -77,6 +77,20 @@ public sealed record UploadedAudioSpec(
 );
 
 /// <summary>
+/// Pre-existing footage used as the clip's starting point instead of a from-scratch generation.
+/// <c>Data</c> is the uploaded video; <c>StartSeconds</c> is how far into the file the
+/// used range begins — its length is the clip's own duration. The backend conforms the range to
+/// the timeline (fps resample, frame window, resize) and feeds it to the clip's stage chain as
+/// per-clip refine input: stage 0 passes it through (Control 0), later stages refine/upscale it,
+/// and a retake window regenerates part of it.
+/// </summary>
+public sealed record SourceVideoSpec(
+    string Data,
+    string FileName,
+    double StartSeconds
+);
+
+/// <summary>
 /// One in-context LoRA on a clip. <c>Lora</c> is the LoRA model name, or "[AUTO]" to resolve the
 /// preset's conventional download path (IcLoraWeights.ModelNameFor(<c>Preset</c>)); <c>Preset</c> is
 /// the frontend catalog id — otherwise editor guidance only; <c>Strength</c> is the LoRA model
@@ -149,7 +163,8 @@ public sealed record ClipSpec(
     // Boundary overlap in frames (multiple of 8, ContinueOverlapDefaultFrames..ContinueOverlapMaxFrames):
     // for "continue" the frozen-context length (window = overlap+1), for "crossfade" the requested
     // dissolve length; ignored for "cut".
-    int BoundaryOutOverlap = Constants.ContinueOverlapDefaultFrames
+    int BoundaryOutOverlap = Constants.ContinueOverlapDefaultFrames,
+    SourceVideoSpec SourceVideo = null
 )
 {
     // The selection rules below (PrimarySlotEntry / VoiceRefDriveEntry / UsesVoiceRefAudio) are
