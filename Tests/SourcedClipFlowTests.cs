@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
@@ -397,6 +398,100 @@ public partial class StageFlowTests
         Assert.True(
             ReachesUpstream(bridge, save.Audio.Connection!.Node, trim.Id),
             "Saved audio does not trace back to the source video's trimmed track.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    // Mirrors the REAL host graph at VideoStages time for a text-to-video root: the raw AV latent
+    // is still undecoded — the real core priority-10 step (CorePreVideoSavePrepStep) then authors
+    // the separate/decode/save itself, leaving CurrentMedia.AttachedAudio as a LATENT audio ref.
+    // The harness seeds that author decode+save wholesale never reproduce that state.
+    private static WorkflowGenerator.WorkflowGenStep SeedRawTextToVideoAvLatentRootStep() =>
+        new(g =>
+        {
+            T2IModel model = g.UserInput.Get(T2IParamTypes.Model, null);
+            g.FinalLoadedModel = model;
+            g.FinalLoadedModelList = model is null ? [] : [model];
+
+            using var bridge = BridgeSync.For(g);
+            UnknownNode unet = bridge.AddStub("UnitTest_RootUnet", "4").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
+            g.CurrentModel = unet.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
+            g.CurrentTextEnc = unet.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
+            UnknownNode vaeLoader = bridge.AddStub("UnitTest_RootVae", "101").WithOutputs(WGNodeData.DT_VAE);
+            g.CurrentVae = vaeLoader.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
+            UnknownNode audioVaeLoader = bridge.AddStub("UnitTest_RootAudioVae", "102").WithOutputs(WGNodeData.DT_VAE);
+            g.CurrentAudioVae = audioVaeLoader.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
+
+            UnknownNode emptyVideo = bridge.AddStub("UnitTest_EmptyVideoLatent", "5").WithOutputs("LATENT");
+            UnknownNode emptyAudio = bridge.AddStub("UnitTest_EmptyAudioLatent", "103").WithOutputs("LATENT");
+            LTXVConcatAVLatentNode concat = new();
+            concat.VideoLatent.ConnectToUntyped(emptyVideo.GetOutput(0));
+            concat.AudioLatent.ConnectToUntyped(emptyAudio.GetOutput(0));
+            bridge.AddNode(concat, "104");
+            SwarmKSamplerNode sampler = bridge.AddNode(new SwarmKSamplerNode(), "10");
+            sampler.Model.ConnectToUntyped(unet.GetOutput(0));
+            sampler.LatentImage.ConnectTo(concat.Latent);
+
+            // A dead consumer pinning the root latent — the live flows grow these transiently
+            // (the root's audio-decode sibling, detached guide decodes). An upstream-only prune
+            // stops at the sampler because of it; the dead-component sweep must remove both.
+            LTXVSeparateAVLatentNode strayDetach = new();
+            strayDetach.AvLatent.ConnectTo(sampler.LATENT);
+            bridge.AddNode(strayDetach, "11");
+
+            g.CurrentMedia = new WGNodeData(
+                new JArray("10", 0), g, WGNodeData.DT_LATENT_AUDIOVIDEO, T2IModelClassSorter.CompatLtxv2);
+        }, 4);
+
+    [Fact]
+    public void Sourced_clip_in_real_text_to_video_step_order_leaves_no_dangling_root_sampler()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel stageLora = new(
+            loraHandler, "/tmp", "/tmp/UnitTest_StageLora.safetensors", "UnitTest_StageLora.safetensors");
+        loraHandler.Models[stageLora.Name] = stageLora;
+
+        JObject sourced = MakeSourcedClip(models);
+        // Payload parity with the real dangling-sampler report: continue boundary, per-stage loras,
+        // a loader-only IC-LoRA, and a ×2 pixel refine stage.
+        sourced["BoundaryOut"] = "continue";
+        sourced["BoundaryOutOverlap"] = 40;
+        JArray stageLoras = new(new JObject { ["Name"] = "UnitTest_StageLora", ["Weight"] = 1.0 });
+        ((JArray)sourced["Stages"])[0]["Loras"] = stageLoras;
+        JObject refineStage = MakeStage(
+            models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12);
+        refineStage["Loras"] = stageLoras.DeepClone();
+        ((JArray)sourced["Stages"]).Add(refineStage);
+        sourced["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_StageLora",
+            ["Source"] = Constants.IcLoraSourceUpload,
+        });
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel, MakeRootConfig(512, 512, sourced).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 0);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
+                .Concat(WorkflowTestHarness.VideoStagesSteps()),
+            features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // The root t2v generation must be fully pruned — only the refine stage samples. A surviving
+        // root sampler is a dangling chain the host post-cleanup cannot remove (SwarmKSampler is
+        // not in its unused-classes allowlist).
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        SwarmKSamplerNode refine = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.True(
+            ReachesUpstream(bridge, refine, window.Id),
+            "The surviving sampler is not the refine stage's sampler.");
+        Assert.False(workflow.ContainsKey("10"), "Root t2v sampler was left dangling.");
+        Assert.False(workflow.ContainsKey("11"), "Dead root latent consumer was left dangling.");
+        Assert.False(workflow.ContainsKey("104"), "Root AV concat was left dangling.");
         AssertWorkflowHasNoCycles(workflow);
     }
 

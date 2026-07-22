@@ -285,22 +285,25 @@ internal sealed class StageSequenceRunner(
                 }
             });
 
-        // The root generation (sampler, empty latents, conditioning) is now consumed by nothing —
-        // drop it so the workflow doesn't carry a dangling chain. The stale audio branch goes
-        // first: its decode keeps the root AV-separate alive until removed. Loaders shared with the
-        // sourced clip's stages keep their consumers and survive.
-        HashSet<string> protectedNodes = [images.Node.Id];
+        // The root generation (sampler, empty latents, conditioning) is now consumed by nothing the
+        // saves depend on — sweep its whole dead component so the workflow doesn't carry a dangling
+        // chain. A bidirectional sweep (not an upstream walk) is required: dead consumers hanging
+        // off the root — its audio-decode sibling, transient detached guide chains — would
+        // otherwise pin the sampler alive past the host's cleanup. Live = anything a save (or the
+        // sourced result) depends on, so shared loaders survive.
+        HashSet<string> liveRoots = [images.Node.Id];
         if (audio is not null)
         {
-            protectedNodes.Add(audio.Node.Id);
+            liveRoots.Add(audio.Node.Id);
         }
-        foreach (string staleAudioNodeId in staleAudioNodeIds)
+        liveRoots.UnionWith(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Select(save => save.Id));
+        HashSet<string> deadStarts = [rootOutput.Node.Id, .. staleAudioNodeIds];
+        if (bridge.ResolvePath(rootSourceMedia.AttachedAudio?.Path) is INodeOutput rootAudio)
         {
-            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
-                bridge, staleAudioNodeId, protectedNodes, g.NodeHelpers);
+            deadStarts.Add(rootAudio.Node.Id);
         }
-        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
-            bridge, rootOutput.Node.Id, protectedNodes, g.NodeHelpers);
+        WorkflowGraphCleanup.RemoveDeadComponentAround(bridge, deadStarts, liveRoots, g.NodeHelpers);
     }
 
     /// <summary>
