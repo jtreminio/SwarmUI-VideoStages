@@ -51,6 +51,7 @@ interface ClipFixture {
     stages: StageFixture[];
     refs?: { source: string; frame: number }[];
     audioSource?: string;
+    uploadedAudio?: { data: string; fileName: string };
     controlNetLora?: string;
     icLoras?: Record<string, unknown>[];
     reuseAudio?: boolean;
@@ -86,6 +87,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     boundaryOut: clip.boundaryOut ?? "cut",
     boundaryOutCarryAudio: clip.boundaryOutCarryAudio ?? false,
     audioSource: clip.audioSource ?? "Native",
+    ...(clip.uploadedAudio ? { uploadedAudio: clip.uploadedAudio } : {}),
     controlNetLora: clip.controlNetLora ?? "",
     ...(clip.icLoras ? { icLoras: clip.icLoras } : {}),
     reuseAudio: clip.reuseAudio ?? false,
@@ -1643,6 +1645,64 @@ describe("createTimelineDetailStrip", () => {
             clipIdx: 0,
             segIdx: 2,
         });
+    });
+
+    it("shows base audio and every segment together in the Audio panel", () => {
+        setup([
+            {
+                duration: 10,
+                stages: [{}],
+                audioSource: "Upload",
+                uploadedAudio: {
+                    data: "data:audio/wav;base64,QkFTRQ==",
+                    fileName: "base.wav",
+                },
+                audioSegments: twoSegments,
+            },
+        ]);
+        setSelection({ kind: "audio", clipIdx: 0 });
+
+        expect(crumbText()).toBe("Audio · Clip 1");
+        expect(
+            fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
+                "select",
+            )?.value,
+        ).toBe("Upload");
+        expect(detailBody()?.textContent).toContain("base.wav");
+        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
+            2,
+        );
+        expect(
+            document.querySelector(".vst-detail-instance-active"),
+        ).toBeNull();
+
+        // Focusing a segment selects/highlights it without rebuilding the
+        // unified panel or hiding the base-audio controls.
+        const before = detailBody();
+        segRow(1).querySelector<HTMLInputElement>("input")?.focus();
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 1,
+        });
+        expect(detailBody()).toBe(before);
+        expect(segRow(1).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
+        expect(
+            fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
+                "select",
+            )?.value,
+        ).toBe("Upload");
+
+        // Selecting the base track clears the segment highlight without
+        // tearing down the same panel.
+        setSelection({ kind: "audio", clipIdx: 0 });
+        expect(detailBody()).toBe(before);
+        expect(crumbText()).toBe("Audio · Clip 1");
+        expect(
+            document.querySelector(".vst-detail-instance-active"),
+        ).toBeNull();
     });
 
     it("renders the audio-segment editor with breadcrumb, fields and remove", () => {

@@ -11,9 +11,11 @@ import {
     buildField,
     buildMediaPickRow,
     buildOptionSelect,
+    sectionLabel,
     wrapForm,
 } from "../detailWidgets";
 import type { Clip, TimelineSelection } from "../types";
+import { buildAudioSegmentSection } from "./audioSegmentPanel";
 import {
     buildCapabilityNotice,
     disableCapabilityControls,
@@ -24,7 +26,10 @@ const GROUP_AUDIO = "vstdock_audio";
 
 export const buildAudioBody = (
     ctx: DetailStripContext,
-    sel: Extract<TimelineSelection, { kind: "audio" }>,
+    sel: Extract<
+        TimelineSelection,
+        { kind: "audio" } | { kind: "audio-segment" }
+    >,
     clips: Clip[],
 ): HTMLElement => {
     const { clipIdx } = sel;
@@ -74,6 +79,7 @@ export const buildAudioBody = (
 
     const body = document.createElement("div");
     body.className = "vst-detail-form-body";
+    body.appendChild(sectionLabel("Base audio"));
 
     const select = buildOptionSelect(
         options.map((o) => ({ value: o.value, label: o.label })),
@@ -197,36 +203,9 @@ export const buildAudioBody = (
         body.appendChild(hint);
     }
 
-    const segCount = clip.audioSegments?.length ?? 0;
-    if (segmentDecision.supported) {
-        const addSegment = document.createElement("button");
-        addSegment.type = "button";
-        addSegment.className =
-            "basic-button small-button vst-detail-add-segment";
-        addSegment.textContent = "+ Add segment";
-        addSegment.title =
-            "Overlay an extra uploaded audio piece on this clip's audio lane";
-        addSegment.addEventListener("click", (event) => {
-            event.preventDefault();
-            ctx.addAudioSegment(clipIdx);
-        });
-        body.appendChild(addSegment);
-    } else if (segCount > 0) {
-        body.appendChild(buildCapabilityNotice(segmentDecision));
-    }
-    if (segCount > 0) {
-        const note = document.createElement("p");
-        note.className = "vst-detail-note";
-        note.textContent =
-            segCount === 1
-                ? "1 overlay segment · mixed additively over the base audio."
-                : `${segCount} overlay segments · mixed additively over the base audio.`;
-        body.appendChild(note);
-    }
     if (!audioDecision.supported) {
         disableCapabilityControls(body, audioDecision, [
             ".vst-remove-unsupported-audio",
-            ".vst-detail-add-segment",
         ]);
         const remove = document.createElement("button");
         remove.type = "button";
@@ -249,5 +228,33 @@ export const buildAudioBody = (
         });
         body.appendChild(remove);
     }
+
+    body.appendChild(sectionLabel("Audio segments"));
+    const segCount = clip.audioSegments?.length ?? 0;
+    if (segmentDecision.supported) {
+        const addSegment = document.createElement("button");
+        addSegment.type = "button";
+        addSegment.className =
+            "basic-button small-button vst-detail-add-segment";
+        addSegment.textContent = "+ Add segment";
+        addSegment.title =
+            "Overlay an extra uploaded audio piece on this clip's audio lane";
+        addSegment.addEventListener("click", (event) => {
+            event.preventDefault();
+            ctx.addAudioSegment(clipIdx);
+        });
+        body.appendChild(addSegment);
+    } else if (segCount > 0) {
+        body.appendChild(buildCapabilityNotice(segmentDecision));
+    }
+    body.appendChild(
+        buildAudioSegmentSection(
+            ctx,
+            clipIdx,
+            sel.kind === "audio-segment" ? sel.segIdx : null,
+            clips,
+        ),
+    );
+
     return wrapForm(GROUP_AUDIO, body);
 };

@@ -21,32 +21,27 @@ import {
     buildOptionSelect,
     buildSlider,
     clampStartLength,
-    wrapForm,
 } from "../detailWidgets";
 import { setSelection } from "../selection";
-import type { Clip, TimelineSelection } from "../types";
+import type { Clip } from "../types";
 import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-const GROUP_AUDIOSEG = "vstdock_audioseg";
-
 /**
- * The audio-segment panel lists EVERY overlay segment of the clip, stacked.
+ * Lists every overlay segment of a clip inside the unified Audio panel.
  * The selected segment is highlighted; touching any segment's control
- * re-points the selection to it (targeted swap, no rebuild) and per-segment
- * keys keep edits distinct.
+ * re-points the selection to it without rebuilding the panel.
  */
-export const buildAudioSegmentBody = (
+export const buildAudioSegmentSection = (
     ctx: DetailStripContext,
-    sel: Extract<TimelineSelection, { kind: "audio-segment" }>,
+    clipIdx: number,
+    selectedSegmentIndex: number | null,
     clips: Clip[],
 ): HTMLElement => {
-    const { clipIdx } = sel;
     const clip = clips[clipIdx];
     const segments = clip?.audioSegments ?? [];
     const body = document.createElement("div");
-    body.className =
-        "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
+    body.className = "vst-detail-instance-body vst-detail-seg-body";
     const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
 
     /**
@@ -65,7 +60,7 @@ export const buildAudioSegmentBody = (
             rowClass: "vst-detail-seg-row",
             indexAttr: "data-vst-seg-index",
             index: segIdx,
-            active: segIdx === sel.segIdx,
+            active: segIdx === selectedSegmentIndex,
             title: `S${segIdx + 1}`,
             deleteLabel: "Remove segment",
             onDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
@@ -264,8 +259,10 @@ export const buildAudioSegmentBody = (
     const note = document.createElement("p");
     note.className = "vst-detail-note";
     note.textContent =
-        "Overlaid additively over the base audio; overlapping segments mix together.";
+        segments.length === 0
+            ? "No overlay segments."
+            : "Overlaid additively over the base audio; overlapping segments mix together.";
     body.appendChild(note);
 
-    return wrapForm(GROUP_AUDIOSEG, body);
+    return body;
 };

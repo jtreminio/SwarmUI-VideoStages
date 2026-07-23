@@ -3,7 +3,6 @@ import { stageChipLabel } from "../timelineDetail";
 import type { Clip, TimelineSelection } from "../types";
 import { roundToTenth } from "../utils";
 import { buildAudioBody } from "./audioPanel";
-import { buildAudioSegmentBody } from "./audioSegmentPanel";
 import { buildBoundaryBody } from "./boundaryPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
@@ -163,7 +162,7 @@ export const buildDetailPanelBody = (
         case "audio":
             return buildAudioBody(context, selection, clips);
         case "audio-segment":
-            return buildAudioSegmentBody(context, selection, clips);
+            return buildAudioBody(context, selection, clips);
         case "prompt-major":
             return buildPromptMajorBody(context, selection, clips);
         case "prompt-minor":

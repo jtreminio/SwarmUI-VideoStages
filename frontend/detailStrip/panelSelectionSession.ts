@@ -34,12 +34,7 @@ export const createPanelSelectionSession = (): PanelSelectionSession => {
         collapsed: boolean,
         clips: Clip[],
     ): boolean => {
-        if (
-            !dock ||
-            !rendered ||
-            collapsed ||
-            rendered.kind !== selection.kind
-        ) {
+        if (!dock || !rendered || collapsed) {
             return false;
         }
         const previous = rendered;
@@ -55,7 +50,7 @@ export const createPanelSelectionSession = (): PanelSelectionSession => {
             const rows = Array.from(
                 dock.querySelectorAll<HTMLElement>(rowSelector),
             );
-            if (index < 0 || index >= rows.length) {
+            if (index < -1 || index >= rows.length) {
                 return false;
             }
             rows.forEach((row, rowIndex) => {
@@ -65,6 +60,7 @@ export const createPanelSelectionSession = (): PanelSelectionSession => {
             syncBreadcrumb(dock, clips);
             if (
                 fromOutside &&
+                index >= 0 &&
                 typeof rows[index].scrollIntoView === "function"
             ) {
                 rows[index].scrollIntoView({ block: "nearest" });
@@ -72,6 +68,23 @@ export const createPanelSelectionSession = (): PanelSelectionSession => {
             return true;
         };
 
+        const previousIsAudio =
+            previous.kind === "audio" || previous.kind === "audio-segment";
+        const selectionIsAudio =
+            selection.kind === "audio" || selection.kind === "audio-segment";
+        if (previousIsAudio && selectionIsAudio) {
+            if (selection.clipIdx !== previous.clipIdx) {
+                return false;
+            }
+            return swap(
+                ".vst-detail-seg-row",
+                "vst-detail-instance-active",
+                selection.kind === "audio-segment" ? selection.segIdx : -1,
+            );
+        }
+        if (rendered.kind !== selection.kind) {
+            return false;
+        }
         if (
             selection.kind === "prompt-minor" &&
             previous.kind === "prompt-minor"

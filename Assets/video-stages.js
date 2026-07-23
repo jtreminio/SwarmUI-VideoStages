@@ -8434,203 +8434,12 @@
     root.prepend(buildCapabilityNotice(decision));
   };
 
-  // frontend/detailStrip/audioPanel.ts
-  var GROUP_AUDIO = "vstdock_audio";
-  var buildAudioBody = (ctx, sel, clips) => {
-    const { clipIdx } = sel;
-    const clip = clips[clipIdx];
-    const capabilityView = ctx.capabilities().forClip(clip);
-    const audioDecision = capabilityView.decision("clipAudio");
-    const reuseDecision = capabilityView.decision("audioReuse");
-    const segmentDecision = capabilityView.decision("audioSegments");
-    const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
-      clip.architecture,
-      clip.icLoras
-    );
-    const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-      controlNetEnabled,
-      allowedKinds: capabilityView.audioSourceKinds
-    });
-    const source = options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";
-    const canLength = canUseClipLengthFromAudio(source);
-    const isAce = isAceStepFunAudioSource(source);
-    const commitAudio = (mutate) => {
-      ctx.commit((cs) => {
-        const target = cs[clipIdx];
-        if (!target) {
-          return;
-        }
-        mutate(target);
-        const nextSource = target.audioSource;
-        target.clipLengthFromAudio = canUseClipLengthFromAudio(nextSource) && target.clipLengthFromAudio;
-        if (target.clipLengthFromAudio) {
-          target.clipLengthFromControlNet = false;
-        }
-        target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
-        target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD || nextSource === AUDIO_SOURCE_VOICE_REF ? target.uploadedAudio : null;
-      });
-    };
-    const body = document.createElement("div");
-    body.className = "vst-detail-form-body";
-    const select2 = buildOptionSelect(
-      options.map((o) => ({ value: o.value, label: o.label })),
-      source,
-      (value) => {
-        commitAudio((c) => {
-          c.audioSource = value;
-        });
-        ctx.render();
-      }
-    );
-    body.appendChild(
-      buildField(
-        "Audio Source",
-        select2,
-        void 0,
-        "Where this clip's audio comes from: generated from the prompt, an uploaded file, a Voice Reference (clone a speaker sample), or none."
-      )
-    );
-    const reuseRow = buildCheckbox(
-      "Reuse Captured Stage Audio",
-      clip.reuseAudio === true,
-      (value) => {
-        commitAudio((c) => {
-          c.reuseAudio = value;
-        });
-      },
-      {
-        disabled: !reuseDecision.supported,
-        help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages." + (reuseDecision.reason ? ` ${reuseDecision.reason}` : "")
-      }
-    );
-    body.appendChild(reuseRow);
-    if (clip.reuseAudio && !reuseDecision.supported) {
-      reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "basic-button small-button vst-detail-delete";
-      remove.textContent = "Remove unsupported reuse";
-      remove.addEventListener("click", () => {
-        commitAudio((target) => {
-          target.reuseAudio = false;
-        });
-        ctx.render();
-      });
-      reuseRow.appendChild(remove);
-    }
-    const lengthRow = buildCheckbox(
-      "Clip Length from Audio",
-      clip.clipLengthFromAudio === true && canLength,
-      (value) => {
-        commitAudio((c) => {
-          c.clipLengthFromAudio = value;
-        });
-      },
-      {
-        disabled: !canLength,
-        help: "Set the clip's duration to match the length of its audio instead of a fixed value. Available only for sources with a known length."
-      }
-    );
-    body.appendChild(lengthRow);
-    const saveRow = buildCheckbox(
-      "Save Audio Track",
-      clip.saveAudioTrack === true && isAce,
-      (value) => {
-        commitAudio((c) => {
-          c.saveAudioTrack = value;
-        });
-      },
-      {
-        disabled: !isAce,
-        help: "Export the generated audio as a separate track alongside the video. Only available for generated (AceStep) audio."
-      }
-    );
-    body.appendChild(saveRow);
-    if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
-      body.appendChild(
-        buildMediaPickRow(
-          source === AUDIO_SOURCE_VOICE_REF ? "Voice Sample" : "Audio Upload",
-          "audio/*",
-          ["audio"],
-          clip.uploadedAudio?.fileName,
-          (data, fileName) => {
-            commitAudio((c) => {
-              c.uploadedAudio = { data, fileName };
-            });
-            ctx.render();
-          },
-          () => {
-            commitAudio((c) => {
-              c.uploadedAudio = null;
-            });
-            ctx.render();
-          }
-        )
-      );
-    }
-    if (source === AUDIO_SOURCE_VOICE_REF) {
-      const hint = document.createElement("small");
-      hint.className = "vst-audio-field-hint";
-      hint.textContent = "Speaker sample only — new speech is generated to match the prompt in this voice. Put the spoken words in the clip prompt.";
-      body.appendChild(hint);
-    }
-    const segCount = clip.audioSegments?.length ?? 0;
-    if (segmentDecision.supported) {
-      const addSegment = document.createElement("button");
-      addSegment.type = "button";
-      addSegment.className = "basic-button small-button vst-detail-add-segment";
-      addSegment.textContent = "+ Add segment";
-      addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
-      addSegment.addEventListener("click", (event) => {
-        event.preventDefault();
-        ctx.addAudioSegment(clipIdx);
-      });
-      body.appendChild(addSegment);
-    } else if (segCount > 0) {
-      body.appendChild(buildCapabilityNotice(segmentDecision));
-    }
-    if (segCount > 0) {
-      const note = document.createElement("p");
-      note.className = "vst-detail-note";
-      note.textContent = segCount === 1 ? "1 overlay segment · mixed additively over the base audio." : `${segCount} overlay segments · mixed additively over the base audio.`;
-      body.appendChild(note);
-    }
-    if (!audioDecision.supported) {
-      disableCapabilityControls(body, audioDecision, [
-        ".vst-remove-unsupported-audio",
-        ".vst-detail-add-segment"
-      ]);
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "basic-button small-button vst-remove-unsupported-audio";
-      remove.textContent = "Remove unsupported clip audio";
-      remove.addEventListener("click", () => {
-        ctx.structuralCommit((items) => {
-          const target = items[clipIdx];
-          if (!target) {
-            return null;
-          }
-          target.audioSource = "Native";
-          target.uploadedAudio = null;
-          target.reuseAudio = false;
-          target.clipLengthFromAudio = false;
-          target.saveAudioTrack = false;
-          return "render";
-        });
-      });
-      body.appendChild(remove);
-    }
-    return wrapForm(GROUP_AUDIO, body);
-  };
-
   // frontend/detailStrip/audioSegmentPanel.ts
-  var GROUP_AUDIOSEG = "vstdock_audioseg";
-  var buildAudioSegmentBody = (ctx, sel, clips) => {
-    const { clipIdx } = sel;
+  var buildAudioSegmentSection = (ctx, clipIdx, selectedSegmentIndex, clips) => {
     const clip = clips[clipIdx];
     const segments = clip?.audioSegments ?? [];
     const body = document.createElement("div");
-    body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-seg-body";
+    body.className = "vst-detail-instance-body vst-detail-seg-body";
     const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
     const clampSegment = (start, length) => clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
     segments.forEach((segment, segIdx) => {
@@ -8638,7 +8447,7 @@
         rowClass: "vst-detail-seg-row",
         indexAttr: "data-vst-seg-index",
         index: segIdx,
-        active: segIdx === sel.segIdx,
+        active: segIdx === selectedSegmentIndex,
         title: `S${segIdx + 1}`,
         deleteLabel: "Remove segment",
         onDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
@@ -8808,9 +8617,201 @@
     });
     const note = document.createElement("p");
     note.className = "vst-detail-note";
-    note.textContent = "Overlaid additively over the base audio; overlapping segments mix together.";
+    note.textContent = segments.length === 0 ? "No overlay segments." : "Overlaid additively over the base audio; overlapping segments mix together.";
     body.appendChild(note);
-    return wrapForm(GROUP_AUDIOSEG, body);
+    return body;
+  };
+
+  // frontend/detailStrip/audioPanel.ts
+  var GROUP_AUDIO = "vstdock_audio";
+  var buildAudioBody = (ctx, sel, clips) => {
+    const { clipIdx } = sel;
+    const clip = clips[clipIdx];
+    const capabilityView = ctx.capabilities().forClip(clip);
+    const audioDecision = capabilityView.decision("clipAudio");
+    const reuseDecision = capabilityView.decision("audioReuse");
+    const segmentDecision = capabilityView.decision("audioSegments");
+    const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
+      clip.architecture,
+      clip.icLoras
+    );
+    const options = buildAudioSourceOptions(clip.audioSource ?? "", {
+      controlNetEnabled,
+      allowedKinds: capabilityView.audioSourceKinds
+    });
+    const source = options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";
+    const canLength = canUseClipLengthFromAudio(source);
+    const isAce = isAceStepFunAudioSource(source);
+    const commitAudio = (mutate) => {
+      ctx.commit((cs) => {
+        const target = cs[clipIdx];
+        if (!target) {
+          return;
+        }
+        mutate(target);
+        const nextSource = target.audioSource;
+        target.clipLengthFromAudio = canUseClipLengthFromAudio(nextSource) && target.clipLengthFromAudio;
+        if (target.clipLengthFromAudio) {
+          target.clipLengthFromControlNet = false;
+        }
+        target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
+        target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD || nextSource === AUDIO_SOURCE_VOICE_REF ? target.uploadedAudio : null;
+      });
+    };
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body";
+    body.appendChild(sectionLabel("Base audio"));
+    const select2 = buildOptionSelect(
+      options.map((o) => ({ value: o.value, label: o.label })),
+      source,
+      (value) => {
+        commitAudio((c) => {
+          c.audioSource = value;
+        });
+        ctx.render();
+      }
+    );
+    body.appendChild(
+      buildField(
+        "Audio Source",
+        select2,
+        void 0,
+        "Where this clip's audio comes from: generated from the prompt, an uploaded file, a Voice Reference (clone a speaker sample), or none."
+      )
+    );
+    const reuseRow = buildCheckbox(
+      "Reuse Captured Stage Audio",
+      clip.reuseAudio === true,
+      (value) => {
+        commitAudio((c) => {
+          c.reuseAudio = value;
+        });
+      },
+      {
+        disabled: !reuseDecision.supported,
+        help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages." + (reuseDecision.reason ? ` ${reuseDecision.reason}` : "")
+      }
+    );
+    body.appendChild(reuseRow);
+    if (clip.reuseAudio && !reuseDecision.supported) {
+      reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "basic-button small-button vst-detail-delete";
+      remove.textContent = "Remove unsupported reuse";
+      remove.addEventListener("click", () => {
+        commitAudio((target) => {
+          target.reuseAudio = false;
+        });
+        ctx.render();
+      });
+      reuseRow.appendChild(remove);
+    }
+    const lengthRow = buildCheckbox(
+      "Clip Length from Audio",
+      clip.clipLengthFromAudio === true && canLength,
+      (value) => {
+        commitAudio((c) => {
+          c.clipLengthFromAudio = value;
+        });
+      },
+      {
+        disabled: !canLength,
+        help: "Set the clip's duration to match the length of its audio instead of a fixed value. Available only for sources with a known length."
+      }
+    );
+    body.appendChild(lengthRow);
+    const saveRow = buildCheckbox(
+      "Save Audio Track",
+      clip.saveAudioTrack === true && isAce,
+      (value) => {
+        commitAudio((c) => {
+          c.saveAudioTrack = value;
+        });
+      },
+      {
+        disabled: !isAce,
+        help: "Export the generated audio as a separate track alongside the video. Only available for generated (AceStep) audio."
+      }
+    );
+    body.appendChild(saveRow);
+    if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
+      body.appendChild(
+        buildMediaPickRow(
+          source === AUDIO_SOURCE_VOICE_REF ? "Voice Sample" : "Audio Upload",
+          "audio/*",
+          ["audio"],
+          clip.uploadedAudio?.fileName,
+          (data, fileName) => {
+            commitAudio((c) => {
+              c.uploadedAudio = { data, fileName };
+            });
+            ctx.render();
+          },
+          () => {
+            commitAudio((c) => {
+              c.uploadedAudio = null;
+            });
+            ctx.render();
+          }
+        )
+      );
+    }
+    if (source === AUDIO_SOURCE_VOICE_REF) {
+      const hint = document.createElement("small");
+      hint.className = "vst-audio-field-hint";
+      hint.textContent = "Speaker sample only — new speech is generated to match the prompt in this voice. Put the spoken words in the clip prompt.";
+      body.appendChild(hint);
+    }
+    if (!audioDecision.supported) {
+      disableCapabilityControls(body, audioDecision, [
+        ".vst-remove-unsupported-audio"
+      ]);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "basic-button small-button vst-remove-unsupported-audio";
+      remove.textContent = "Remove unsupported clip audio";
+      remove.addEventListener("click", () => {
+        ctx.structuralCommit((items) => {
+          const target = items[clipIdx];
+          if (!target) {
+            return null;
+          }
+          target.audioSource = "Native";
+          target.uploadedAudio = null;
+          target.reuseAudio = false;
+          target.clipLengthFromAudio = false;
+          target.saveAudioTrack = false;
+          return "render";
+        });
+      });
+      body.appendChild(remove);
+    }
+    body.appendChild(sectionLabel("Audio segments"));
+    const segCount = clip.audioSegments?.length ?? 0;
+    if (segmentDecision.supported) {
+      const addSegment = document.createElement("button");
+      addSegment.type = "button";
+      addSegment.className = "basic-button small-button vst-detail-add-segment";
+      addSegment.textContent = "+ Add segment";
+      addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
+      addSegment.addEventListener("click", (event) => {
+        event.preventDefault();
+        ctx.addAudioSegment(clipIdx);
+      });
+      body.appendChild(addSegment);
+    } else if (segCount > 0) {
+      body.appendChild(buildCapabilityNotice(segmentDecision));
+    }
+    body.appendChild(
+      buildAudioSegmentSection(
+        ctx,
+        clipIdx,
+        sel.kind === "audio-segment" ? sel.segIdx : null,
+        clips
+      )
+    );
+    return wrapForm(GROUP_AUDIO, body);
   };
 
   // frontend/boundaryPlan.ts
@@ -11716,7 +11717,7 @@ The conversion is one undoable change.`;
       case "audio":
         return buildAudioBody(context, selection2, clips);
       case "audio-segment":
-        return buildAudioSegmentBody(context, selection2, clips);
+        return buildAudioBody(context, selection2, clips);
       case "prompt-major":
         return buildPromptMajorBody(context, selection2, clips);
       case "prompt-minor":
@@ -11751,7 +11752,7 @@ The conversion is one undoable change.`;
       }
     };
     const targetedReselect = (selection2, dock, collapsed, clips) => {
-      if (!dock || !rendered || collapsed || rendered.kind !== selection2.kind) {
+      if (!dock || !rendered || collapsed) {
         return false;
       }
       const previous = rendered;
@@ -11761,7 +11762,7 @@ The conversion is one undoable change.`;
         const rows = Array.from(
           dock.querySelectorAll(rowSelector)
         );
-        if (index < 0 || index >= rows.length) {
+        if (index < -1 || index >= rows.length) {
           return false;
         }
         rows.forEach((row, rowIndex) => {
@@ -11769,11 +11770,26 @@ The conversion is one undoable change.`;
         });
         rendered = selection2;
         syncBreadcrumb(dock, clips);
-        if (fromOutside && typeof rows[index].scrollIntoView === "function") {
+        if (fromOutside && index >= 0 && typeof rows[index].scrollIntoView === "function") {
           rows[index].scrollIntoView({ block: "nearest" });
         }
         return true;
       };
+      const previousIsAudio = previous.kind === "audio" || previous.kind === "audio-segment";
+      const selectionIsAudio = selection2.kind === "audio" || selection2.kind === "audio-segment";
+      if (previousIsAudio && selectionIsAudio) {
+        if (selection2.clipIdx !== previous.clipIdx) {
+          return false;
+        }
+        return swap(
+          ".vst-detail-seg-row",
+          "vst-detail-instance-active",
+          selection2.kind === "audio-segment" ? selection2.segIdx : -1
+        );
+      }
+      if (rendered.kind !== selection2.kind) {
+        return false;
+      }
       if (selection2.kind === "prompt-minor" && previous.kind === "prompt-minor") {
         if (selection2.clipIdx !== previous.clipIdx) {
           return false;
