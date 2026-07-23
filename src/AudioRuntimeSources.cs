@@ -13,6 +13,7 @@ internal sealed record AudioRuntimeSources(
 internal sealed record ClipAudioExecutionContext(
     StagePlan FirstStage,
     ClipPlan PlannedClip,
+    int FramesPerSecond,
     bool IsFirstClip,
     AudioRuntimeSources Sources,
     RootExecutionPolicy RootPolicy);

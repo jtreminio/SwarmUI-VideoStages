@@ -66,6 +66,7 @@ const CLIP_PATCH_KEYS = [
     "skipped",
     "hue",
     "boundaryOut",
+    "boundaryOutCarryAudio",
     "boundaryOutOverlap",
     "duration",
     "audioSource",

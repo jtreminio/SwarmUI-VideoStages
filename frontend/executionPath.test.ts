@@ -787,6 +787,7 @@ describe("projectVideoExecutionPath", () => {
             config([
                 minimalClip({
                     boundaryOut: "continue",
+                    boundaryOutCarryAudio: true,
                     boundaryOutOverlap: 16,
                 }),
                 minimalClip({
@@ -807,8 +808,12 @@ describe("projectVideoExecutionPath", () => {
                 effective: "continue",
                 fallback: "none",
                 overlapFrames: 16,
+                carryAudio: true,
             }),
         ]);
+        expect(summary.boundaries[0].label).toContain(
+            "generated audio continuation",
+        );
     });
 
     it.each<{
@@ -848,6 +853,7 @@ describe("projectVideoExecutionPath", () => {
             effective: "cut",
             fallback,
             overlapFrames: 0,
+            carryAudio: false,
         });
         expect(summary.labels).toContain("1 clip boundary: continue→cut");
     });

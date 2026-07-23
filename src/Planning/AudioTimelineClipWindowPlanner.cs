@@ -66,9 +66,7 @@ internal static class AudioTimelineClipWindowPlanner
             if (outgoing.TryGetValue(clip.ClipId, out BoundaryPlan boundary)
                 && boundary.Effective != BoundaryExecutionMode.Cut)
             {
-                trimFrames = boundary.Effective == BoundaryExecutionMode.Continue
-                    ? boundary.ContinuityWindowFrames
-                    : boundary.OverlapFrames;
+                trimFrames = BoundaryOverlapPlanner.EffectiveOverlapFrames(boundary);
                 provisional = boundary.RequiresRuntimeMergeValidation;
             }
 

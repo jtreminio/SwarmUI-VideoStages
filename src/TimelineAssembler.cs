@@ -48,6 +48,23 @@ internal sealed class TimelineAssemblySession
         return false;
     }
 
+    public bool TryGetAudioCarryWindow(int fromClipId, out int window)
+    {
+        int boundaryIndex = BoundaryIndex(fromClipId);
+        if (boundaryIndex >= 0
+            && _effectiveBoundaries[boundaryIndex] is BoundaryPlan
+            {
+                Effective: not BoundaryExecutionMode.Cut,
+                CarryAudio: true,
+            } boundary)
+        {
+            window = BoundaryOverlapPlanner.EffectiveOverlapFrames(boundary);
+            return window > 0;
+        }
+        window = 0;
+        return false;
+    }
+
     public void DegradeToCut(int fromClipId, string reason)
     {
         int boundaryIndex = BoundaryIndex(fromClipId);

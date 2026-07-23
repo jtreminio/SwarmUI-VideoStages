@@ -111,6 +111,7 @@ describe("normalization", () => {
             getDefaultStageModel,
         );
         expect(clip.boundaryOut).toBe("cut");
+        expect(clip.boundaryOutCarryAudio).toBe(false);
     });
 
     it("derives none for fresh source-only clips but preserves invalid v3 identity for diagnostics", () => {

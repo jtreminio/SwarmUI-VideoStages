@@ -37,6 +37,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     skipped: false,
     hue: 210,
     boundaryOut: "cut",
+    boundaryOutCarryAudio: false,
     boundaryOutOverlap: 8,
     duration: 2,
     audioSource: "Native",

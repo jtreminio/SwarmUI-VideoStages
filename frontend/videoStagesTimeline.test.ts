@@ -308,6 +308,7 @@ describe("videoStagesTimeline", () => {
                     {
                         duration: 2,
                         boundaryOut: "continue",
+                        boundaryOutCarryAudio: true,
                         boundaryOutOverlap: 16,
                         stages: [{}] as unknown[],
                         refs: [] as unknown[],
@@ -344,6 +345,7 @@ describe("videoStagesTimeline", () => {
         expect(clips).toHaveLength(3);
         // The join into the new clip mirrors the join between the previous two.
         expect(clips[1].boundaryOut).toBe("continue");
+        expect(clips[1].boundaryOutCarryAudio).toBe(true);
         expect(clips[1].boundaryOutOverlap).toBe(16);
         // The new clip inherits the previous clip's base settings.
         expect(clips[2].duration).toBe(3);

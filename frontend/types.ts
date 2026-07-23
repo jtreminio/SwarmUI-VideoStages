@@ -205,6 +205,11 @@ export interface Clip {
     hue: number;
     boundaryOut: BoundaryOut;
     /**
+     * For a continue/crossfade overlap, preserve this clip's outgoing audio
+     * tail as opening generation context for the next clip.
+     */
+    boundaryOutCarryAudio: boolean;
+    /**
      * "continue" boundary overlap in frames (multiple of 8): the next clip is
      * generated with this clip's last overlap+1 frames as frozen latent
      * context, and the merge collapses the duplicated frames. Ignored for

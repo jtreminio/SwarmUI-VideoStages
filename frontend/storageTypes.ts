@@ -42,6 +42,7 @@ export const STORED_CLIP_KEYS = [
     "modelProfileId",
     "skipped",
     "boundaryOut",
+    "boundaryOutCarryAudio",
     "boundaryOutOverlap",
     "duration",
     "audioSource",

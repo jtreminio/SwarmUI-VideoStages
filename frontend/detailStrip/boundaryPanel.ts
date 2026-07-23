@@ -4,6 +4,7 @@ import {
 } from "../architectures/boundaryConstraints";
 import { type BoundaryPlan, crossfadePlanForClips } from "../boundaryPlan";
 import {
+    buildCheckbox,
     buildField,
     buildOptionSelect,
     type OptionSpec,
@@ -31,6 +32,13 @@ export const buildBoundaryBody = (
     const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
     const state = getState();
     const fps = Math.round(safeFps(state.fps));
+    const carryTargetHasStage =
+        capability.rightClipIdx !== null &&
+        clips[capability.rightClipIdx]?.stages.some(
+            (stage) => !stage.skipped,
+        ) === true;
+    const carryAudioActive =
+        clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
 
     const joinSpecs: OptionSpec[] = capability.modes.map((mode) => ({
         value: mode,
@@ -120,6 +128,27 @@ export const buildBoundaryBody = (
                     "short for the overlap falls back to a cut.",
             ),
         );
+        body.appendChild(
+            buildCheckbox(
+                "Continue outgoing audio into next clip",
+                clip?.boundaryOutCarryAudio === true,
+                (enabled) => {
+                    ctx.commit((cs) => {
+                        const c = cs[leftClipIdx];
+                        if (c) {
+                            c.boundaryOutCarryAudio = enabled;
+                        }
+                    });
+                    ctx.render();
+                },
+                {
+                    disabled: !carryTargetHasStage,
+                    help:
+                        "Preserve this clip's audio tail at the start of the next clip's LTX generation, " +
+                        "then let LTX generate its continuation. The next clip needs an active stage.",
+                },
+            ),
+        );
     }
 
     const info = document.createElement("div");
@@ -158,6 +187,10 @@ export const buildBoundaryBody = (
             if (window < requested) {
                 text += " The window was reduced because a clip is too short.";
             }
+            if (carryAudioActive) {
+                text +=
+                    " Its audio tail becomes preserved opening context for the next clip's generated audio.";
+            }
             info.textContent = text;
         }
     } else {
@@ -184,6 +217,10 @@ export const buildBoundaryBody = (
                 `(~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
             if (overlapFrames < requested) {
                 text += " The window was reduced because a clip is too short.";
+            }
+            if (carryAudioActive) {
+                text +=
+                    " Its audio tail becomes preserved opening context for the next clip's generated audio.";
             }
             info.textContent = text;
         }

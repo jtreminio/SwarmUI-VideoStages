@@ -76,12 +76,25 @@ internal static class BoundaryPlanCompiler
             int continuityWindow = effective == BoundaryExecutionMode.Continue
                 ? overlap + (modePolicy?.ContinuityExtraFrames ?? 0)
                 : 0;
+            bool targetHasGenerationStage = plannedTo?.Stages is { Count: > 0 }
+                || (plannedTo is null && to.Stages is { Count: > 0 });
             if (fallback != BoundaryFallback.None)
             {
                 diagnostics.Add(new VideoPlanDiagnostic(
                     VideoPlanDiagnosticSeverity.Warning,
                     $"boundary-{fallback.ToString().ToLowerInvariant()}",
                     $"Clip {from.Id} boundary '{from.BoundaryOut}' falls back to a cut: {DescribeFallback(fallback)}",
+                    from.Id));
+            }
+            if (from.BoundaryOutCarryAudio
+                && effective != BoundaryExecutionMode.Cut
+                && !targetHasGenerationStage)
+            {
+                diagnostics.Add(new VideoPlanDiagnostic(
+                    VideoPlanDiagnosticSeverity.Warning,
+                    "boundary-audio-carry-target-has-no-stage",
+                    $"Clip {from.Id} cannot carry audio across its '{from.BoundaryOut}' boundary "
+                        + "because the next clip has no generation stage to consume it.",
                     from.Id));
             }
             boundaries.Add(new BoundaryPlan(
@@ -97,6 +110,9 @@ internal static class BoundaryPlanCompiler
                 MinFrames = effective == BoundaryExecutionMode.Cut
                     ? 0
                     : modePolicy?.MinFrames ?? 1,
+                CarryAudio = effective != BoundaryExecutionMode.Cut
+                    && from.BoundaryOutCarryAudio
+                    && targetHasGenerationStage,
             });
         }
         return new BoundaryPlanningResult(boundaries.ToImmutable(), diagnostics.ToImmutable());

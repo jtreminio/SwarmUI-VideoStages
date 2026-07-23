@@ -74,6 +74,8 @@ export interface VideoBoundarySummary {
         | "cross-architecture"
         | "architecture-rule";
     overlapFrames: number;
+    /** Whether the next generated clip receives outgoing audio-tail context. */
+    carryAudio: boolean;
     label: string;
 }
 

@@ -49,10 +49,17 @@ export const projectBoundaries = (
         }
         const overlapFrames =
             effective === "cut" ? 0 : left.clip.boundaryOutOverlap;
-        const title =
+        const carryAudio =
+            effective !== "cut" &&
+            left.clip.boundaryOutCarryAudio === true &&
+            right.stages.length > 0;
+        let title =
             effective === "continue" && overlapFrames > 0
                 ? `Continue (${plural(overlapFrames, "frame")} overlap)`
                 : effective[0].toUpperCase() + effective.slice(1);
+        if (carryAudio) {
+            title += " + generated audio continuation";
+        }
         const fallbackDescription =
             fallback === "target-is-sourced-video"
                 ? "next clip is sourced footage"
@@ -77,6 +84,7 @@ export const projectBoundaries = (
             effective,
             fallback,
             overlapFrames,
+            carryAudio,
             label: `Clip ${left.index + 1} → ${right.index + 1}: ${result}`,
         };
     });

@@ -31,6 +31,7 @@ public class PlanningCompilerComponentTests
             {
                 BoundaryOut = Constants.BoundaryOutContinue,
                 BoundaryOutOverlap = 16,
+                BoundaryOutCarryAudio = true,
             },
             SourcedClip(1, Stage(11)),
         ]);
@@ -42,8 +43,31 @@ public class PlanningCompilerComponentTests
         Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
         Assert.Equal(BoundaryFallback.TargetIsSourcedVideo, boundary.Fallback);
         Assert.Equal(0, boundary.OverlapFrames);
+        Assert.False(boundary.CarryAudio);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "boundary-targetissourcedvideo");
+    }
+
+    [Fact]
+    public void BoundaryPlanCompiler_CarriesAudioOnlyForEffectiveOverlappedBoundary()
+    {
+        VideoStagesSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)) with
+            {
+                BoundaryOut = Constants.BoundaryOutCrossfade,
+                BoundaryOutOverlap = 16,
+                BoundaryOutCarryAudio = true,
+            },
+            GeneratedClip(1, Stage(11)),
+        ]);
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        BoundaryPlan boundary = Assert.Single(
+            BoundaryPlanCompiler.Compile(spec.Clips, plan.Clips).Boundaries);
+
+        Assert.Equal(BoundaryExecutionMode.Crossfade, boundary.Effective);
+        Assert.True(boundary.CarryAudio);
     }
 
     [Fact]

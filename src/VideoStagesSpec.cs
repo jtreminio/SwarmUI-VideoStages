@@ -174,7 +174,10 @@ public sealed record ClipSpec(
     // for "continue" the frozen-context length (window = overlap+1), for "crossfade" the requested
     // dissolve length; ignored for "cut".
     int BoundaryOutOverlap = 0,
-    SourceVideoSpec SourceVideo = null
+    SourceVideoSpec SourceVideo = null,
+    // When true on a non-cut boundary, the next generated clip receives the outgoing audio tail
+    // as preserved opening context and generates the continuation after that window.
+    bool BoundaryOutCarryAudio = false
 )
 {
     public string AuthoredArchitectureId { get; init; }

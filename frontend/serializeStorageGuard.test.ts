@@ -67,6 +67,7 @@ const maximalClip = (): Clip =>
     minimalClip({
         skipped: true,
         boundaryOut: "crossfade",
+        boundaryOutCarryAudio: true,
         boundaryOutOverlap: 16,
         duration: 4,
         audioSource: "Native",

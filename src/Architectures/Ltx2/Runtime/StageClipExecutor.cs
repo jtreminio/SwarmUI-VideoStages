@@ -28,7 +28,8 @@ internal sealed class StageClipExecutor(
     StageRunner singleStageRunner,
     AudioTimelineExecutor audioTimelineExecutor,
     StageGuideReferenceState guideReferences,
-    ContinuityGuideBuilder continuityGuideBuilder)
+    ContinuityGuideBuilder continuityGuideBuilder,
+    LtxBoundaryAudioCarryBuilder boundaryAudioCarryBuilder)
 {
     private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
 
@@ -44,13 +45,14 @@ internal sealed class StageClipExecutor(
             context.RootSources.SourceVae);
 
         WGNodeData sourcedMedia = InstallSourceIfPlanned(plannedClip);
-        PrepareCrossClipInput(context, sourcedMedia, clipContext);
+        LtxBoundaryAudioCarry boundaryAudioCarry =
+            PrepareCrossClipInput(context, sourcedMedia, clipContext);
         if (sourcedMedia is not null)
         {
             g.CurrentMedia = sourcedMedia;
         }
 
-        PrepareClipAudio(context, sourcedMedia);
+        PrepareClipAudio(context, sourcedMedia, boundaryAudioCarry);
         if (plannedClip.Stages.Count == 0)
         {
             return CaptureStageInputArtifact(ArtifactOrigin.SourceVideo);
@@ -83,14 +85,14 @@ internal sealed class StageClipExecutor(
         return sourcedMedia;
     }
 
-    private void PrepareCrossClipInput(
+    private LtxBoundaryAudioCarry PrepareCrossClipInput(
         StageClipExecutionContext context,
         WGNodeData sourcedMedia,
         ClipContext clipContext)
     {
         if (!context.ParallelMultiClip || !context.HasPreviousTimelineClip)
         {
-            return;
+            return null;
         }
 
         if (sourcedMedia is null)
@@ -107,38 +109,57 @@ internal sealed class StageClipExecutor(
             }
         }
 
-        if (context.PreviousClip is null
-            || !context.Assembly.TryGetContinueWindow(
+        if (context.PreviousClip is null)
+        {
+            return null;
+        }
+
+        if (context.Assembly.TryGetContinueWindow(
             context.PreviousClip.ClipId,
             out int continuityWindow))
         {
-            return;
-        }
-        if (sourcedMedia is not null)
-        {
-            Logs.Warning(
-                $"VideoStages: Clip {context.PreviousClip.ClipId} boundary 'continue' flows into "
-                + $"sourced Clip {context.PlannedClip.ClipId}; treating the boundary as a cut.");
-            context.Assembly.DegradeToCut(
-                context.PreviousClip.ClipId,
-                "target clip is sourced footage");
-            return;
+            if (sourcedMedia is not null)
+            {
+                Logs.Warning(
+                    $"VideoStages: Clip {context.PreviousClip.ClipId} boundary 'continue' flows into "
+                    + $"sourced Clip {context.PlannedClip.ClipId}; treating the boundary as a cut.");
+                context.Assembly.DegradeToCut(
+                    context.PreviousClip.ClipId,
+                    "target clip is sourced footage");
+                return null;
+            }
+
+            clipContext.ContinuityFrame = continuityGuideBuilder.TryBuild(
+                context.PreviousClip,
+                context.PreviousClipOutput,
+                context.PlannedClip,
+                continuityWindow);
+            if (clipContext.ContinuityFrame is null)
+            {
+                context.Assembly.DegradeToCut(
+                    context.PreviousClip.ClipId,
+                    "continuity input could not be built");
+                return null;
+            }
         }
 
-        clipContext.ContinuityFrame = continuityGuideBuilder.TryBuild(
+        if (!context.Assembly.TryGetAudioCarryWindow(
+            context.PreviousClip.ClipId,
+            out int audioWindow))
+        {
+            return null;
+        }
+        return boundaryAudioCarryBuilder.TryBuild(
             context.PreviousClip,
             context.PreviousClipOutput,
             context.PlannedClip,
-            continuityWindow);
-        if (clipContext.ContinuityFrame is null)
-        {
-            context.Assembly.DegradeToCut(
-                context.PreviousClip.ClipId,
-                "continuity input could not be built");
-        }
+            audioWindow);
     }
 
-    private void PrepareClipAudio(StageClipExecutionContext context, WGNodeData sourcedMedia)
+    private void PrepareClipAudio(
+        StageClipExecutionContext context,
+        WGNodeData sourcedMedia,
+        LtxBoundaryAudioCarry boundaryAudioCarry)
     {
         ClipPlan plannedClip = context.PlannedClip;
         StagePlan firstStage = plannedClip.Stages.FirstOrDefault();
@@ -150,9 +171,11 @@ internal sealed class StageClipExecutor(
         audioTimelineExecutor.PrepareClipAudio(new(
             firstStage,
             plannedClip,
+            context.Plan.FramesPerSecond,
             IsFirstClip: context.ClipIndex == 0,
             clipAudioSources,
-            context.RootPolicy));
+            context.RootPolicy),
+            boundaryAudioCarry);
     }
 
     private RuntimeArtifact ExecuteStage(

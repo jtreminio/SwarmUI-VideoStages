@@ -4,7 +4,9 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>Resolved video-frame overlap at every boundary, plus its total timeline reduction.</summary>
-internal sealed record BoundaryOverlapPlan(int[] BoundaryOverlap, int RemovedFrames);
+internal sealed record BoundaryOverlapPlan(
+    int[] BoundaryOverlap,
+    int RemovedFrames);
 
 /// <summary>
 /// One typed boundary-budget resolution. Planning may shrink authored windows to fit known clip
@@ -87,8 +89,8 @@ internal static class BoundaryOverlapPlanner
     {
         for (int i = 0; i <= boundaryCount; i++)
         {
-            int leftTrim = i > 0 ? EffectiveTrimFrames(boundaries[i - 1]) : 0;
-            int rightTrim = i < boundaryCount ? EffectiveTrimFrames(boundaries[i]) : 0;
+            int leftTrim = i > 0 ? EffectiveOverlapFrames(boundaries[i - 1]) : 0;
+            int rightTrim = i < boundaryCount ? EffectiveOverlapFrames(boundaries[i]) : 0;
             if (leftTrim + rightTrim > frames[i]!.Value - 1)
             {
                 clipIndex = i;
@@ -166,7 +168,7 @@ internal static class BoundaryOverlapPlanner
         {
             return null;
         }
-        int[] overlaps = [.. boundaries.Select(EffectiveTrimFrames)];
+        int[] overlaps = [.. boundaries.Select(EffectiveOverlapFrames)];
         return new(overlaps, overlaps.Sum());
     }
 
@@ -183,6 +185,7 @@ internal static class BoundaryOverlapPlanner
                 OverlapFrames = 0,
                 ContinuityWindowFrames = 0,
                 RequiresRuntimeMergeValidation = false,
+                CarryAudio = false,
                 Fallback = fallback == BoundaryFallback.None ? boundary.Fallback : fallback,
             }).ToArray()),
             Degraded: source.Any(IsOverlapped),
@@ -196,12 +199,13 @@ internal static class BoundaryOverlapPlanner
             OverlapFrames = 0,
             ContinuityWindowFrames = 0,
             RequiresRuntimeMergeValidation = false,
+            CarryAudio = false,
         };
 
     private static bool IsOverlapped(BoundaryPlan boundary) =>
         boundary?.Effective is BoundaryExecutionMode.Continue or BoundaryExecutionMode.Crossfade;
 
-    private static int EffectiveTrimFrames(BoundaryPlan boundary) =>
+    internal static int EffectiveOverlapFrames(BoundaryPlan boundary) =>
         boundary.Effective switch
         {
             BoundaryExecutionMode.Continue => Math.Max(1, boundary.ContinuityWindowFrames),

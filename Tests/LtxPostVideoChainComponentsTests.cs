@@ -89,6 +89,32 @@ public class LtxPostVideoChainComponentsTests
     }
 
     [Fact]
+    public void AudioResolverPrefersPreparedWindowedLatentOverCapturedNativeAudio()
+    {
+        WorkflowGenerator generator = CreateGenerator(new JObject());
+        LtxPostVideoChainState state = CreateState(generator);
+        state.CurrentOutputMedia.AttachedAudio = new WGNodeData(
+            new JArray("prepared-window-mask", 0),
+            generator,
+            WGNodeData.DT_LATENT_AUDIO,
+            null)
+        {
+            Frames = 97,
+            FPS = 24
+        };
+        LtxAudioReferenceResolver resolver = new(generator, audioReuse: null, state);
+
+        WGNodeData result = resolver.CreateSourceAudioReference();
+
+        Assert.Equal(WGNodeData.DT_LATENT_AUDIO, result.DataType);
+        Assert.Equal("prepared-window-mask", $"{result.Path[0]}");
+        Assert.Equal(0L, (long)result.Path[1]);
+        Assert.Equal(97, result.Frames);
+        Assert.Equal(24, result.FPS);
+        Assert.NotSame(state.CurrentOutputMedia.AttachedAudio.Path, result.Path);
+    }
+
+    [Fact]
     public void RebuilderMissingStageOutputFailsClosedWithoutGraphMutation()
     {
         JObject workflow = BuildLtxWorkflow();

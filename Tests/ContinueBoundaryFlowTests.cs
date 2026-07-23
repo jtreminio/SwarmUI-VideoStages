@@ -72,6 +72,125 @@ public partial class StageFlowTests
         AssertWorkflowHasNoCycles(workflow);
     }
 
+    [Theory]
+    [InlineData(Constants.BoundaryOutContinue, ContinueWindowFrames)]
+    [InlineData(Constants.BoundaryOutCrossfade, Ltx2BoundaryPolicy.DefaultFrames)]
+    public void Boundary_audio_carry_conditions_next_clip_sampler_from_previous_tail(
+        string boundary,
+        int carryFrames)
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject firstClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        firstClip["BoundaryOut"] = boundary;
+        firstClip["BoundaryOutCarryAudio"] = true;
+        firstClip["Duration"] = 0.6;
+        JObject secondClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        secondClip["Duration"] = 0.6;
+
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(512, 512, firstClip, secondClip).ToString());
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(2, samplers.Count);
+        LTXVConcatAVLatentNode secondStageInput = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>(),
+            node => ReferenceEquals(node.Latent, samplers[1].LatentImage.Connection));
+        SwarmSetAudioMaskWindowsNode carryMask = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        Assert.Same(carryMask.Latent, secondStageInput.AudioLatent.Connection);
+        Assert.Equal(1.0, carryMask.GapMaskValue.LiteralAsDouble());
+
+        JArray windows = JArray.Parse(carryMask.Windows.LiteralAsString());
+        JObject carryWindow = Assert.IsType<JObject>(Assert.Single(windows));
+        Assert.Equal(0.0, carryWindow.Value<double>("start"), 6);
+        Assert.Equal(
+            carryFrames / 24.0,
+            carryWindow.Value<double>("end"),
+            6);
+
+        LTXVAudioVAEEncodeNode encodedCarry =
+            Assert.IsType<LTXVAudioVAEEncodeNode>(
+                carryMask.Samples.Connection!.Node);
+        AudioMergeNode conditioningTrack = Assert.IsType<AudioMergeNode>(
+            encodedCarry.Audio.Connection!.Node);
+        TrimAudioDurationNode previousTail =
+            Assert.IsType<TrimAudioDurationNode>(
+                conditioningTrack.Audio2.Connection!.Node);
+        Assert.Equal(
+            (ContinueClipFrames - carryFrames) / 24.0,
+            previousTail.StartIndex.LiteralAsDouble()!.Value,
+            6);
+        Assert.Equal(
+            carryFrames / 24.0,
+            previousTail.Duration.LiteralAsDouble()!.Value,
+            6);
+        Assert.True(ReachesUpstream(
+            bridge,
+            previousTail.Audio.Connection!.Node,
+            samplers[0].Id));
+        Assert.True(ReachesUpstream(bridge, samplers[1], conditioningTrack.Id));
+
+        // Carry is generation-time context. There is no second AudioMerge near final publication.
+        Assert.Single(bridge.Graph.NodesOfType<AudioMergeNode>());
+        SwarmSaveAnimationWSNode save =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.IsType<AudioConcatNode>(save.Audio.Connection!.Node);
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Boundary_audio_carry_uses_plan_timing_when_next_clip_starts_from_image_root()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject firstClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        firstClip["BoundaryOut"] = Constants.BoundaryOutContinue;
+        firstClip["BoundaryOutCarryAudio"] = true;
+        firstClip["Duration"] = 5.0;
+        JObject secondClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        secondClip["Duration"] = 5.0;
+
+        T2IParamInput input = BuildInput(
+            models.BaseModel,
+            MakeRootConfig(512, 512, firstClip, secondClip).ToString());
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNoopSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmSetAudioMaskWindowsNode carryMask = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        LTXVConcatAVLatentNode conditionedInput = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>(),
+            node => ReferenceEquals(node.AudioLatent.Connection, carryMask.Latent));
+        Assert.Contains(
+            bridge.Graph.FindInputsConnectedTo(conditionedInput.Latent),
+            consumer => consumer.Node is SwarmKSamplerNode
+                && consumer.Input.Name == "latent_image");
+
+        AudioMergeNode conditioningTrack = Assert.IsType<AudioMergeNode>(
+            Assert.IsType<LTXVAudioVAEEncodeNode>(
+                carryMask.Samples.Connection!.Node)
+            .Audio.Connection!.Node);
+        TrimAudioDurationNode previousTail = Assert.IsType<TrimAudioDurationNode>(
+            conditioningTrack.Audio2.Connection!.Node);
+        Assert.NotEmpty(bridge.Graph.FindInputsConnectedTo(previousTail.AUDIO));
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
     [Fact]
     public void Continue_boundary_with_explicit_first_frame_ref_degrades_to_cut()
     {

@@ -102,6 +102,7 @@ export const buildDefaultClip = (
         skipped: false,
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
+        boundaryOutCarryAudio: false,
         boundaryOutOverlap:
             boundaryOverlapConstraints(continueRule).defaultFrames,
         duration: previousClip
@@ -220,6 +221,7 @@ export const normalizeClip = (
         skipped: !!rawClip.skipped,
         hue: normalizeStoredHue(rawClip.hue),
         boundaryOut,
+        boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
         boundaryOutOverlap: normalizeContinueOverlap(
             rawClip.boundaryOutOverlap,
             boundaryOverlapConstraints(boundaryRule),

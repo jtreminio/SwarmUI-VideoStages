@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -113,6 +114,16 @@ public class AudioSegmentCombinerTests
         Assert.NotNull(output);
         Assert.Equal("AudioMerge", output.Node.ClassTypeName);
         Assert.Equal("add", workflow[output.Node.Id]?["inputs"]?["merge_method"]?.ToString());
+
+        // AudioConcat only turns silence + the offset segment into one positioned overlay track.
+        // That positioned track is then connected to AudioMerge.audio2, never appended to the base.
+        AudioConcatNode placement = Assert.Single(
+            bridge.Graph.NodesOfType<AudioConcatNode>());
+        Assert.IsType<EmptyAudioNode>(placement.Audio1.Connection!.Node);
+        Assert.IsType<TrimAudioDurationNode>(placement.Audio2.Connection!.Node);
+        Assert.Contains(
+            bridge.Graph.NodesOfType<AudioMergeNode>(),
+            merge => ReferenceEquals(merge.Audio2.Connection, placement.AUDIO));
     }
 
     [Fact]

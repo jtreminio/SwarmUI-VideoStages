@@ -1,4 +1,9 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
@@ -7,7 +12,13 @@ internal sealed class ClipAudioPreparer(
     WorkflowGenerator g,
     LtxAudioInjector audioInjector)
 {
-    public void Prepare(ClipAudioExecutionContext context)
+    private const string MergeMethodAdd = "add";
+    private const long SilenceSampleRate = 44100;
+    private const long SilenceChannels = 2;
+
+    public void Prepare(
+        ClipAudioExecutionContext context,
+        LtxBoundaryAudioCarry boundaryAudioCarry = null)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (g.CurrentMedia is null)
@@ -19,21 +30,39 @@ internal sealed class ClipAudioPreparer(
         bool suppressNative = context.RootPolicy.SuppressesNativeAudioForStage(
             context.FirstStage,
             context.PlannedClip);
-        WGNodeData baseAudio = PlannedAudioSourceSelector.Select(
+        WGNodeData selectedBaseAudio = PlannedAudioSourceSelector.Select(
             context.PlannedClip.ClipId,
             context.PlannedClip.Audio.Base,
             context.Sources,
             suppressNative);
-        int? fps = g.CurrentMedia.GetRawFPS();
+        // Native audio is the model-generated/default track, not an authored full-clip bed.
+        // Boundary carry replaces its opening with preserved context and lets LTX generate the rest.
+        bool carryStartsGeneratedAudio = boundaryAudioCarry is not null
+            && context.PlannedClip.Audio.Base.Kind is
+                AudioBaseSourceKind.None or AudioBaseSourceKind.Native;
+        WGNodeData baseAudio = carryStartsGeneratedAudio
+            ? null
+            : selectedBaseAudio;
+        int? fps = context.FramesPerSecond > 0
+            ? context.FramesPerSecond
+            : g.CurrentMedia.GetRawFPS();
         double duration = context.PlannedClip.Frames is int frames && fps is > 0
             ? (double)frames / fps.Value
             : 0;
+        WGNodeData baseWithBoundaryCarry = ApplyBoundaryAudioCarry(
+            baseAudio,
+            boundaryAudioCarry,
+            duration);
         WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(
             context.PlannedClip.ClipId,
             context.PlannedClip.Audio.Segments,
-            baseAudio,
+            baseWithBoundaryCarry,
             duration,
             out IReadOnlyList<(double Start, double End)> segmentWindows);
+        IReadOnlyList<(double Start, double End)> preserveWindows =
+            boundaryAudioCarry is null
+                ? segmentWindows
+                : [(0, boundaryAudioCarry.DurationSeconds), .. segmentWindows];
 
         AttachClipAudio(
             context,
@@ -41,7 +70,7 @@ internal sealed class ClipAudioPreparer(
             baseAudio,
             combinedAudio,
             duration,
-            segmentWindows);
+            preserveWindows);
     }
 
     private void AttachClipAudio(
@@ -50,28 +79,28 @@ internal sealed class ClipAudioPreparer(
         WGNodeData baseAudio,
         WGNodeData combinedAudio,
         double duration,
-        IReadOnlyList<(double Start, double End)> segmentWindows)
+        IReadOnlyList<(double Start, double End)> preserveWindows)
     {
         bool hasGenerationStage = context.FirstStage is not null;
-        bool segmentsOverNoBase = segmentWindows.Count > 0
+        bool overlaysOverNoBase = preserveWindows.Count > 0
             && baseAudio is null
             && duration > 0;
-        bool segmentsConditionGeneration = hasGenerationStage
+        bool overlaysConditionRootGeneration = hasGenerationStage
             && context.IsFirstClip
-            && segmentsOverNoBase
+            && overlaysOverNoBase
             && audioInjector.TryInject(
                 combinedAudio,
                 matchVideoLengthToAudio: false,
-                preserveWindows: segmentWindows);
+                preserveWindows);
 
-        if (segmentsConditionGeneration)
+        if (overlaysConditionRootGeneration)
         {
             currentMedia.AttachedAudio = null;
         }
-        else if (segmentsOverNoBase
+        else if (overlaysOverNoBase
             && audioInjector.TryBuildPreserveWindowedAudioLatent(
                 combinedAudio,
-                segmentWindows,
+                preserveWindows,
                 stableIdSlot: context.PlannedClip.ClipId + 1) is WGNodeData windowedLatent)
         {
             currentMedia.AttachedAudio = windowedLatent;
@@ -95,12 +124,53 @@ internal sealed class ClipAudioPreparer(
         }
         else if (!context.RootPolicy.UsesStageHandoff
             && context.IsFirstClip
-            && segmentWindows.Count > 0
+            && preserveWindows.Count > 0
             && baseAudio is not null)
         {
             _ = audioInjector.TryInject(
                 combinedAudio,
                 context.PlannedClip.Audio.Length.NonHandoffInjectionMatchesAudioLength);
         }
+    }
+
+    private WGNodeData ApplyBoundaryAudioCarry(
+        WGNodeData baseAudio,
+        LtxBoundaryAudioCarry carry,
+        double clipDurationSeconds)
+    {
+        if (carry?.Tail?.Path is not JArray carryPath
+            || clipDurationSeconds <= 0)
+        {
+            return baseAudio;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        INodeOutput carryTail = bridge.ResolvePath(carryPath);
+        if (carryTail is null)
+        {
+            return baseAudio;
+        }
+
+        INodeOutput bed = bridge.ResolvePath(baseAudio?.Path);
+        if (bed is null)
+        {
+            EmptyAudioNode silence = bridge.AddNode(new EmptyAudioNode()).With(
+                Duration: clipDurationSeconds,
+                SampleRate: SilenceSampleRate,
+                Channels: SilenceChannels);
+            bridge.SyncNode(silence);
+            bed = silence.AUDIO;
+        }
+
+        AudioMergeNode merge = bridge.AddNode(
+            new AudioMergeNode().With(MergeMethod: MergeMethodAdd));
+        merge.Audio1.ConnectToUntyped(bed);
+        merge.Audio2.ConnectToUntyped(carryTail);
+        bridge.SyncNode(merge);
+        return new WGNodeData(
+            WorkflowBridge.ToPath(merge.AUDIO),
+            g,
+            WGNodeData.DT_AUDIO,
+            baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? carry.Tail.Compat);
     }
 }

@@ -62,7 +62,8 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             stageRunner,
             audioTimelineExecutor,
             guideReferences,
-            new ContinuityGuideBuilder(generator));
+            new ContinuityGuideBuilder(generator),
+            new LtxBoundaryAudioCarryBuilder(generator));
         return new Ltx2GenerationSessionFactory(
             generator,
             audioTimelineExecutor,

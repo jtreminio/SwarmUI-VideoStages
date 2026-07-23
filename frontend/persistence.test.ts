@@ -151,6 +151,7 @@ describe("persistence", () => {
                     modelProfileId: "ltx-2.3",
                     skipped: false,
                     boundaryOut: "cut",
+                    boundaryOutCarryAudio: false,
                     boundaryOutOverlap: 8,
                     duration: 3,
                     audioSource: "Native",
@@ -561,22 +562,36 @@ describe("persistence", () => {
             expect(getState().clips[0].duration).toBe(5);
         });
 
-        it("round-trips per-clip boundaryOut through the Data param", () => {
+        it("round-trips per-clip boundary settings through the Data param", () => {
             saveClips([
-                minimalClip({ duration: 3, boundaryOut: "crossfade" }),
+                minimalClip({
+                    duration: 3,
+                    boundaryOut: "crossfade",
+                    boundaryOutCarryAudio: true,
+                }),
                 minimalClip({ duration: 4, boundaryOut: "continue" }),
             ]);
             const stored = JSON.parse(dataInput().value) as {
-                clips: { boundaryOut: string }[];
+                clips: {
+                    boundaryOut: string;
+                    boundaryOutCarryAudio: boolean;
+                }[];
             };
             expect(stored.clips.map((c) => c.boundaryOut)).toEqual([
                 "crossfade",
                 "continue",
             ]);
+            expect(stored.clips.map((c) => c.boundaryOutCarryAudio)).toEqual([
+                true,
+                false,
+            ]);
             expect(getClips().map((clip) => clip.boundaryOut)).toEqual([
                 "crossfade",
                 "continue",
             ]);
+            expect(
+                getClips().map((clip) => clip.boundaryOutCarryAudio),
+            ).toEqual([true, false]);
         });
 
         it("round-trips a per-clip retake through the Data param", () => {

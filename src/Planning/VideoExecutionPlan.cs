@@ -165,6 +165,12 @@ internal sealed record BoundaryPlan(
     public int FrameStep { get; init; } = 1;
 
     public int MinFrames { get; init; } = 1;
+
+    /// <summary>
+    /// The next generated clip receives this boundary's outgoing audio tail as preserved opening
+    /// context. This is generation-time conditioning, not final timeline mixing.
+    /// </summary>
+    public bool CarryAudio { get; init; }
 }
 
 internal enum BoundaryExecutionMode

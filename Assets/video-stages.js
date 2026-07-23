@@ -2076,6 +2076,7 @@
       skipped: false,
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
+      boundaryOutCarryAudio: false,
       boundaryOutOverlap: boundaryOverlapConstraints(continueRule).defaultFrames,
       duration: previousClip ? previousClip.duration : snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
@@ -2168,6 +2169,7 @@
       skipped: !!rawClip.skipped,
       hue: normalizeStoredHue(rawClip.hue),
       boundaryOut,
+      boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
       boundaryOutOverlap: normalizeContinueOverlap(
         rawClip.boundaryOutOverlap,
         boundaryOverlapConstraints(boundaryRule)
@@ -2764,6 +2766,7 @@
         modelProfileId: clip.modelProfileId,
         skipped: clip.skipped,
         boundaryOut: clip.boundaryOut,
+        boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
         boundaryOutOverlap: clip.boundaryOutOverlap,
         duration: clip.duration,
         audioSource: clip.audioSource,
@@ -3538,6 +3541,7 @@
     "skipped",
     "hue",
     "boundaryOut",
+    "boundaryOutCarryAudio",
     "boundaryOutOverlap",
     "duration",
     "audioSource",
@@ -5632,7 +5636,11 @@
         fallback = left.clip.architecture !== right.clip.architecture ? "cross-architecture" : constraints?.targetRequiresGeneratedEntry === true && right.clip.sourceVideo !== null ? "target-is-sourced-video" : constraints?.targetRequiresStage === true && right.stages.length === 0 ? "target-has-no-stage" : constraints?.targetDisallowsInitialReference === true && right.clip.refs.some(isInitialGuidance) ? "target-has-first-frame-reference" : "architecture-rule";
       }
       const overlapFrames = effective === "cut" ? 0 : left.clip.boundaryOutOverlap;
-      const title = effective === "continue" && overlapFrames > 0 ? `Continue (${plural(overlapFrames, "frame")} overlap)` : effective[0].toUpperCase() + effective.slice(1);
+      const carryAudio = effective !== "cut" && left.clip.boundaryOutCarryAudio === true && right.stages.length > 0;
+      let title = effective === "continue" && overlapFrames > 0 ? `Continue (${plural(overlapFrames, "frame")} overlap)` : effective[0].toUpperCase() + effective.slice(1);
+      if (carryAudio) {
+        title += " + generated audio continuation";
+      }
       const fallbackDescription = fallback === "target-is-sourced-video" ? "next clip is sourced footage" : fallback === "target-has-no-stage" ? "next clip has no generation stage" : fallback === "target-has-first-frame-reference" ? "next clip has a first-frame reference" : fallback === "cross-architecture" ? "clips use different video architectures" : fallback === "architecture-rule" ? "the selected architecture rule does not allow this join" : "";
       const result = fallback === "none" ? title : `${requested} → cut (${fallbackDescription})`;
       return {
@@ -5643,6 +5651,7 @@
         effective,
         fallback,
         overlapFrames,
+        carryAudio,
         label: `Clip ${left.index + 1} → ${right.index + 1}: ${result}`
       };
     });
@@ -8835,6 +8844,10 @@
     const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
     const state = getState();
     const fps = Math.round(safeFps(state.fps));
+    const carryTargetHasStage = capability.rightClipIdx !== null && clips[capability.rightClipIdx]?.stages.some(
+      (stage) => !stage.skipped
+    ) === true;
+    const carryAudioActive = clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
     const joinSpecs = capability.modes.map((mode) => ({
       value: mode,
       label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
@@ -8912,6 +8925,25 @@
           "How many frames the two clips share at the join. For continue this is the frozen context handed to the next clip; for crossfade it is the length of the dissolve. A clip too short for the overlap falls back to a cut."
         )
       );
+      body.appendChild(
+        buildCheckbox(
+          "Continue outgoing audio into next clip",
+          clip?.boundaryOutCarryAudio === true,
+          (enabled) => {
+            ctx.commit((cs) => {
+              const c = cs[leftClipIdx];
+              if (c) {
+                c.boundaryOutCarryAudio = enabled;
+              }
+            });
+            ctx.render();
+          },
+          {
+            disabled: !carryTargetHasStage,
+            help: "Preserve this clip's audio tail at the start of the next clip's LTX generation, then let LTX generate its continuation. The next clip needs an active stage."
+          }
+        )
+      );
     }
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
@@ -8937,6 +8969,9 @@
         if (window2 < requested) {
           text += " The window was reduced because a clip is too short.";
         }
+        if (carryAudioActive) {
+          text += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
+        }
         info.textContent = text;
       }
     } else {
@@ -8954,6 +8989,9 @@
         let text = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
         if (overlapFrames < requested) {
           text += " The window was reduced because a clip is too short.";
+        }
+        if (carryAudioActive) {
+          text += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
         }
         info.textContent = text;
       }
@@ -13560,6 +13598,7 @@ The conversion is one undoable change.`;
         if (prev && clips.length >= 2) {
           const prevJoin = clips[clips.length - 2];
           prev.boundaryOut = prevJoin.boundaryOut;
+          prev.boundaryOutCarryAudio = prevJoin.boundaryOutCarryAudio;
           prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
         }
         clips.push(

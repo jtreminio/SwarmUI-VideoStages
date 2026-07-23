@@ -58,6 +58,7 @@ interface ClipFixture {
     prompt?: string;
     windows?: WindowFixture[];
     boundaryOut?: "cut" | "continue" | "crossfade";
+    boundaryOutCarryAudio?: boolean;
     retake?: {
         startSeconds: number;
         lengthSeconds: number;
@@ -82,6 +83,7 @@ interface ClipFixture {
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     boundaryOut: clip.boundaryOut ?? "cut",
+    boundaryOutCarryAudio: clip.boundaryOutCarryAudio ?? false,
     audioSource: clip.audioSource ?? "Native",
     controlNetLora: clip.controlNetLora ?? "",
     ...(clip.icLoras ? { icLoras: clip.icLoras } : {}),
@@ -2935,6 +2937,23 @@ describe("createTimelineDetailStrip", () => {
             );
             return field?.querySelector<HTMLSelectElement>("select") ?? null;
         };
+        const carryAudioCheckbox = (): HTMLInputElement | null => {
+            const labels = Array.from(
+                detailBody()?.querySelectorAll<HTMLLabelElement>(
+                    "label.vst-audio-field-check",
+                ) ?? [],
+            );
+            const row = labels.find((label) =>
+                label.textContent?.includes(
+                    "Continue outgoing audio into next clip",
+                ),
+            );
+            return (
+                row?.querySelector<HTMLInputElement>(
+                    'input[type="checkbox"]',
+                ) ?? null
+            );
+        };
 
         it("renders a breadcrumb and join select for the seam", () => {
             setup([
@@ -2986,6 +3005,38 @@ describe("createTimelineDetailStrip", () => {
             expect(savedClips(saveSpy)[0].boundaryOutOverlap).toBe(24);
         });
 
+        it("offers opt-in outgoing audio carry for an overlapped boundary", () => {
+            setup([
+                { duration: 4, boundaryOut: "continue", stages: [{}] },
+                { duration: 4, stages: [{}] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+            const checkbox = carryAudioCheckbox();
+            expect(checkbox).not.toBeNull();
+            expect(checkbox?.checked).toBe(false);
+
+            if (!checkbox) {
+                throw new Error("boundary audio carry checkbox missing");
+            }
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(savedClips(saveSpy)[0].boundaryOutCarryAudio).toBe(true);
+            expect(infoText()).toContain(
+                "audio tail becomes preserved opening context",
+            );
+        });
+
+        it("disables audio continuation when the next clip has no generation stage", () => {
+            setup([
+                { duration: 4, boundaryOut: "crossfade", stages: [{}] },
+                { duration: 4, stages: [] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+
+            expect(carryAudioCheckbox()?.disabled).toBe(true);
+        });
+
         it("shows an Overlap selector and dissolve info for a crossfade boundary", () => {
             setup([
                 { duration: 4, boundaryOut: "crossfade", stages: [{}] },
@@ -3007,6 +3058,7 @@ describe("createTimelineDetailStrip", () => {
             ]);
             setSelection({ kind: "boundary", leftClipIdx: 0 });
             expect(overlapSelect()).toBeNull();
+            expect(carryAudioCheckbox()).toBeNull();
             expect(
                 detailBody()?.querySelector(".vst-boundary-note"),
             ).toBeNull();

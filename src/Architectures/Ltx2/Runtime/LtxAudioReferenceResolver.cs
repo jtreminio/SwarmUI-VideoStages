@@ -61,6 +61,19 @@ internal sealed class LtxAudioReferenceResolver
                 ResolveAudioCompat());
         }
 
+        if (state.CurrentOutputMedia?.AttachedAudio is WGNodeData
+            {
+                DataType: var attachedType,
+                Path: JArray { Count: 2 },
+            } preparedAudioLatent
+            && attachedType == WGNodeData.DT_LATENT_AUDIO)
+        {
+            // Clip preparation may have installed a deliberately window-masked latent (audio
+            // segments over no locked base, or incoming boundary audio context). It is already the
+            // exact sampling input and must outrank the captured root chain's native audio.
+            return CloneAudioReference(preparedAudioLatent);
+        }
+
         if (ReferencesCapturedDecodedAudio(state.CurrentOutputMedia?.AttachedAudio))
         {
             // Final publication exposes decoded audio, and that decode can still trace to an
@@ -98,22 +111,16 @@ internal sealed class LtxAudioReferenceResolver
 
     private bool ReferencesCapturedDecodedAudio(WGNodeData audio)
     {
-        if (audio?.Path is not JArray { Count: 2 } audioPath
-            || state.AudioLatentPath is not { Count: 2 })
+        if (state.AudioLatentPath is not { Count: 2 }
+            || !LtxDecodedAudioHandoff.TryResolveNativeLatent(
+                g,
+                audio,
+                out JArray nativePath))
         {
             return false;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.ResolvePath(audioPath)?.Node is not LTXVAudioVAEDecodeNode decode
-            || decode.Samples.Connection is not INodeOutput samples)
-        {
-            return false;
-        }
-
-        return JToken.DeepEquals(
-            WorkflowBridge.ToPath(samples),
-            state.AudioLatentPath);
+        return JToken.DeepEquals(nativePath, state.AudioLatentPath);
     }
 
     internal bool IsExplicitUploadAudio(WGNodeData audio)

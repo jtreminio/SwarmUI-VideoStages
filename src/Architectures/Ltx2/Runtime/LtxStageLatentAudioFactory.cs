@@ -123,8 +123,11 @@ internal sealed class LtxStageLatentAudioFactory(
         WGNodeData sourceMedia)
     {
         int fps = runtimeSettings.ResolveFps(genInfo, sourceMedia);
-        WGNodeData withAudio = latent.EnsureHasAudioIfNeeded(genInfo.Vae, g.CurrentAudioVae);
-        PatchEmptyLatentAudioAfterEnsure(latent, withAudio, fps);
+        WGNodeData nativeHandoff = LtxDecodedAudioHandoff.PreferNativeLatent(g, latent);
+        WGNodeData withAudio = nativeHandoff.EnsureHasAudioIfNeeded(
+            genInfo.Vae,
+            g.CurrentAudioVae);
+        PatchEmptyLatentAudioAfterEnsure(nativeHandoff, withAudio, fps);
         withAudio.FPS = fps;
 
         return withAudio;

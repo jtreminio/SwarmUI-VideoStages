@@ -1181,6 +1181,21 @@ public class VideoStagesSpecParserClipsTests
         ClipSpec parsed = VideoStagesSpecParser.Parse(parser).Clips.Single();
 
         Assert.Equal(Constants.BoundaryOutCut, parsed.BoundaryOut);
+        Assert.False(parsed.BoundaryOutCarryAudio);
+    }
+
+    [Fact]
+    public void ParseClips_BoundaryOutCarryAudio_PreservesAuthoredOptIn()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["BoundaryOut"] = Constants.BoundaryOutCrossfade;
+        clip["BoundaryOutCarryAudio"] = true;
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        WorkflowGenerator parser = BuildParser(json);
+
+        ClipSpec parsed = VideoStagesSpecParser.Parse(parser).Clips.Single();
+
+        Assert.True(parsed.BoundaryOutCarryAudio);
     }
 
     // No VideoFPS param and no top-level JSON FPS => the parser falls back to 24 fps, so seconds map to

@@ -71,7 +71,11 @@ internal static class VideoClipSpecParser
                     "BoundaryOutOverlap",
                     0,
                     location)),
-            SourceVideo: sourceVideo)
+            SourceVideo: sourceVideo,
+            BoundaryOutCarryAudio: VideoStagesJsonReader.GetOptionalBool(
+                clipObject,
+                "BoundaryOutCarryAudio",
+                false))
         {
             AuthoredArchitectureId = VideoStagesJsonReader.GetString(
                 clipObject,

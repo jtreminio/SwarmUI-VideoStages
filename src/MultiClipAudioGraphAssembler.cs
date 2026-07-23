@@ -97,8 +97,8 @@ internal static class MultiClipAudioGraphAssembler
     }
 
     /// <summary>
-    /// Concatenates clip audio after dropping each outgoing overlap from its source track. This keeps
-    /// later audio aligned with its earlier-in-the-timeline video after every interior boundary.
+    /// Concatenates clip audio on the resolved video-overlap timeline. The incoming clip owns each
+    /// overlap, including any audio continuation it generated from boundary context.
     /// </summary>
     public static INodeOutput Merge(
         WorkflowBridge bridge,
@@ -110,7 +110,6 @@ internal static class MultiClipAudioGraphAssembler
         {
             return CascadeConcat(bridge, audioOutputs);
         }
-
         int fps = clips[0].FramesPerSecond;
         List<INodeOutput> aligned = [];
         for (int i = 0; i < audioOutputs.Count; i++)
