@@ -14,49 +14,23 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     [Fact]
-    public void Native_stage_prompting_uses_clip_prompt_from_json()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        JObject clip = MakeClip(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
-            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10));
-        string stagesJson = new JArray(clip).ToString();
-
-        // Clip prompt now rides a <videoclip[0]> tag, not a JSON "Prompt" field.
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel, models.VideoModel, stagesJson,
-            prompt: "global-only words <videoclip[0]>clip-zero words");
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        List<string> conditioningTexts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
-            .Select(n => n.Text.LiteralAsString())
-            .Where(text => !string.IsNullOrWhiteSpace(text))
-            .ToList();
-
-        Assert.NotEmpty(conditioningTexts);
-        Assert.Contains(conditioningTexts, text => text.Contains("clip-zero words"));
-        Assert.DoesNotContain(conditioningTexts, text => text.Contains("global-only words"));
-        Assert.DoesNotContain(conditioningTexts, text => text.Contains("videostages") || text.Contains("\"stages\""));
-    }
-
-    [Fact]
     public void Native_stage_prompting_falls_back_to_global_prompt_without_clip_or_stage_prompt()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: "global-only words");
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        (JObject workflow, WorkflowGenerator unusedGenerator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: false));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        List<string> conditioningTexts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
-            .Select(n => n.Text.LiteralAsString())
+        List<string> conditioningTexts = bridge.Graph.NodesOfType<SwarmClipTextEncodeAdvancedNode>()
+            .Select(n => n.Prompt.LiteralAsString())
             .Where(text => !string.IsNullOrWhiteSpace(text))
             .ToList();
 
@@ -68,7 +42,7 @@ public partial class StageFlowTests
     public void Stage_section_concatenates_with_matching_clip_section()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         string stagesJson = new JArray(clip).ToString();
@@ -78,11 +52,14 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, stagesJson,
             prompt: "global-only words <videoclip[0]>clip-zero words <videoclip[0,0]>stage-zero words");
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        (JObject workflow, WorkflowGenerator unusedGenerator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: false));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        List<string> conditioningTexts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
-            .Select(n => n.Text.LiteralAsString())
+        List<string> conditioningTexts = bridge.Graph.NodesOfType<SwarmClipTextEncodeAdvancedNode>()
+            .Select(n => n.Prompt.LiteralAsString())
             .Where(text => !string.IsNullOrWhiteSpace(text))
             .ToList();
 
@@ -122,7 +99,7 @@ public partial class StageFlowTests
         {
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
         }, -10);
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
@@ -137,18 +114,15 @@ public partial class StageFlowTests
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: "global prompt");
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input, BuildNativeSteps(attachAudioToCurrentMedia: true));
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         ComfyNode loraLoader = Assert.Single(LoraLoaderNodesOf(bridge));
-        List<ComfyNode> positiveEncoderClipStarts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
-            .Where(node => node.Text.LiteralAsString() == "global prompt")
-            .Select(node => node.Clip.Connection!.Node)
-            .ToList();
-
-        Assert.Equal(2, positiveEncoderClipStarts.Count);
-        Assert.Contains(positiveEncoderClipStarts, start => !ReachesUpstream(bridge, start, loraLoader.Id));
-        Assert.Contains(positiveEncoderClipStarts, start => ReachesUpstream(bridge, start, loraLoader.Id));
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(2, samplers.Count);
+        Assert.False(ReachesUpstream(bridge, samplers[0], loraLoader.Id));
+        Assert.True(ReachesUpstream(bridge, samplers[1], loraLoader.Id));
     }
 
     [Fact]
@@ -159,7 +133,7 @@ public partial class StageFlowTests
         {
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
         }, -10);
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;

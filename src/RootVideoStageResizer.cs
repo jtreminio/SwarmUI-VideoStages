@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.Execution;
 
 namespace VideoStages;
 
@@ -174,7 +173,6 @@ internal sealed class RootVideoStageResizer(
 
         using WorkflowBridge bridge = BridgeSync.For(g);
         ImageScaleNode scale = bridge.NodeAt<ImageScaleNode>(path);
-        INodeOutput insertedFrom = null;
         if (scale is null)
         {
             if (bridge.ResolvePath(path) is not INodeOutput sourceOutput)
@@ -184,7 +182,6 @@ internal sealed class RootVideoStageResizer(
             scale = bridge.AddNode(new ImageScaleNode());
             scale.Image.ConnectToUntyped(sourceOutput);
             g.CurrentMedia = g.CurrentMedia.WithPath(scale.IMAGE);
-            insertedFrom = sourceOutput;
         }
 
         scale.With(
@@ -196,22 +193,5 @@ internal sealed class RootVideoStageResizer(
             scale.UpscaleMethod.Set("lanczos");
         }
         bridge.SyncNode(scale);
-
-        if (insertedFrom is not null)
-        {
-            // A save watching the pre-conform root output must follow it through the inserted
-            // scale: every later save retarget (stage handoff, cross-clip merge) matches the
-            // post-scale path only, so a save left on the raw output would ship the unconformed
-            // root generation as an extra unrelated video.
-            SaveAnimationRetargeter.Retarget(
-                bridge,
-                save => save.Images.Connection is INodeOutput existing
-                    && existing.Node.Id == insertedFrom.Node.Id
-                    && existing.SlotIndex == insertedFrom.SlotIndex
-                    && OutputRegistry.CanAdvanceFinalHostSave(g, save.Id),
-                bridge.ResolvePath(WorkflowBridge.ToPath(scale.IMAGE)),
-                newAudio: null,
-                retargetAudio: false);
-        }
     }
 }

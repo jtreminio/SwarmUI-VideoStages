@@ -204,26 +204,6 @@ internal static class LtxChainOps
         };
     }
 
-    public static void RetargetAnimationSaves(
-        WorkflowBridge bridge,
-        INodeOutput oldOutput,
-        INodeOutput newOutput,
-        Func<SwarmSaveAnimationWSNode, bool> canRetarget = null)
-    {
-        if (oldOutput is null || newOutput is null)
-        {
-            return;
-        }
-
-        SaveAnimationRetargeter.Retarget(
-            bridge,
-            save => save.Images.Connection == oldOutput
-                && (canRetarget?.Invoke(save) ?? true),
-            newOutput,
-            newAudio: null,
-            retargetAudio: false);
-    }
-
     private static void ReplaceVideoDecode(
         WorkflowBridge bridge,
         string decodeId,

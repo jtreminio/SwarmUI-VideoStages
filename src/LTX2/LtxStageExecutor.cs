@@ -7,6 +7,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -255,13 +256,13 @@ internal sealed class LtxStageExecutor(
         WGNodeData sourceMedia,
         LtxPostVideoChainCapture postVideoChain)
     {
-        StageSpec stage = stageFrame.Stage;
+        StagePlan stage = stageFrame.Stage;
         ClipSpec clip = stageFrame.ClipContext.Clip;
-        genInfo.StartStep = (int)Math.Floor(stage.Steps * (1 - stage.Control));
+        genInfo.StartStep = (int)Math.Floor(stage.Core.Steps * (1 - stage.Core.Control));
         // The per-frame noise mask (not StartStep) gates what regenerates, so the whole latent must
         // stay denoise-capable from step 0.
-        bool retakeActive = stage.RetakeWindow is not null
-            && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model);
+        bool retakeActive = stage.Retake is not null
+            && VideoStageModelCompat.IsLtxV2VideoModel(stage.Core.Model);
         if (retakeActive)
         {
             genInfo.StartStep = 0;
@@ -355,19 +356,22 @@ internal sealed class LtxStageExecutor(
     private WGNodeData ApplyRetakeMaskIfActive(
         WGNodeData encodedLatent,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageSpec stage,
+        StagePlan stage,
         bool retakeActive)
     {
-        if (!retakeActive || stage.RetakeWindow is null)
+        if (!retakeActive || stage.Retake is null)
         {
             return encodedLatent;
         }
-        return new LtxVideoRetakeMasker(g).Apply(encodedLatent, genInfo, stage.RetakeWindow);
+        return new LtxVideoRetakeMasker(g).Apply(
+            encodedLatent,
+            genInfo,
+            new RetakeWindowSpec(stage.Retake.StartFrame, stage.Retake.LengthFrames, stage.Retake.Strength));
     }
 
-    private static bool IsPixelOrModelScaleStage(StageSpec stage)
+    private static bool IsPixelOrModelScaleStage(StagePlan stage)
     {
-        return stage.Upscale != 1 && (stage.IsPixelUpscale || stage.IsModelUpscale);
+        return stage.Upscale.Mode is StageUpscaleMode.Pixel or StageUpscaleMode.Model;
     }
 
     private string AddImageFromBatch(JArray imagePath, int batchIndex, JToken length)
@@ -799,7 +803,7 @@ internal sealed class LtxStageExecutor(
         int outputWidth = g.CurrentMedia?.Width ?? sourceMedia.Width ?? g.UserInput.GetImageWidth();
         int outputHeight = g.CurrentMedia?.Height ?? sourceMedia.Height ?? g.UserInput.GetImageHeight();
         bool splicedIntoNativeChain = postVideoChain is not null;
-        bool parallelMultiClip = stageFrame.ParallelMultiClip;
+        bool parallelMultiClip = stageFrame.ExecutionOptions.RequiresDedicatedOutput;
         if (splicedIntoNativeChain)
         {
             if (parallelMultiClip)
@@ -848,10 +852,6 @@ internal sealed class LtxStageExecutor(
         {
             string trimNodeId = AddSwarmTrimFrames(g.CurrentMedia.Path, trimStartFrames, trimEndFrames);
             g.CurrentMedia = g.CurrentMedia.WithPath([trimNodeId, 0]);
-            if (splicedIntoNativeChain && !postVideoChain.HasPostDecodeWrappers && !parallelMultiClip)
-            {
-                LtxPostVideoChainSplicer.RetargetAnimationSaves(postVideoChain, g, g.CurrentMedia.Path);
-            }
             ApplyCurrentMediaOutputMetadata(outputWidth, outputHeight, genInfo.Frames, genInfo.VideoFPS);
         }
 

@@ -71,12 +71,15 @@ public sealed class LtxIcLoraTests
         return entry;
     }
 
-    private static (JObject Workflow, WorkflowBridge Bridge) Generate(JObject clip, TestModelBundle models)
+    private static (JObject Workflow, WorkflowBridge Bridge) Generate(
+        JObject clip,
+        TestModelBundle models,
+        IEnumerable<WorkflowGenerator.WorkflowGenStep> extraSteps = null)
     {
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            BuildCoreVideoWorkflowSteps());
+            BuildCoreVideoWorkflowSteps().Concat(extraSteps ?? []));
         return (workflow, WorkflowBridge.Create(workflow));
     }
 
@@ -265,8 +268,8 @@ public sealed class LtxIcLoraTests
         LTXAddVideoICLoRAGuideNode guide =
             Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         ResizeImageMaskNodeNode resize = Assert.Single(
-            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>()
-                .Where(n => n.ResizeType.LiteralAsString() == "scale dimensions"));
+            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
+            n => n.ResizeType.LiteralAsString() == "scale dimensions");
         Assert.True(
             GuideImageTracesTo(bridge, guide, resize),
             "Expected the guide image to trace through the stage-dims resize.");
@@ -337,8 +340,8 @@ public sealed class LtxIcLoraTests
         LTXAddVideoICLoRAGuideNode guide =
             Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         ResizeImageMaskNodeNode resize = Assert.Single(
-            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>()
-                .Where(n => n.ResizeType.LiteralAsString() == "scale dimensions"));
+            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
+            n => n.ResizeType.LiteralAsString() == "scale dimensions");
         Assert.True(
             GuideImageTracesTo(bridge, guide, resize),
             "Expected the uploaded drive media to pass through the stage-dims resize.");
@@ -661,6 +664,44 @@ public sealed class LtxIcLoraTests
         Assert.Same(post, hdrSave.Images.Connection?.Node);
         Assert.Same(post.HdrLinear, hdrSave.Images.Connection);
     }
+
+    [Fact]
+    public void Hdr_entry_rewrites_only_the_owned_final_save()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraHdr");
+
+        JObject entry = MakeIcLora("UnitTest_IcLoraHdr");
+        entry["Preset"] = "hdr";
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(
+            clip,
+            models,
+            [SeedUnrelatedAnimationSaveStep()]);
+        using WorkflowBridge _ = bridge;
+
+        SwarmSaveAnimationWSNode unrelated =
+            Assert.IsType<SwarmSaveAnimationWSNode>(bridge.Graph.GetNode("991"));
+        Assert.Equal("990", unrelated.Images.Connection?.Node.Id);
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveHDRAnimationWSNode>());
+        Assert.Single(bridge.Graph.NodesOfType<LTXVHDRDecodePostprocessNode>());
+    }
+
+    private static WorkflowGenerator.WorkflowGenStep SeedUnrelatedAnimationSaveStep() =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            UnknownNode unrelatedMedia = bridge.AddStub(
+                "UnitTest_UnrelatedVideo",
+                "990").WithOutputs(WGNodeData.DT_VIDEO);
+            SwarmSaveAnimationWSNode unrelatedSave = new();
+            unrelatedSave.Images.ConnectToUntyped(unrelatedMedia.GetOutput(0));
+            bridge.AddNode(unrelatedSave, "991");
+        }, 11.25);
 
     [Theory]
     [InlineData("union-control", "some-lora", 2)]

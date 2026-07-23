@@ -10,18 +10,25 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
 {
     /// <summary>
     /// Splices the HDR LogC3 postprocess (pure math, no aux weights) between the decoded frames
-    /// and every animation save when any clip has an active HDR IC-LoRA — without it the saved
+    /// and the final owned animation saves when any clip has an active HDR IC-LoRA — without it the saved
     /// video is flat log-encoded footage. The postprocess's linear HDR output feeds our own
     /// SwarmSaveHDRAnimationWS node (PQ-encodes to Rec.2020 and writes a 10-bit HDR10 mp4).
     /// </summary>
-    public void ApplyHdrPostprocessToFinalSaves(IReadOnlyList<ClipSpec> clips)
+    public void ApplyHdrPostprocessToFinalSaves(
+        IReadOnlyList<ClipSpec> clips,
+        IReadOnlySet<string> finalSaveNodeIds)
     {
-        if (clips is null || !clips.Any(HasActiveHdrIcLora))
+        if (clips is null
+            || finalSaveNodeIds is null
+            || finalSaveNodeIds.Count == 0
+            || !clips.Any(HasActiveHdrIcLora))
         {
             return;
         }
         using WorkflowBridge bridge = BridgeSync.For(g);
-        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
+        foreach (SwarmSaveAnimationWSNode save in finalSaveNodeIds
+            .Select(id => bridge.Graph.GetNode(id))
+            .OfType<SwarmSaveAnimationWSNode>())
         {
             if (save.Images.Connection is not INodeOutput imagesSource)
             {

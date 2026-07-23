@@ -294,24 +294,11 @@ public class VideoExecutionPlanCompilerTests
             compiled.Output.IntermediatePolicy);
         Assert.True(compiled.Output.PreserveConfiguredAudioTrackSave);
 
-        StageSpec legacy = compiled.ToLegacyStageSpec();
-        Assert.Equal(target.Id, legacy.Id);
-        Assert.Equal(target.ClipStageIndex, legacy.ClipStageIndex);
-        Assert.Equal(target.ClipStageRawIndex, legacy.ClipStageRawIndex);
-        Assert.Equal(target.Model, legacy.Model);
-        Assert.Equal(target.Control, legacy.Control);
-        Assert.Equal(target.Steps, legacy.Steps);
-        Assert.Equal(target.CfgScale, legacy.CfgScale);
-        Assert.Equal(target.Sampler, legacy.Sampler);
-        Assert.Equal(target.Scheduler, legacy.Scheduler);
-        Assert.Equal(target.ControlNetStrength, legacy.ControlNetStrength);
-        Assert.Equal(target.ImageReference, legacy.ImageReference);
-        Assert.Equal(target.ImageRefStrengths, legacy.ImageRefStrengths);
-        Assert.Equal(target.ImageRefWasExplicit, legacy.ImageRefWasExplicit);
-        LoraRef reconstructedLora = Assert.Single(legacy.Loras);
-        Assert.Equal("stage.safetensors", reconstructedLora.Name);
-        Assert.Null(reconstructedLora.TencWeight);
-        Assert.Equal(target.RetakeWindow, legacy.RetakeWindow);
+        NormalLoraPlan plannedLora = Assert.Single(
+            compiled.Loras,
+            lora => lora.Scope == NormalLoraScope.Stage);
+        Assert.Equal("stage.safetensors", plannedLora.Name);
+        Assert.Null(plannedLora.AuthoredTextEncoderWeight);
     }
 
     [Fact]

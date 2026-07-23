@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -15,19 +16,24 @@ internal sealed class LtxClipRefResolver(
 {
     internal List<ResolvedClipRef> ResolveStageClipRefs(
         ClipSpec clip,
-        StageSpec stage,
+        StagePlan stage,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia)
     {
         bool isTextToVideo = g.GetVideoStagesSpec().IsTextToVideo;
-        IReadOnlyList<ImageRefSpec> refs = clip.ImageRefs;
-        IReadOnlyList<double> strengths = stage.ImageRefStrengths;
+        IReadOnlyList<ImageRefSpec> refs = stage.FrameReferences.Select(reference => new ImageRefSpec(
+            reference.RawSource,
+            reference.Frame,
+            reference.FrameOrigin == ImageReferenceFrameOrigin.End,
+            reference.UploadFileName,
+            reference.InlineData)).ToArray();
+        IReadOnlyList<double> strengths = stage.FrameReferences.Select(reference => reference.Strength).ToArray();
         // A sourced clip's footage IS its init reference: never synthesize the implicit
         // image-to-video ref for it. The default ref would become the primary guide and
         // inplace-merge the host init image into the encoded footage latent (defeating the
         // orchestrator's sourced-footage reinjection skip, which requires a null primary guide).
-        if (refs.Count == 0 && !stage.ImageRefWasExplicit && clip.SourceVideo is null)
+        if (refs.Count == 0 && !stage.Core.ImageReferenceWasExplicit && clip.SourceVideo is null)
         {
             ImageRefSpec defaultRef = ResolveDefaultImageToVideoRef(isTextToVideo, refStore);
             if (defaultRef is not null)
@@ -52,7 +58,7 @@ internal sealed class LtxClipRefResolver(
             if (raw is null)
             {
                 Logs.Warning(
-                    $"VideoStages: Stage {stage.Id} clip reference {i} ({spec.Source}) could not be resolved; "
+                    $"VideoStages: Stage {stage.StageId} clip reference {i} ({spec.Source}) could not be resolved; "
                     + "skipping.");
                 continue;
             }

@@ -66,7 +66,7 @@ public partial class StageFlowTests
         {
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
         }, -10);
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
@@ -80,7 +80,8 @@ public partial class StageFlowTests
         string prompt = "global prompt <videoclip[1]><lora:UnitTest_VideoClipLora:0.5>";
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input, BuildNativeSteps(attachAudioToCurrentMedia: true));
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.True(input.TryGet(T2IParamTypes.Loras, out List<string> parsedLoras));
@@ -88,14 +89,10 @@ public partial class StageFlowTests
         Assert.True(input.TryGet(T2IParamTypes.LoraSectionConfinement, out List<string> parsedConfinements));
         Assert.Contains($"{VideoStagesExtension.SectionIdForClip(1)}", parsedConfinements);
         ComfyNode loraLoader = Assert.Single(LoraLoaderNodesOf(bridge));
-        List<ComfyNode> positiveEncoderClipStarts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
-            .Where(node => node.Text.LiteralAsString() == "global prompt")
-            .Select(node => node.Clip.Connection!.Node)
-            .ToList();
-
-        Assert.Equal(2, positiveEncoderClipStarts.Count);
-        Assert.Contains(positiveEncoderClipStarts, start => !ReachesUpstream(bridge, start, loraLoader.Id));
-        Assert.Contains(positiveEncoderClipStarts, start => ReachesUpstream(bridge, start, loraLoader.Id));
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(2, samplers.Count);
+        Assert.False(ReachesUpstream(bridge, samplers[0], loraLoader.Id));
+        Assert.True(ReachesUpstream(bridge, samplers[1], loraLoader.Id));
     }
 
     [Fact]
@@ -106,7 +103,7 @@ public partial class StageFlowTests
         {
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
         }, -10);
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
@@ -136,7 +133,7 @@ public partial class StageFlowTests
         {
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(T2IParamInput.SectionID_Video, g.LoadingModel, g.LoadingClip);
         }, -10);
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;

@@ -24,7 +24,7 @@ internal enum AudioVoiceReferenceKind
 
 /// <summary>
 /// The single configuration source allowed to determine clip duration. ControlNet wins when both
-/// legacy flags are present, matching the parser and preventing two frame-count nodes from racing.
+/// duration flags are present, matching the parser and preventing two frame-count nodes from racing.
 /// </summary>
 internal enum AudioLengthOwner
 {

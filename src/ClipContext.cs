@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -26,8 +27,7 @@ internal sealed class ClipContext
     // frame, used as this clip's first-frame guide so generation picks up where the prior clip ended.
     public WGNodeData ContinuityFrame { get; set; }
 
-    public bool IsFirstStage(StageSpec stage) =>
-        Clip.Stages.Count > 0 && Clip.Stages[0].Id == stage.Id;
+    public bool IsFirstStage(StagePlan stage) => stage?.ClipStageIndex == 0;
 }
 
 internal sealed class ClipDimensionState

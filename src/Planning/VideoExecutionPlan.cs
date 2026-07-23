@@ -35,7 +35,7 @@ internal sealed record RootPlan(
     TimelineOutputDisposition OutputDisposition,
     NativeAudioDisposition NativeAudioDisposition);
 
-/// <summary>This planner only describes the LTX execution path; legacy WAN stays outside it.</summary>
+/// <summary>This planner describes the LTX execution path; WAN is outside its contract.</summary>
 internal enum VideoModelFamily
 {
     Ltx,
@@ -139,35 +139,7 @@ internal sealed record StagePlan(
     ImmutableArray<ImageReferencePlan> FrameReferences,
     StageAudioAction AudioAction,
     StageOutputPlan Output)
-{
-    /// <summary>Temporary bridge for legacy graph builders while they migrate to typed fields.</summary>
-    public StageSpec ToLegacyStageSpec() => new(
-        Id: StageId,
-        Control: Core.Control,
-        Upscale: Upscale.Factor,
-        UpscaleMethod: Upscale.RawMethod,
-        Model: Core.Model,
-        Steps: Core.Steps,
-        CfgScale: Core.CfgScale,
-        Sampler: Core.Sampler,
-        Scheduler: Core.Scheduler,
-        ImageReference: Guide.RawValue,
-        ClipStageIndex: ClipStageIndex,
-        ClipStageRawIndex: ClipStageRawIndex,
-        ControlNetStrength: Core.ControlNetStrength,
-        ImageRefStrengths: FrameReferences.Select(reference => reference.Strength).ToArray(),
-        ImageRefWasExplicit: Core.ImageReferenceWasExplicit,
-        Loras: Loras
-            .Where(lora => lora.Scope == NormalLoraScope.Stage)
-            .Select(lora => new LoraRef(
-                lora.Name,
-                lora.ModelWeight,
-                lora.AuthoredTextEncoderWeight))
-            .ToArray(),
-        RetakeWindow: Retake is null
-            ? null
-            : new RetakeWindowSpec(Retake.StartFrame, Retake.LengthFrames, Retake.Strength));
-}
+{ }
 
 internal sealed record StageCorePlan(
     string Model,

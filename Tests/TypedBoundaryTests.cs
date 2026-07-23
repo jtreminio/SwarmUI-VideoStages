@@ -992,25 +992,4 @@ public class TypedBoundaryTests
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  RetargetAnimationSaves tests
-    // ═══════════════════════════════════════════════════════════════
-
-    [Fact]
-    public void RetargetAnimationSaves_UpdatesSaveNodeConnections()
-    {
-        JObject workflow = BuildLtxWorkflow();
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        INodeOutput oldDecodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        var newDecode = bridge.AddNode(new VAEDecodeNode());
-
-        LtxChainOps.RetargetAnimationSaves(bridge, oldDecodeOutput, newDecode.IMAGE);
-
-        // Save node("7") should now point to the new decode
-        JObject saveNode = workflow["7"] as JObject;
-        JArray imagesRef = saveNode?["inputs"]?["images"] as JArray;
-        Assert.NotNull(imagesRef);
-        Assert.Equal(newDecode.Id, $"{imagesRef[0]}");
-    }
 }

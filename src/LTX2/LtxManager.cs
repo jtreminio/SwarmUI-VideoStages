@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -67,10 +68,10 @@ internal sealed class LtxManager
     public static void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
         LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
 
-    public void PrepareReusableAudio(ClipContext clipContext, StageSpec stage) =>
+    public void PrepareReusableAudio(ClipContext clipContext, StagePlan stage) =>
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
 
-    public LtxPostVideoChainCapture TryCapturePostVideoChain(ClipContext clipContext, StageSpec stage) =>
+    public LtxPostVideoChainCapture TryCapturePostVideoChain(ClipContext clipContext, StagePlan stage) =>
         LtxPostVideoChainCapture.TryCapture(g, clipContext, stage);
 
     public void ApplyPostVideoChainCaptureIfPresent(
@@ -86,7 +87,7 @@ internal sealed class LtxManager
         referenceVae = postVideoChain.CreateStageInputVae();
     }
 
-    public bool TryRunLocalStage(
+    public void RunStage(
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -94,7 +95,7 @@ internal sealed class LtxManager
         WGNodeData sourceMedia,
         JArray priorOutputPath,
         LtxPostVideoChainCapture postVideoChain) =>
-        stageOrchestrator.TryRunLocalLtxPath(
+        stageOrchestrator.RunLtxPath(
             guideReference,
             refStore,
             genInfo,

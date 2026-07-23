@@ -3,7 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using System.Runtime.CompilerServices;
+using SwarmUI.Utils;
 using VideoStages.Planning;
 
 namespace VideoStages.Execution;
@@ -50,7 +50,7 @@ internal sealed class RootRuntimeSession
             generator,
             bridge,
             ArtifactOrigin.HostRoot);
-        OutputRegistry outputs = OutputRegistry.Capture(generator, bridge, hostRoot);
+        OutputRegistry outputs = OutputRegistry.Capture(bridge, hostRoot);
         HashSet<string> componentSeeds = [];
         AddArtifactNodeIds(componentSeeds, hostRoot);
         IReadOnlySet<string> rootComponentIds = componentSeeds.Count == 0
@@ -67,13 +67,17 @@ internal sealed class RootRuntimeSession
             rootComponentIds);
     }
 
-    public void PublishTimeline(RuntimeArtifact timeline)
+    public OutputPublication PublishTimeline(RuntimeArtifact timeline)
     {
         ArgumentNullException.ThrowIfNull(timeline);
-        if (RootPlan.OutputDisposition != TimelineOutputDisposition.PublishTimelineOutput
-            || !timeline.HasMedia)
+        if (RootPlan.OutputDisposition != TimelineOutputDisposition.PublishTimelineOutput)
         {
-            return;
+            return OutputPublication.NotRequired;
+        }
+        if (!timeline.HasMedia)
+        {
+            throw new SwarmUserErrorException(
+                "VideoStages: the completed LTX timeline did not produce a publishable video artifact.");
         }
 
         bool rootIsDisplaced = RootPlan.Use is RootUse.Discard
@@ -82,18 +86,20 @@ internal sealed class RootRuntimeSession
             _generator,
             Outputs,
             _generator.GetStableDynamicID(OutputPublisher.DefaultFinalSaveId, 0));
-        OutputPublicationResult publication = publisher.Publish(
+        OutputPublication publication = publisher.Publish(
             timeline,
             replaceCapturedAudio: rootIsDisplaced);
-        if (publication == OutputPublicationResult.Failed)
+        if (publication.Result == OutputPublicationResult.Failed)
         {
-            return;
+            throw new SwarmUserErrorException(
+                "VideoStages: the completed LTX timeline could not be connected to the final output.");
         }
 
         if (rootIsDisplaced)
         {
             CleanupDisplacedRoot(timeline);
         }
+        return publication;
     }
 
     private void CleanupDisplacedRoot(RuntimeArtifact timeline)
@@ -134,14 +140,10 @@ internal sealed class RootRuntimeSession
 /// </summary>
 internal sealed record OutputRegistry(IReadOnlySet<string> HostAnimationSaveIds)
 {
-    private static readonly ConditionalWeakTable<WorkflowGenerator, OutputRegistry> Registries = new();
-
     public static OutputRegistry Capture(
-        WorkflowGenerator generator,
         WorkflowBridge bridge,
         RuntimeArtifact hostRoot)
     {
-        ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(bridge);
         INodeOutput hostMedia = hostRoot?.Media?.Output;
         HashSet<string> saveIds = hostMedia is null
@@ -151,23 +153,7 @@ internal sealed record OutputRegistry(IReadOnlySet<string> HostAnimationSaveIds)
                     .Where(save => SameOutput(save.Images.Connection, hostMedia))
                     .Select(save => save.Id)
             ];
-        OutputRegistry registry = new(saveIds);
-        Registries.Remove(generator);
-        Registries.Add(generator, registry);
-        return registry;
-    }
-
-    /// <summary>
-    /// Once a root session exists, only publications captured as belonging to that root are
-    /// allowed to follow the final-host timeline. Stage-authored intermediate saves deliberately
-    /// remain attached to the artifact they published. Outside a root session the legacy
-    /// retarget behavior is preserved.
-    /// </summary>
-    public static bool CanAdvanceFinalHostSave(WorkflowGenerator generator, string saveNodeId)
-    {
-        return generator is null
-            || !Registries.TryGetValue(generator, out OutputRegistry registry)
-            || registry.HostAnimationSaveIds.Contains(saveNodeId);
+        return new OutputRegistry(saveIds);
     }
 
     private static bool SameOutput(INodeOutput left, INodeOutput right)
@@ -191,7 +177,7 @@ internal sealed class OutputPublisher(
 {
     internal const int DefaultFinalSaveId = 52200;
 
-    public OutputPublicationResult Publish(RuntimeArtifact artifact, bool replaceCapturedAudio)
+    public OutputPublication Publish(RuntimeArtifact artifact, bool replaceCapturedAudio)
     {
         if (generator.UserInput.Get(T2IParamTypes.DoNotSave, false))
         {
@@ -203,16 +189,16 @@ internal sealed class OutputPublisher(
                     suppressionBridge.RemoveNode(saveId);
                 }
             }
-            return OutputPublicationResult.Suppressed;
+            return OutputPublication.Suppressed;
         }
 
         WGNodeData media = artifact.Media?.ToWGNodeData(generator);
         if (media?.Path is not JArray { Count: 2 } mediaPath)
         {
-            return OutputPublicationResult.Failed;
+            return OutputPublication.Failed;
         }
 
-        // A retained I2V root keeps the legacy save-audio wrapper exactly as authored. Its stage
+        // A retained I2V root keeps the host save-audio wrapper exactly as authored. Its stage
         // path already handles any needed retarget. Only a displaced root transfers audio
         // ownership here; eagerly decoding final audio would orphan the host's wrapper chain.
         WGNodeData audio = replaceCapturedAudio
@@ -222,7 +208,7 @@ internal sealed class OutputPublisher(
         INodeOutput videoOutput = bridge.ResolvePath(mediaPath);
         if (videoOutput is null)
         {
-            return OutputPublicationResult.Failed;
+            return OutputPublication.Failed;
         }
 
         INodeOutput audioOutput = audio?.Path is JArray { Count: 2 } audioPath
@@ -236,7 +222,9 @@ internal sealed class OutputPublisher(
         {
             WGNodeData vae = artifact.Vae?.ToWGNodeData(generator) ?? generator.CurrentVae;
             media.SaveOutput(vae, generator.CurrentAudioVae, fallbackSaveId);
-            return OutputPublicationResult.Published;
+            return new(
+                OutputPublicationResult.Published,
+                new HashSet<string>(StringComparer.Ordinal) { fallbackSaveId });
         }
 
         HashSet<string> staleAudioNodeIds = [];
@@ -270,7 +258,9 @@ internal sealed class OutputPublisher(
                 protectedNodeIds,
                 generator.NodeHelpers);
         }
-        return OutputPublicationResult.Published;
+        return new(
+            OutputPublicationResult.Published,
+            new HashSet<string>(hostSaves.Select(save => save.Id), StringComparer.Ordinal));
     }
 
     private WGNodeData ResolvePublishedAudio(WGNodeData attachedAudio)
@@ -286,7 +276,22 @@ internal sealed class OutputPublisher(
 
 internal enum OutputPublicationResult
 {
+    NotRequired,
     Published,
     Suppressed,
     Failed,
+}
+
+internal sealed record OutputPublication(
+    OutputPublicationResult Result,
+    IReadOnlySet<string> SaveNodeIds)
+{
+    public static OutputPublication NotRequired { get; } =
+        new(OutputPublicationResult.NotRequired, new HashSet<string>());
+
+    public static OutputPublication Suppressed { get; } =
+        new(OutputPublicationResult.Suppressed, new HashSet<string>());
+
+    public static OutputPublication Failed { get; } =
+        new(OutputPublicationResult.Failed, new HashSet<string>());
 }

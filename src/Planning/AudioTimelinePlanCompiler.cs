@@ -100,8 +100,8 @@ internal static class AudioTimelinePlanCompiler
 
     /// <summary>
     /// Existing clip-local audio becomes an explicit set of one-clip tracks. This makes the default
-    /// projection useful immediately while leaving <see cref="AudioPlan"/> unchanged for callers
-    /// that still execute the legacy single-clip path.
+    /// projection useful immediately while leaving <see cref="AudioPlan"/> available to the
+    /// per-clip runtime executor.
     /// </summary>
     private static ImmutableArray<AudioTrackSpec> BuildCompatibilityTrackSpecs(
         VideoExecutionPlan videoPlan,

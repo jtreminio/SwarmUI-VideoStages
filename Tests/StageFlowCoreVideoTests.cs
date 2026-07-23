@@ -187,7 +187,7 @@ public partial class StageFlowTests
     public void Configured_video_stages_without_native_image_to_video_toggle_run_from_stage_model()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Generated"));
@@ -206,7 +206,7 @@ public partial class StageFlowTests
     public void Single_stage_on_native_video_workflow_adds_one_sampler_and_reuses_final_save()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
@@ -253,12 +253,11 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.Controlnets[1].Model, controlNetModel);
         input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[1], "UnitTestPreprocessor");
 
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        Assert.Empty(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        Assert.Empty(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<ControlNetLoaderNode>());
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowSteps()));
+        Assert.Contains("supports LTX-Video timelines only", error.Message);
     }
 
     [Fact]
@@ -266,7 +265,7 @@ public partial class StageFlowTests
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
         T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
         {
@@ -744,37 +743,10 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Root_stage_resolution_inserts_center_crop_upscale_before_first_native_video_stage_batch_extract()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        string stagesJson = MakeRootConfig(
-            width: 768,
-            height: 448,
-            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10))
-        ).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        ImageScaleNode scaleNode = Assert.Single(
-            bridge.Graph.NodesOfType<ImageScaleNode>(),
-            node => node.Image.Connection?.Node.Id == "12" && node.Image.Connection.SlotIndex == 0);
-        ImageFromBatchNode imageFromBatch = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
-        Assert.True(ReachesUpstream(bridge, imageFromBatch.Image.Connection!.Node, scaleNode.Id));
-        Assert.Equal(768, scaleNode.Width.LiteralAsInt());
-        Assert.Equal(448, scaleNode.Height.LiteralAsInt());
-        Assert.Equal("lanczos", scaleNode.UpscaleMethod.LiteralAsString());
-        Assert.Equal("center", scaleNode.Crop.LiteralAsString());
-    }
-
-    [Fact]
     public void Root_stage_resolution_uses_json_dimensions()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = MakeRootConfig(
             width: 1472,
@@ -793,34 +765,6 @@ public partial class StageFlowTests
         Assert.Equal(1472, scaleNode.Width.LiteralAsInt());
         Assert.Equal(832, scaleNode.Height.LiteralAsInt());
         Assert.Equal("center", scaleNode.Crop.LiteralAsString());
-    }
-
-    [Fact]
-    public void Root_stage_resolution_ignores_stage_upscale_json_before_first_native_video_stage_batch_extract()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        string stagesJson = MakeRootConfig(
-            width: 960,
-            height: 544,
-            MakeClip(
-                MakeStage(models.VideoModel.Name, "Generated", upscale: 2.0, upscaleMethod: "pixel-bicubic", steps: 10))
-        ).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        ImageScaleNode rootScaleNode = Assert.Single(
-            bridge.Graph.NodesOfType<ImageScaleNode>(),
-            node => node.Image.Connection?.Node.Id == "12" && node.Image.Connection.SlotIndex == 0);
-        ImageFromBatchNode imageFromBatch = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
-        Assert.Equal(960, rootScaleNode.Width.LiteralAsInt());
-        Assert.Equal(544, rootScaleNode.Height.LiteralAsInt());
-        Assert.Equal("lanczos", rootScaleNode.UpscaleMethod.LiteralAsString());
-        Assert.Equal("center", rootScaleNode.Crop.LiteralAsString());
-        Assert.True(ReachesUpstream(bridge, imageFromBatch.Image.Connection!.Node, rootScaleNode.Id));
     }
 
     [Fact]
@@ -1370,7 +1314,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Clip_shaped_json_without_stages_does_not_run_additional_stages()
+    public void Clip_shaped_json_without_executable_timeline_is_rejected()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
@@ -1380,15 +1324,11 @@ public partial class StageFlowTests
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        Assert.Single(SamplerNodesOrdered(bridge));
-        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.True(JToken.DeepEquals(
-            WorkflowBridge.ToPath(saveNode.Images.Connection!),
-            generator.CurrentMedia.Path));
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowSteps()));
+        Assert.Contains("supports LTX-Video timelines only", error.Message);
     }
 
     [Fact]
@@ -1527,7 +1467,7 @@ public partial class StageFlowTests
     public void Two_stages_on_native_video_workflow_add_two_samplers_and_keep_single_final_save()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         string stagesJson = JsonSingleClipStages(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
@@ -1543,64 +1483,6 @@ public partial class StageFlowTests
         Assert.True(JToken.DeepEquals(
             WorkflowBridge.ToPath(saveNode.Images.Connection!),
             generator.CurrentMedia.Path));
-    }
-
-    [Fact]
-    public void Stage_pixel_upscale_propagates_dims_to_next_stage()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        string stagesJson = JsonSingleClipStages(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
-            MakeStage(
-                models.VideoModel.Name,
-                "PreviousStage",
-                upscale: 1.5,
-                upscaleMethod: "pixel-lanczos",
-                steps: 10),
-            MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10));
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(3, samplers.Count);
-
-        IReadOnlyList<ImageScaleNode> upscaleNodes = bridge.Graph.NodesOfType<ImageScaleNode>()
-            .Where(node => node.Width.LiteralAsInt() == 768
-                && node.Height.LiteralAsInt() == 768
-                && node.UpscaleMethod.LiteralAsString() == "lanczos"
-                && node.Crop.LiteralAsString() == "disabled")
-            .ToList();
-        Assert.NotEmpty(upscaleNodes);
-        Assert.Contains(upscaleNodes, node => ReachesUpstream(bridge, samplers[2], node.Id));
-    }
-
-    [Fact]
-    public void Native_stage_prompting_uses_video_prompt_sections()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-
-        string stagesJson = JsonSingleClipStages(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        string prompt = "global-only words <video>video-only words";
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: prompt);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
-
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        List<string> conditioningTexts = bridge.Graph.NodesOfType<CLIPTextEncodeNode>()
-            .Select(n => n.Text.LiteralAsString())
-            .Where(text => !string.IsNullOrWhiteSpace(text))
-            .ToList();
-
-        Assert.NotEmpty(conditioningTexts);
-        Assert.Contains(conditioningTexts, text => text.Contains("video-only words"));
-        Assert.DoesNotContain(conditioningTexts, text => text.Contains("global-only words"));
     }
 
 }

@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.LTX2;
+using VideoStages.Planning;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -48,6 +49,10 @@ public class LtxAudioReuseStateTests
         ImageRefs: [],
         Stages: [MakeStage(0), MakeStage(1), MakeStage(2)]);
 
+    private static StagePlan PlanStage(ClipSpec clip, int stageIndex) =>
+        VideoExecutionPlanCompiler.Compile(new VideoStagesSpec(512, 512, 24, false, [clip]))
+            .Clips[0].Stages[stageIndex];
+
     private static WGNodeData MakeVideoMedia(WorkflowGenerator g, JArray attachedAudioPath = null)
     {
         WGNodeData media = new(new JArray("100", 0), g, WGNodeData.DT_VIDEO, T2IModelClassSorter.CompatLtxv2);
@@ -72,7 +77,7 @@ public class LtxAudioReuseStateTests
         WGNodeData mediaBefore = g.CurrentMedia;
         WGNodeData attachedBefore = g.CurrentMedia.AttachedAudio;
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, clip.Stages[1]);
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, PlanStage(clip, 1));
 
         Assert.True(clipContext.AudioReuse.TryGetPath(out JArray remembered));
         Assert.Equal("200", $"{remembered[0]}");
@@ -94,7 +99,7 @@ public class LtxAudioReuseStateTests
         ClipContext clipContext = new(clip, 512, 512, sourceMedia: null, sourceVae: null);
         clipContext.AudioReuse.Remember(new JArray("999", 0));
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, clip.Stages[0]);
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, PlanStage(clip, 0));
 
         Assert.False(clipContext.AudioReuse.TryGetPath(out JArray _));
     }
@@ -110,7 +115,7 @@ public class LtxAudioReuseStateTests
         ClipContext clipContext = new(clip, 512, 512, sourceMedia: null, sourceVae: null);
         clipContext.AudioReuse.Remember(new JArray("200", 0));
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, clip.Stages[2]);
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, PlanStage(clip, 2));
 
         Assert.NotNull(g.CurrentMedia.AttachedAudio);
         JArray applied = (JArray)g.CurrentMedia.AttachedAudio.Path;

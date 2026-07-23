@@ -1,13 +1,14 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.LTX2;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
 internal sealed class StageFrame
 {
     public StageFrame(
-        StageSpec stage,
+        StagePlan stage,
         int sectionId,
         ClipContext clipContext,
         JArray priorOutputPath,
@@ -15,7 +16,7 @@ internal sealed class StageFrame
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        bool parallelMultiClip)
+        StageExecutionOptions executionOptions)
     {
         Stage = stage;
         SectionId = sectionId;
@@ -25,10 +26,10 @@ internal sealed class StageFrame
         PostVideoChain = postVideoChain;
         SourceMedia = sourceMedia;
         GenInfo = genInfo;
-        ParallelMultiClip = parallelMultiClip;
+        ExecutionOptions = executionOptions;
     }
 
-    public StageSpec Stage { get; }
+    public StagePlan Stage { get; }
     public int SectionId { get; }
     public ClipContext ClipContext { get; }
     public JArray PriorOutputPath { get; }
@@ -36,7 +37,7 @@ internal sealed class StageFrame
     public LtxPostVideoChainCapture PostVideoChain { get; }
     public WGNodeData SourceMedia { get; }
     public WorkflowGenerator.ImageToVideoGenInfo GenInfo { get; }
-    public bool ParallelMultiClip { get; }
+    public StageExecutionOptions ExecutionOptions { get; }
 
     public bool NeedsCropGuidesAfterSampler { get; set; }
 
@@ -50,4 +51,11 @@ internal sealed class StageFrame
     public JArray VoiceRefPreWrapPosCond { get; set; }
 
     public JArray VoiceRefPreWrapNegCond { get; set; }
+}
+
+internal sealed record StageExecutionOptions(
+    bool IsParallelMultiClip,
+    bool PublishIntermediateStages)
+{
+    public bool RequiresDedicatedOutput => IsParallelMultiClip || PublishIntermediateStages;
 }

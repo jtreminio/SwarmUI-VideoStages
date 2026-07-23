@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Execution;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -17,7 +16,7 @@ namespace VideoStages;
 // 5  11.05  DropCoreImageToVideoOutput                    StageRefStore.PreRootVideo,                    clears both above
 //                                                         videostages.pre-core-node-ids
 // 6  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
-// 7  11.5   RunConfiguredStages                           StageRefStore.Base/Refiner,                    writes StageRefStore.Generated (intra-phase fallback only)
+// 7  11.5   RunConfiguredStages                           StageRefStore.Base/Refiner,                    writes StageRefStore.Generated (intra-phase reference only)
 //                                                         videostages.controlnet.fullimage.{i}
 //
 // Non-phase entry points (NOT registered as workflow steps — called from outside the pipeline):
@@ -27,7 +26,7 @@ public static class Runner
 {
     public static void CaptureCoreVideoControlNetPreprocessors(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
+        if (!RequireSupportedActiveExecution(g))
         {
             return;
         }
@@ -37,7 +36,7 @@ public static class Runner
 
     public static void CaptureBase(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g) || !HasConfiguredStages(g))
+        if (!RequireSupportedActiveExecution(g) || !HasConfiguredStages(g))
         {
             return;
         }
@@ -48,7 +47,7 @@ public static class Runner
 
     public static void CaptureRefiner(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g) || !HasConfiguredStages(g))
+        if (!RequireSupportedActiveExecution(g) || !HasConfiguredStages(g))
         {
             return;
         }
@@ -59,7 +58,7 @@ public static class Runner
 
     public static void CapturePreCoreVideoMedia(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
+        if (!RequireSupportedActiveExecution(g))
         {
             return;
         }
@@ -71,7 +70,7 @@ public static class Runner
 
     public static void DropCoreImageToVideoOutput(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
+        if (!RequireSupportedActiveExecution(g))
         {
             return;
         }
@@ -83,7 +82,7 @@ public static class Runner
 
     public static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
+        if (!RequireSupportedActiveExecution(g))
         {
             return;
         }
@@ -93,32 +92,31 @@ public static class Runner
 
     public static void RunConfiguredStages(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
+        if (!RequireSupportedActiveExecution(g))
         {
             return;
         }
 
         Pipeline pipeline = BuildPipeline(g);
         AudioHandler audioHandler = new(g);
+        AudioTimelineExecutor audioTimelineExecutor = new(g, pipeline.Handoff, pipeline.LtxManager, audioHandler);
         MultiClipParallelMerger multiClipParallelMerger = new(g);
-        StageRunner stageRunner = new(g, pipeline.GuideMediaHelper, pipeline.LtxManager);
-        StageExecutionAdapter stageExecutionAdapter = new(g, stageRunner);
+        TimelineAssembler timelineAssembler = new(g, multiClipParallelMerger);
+        StageRunner stageRunner = new(g, pipeline.LtxManager);
         StageSequenceRunner stageSequenceRunner = new(
             g,
             pipeline.StageRefStore,
             stageRunner,
-            stageExecutionAdapter,
             pipeline.Base2Edit,
-            pipeline.Handoff,
             pipeline.Resizer,
-            multiClipParallelMerger,
-            pipeline.LtxManager);
+            timelineAssembler,
+            pipeline.LtxManager,
+            audioTimelineExecutor);
         VideoStagesCoordinator coordinator = new(
             g,
             pipeline.Handoff,
             stageSequenceRunner,
-            audioHandler,
-            pipeline.LtxManager);
+            audioTimelineExecutor);
         coordinator.RunConfiguredStages();
     }
 
@@ -156,6 +154,16 @@ public static class Runner
     }
 
     private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsActive(g);
+
+    private static bool RequireSupportedActiveExecution(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return false;
+        }
+        _ = g.RequireLtxVideoExecutionPlanContext();
+        return true;
+    }
 
     private static bool HasConfiguredStages(WorkflowGenerator g)
     {

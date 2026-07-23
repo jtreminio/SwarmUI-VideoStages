@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -21,8 +22,8 @@ internal sealed class LtxConditioningPipeline(
     /// window — skip them all.
     /// </summary>
     private bool RetakeMaskActive =>
-        stageFrame.Stage.RetakeWindow is not null
-        && VideoStageModelCompat.IsLtxV2VideoModel(stageFrame.Stage.Model);
+        stageFrame.Stage.Retake is not null
+        && VideoStageModelCompat.IsLtxV2VideoModel(stageFrame.Stage.Core.Model);
 
     public LtxConditioningPipeline WithLatent(WGNodeData stageLatent, WGNodeData sourceMedia)
     {
@@ -39,19 +40,19 @@ internal sealed class LtxConditioningPipeline(
 
     public LtxConditioningPipeline WithUpscaleIfNeeded(WGNodeData sourceMedia)
     {
-        StageSpec stage = stageFrame.Stage;
-        if (stage.Upscale == 1 || !(stage.IsLatentModelUpscale || stage.IsLatentUpscale))
+        StagePlan stage = stageFrame.Stage;
+        if (stage.Upscale.Mode is not (StageUpscaleMode.LatentModel or StageUpscaleMode.Latent))
         {
             return this;
         }
 
         int baseWidth = Math.Max(sourceMedia?.Width ?? g.UserInput.GetImageWidth(), 16);
         int baseHeight = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
-        (int width, int height) = GetUpscaledDimensions(baseWidth, baseHeight, stage.Upscale);
+        (int width, int height) = GetUpscaledDimensions(baseWidth, baseHeight, stage.Upscale.Factor);
 
-        stageLatent = stage.IsLatentUpscale
-            ? ApplyLatentUpscale(stage.UpscaleMethod["latent-".Length..], stage.Upscale, width, height)
-            : ApplyLatentModelUpscale(stage.UpscaleMethod["latentmodel-".Length..], width, height);
+        stageLatent = stage.Upscale.Mode == StageUpscaleMode.Latent
+            ? ApplyLatentUpscale(stage.Upscale.MethodName, stage.Upscale.Factor, width, height)
+            : ApplyLatentModelUpscale(stage.Upscale.MethodName, width, height);
         stageFrame.ClipContext.Dimensions.Width = width;
         stageFrame.ClipContext.Dimensions.Height = height;
         return this;

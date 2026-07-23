@@ -1,5 +1,7 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -9,7 +11,7 @@ internal sealed class LtxStageOrchestrator(
     StageGuideMediaHelper stageGuideMediaHelper,
     LtxClipRefResolver clipRefResolver)
 {
-    internal bool TryRunLocalLtxPath(
+    internal void RunLtxPath(
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -18,12 +20,16 @@ internal sealed class LtxStageOrchestrator(
         JArray priorOutputPath,
         LtxPostVideoChainCapture postVideoChain)
     {
-        if (!ShouldUseLocalLtxv2Path(genInfo, sourceMedia))
+        if (!VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel)
+            || (sourceMedia?.DataType != WGNodeData.DT_VIDEO
+                && sourceMedia?.DataType != WGNodeData.DT_IMAGE))
         {
-            return false;
+            throw new SwarmUserErrorException(
+                "VideoStages: the LTX execution plan reached an invalid LTX stage input. "
+                + "Regenerate after updating the timeline.");
         }
 
-        StageSpec stage = stageFrame.Stage;
+        StagePlan stage = stageFrame.Stage;
         List<ResolvedClipRef> clipRefs = clipRefResolver.ResolveStageClipRefs(
             stageFrame.ClipContext.Clip,
             stage,
@@ -79,16 +85,6 @@ internal sealed class LtxStageOrchestrator(
             postVideoChain,
             clipRefs,
             guideMergeStrength);
-        return true;
-    }
-
-    private static bool ShouldUseLocalLtxv2Path(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData sourceMedia)
-    {
-        return VideoStageModelCompat.IsLtxV2VideoModel(genInfo.VideoModel)
-            && (sourceMedia?.DataType == WGNodeData.DT_VIDEO
-                || sourceMedia?.DataType == WGNodeData.DT_IMAGE);
     }
 
     private WGNodeData ResolveLocalGuideMedia(
@@ -139,13 +135,13 @@ internal sealed class LtxStageOrchestrator(
     }
 
     private bool ShouldSkipGeneratedGuideReinjection(
-        StageSpec stage,
+        StagePlan stage,
         WGNodeData sourceMedia,
         StageRefStore.StageRef guideReference,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         LtxPostVideoChainCapture postVideoChain)
     {
-        return stage.ImageReference == "Generated"
+        return stage.Guide.Kind == GuideReferenceKind.Generated
             && postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true
             && stageGuideMediaHelper.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
             && !string.IsNullOrWhiteSpace(guideReference?.Vae?.Compat?.ID)

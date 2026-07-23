@@ -2,7 +2,6 @@ using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Execution;
 
 namespace VideoStages.LTX2;
 
@@ -70,28 +69,4 @@ internal static class LtxPostVideoChainSplicer
         }
     }
 
-    public static void RetargetAnimationSaves(
-        LtxPostVideoChainCapture capture,
-        WorkflowGenerator g,
-        JArray newImagePath)
-    {
-        if (newImagePath is not { Count: 2 })
-        {
-            return;
-        }
-
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        INodeOutput oldOutput = bridge.ResolvePath(capture.CurrentOutputMedia.Path);
-        INodeOutput newOutput = bridge.ResolvePath(newImagePath);
-        if (oldOutput is null || newOutput is null)
-        {
-            return;
-        }
-
-        LtxChainOps.RetargetAnimationSaves(
-            bridge,
-            oldOutput,
-            newOutput,
-            save => OutputRegistry.CanAdvanceFinalHostSave(g, save.Id));
-    }
 }

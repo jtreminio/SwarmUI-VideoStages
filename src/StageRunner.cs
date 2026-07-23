@@ -7,50 +7,46 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Execution;
 using VideoStages.LTX2;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
 internal class StageRunner(
     WorkflowGenerator g,
-    StageGuideMediaHelper stageGuideMediaHelper,
     LtxManager ltxManager)
 {
-    public virtual void RunStage(
-        StageSpec stage,
+    public virtual RuntimeArtifact RunStage(
+        StagePlan stage,
         int sectionId,
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
-        ClipContext clipContext)
+        ClipContext clipContext,
+        StageExecutionOptions executionOptions)
     {
         if (g.CurrentMedia is null)
         {
-            Logs.Error($"VideoStages: Stage {stage.Id} has no input media available.");
-            return;
+            throw new SwarmUserErrorException(
+                $"VideoStages: stage {stage.StageId} has no input media.");
         }
 
         ClipSpec clip = clipContext.Clip;
-        if (stage.IsPassthrough && !ReplacesTextToVideoRoot(stage, clipContext))
+        if (stage.Execution == StageExecutionMode.Passthrough && !ReplacesTextToVideoRoot(stage, clipContext))
         {
             RunPassthroughStage(stage, sectionId, clipContext);
-            return;
+            return CaptureOutput(stage);
         }
 
         using ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(g.UserInput, clip.Id, sectionId);
-        using ParamSnapshot loraScope = ApplyStageLoras(g.UserInput, clip, stage);
+        using ParamSnapshot loraScope = ApplyStageLoras(g.UserInput, stage);
 
-        StageFrame stageFrame = PrepareStage(stage, sectionId, clipContext);
-        if (stageFrame is null)
-        {
-            return;
-        }
-
+        StageFrame stageFrame = PrepareStage(stage, sectionId, clipContext, executionOptions);
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
             bool needsCrop = new IcLoraApplicator(g).ApplyIcLoras(
                 currentGenInfo,
                 clip,
-                stage.ControlNetStrength,
+                stage.Core.ControlNetStrength,
                 clipContext.Clip.Frames,
                 clip.ClipLengthFromControlNet,
                 stage.ClipStageRawIndex,
@@ -66,25 +62,15 @@ internal class StageRunner(
                 clipContext.IsFirstStage(stage));
         });
 
-        if (ltxManager.TryRunLocalStage(
-                guideReference,
-                refStore,
-                genInfo,
-                stageFrame,
-                stageFrame.SourceMedia,
-                stageFrame.PriorOutputPath,
-                stageFrame.PostVideoChain))
-        {
-            RetargetExistingAnimationSaves(
-                stageFrame.PriorOutputPath,
-                g.CurrentMedia?.Path,
-                retargetAudio: g.CurrentMedia?.AttachedAudio is not null);
-        }
-        else
-        {
-            RunNativeStagePath(stageFrame, guideReference);
-        }
-        CleanupReplacedTextToVideoRootStage(stageFrame.PriorOutputPath, stageFrame.ReplacesTextToVideoRoot);
+        ltxManager.RunStage(
+            guideReference,
+            refStore,
+            genInfo,
+            stageFrame,
+            stageFrame.SourceMedia,
+            stageFrame.PriorOutputPath,
+            stageFrame.PostVideoChain);
+        return CaptureOutput(stage);
     }
 
     /// <summary>
@@ -94,19 +80,17 @@ internal class StageRunner(
     /// partially, leaving dead nodes (e.g. a dangling IC-LoRA loader) and a lossy
     /// encode/preprocess/decode roundtrip in the live pixel path.
     /// </summary>
-    private void RunPassthroughStage(StageSpec stage, int sectionId, ClipContext clipContext)
+    private void RunPassthroughStage(StagePlan stage, int sectionId, ClipContext clipContext)
     {
-        JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(clipContext, stage);
         LtxPostVideoChainCapture postVideoChain = ltxManager.TryCapturePostVideoChain(clipContext, stage);
         _ = ApplyStageUpscaleIfNeeded(clipContext, stage, sectionId, postVideoChain);
-        RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
     }
 
-    private bool ReplacesTextToVideoRoot(StageSpec stage, ClipContext clipContext)
+    private bool ReplacesTextToVideoRoot(StagePlan stage, ClipContext clipContext)
     {
-        LtxVideoExecutionPlanContext planContext = g.GetLtxVideoExecutionPlanContext();
-        if (planContext?.Plan.Root.Use == Planning.RootUse.GlobalRefineReplacement)
+        if (g.RequireLtxVideoExecutionPlanContext().Plan.Root.Use
+            == Planning.RootUse.GlobalRefineReplacement)
         {
             return false;
         }
@@ -115,7 +99,11 @@ internal class StageRunner(
             && g.GetVideoStagesSpec().IsTextToVideo;
     }
 
-    private StageFrame PrepareStage(StageSpec stage, int sectionId, ClipContext clipContext)
+    private StageFrame PrepareStage(
+        StagePlan stage,
+        int sectionId,
+        ClipContext clipContext,
+        StageExecutionOptions executionOptions)
     {
         JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         ltxManager.PrepareReusableAudio(clipContext, stage);
@@ -128,17 +116,10 @@ internal class StageRunner(
             : ApplyStageUpscaleIfNeeded(clipContext, stage, sectionId, postVideoChain);
         if (sourceMedia is null)
         {
-            Logs.Error($"VideoStages: Stage {stage.Id} could not resolve source media.");
-            return null;
+            throw new SwarmUserErrorException(
+                $"VideoStages: stage {stage.StageId} could not resolve its source media.");
         }
         WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(clipContext, stage, sectionId, sourceMedia, replaceTextToVideoRootStage);
-        if (genInfo is null)
-        {
-            return null;
-        }
-        bool parallelMultiClip =
-            g.NodeHelpers.TryGetValue(MultiClipParallelMerger.NodeHelperKey, out string parallelFlag)
-            && StringUtils.Equals(parallelFlag, "1");
         return new StageFrame(
             stage,
             sectionId,
@@ -148,43 +129,12 @@ internal class StageRunner(
             postVideoChain,
             sourceMedia,
             genInfo,
-            parallelMultiClip);
-    }
-
-    private void RunNativeStagePath(
-        StageFrame stageFrame,
-        StageRefStore.StageRef guideReference)
-    {
-        StageSpec stage = stageFrame.Stage;
-        WGNodeData guideRaw = stageGuideMediaHelper.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
-
-        WGNodeData guideMedia = stageGuideMediaHelper.PrepareGuideMedia(
-            guideRaw,
-            stageFrame.SourceMedia,
-            scaleToSourceSize: true);
-
-        RunNativeStage(stage, stageFrame.GenInfo, stageFrame.SourceMedia, guideMedia, stageFrame.PriorOutputPath);
-    }
-
-    private void RunNativeStage(
-        StageSpec stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData sourceMedia,
-        WGNodeData guideMedia,
-        JArray priorOutputPath)
-    {
-        g.CurrentMedia = guideMedia ?? sourceMedia;
-
-        g.CreateImageToVideo(genInfo);
-
-        g.CurrentVae = genInfo.Vae;
-        StampCurrentMediaMetadata(sourceMedia, genInfo);
-        RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
+            executionOptions);
     }
 
     private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(
         ClipContext clipContext,
-        StageSpec stage,
+        StagePlan stage,
         int sectionId,
         WGNodeData sourceMedia,
         bool replaceTextToVideoRootStage)
@@ -195,8 +145,9 @@ internal class StageRunner(
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId);
         if (videoModel is null)
         {
-            Logs.Error($"VideoStages: Stage {stage.Id} could not resolve video model '{stage.Model}'.");
-            return null;
+            throw new SwarmUserErrorException(
+                $"VideoStages: stage {stage.StageId} could not resolve LTX video model "
+                + $"'{stage.Core.Model}'.");
         }
         _ = g.NodeHelpers.Remove($"modelloader_{videoModel.Name}_image2video");
 
@@ -218,14 +169,14 @@ internal class StageRunner(
             VideoSwapModel = null,
             VideoSwapPercent = 0.5,
             Frames = ResolveFrames(sourceMedia, sectionId, replaceTextToVideoRootStage),
-            VideoCFG = stage.CfgScale,
+            VideoCFG = stage.Core.CfgScale,
             VideoFPS = spec.FPS,
             Width = stageWidth,
             Height = stageHeight,
             Prompt = positivePrompt,
             NegativePrompt = negativePrompt,
-            Steps = stage.Steps,
-            Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.Id,
+            Steps = stage.Core.Steps,
+            Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             BatchIndex = batchIndex,
             BatchLen = batchLen,
             ContextID = sectionId,
@@ -239,7 +190,7 @@ internal class StageRunner(
     // the same way (a `factor*32` math node feeding "scale to multiple").
     private static (int Width, int Height) SnapDimsForIcLoraFactor(
         ClipSpec clip,
-        StageSpec stage,
+        StagePlan stage,
         int width,
         int height)
     {
@@ -252,7 +203,7 @@ internal class StageRunner(
         int snappedWidth = Math.Max(multiple, width / multiple * multiple);
         int snappedHeight = Math.Max(multiple, height / multiple * multiple);
         Logs.Info(
-            $"VideoStages: stage {stage.Id} dims {width}x{height} snapped to "
+            $"VideoStages: stage {stage.StageId} dims {width}x{height} snapped to "
             + $"{snappedWidth}x{snappedHeight} — the active IC-LoRA's reference downscale factor "
             + $"requires multiples of {multiple}.");
         return (snappedWidth, snappedHeight);
@@ -275,29 +226,20 @@ internal class StageRunner(
         return sourceMedia.Frames;
     }
 
-    private (string Positive, string Negative) BuildClipPrompts(ClipSpec clip, StageSpec stage)
+    private (string Positive, string Negative) BuildClipPrompts(ClipSpec clip, StagePlan stage)
     {
         string positive = g.UserInput.Get(T2IParamTypes.Prompt, "");
         string negative = g.UserInput.Get(T2IParamTypes.NegativePrompt, "");
         string originalPositive = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.Prompt.Type.ID, positive);
         string originalNegative = PromptParser.GetOriginalPrompt(g.UserInput, T2IParamTypes.NegativePrompt.Type.ID, negative);
         return (
-            PromptParser.ExtractPrompt(positive, originalPositive, clip.Id, stage.Id, stage.ClipStageIndex),
-            PromptParser.ExtractPrompt(negative, originalNegative, clip.Id, stage.Id, stage.ClipStageIndex));
+            PromptParser.ExtractPrompt(positive, originalPositive, clip.Id, stage.StageId, stage.ClipStageIndex),
+            PromptParser.ExtractPrompt(negative, originalNegative, clip.Id, stage.StageId, stage.ClipStageIndex));
     }
 
-    private static ParamSnapshot ApplyStageLoras(T2IParamInput input, ClipSpec clip, StageSpec stage)
+    private static ParamSnapshot ApplyStageLoras(T2IParamInput input, StagePlan stage)
     {
-        List<LoraRef> toApply = [];
-        if (clip.Loras is not null)
-        {
-            toApply.AddRange(clip.Loras);
-        }
-        if (stage.Loras is not null)
-        {
-            toApply.AddRange(stage.Loras);
-        }
-        if (toApply.Count == 0)
+        if (stage.Loras.IsDefaultOrEmpty)
         {
             return null;
         }
@@ -307,16 +249,16 @@ internal class StageRunner(
         List<string> tencWeights = [.. input.Get(T2IParamTypes.LoraTencWeights) ?? []];
         List<string> confinements = [.. input.Get(T2IParamTypes.LoraSectionConfinement) ?? []];
 
-        List<(string, string, string)> rows = [.. toApply.Select(lora => (
+        List<(string, string, string)> rows = [.. stage.Loras.Select(lora => (
             lora.Name,
-            LoraParams.FormatWeight(lora.Weight),
-            LoraParams.FormatWeight(lora.TencWeight ?? lora.Weight)))];
+            LoraParams.FormatWeight(lora.ModelWeight),
+            LoraParams.FormatWeight(lora.TextEncoderWeight)))];
         return LoraParams.AppendVideoScoped(input, loras, weights, tencWeights, confinements, rows);
     }
 
     private WGNodeData ApplyStageUpscaleIfNeeded(
         ClipContext clipContext,
-        StageSpec stage,
+        StagePlan stage,
         int sectionId,
         LtxPostVideoChainCapture postVideoChain)
     {
@@ -327,14 +269,14 @@ internal class StageRunner(
         source.Width = width;
         source.Height = height;
 
-        if (stage.Upscale == 1 || string.IsNullOrWhiteSpace(stage.UpscaleMethod))
+        if (stage.Upscale.Mode == StageUpscaleMode.None || string.IsNullOrWhiteSpace(stage.Upscale.RawMethod))
         {
             g.CurrentMedia = source;
             return source;
         }
 
-        int targetWidth = Math.Max(16, (int)Math.Round(width * stage.Upscale));
-        int targetHeight = Math.Max(16, (int)Math.Round(height * stage.Upscale));
+        int targetWidth = Math.Max(16, (int)Math.Round(width * stage.Upscale.Factor));
+        int targetHeight = Math.Max(16, (int)Math.Round(height * stage.Upscale.Factor));
         targetWidth = (targetWidth / 16) * 16;
         targetHeight = (targetHeight / 16) * 16;
         (targetWidth, targetHeight) = SnapDimsForIcLoraFactor(
@@ -342,7 +284,7 @@ internal class StageRunner(
 
         T2IModel stageVideoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId);
         bool isLtxv2Stage = VideoStageModelCompat.IsLtxV2VideoModel(stageVideoModel);
-        if (isLtxv2Stage && (stage.IsLatentModelUpscale || stage.IsLatentUpscale))
+        if (isLtxv2Stage && stage.Upscale.Mode is StageUpscaleMode.LatentModel or StageUpscaleMode.Latent)
         {
             g.CurrentMedia = source;
             return source;
@@ -350,9 +292,9 @@ internal class StageRunner(
 
         WGNodeData upscaleSource = ResolveUpscaleSourceMedia(source, postVideoChain, width, height);
 
-        if (stage.IsPixelUpscale)
+        if (stage.Upscale.Mode == StageUpscaleMode.Pixel)
         {
-            string method = stage.UpscaleMethod["pixel-".Length..];
+            string method = stage.Upscale.MethodName;
             ImageScaleNode scaleNode = AddStagePixelScale(upscaleSource.Path, targetWidth, targetHeight, method);
             g.CurrentMedia = upscaleSource.WithPath(scaleNode.IMAGE);
             g.CurrentMedia.Width = targetWidth;
@@ -362,9 +304,9 @@ internal class StageRunner(
             return g.CurrentMedia;
         }
 
-        if (stage.IsModelUpscale)
+        if (stage.Upscale.Mode == StageUpscaleMode.Model)
         {
-            string modelName = stage.UpscaleMethod["model-".Length..];
+            string modelName = stage.Upscale.MethodName;
             ImageScaleNode fitScale = AddModelUpscaleChain(upscaleSource.Path, modelName, targetWidth, targetHeight);
             g.CurrentMedia = upscaleSource.WithPath(fitScale.IMAGE);
             g.CurrentMedia.Width = targetWidth;
@@ -374,11 +316,11 @@ internal class StageRunner(
             return g.CurrentMedia;
         }
 
-        if (stage.Upscale != 1)
+        if (stage.Upscale.Mode != StageUpscaleMode.None)
         {
             Logs.Warning(
-                $"VideoStages: Stage {stage.Id} uses unsupported upscale method "
-                + $"'{stage.UpscaleMethod}'. Ignoring upscale.");
+                $"VideoStages: Stage {stage.StageId} uses unsupported upscale method "
+                + $"'{stage.Upscale.RawMethod}'. Ignoring upscale.");
         }
 
         g.CurrentMedia = source;
@@ -395,8 +337,8 @@ internal class StageRunner(
     {
         WGNodeData source = stageFrame.SourceMedia;
         LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
-        bool wantsStageInput = clip.IcLoras is not null && clip.IcLoras.Any(entry =>
-            IcLoraApplicator.WantsStageInputDrive(clip, entry, stageFrame.Stage.ClipStageRawIndex));
+        bool wantsStageInput = stageFrame.Stage.IcLoras.Any(entry =>
+            entry.Drive.Kind is IcLoraDriveSourceKind.StageInput or IcLoraDriveSourceKind.SourcedClipInput);
         if (!wantsStageInput
             || postVideoChain is null
             || !ReferencesPostVideoChainOutput(source, postVideoChain))
@@ -459,76 +401,6 @@ internal class StageRunner(
         return fit;
     }
 
-    private void StampCurrentMediaMetadata(WGNodeData sourceMedia, WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        if (g.CurrentMedia is null)
-        {
-            return;
-        }
-
-        g.CurrentMedia.Width = sourceMedia.Width;
-        g.CurrentMedia.Height = sourceMedia.Height;
-        g.CurrentMedia.Frames = genInfo.Frames ?? g.CurrentMedia.Frames;
-        g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
-    }
-
-    internal void RetargetExistingAnimationSaves(
-        JArray priorOutputPath,
-        JArray newOutputPath,
-        bool retargetAudio = false)
-    {
-        if (priorOutputPath is not { Count: 2 }
-            || newOutputPath is not { Count: 2 }
-            || JToken.DeepEquals(priorOutputPath, newOutputPath))
-        {
-            return;
-        }
-
-        WGNodeData attachedAudio = g.CurrentMedia?.AttachedAudio;
-        if (retargetAudio && attachedAudio?.DataType == WGNodeData.DT_LATENT_AUDIO && g.CurrentAudioVae is not null)
-        {
-            attachedAudio = attachedAudio.DecodeLatents(g.CurrentAudioVae, true);
-        }
-
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        INodeOutput oldOutput = bridge.ResolvePath(priorOutputPath);
-        INodeOutput newOutput = bridge.ResolvePath(newOutputPath);
-        if (oldOutput is null || newOutput is null)
-        {
-            return;
-        }
-
-        JArray newAudioPath = retargetAudio && attachedAudio?.DataType == WGNodeData.DT_AUDIO ? CopyPath(attachedAudio.Path) : null;
-        INodeOutput newAudioOutput = newAudioPath is not null ? bridge.ResolvePath(newAudioPath) : null;
-        HashSet<string> staleAudioNodeIds = [];
-
-        SaveAnimationRetargeter.Retarget(
-            bridge,
-            saveNode => saveNode.Images.Connection == oldOutput
-                && OutputRegistry.CanAdvanceFinalHostSave(g, saveNode.Id),
-            newOutput,
-            newAudioOutput,
-            retargetAudio,
-            saveNode =>
-            {
-                if (saveNode.Audio.Connection is INodeOutput oldAudioOutput)
-                {
-                    staleAudioNodeIds.Add(oldAudioOutput.Node.Id);
-                }
-            });
-
-        HashSet<string> protectedNodes = [];
-        AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
-        if (newAudioPath is not null)
-        {
-            protectedNodes.Add($"{newAudioPath[0]}");
-        }
-        foreach (string staleAudioNodeId in staleAudioNodeIds)
-        {
-            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, staleAudioNodeId, protectedNodes, g.NodeHelpers);
-        }
-    }
-
     internal static JArray CopyPath(JArray path)
     {
         if (path is not { Count: 2 })
@@ -536,28 +408,6 @@ internal class StageRunner(
             return null;
         }
         return new JArray(path[0], path[1]);
-    }
-
-    private static void AddCurrentMediaRootNodeId(HashSet<string> protectedNodes, WGNodeData media)
-    {
-        if (media?.Path is not JArray { Count: 2 } currentPath)
-        {
-            return;
-        }
-        protectedNodes.Add($"{currentPath[0]}");
-    }
-
-    private void CleanupReplacedTextToVideoRootStage(JArray priorOutputPath, bool replaceTextToVideoRootStage)
-    {
-        if (!replaceTextToVideoRootStage || priorOutputPath is not { Count: 2 })
-        {
-            return;
-        }
-
-        HashSet<string> protectedNodes = [];
-        AddCurrentMediaRootNodeId(protectedNodes, g.CurrentMedia);
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(bridge, $"{priorOutputPath[0]}", protectedNodes, g.NodeHelpers);
     }
 
     private static WGNodeData CloneMedia(WGNodeData media)
@@ -575,5 +425,17 @@ internal class StageRunner(
                 media.AttachedAudio.Compat);
         }
         return clone;
+    }
+
+    private RuntimeArtifact CaptureOutput(StagePlan stage)
+    {
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        RuntimeArtifact output = RuntimeArtifact.Capture(g, bridge, ArtifactOrigin.StageOutput);
+        if (!output.HasMedia)
+        {
+            throw new SwarmUserErrorException(
+                $"VideoStages: stage {stage.StageId} did not produce a video artifact.");
+        }
+        return output;
     }
 }

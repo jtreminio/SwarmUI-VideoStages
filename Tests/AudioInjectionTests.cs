@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -345,37 +346,16 @@ public class AudioInjectionTests
     }
 
     [Fact]
-    public void Save_audio_stage_injects_audio_into_native_ltx_video_chain_without_configured_stages()
+    public void Active_audio_only_configuration_without_timeline_is_rejected()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]");
 
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
-        Assert.Equal("300", lengthToFrames.AudioInput.Connection!.Node.Id);
-        Assert.Equal(0, lengthToFrames.AudioInput.Connection.SlotIndex);
-
-        EmptyLTXVLatentVideoNode emptyVideo = RequireTypedNode<EmptyLTXVLatentVideoNode>(bridge, "108");
-        Assert.Same(lengthToFrames.Frames, emptyVideo.Length.Connection);
-
-        SetLatentNoiseMaskNode setMask = Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
-        LTXVConcatAVLatentNode rootConcat = RequireTypedNode<LTXVConcatAVLatentNode>(bridge, "113");
-        Assert.Same(setMask.LATENT, rootConcat.AudioLatent.Connection);
-
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
-
-        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.Equal("203", saveNode.Audio.Connection!.Node.Id);
-        Assert.Equal(0, saveNode.Audio.Connection.SlotIndex);
-
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
+        Assert.Contains("supports LTX-Video timelines only", error.Message);
     }
 
     [Fact]

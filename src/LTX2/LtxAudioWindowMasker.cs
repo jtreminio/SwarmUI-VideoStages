@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Generated;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -120,15 +121,18 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
 
     private static AudioMaskWindow ResolveWindow(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageFrame stageFrame)
     {
-        StageSpec stage = stageFrame.Stage;
+        StagePlan stage = stageFrame.Stage;
         ClipSpec clip = stageFrame.ClipContext.Clip;
         int fps = genInfo.VideoFPS ?? LtxStageExecutor.DefaultFpsValue;
 
         // Retake: preserved-frame audio stays locked to the base encoding. Matches the video retake mask's
         // frame-count preference (genInfo.Frames first) so both windows describe the same span.
-        if (stage.RetakeWindow is not null && VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))
+        if (stage.Retake is not null && VideoStageModelCompat.IsLtxV2VideoModel(stage.Core.Model))
         {
-            return ComputeRetakeWindow(stage.RetakeWindow, fps, genInfo.Frames ?? clip.Frames);
+            return ComputeRetakeWindow(
+                new RetakeWindowSpec(stage.Retake.StartFrame, stage.Retake.LengthFrames, stage.Retake.Strength),
+                fps,
+                genInfo.Frames ?? clip.Frames);
         }
 
         return default;

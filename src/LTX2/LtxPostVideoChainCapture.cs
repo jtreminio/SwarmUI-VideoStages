@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -34,19 +35,18 @@ internal sealed class LtxPostVideoChainCapture
     public static LtxPostVideoChainCapture TryCapture(
         WorkflowGenerator generator,
         ClipContext clipContext,
-        StageSpec stage) =>
+        StagePlan stage) =>
         TryCaptureCore(generator, clipContext.AudioReuse, clipContext.Clip, stage, mutateReuseAudioState: true);
 
     private static LtxPostVideoChainCapture TryCaptureCore(
         WorkflowGenerator generator,
         ClipAudioState audioReuse,
         ClipSpec clip,
-        StageSpec stage,
+        StagePlan stage,
         bool mutateReuseAudioState)
     {
-        bool clipCanReuseAudio = clip?.CanReuseAudio == true;
-        bool useReusedAudio = clipCanReuseAudio && stage.ClipStageIndex > 0;
-        bool captureReusableAudio = clipCanReuseAudio && stage.ClipStageIndex == 1;
+        bool useReusedAudio = stage?.AudioAction == StageAudioAction.ReuseCaptured;
+        bool captureReusableAudio = stage?.AudioAction == StageAudioAction.CaptureForReuse;
         if (mutateReuseAudioState && !useReusedAudio && !captureReusableAudio)
         {
             audioReuse.Clear();

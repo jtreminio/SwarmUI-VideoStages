@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -14,7 +15,7 @@ internal static class LtxAudioReuseState
     public static void PrepareReusableAudio(
         WorkflowGenerator generator,
         ClipContext clipContext,
-        StageSpec stage)
+        StagePlan stage)
     {
         if (generator.CurrentMedia is null)
         {
@@ -23,13 +24,13 @@ internal static class LtxAudioReuseState
 
         ClipSpec clip = clipContext.Clip;
         ClipAudioState audioReuse = clipContext.AudioReuse;
-        if (!clip.CanReuseAudio || stage.ClipStageIndex == 0)
+        if (stage.AudioAction == StageAudioAction.None)
         {
             audioReuse.Clear();
             return;
         }
 
-        if (stage.ClipStageIndex == 1
+        if (stage.AudioAction == StageAudioAction.CaptureForReuse
             && generator.CurrentMedia.AttachedAudio?.DataType == WGNodeData.DT_LATENT_AUDIO
             && generator.CurrentMedia.AttachedAudio.Path is JArray currentAudioPath
             && IsValidAudioLatentPath(currentAudioPath))

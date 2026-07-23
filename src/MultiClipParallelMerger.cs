@@ -4,14 +4,12 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Execution;
 using VideoStages.Generated;
 
 namespace VideoStages;
 
 internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 {
-    internal const string NodeHelperKey = "videostages.parallel-multi-clip";
     private const int BatchImagesNodeMaxInputs = 50;
     // Crossfade dissolve length when no per-clip BoundaryOutOverlap preference is supplied; each
     // boundary's request is clamped so every crossfaded clip keeps >=1 non-overlapped core frame
@@ -24,7 +22,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 
     public void Apply(
         IReadOnlyList<WGNodeData> clipOutputsInOrder,
-        WGNodeData parallelClipSourceMedia = null,
         IReadOnlyList<string> clipBoundaryOuts = null,
         IReadOnlyList<int> continueWindows = null,
         IReadOnlyList<int> boundaryOverlapPrefs = null)
@@ -61,7 +58,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         using WorkflowBridge bridge = BridgeSync.For(g);
 
         List<INodeOutput> videoOutputs = [];
-        HashSet<string> terminalKeys = [];
         foreach (WGNodeData clip in clipOutputsInOrder)
         {
             INodeOutput output = bridge.ResolvePath(clip?.Path);
@@ -70,7 +66,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 continue;
             }
             videoOutputs.Add(output);
-            terminalKeys.Add(OutputKey(output));
         }
 
         if (videoOutputs.Count < 2)
@@ -89,7 +84,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         }
 
         // Null plan => the pure-cut path below runs byte-for-byte as before: a regression guarantee for
-        // all-cut, non-LTX, dimension/fps-mismatch, and unknown-frame configs. ("continue" reaches this
+        // all-cut, dimension/fps-mismatch, and unknown-frame configs. ("continue" reaches this
         // method only when generation-time continuity was actually armed; unarmed ones arrive as "cut".)
         CrossfadePlan crossfadePlan = ResolveCrossfadePlan(
             clipOutputsInOrder, clipBoundaryOuts, allFramesKnown, continueWindows, boundaryOverlapPrefs);
@@ -126,14 +121,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             ? BuildMergedAudio(bridge, clipOutputsInOrder, audioOutputs, crossfadePlan)
             : null;
 
-        INodeOutput rootVideoOutput = bridge.ResolvePath(parallelClipSourceMedia?.Path);
-        if (rootVideoOutput is not null)
-        {
-            terminalKeys.Add(OutputKey(rootVideoOutput));
-        }
-
-        RetargetSwarmSaveAnimationWsForClipTerminals(bridge, terminalKeys, mergedVideo, mergedAudio);
-
         WGNodeData template = clipOutputsInOrder[0];
         g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, template.Compat)
         {
@@ -151,8 +138,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 template.AttachedAudio?.Compat ?? g.CurrentAudioVae?.Compat);
         }
     }
-
-    private static string OutputKey(INodeOutput output) => $"{output.Node.Id}::{output.SlotIndex}";
 
     private WGNodeData TryGetClipConcatenatableAudio(WGNodeData clip)
     {
@@ -543,24 +528,4 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         return trim.AUDIO;
     }
 
-    private void RetargetSwarmSaveAnimationWsForClipTerminals(
-        WorkflowBridge bridge,
-        HashSet<string> terminalKeys,
-        INodeOutput images,
-        INodeOutput audio)
-    {
-        if (images is null || terminalKeys.Count == 0)
-        {
-            return;
-        }
-
-        SaveAnimationRetargeter.Retarget(
-            bridge,
-            save => save.Images.Connection is INodeOutput existingImages
-                && terminalKeys.Contains(OutputKey(existingImages))
-                && OutputRegistry.CanAdvanceFinalHostSave(g, save.Id),
-            images,
-            audio,
-            retargetAudio: true);
-    }
 }

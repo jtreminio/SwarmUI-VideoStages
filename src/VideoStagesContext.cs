@@ -10,9 +10,8 @@ internal static class VideoStagesContext
 {
     private static readonly ConditionalWeakTable<WorkflowGenerator, VideoStagesSpec> Cache = new();
 
-    // The execution plan is deliberately a separate cache from the parsed specification. The
-    // specification remains available to every historical path (including WAN); this cache is
-    // the canonical LTX-only execution seam.
+    // The execution plan is deliberately a separate cache from the parsed specification so it
+    // can be compiled before the host graph exists and consumed by every workflow phase.
     private static readonly ConditionalWeakTable<WorkflowGenerator, LtxPlanCacheEntry> LtxPlanCache = new();
 
     // Prompt-tag section resolution has no live WorkflowGenerator to key the cache on, so repeated
@@ -27,11 +26,34 @@ internal static class VideoStagesContext
 
     /// <summary>
     /// Gets the graph-free LTX execution plan compiled for this workflow, if the workflow's
-    /// selected models make it an LTX timeline. Its parity diagnostics preserve the root-handoff
-    /// characterization that guided the migration, while runtime orchestration consumes the plan.
+    /// selected models make it an LTX timeline.
     /// </summary>
     public static LtxVideoExecutionPlanContext? GetLtxVideoExecutionPlanContext(this WorkflowGenerator g) =>
         LtxPlanCache.GetValue(g, CompileLtxPlan).Context;
+
+    public static LtxVideoExecutionPlanContext RequireLtxVideoExecutionPlanContext(
+        this WorkflowGenerator g)
+    {
+        LtxVideoExecutionPlanContext context = g.GetLtxVideoExecutionPlanContext();
+        if (context is null)
+        {
+            throw new SwarmUserErrorException(
+                "VideoStages currently supports LTX-Video timelines only. "
+                + "WAN, mixed-model, and other video-model configurations are not supported.");
+        }
+
+        VideoPlanDiagnostic[] errors = [
+            .. context.Plan.Diagnostics.Where(
+                diagnostic => diagnostic.Severity == VideoPlanDiagnosticSeverity.Error)
+        ];
+        if (errors.Length > 0)
+        {
+            throw new SwarmUserErrorException(
+                "VideoStages could not create a valid LTX execution plan: "
+                + string.Join("; ", errors.Select(error => error.Message)));
+        }
+        return context;
+    }
 
     private static VideoStagesSpec ParseForPromptTag(T2IParamInput input)
     {
@@ -52,35 +74,19 @@ internal static class VideoStagesContext
             return new LtxPlanCacheEntry(null);
         }
 
-        bool legacyRootInterception = RootVideoStageHandoff.ShouldHandoffRootStageLegacy(g, spec);
+        bool canInterceptHostCore = RootVideoStageHandoff.CanInterceptHostCore(g, spec);
         RootEnvironment rootEnvironment = new(
             spec.IsTextToVideo ? HostRootKind.TextToVideoRoot : HostRootKind.ImageToVideo,
-            CanHandoffHostCore: legacyRootInterception,
+            CanHandoffHostCore: canInterceptHostCore,
             HasGlobalRefineSource: HasVideoRefineSource(g));
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(spec, rootEnvironment);
-        bool planRequestsRootInterception = plan.Root.CoreDisposition is not HostCoreDisposition.Keep;
-        List<VideoExecutionPlanParityDiagnostic> parityDiagnostics = [];
-        if (legacyRootInterception != planRequestsRootInterception)
-        {
-            parityDiagnostics.Add(new(
-                "root-interception-mismatch",
-                "The immutable root plan and the legacy root interception predicate disagree. "
-                    + "The comparison is retained as a migration characterization diagnostic.",
-                legacyRootInterception,
-                planRequestsRootInterception));
-        }
-        return new LtxPlanCacheEntry(new LtxVideoExecutionPlanContext(
-            plan,
-            legacyRootInterception,
-            planRequestsRootInterception,
-            parityDiagnostics.AsReadOnly()));
+        return new LtxPlanCacheEntry(new LtxVideoExecutionPlanContext(plan));
     }
 
     private static bool IsLtxTimeline(WorkflowGenerator g, VideoStagesSpec spec)
     {
-        // A mixed timeline remains on the legacy path: the canonical executor has one
-        // model-family contract, rather than silently treating an LTX stage as permission to
-        // plan adjacent WAN/unknown stages as LTX.
+        // The executor has one model-family contract; one LTX stage cannot make adjacent
+        // WAN/unknown stages valid.
         IReadOnlyList<StageSpec> activeStages = [.. spec.Clips.SelectMany(clip => clip.Stages)];
         if (activeStages.Count > 0)
         {
@@ -113,20 +119,7 @@ internal static class VideoStagesContext
 
 /// <summary>
 /// LTX-only execution data available at every workflow phase. It is immutable and safe to inspect
-/// before the native image-to-video step runs. The context records parity with the historical root
-/// predicate as a migration guard while current LTX orchestration consumes the plan.
+/// before the native image-to-video step runs.
 /// </summary>
 internal sealed record LtxVideoExecutionPlanContext(
-    VideoExecutionPlan Plan,
-    bool LegacyRootInterception,
-    bool PlanRequestsRootInterception,
-    IReadOnlyList<VideoExecutionPlanParityDiagnostic> ParityDiagnostics)
-{
-    public bool HasRootInterceptionParity => ParityDiagnostics.Count == 0;
-}
-
-internal sealed record VideoExecutionPlanParityDiagnostic(
-    string Code,
-    string Message,
-    bool LegacyValue,
-    bool PlanValue);
+    VideoExecutionPlan Plan);

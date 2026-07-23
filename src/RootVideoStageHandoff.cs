@@ -21,23 +21,22 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
 
     /// <summary>A sourced clip's first stage refines its own footage, so it never absorbs the
     /// text-to-video root generation.</summary>
-    public bool ShouldReplaceTextToVideoRootStage(StageSpec stage, ClipSpec clip)
+    public bool ShouldReplaceTextToVideoRootStage(
+        Planning.StagePlan stage,
+        Planning.ClipPlan clip)
     {
-        return clip?.SourceVideo is null
+        return clip?.Input != Planning.ClipInputKind.SourceVideo
             && stage.ClipStageIndex == 0
             && g.GetVideoStagesSpec().IsTextToVideo;
     }
 
     public bool ShouldHandoffRootStage()
     {
-        // Compile the LTX plan early enough for the pre-core interception phase. The plan is
-        // deliberately observational in this milestone: the proven legacy predicate below stays
-        // authoritative until the root/output migration has its own characterization coverage.
-        _ = g.GetLtxVideoExecutionPlanContext();
-        return ShouldHandoffRootStageLegacy(g, g.GetVideoStagesSpec());
+        return g.RequireLtxVideoExecutionPlanContext()
+            .Plan.Root.CoreDisposition is not Planning.HostCoreDisposition.Keep;
     }
 
-    internal static bool ShouldHandoffRootStageLegacy(WorkflowGenerator g, VideoStagesSpec spec)
+    internal static bool CanInterceptHostCore(WorkflowGenerator g, VideoStagesSpec spec)
     {
         if (VideoStagesExtension.CoreImageToVideoStep is null)
         {

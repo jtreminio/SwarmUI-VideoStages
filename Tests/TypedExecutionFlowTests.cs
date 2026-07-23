@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -10,13 +11,51 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// Characterization coverage for the plan-backed adapter path. These cases run through the
-/// canonical LTX plan and assert the same graph-level outcomes as the established legacy flows.
+/// Characterization coverage for the plan-backed typed execution path. These cases run through
+/// the canonical LTX plan and assert the required graph-level outcomes.
 /// </summary>
 public partial class StageFlowTests
 {
     [Fact]
-    public void Plan_adapter_single_stage_ltx_preserves_one_stage_graph()
+    public void Active_Wan_configuration_fails_before_execution()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true)));
+
+        Assert.Contains("supports LTX-Video timelines only", error.Message);
+    }
+
+    [Fact]
+    public void Active_mixed_model_configuration_fails_before_execution()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated"),
+                MakeStage("not-an-ltx-model", "PreviousStage")));
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true)));
+
+        Assert.Contains("mixed-model", error.Message);
+    }
+
+    [Fact]
+    public void Typed_plan_single_stage_ltx_preserves_one_stage_graph()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -34,7 +73,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Plan_adapter_multi_stage_ltx_preserves_stage_chaining()
+    public void Typed_plan_multi_stage_ltx_preserves_stage_chaining()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -55,7 +94,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Plan_adapter_sourced_ltx_preserves_source_refine_graph()
+    public void Typed_plan_sourced_ltx_preserves_source_refine_graph()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -68,7 +107,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Plan_adapter_multi_clip_ltx_preserves_parallel_merge_graph()
+    public void Typed_plan_multi_clip_ltx_preserves_parallel_merge_graph()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
