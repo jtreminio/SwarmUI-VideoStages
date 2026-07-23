@@ -928,7 +928,7 @@
     }
     return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
   };
-  var normalizeIcLora = (raw, stageCount = 0) => {
+  var normalizeIcLora = (raw, stageCount = 0, sourcedClip = false) => {
     if (!isRecord(raw)) {
       return null;
     }
@@ -942,7 +942,7 @@
       stageCount
     );
     let source = normalizeIcLoraSource(readProp(raw, "source", "Source"));
-    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1) {
+    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1 && !sourcedClip) {
       source = IC_LORA_SOURCE_UPLOAD;
     }
     return {
@@ -971,10 +971,10 @@
       driveAudioRef: readProp(raw, "driveAudioRef", "DriveAudioRef") === true
     };
   };
-  var normalizeIcLoras = (rawClip, stageCount = 0) => {
+  var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
     const raw = readProp(rawClip, "icLoras", "IcLoras");
     if (Array.isArray(raw)) {
-      const entries = raw.map((entry) => normalizeIcLora(entry, stageCount)).filter((entry) => entry !== null);
+      const entries = raw.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
       if (entries.length > 0) {
         return entries;
       }
@@ -994,8 +994,8 @@
       })
     ];
   };
-  var reconcileIcLoraStage = (entry) => {
-    if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+  var reconcileIcLoraStage = (entry, sourcedClip = false) => {
+    if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT && !sourcedClip) {
       entry.source = IC_LORA_SOURCE_UPLOAD;
     }
   };
@@ -1147,7 +1147,7 @@
     }
     return Math.max(REF_FRAME_MIN, defaults.frames);
   };
-  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip) => {
+  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false) => {
     const defaults = getRootDefaults2();
     const fallback = buildDefaultStage(
       getRootDefaults2,
@@ -1155,9 +1155,10 @@
       previousStage,
       refCount
     );
+    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
     let firstStageUpscale;
     let control;
-    if (stageIndexInClip === 0) {
+    if (forcedFirstStage) {
       firstStageUpscale = {
         upscale: defaults.upscale,
         upscaleMethod: resolveRootPreferredUpscaleMethod(
@@ -1238,7 +1239,7 @@
       )
     };
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
-      stage.upscaleMethod = stageIndexInClip === 0 ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
+      stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
     }
     return stage;
   };
@@ -1270,14 +1271,18 @@
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const icLoras = normalizeIcLoras(rawClip, stagesRaw.length);
+    const sourceVideo = normalizeSourceVideo(
+      readProp(rawClip, "sourceVideo", "SourceVideo")
+    );
+    const icLoras = normalizeIcLoras(
+      rawClip,
+      stagesRaw.length,
+      sourceVideo !== null
+    );
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
       controlNetEnabled: hasSlotSourcedIcLora(icLoras)
     });
     const fps = Math.max(1, defaults.fps);
-    const sourceVideo = normalizeSourceVideo(
-      readProp(rawClip, "sourceVideo", "SourceVideo")
-    );
     const rawDuration = sourceVideo?.lengthSeconds ?? utils.toNumber(`${rawClip.duration}`, defaults.frames / fps);
     const duration = snapDurationToFps(
       Math.max(CLIP_DURATION_MIN, rawDuration),
@@ -1298,7 +1303,8 @@
           isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
           previousStage,
           refs.length,
-          i
+          i,
+          sourceVideo !== null
         )
       );
     }
@@ -4862,10 +4868,8 @@
   var buildParamsColumn = (ctx, clip, clipIdx, stageIdx, stage, defaults) => {
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-params";
-    const isRefine = stageIdx >= 1;
-    const retakeRidesStage0 = clip.retake != null && !clip.stages.some((s, idx) => idx > 0 && s.skipped !== true);
     const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
-    const sourcedPassthrough = sourcedStage0 && !retakeRidesStage0;
+    const isRefine = stageIdx >= 1 || sourcedStage0;
     const stageCommit = (mutate) => {
       ctx.commit((clips) => {
         const target = clips[clipIdx]?.stages[stageIdx];
@@ -5105,14 +5109,8 @@
     if (sourcedStage0) {
       const note = document.createElement("p");
       note.className = "vst-detail-note vst-stage-passthrough-note";
-      note.textContent = sourcedPassthrough ? "Source footage passes through this stage unchanged — add a later stage to refine it." : "This stage passes the source footage through; its settings apply only to the retake window.";
+      note.textContent = "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
       col.insertBefore(note, fields);
-      if (sourcedPassthrough) {
-        fields.classList.add("vst-stage-fields-passthrough");
-        for (const el of fields.querySelectorAll("input, select, button")) {
-          el.disabled = true;
-        }
-      }
     }
     railSkipSync = (skipped) => {
       const railChip = ctx.getDockEl()?.querySelector(
@@ -5566,13 +5564,13 @@
             }
             const stage = Number(value);
             target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
-            reconcileIcLoraStage(target);
+            reconcileIcLoraStage(target, !!clips[clipIdx]?.sourceVideo);
           });
           ctx.render();
         }
       );
       fields.appendChild(buildField("Apply on", applySelect));
-      if (entry.stage >= 1 && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
+      if ((entry.stage >= 1 || !!clip.sourceVideo) && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
         const sourceSelect = buildOptionSelect(
           [
             { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
@@ -5597,7 +5595,7 @@
       if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
         const hint = document.createElement("small");
         hint.className = "vst-audio-field-hint";
-        hint.textContent = `Driven by stage ${entry.stage}'s input (the previous stage's output).`;
+        hint.textContent = entry.stage >= 1 ? `Driven by stage ${entry.stage}'s input (the previous stage's output).` : "Driven by each stage's incoming frames (the source footage on stage 0).";
         fields.appendChild(hint);
       } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
         fields.appendChild(
@@ -5625,6 +5623,12 @@
             }
           )
         );
+        if (!entry.video?.data && !!clip.sourceVideo) {
+          const hint = document.createElement("small");
+          hint.className = "vst-audio-field-hint";
+          hint.textContent = "No upload — drives from the stage's incoming footage.";
+          fields.appendChild(hint);
+        }
         if (entry.video?.data?.startsWith("data:video/")) {
           const voiceRow = buildCheckbox(
             "Voice ref from drive audio",
@@ -6676,7 +6680,7 @@
             } else if (entry.stage > stageIdx) {
               entry.stage -= 1;
             }
-            reconcileIcLoraStage(entry);
+            reconcileIcLoraStage(entry, !!clip.sourceVideo);
           }
           return {
             kind: "clip",

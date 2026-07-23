@@ -980,6 +980,32 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseStage_SourcedClipStage0_KeepsAuthoredControlAndUpscale()
+    {
+        JObject stage0 = MakeStage("model-a");
+        stage0["Control"] = 0.3;
+        stage0["Upscale"] = 2.0;
+        stage0["UpscaleMethod"] = "pixel-catmull";
+        JObject clip = MakeClip(stages: [stage0], duration: 3.0);
+        clip["SourceVideo"] = new JObject
+        {
+            ["Data"] = "data:video/mp4;base64,QUJD",
+            ["FileName"] = "footage.mp4",
+            ["StartSeconds"] = 0.0,
+        };
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+        WorkflowGenerator parser = BuildParser(json);
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        // A sourced clip's stage 0 refines its footage (init-video img2img), so authored
+        // Control/Upscale/UpscaleMethod survive instead of being forced to 1 / 1× / default.
+        Assert.Equal(0.3, spec.Clips[0].Stages[0].Control);
+        Assert.Equal(2.0, spec.Clips[0].Stages[0].Upscale);
+        Assert.Equal("pixel-catmull", spec.Clips[0].Stages[0].UpscaleMethod);
+    }
+
+    [Fact]
     public void ParseStage_Clip0Stage0_RefineSourceVideoMode_ForcesControlToZero()
     {
         string json = JsonConvert.SerializeObject(new JArray(

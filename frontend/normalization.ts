@@ -432,6 +432,7 @@ const normalizeIcLoraStage = (value: unknown, stageCount: number): number => {
 export const normalizeIcLora = (
     raw: unknown,
     stageCount: number = 0,
+    sourcedClip = false,
 ): IcLora | null => {
     if (!isRecord(raw)) {
         return null;
@@ -446,8 +447,9 @@ export const normalizeIcLora = (
         stageCount,
     );
     let source = normalizeIcLoraSource(readProp(raw, "source", "Source"));
-    // Stage Input means "this stage's incoming frames" — meaningless without a refine-stage target.
-    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1) {
+    // Stage Input means "this stage's incoming frames" — meaningless below a refine-stage
+    // target UNLESS the clip is sourced, where stage 0's input is the clip's footage.
+    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1 && !sourcedClip) {
         source = IC_LORA_SOURCE_UPLOAD;
     }
     return {
@@ -484,11 +486,12 @@ export const normalizeIcLora = (
 export const normalizeIcLoras = (
     rawClip: Record<string, unknown>,
     stageCount: number = 0,
+    sourcedClip = false,
 ): IcLora[] => {
     const raw = readProp(rawClip, "icLoras", "IcLoras");
     if (Array.isArray(raw)) {
         const entries = raw
-            .map((entry) => normalizeIcLora(entry, stageCount))
+            .map((entry) => normalizeIcLora(entry, stageCount, sourcedClip))
             .filter((entry): entry is IcLora => entry !== null);
         if (entries.length > 0) {
             return entries;
@@ -512,11 +515,20 @@ export const normalizeIcLoras = (
 
 /**
  * Heals an IC-LoRA entry after its stage target changes (a stage delete/shift or
- * a re-target): "Stage Input" media only exists on a refine stage, so an entry
- * that dropped below stage 1 falls its source back to Upload. Mutates in place.
+ * a re-target): "Stage Input" media only exists on a refine stage — or anywhere
+ * on a sourced clip, whose stage 0 input is the footage — so an entry that
+ * dropped below stage 1 on an unsourced clip falls its source back to Upload.
+ * Mutates in place.
  */
-export const reconcileIcLoraStage = (entry: IcLora): void => {
-    if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+export const reconcileIcLoraStage = (
+    entry: IcLora,
+    sourcedClip = false,
+): void => {
+    if (
+        entry.stage < 1 &&
+        entry.source === IC_LORA_SOURCE_STAGE_INPUT &&
+        !sourcedClip
+    ) {
         entry.source = IC_LORA_SOURCE_UPLOAD;
     }
 };
@@ -741,6 +753,7 @@ export const normalizeStage = (
     previousStage: Stage | null,
     refCount: number,
     stageIndexInClip: number,
+    sourcedClip = false,
 ): Stage => {
     const defaults = getRootDefaults();
     const fallback = buildDefaultStage(
@@ -749,9 +762,12 @@ export const normalizeStage = (
         previousStage,
         refCount,
     );
+    // A generation first stage forces control/upscale; a sourced clip's stage 0
+    // refines its footage (init-video img2img), so it keeps authored values.
+    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
     let firstStageUpscale: { upscale: number; upscaleMethod: string };
     let control: number;
-    if (stageIndexInClip === 0) {
+    if (forcedFirstStage) {
         firstStageUpscale = {
             upscale: defaults.upscale,
             upscaleMethod: resolveRootPreferredUpscaleMethod(
@@ -839,10 +855,9 @@ export const normalizeStage = (
         !defaults.upscaleMethodValues.includes(stage.upscaleMethod) &&
         defaults.upscaleMethodValues.length > 0
     ) {
-        stage.upscaleMethod =
-            stageIndexInClip === 0
-                ? (defaults.upscaleMethodValues[0] ?? "")
-                : stage.upscaleMethod || fallback.upscaleMethod;
+        stage.upscaleMethod = forcedFirstStage
+            ? (defaults.upscaleMethodValues[0] ?? "")
+            : stage.upscaleMethod || fallback.upscaleMethod;
     }
     return stage;
 };
@@ -886,14 +901,18 @@ export const normalizeClip = (
     const defaults = getRootDefaults();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const icLoras = normalizeIcLoras(rawClip, stagesRaw.length);
+    const sourceVideo = normalizeSourceVideo(
+        readProp(rawClip, "sourceVideo", "SourceVideo"),
+    );
+    const icLoras = normalizeIcLoras(
+        rawClip,
+        stagesRaw.length,
+        sourceVideo !== null,
+    );
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
         controlNetEnabled: hasSlotSourcedIcLora(icLoras),
     });
     const fps = Math.max(1, defaults.fps);
-    const sourceVideo = normalizeSourceVideo(
-        readProp(rawClip, "sourceVideo", "SourceVideo"),
-    );
     // A sourced clip's duration IS its used source range.
     const rawDuration =
         sourceVideo?.lengthSeconds ??
@@ -920,6 +939,7 @@ export const normalizeClip = (
                 previousStage,
                 refs.length,
                 i,
+                sourceVideo !== null,
             ),
         );
     }

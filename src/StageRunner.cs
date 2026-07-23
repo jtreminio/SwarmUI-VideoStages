@@ -6,7 +6,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
-using VideoStages.Generated;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -390,8 +389,7 @@ internal class StageRunner(
         WGNodeData source = stageFrame.SourceMedia;
         LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
         bool wantsStageInput = clip.IcLoras is not null && clip.IcLoras.Any(entry =>
-            StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput)
-            && entry.Stage == stageFrame.Stage.ClipStageRawIndex);
+            IcLoraApplicator.WantsStageInputDrive(clip, entry, stageFrame.Stage.ClipStageRawIndex));
         if (!wantsStageInput
             || postVideoChain is null
             || !ReferencesPostVideoChainOutput(source, postVideoChain))

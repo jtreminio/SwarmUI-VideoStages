@@ -47,9 +47,15 @@ internal sealed class LtxStageOrchestrator(
         double guideMergeStrength = primaryGuideClipRef?.Strength ?? 1.0;
 
         bool replacesTextToVideoRoot = stageFrame.ReplacesTextToVideoRoot;
+        // A sourced clip's first stage samples its encoded footage directly (init-video
+        // img2img); reinjecting that same footage as an i2v inplace guide would overwrite the
+        // noise mask of every frame it spans. The official upscaler/V2V flows are encode-only.
+        bool sourcedFootageIsStageInput = stageFrame.ClipContext.Clip.SourceVideo is not null
+            && stageFrame.ClipContext.IsFirstStage(stage);
         bool skipGuideReinjection = primaryGuideClipRef is null
             && (replacesTextToVideoRoot
                 || clipRefs is { Count: > 0 }
+                || sourcedFootageIsStageInput
                 || ShouldSkipGeneratedGuideReinjection(
                     stage,
                     sourceMedia,

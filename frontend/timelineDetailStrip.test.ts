@@ -597,6 +597,81 @@ describe("createTimelineDetailStrip", () => {
         expect(controlNetLabels()).toContain("Drive Media");
     });
 
+    it("sourced clip renders the IC-LoRA Source select and footage-drive hint on an all-stages entry", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                sourceVideo: {
+                    data: "data:video/mp4;base64,AA==",
+                    fileName: "clip.mp4",
+                    fps: 24,
+                    durationSeconds: 4,
+                    startSeconds: 0,
+                    lengthSeconds: 4,
+                },
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        // On a sourced clip the footage is the drive, so the Source select renders even at the
+        // default All-stages placement: Preset, LoRA, Control, Apply on, Source = 5 selects.
+        expect(
+            document.querySelectorAll(".vst-detail-iclora select"),
+        ).toHaveLength(5);
+        expect(icLoraSelect("source").value).toBe("Upload");
+        expect(controlNetLabels()).toContain("Drive Media");
+        expect(detail()?.textContent).toContain(
+            "No upload — drives from the stage's incoming footage.",
+        );
+    });
+
+    it("sourced clip Stage-Input entry shows the footage-drive hint at stage 0", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                sourceVideo: {
+                    data: "data:video/mp4;base64,AA==",
+                    fileName: "clip.mp4",
+                    fps: 24,
+                    durationSeconds: 4,
+                    startSeconds: 0,
+                    lengthSeconds: 4,
+                },
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 0,
+                        source: "Stage Input",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(icLoraSelect("source").value).toBe("Stage Input");
+        expect(controlNetLabels()).not.toContain("Drive Media");
+        expect(detail()?.textContent).toContain(
+            "Driven by each stage's incoming frames (the source footage on stage 0)",
+        );
+    });
+
+    it("unsourced clip omits the IC-LoRA Source select on a stage-0/all entry", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        // Preset, LoRA, Control, Apply on — no Source select without a refine-stage placement.
+        expect(
+            document.querySelectorAll(".vst-detail-iclora select"),
+        ).toHaveLength(4);
+        expect(controlNetLabels()).toContain("Drive Media");
+    });
+
     it("leads the IC-LoRA LoRA dropdown with [AUTO]", () => {
         setup([
             {
@@ -886,7 +961,7 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].stages[1].skipped).toBe(true);
     });
 
-    describe("sourced clip stage 0 passthrough gating", () => {
+    describe("sourced clip stage 0 refine params", () => {
         const SOURCE_VIDEO = {
             data: "data:video/mp4;base64,AA==",
             fileName: "clip.mp4",
@@ -901,26 +976,31 @@ describe("createTimelineDetailStrip", () => {
             document.querySelector(".vst-stage-passthrough-note")
                 ?.textContent ?? "";
 
-        it("disables stage 0 params when the footage passes through", () => {
+        it("renders enabled refine params and a footage note on sourced stage 0", () => {
             setup([
                 {
                     duration: 4,
-                    stages: [{}, {}],
+                    stages: [{ control: 0.5, upscale: 2 }, {}],
                     sourceVideo: SOURCE_VIDEO,
                 },
             ]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            // Sourced stage 0 refines its footage: no passthrough gating.
             expect(
                 fields()?.classList.contains("vst-stage-fields-passthrough"),
-            ).toBe(true);
-            expect(note()).toContain("passes through this stage unchanged");
-            const someInput =
-                fields()?.querySelector<HTMLInputElement>("input");
-            const someSelect =
-                fields()?.querySelector<HTMLSelectElement>("select");
-            expect(someInput?.disabled).toBe(true);
-            expect(someSelect?.disabled).toBe(true);
-            // Later stages keep their live editors.
+            ).toBe(false);
+            expect(note()).toContain("starts from the source footage");
+            // The refine controls (Control / Upscale / Upscale Method) render
+            // and are live — a generation stage 0 lacks them entirely.
+            expect(sliderNumberByLabel("Control").disabled).toBe(false);
+            expect(sliderNumberByLabel("Upscale").disabled).toBe(false);
+            expect(
+                fieldByLabel("Upscale Method").querySelector<HTMLSelectElement>(
+                    "select",
+                )?.disabled,
+            ).toBe(false);
+
+            // Later stages keep their live editors and no footage note.
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
             expect(
                 fields()?.classList.contains("vst-stage-fields-passthrough"),
@@ -928,47 +1008,15 @@ describe("createTimelineDetailStrip", () => {
             expect(note()).toBe("");
         });
 
-        it("still disables stage 0 when a retake rides a LATER active stage", () => {
-            setup([
-                {
-                    duration: 4,
-                    stages: [{}, {}],
-                    sourceVideo: SOURCE_VIDEO,
-                    retake: { startSeconds: 1, lengthSeconds: 2, strength: 1 },
-                },
-            ]);
-            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            expect(
-                fields()?.classList.contains("vst-stage-fields-passthrough"),
-            ).toBe(true);
-        });
-
-        it("keeps stage 0 params live when the retake rides stage 0", () => {
-            setup([
-                {
-                    duration: 4,
-                    stages: [{}, { skipped: true }],
-                    sourceVideo: SOURCE_VIDEO,
-                    retake: { startSeconds: 1, lengthSeconds: 2, strength: 1 },
-                },
-            ]);
-            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            expect(
-                fields()?.classList.contains("vst-stage-fields-passthrough"),
-            ).toBe(false);
-            expect(note()).toContain("apply only to the retake window");
-            expect(
-                fields()?.querySelector<HTMLInputElement>("input")?.disabled,
-            ).toBe(false);
-        });
-
-        it("leaves stage 0 of an unsourced clip untouched", () => {
+        it("leaves stage 0 of an unsourced clip without refine params or note", () => {
             setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             expect(
                 fields()?.classList.contains("vst-stage-fields-passthrough"),
             ).toBe(false);
             expect(note()).toBe("");
+            // Generation stage 0 forces Control/Upscale, so those widgets are absent.
+            expect(() => sliderNumberByLabel("Control")).toThrow();
         });
     });
 

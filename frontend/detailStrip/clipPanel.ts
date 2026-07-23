@@ -210,17 +210,11 @@ const buildParamsColumn = (
 ): { col: HTMLElement; railSkipSync: (skipped: boolean) => void } => {
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-params";
-    const isRefine = stageIdx >= 1;
-    // A sourced clip's stage 0 is a Control-0 passthrough of the footage (the
-    // backend discards its sampling params) — unless the clip's retake rides
-    // it: the retake attaches to the LAST active stage and samples with that
-    // stage's settings.
-    const retakeRidesStage0 =
-        clip.retake != null &&
-        !clip.stages.some((s, idx) => idx > 0 && s.skipped !== true);
+    // A sourced clip's stage 0 refines its footage (init-video img2img), so it
+    // gets the refine controls (Control/Upscale) a generation stage 0 lacks.
     const sourcedStage0 =
         stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
-    const sourcedPassthrough = sourcedStage0 && !retakeRidesStage0;
+    const isRefine = stageIdx >= 1 || sourcedStage0;
 
     const stageCommit = (mutate: (target: Stage) => void): void => {
         ctx.commit((clips) => {
@@ -501,18 +495,9 @@ const buildParamsColumn = (
     if (sourcedStage0) {
         const note = document.createElement("p");
         note.className = "vst-detail-note vst-stage-passthrough-note";
-        note.textContent = sourcedPassthrough
-            ? "Source footage passes through this stage unchanged — add a later stage to refine it."
-            : "This stage passes the source footage through; its settings apply only to the retake window.";
+        note.textContent =
+            "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
         col.insertBefore(note, fields);
-        if (sourcedPassthrough) {
-            fields.classList.add("vst-stage-fields-passthrough");
-            for (const el of fields.querySelectorAll<
-                HTMLInputElement | HTMLSelectElement | HTMLButtonElement
-            >("input, select, button")) {
-                el.disabled = true;
-            }
-        }
     }
 
     railSkipSync = (skipped: boolean): void => {
@@ -1081,7 +1066,7 @@ const buildIcLorasSection = (
                         Number.isInteger(stage) && stage >= 0
                             ? stage
                             : IC_LORA_STAGE_ALL;
-                    reconcileIcLoraStage(target);
+                    reconcileIcLoraStage(target, !!clips[clipIdx]?.sourceVideo);
                 });
                 ctx.render();
             },
@@ -1089,12 +1074,13 @@ const buildIcLorasSection = (
         fields.appendChild(buildField("Apply on", applySelect));
 
         /**
-         * "Stage input" (the previous stage's output as drive media) only
-         * exists on refine-stage placements; legacy captured-branch entries
+         * "Stage input" (the stage's incoming frames as drive media) only
+         * exists on refine-stage placements — or anywhere on a sourced clip,
+         * whose stage 0 input is the footage; legacy captured-branch entries
          * keep their source and get no select.
          */
         if (
-            entry.stage >= 1 &&
+            (entry.stage >= 1 || !!clip.sourceVideo) &&
             (entry.source === IC_LORA_SOURCE_UPLOAD ||
                 entry.source === IC_LORA_SOURCE_STAGE_INPUT)
         ) {
@@ -1123,7 +1109,10 @@ const buildIcLorasSection = (
         if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
             const hint = document.createElement("small");
             hint.className = "vst-audio-field-hint";
-            hint.textContent = `Driven by stage ${entry.stage}'s input (the previous stage's output).`;
+            hint.textContent =
+                entry.stage >= 1
+                    ? `Driven by stage ${entry.stage}'s input (the previous stage's output).`
+                    : "Driven by each stage's incoming frames (the source footage on stage 0).";
             fields.appendChild(hint);
         } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
             fields.appendChild(
@@ -1151,6 +1140,13 @@ const buildIcLorasSection = (
                     },
                 ),
             );
+            if (!entry.video?.data && !!clip.sourceVideo) {
+                const hint = document.createElement("small");
+                hint.className = "vst-audio-field-hint";
+                hint.textContent =
+                    "No upload — drives from the stage's incoming footage.";
+                fields.appendChild(hint);
+            }
             if (entry.video?.data?.startsWith("data:video/")) {
                 const voiceRow = buildCheckbox(
                     "Voice ref from drive audio",

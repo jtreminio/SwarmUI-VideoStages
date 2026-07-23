@@ -816,13 +816,15 @@ internal static class VideoStagesSpecParser
             defaults.UpscaleMethod,
             locationPrefix,
             allowEmpty: false);
-        // A sourced clip is per-clip refine: its first stage passes the footage through (Control 0)
-        // and later stages refine/upscale it — the same shape the global refine source gives clip 0.
-        bool isRefineSkipped = (refineMode && clipIndex == 0 && index < refineSkipStages)
-            || (sourcedClip && index == 0);
-        if (index == 0 || isRefineSkipped)
+        // A sourced clip's first stage refines its own footage like any later stage refines its
+        // predecessor (init-video img2img): Control and Upscale stay user-authored. Only a
+        // generation first stage (no source video) forces Control 1 / Upscale 1, and only
+        // refine-mode skip stages force a Control-0 passthrough.
+        bool isRefineSkipped = refineMode && clipIndex == 0 && index < refineSkipStages;
+        bool isGenerationFirstStage = index == 0 && !sourcedClip;
+        if (isGenerationFirstStage || isRefineSkipped)
         {
-            if (index == 0 && ShouldWarnFirstStageUpscaleIgnored(
+            if (isGenerationFirstStage && ShouldWarnFirstStageUpscaleIgnored(
                 JsonHasOwnProperty(stage, "Upscale"),
                 JsonHasOwnProperty(stage, "UpscaleMethod"),
                 upscale))

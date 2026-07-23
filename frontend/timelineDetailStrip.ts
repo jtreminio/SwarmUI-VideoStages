@@ -751,7 +751,7 @@ export const createTimelineDetailStrip = (
                     } else if (entry.stage > stageIdx) {
                         entry.stage -= 1;
                     }
-                    reconcileIcLoraStage(entry);
+                    reconcileIcLoraStage(entry, !!clip.sourceVideo);
                 }
                 return {
                     kind: "clip",

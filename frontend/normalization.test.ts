@@ -4,10 +4,12 @@ import {
     buildDefaultClip,
     buildDefaultRef,
     buildDefaultStage,
+    defaultIcLora,
     hasSlotSourcedIcLora,
     normalizeAudioSegments,
     normalizeClip,
     normalizeContinueOverlap,
+    normalizeIcLora,
     normalizeRef,
     normalizeRetake,
     normalizeSourceVideo,
@@ -16,6 +18,7 @@ import {
     normalizeStageRefStrengthValue,
     readRawStageProp,
     readRawStageString,
+    reconcileIcLoraStage,
     removeRefAt,
 } from "./normalization";
 import {
@@ -320,6 +323,53 @@ describe("normalization", () => {
         expect(clip.icLoras[0].stage).toBe(-1);
     });
 
+    it("normalizeClip keeps a Stage Input source at stage 0 on a sourced clip", () => {
+        const clip = normalizeClip(
+            {
+                stages: [{ model: "ltx" }],
+                sourceVideo: {
+                    data: "data:video/mp4;base64,QUJD",
+                    lengthSeconds: 3,
+                },
+                icLoras: [{ lora: "a", stage: 0, source: "Stage Input" }],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        // Stage 0's incoming frames ARE the footage on a sourced clip, so Stage Input survives there.
+        expect(clip.sourceVideo).not.toBeNull();
+        expect(clip.icLoras[0].source).toBe("Stage Input");
+        expect(clip.icLoras[0].stage).toBe(0);
+    });
+
+    it("normalizeClip downgrades a Stage Input source at stage 0 on an unsourced clip", () => {
+        const clip = normalizeClip(
+            {
+                stages: [{ model: "ltx" }],
+                icLoras: [{ lora: "a", stage: 0, source: "Stage Input" }],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.icLoras[0].source).toBe("Upload");
+    });
+
+    it("normalizeIcLora keeps Stage Input at stage < 1 only when sourced", () => {
+        const raw = { lora: "a", stage: 0, source: "Stage Input" };
+        expect(normalizeIcLora(raw, 0, false)?.source).toBe("Upload");
+        expect(normalizeIcLora(raw, 0, true)?.source).toBe("Stage Input");
+    });
+
+    it("reconcileIcLoraStage keeps Stage Input for a sourced clip and downgrades otherwise", () => {
+        const sourced = defaultIcLora({ source: "Stage Input", stage: 0 });
+        reconcileIcLoraStage(sourced, true);
+        expect(sourced.source).toBe("Stage Input");
+
+        const unsourced = defaultIcLora({ source: "Stage Input", stage: 0 });
+        reconcileIcLoraStage(unsourced, false);
+        expect(unsourced.source).toBe("Upload");
+    });
+
     it("normalizeClip heals an IC-LoRA stage target beyond the clip's stage list", () => {
         const clip = normalizeClip(
             {
@@ -497,6 +547,54 @@ describe("normalization", () => {
         );
 
         expect(stage0.control).toBe(0.5);
+    });
+
+    it("normalizeStage keeps authored control/upscale on a sourced clip stage 0", () => {
+        const stage0 = normalizeStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            {
+                ...minimalStageRaw,
+                Control: 0.4,
+                Upscale: 1.3,
+                UpscaleMethod: "latentmodel-b.safetensors",
+            },
+            null,
+            0,
+            0,
+            true,
+        );
+
+        // A sourced stage 0 refines its footage (init-video img2img): authored
+        // Control/Upscale/UpscaleMethod survive, still clamped and 0.25-snapped.
+        expect(stage0.control).toBe(0.4);
+        expect(stage0.upscale).toBe(1.25);
+        expect(stage0.upscaleMethod).toBe("latentmodel-b.safetensors");
+    });
+
+    it("normalizeClip keeps authored stage-0 refine params for a sourced clip", () => {
+        const clip = normalizeClip(
+            {
+                stages: [
+                    {
+                        model: "ltx",
+                        control: 0.3,
+                        upscale: 2,
+                        upscaleMethod: "latentmodel-b.safetensors",
+                    },
+                ],
+                sourceVideo: {
+                    data: "data:video/mp4;base64,QUJD",
+                    lengthSeconds: 3,
+                },
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.sourceVideo).not.toBeNull();
+        expect(clip.stages[0].control).toBe(0.3);
+        expect(clip.stages[0].upscale).toBe(2);
+        expect(clip.stages[0].upscaleMethod).toBe("latentmodel-b.safetensors");
     });
 
     it("normalizeStage reads PascalCase control for non-first stage", () => {

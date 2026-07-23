@@ -175,24 +175,33 @@ internal class IcLoraApplicator(WorkflowGenerator g)
         slotSource = null;
         if (StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload))
         {
-            if (string.IsNullOrWhiteSpace(entry.Video?.Data))
+            if (!string.IsNullOrWhiteSpace(entry.Video?.Data))
+            {
+                images = GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, entry.Video);
+                return images is not null;
+            }
+            // A sourced clip's footage is the implicit drive: an Upload entry with no uploaded
+            // media drives from the stage's incoming frames (matching the official IC-LoRA
+            // upscaler/V2V workflows) instead of degrading to a loader-only model patch.
+            if (clip.SourceVideo is null || !IsImageStream(stageInput))
             {
                 return false;
             }
-            images = GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, entry.Video);
-            return images is not null;
+            images = new JArray(stageInput.Path[0], stageInput.Path[1]);
+            return true;
         }
         if (StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput))
         {
-            if (entry.Stage < 1)
+            // On a sourced clip, stage 0's incoming frames are the clip's footage, so Stage
+            // Input is valid there (and on an all-stages target); other clips generate stage 0
+            // and have no stage-0 input stream.
+            if (entry.Stage < 1 && clip.SourceVideo is null)
             {
                 throw new SwarmUserErrorException(
                     "An IC-LoRA uses the Stage Input drive source but is not applied to a refine "
                     + "stage. Set 'Apply on' to Stage 1 or later, or switch the source to Upload.");
             }
-            if (stageInput is null
-                || (stageInput.DataType != WGNodeData.DT_IMAGE
-                    && stageInput.DataType != WGNodeData.DT_VIDEO))
+            if (!IsImageStream(stageInput))
             {
                 throw new SwarmUserErrorException(
                     $"IC-LoRA Stage Input is not available on stage {entry.Stage}: the stage has "
@@ -209,6 +218,30 @@ internal class IcLoraApplicator(WorkflowGenerator g)
         slotSource = entry.Source;
         images = new JArray(controlImage.Path[0], controlImage.Path[1]);
         return true;
+    }
+
+    private static bool IsImageStream(WGNodeData media) =>
+        media is not null
+        && (media.DataType == WGNodeData.DT_IMAGE || media.DataType == WGNodeData.DT_VIDEO);
+
+    /// <summary>
+    /// True when this entry's drive resolves to the incoming frames of the stage at
+    /// <paramref name="stageIndex"/>: an explicit Stage Input source, or — on a sourced clip,
+    /// whose footage is the implicit drive — an Upload source with no uploaded media.
+    /// </summary>
+    internal static bool WantsStageInputDrive(ClipSpec clip, IcLoraSpec entry, int stageIndex)
+    {
+        if (entry.Stage >= 0 && entry.Stage != stageIndex)
+        {
+            return false;
+        }
+        if (StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput))
+        {
+            return true;
+        }
+        return clip.SourceVideo is not null
+            && StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload)
+            && string.IsNullOrWhiteSpace(entry.Video?.Data);
     }
 
     // The official IC-LoRA workflows resize the drive to the generation dimensions before the

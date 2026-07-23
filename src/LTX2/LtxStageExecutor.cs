@@ -890,9 +890,28 @@ internal sealed class LtxStageExecutor(
 
         LtxChainOps.AttachDecodedLtxAudio(bridge, currentMedia, audioVae);
 
-        if (currentMedia.AttachedAudio is not null)
+        // MediaRef.FromWGNodeData pre-copies any existing AttachedAudio (possibly a latent
+        // route) into the snapshot, so non-null cannot mean "freshly decoded" — only a
+        // DT_AUDIO attachment proves AttachDecodedLtxAudio succeeded.
+        if (currentMedia.AttachedAudio is MediaRef attachedAudio
+            && attachedAudio.DataType == WGNodeData.DT_AUDIO)
         {
-            g.CurrentMedia.AttachedAudio = currentMedia.AttachedAudio.ToWGNodeData(g);
+            g.CurrentMedia.AttachedAudio = attachedAudio.ToWGNodeData(g);
+        }
+        else if (g.CurrentMedia.AttachedAudio is WGNodeData latentAudio
+            && latentAudio.DataType == WGNodeData.DT_LATENT_AUDIO
+            && latentAudio.Path is JArray latentAudioPath)
+        {
+            // AsRawImage on a concat AV latent (e.g. the crop-guides output) reads the concat's
+            // pre-join routes, so the video decode consumes the crop node — not a separate — and
+            // the decode→separate shortcut above finds no audio. The stashed latent-audio route
+            // is authoritative: decode it directly so no consumer sees a latent as save audio.
+            LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode());
+            audioDecode.Samples.TryConnectFromPath(bridge, latentAudioPath);
+            audioDecode.AudioVae.ConnectFrom(audioVae);
+            bridge.SyncNode(audioDecode);
+            g.CurrentMedia.AttachedAudio = new WGNodeData(
+                audioDecode.Audio.ToPath(), g, WGNodeData.DT_AUDIO, audioVae.Compat);
         }
     }
 
