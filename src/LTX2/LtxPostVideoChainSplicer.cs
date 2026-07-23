@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution;
 
 namespace VideoStages.LTX2;
 
@@ -87,6 +88,10 @@ internal static class LtxPostVideoChainSplicer
             return;
         }
 
-        LtxChainOps.RetargetAnimationSaves(bridge, oldOutput, newOutput);
+        LtxChainOps.RetargetAnimationSaves(
+            bridge,
+            oldOutput,
+            newOutput,
+            save => OutputRegistry.CanAdvanceFinalHostSave(g, save.Id));
     }
 }

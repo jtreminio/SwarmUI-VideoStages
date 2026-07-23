@@ -5,7 +5,9 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Execution;
 using VideoStages.LTX2;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -13,6 +15,7 @@ internal sealed class StageSequenceRunner(
     WorkflowGenerator g,
     StageRefStore store,
     StageRunner singleStageRunner,
+    StageExecutionAdapter stageExecutionAdapter,
     Base2EditPublishedStageRefs base2EditPublishedStageRefs,
     RootVideoStageHandoff rootVideoStageHandoff,
     RootVideoStageResizer rootVideoStageResizer,
@@ -37,9 +40,11 @@ internal sealed class StageSequenceRunner(
         WGNodeData nativeAudio = null,
         IReadOnlyDictionary<int, WGNodeData> clipAudios = null,
         IReadOnlyDictionary<int, WGNodeData> uploadedAudios = null,
-        bool rootStageHandoff = false)
+        bool rootStageHandoff = false,
+        VideoExecutionPlan plan = null)
     {
         VideoStagesSpec spec = g.GetVideoStagesSpec();
+        IReadOnlyList<ClipPlan> plannedClips = ResolvePlannedClips(plan, clips);
         bool sourcedLeadWithGeneratedClips = clips.Count > 0
             && clips[0].SourceVideo is not null
             && clips.Any(clip => clip.SourceVideo is null);
@@ -114,12 +119,19 @@ internal sealed class StageSequenceRunner(
             CaptureGeneratedReference();
             WGNodeData rootSourceMedia = g.CurrentMedia?.Duplicate();
             WGNodeData rootSourceVae = g.CurrentVae?.Duplicate();
-            if (parallelMultiClip)
+            int totalStageCount = TotalStageCount(clips);
+            bool publishIntermediateStages =
+                totalStageCount > 1
+                && g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
+                && !g.UserInput.Get(T2IParamTypes.DoNotSave, false);
+            if (parallelMultiClip || publishIntermediateStages)
             {
+                // Dedicated decode branches are also required for intermediate publications:
+                // otherwise the next LTX stage rewires the same native decode chain in place and
+                // every earlier save silently advances to the final stage artifact.
                 g.NodeHelpers[MultiClipParallelMerger.NodeHelperKey] = "1";
             }
 
-            int totalStageCount = TotalStageCount(clips);
             List<string> effectiveBoundaryOuts = [.. clips.Select(clip => clip.BoundaryOut)];
             int[] boundaryOverlapPrefs = [.. clips.Select(clip => clip.BoundaryOutOverlap)];
             int[] continueWindows = MultiClipParallelMerger.ResolveContinueWindows(
@@ -130,9 +142,12 @@ internal sealed class StageSequenceRunner(
             WGNodeData previousClipOutput = null;
             SourcedClipInstaller sourcedClipInstaller = new(g);
             int clipIndex = 0;
+            int completedStageCount = 0;
             foreach (ClipSpec clip in clips)
             {
                 ClipContext clipContext = new(clip, spec.Width, spec.Height, rootSourceMedia, rootSourceVae);
+                RuntimeArtifact clipArtifact = null;
+                ClipPlan plannedClip = plannedClips is null ? null : plannedClips[clipIndex];
                 WGNodeData sourcedMedia = null;
                 if (clip.SourceVideo is not null)
                 {
@@ -239,12 +254,36 @@ internal sealed class StageSequenceRunner(
                     int sectionId = VideoStagesExtension.SectionIdForStage(stage.Id);
                     usedSectionIds.Add(sectionId);
                     PrepareStageOverrides(clipContext, stage, sectionId);
-                    singleStageRunner.RunStage(stage, sectionId, guideRef, store, clipContext);
+                    StagePlan plannedStage = plannedClip is null ? null : plannedClip.Stages[clipStageIndex];
+                    if (plannedStage is not null)
+                    {
+                        RuntimeArtifact inputArtifact = clipArtifact ?? CaptureStageInputArtifact(
+                            clip.SourceVideo is null ? ArtifactOrigin.HostRoot : ArtifactOrigin.SourceVideo);
+                        clipArtifact = stageExecutionAdapter.Execute(
+                            plannedStage,
+                            sectionId,
+                            new StageExecutionAdapterContext(
+                                guideRef,
+                                store,
+                                clipContext,
+                                parallelMultiClip,
+                                clips.Count,
+                                clipIndex,
+                                clipStageIndex),
+                            inputArtifact);
+                    }
+                    else
+                    {
+                        // Non-LTX and plan-mismatch paths retain the exact historical invocation.
+                        singleStageRunner.RunStage(stage, sectionId, guideRef, store, clipContext);
+                    }
                     CaptureStageOutput(stage.Id);
                     clipStageIndex++;
+                    completedStageCount++;
 
-                    if (stage.Id < totalStageCount - 1
-                        && g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false))
+                    if (completedStageCount < totalStageCount
+                        && g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
+                        && !g.UserInput.Get(T2IParamTypes.DoNotSave, false))
                     {
                         g.CurrentMedia.SaveOutput(
                             g.CurrentVae,
@@ -325,7 +364,8 @@ internal sealed class StageSequenceRunner(
             bridge,
             save => save.Images.Connection is INodeOutput existing
                 && existing.Node.Id == rootOutput.Node.Id
-                && existing.SlotIndex == rootOutput.SlotIndex,
+                && existing.SlotIndex == rootOutput.SlotIndex
+                && OutputRegistry.CanAdvanceFinalHostSave(g, save.Id),
             images,
             audio,
             retargetAudio: true,
@@ -445,6 +485,38 @@ internal sealed class StageSequenceRunner(
             total += clip.Stages.Count;
         }
         return total;
+    }
+
+    internal static IReadOnlyList<ClipPlan> ResolvePlannedClips(
+        VideoExecutionPlan plan,
+        IReadOnlyList<ClipSpec> clips)
+    {
+        if (plan is null)
+        {
+            return null;
+        }
+
+        if (plan.Clips.Count == clips.Count
+            && plan.Clips.Select((plannedClip, clipIndex) =>
+                plannedClip.ClipId == clips[clipIndex].Id
+                && plannedClip.Stages.Count == clips[clipIndex].Stages.Count
+                && plannedClip.Stages.Select((plannedStage, stageIndex) =>
+                    plannedStage.StageId == clips[clipIndex].Stages[stageIndex].Id).All(valid => valid))
+                .All(valid => valid))
+        {
+            return plan.Clips;
+        }
+
+        Logs.Warning(
+            "VideoStages: LTX execution plan did not match the parsed stage sequence; "
+                + "falling back to the legacy stage runner for this workflow.");
+        return null;
+    }
+
+    private RuntimeArtifact CaptureStageInputArtifact(ArtifactOrigin origin)
+    {
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        return RuntimeArtifact.Capture(g, bridge, origin);
     }
 
     private void PrepareClipAudio(ClipSpec clip, StageSpec stage, RunContext context, bool isFirstClip)

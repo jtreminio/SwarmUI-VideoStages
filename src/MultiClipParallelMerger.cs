@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Execution;
 using VideoStages.Generated;
 
 namespace VideoStages;
@@ -542,7 +543,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         return trim.AUDIO;
     }
 
-    private static void RetargetSwarmSaveAnimationWsForClipTerminals(
+    private void RetargetSwarmSaveAnimationWsForClipTerminals(
         WorkflowBridge bridge,
         HashSet<string> terminalKeys,
         INodeOutput images,
@@ -556,7 +557,8 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         SaveAnimationRetargeter.Retarget(
             bridge,
             save => save.Images.Connection is INodeOutput existingImages
-                && terminalKeys.Contains(OutputKey(existingImages)),
+                && terminalKeys.Contains(OutputKey(existingImages))
+                && OutputRegistry.CanAdvanceFinalHostSave(g, save.Id),
             images,
             audio,
             retargetAudio: true);

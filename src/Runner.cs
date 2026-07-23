@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -101,10 +102,12 @@ public static class Runner
         AudioHandler audioHandler = new(g);
         MultiClipParallelMerger multiClipParallelMerger = new(g);
         StageRunner stageRunner = new(g, pipeline.GuideMediaHelper, pipeline.LtxManager);
+        StageExecutionAdapter stageExecutionAdapter = new(g, stageRunner);
         StageSequenceRunner stageSequenceRunner = new(
             g,
             pipeline.StageRefStore,
             stageRunner,
+            stageExecutionAdapter,
             pipeline.Base2Edit,
             pipeline.Handoff,
             pipeline.Resizer,

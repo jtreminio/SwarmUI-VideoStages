@@ -30,11 +30,20 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
 
     public bool ShouldHandoffRootStage()
     {
+        // Compile the LTX plan early enough for the pre-core interception phase. The plan is
+        // deliberately observational in this milestone: the proven legacy predicate below stays
+        // authoritative until the root/output migration has its own characterization coverage.
+        _ = g.GetLtxVideoExecutionPlanContext();
+        return ShouldHandoffRootStageLegacy(g, g.GetVideoStagesSpec());
+    }
+
+    internal static bool ShouldHandoffRootStageLegacy(WorkflowGenerator g, VideoStagesSpec spec)
+    {
         if (VideoStagesExtension.CoreImageToVideoStep is null)
         {
             return false;
         }
-        if (!g.GetVideoStagesSpec().Clips.Any(c => c.Stages.Count > 0))
+        if (!spec.Clips.Any(c => c.Stages.Count > 0))
         {
             return false;
         }

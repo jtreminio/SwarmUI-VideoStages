@@ -30,6 +30,7 @@ internal class VoiceRefApplicator(WorkflowGenerator g)
         bool isGeneratingStage)
     {
         if (!clip.UsesVoiceRefAudio
+            && FindDriveAudioReferenceRequest(clip) is null
             || genInfo?.Model is null
             || genInfo.VideoModel?.ModelClass?.CompatClass?.ID != T2IModelClassSorter.CompatLtxv2.ID
             || genInfo.PosCond is null
@@ -93,24 +94,38 @@ internal class VoiceRefApplicator(WorkflowGenerator g)
 
     private JArray ResolveVoiceRefSampleAudio(WorkflowBridge bridge, ClipSpec clip)
     {
-        if (clip.VoiceRefDriveEntry is IcLoraSpec driveEntry)
+        if (FindDriveAudioReferenceRequest(clip) is IcLoraSpec driveEntry)
         {
-            if (VideoGraphHelpers.IsImageDataUri(driveEntry.Video.Data))
+            if (string.IsNullOrWhiteSpace(driveEntry.Video?.Data))
             {
-                throw new SwarmUserErrorException(
-                    "An IC-LoRA drive image has no audio to use as a voice reference. Upload a "
-                    + "drive video with sound, or set the clip's Audio source to Voice Reference.");
+                Logs.Warning(
+                    "VideoStages: IC-LoRA drive-audio voice reference was enabled but no drive video "
+                    + "was uploaded; skipping the drive sample.");
+                // A separately configured clip voice-reference upload remains a valid fallback.
+                if (!StringUtils.Equals(clip.AudioSource, Constants.AudioSourceVoiceRef))
+                {
+                    return null;
+                }
             }
-            int entryIdx = 0;
-            while (entryIdx < clip.IcLoras.Count && !ReferenceEquals(clip.IcLoras[entryIdx], driveEntry))
+            else
             {
-                entryIdx++;
+                if (VideoGraphHelpers.IsImageDataUri(driveEntry.Video.Data))
+                {
+                    throw new SwarmUserErrorException(
+                        "An IC-LoRA drive image has no audio to use as a voice reference. Upload a "
+                        + "drive video with sound, or set the clip's Audio source to Voice Reference.");
+                }
+                int entryIdx = 0;
+                while (entryIdx < clip.IcLoras.Count && !ReferenceEquals(clip.IcLoras[entryIdx], driveEntry))
+                {
+                    entryIdx++;
+                }
+                _ = new IcLoraApplicator(g).GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, driveEntry.Video);
+                return VideoGraphHelpers.TryGetCachedPath(
+                    g, bridge, $"{IcLoraApplicator.UploadedDriveAudioKeyPrefix}{clip.Id}.{entryIdx}", out JArray driveAudio)
+                    ? driveAudio
+                    : null;
             }
-            _ = new IcLoraApplicator(g).GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, driveEntry.Video);
-            return VideoGraphHelpers.TryGetCachedPath(
-                g, bridge, $"{IcLoraApplicator.UploadedDriveAudioKeyPrefix}{clip.Id}.{entryIdx}", out JArray driveAudio)
-                ? driveAudio
-                : null;
         }
         AudioFile uploaded = VideoStagesSpecParser.MaterializeUploadedAudioForClip(g, clip);
         if (uploaded is null)
@@ -121,4 +136,9 @@ internal class VoiceRefApplicator(WorkflowGenerator g)
         }
         return new JArray(g.CreateAudioLoadNode(uploaded, "${vsvoiceref}"), 0);
     }
+
+    private static IcLoraSpec FindDriveAudioReferenceRequest(ClipSpec clip) =>
+        clip?.IcLoras?.FirstOrDefault(entry =>
+            entry.DriveAudioRef
+            && StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload));
 }

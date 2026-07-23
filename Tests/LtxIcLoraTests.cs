@@ -720,6 +720,35 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
+    public void Drive_audio_voice_ref_without_uploaded_drive_video_falls_back_to_clip_voice_upload()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        // The malformed DriveAudioRef request used to dereference Video/Data while wiring voice
+        // tokens. A separate clip voice upload remains a valid sample, so the run stays usable.
+        JObject entry = MakeIcLora("UnitTest_IcLoraA");
+        entry["DriveAudioRef"] = true;
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+        clip["AudioSource"] = Constants.AudioSourceVoiceRef;
+        clip["UploadedAudio"] = new JObject
+        {
+            ["Data"] = "data:audio/wav;base64,QUFB",
+            ["FileName"] = "fallback.wav",
+        };
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LTXVSetAudioRefTokensNode refTokens =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        Assert.NotNull(refTokens.AudioLatent.Connection);
+        Assert.Empty(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+    }
+
+    [Fact]
     public void Clip_voice_ref_upload_wraps_conditioning_without_ic_loras()
     {
         using SwarmUiTestContext testContext = new();

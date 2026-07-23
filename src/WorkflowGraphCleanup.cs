@@ -178,7 +178,65 @@ internal static class WorkflowGraphCleanup
         return seen;
     }
 
-    private static HashSet<string> CollectUpstreamClosure(
+    /// <summary>
+    /// Captures only the disposable portion of a root-connected component. Any unrelated terminal
+    /// sink (save, preview, external output) owns its complete upstream closure, so shared loaders
+    /// and the branch behind them are excluded from the returned ownership set. The caller-supplied
+    /// <paramref name="ownedTerminalNodeIds"/> are the root publications that may be retargeted or
+    /// removed and therefore do not protect the displaced root.
+    /// </summary>
+    public static HashSet<string> CollectOwnedRootClosure(
+        WorkflowBridge bridge,
+        IEnumerable<string> rootNodeIds,
+        IEnumerable<string> ownedTerminalNodeIds)
+    {
+        ArgumentNullException.ThrowIfNull(bridge);
+        HashSet<string> ownedTerminals = new(
+            (ownedTerminalNodeIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)));
+        HashSet<string> component = CollectComponentIds(bridge, rootNodeIds ?? []);
+        HashSet<string> unrelatedTerminalIds = [
+            .. bridge.Graph.Nodes.Values
+                .Where(node => node.Outputs.Count == 0 && !ownedTerminals.Contains(node.Id))
+                .Select(node => node.Id)
+        ];
+        HashSet<string> protectedNodes = CollectUpstreamClosure(bridge, unrelatedTerminalIds);
+        component.ExceptWith(protectedNodes);
+        return component;
+    }
+
+    /// <summary>
+    /// Removes only nodes explicitly captured as owned, never expanding into adjacent graph
+    /// branches. Current terminal sinks and caller-provided live roots protect their upstream
+    /// dependencies, including shared loaders that acquired consumers after capture.
+    /// </summary>
+    public static void RemoveOwnedNodesNotLive(
+        WorkflowBridge bridge,
+        IEnumerable<string> ownedNodeIds,
+        IEnumerable<string> liveRootNodeIds,
+        IDictionary<string, string> nodeHelpers = null)
+    {
+        ArgumentNullException.ThrowIfNull(bridge);
+        HashSet<string> liveRootIds = new(
+            (liveRootNodeIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)));
+        liveRootIds.UnionWith(
+            bridge.Graph.Nodes.Values
+                .Where(node => node.Outputs.Count == 0)
+                .Select(node => node.Id));
+        HashSet<string> live = CollectUpstreamClosure(bridge, liveRootIds);
+        HashSet<string> removed = [];
+        foreach (string nodeId in (ownedNodeIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)))
+        {
+            if (live.Contains(nodeId) || bridge.Graph.GetNode(nodeId) is null)
+            {
+                continue;
+            }
+            bridge.RemoveNode(nodeId);
+            removed.Add(nodeId);
+        }
+        InvalidateNodeHelperCacheForRemovedIds(nodeHelpers, removed);
+    }
+
+    internal static HashSet<string> CollectUpstreamClosure(
         WorkflowBridge bridge, IEnumerable<string> rootNodeIds)
     {
         HashSet<string> seen = [];

@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Execution;
 
 namespace VideoStages;
 
@@ -206,7 +207,8 @@ internal sealed class RootVideoStageResizer(
                 bridge,
                 save => save.Images.Connection is INodeOutput existing
                     && existing.Node.Id == insertedFrom.Node.Id
-                    && existing.SlotIndex == insertedFrom.SlotIndex,
+                    && existing.SlotIndex == insertedFrom.SlotIndex
+                    && OutputRegistry.CanAdvanceFinalHostSave(g, save.Id),
                 bridge.ResolvePath(WorkflowBridge.ToPath(scale.IMAGE)),
                 newAudio: null,
                 retargetAudio: false);

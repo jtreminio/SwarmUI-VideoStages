@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Execution;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -16,15 +17,20 @@ internal sealed class VideoStagesCoordinator(
     AudioHandler audioHandler,
     LtxManager ltxManager)
 {
-    private const int FinalStageSaveId = 52200;
-
     public void RunConfiguredStages()
     {
         VideoStagesSpec spec = g.GetVideoStagesSpec();
+        LtxVideoExecutionPlanContext? planContext = g.GetLtxVideoExecutionPlanContext();
         if (!VideoStagesGate.HasUsableVideoModel(g, spec))
         {
             return;
         }
+
+        // LTX takes explicit ownership of the host root and its pre-existing publications before
+        // global-refine or clip execution replaces CurrentMedia. WAN remains on the legacy path.
+        RootRuntimeSession rootSession = planContext is null
+            ? null
+            : RootRuntimeSession.Capture(g, planContext);
 
         List<ClipSpec> clips = [.. spec.Clips];
         bool refineSourceVideo = TryInstallRefineSourceVideo(clips);
@@ -71,8 +77,21 @@ internal sealed class VideoStagesCoordinator(
             clipAudioMaps.NativeAudio,
             clipAudioMaps.ClipAudios,
             clipAudioMaps.UploadedAudios,
-            rootStageHandoff);
-        EnsureFinalStageOutputSaved();
+            rootStageHandoff,
+            planContext?.Plan);
+        if (rootSession is not null)
+        {
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            RuntimeArtifact finalArtifact = RuntimeArtifact.Capture(
+                g,
+                bridge,
+                ArtifactOrigin.ClipAssembly);
+            rootSession.PublishTimeline(finalArtifact);
+        }
+        else
+        {
+            EnsureLegacyFinalStageOutputSaved();
+        }
         new HdrPostprocessApplicator(g).ApplyHdrPostprocessToFinalSaves(clips);
     }
 
@@ -245,14 +264,14 @@ internal sealed class VideoStagesCoordinator(
         return audios;
     }
 
-    private void EnsureFinalStageOutputSaved()
+    private void EnsureLegacyFinalStageOutputSaved()
     {
         if (g.UserInput.Get(T2IParamTypes.DoNotSave, false) || g.CurrentMedia is null)
         {
             return;
         }
 
-        string saveId = g.GetStableDynamicID(FinalStageSaveId, 0);
+        string saveId = g.GetStableDynamicID(OutputPublisher.DefaultFinalSaveId, 0);
         if (g.CurrentMedia.Path is JArray { Count: 2 } currentPath)
         {
             WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);

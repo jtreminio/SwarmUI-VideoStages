@@ -484,6 +484,47 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Sourced_lead_then_generated_clip_in_real_native_i2v_step_order_publishes_only_the_timeline()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // Exercise the actual host priority-10 save preparation and priority-11 native I2V step,
+        // rather than the already-decoded priority-11 fixture used by most sourced-clip tests.
+        // Clip 0 owns uploaded footage while clip 1 owns the generated root handoff.
+        JObject sourced = MakeSourcedClip(models);
+        sourced["BoundaryOut"] = Constants.BoundaryOutCut;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(512, 512, sourced, MakeGeneratedClip(models)).ToString());
+
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowStepsWithPreVideoSave(),
+            features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        List<SwarmKSamplerNode> samplers = [.. SamplerNodesOrdered(bridge)];
+        Assert.Equal(2, samplers.Count);
+        Assert.Single(
+            samplers,
+            sampler => ReachesUpstream(bridge, sampler, window.Id));
+
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(
+            ReachesUpstream(bridge, save.Images.Connection!.Node, window.Id),
+            "The sole published video does not trace to the mixed sourced/generated timeline.");
+        Assert.True(JToken.DeepEquals(
+            WorkflowBridge.ToPath(save.Images.Connection),
+            generator.CurrentMedia.Path));
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
     public void Passthrough_sourced_lead_continue_join_samples_only_the_generated_clip()
     {
         using SwarmUiTestContext _ = new();
@@ -737,6 +778,66 @@ public partial class StageFlowTests
         SwarmSaveAnimationWSNode save = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.IsType<LTXVAudioVAEDecodeNode>(save.Audio.Connection!.Node);
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Generated_clip_replacing_raw_t2v_av_root_does_not_pin_the_root_sampler()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // This is the raw host T2V state before its priority-10 separate/decode/save pass. Unlike
+        // the sourced tests above, no uploaded footage participates: the generated VideoStages
+        // clip alone replaces the root AV generation and must own the only surviving output.
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            MakeRootConfig(512, 512, MakeGeneratedClip(models)).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 0);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
+
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
+                .Concat(WorkflowTestHarness.VideoStagesSteps()),
+            features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.False(workflow.ContainsKey("10"), "The discarded root T2V sampler remained pinned.");
+        Assert.False(workflow.ContainsKey("11"), "The root sampler's dead detach consumer remained.");
+        Assert.False(workflow.ContainsKey("104"), "The discarded root AV concat remained.");
+        Assert.Single(SamplerNodesOrdered(bridge));
+
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(JToken.DeepEquals(
+            WorkflowBridge.ToPath(save.Images.Connection!),
+            generator.CurrentMedia.Path));
+        Assert.IsType<LTXVAudioVAEDecodeNode>(save.Audio.Connection!.Node);
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Do_not_save_generated_t2v_timeline_still_cleans_the_discarded_root()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            MakeRootConfig(512, 512, MakeGeneratedClip(models)).ToString());
+        input.Set(T2IParamTypes.DoNotSave, true);
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true),
+            features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.False(workflow.ContainsKey("200"));
+        Assert.False(workflow.ContainsKey("201"));
+        Assert.False(workflow.ContainsKey("202"));
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.NotNull(bridge.ResolvePath((JArray)generator.CurrentMedia.Path));
         AssertWorkflowHasNoCycles(workflow);
     }
 

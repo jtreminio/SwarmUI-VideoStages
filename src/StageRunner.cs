@@ -3,9 +3,9 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Execution;
 using VideoStages.LTX2;
 
 namespace VideoStages;
@@ -15,7 +15,7 @@ internal class StageRunner(
     StageGuideMediaHelper stageGuideMediaHelper,
     LtxManager ltxManager)
 {
-    public void RunStage(
+    public virtual void RunStage(
         StageSpec stage,
         int sectionId,
         StageRefStore.StageRef guideReference,
@@ -103,10 +103,17 @@ internal class StageRunner(
         RetargetExistingAnimationSaves(priorOutputPath, g.CurrentMedia?.Path);
     }
 
-    private bool ReplacesTextToVideoRoot(StageSpec stage, ClipContext clipContext) =>
-        clipContext.IsFirstStage(stage)
-        && clipContext.Clip.SourceVideo is null
-        && g.GetVideoStagesSpec().IsTextToVideo;
+    private bool ReplacesTextToVideoRoot(StageSpec stage, ClipContext clipContext)
+    {
+        LtxVideoExecutionPlanContext planContext = g.GetLtxVideoExecutionPlanContext();
+        if (planContext?.Plan.Root.Use == Planning.RootUse.GlobalRefineReplacement)
+        {
+            return false;
+        }
+        return clipContext.IsFirstStage(stage)
+            && clipContext.Clip.SourceVideo is null
+            && g.GetVideoStagesSpec().IsTextToVideo;
+    }
 
     private StageFrame PrepareStage(StageSpec stage, int sectionId, ClipContext clipContext)
     {
@@ -497,7 +504,8 @@ internal class StageRunner(
 
         SaveAnimationRetargeter.Retarget(
             bridge,
-            saveNode => saveNode.Images.Connection == oldOutput,
+            saveNode => saveNode.Images.Connection == oldOutput
+                && OutputRegistry.CanAdvanceFinalHostSave(g, saveNode.Id),
             newOutput,
             newAudioOutput,
             retargetAudio,

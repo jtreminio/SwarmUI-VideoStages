@@ -100,6 +100,51 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Refine_source_video_replaces_t2v_root_and_is_the_only_published_output()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 12));
+        T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0x52, 0x45, 0x46, 0x49, 0x4E, 0x45], MediaType.VideoMp4));
+
+        // The native T2V fixture authors a sampler, decode and save before VideoStages runs. Global
+        // refine must replace that whole root component, retarget the one publication to the
+        // uploaded video's refine chain, and leave no stale root sampler or save.
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true),
+            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadVideoB64Node loadVideo = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        Assert.False(workflow.ContainsKey("200"), "The displaced native T2V root sampler survived.");
+        Assert.False(workflow.ContainsKey("201"), "The displaced native T2V AV separator survived.");
+        Assert.False(workflow.ContainsKey("202"), "The displaced native T2V video decode survived.");
+        SwarmKSamplerNode refine = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.NotEqual("200", refine.Id);
+        Assert.True(
+            ReachesUpstream(bridge, refine, loadVideo.Id),
+            "The surviving stage sampler does not refine the uploaded global source video.");
+
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(
+            ReachesUpstream(bridge, save.Images.Connection!.Node, loadVideo.Id),
+            "The sole save does not publish the uploaded global-refine timeline.");
+        Assert.True(JToken.DeepEquals(
+            WorkflowBridge.ToPath(save.Images.Connection),
+            generator.CurrentMedia.Path));
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
     public void Refine_source_video_skip_two_emits_no_samplers_for_the_skipped_stages()
     {
         using SwarmUiTestContext _ = new();

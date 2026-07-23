@@ -207,7 +207,8 @@ internal static class LtxChainOps
     public static void RetargetAnimationSaves(
         WorkflowBridge bridge,
         INodeOutput oldOutput,
-        INodeOutput newOutput)
+        INodeOutput newOutput,
+        Func<SwarmSaveAnimationWSNode, bool> canRetarget = null)
     {
         if (oldOutput is null || newOutput is null)
         {
@@ -216,7 +217,8 @@ internal static class LtxChainOps
 
         SaveAnimationRetargeter.Retarget(
             bridge,
-            save => save.Images.Connection == oldOutput,
+            save => save.Images.Connection == oldOutput
+                && (canRetarget?.Invoke(save) ?? true),
             newOutput,
             newAudio: null,
             retargetAudio: false);
