@@ -13,7 +13,7 @@ import {
     STAGE_CONTROLNET_STRENGTH_MIN,
     STAGE_CONTROLNET_STRENGTH_STEP,
 } from "./icLoraAuthoring";
-import { normalizeUploadedAudio } from "./normalizationMedia";
+import { normalizeUploadedMedia } from "./normalizationMedia";
 import {
     normalizeOptionalEntityId,
     readProp,
@@ -323,7 +323,7 @@ export const normalizeRef = (
             rawRef.uploadFileName == null || rawRef.uploadFileName === ""
                 ? null
                 : `${rawRef.uploadFileName}`,
-        uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
+        uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
         frame: Math.max(
             REF_FRAME_MIN,
             Math.round(

@@ -164,10 +164,6 @@ internal static class ArchitectureCapabilityValidator
         {
             return ArchitectureAudioSourceKind.ControlNet;
         }
-        if (StringUtils.Equals(raw, Constants.AudioSourceVoiceRef))
-        {
-            return ArchitectureAudioSourceKind.VoiceReference;
-        }
         return AudioHandler.TryParseAceStepFunAudioSource(raw, out _)
             ? ArchitectureAudioSourceKind.AceStepFun
             : null;

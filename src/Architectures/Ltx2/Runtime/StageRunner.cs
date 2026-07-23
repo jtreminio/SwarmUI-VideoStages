@@ -85,11 +85,10 @@ internal class StageRunner
             {
                 stageFrame.NeedsCropGuidesAfterSampler = true;
             }
-            new VoiceRefApplicator(_generator).ApplyVoiceRefTokens(
+            new IcLoraAudioReferenceApplicator(_generator).ApplyAudioReferenceTokens(
                 currentGenInfo,
                 clip,
-                stageFrame,
-                clipContext.IsFirstStage(stage));
+                stageFrame);
         });
 
         _stageOrchestrator.RunLtxPath(

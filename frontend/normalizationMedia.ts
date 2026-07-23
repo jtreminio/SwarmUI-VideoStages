@@ -11,7 +11,7 @@ import {
     clampWindowInDuration,
     normalizeOptionalEntityId,
 } from "./normalizationShared";
-import type { PromptWindow, Retake, SourceVideo, UploadedAudio } from "./types";
+import type { PromptWindow, Retake, SourceVideo, UploadedMedia } from "./types";
 import { isRecord, roundToTenth, toNumber } from "./utils";
 
 const normalizePromptWindow = (
@@ -122,9 +122,9 @@ export const normalizeSourceVideo = (value: unknown): SourceVideo | null => {
     };
 };
 
-export const normalizeUploadedAudio = (
+export const normalizeUploadedMedia = (
     value: unknown,
-): UploadedAudio | null => {
+): UploadedMedia | null => {
     if (!isRecord(value)) {
         return null;
     }

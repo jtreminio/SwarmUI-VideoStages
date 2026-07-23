@@ -26,7 +26,6 @@ internal sealed class Ltx2ArchitectureModule :
         [
             ArchitectureAudioSourceKind.Native,
             ArchitectureAudioSourceKind.Upload,
-            ArchitectureAudioSourceKind.VoiceReference,
             ArchitectureAudioSourceKind.ControlNet,
             ArchitectureAudioSourceKind.AceStepFun,
         ],
@@ -114,7 +113,6 @@ internal sealed class Ltx2ArchitectureModule :
 internal sealed record Ltx2ClipPayload(
     int ClipId,
     IReadOnlyDictionary<int, Ltx2StagePayload> Stages,
-    AudioVoiceReferencePlan VoiceReference,
     AudioReusePlan AudioReuse,
     int? ControlNetSourceIndex) :
     IArchitectureClipPayload,

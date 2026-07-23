@@ -68,7 +68,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             loaders.Add(loader);
         }
 
-        IcLoraDriveMediaResolver driveResolver = new(g);
+        IcLoraVisualGuideResolver driveResolver = new(g);
         IcLoraControlSignalBuilder controlSignals = new(g);
         LtxIcLoraGuideApplicator guides = new(g);
         bool anyGuide = false;
@@ -87,7 +87,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             }
 
             double strength = entry.Plan.GuideStrength
-                ?? ResolveControlNetGuideStrength(entry.Plan.Drive.ControlNetIndex);
+                ?? ResolveControlNetGuideStrength(entry.Plan.VisualGuide.ControlNetIndex);
             if (strength <= 0)
             {
                 continue;

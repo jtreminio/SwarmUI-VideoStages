@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 using Xunit;
 
@@ -127,6 +128,39 @@ public class CrossLanguageMirrorTests
             Assert.Equal(url, actualUrl);
             Assert.Equal(modelName, IcLoraWeights.ModelNameFor(id));
         }
+    }
+
+    [Fact]
+    public void IcLoraDriveMediaContracts_MatchSharedFixture()
+    {
+        JObject fixture = LoadObjectFixture("ic-lora-drive-media-contract.json");
+        AssertContract(fixture["default"] as JObject, IcLoraDriveMediaContracts.Resolve("custom"));
+        AssertContract(
+            fixture[IcLoraDriveMediaContracts.LipDubPreset] as JObject,
+            IcLoraDriveMediaContracts.Resolve(IcLoraDriveMediaContracts.LipDubPreset));
+    }
+
+    private static void AssertContract(
+        JObject expected,
+        IcLoraDriveMediaContract actual)
+    {
+        string[] accepted = [.. Enum.GetValues<IcLoraDriveMediaKind>()
+            .Where(kind => actual.Accepts(kind))
+            .Select(kind => kind.ToString().ToLowerInvariant())];
+        Assert.Equal(
+            expected["acceptedKinds"]!.Values<string>().OrderBy(value => value),
+            accepted.OrderBy(value => value));
+        Assert.Equal(
+            expected.Value<string>("consumes"),
+            actual.Consumption == IcLoraDriveMediaConsumption.AudioReference
+                ? "audio"
+                : "visual");
+        Assert.Equal(
+            expected.Value<string>("visualSource"),
+            actual.Consumption == IcLoraDriveMediaConsumption.AudioReference
+                ? "clip-entry"
+                : "drive-media");
+        Assert.Equal(expected.Value<bool>("requiresUpload"), actual.RequiresUpload);
     }
 
     [Fact]

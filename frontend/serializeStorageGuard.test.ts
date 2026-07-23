@@ -80,11 +80,10 @@ const maximalClip = (): Clip =>
                 strength: 0.75,
                 attentionStrength: 0.5,
                 controlType: "canny",
-                video: {
+                driveMedia: {
                     data: "data:video/mp4;base64,AAAA",
                     fileName: "d.mp4",
                 },
-                driveAudioRef: true,
             },
         ],
         saveAudioTrack: true,

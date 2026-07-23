@@ -6,7 +6,7 @@ import {
     AUDIO_SEGMENT_VOLUME_MIN,
     clamp,
 } from "./constants";
-import { normalizeUploadedAudio } from "./normalizationMedia";
+import { normalizeUploadedMedia } from "./normalizationMedia";
 import {
     clampWindowInDuration,
     normalizeOptionalEntityId,
@@ -96,7 +96,7 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
             source: {
                 kind: normalizeAudioTrackSourceKind(source.kind),
                 reference: `${source.reference ?? ""}`.trim(),
-                uploadedAudio: normalizeUploadedAudio(source.uploadedAudio),
+                uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
             },
             spans: Array.isArray(rawSpans)
                 ? rawSpans
@@ -123,7 +123,7 @@ const normalizeAudioSegment = (
     const source =
         typeof rawSource === "string" && isAceStepFunAudioSource(rawSource)
             ? rawSource.trim()
-            : normalizeUploadedAudio(rawSource);
+            : normalizeUploadedMedia(rawSource);
     const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
     const trimStartRaw = Math.max(
         0,

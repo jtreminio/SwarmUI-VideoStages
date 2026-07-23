@@ -11,11 +11,15 @@ import {
     IC_LORA_STRENGTH_MIN,
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
-import { normalizeUploadedAudio } from "../../normalizationMedia";
+import { normalizeUploadedMedia } from "../../normalizationMedia";
 import { snapValueToStep } from "../../normalizationShared";
 import type { IcLora, IcLoraControlType } from "../../types";
 import { isRecord } from "../../utils";
-import { IC_LORA_PRESET_CUSTOM_ID } from "./icLoraPresets";
+import {
+    findIcLoraPreset,
+    IC_LORA_PRESET_CUSTOM_ID,
+    icLoraDriveMediaContract,
+} from "./icLoraPresets";
 
 const CONTROLNET_SOURCE_OPTIONS = [
     "ControlNet 1",
@@ -41,8 +45,7 @@ export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
     controlType: "none",
-    video: null,
-    driveAudioRef: false,
+    driveMedia: null,
     ...overrides,
 });
 
@@ -104,6 +107,19 @@ export const normalizeIcLora = (
         return null;
     }
     const preset = `${raw.preset ?? ""}`.trim();
+    const normalizedPreset = preset || IC_LORA_PRESET_CUSTOM_ID;
+    const driveContract = icLoraDriveMediaContract(
+        findIcLoraPreset(normalizedPreset),
+    );
+    const consumesAudio = driveContract.consumes === "audio";
+    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
+    const driveMedia =
+        normalizedDriveMedia &&
+        driveContract.acceptedKinds.some((kind) =>
+            normalizedDriveMedia.data.startsWith(`data:${kind}/`),
+        )
+            ? normalizedDriveMedia
+            : null;
     const stage = normalizeIcLoraStage(raw.stage, stageCount);
     let source = normalizeIcLoraSource(raw.source);
     // Stage Input means "this stage's incoming frames" — meaningless below a
@@ -111,9 +127,15 @@ export const normalizeIcLora = (
     if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1 && !sourcedClip) {
         source = IC_LORA_SOURCE_UPLOAD;
     }
+    // LipDub's Drive Media is audio-only conditioning. Its visuals come from
+    // the ordinary stage input, so its legacy visual-source setting is never
+    // meaningful or authorable.
+    if (consumesAudio) {
+        source = IC_LORA_SOURCE_UPLOAD;
+    }
     return {
         lora,
-        preset: preset || IC_LORA_PRESET_CUSTOM_ID,
+        preset: normalizedPreset,
         source,
         stage,
         strength: snapValueToStep(
@@ -130,9 +152,10 @@ export const normalizeIcLora = (
             IC_LORA_ATTENTION_MAX,
             IC_LORA_ATTENTION_STEP,
         ),
-        controlType: normalizeIcLoraControlType(raw.controlType),
-        video: normalizeUploadedAudio(raw.video),
-        driveAudioRef: raw.driveAudioRef === true,
+        controlType: consumesAudio
+            ? "none"
+            : normalizeIcLoraControlType(raw.controlType),
+        driveMedia,
     };
 };
 

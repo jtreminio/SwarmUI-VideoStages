@@ -463,23 +463,20 @@ describe("createTimelineDetailStrip", () => {
         const clips = savedClips(saveSpy);
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0]).toEqual({
-            lora: "lora-x.safetensors",
+            lora: IC_LORA_AUTO,
             preset: "custom",
             source: "Upload",
             stage: -1,
             strength: 1,
             attentionStrength: 1,
             controlType: "none",
-            video: null,
-            driveAudioRef: false,
+            driveMedia: null,
         });
         expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();
         expect(controlNetLabels()).toContain("Drive Media");
     });
 
-    it("add IC-LoRA skips the host's (None) lora sentinel when seeding", () => {
-        // The live LoRA dropdown leads with "(None)"; seeding a new entry with
-        // it would make normalize drop the row on the next render.
+    it("add IC-LoRA starts at [AUTO] instead of an unrelated installed LoRA", () => {
         setup(
             [{ duration: 4, stages: [{}] }],
             ["(None)", "lora-x.safetensors"],
@@ -494,12 +491,12 @@ describe("createTimelineDetailStrip", () => {
         addBtn.click();
         const clips = savedClips(saveSpy);
         expect(clips[0].icLoras).toHaveLength(1);
-        expect(clips[0].icLoras[0].lora).toBe("lora-x.safetensors");
+        expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
         // The row survives the rebuild (the original bug: it vanished).
         expect(document.querySelectorAll(".vst-detail-iclora")).toHaveLength(1);
     });
 
-    it("applying a preset seeds strength and control type", () => {
+    it("applying a preset selects its [AUTO] weights and seeds its settings", () => {
         setup([
             {
                 duration: 4,
@@ -517,6 +514,7 @@ describe("createTimelineDetailStrip", () => {
         presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
         const clips = savedClips(saveSpy);
         expect(clips[0].icLoras[0].preset).toBe("union-control");
+        expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
         expect(clips[0].icLoras[0].controlType).toBe("depth");
         expect(clips[0].icLoras[0].strength).toBe(1);
     });
@@ -553,6 +551,45 @@ describe("createTimelineDetailStrip", () => {
         expect(labels()).not.toContain("Control");
         pickPreset("union-control");
         expect(labels()).toContain("Control");
+    });
+
+    it("gives LipDub one audio/video Drive Media picker without visual-guide controls", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        preset: "lipdub",
+                        stage: 1,
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        const row = document.querySelector<HTMLElement>(".vst-detail-iclora");
+        const driveMedia = Array.from(
+            row?.querySelectorAll<HTMLElement>(".vst-audio-field") ?? [],
+        ).find(
+            (field) =>
+                field.querySelector(".vst-audio-field-label")?.textContent ===
+                "Drive Media",
+        );
+        const input =
+            driveMedia?.querySelector<HTMLInputElement>('input[type="file"]');
+
+        expect(input?.accept).toBe("audio/*,video/*");
+        expect(
+            Array.from(
+                row?.querySelectorAll(".vst-audio-field-label") ?? [],
+            ).map((label) => label.textContent),
+        ).toEqual(
+            expect.not.arrayContaining(["Attention", "Control", "Source"]),
+        );
+        expect(row?.textContent).toContain("only this media's audio");
+        expect(row?.textContent).toContain("frames are ignored");
     });
 
     // The per-entry selects render in a fixed order: Preset, LoRA, Control

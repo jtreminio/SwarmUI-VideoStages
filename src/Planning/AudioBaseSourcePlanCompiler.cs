@@ -14,10 +14,6 @@ internal static class AudioBaseSourcePlanCompiler
         {
             return Result(new(AudioBaseSourceKind.Native, raw, null, HasConfiguredTrack: true, null));
         }
-        if (StringUtils.Equals(raw, Constants.AudioSourceVoiceRef))
-        {
-            return Result(new(AudioBaseSourceKind.None, raw, null, HasConfiguredTrack: false, null));
-        }
         if (StringUtils.Equals(raw, Constants.AudioSourceUpload))
         {
             return Result(new(

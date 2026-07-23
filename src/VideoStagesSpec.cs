@@ -78,7 +78,8 @@ public sealed record ImageRefSpec(
     string Data = null
 );
 
-public sealed record UploadedAudioSpec(
+/// <summary>An embedded upload used by audio, video, image, or architecture-specific media fields.</summary>
+public sealed record UploadedMediaSpec(
     string Data,
     string FileName
 );
@@ -99,12 +100,12 @@ public sealed record SourceVideoSpec(
 /// <summary>
 /// One in-context LoRA on a clip. <c>Lora</c> is the LoRA model name, or "[AUTO]" to resolve the
 /// selected architecture preset's conventional download path; <c>Preset</c> is the frontend
-/// catalog id and otherwise editor guidance only. <c>Strength</c>, <c>AttentionStrength</c>, and
-/// <c>ControlType</c> are architecture-interpreted settings. <c>Source</c> identifies the drive
-/// video's authored source; <c>Stage</c> scopes the entry to one authored stage (-1 = every stage).
-/// An entry without drive media is a model-only adapter request when the architecture supports it.
-/// <c>DriveAudioRef</c> uses the uploaded drive video's own audio track as the clip's
-/// architecture-owned voice-reference sample rather than a timeline audio track.
+/// catalog id and may select an architecture-owned media contract. <c>Strength</c>,
+/// <c>AttentionStrength</c>, and <c>ControlType</c> are architecture-interpreted settings.
+/// <c>Source</c> identifies an authored visual-guide source where the selected contract uses one;
+/// <c>Stage</c> scopes the entry to one authored stage (-1 = every stage). <c>DriveMedia</c> is a
+/// single upload whose usable streams are selected by the architecture contract. It is independent
+/// from the clip's base audio track.
 /// </summary>
 public sealed record IcLoraSpec(
     string Lora,
@@ -112,10 +113,9 @@ public sealed record IcLoraSpec(
     double Strength,
     double AttentionStrength,
     string ControlType,
-    UploadedAudioSpec Video,
+    UploadedMediaSpec DriveMedia,
     string Preset = null,
-    int Stage = -1,
-    bool DriveAudioRef = false
+    int Stage = -1
 );
 
 /// <summary>
@@ -127,7 +127,7 @@ public sealed record IcLoraSpec(
 /// mixes each segment additively over the base audio.
 /// </summary>
 public sealed record AudioSegmentSpec(
-    UploadedAudioSpec Source,
+    UploadedMediaSpec Source,
     double StartSeconds,
     double TrimStartSeconds,
     double LengthSeconds,
@@ -162,7 +162,7 @@ public sealed record ClipSpec(
     bool ClipLengthFromAudio,
     bool ClipLengthFromControlNet,
     bool ReuseAudio,
-    UploadedAudioSpec UploadedAudio,
+    UploadedMediaSpec UploadedAudio,
     IReadOnlyList<ImageRefSpec> ImageRefs,
     IReadOnlyList<StageSpec> Stages,
     IReadOnlyList<AudioSegmentSpec> AudioSegments = null,

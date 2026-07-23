@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Generated;
 
 namespace VideoStages.Architectures.Ltx2;
 
@@ -97,13 +96,13 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
         bool shouldRestoreAudioVideoLatent =
             g.CurrentMedia.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO;
 
-        // Voice-ref clips: the crop branches from the PRE-ref-token conditioning — in the official
-        // LipDub graph the ref-token wrap feeds only the sampler's guider and never flows into
-        // LTXVCropGuides. (This also bypasses a retake window-mask wrap, an unsupported combo.)
-        if (stageFrame.VoiceRefActive && stageFrame.VoiceRefPreWrapPosCond is not null)
+        // Audio-reference tokens guide the sampler, while guide cropping uses the original
+        // conditioning paths.
+        if (stageFrame.AudioReferenceActive
+            && stageFrame.AudioReferencePreWrapPosCond is not null)
         {
-            genInfo.PosCond = stageFrame.VoiceRefPreWrapPosCond;
-            genInfo.NegCond = stageFrame.VoiceRefPreWrapNegCond;
+            genInfo.PosCond = stageFrame.AudioReferencePreWrapPosCond;
+            genInfo.NegCond = stageFrame.AudioReferencePreWrapNegCond;
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
@@ -134,31 +133,9 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
 
         if (shouldRestoreAudioVideoLatent)
         {
-            INodeOutput concatAudioSource = audioLatentSource;
-            if (stageFrame.VoiceRefActive && audioLatentSource is not null)
-            {
-                // Official LipDub refine carry: crop → SetAudioRefTokens(this stage's generated
-                // audio) → the next stage's conditioning, with the concat taking the FROZEN audio so
-                // refinement preserves the generated speech instead of renoising it. The stash lets
-                // the next stage's own wrap reuse this audio as its speaker context.
-                LTXVSetAudioRefTokensNode refTokens = bridge.AddNode(new LTXVSetAudioRefTokensNode());
-                refTokens.PositiveInput.ConnectToUntyped(crop.Positive);
-                refTokens.NegativeInput.ConnectToUntyped(crop.Negative);
-                refTokens.AudioLatent.ConnectToUntyped(audioLatentSource);
-                bridge.SyncNode(refTokens);
-                genInfo.PosCond = WorkflowBridge.ToPath(refTokens.Positive);
-                genInfo.NegCond = WorkflowBridge.ToPath(refTokens.Negative);
-                g.NodeHelpers[
-                    $"{VoiceRefApplicator.VoiceRefStageAudioKeyPrefix}"
-                    + $"{stageFrame.ClipContext.PlannedClip.ClipId}"] =
-                    WorkflowBridge.ToPath(audioLatentSource)
-                        .ToString(Newtonsoft.Json.Formatting.None);
-                concatAudioSource = refTokens.FrozenAudio;
-            }
-
             LTXVConcatAVLatentNode concat = bridge.AddNode(new LTXVConcatAVLatentNode().With(
                 VideoLatent: crop.Latent));
-            concat.AudioLatent.TryConnectToUntyped(concatAudioSource);
+            concat.AudioLatent.TryConnectToUntyped(audioLatentSource);
 
             g.CurrentMedia = g.CurrentMedia.WithPath(
                 concat.Latent,

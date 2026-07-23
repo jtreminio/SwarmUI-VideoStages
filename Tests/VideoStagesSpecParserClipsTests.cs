@@ -354,6 +354,36 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseClips_IcLoraReadsDriveMedia()
+    {
+        JObject icLora = new()
+        {
+            ["Lora"] = "lipdub.safetensors",
+            ["Preset"] = "lipdub",
+            ["Source"] = Constants.IcLoraSourceUpload,
+            ["ControlType"] = Constants.IcLoraControlNone,
+            ["DriveMedia"] = new JObject
+            {
+                ["Data"] = "data:audio/wav;base64,QUJD",
+                ["FileName"] = "target-voice.wav",
+            },
+        };
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                stages: [MakeStage("model-a")],
+                icLoras: new JArray(icLora))));
+
+        ClipSpec clip = Assert.Single(
+            VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
+        IcLoraSpec parsed = Assert.Single(clip.IcLoras);
+
+        Assert.Equal("lipdub", parsed.Preset);
+        Assert.NotNull(parsed.DriveMedia);
+        Assert.Equal("data:audio/wav;base64,QUJD", parsed.DriveMedia.Data);
+        Assert.Equal("target-voice.wav", parsed.DriveMedia.FileName);
+    }
+
+    [Fact]
     public void ParseClips_LegacyControlNetFields_AreIgnored()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);

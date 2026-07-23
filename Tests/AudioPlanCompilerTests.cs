@@ -18,7 +18,7 @@ public class AudioPlanCompilerTests
         ImageReference: "Generated",
         ClipStageIndex: index);
 
-    private static UploadedAudioSpec Upload(string data = "data:audio/wav;base64,QUJD") =>
+    private static UploadedMediaSpec Upload(string data = "data:audio/wav;base64,QUJD") =>
         new(data, "clip.wav");
 
     private static ClipSpec Clip(
@@ -27,7 +27,7 @@ public class AudioPlanCompilerTests
         bool controlNetLength = false,
         bool reuse = false,
         IReadOnlyList<StageSpec> stages = null,
-        UploadedAudioSpec uploadedAudio = null,
+        UploadedMediaSpec uploadedAudio = null,
         IReadOnlyList<AudioSegmentSpec> segments = null,
         IReadOnlyList<IcLoraSpec> icLoras = null) => new(
             Id: 0,
@@ -57,99 +57,12 @@ public class AudioPlanCompilerTests
 
         Assert.Equal(expected, plan.Base.Kind);
         Assert.Equal(source, plan.Base.RawSource);
-        Assert.Equal(expected != AudioBaseSourceKind.None, plan.Base.HasConfiguredTrack);
+        Assert.True(plan.Base.HasConfiguredTrack);
         if (expected == AudioBaseSourceKind.Upload)
         {
             Assert.Equal("data:audio/wav;base64,QUJD", plan.Base.UploadedMedia.Data);
             Assert.Equal("clip.wav", plan.Base.UploadedMedia.FileName);
         }
-    }
-
-    [Fact]
-    public void Compile_models_voice_reference_separately_from_the_base_track()
-    {
-        IcLoraSpec driveVoice = new(
-            Lora: "voice.safetensors",
-            Source: Constants.IcLoraSourceUpload,
-            Strength: 1,
-            AttentionStrength: 1,
-            ControlType: Constants.IcLoraControlNone,
-            Video: Upload(),
-            DriveAudioRef: true);
-
-        ClipSpec clip = Clip(
-            source: Constants.AudioSourceNative,
-            icLoras: [driveVoice]);
-        AudioPlan plan = AudioPlanCompiler.Compile(clip);
-        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
-
-        Assert.Equal(AudioBaseSourceKind.Native, plan.Base.Kind);
-        Assert.Equal(AudioVoiceReferenceKind.IcLoraDriveVideo, ltx.VoiceReference.Kind);
-        Assert.True(ltx.VoiceReference.IsRequested);
-        Assert.True(ltx.VoiceReference.HasConfiguredSample);
-        Assert.Equal(0, ltx.VoiceReference.IcLoraEntryIndex);
-        Assert.Equal("data:audio/wav;base64,QUJD", ltx.VoiceReference.Media.Data);
-        Assert.Equal("clip.wav", ltx.VoiceReference.Media.FileName);
-    }
-
-    [Fact]
-    public void Compile_drive_audio_reference_without_media_has_stable_diagnostic()
-    {
-        IcLoraSpec missingDrive = new(
-            Lora: "voice.safetensors",
-            Source: Constants.IcLoraSourceUpload,
-            Strength: 1,
-            AttentionStrength: 1,
-            ControlType: Constants.IcLoraControlNone,
-            Video: null,
-            DriveAudioRef: true);
-
-        Ltx2AudioPlan plan = Ltx2AudioPlanCompiler.Compile(Clip(icLoras: [missingDrive]));
-
-        Assert.Equal(AudioVoiceReferenceKind.IcLoraDriveVideo, plan.VoiceReference.Kind);
-        Assert.True(plan.VoiceReference.IsRequested);
-        Assert.False(plan.VoiceReference.HasConfiguredSample);
-        Assert.Equal(0, plan.VoiceReference.IcLoraEntryIndex);
-        Assert.Contains(plan.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.voice_reference.drive_media_missing");
-    }
-
-    [Fact]
-    public void Compile_drive_audio_reference_keeps_the_typed_voice_upload_fallback()
-    {
-        IcLoraSpec missingDrive = new(
-            Lora: "voice.safetensors",
-            Source: Constants.IcLoraSourceUpload,
-            Strength: 1,
-            AttentionStrength: 1,
-            ControlType: Constants.IcLoraControlNone,
-            Video: null,
-            DriveAudioRef: true);
-
-        Ltx2AudioPlan plan = Ltx2AudioPlanCompiler.Compile(Clip(
-            source: Constants.AudioSourceVoiceRef,
-            uploadedAudio: Upload("data:audio/wav;base64,RkFMTEJBQ0s="),
-            icLoras: [missingDrive]));
-
-        Assert.Equal(AudioVoiceReferenceKind.IcLoraDriveVideo, plan.VoiceReference.Kind);
-        Assert.False(plan.VoiceReference.HasConfiguredSample);
-        Assert.Equal(IcLoraUploadedMediaKind.None, plan.VoiceReference.DriveMediaKind);
-        Assert.Equal("data:audio/wav;base64,RkFMTEJBQ0s=", plan.VoiceReference.FallbackMedia.Data);
-        Assert.Equal("clip.wav", plan.VoiceReference.FallbackMedia.FileName);
-    }
-
-    [Fact]
-    public void Compile_voice_reference_source_has_no_locked_track_and_reports_missing_upload()
-    {
-        ClipSpec clip = Clip(source: Constants.AudioSourceVoiceRef);
-        AudioPlan plan = AudioPlanCompiler.Compile(clip);
-        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
-
-        Assert.Equal(AudioBaseSourceKind.None, plan.Base.Kind);
-        Assert.False(plan.Base.HasConfiguredTrack);
-        Assert.Equal(AudioVoiceReferenceKind.ClipUpload, ltx.VoiceReference.Kind);
-        Assert.False(ltx.VoiceReference.HasConfiguredSample);
-        Assert.Contains(ltx.Diagnostics, d => d.Code == "audio.voice_reference.missing_sample");
     }
 
     [Fact]
@@ -161,7 +74,7 @@ public class AudioPlanCompilerTests
             Strength: 1,
             AttentionStrength: 1,
             ControlType: Constants.IcLoraControlNone,
-            Video: null);
+            DriveMedia: null);
         ClipSpec clip = Clip(
             source: Constants.AudioSourceUpload,
             audioLength: true,
@@ -240,8 +153,8 @@ public class AudioPlanCompilerTests
     public void Compile_segments_without_a_base_use_preserve_windows()
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(
-            source: Constants.AudioSourceVoiceRef,
-            uploadedAudio: Upload(),
+            source: Constants.AudioSourceUpload,
+            uploadedAudio: null,
             segments: [new(Upload(), StartSeconds: 1, TrimStartSeconds: 0, LengthSeconds: 2)]));
 
         Assert.Single(plan.Segments.Items);

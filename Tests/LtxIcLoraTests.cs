@@ -55,7 +55,8 @@ public sealed class LtxIcLoraTests
         double strength = 1.0,
         double attentionStrength = 1.0,
         string controlType = Constants.IcLoraControlNone,
-        string videoData = null)
+        string driveMediaData = null,
+        string driveMediaFileName = "drive.mp4")
     {
         JObject entry = new()
         {
@@ -65,9 +66,13 @@ public sealed class LtxIcLoraTests
             ["AttentionStrength"] = attentionStrength,
             ["ControlType"] = controlType,
         };
-        if (videoData is not null)
+        if (driveMediaData is not null)
         {
-            entry["Video"] = new JObject { ["Data"] = videoData, ["FileName"] = "drive.mp4" };
+            entry["DriveMedia"] = new JObject
+            {
+                ["Data"] = driveMediaData,
+                ["FileName"] = driveMediaFileName,
+            };
         }
         return entry;
     }
@@ -92,7 +97,7 @@ public sealed class LtxIcLoraTests
         RegisterLora("LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9");
 
         JObject entry = MakeIcLora(
-            IcLoraWeights.AutoModelToken, videoData: "data:video/mp4;base64,QUJD");
+            IcLoraWeights.AutoModelToken, driveMediaData: "data:video/mp4;base64,QUJD");
         entry["Preset"] = "deblur";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(entry);
@@ -167,7 +172,7 @@ public sealed class LtxIcLoraTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         RegisterLora("UnitTest_IcLoraA");
 
-        JObject entry = MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD");
+        JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD");
         entry["Stage"] = 1;
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
@@ -189,7 +194,7 @@ public sealed class LtxIcLoraTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         RegisterLora("UnitTest_IcLoraA");
 
-        JObject entry = MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD");
+        JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD");
         entry["Stage"] = 0;
         JObject secondClip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         secondClip["IcLoras"] = new JArray(entry);
@@ -214,7 +219,7 @@ public sealed class LtxIcLoraTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         RegisterLora("UnitTest_IcLoraA");
 
-        JObject entry = MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD");
+        JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD");
         entry["Stage"] = 1;
         JObject skipped = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         skipped["Skipped"] = true;
@@ -238,7 +243,7 @@ public sealed class LtxIcLoraTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated", upscale: 2, steps: 10));
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"));
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -333,7 +338,7 @@ public sealed class LtxIcLoraTests
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"));
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -360,8 +365,8 @@ public sealed class LtxIcLoraTests
         stage["ControlNetStrength"] = 0.7;
         JObject clip = MakeClip(stage);
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", strength: 1.2, videoData: "data:video/mp4;base64,QUJD"),
-            MakeIcLora("UnitTest_IcLoraB", strength: 0.9, videoData: "data:video/mp4;base64,REVG"));
+            MakeIcLora("UnitTest_IcLoraA", strength: 1.2, driveMediaData: "data:video/mp4;base64,QUJD"),
+            MakeIcLora("UnitTest_IcLoraB", strength: 0.9, driveMediaData: "data:video/mp4;base64,REVG"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -401,7 +406,7 @@ public sealed class LtxIcLoraTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"));
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -428,8 +433,8 @@ public sealed class LtxIcLoraTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"),
-            MakeIcLora("UnitTest_IcLoraB", attentionStrength: 0.65, videoData: "data:video/mp4;base64,REVG"));
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"),
+            MakeIcLora("UnitTest_IcLoraB", attentionStrength: 0.65, driveMediaData: "data:video/mp4;base64,REVG"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -455,7 +460,7 @@ public sealed class LtxIcLoraTests
             MakeIcLora(
                 "UnitTest_IcLoraA",
                 controlType: Constants.IcLoraControlCanny,
-                videoData: "data:video/mp4;base64,QUJD"));
+                driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -482,7 +487,7 @@ public sealed class LtxIcLoraTests
             MakeIcLora(
                 "UnitTest_IcLoraA",
                 controlType: Constants.IcLoraControlDepth,
-                videoData: "data:video/mp4;base64,QUJD"));
+                driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -515,7 +520,7 @@ public sealed class LtxIcLoraTests
             MakeIcLora(
                 "UnitTest_IcLoraA",
                 controlType: Constants.IcLoraControlNormal,
-                videoData: "data:video/mp4;base64,QUJD"));
+                driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -540,7 +545,7 @@ public sealed class LtxIcLoraTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", videoData: "data:image/png;base64,QUJD"));
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:image/png;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -583,8 +588,8 @@ public sealed class LtxIcLoraTests
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_MissingLora", videoData: "data:video/mp4;base64,QUJD"),
-            MakeIcLora("UnitTest_IcLoraB", videoData: "data:video/mp4;base64,REVG"));
+            MakeIcLora("UnitTest_MissingLora", driveMediaData: "data:video/mp4;base64,QUJD"),
+            MakeIcLora("UnitTest_IcLoraB", driveMediaData: "data:video/mp4;base64,REVG"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -606,7 +611,7 @@ public sealed class LtxIcLoraTests
         JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
         JObject clip = MakeClip(stageA, stageB);
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD"));
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -627,7 +632,7 @@ public sealed class LtxIcLoraTests
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(
-            MakeIcLora("UnitTest_IcLoraA", videoData: "data:image/png;base64,QUJD"));
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:image/png;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -723,98 +728,251 @@ public sealed class LtxIcLoraTests
             ModelStrength: 1,
             AttentionStrength: 1,
             ControlMode: IcLoraControlMode.None,
-            Drive: new(
-                IcLoraDriveSourceKind.LoaderOnly,
+            MediaContract: IcLoraDriveMediaContracts.Resolve(preset),
+            DriveMedia: new(
+                IcLoraDriveMediaKind.None,
+                Data: null,
+                FileName: null),
+            VisualGuide: new(
+                IcLoraVisualGuideSourceKind.LoaderOnly,
                 RawSource: "",
                 ControlNetIndex: null,
-                UploadedMediaKind: IcLoraUploadedMediaKind.None,
-                UploadedData: null,
-                HasDriveMedia: false),
+                HasGuide: false),
             GuideStrength: null);
 
         Assert.Equal(expected, IcLoraApplicator.MaxKnownIcLoraDownscaleFactor([plan]));
     }
 
     [Fact]
-    public void Drive_audio_voice_ref_wraps_conditioning_after_the_guide()
+    public void Lipdub_drive_video_feeds_audio_reference_tokens_without_a_visual_guide()
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        RegisterLora("UnitTest_IcLoraA");
+        RegisterLora("UnitTest_IcLoraLipDub");
 
-        JObject entry = MakeIcLora("UnitTest_IcLoraA", videoData: "data:video/mp4;base64,QUJD");
-        entry["DriveAudioRef"] = true;
+        JObject entry = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: "data:video/mp4;base64,QUJD");
+        entry["Preset"] = IcLoraDriveMediaContracts.LipDubPreset;
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
 
-        List<LTXVSetAudioRefTokensNode> refTokens =
-            [.. bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>()];
-        Assert.NotEmpty(refTokens);
-        // The generating stage's wrap sits after the IC-LoRA guide (official LipDub order) and its
-        // sample latent traces back to the uploaded drive video's audio split.
-        LTXVSetAudioRefTokensNode stageWrap = Assert.Single(
-            refTokens,
-            node => node.PositiveInput.Connection?.Node is LTXAddVideoICLoRAGuideNode);
-        ComfyNode audioStart = stageWrap.AudioLatent.Connection?.Node;
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideAdvancedNode>());
+
+        SwarmLoadVideoB64Node driveLoad =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        Assert.Equal("QUJD", driveLoad.VideoBase64.LiteralAsString());
+        GetVideoComponentsNode driveComponents =
+            Assert.Single(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        Assert.Same(driveLoad, driveComponents.Video.Connection?.Node);
+
+        LTXVSetAudioRefTokensNode refTokens =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        ComfyNode audioStart = refTokens.AudioLatent.Connection?.Node;
         Assert.NotNull(audioStart);
         Assert.True(
-            audioStart is GetVideoComponentsNode
-            || bridge.Graph.FindNearestUpstream<GetVideoComponentsNode>(audioStart) is not null);
+            audioStart.Id == driveComponents.Id
+            || bridge.Graph.FindNearestUpstream(
+                audioStart,
+                node => node.Id == driveComponents.Id) is not null,
+            "LipDub voice conditioning does not trace to Drive Media's audio stream.");
     }
 
     [Fact]
-    public void Drive_audio_voice_ref_without_uploaded_drive_video_falls_back_to_clip_voice_upload()
+    public void Lipdub_drive_audio_feeds_audio_reference_tokens_without_loading_video_or_guide_frames()
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        RegisterLora("UnitTest_IcLoraA");
+        RegisterLora("UnitTest_IcLoraLipDub");
 
-        // The malformed DriveAudioRef request used to dereference Video/Data while wiring voice
-        // tokens. A separate clip voice upload remains a valid sample, so the run stays usable.
-        JObject entry = MakeIcLora("UnitTest_IcLoraA");
-        entry["DriveAudioRef"] = true;
+        JObject entry = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: "data:audio/wav;base64,QUJD",
+            driveMediaFileName: "voice.wav");
+        entry["Preset"] = IcLoraDriveMediaContracts.LipDubPreset;
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(entry);
-        clip["AudioSource"] = Constants.AudioSourceVoiceRef;
-        clip["UploadedAudio"] = new JObject
-        {
-            ["Data"] = "data:audio/wav;base64,QUFB",
-            ["FileName"] = "fallback.wav",
-        };
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
 
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideAdvancedNode>());
+
+        SwarmLoadAudioB64Node driveAudio =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         LTXVSetAudioRefTokensNode refTokens =
             Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
-        Assert.NotNull(refTokens.AudioLatent.Connection);
-        Assert.Empty(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        ComfyNode audioStart = refTokens.AudioLatent.Connection?.Node;
+        Assert.NotNull(audioStart);
+        Assert.True(
+            audioStart.Id == driveAudio.Id
+            || bridge.Graph.FindNearestUpstream(
+                audioStart,
+                node => node.Id == driveAudio.Id) is not null,
+            "LipDub voice conditioning does not trace to the audio Drive Media upload.");
     }
 
     [Fact]
-    public void Clip_voice_ref_upload_wraps_conditioning_without_ic_loras()
+    public void Lipdub_audio_reference_obeys_the_entry_stage_scope()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraLipDub");
+
+        JObject entry = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: "data:audio/wav;base64,QUJD",
+            driveMediaFileName: "voice.wav");
+        entry["Preset"] = IcLoraDriveMediaContracts.LipDubPreset;
+        entry["Stage"] = 1;
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+    }
+
+    [Fact]
+    public void Lipdub_all_stages_reuses_one_materialized_audio_sample()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraLipDub");
+
+        JObject entry = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: "data:audio/wav;base64,QUJD",
+            driveMediaFileName: "voice.wav");
+        entry["Preset"] = IcLoraDriveMediaContracts.LipDubPreset;
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count());
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>().Count());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+    }
+
+    [Fact]
+    public void Lipdub_drive_audio_stays_separate_from_the_clip_base_audio_upload()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraLipDub");
+
+        JObject entry = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: "data:audio/wav;base64,RFJJVkU=",
+            driveMediaFileName: "speaker.wav");
+        entry["Preset"] = IcLoraDriveMediaContracts.LipDubPreset;
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["AudioSource"] = Constants.AudioSourceUpload;
+        clip["UploadedAudio"] = new JObject
+        {
+            ["Data"] = "data:audio/wav;base64,QkFTRQ==",
+            ["FileName"] = "base.wav",
+        };
+        clip["IcLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        IReadOnlyList<SwarmLoadAudioB64Node> uploads =
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>();
+        Assert.Equal(2, uploads.Count);
+        LTXVSetAudioRefTokensNode refTokens =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        SwarmLoadAudioB64Node referenceUpload =
+            bridge.Graph.FindNearestUpstream<SwarmLoadAudioB64Node>(
+                refTokens.AudioLatent.Connection!.Node);
+        Assert.NotNull(referenceUpload);
+        Assert.Contains(uploads, upload => upload.Id != referenceUpload.Id);
+        Assert.Empty(bridge.Graph.NodesOfType<AudioConcatNode>());
+    }
+
+    [Fact]
+    public void Lipdub_and_visual_guide_coexist_across_refinement_without_extra_audio_wrapping()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraLipDub");
+        RegisterLora("UnitTest_IcLoraVisual");
+
+        JObject lipDub = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: "data:audio/wav;base64,QUJD",
+            driveMediaFileName: "speaker.wav");
+        lipDub["Preset"] = IcLoraDriveMediaContracts.LipDubPreset;
+        JObject visual = MakeIcLora(
+            "UnitTest_IcLoraVisual",
+            driveMediaData: "data:image/png;base64,QUJD",
+            driveMediaFileName: "guide.png");
+        visual["Preset"] = "ingredients";
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(lipDub, visual);
+
+        (JObject workflow, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>().Count());
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count());
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        AssertAcyclic(bridge);
+    }
+
+    [Theory]
+    [InlineData(null, "requires uploaded audio or video Drive Media")]
+    [InlineData(
+        "data:image/png;base64,QUJD",
+        "requires audio or video Drive Media; images are not speaker samples")]
+    public void Lipdub_rejects_missing_or_image_drive_media_during_planning(
+        string driveMediaData,
+        string expectedMessage)
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
+        JObject entry = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: driveMediaData);
+        entry["Preset"] = IcLoraDriveMediaContracts.LipDubPreset;
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["AudioSource"] = Constants.AudioSourceVoiceRef;
-        clip["UploadedAudio"] = new JObject
-        {
-            ["Data"] = "data:audio/wav;base64,QUFB",
-            ["FileName"] = "voice.wav",
-        };
+        clip["IcLoras"] = new JArray(entry);
 
-        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
-        using WorkflowBridge _ = bridge;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            new JArray(clip).ToString());
+        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowSteps()));
 
-        LTXVSetAudioRefTokensNode refTokens =
-            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
-        Assert.NotNull(refTokens.PositiveInput.Connection);
-        Assert.NotNull(refTokens.AudioLatent.Connection);
+        Assert.Contains(expectedMessage, ex.Message);
     }
 
     private static bool GuideImageTracesTo(WorkflowBridge bridge, ComfyNode guide, ComfyNode wanted)

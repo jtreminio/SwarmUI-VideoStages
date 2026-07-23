@@ -32,31 +32,6 @@ public class AudioPlanCompilerComponentTests
     }
 
     [Fact]
-    public void Voice_reference_component_and_facade_preserve_missing_drive_media()
-    {
-        ClipSpec clip = Clip(icLoras:
-        [
-            new(
-                "voice.safetensors",
-                Constants.IcLoraSourceUpload,
-                1,
-                1,
-                Constants.IcLoraControlNone,
-                null,
-                DriveAudioRef: true),
-        ]);
-
-        AudioPlanComponentResult<AudioVoiceReferencePlan> component =
-            AudioVoiceReferencePlanCompiler.Compile(clip);
-        Ltx2AudioPlan facade = Ltx2AudioPlanCompiler.Compile(clip);
-
-        Assert.Equal(component.Plan, facade.VoiceReference);
-        Assert.Equal(["audio.voice_reference.drive_media_missing"],
-            component.Diagnostics.Select(diagnostic => diagnostic.Code));
-        Assert.Equal(component.Diagnostics.AsEnumerable(), facade.Diagnostics);
-    }
-
-    [Fact]
     public void Segment_component_and_facade_preserve_sorted_windows()
     {
         ClipSpec clip = Clip(
@@ -98,17 +73,6 @@ public class AudioPlanCompilerComponentTests
             audioLength: true,
             controlNetLength: true,
             reuse: true,
-            icLoras:
-            [
-                new(
-                    "voice.safetensors",
-                    Constants.IcLoraSourceUpload,
-                    1,
-                    1,
-                    Constants.IcLoraControlNone,
-                    null,
-                    DriveAudioRef: true),
-            ],
             segments:
             [
                 new(null, -1, 0, 1),
@@ -128,7 +92,6 @@ public class AudioPlanCompilerComponentTests
             plan.Diagnostics.Select(diagnostic => diagnostic.Code));
         Assert.Equal(
         [
-            "audio.voice_reference.drive_media_missing",
             "audio.length.controlnet_owner_has_no_source",
         ],
             ltx.Diagnostics.Select(diagnostic => diagnostic.Code));
@@ -137,7 +100,7 @@ public class AudioPlanCompilerComponentTests
     private static string Serialize<T>(T plan) =>
         JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
 
-    private static UploadedAudioSpec Upload(string data = "data:audio/wav;base64,QUJD") =>
+    private static UploadedMediaSpec Upload(string data = "data:audio/wav;base64,QUJD") =>
         new(data, "clip.wav");
 
     private static ClipSpec Clip(
@@ -146,7 +109,7 @@ public class AudioPlanCompilerComponentTests
         bool controlNetLength = false,
         bool reuse = false,
         IReadOnlyList<StageSpec> stages = null,
-        UploadedAudioSpec uploadedAudio = null,
+        UploadedMediaSpec uploadedAudio = null,
         IReadOnlyList<AudioSegmentSpec> segments = null,
         IReadOnlyList<IcLoraSpec> icLoras = null) => new(
             Id: 0,

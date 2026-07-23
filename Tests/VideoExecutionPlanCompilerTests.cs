@@ -94,12 +94,12 @@ public class VideoExecutionPlanCompilerTests
     public void Compile_OptionsAreExpressedAtStageAndClipHooks()
     {
         ClipSpec clip = new(
-            4, 49, Constants.AudioSourceVoiceRef,
+            4, 49, Constants.AudioSourceNative,
             [new IcLoraSpec("drive", Constants.IcLoraSourceUpload, 1, 1, Constants.IcLoraControlNone, null, Stage: 0)],
             false, true, false, true, null,
             [new ImageRefSpec("Upload", 1, false, "ref.png")],
             [Stage(10, loras: [new LoraRef("stage")]), Stage(11)],
-            AudioSegments: [new AudioSegmentSpec(new UploadedAudioSpec("audio", "clip.wav"), 0, 0, 1)],
+            AudioSegments: [new AudioSegmentSpec(new UploadedMediaSpec("audio", "clip.wav"), 0, 0, 1)],
             Loras: [new LoraRef("clip")],
             PromptWindows: [new PromptWindowSpec("first", 0, 1)]);
 
@@ -109,7 +109,6 @@ public class VideoExecutionPlanCompilerTests
         Ltx2ClipPayload ltxClip = Assert.IsType<Ltx2ClipPayload>(
             compiled.ArchitecturePayload);
         Assert.Equal(AudioLengthOwner.Audio, compiled.Audio.Length.Owner);
-        Assert.True(ltxClip.VoiceReference.IsRequested);
         Assert.False(ltxClip.AudioReuse.IsEligible);
         Assert.Single(compiled.Audio.Segments.Items);
         Assert.Equal(
@@ -167,10 +166,9 @@ public class VideoExecutionPlanCompilerTests
                 0.8,
                 0.7,
                 Constants.IcLoraControlCanny,
-                new UploadedAudioSpec("data:image/png;base64,Qg==", "drive.png"),
+                new UploadedMediaSpec("data:image/png;base64,Qg==", "drive.png"),
                 Preset: "pixel-spatial-upscaler-x2",
-                Stage: 1,
-                DriveAudioRef: true),
+                Stage: 1),
             new(
                 "control.safetensors",
                 Constants.ControlNetSourceTwo,
@@ -261,12 +259,12 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(2, ltx.IcLoras.Length);
         IcLoraPlan uploaded = ltx.IcLoras[0];
         Assert.True(uploaded.UsesAutoModel);
-        Assert.Equal(IcLoraDriveSourceKind.UploadedMedia, uploaded.Drive.Kind);
-        Assert.Equal(IcLoraUploadedMediaKind.Image, uploaded.Drive.UploadedMediaKind);
+        Assert.Equal(IcLoraVisualGuideSourceKind.UploadedMedia, uploaded.VisualGuide.Kind);
+        Assert.Equal(IcLoraDriveMediaKind.Image, uploaded.DriveMedia.Kind);
         Assert.Equal(IcLoraControlMode.Canny, uploaded.ControlMode);
         Assert.Equal(0.55, uploaded.GuideStrength);
-        Assert.Equal(IcLoraDriveSourceKind.ControlNet, ltx.IcLoras[1].Drive.Kind);
-        Assert.Equal(1, ltx.IcLoras[1].Drive.ControlNetIndex);
+        Assert.Equal(IcLoraVisualGuideSourceKind.ControlNet, ltx.IcLoras[1].VisualGuide.Kind);
+        Assert.Equal(1, ltx.IcLoras[1].VisualGuide.ControlNetIndex);
 
         Assert.Equal(new RetakePlan(8, 16, 0.75), ltx.Retake);
         Assert.Equal(PromptRelayMode.Relay, ltx.PromptRelay.Mode);
@@ -329,7 +327,7 @@ public class VideoExecutionPlanCompilerTests
         {
             Frames = null,
             AudioSource = controlNetOwnsLength ? Constants.AudioSourceControlNet : Constants.AudioSourceUpload,
-            UploadedAudio = controlNetOwnsLength ? null : new UploadedAudioSpec("audio", "track.wav"),
+            UploadedAudio = controlNetOwnsLength ? null : new UploadedMediaSpec("audio", "track.wav"),
             ClipLengthFromAudio = !controlNetOwnsLength,
             ClipLengthFromControlNet = controlNetOwnsLength,
             IcLoras = controlNetOwnsLength

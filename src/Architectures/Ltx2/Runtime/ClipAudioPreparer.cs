@@ -38,8 +38,7 @@ internal sealed class ClipAudioPreparer(
         // Native audio is the model-generated/default track, not an authored full-clip bed.
         // Boundary carry replaces its opening with preserved context and lets LTX generate the rest.
         bool carryStartsGeneratedAudio = boundaryAudioCarry is not null
-            && context.PlannedClip.Audio.Base.Kind is
-                AudioBaseSourceKind.None or AudioBaseSourceKind.Native;
+            && context.PlannedClip.Audio.Base.Kind == AudioBaseSourceKind.Native;
         WGNodeData baseAudio = carryStartsGeneratedAudio
             ? null
             : selectedBaseAudio;

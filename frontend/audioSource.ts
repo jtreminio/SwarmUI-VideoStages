@@ -15,7 +15,6 @@ export interface AudioSourceContext {
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
 export const AUDIO_SOURCE_CONTROLNET = "ControlNet";
-export const AUDIO_SOURCE_VOICE_REF = "Voice Reference";
 export const AUDIO_SOURCE_DISABLED_KIND = "Disabled";
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
@@ -119,7 +118,6 @@ export const buildAudioSourceOptions = (
     const options: AudioSourceOption[] = [
         { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
         { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
-        { value: AUDIO_SOURCE_VOICE_REF, label: AUDIO_SOURCE_VOICE_REF },
     ];
     appendAceStepFunRefs(options);
     if (context.controlNetEnabled) {

@@ -120,6 +120,66 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Sourced_clip_LipDub_keeps_init_video_visuals_and_uses_drive_video_audio_only()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel lipDub = new(
+            loraHandler,
+            "/tmp",
+            "/tmp/UnitTest_LipDub.safetensors",
+            "UnitTest_LipDub.safetensors");
+        loraHandler.Models[lipDub.Name] = lipDub;
+
+        JObject sourced = MakeSourcedClip(models);
+        sourced["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = lipDub.Name,
+            ["Preset"] = IcLoraDriveMediaContracts.LipDubPreset,
+            ["Source"] = Constants.IcLoraSourceUpload,
+            ["DriveMedia"] = new JObject
+            {
+                ["Data"] = "data:video/mp4;base64,RFJJVkU=",
+                ["FileName"] = "target-voice.mp4",
+            },
+        });
+
+        (JObject workflow, WorkflowGenerator _generator) =
+            GenerateSourcedFlow(models, sourced);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadVideoB64Node sourceLoad = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>(),
+            node => node.VideoBase64.LiteralAsString() != "RFJJVkU=");
+        SwarmLoadVideoB64Node driveLoad = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>(),
+            node => node.VideoBase64.LiteralAsString() == "RFJJVkU=");
+        GetVideoComponentsNode driveComponents = Assert.Single(
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>(),
+            node => node.Video.Connection?.Node.Id == driveLoad.Id);
+        SwarmFrameWindowNode sourceWindow = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>(),
+            node => ReachesUpstream(bridge, node, sourceLoad.Id));
+
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        LTXVSetAudioRefTokensNode refTokens =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        Assert.True(
+            ReachesUpstream(bridge, refTokens.AudioLatent.Connection!.Node, driveComponents.Id),
+            "LipDub reference tokens do not trace to the Drive Media video's audio.");
+        SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.True(
+            ReachesUpstream(bridge, sampler.LatentImage.Connection!.Node, sourceWindow.Id),
+            "The sampler's visuals do not trace to the init video.");
+        Assert.False(
+            ReachesUpstream(bridge, sampler.LatentImage.Connection!.Node, driveComponents.Id),
+            "Drive Media video frames leaked into the generated visual path.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
     public void Sourced_clip_second_stage_refines_the_passthrough_footage()
     {
         using SwarmUiTestContext _ = new();
@@ -966,7 +1026,7 @@ public partial class StageFlowTests
         {
             ["Lora"] = "UnitTest_IcLoraDrive",
             ["Source"] = Constants.IcLoraSourceUpload,
-            ["Video"] = new JObject
+            ["DriveMedia"] = new JObject
             {
                 ["Data"] = "data:video/mp4;base64,QUJD",
                 ["FileName"] = "drive.mp4",

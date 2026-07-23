@@ -25,7 +25,7 @@ describe("normalization compatibility facade", () => {
             "normalizeStageLoras",
             "normalizeStageRefStrengthValue",
             "normalizeStageRefStrengths",
-            "normalizeUploadedAudio",
+            "normalizeUploadedMedia",
             "readProp",
             "readRawStageProp",
             "readRawStageString",

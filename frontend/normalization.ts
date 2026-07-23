@@ -18,7 +18,7 @@ export {
     normalizePromptWindows,
     normalizeRetake,
     normalizeSourceVideo,
-    normalizeUploadedAudio,
+    normalizeUploadedMedia,
 } from "./normalizationMedia";
 export { readProp } from "./normalizationShared";
 export {

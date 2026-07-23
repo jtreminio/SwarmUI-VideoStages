@@ -856,11 +856,6 @@
 .vst-audio-kind-ace {
     --vst-audio-tint: hsl(275 55% 58%);
 }
-.vst-audio-kind-voiceref {
-    /* Speaker-sample conditioning (audio is generated) — amber, distinct from
-       the locked-track Upload blue. */
-    --vst-audio-tint: hsl(35 80% 52%);
-}
 .vst-audio-wave {
     position: absolute;
     inset: 4px 8px;

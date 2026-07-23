@@ -1,8 +1,5 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
-import {
-    AUDIO_SOURCE_VOICE_REF,
-    isAceStepFunAudioSource,
-} from "../audioSource";
+import { isAceStepFunAudioSource } from "../audioSource";
 import { clamp, mediaPreviewSrc } from "../constants";
 import {
     audioSourceBadge,
@@ -262,13 +259,9 @@ export const renderAudioTrackRow = (
                 ? " vst-audio-native vst-audio-kind-native"
                 : isAceStepFunAudioSource(clip.audioSource ?? "")
                   ? " vst-audio-kind-ace"
-                  : clip.audioSource === AUDIO_SOURCE_VOICE_REF
-                    ? " vst-audio-kind-voiceref"
-                    : " vst-audio-kind-upload";
+                  : " vst-audio-kind-upload";
             const upload =
-                !native &&
-                (clip.audioSource === "Upload" ||
-                    clip.audioSource === AUDIO_SOURCE_VOICE_REF)
+                !native && clip.audioSource === "Upload"
                     ? clip.uploadedAudio?.fileName
                     : null;
             const labelText = upload

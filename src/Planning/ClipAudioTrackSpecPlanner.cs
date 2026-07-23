@@ -11,7 +11,7 @@ internal static class ClipAudioTrackSpecPlanner
         for (int index = 0; index < videoPlan.Clips.Count; index++)
         {
             ClipPlan clip = videoPlan.Clips[index];
-            if (clip.Audio.Base.Kind != AudioBaseSourceKind.None && clip.Audio.Base.HasConfiguredTrack)
+            if (clip.Audio.Base.HasConfiguredTrack)
             {
                 tracks.Add(new(
                     $"clip-{clip.ClipId}-base",

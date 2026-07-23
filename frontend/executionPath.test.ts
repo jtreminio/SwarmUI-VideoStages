@@ -230,8 +230,7 @@ describe("projectVideoExecutionPath", () => {
                             strength: 1,
                             attentionStrength: 1,
                             controlType: "none",
-                            video: null,
-                            driveAudioRef: false,
+                            driveMedia: null,
                         },
                     ],
                     prompt: "major beat",
@@ -521,8 +520,7 @@ describe("projectVideoExecutionPath", () => {
             strength: 1,
             attentionStrength: 1,
             controlType: "none",
-            video: null,
-            driveAudioRef: false,
+            driveMedia: null,
         };
         const summary = projectVideoExecutionPath(
             config([
@@ -685,8 +683,7 @@ describe("projectVideoExecutionPath", () => {
                             strength: 1,
                             attentionStrength: 1,
                             controlType: "none",
-                            video: null,
-                            driveAudioRef: false,
+                            driveMedia: null,
                         },
                         {
                             lora: "new-guide.safetensors",
@@ -696,8 +693,7 @@ describe("projectVideoExecutionPath", () => {
                             strength: 1,
                             attentionStrength: 1,
                             controlType: "none",
-                            video: null,
-                            driveAudioRef: false,
+                            driveMedia: null,
                         },
                     ],
                 }),

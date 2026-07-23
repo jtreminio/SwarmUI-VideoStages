@@ -292,11 +292,10 @@ describe("normalization", () => {
                         strength: 99,
                         attentionStrength: -3,
                         controlType: "DEPTH",
-                        video: {
+                        driveMedia: {
                             data: "data:video/mp4;base64,QUJD",
                             fileName: "d.mp4",
                         },
-                        driveAudioRef: true,
                     },
                     { lora: "" },
                 ],
@@ -312,11 +311,58 @@ describe("normalization", () => {
         expect(entry.strength).toBe(2);
         expect(entry.attentionStrength).toBe(0);
         expect(entry.controlType).toBe("depth");
-        expect(entry.video).toEqual({
+        expect(entry.driveMedia).toEqual({
             data: "data:video/mp4;base64,QUJD",
             fileName: "d.mp4",
         });
-        expect(entry.driveAudioRef).toBe(true);
+    });
+
+    it("normalizes audio Drive Media for LipDub", () => {
+        const entry = normalizeIcLora({
+            lora: "lipdub.safetensors",
+            preset: "lipdub",
+            driveMedia: {
+                data: "data:audio/wav;base64,QUJD",
+                fileName: "voice.wav",
+            },
+        });
+
+        expect(entry?.driveMedia).toEqual({
+            data: "data:audio/wav;base64,QUJD",
+            fileName: "voice.wav",
+        });
+        expect(
+            normalizeIcLora({
+                lora: "lipdub.safetensors",
+                preset: "lipdub",
+                driveMedia: {
+                    data: "data:image/png;base64,QUJD",
+                    fileName: "not-a-speaker.png",
+                },
+            })?.driveMedia,
+        ).toBeNull();
+    });
+
+    it("normalizes LipDub source to its required Upload contract", () => {
+        expect(
+            normalizeIcLora(
+                {
+                    lora: "lipdub.safetensors",
+                    preset: "lipdub",
+                    source: "Stage Input",
+                    controlType: "canny",
+                },
+                2,
+                true,
+            )?.source,
+        ).toBe("Upload");
+        expect(
+            normalizeIcLora({
+                lora: "lipdub.safetensors",
+                preset: "lipdub",
+                controlType: "canny",
+            })?.controlType,
+        ).toBe("none");
     });
 
     it("normalizeClip reads the IC-LoRA stage and Stage Input source", () => {

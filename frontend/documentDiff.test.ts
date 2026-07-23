@@ -503,8 +503,7 @@ describe("diffDocuments", () => {
                         strength: 0.75,
                         attentionStrength: 0.5,
                         controlType: "depth",
-                        video: null,
-                        driveAudioRef: false,
+                        driveMedia: null,
                     },
                 ];
             },

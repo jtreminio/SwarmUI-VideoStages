@@ -125,8 +125,7 @@ describe("stage architecture model filtering", () => {
                     strength: 1,
                     attentionStrength: 1,
                     controlType: "none",
-                    video: null,
-                    driveAudioRef: false,
+                    driveMedia: null,
                 },
             ],
         });

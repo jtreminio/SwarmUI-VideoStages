@@ -36,7 +36,7 @@ public class MetadataSanitizerTests
                         new JObject
                         {
                             ["Lora"] = "some-lora",
-                            ["Video"] = new JObject
+                            ["DriveMedia"] = new JObject
                             {
                                 ["Data"] = "data:video/mp4;base64,QUJD",
                                 ["FileName"] = "drive.mp4"
@@ -55,8 +55,8 @@ public class MetadataSanitizerTests
         Assert.Null(ref0["UploadedImage"]!["Data"]);
         Assert.Equal("r.png", $"{ref0["UploadedImage"]!["FileName"]}");
         JObject icLora = (JObject)clip["IcLoras"]![0]!;
-        Assert.Null(icLora["Video"]!["Data"]);
-        Assert.Equal("drive.mp4", $"{icLora["Video"]!["FileName"]}");
+        Assert.Null(icLora["DriveMedia"]!["Data"]);
+        Assert.Equal("drive.mp4", $"{icLora["DriveMedia"]!["FileName"]}");
         Assert.Equal("some-lora", $"{icLora["Lora"]}");
     }
 

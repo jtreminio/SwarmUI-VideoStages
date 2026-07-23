@@ -151,7 +151,7 @@ internal static class VideoStagesJsonReader
     public static bool HasProperty(JObject obj, string key) =>
         JsonUtil.Get(obj, key) is not null;
 
-    public static UploadedAudioSpec GetEmbeddedUpload(JObject parent, string containerPropertyName)
+    public static UploadedMediaSpec GetEmbeddedUpload(JObject parent, string containerPropertyName)
     {
         JObject nested = GetObject(parent, containerPropertyName);
         string data = nested is null ? null : GetString(nested, "Data");
@@ -159,7 +159,7 @@ internal static class VideoStagesJsonReader
         {
             return null;
         }
-        return new UploadedAudioSpec(data.Trim(), GetString(nested, "FileName")?.Trim());
+        return new UploadedMediaSpec(data.Trim(), GetString(nested, "FileName")?.Trim());
     }
 
     private static int? GetOptionalNullableInt(JObject obj, string key)

@@ -26,7 +26,6 @@ public static class Constants
     public const string AudioSourceUpload = "Upload";
     public const string AudioSourceControlNet = "ControlNet";
     // The uploaded audio is a speaker-identity sample, not a locked timeline track.
-    public const string AudioSourceVoiceRef = "Voice Reference";
     public const string ControlNetSourceOne = "ControlNet 1";
     public const string ControlNetSourceTwo = "ControlNet 2";
     public const string ControlNetSourceThree = "ControlNet 3";

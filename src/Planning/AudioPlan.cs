@@ -3,12 +3,10 @@ using System.Collections.Immutable;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// The configured source of a clip's lockable audio track. Voice-reference samples deliberately
-/// live outside this enum: they condition generated speech and are never a locked track.
+/// The configured source of a clip's lockable base audio track.
 /// </summary>
 internal enum AudioBaseSourceKind
 {
-    None,
     Native,
     Upload,
     AceStepFun,

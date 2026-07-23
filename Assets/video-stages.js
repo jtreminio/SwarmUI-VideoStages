@@ -338,7 +338,6 @@
   var AUDIO_SOURCE_NATIVE = "Native";
   var AUDIO_SOURCE_UPLOAD = "Upload";
   var AUDIO_SOURCE_CONTROLNET = "ControlNet";
-  var AUDIO_SOURCE_VOICE_REF = "Voice Reference";
   var AUDIO_SOURCE_DISABLED_KIND = "Disabled";
   var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
   var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
@@ -402,8 +401,7 @@
   var buildAudioSourceOptions = (currentValue = "", context = {}) => {
     const options = [
       { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
-      { value: AUDIO_SOURCE_VOICE_REF, label: AUDIO_SOURCE_VOICE_REF }
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
     ];
     appendAceStepFunRefs(options);
     if (context.controlNetEnabled) {
@@ -634,7 +632,7 @@
       lengthSeconds: roundToTenth(lengthSeconds)
     };
   };
-  var normalizeUploadedAudio = (value) => {
+  var normalizeUploadedMedia = (value) => {
     if (!isRecord(value)) {
       return null;
     }
@@ -717,7 +715,7 @@
         source: {
           kind: normalizeAudioTrackSourceKind(source.kind),
           reference: `${source.reference ?? ""}`.trim(),
-          uploadedAudio: normalizeUploadedAudio(source.uploadedAudio)
+          uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
         },
         spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter((span) => span !== null) : []
       });
@@ -729,7 +727,7 @@
       return null;
     }
     const rawSource = value.source;
-    const source = typeof rawSource === "string" && isAceStepFunAudioSource(rawSource) ? rawSource.trim() : normalizeUploadedAudio(rawSource);
+    const source = typeof rawSource === "string" && isAceStepFunAudioSource(rawSource) ? rawSource.trim() : normalizeUploadedMedia(rawSource);
     const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
     const trimStartRaw = Math.max(
       0,
@@ -787,6 +785,18 @@
 
   // frontend/architectures/ltx2/icLoraPresets.ts
   var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+  var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["image", "video"],
+    consumes: "visual",
+    visualSource: "drive-media",
+    requiresUpload: false
+  };
+  var LIPDUB_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["audio", "video"],
+    consumes: "audio",
+    visualSource: "clip-entry",
+    requiresUpload: true
+  };
   var IC_LORA_PRESET_CUSTOM_ID = "custom";
   var IC_LORA_PRESET_UNION_CONTROL_ID = "union-control";
   var HF = "https://huggingface.co";
@@ -834,7 +844,8 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
-      note: "Generates new speech + lips from the prompt's words. Upload the source video as drive media and enable 'Voice ref from drive audio' (or set the clip's Audio to Voice Reference)."
+      note: "Generates new speech + lips from the prompt's words. Drive Media supplies the speaker sample: audio is used directly, and video uploads have their audio extracted while their frames are ignored.",
+      driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
     },
     {
       id: "hdr",
@@ -989,6 +1000,7 @@
     }
     return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
   };
+  var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
   var icLoraAutoModelName = (preset) => {
     const file = preset.weightsUrl.slice(
       preset.weightsUrl.lastIndexOf("/") + 1
@@ -1026,8 +1038,7 @@
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
     controlType: "none",
-    video: null,
-    driveAudioRef: false,
+    driveMedia: null,
     ...overrides
   });
   var normalizeControlNetLora = (value) => {
@@ -1074,14 +1085,26 @@
       return null;
     }
     const preset = `${raw.preset ?? ""}`.trim();
+    const normalizedPreset = preset || IC_LORA_PRESET_CUSTOM_ID;
+    const driveContract = icLoraDriveMediaContract(
+      findIcLoraPreset(normalizedPreset)
+    );
+    const consumesAudio = driveContract.consumes === "audio";
+    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
+    const driveMedia = normalizedDriveMedia && driveContract.acceptedKinds.some(
+      (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
+    ) ? normalizedDriveMedia : null;
     const stage = normalizeIcLoraStage(raw.stage, stageCount);
     let source = normalizeIcLoraSource(raw.source);
     if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1 && !sourcedClip) {
       source = IC_LORA_SOURCE_UPLOAD;
     }
+    if (consumesAudio) {
+      source = IC_LORA_SOURCE_UPLOAD;
+    }
     return {
       lora,
-      preset: preset || IC_LORA_PRESET_CUSTOM_ID,
+      preset: normalizedPreset,
       source,
       stage,
       strength: snapValueToStep(
@@ -1098,9 +1121,8 @@
         IC_LORA_ATTENTION_MAX,
         IC_LORA_ATTENTION_STEP
       ),
-      controlType: normalizeIcLoraControlType(raw.controlType),
-      video: normalizeUploadedAudio(raw.video),
-      driveAudioRef: raw.driveAudioRef === true
+      controlType: consumesAudio ? "none" : normalizeIcLoraControlType(raw.controlType),
+      driveMedia
     };
   };
   var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
@@ -1254,13 +1276,7 @@
         "source-video",
         "refine-video"
       ],
-      audioSourceKinds: [
-        "Native",
-        "Upload",
-        "Voice Reference",
-        "ControlNet",
-        "AceStepFun"
-      ]
+      audioSourceKinds: ["Native", "Upload", "ControlNet", "AceStepFun"]
     },
     profiles: [
       {
@@ -2038,7 +2054,7 @@
       id: normalizeOptionalEntityId(rawRef.id),
       source,
       uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
-      uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
+      uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
       frame: Math.max(
         REF_FRAME_MIN,
         Math.round(
@@ -2195,7 +2211,7 @@
       clipLengthFromAudio,
       clipLengthFromControlNet,
       reuseAudio: !!rawClip.reuseAudio,
-      uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
+      uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
       audioSegments: normalizeAudioSegments(rawClip.audioSegments, duration),
       prompt: `${rawClip.prompt ?? ""}`,
       promptWindows: normalizePromptWindows(rawClip),
@@ -2792,8 +2808,7 @@
           strength: entry.strength,
           attentionStrength: entry.attentionStrength,
           controlType: entry.controlType,
-          video: entry.video,
-          driveAudioRef: entry.driveAudioRef
+          driveMedia: entry.driveMedia
         })),
         saveAudioTrack: clip.saveAudioTrack,
         clipLengthFromAudio: clip.clipLengthFromAudio,
@@ -6909,8 +6924,8 @@
       const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
       const native = badge.label === "Native";
       const width = clipInnerWidth(layout.widthPx);
-      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : clip.audioSource === AUDIO_SOURCE_VOICE_REF ? " vst-audio-kind-voiceref" : " vst-audio-kind-upload";
-      const upload = !native && (clip.audioSource === "Upload" || clip.audioSource === AUDIO_SOURCE_VOICE_REF) ? clip.uploadedAudio?.fileName : null;
+      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
+      const upload = !native && clip.audioSource === "Upload" ? clip.uploadedAudio?.fileName : null;
       const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
       const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
       const barCount = Math.min(
@@ -8655,7 +8670,7 @@
           target.clipLengthFromControlNet = false;
         }
         target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
-        target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD || nextSource === AUDIO_SOURCE_VOICE_REF ? target.uploadedAudio : null;
+        target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD ? target.uploadedAudio : null;
       });
     };
     const body = document.createElement("div");
@@ -8676,7 +8691,7 @@
         "Audio Source",
         select2,
         void 0,
-        "Where this clip's audio comes from: generated from the prompt, an uploaded file, a Voice Reference (clone a speaker sample), or none."
+        "Where this clip's audio comes from: generated from the prompt, an uploaded file, or a connected generated-audio source."
       )
     );
     const reuseRow = buildCheckbox(
@@ -8735,10 +8750,10 @@
       }
     );
     body.appendChild(saveRow);
-    if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
+    if (source === AUDIO_SOURCE_UPLOAD) {
       body.appendChild(
         buildMediaPickRow(
-          source === AUDIO_SOURCE_VOICE_REF ? "Voice Sample" : "Audio Upload",
+          "Audio Upload",
           "audio/*",
           ["audio"],
           clip.uploadedAudio?.fileName,
@@ -8756,12 +8771,6 @@
           }
         )
       );
-    }
-    if (source === AUDIO_SOURCE_VOICE_REF) {
-      const hint = document.createElement("small");
-      hint.className = "vst-audio-field-hint";
-      hint.textContent = "Speaker sample only — new speech is generated to match the prompt in this voice. Put the spoken words in the clip prompt.";
-      body.appendChild(hint);
     }
     if (!audioDecision.supported) {
       disableCapabilityControls(body, audioDecision, [
@@ -9148,7 +9157,7 @@
         sectionLabel2,
         wrap,
         "IC-LoRAs",
-        "In-context LoRAs condition this clip on a drive video or image — matching pose, depth, motion, or style. Add one per guide you want to apply."
+        "In-context LoRAs use a drive media upload for pose, depth, motion, style, or other preset-specific conditioning. Add one per guide you want to apply."
       );
     }
     const entryAt = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
@@ -9176,6 +9185,9 @@
         }
       });
       const persistedHdr = isHdrFeature(entry);
+      const preset = findIcLoraPreset(entry.preset);
+      const driveContract = icLoraDriveMediaContract(preset);
+      const audioDriveMedia = driveContract.consumes === "audio";
       const presetOptions = IC_LORA_PRESETS.filter(
         (preset2) => hdrDecision.supported || !`${preset2.id} ${preset2.displayName}`.toLowerCase().includes("hdr")
       );
@@ -9203,8 +9215,20 @@
             target.preset = value;
             const preset2 = findIcLoraPreset(value);
             if (preset2) {
+              target.lora = IC_LORA_AUTO;
               target.strength = preset2.strength;
               target.controlType = preset2.controlType;
+            }
+            const nextContract = icLoraDriveMediaContract(preset2);
+            if (nextContract.consumes === "audio") {
+              target.source = IC_LORA_SOURCE_UPLOAD;
+              target.controlType = "none";
+            }
+            const driveData = target.driveMedia?.data ?? "";
+            if (driveData && !nextContract.acceptedKinds.some(
+              (kind) => driveData.startsWith(`data:${kind}/`)
+            )) {
+              target.driveMedia = null;
             }
           });
           clearIcLoraAutoFailure(value);
@@ -9273,30 +9297,31 @@
           "How strongly this IC-LoRA steers generation. Higher follows the drive media more closely; too high can overpower the prompt."
         )
       );
-      const attention = context.buildClampedNumber({
-        key: `iclora-${entryIdx}-attention`,
-        value: entry.attentionStrength,
-        min: IC_LORA_ATTENTION_MIN,
-        max: IC_LORA_ATTENTION_MAX,
-        step: IC_LORA_ATTENTION_STEP,
-        readBack: (clips) => entryAt(clips, entryIdx)?.attentionStrength ?? null,
-        mutate: (clips, value) => {
-          const target = entryAt(clips, entryIdx);
-          if (target) {
-            target.attentionStrength = value;
+      if (!audioDriveMedia) {
+        const attention = context.buildClampedNumber({
+          key: `iclora-${entryIdx}-attention`,
+          value: entry.attentionStrength,
+          min: IC_LORA_ATTENTION_MIN,
+          max: IC_LORA_ATTENTION_MAX,
+          step: IC_LORA_ATTENTION_STEP,
+          readBack: (clips) => entryAt(clips, entryIdx)?.attentionStrength ?? null,
+          mutate: (clips, value) => {
+            const target = entryAt(clips, entryIdx);
+            if (target) {
+              target.attentionStrength = value;
+            }
           }
-        }
-      });
-      fields.appendChild(
-        buildField(
-          "Attention",
-          attention,
-          void 0,
-          "Scales how much the IC-LoRA influences the model's attention layers. A finer control than Strength; leave at the default unless a preset tunes it."
-        )
-      );
-      const preset = findIcLoraPreset(entry.preset);
-      if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
+        });
+        fields.appendChild(
+          buildField(
+            "Attention",
+            attention,
+            void 0,
+            "Scales how much the IC-LoRA influences the model's attention layers. A finer control than Strength; leave at the default unless a preset tunes it."
+          )
+        );
+      }
+      if (!audioDriveMedia && (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID)) {
         const controlSelect = buildOptionSelect(
           [
             { value: "none", label: "None (raw video)" },
@@ -9319,7 +9344,7 @@
             "Control",
             controlSelect,
             void 0,
-            "Preprocesses the drive video into a control signal before conditioning: Canny edges, a depth map, or a normal map. None feeds the raw video straight in."
+            "Preprocesses visual drive media into a control signal before conditioning: Canny edges, a depth map, or a normal map. None feeds the raw video straight in."
           )
         );
       }
@@ -9353,7 +9378,7 @@
           "Which stage this IC-LoRA conditions — a single stage, or All stages of the clip."
         )
       );
-      if ((entry.stage >= 1 || !!clip.sourceVideo) && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
+      if (!audioDriveMedia && (entry.stage >= 1 || !!clip.sourceVideo) && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
         const sourceSelect = buildOptionSelect(
           [
             { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
@@ -9382,23 +9407,19 @@
           )
         );
       }
-      if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
-        const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
-        hint.textContent = entry.stage >= 1 ? `Driven by stage ${entry.stage}'s input (the previous stage's output).` : "Driven by each stage's incoming frames (the source footage on stage 0).";
-        fields.appendChild(hint);
-      } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
+      if (audioDriveMedia || entry.source === IC_LORA_SOURCE_UPLOAD) {
+        const acceptedKinds = driveContract.acceptedKinds;
         fields.appendChild(
           buildMediaPickRow(
             "Drive Media",
-            "video/*,image/*",
-            ["image", "video"],
-            entry.video?.fileName,
+            acceptedKinds.map((kind) => `${kind}/*`).join(","),
+            [...acceptedKinds],
+            entry.driveMedia?.fileName,
             (data, fileName) => {
               context.commit((clips) => {
                 const target = entryAt(clips, entryIdx);
                 if (target) {
-                  target.video = { data, fileName };
+                  target.driveMedia = { data, fileName };
                 }
               });
               context.render();
@@ -9407,38 +9428,29 @@
               context.commit((clips) => {
                 const target = entryAt(clips, entryIdx);
                 if (target) {
-                  target.video = null;
+                  target.driveMedia = null;
                 }
               });
               context.render();
             }
           )
         );
-        if (!entry.video?.data && !!clip.sourceVideo) {
+        if (audioDriveMedia) {
+          const hint = document.createElement("small");
+          hint.className = "vst-audio-field-hint";
+          hint.textContent = "LipDub uses only this media's audio as the speaker sample. For a video upload, its frames are ignored; the clip's normal text, image, or video entry path supplies visuals.";
+          fields.appendChild(hint);
+        } else if (!entry.driveMedia?.data && !!clip.sourceVideo) {
           const hint = document.createElement("small");
           hint.className = "vst-audio-field-hint";
           hint.textContent = "No upload — drives from the stage's incoming footage.";
           fields.appendChild(hint);
         }
-        if (entry.video?.data?.startsWith("data:video/")) {
-          fields.appendChild(
-            buildCheckbox(
-              "Voice ref from drive audio",
-              entry.driveAudioRef === true,
-              (value) => {
-                context.commit((clips) => {
-                  const target = entryAt(clips, entryIdx);
-                  if (target) {
-                    target.driveAudioRef = value;
-                  }
-                });
-              },
-              {
-                help: "Use this drive video's audio as the speaker sample (LipDub): new speech matching the prompt is generated in that voice."
-              }
-            )
-          );
-        }
+      } else if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+        const hint = document.createElement("small");
+        hint.className = "vst-audio-field-hint";
+        hint.textContent = entry.stage >= 1 ? `Driven by stage ${entry.stage}'s input (the previous stage's output).` : "Driven by each stage's incoming frames (the source footage on stage 0).";
+        fields.appendChild(hint);
       } else {
         const slot = document.createElement("small");
         slot.className = "vst-audio-field-hint";
@@ -9487,7 +9499,7 @@
           }
           target.icLoras.push(
             defaultIcLora({
-              lora: defaults.loraValues[0] ?? IC_LORA_AUTO
+              lora: IC_LORA_AUTO
             })
           );
           return "render";

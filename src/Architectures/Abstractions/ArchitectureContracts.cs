@@ -44,7 +44,6 @@ internal enum ArchitectureAudioSourceKind
     Disabled,
     Native,
     Upload,
-    VoiceReference,
     ControlNet,
     AceStepFun,
 }

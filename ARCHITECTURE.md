@@ -129,9 +129,10 @@ metadata never inherits the first clip's model compatibility.
 
 ## Audio ownership
 
-Clip-local source selection, clip-length ownership, segments, voice reference,
-and stage-latent reuse are separate decisions. Architecture modules own any
-model-latent audio behavior.
+Clip-local base-source selection, clip-length ownership, segments, and
+stage-latent reuse are separate decisions. Architecture-specific conditioning
+media, such as LipDub speaker audio, stays outside the base track and timeline
+mix. Architecture modules own any model-latent audio behavior.
 
 For LTX multi-stage clips, separated audio latents remain architecture-owned
 and flow directly between stages. They are not decoded to audio and encoded

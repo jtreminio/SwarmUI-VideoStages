@@ -145,8 +145,8 @@ public class PlanningCompilerComponentTests
             loras,
             lora => Assert.Equal("clip", lora.Name),
             lora => Assert.Equal("stage", lora.Name));
-        Assert.Equal(IcLoraDriveSourceKind.ControlNet, Assert.Single(icLoras).Drive.Kind);
-        Assert.Equal(1, icLoras[0].Drive.ControlNetIndex);
+        Assert.Equal(IcLoraVisualGuideSourceKind.ControlNet, Assert.Single(icLoras).VisualGuide.Kind);
+        Assert.Equal(1, icLoras[0].VisualGuide.ControlNetIndex);
         Assert.Equal(ImageReferenceSourceKind.Upload, Assert.Single(references).SourceKind);
     }
 
@@ -311,7 +311,7 @@ public class PlanningCompilerComponentTests
                             0.7,
                             1,
                             Constants.IcLoraControlNone,
-                            new UploadedAudioSpec("data:image/png;base64,Qg==", "drive.png"),
+                            new UploadedMediaSpec("data:image/png;base64,Qg==", "drive.png"),
                             Preset: "deblur",
                             Stage: 1),
                     ],

@@ -52,7 +52,6 @@ internal static class Ltx2ClipPlanCompiler
             new Ltx2ClipPayload(
                 clip.Id,
                 stages,
-                audio.VoiceReference,
                 audio.Reuse,
                 audio.ControlNetSourceIndex),
             diagnostics.AsReadOnly());

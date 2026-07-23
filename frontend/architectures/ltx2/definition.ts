@@ -46,13 +46,7 @@ export const ltx2Architecture: VideoArchitectureDefinition = {
             "source-video",
             "refine-video",
         ],
-        audioSourceKinds: [
-            "Native",
-            "Upload",
-            "Voice Reference",
-            "ControlNet",
-            "AceStepFun",
-        ],
+        audioSourceKinds: ["Native", "Upload", "ControlNet", "AceStepFun"],
     },
     profiles: [
         {

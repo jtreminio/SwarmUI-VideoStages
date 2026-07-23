@@ -73,8 +73,9 @@ internal static class VideoStageResourceParser
                 AttentionStrength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
                     entry, "AttentionStrength", 1, "Clip IcLora"), 0, 1),
                 ControlType: VideoStagesJsonReader.GetString(entry, "ControlType")?.Trim(),
-                Video: VideoStagesJsonReader.GetEmbeddedUpload(entry, UploadContainers.IcLoraVideo),
-                DriveAudioRef: VideoStagesJsonReader.GetOptionalBool(entry, "DriveAudioRef", false)));
+                DriveMedia: VideoStagesJsonReader.GetEmbeddedUpload(
+                    entry,
+                    UploadContainers.IcLoraDriveMedia)));
         }
         return entries;
     }
@@ -106,7 +107,7 @@ internal static class VideoStageResourceParser
 
         string uploadFileName = VideoStagesJsonReader.GetString(obj, "UploadFileName");
         string data = VideoStagesJsonReader.GetString(obj, "Data");
-        UploadedAudioSpec embeddedImage = VideoStagesJsonReader.GetEmbeddedUpload(
+        UploadedMediaSpec embeddedImage = VideoStagesJsonReader.GetEmbeddedUpload(
             obj, UploadContainers.RefImage);
         if (embeddedImage is not null)
         {

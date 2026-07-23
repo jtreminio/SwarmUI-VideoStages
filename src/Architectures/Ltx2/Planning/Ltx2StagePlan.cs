@@ -82,7 +82,7 @@ internal sealed record NormalLoraPlan(
     double ModelWeight,
     double TextEncoderWeight);
 
-internal enum IcLoraDriveSourceKind
+internal enum IcLoraVisualGuideSourceKind
 {
     UploadedMedia,
     StageInput,
@@ -101,21 +101,28 @@ internal enum IcLoraControlMode
     Unknown,
 }
 
-internal enum IcLoraUploadedMediaKind
+internal enum IcLoraDriveMediaKind
 {
     None,
     Image,
     Video,
+    Audio,
     Unknown,
 }
 
-internal sealed record IcLoraDrivePlan(
-    IcLoraDriveSourceKind Kind,
+internal sealed record IcLoraDriveMediaPlan(
+    IcLoraDriveMediaKind Kind,
+    string Data,
+    string FileName)
+{
+    internal bool IsConfigured => !string.IsNullOrWhiteSpace(Data);
+}
+
+internal sealed record IcLoraVisualGuidePlan(
+    IcLoraVisualGuideSourceKind Kind,
     string RawSource,
     int? ControlNetIndex,
-    IcLoraUploadedMediaKind UploadedMediaKind,
-    string UploadedData,
-    bool HasDriveMedia);
+    bool HasGuide);
 
 internal sealed record IcLoraPlan(
     int EntryIndex,
@@ -125,7 +132,9 @@ internal sealed record IcLoraPlan(
     double ModelStrength,
     double AttentionStrength,
     IcLoraControlMode ControlMode,
-    IcLoraDrivePlan Drive,
+    IcLoraDriveMediaContract MediaContract,
+    IcLoraDriveMediaPlan DriveMedia,
+    IcLoraVisualGuidePlan VisualGuide,
     double? GuideStrength);
 
 internal sealed record RetakePlan(

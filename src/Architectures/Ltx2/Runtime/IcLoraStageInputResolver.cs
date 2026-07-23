@@ -13,9 +13,9 @@ internal sealed class IcLoraStageInputResolver(WorkflowGenerator g)
         WGNodeData source = stageFrame.SourceMedia;
         LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
         bool wantsStageInput = stageFrame.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
-            entry.Drive.Kind
-                is IcLoraDriveSourceKind.StageInput
-                or IcLoraDriveSourceKind.SourcedClipInput);
+            entry.VisualGuide.Kind
+                is IcLoraVisualGuideSourceKind.StageInput
+                or IcLoraVisualGuideSourceKind.SourcedClipInput);
         if (!wantsStageInput
             || postVideoChain is null
             || !StagePostVideoChainMedia.ReferencesOutput(source, postVideoChain))

@@ -47,7 +47,7 @@ public class AudioTimelinePlanCompilerTests
     public void Default_projection_preserves_clip_local_base_and_segment_tracks()
     {
         AudioSegmentSpec segment = new(
-            new UploadedAudioSpec("data:audio/wav;base64,QUJD", "line.wav"),
+            new UploadedMediaSpec("data:audio/wav;base64,QUJD", "line.wav"),
             StartSeconds: 1,
             TrimStartSeconds: 2,
             LengthSeconds: 0.5);
@@ -238,7 +238,7 @@ public class AudioTimelinePlanCompilerTests
     public void Clip_relative_span_is_retained_as_pending_when_clip_timing_is_unknown()
     {
         AudioSegmentSpec segment = new(
-            new UploadedAudioSpec("data:audio/wav;base64,QUJD", "pending.wav"),
+            new UploadedMediaSpec("data:audio/wav;base64,QUJD", "pending.wav"),
             StartSeconds: 1.25,
             TrimStartSeconds: 0.5,
             LengthSeconds: 2);

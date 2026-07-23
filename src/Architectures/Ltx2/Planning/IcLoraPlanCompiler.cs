@@ -16,6 +16,8 @@ internal static class IcLoraPlanCompiler
         for (int index = 0; index < entries.Count; index++)
         {
             IcLoraSpec entry = entries[index];
+            IcLoraDriveMediaContract contract = IcLoraDriveMediaContracts.Resolve(entry.Preset);
+            IcLoraDriveMediaPlan media = CompileDriveMedia(entry.DriveMedia);
             if (entry.Stage >= 0 && !authoredStageIndices.Contains(entry.Stage))
             {
                 diagnostics.Add(Error(
@@ -25,8 +27,46 @@ internal static class IcLoraPlanCompiler
                     $"targets authored stage {entry.Stage}, which does not exist"));
             }
 
-            IcLoraDriveSourceKind sourceKind = ResolveSourceKind(entry.Source);
-            if (sourceKind == IcLoraDriveSourceKind.Unknown)
+            IcLoraVisualGuideSourceKind sourceKind = ResolveSourceKind(entry.Source);
+            if (contract.Consumption == IcLoraDriveMediaConsumption.AudioReference)
+            {
+                if (sourceKind != IcLoraVisualGuideSourceKind.UploadedMedia)
+                {
+                    diagnostics.Add(Error(
+                        clip,
+                        index,
+                        "ltx2.ic-lora.audio-drive-source-unsupported",
+                        "uses an audio drive-media contract but its source is not Upload"));
+                }
+                if (contract.RequiresUpload && !media.IsConfigured)
+                {
+                    diagnostics.Add(Error(
+                        clip,
+                        index,
+                        "ltx2.ic-lora.audio-drive-media-missing",
+                        "requires uploaded audio or video Drive Media"));
+                }
+                else if (!contract.Accepts(media.Kind))
+                {
+                    diagnostics.Add(Error(
+                        clip,
+                        index,
+                        "ltx2.ic-lora.audio-drive-media-unsupported",
+                        "requires audio or video Drive Media; images are not speaker samples"));
+                }
+                if (CompileControlMode(entry.ControlType) != IcLoraControlMode.None)
+                {
+                    diagnostics.Add(Error(
+                        clip,
+                        index,
+                        "ltx2.ic-lora.audio-drive-control-unsupported",
+                        "consumes audio only and cannot use visual control preprocessing"));
+                }
+                ValidateAutoModel(clip, entry, index, diagnostics);
+                continue;
+            }
+
+            if (sourceKind == IcLoraVisualGuideSourceKind.Unknown)
             {
                 diagnostics.Add(Error(
                     clip,
@@ -34,7 +74,7 @@ internal static class IcLoraPlanCompiler
                     "ltx2.ic-lora.source-unsupported",
                     $"uses unsupported drive source '{entry.Source}'"));
             }
-            if (sourceKind == IcLoraDriveSourceKind.StageInput
+            if (sourceKind == IcLoraVisualGuideSourceKind.StageInput
                 && clip.SourceVideo is null
                 && (clip.Stages ?? []).Any(stage =>
                     stage.ClipStageIndex == 0
@@ -46,15 +86,15 @@ internal static class IcLoraPlanCompiler
                     "ltx2.ic-lora.stage-input-unavailable",
                     "uses Stage Input on a generated first stage with no incoming video"));
             }
-            if (sourceKind == IcLoraDriveSourceKind.UploadedMedia
-                && !string.IsNullOrWhiteSpace(entry.Video?.Data)
-                && ResolveUploadedMediaKind(entry.Video.Data) == IcLoraUploadedMediaKind.Unknown)
+            if (sourceKind == IcLoraVisualGuideSourceKind.UploadedMedia
+                && media.IsConfigured
+                && !contract.Accepts(media.Kind))
             {
                 diagnostics.Add(Error(
                     clip,
                     index,
                     "ltx2.ic-lora.upload-kind-unsupported",
-                    "contains uploaded drive data that is neither an image nor a video"));
+                    "requires image or video Drive Media"));
             }
             if (CompileControlMode(entry.ControlType) == IcLoraControlMode.Unknown)
             {
@@ -64,23 +104,39 @@ internal static class IcLoraPlanCompiler
                     "ltx2.ic-lora.control-mode-unsupported",
                     $"uses unsupported control mode '{entry.ControlType}'"));
             }
-            if (StringUtils.Equals(entry.Lora, IcLoraWeights.AutoModelToken)
-                && string.IsNullOrWhiteSpace(entry.Preset))
+            ValidateAutoModel(clip, entry, index, diagnostics);
+        }
+
+        foreach (StageSpec stage in clip.Stages ?? [])
+        {
+            List<int> audioEntries = [];
+            for (int index = 0; index < entries.Count; index++)
             {
-                diagnostics.Add(Error(
-                    clip,
-                    index,
-                    "ltx2.ic-lora.auto-preset-missing",
-                    "uses [AUTO] but has no preset"));
+                IcLoraSpec entry = entries[index];
+                if ((entry.Stage < 0 || entry.Stage == stage.ClipStageRawIndex)
+                    && IcLoraDriveMediaContracts.Resolve(entry.Preset).Consumption
+                        == IcLoraDriveMediaConsumption.AudioReference)
+                {
+                    audioEntries.Add(index);
+                }
             }
-            else if (StringUtils.Equals(entry.Lora, IcLoraWeights.AutoModelToken)
-                && string.IsNullOrWhiteSpace(IcLoraWeights.ModelNameFor(entry.Preset)))
+            if (audioEntries.Count > 1)
             {
-                diagnostics.Add(Error(
-                    clip,
-                    index,
-                    "ltx2.ic-lora.auto-preset-unknown",
-                    $"uses [AUTO], but preset '{entry.Preset}' has no known weights"));
+                diagnostics.Add(new(
+                    VideoPlanDiagnosticSeverity.Error,
+                    "ltx2.ic-lora.audio-drive-overlap",
+                    $"Clip {clip.Id} stage {stage.ClipStageRawIndex} has overlapping audio-consuming "
+                        + $"IC-LoRAs ({string.Join(", ", audioEntries)}); use one speaker drive per stage.",
+                    clip.Id));
+            }
+            if (stage.IsPassthrough && audioEntries.Count > 0)
+            {
+                diagnostics.Add(new(
+                    VideoPlanDiagnosticSeverity.Error,
+                    "ltx2.ic-lora.audio-drive-passthrough",
+                    $"Clip {clip.Id} stage {stage.ClipStageRawIndex} is passthrough, so its audio-consuming "
+                        + "IC-LoRA cannot run; target a generating stage.",
+                    clip.Id));
             }
         }
         return diagnostics.AsReadOnly();
@@ -98,15 +154,17 @@ internal static class IcLoraPlanCompiler
                 continue;
             }
 
-            IcLoraDrivePlan drive = CompileDrive(clip, entry);
+            IcLoraDriveMediaContract contract = IcLoraDriveMediaContracts.Resolve(entry.Preset);
+            IcLoraDriveMediaPlan driveMedia = CompileDriveMedia(entry.DriveMedia);
+            IcLoraVisualGuidePlan visualGuide = CompileVisualGuide(clip, entry, contract, driveMedia);
             double? guideStrength = null;
-            if (drive.HasDriveMedia)
+            if (visualGuide.HasGuide)
             {
                 if (stage.ControlNetStrength is double stageStrength)
                 {
                     guideStrength = stageStrength;
                 }
-                else if (drive.Kind != IcLoraDriveSourceKind.ControlNet)
+                else if (visualGuide.Kind != IcLoraVisualGuideSourceKind.ControlNet)
                 {
                     guideStrength = 1.0;
                 }
@@ -120,76 +178,65 @@ internal static class IcLoraPlanCompiler
                 entry.Strength,
                 entry.AttentionStrength,
                 CompileControlMode(entry.ControlType),
-                drive,
+                contract,
+                driveMedia,
+                visualGuide,
                 guideStrength));
         }
         return plans.ToImmutable();
     }
 
-    private static IcLoraDrivePlan CompileDrive(ClipSpec clip, IcLoraSpec entry)
+    private static IcLoraVisualGuidePlan CompileVisualGuide(
+        ClipSpec clip,
+        IcLoraSpec entry,
+        IcLoraDriveMediaContract contract,
+        IcLoraDriveMediaPlan driveMedia)
     {
         string raw = NormalizeSource(entry.Source);
-        IcLoraDriveSourceKind kind = ResolveSourceKind(raw);
-        if (kind == IcLoraDriveSourceKind.UploadedMedia)
+        if (contract.Consumption == IcLoraDriveMediaConsumption.AudioReference)
         {
-            if (!string.IsNullOrWhiteSpace(entry.Video?.Data))
+            return new(
+                IcLoraVisualGuideSourceKind.LoaderOnly,
+                raw,
+                null,
+                HasGuide: false);
+        }
+
+        IcLoraVisualGuideSourceKind kind = ResolveSourceKind(raw);
+        if (kind == IcLoraVisualGuideSourceKind.UploadedMedia)
+        {
+            if (driveMedia.IsConfigured)
             {
-                string data = entry.Video.Data;
-                IcLoraUploadedMediaKind mediaKind = ResolveUploadedMediaKind(data);
-                return new(
-                    IcLoraDriveSourceKind.UploadedMedia,
-                    raw,
-                    null,
-                    mediaKind,
-                    data,
-                    HasDriveMedia: true);
+                return new(kind, raw, null, HasGuide: true);
             }
             if (clip.SourceVideo is not null)
             {
                 return new(
-                    IcLoraDriveSourceKind.SourcedClipInput,
+                    IcLoraVisualGuideSourceKind.SourcedClipInput,
                     raw,
                     null,
-                    IcLoraUploadedMediaKind.None,
-                    null,
-                    HasDriveMedia: true);
+                    HasGuide: true);
             }
             return new(
-                IcLoraDriveSourceKind.LoaderOnly,
+                IcLoraVisualGuideSourceKind.LoaderOnly,
                 raw,
                 null,
-                IcLoraUploadedMediaKind.None,
-                null,
-                HasDriveMedia: false);
+                HasGuide: false);
         }
-        if (kind == IcLoraDriveSourceKind.StageInput)
+        if (kind == IcLoraVisualGuideSourceKind.StageInput)
         {
-            return new(
-                IcLoraDriveSourceKind.StageInput,
-                raw,
-                null,
-                IcLoraUploadedMediaKind.None,
-                null,
-                HasDriveMedia: true);
+            return new(kind, raw, null, HasGuide: true);
         }
-        if (kind == IcLoraDriveSourceKind.ControlNet
+        if (kind == IcLoraVisualGuideSourceKind.ControlNet
             && ControlNetSourcePlan.TryParseIndex(raw, out int controlNetIndex))
         {
-            return new(
-                IcLoraDriveSourceKind.ControlNet,
-                raw,
-                controlNetIndex,
-                IcLoraUploadedMediaKind.None,
-                null,
-                HasDriveMedia: true);
+            return new(kind, raw, controlNetIndex, HasGuide: true);
         }
         return new(
-            IcLoraDriveSourceKind.Unknown,
+            IcLoraVisualGuideSourceKind.Unknown,
             raw,
             null,
-            IcLoraUploadedMediaKind.None,
-            null,
-            HasDriveMedia: false);
+            HasGuide: false);
     }
 
     private static IcLoraControlMode CompileControlMode(string controlType)
@@ -229,20 +276,20 @@ internal static class IcLoraPlanCompiler
         return null;
     }
 
-    private static IcLoraDriveSourceKind ResolveSourceKind(string source)
+    private static IcLoraVisualGuideSourceKind ResolveSourceKind(string source)
     {
         string normalized = NormalizeSource(source);
         if (StringUtils.Equals(normalized, Constants.IcLoraSourceUpload))
         {
-            return IcLoraDriveSourceKind.UploadedMedia;
+            return IcLoraVisualGuideSourceKind.UploadedMedia;
         }
         if (StringUtils.Equals(normalized, Constants.IcLoraSourceStageInput))
         {
-            return IcLoraDriveSourceKind.StageInput;
+            return IcLoraVisualGuideSourceKind.StageInput;
         }
         return ControlNetSourcePlan.TryParseIndex(normalized, out _)
-            ? IcLoraDriveSourceKind.ControlNet
-            : IcLoraDriveSourceKind.Unknown;
+            ? IcLoraVisualGuideSourceKind.ControlNet
+            : IcLoraVisualGuideSourceKind.Unknown;
     }
 
     private static string NormalizeSource(string source)
@@ -269,12 +316,59 @@ internal static class IcLoraPlanCompiler
         return source?.Trim() ?? "";
     }
 
-    private static IcLoraUploadedMediaKind ResolveUploadedMediaKind(string data) =>
-        data.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)
-            ? IcLoraUploadedMediaKind.Image
-            : data.StartsWith("data:video/", StringComparison.OrdinalIgnoreCase)
-                ? IcLoraUploadedMediaKind.Video
-                : IcLoraUploadedMediaKind.Unknown;
+    private static IcLoraDriveMediaPlan CompileDriveMedia(UploadedMediaSpec media) => new(
+        ResolveDriveMediaKind(media?.Data),
+        media?.Data,
+        media?.FileName);
+
+    internal static IcLoraDriveMediaKind ResolveDriveMediaKind(string data)
+    {
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            return IcLoraDriveMediaKind.None;
+        }
+        if (data.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return IcLoraDriveMediaKind.Image;
+        }
+        if (data.StartsWith("data:video/", StringComparison.OrdinalIgnoreCase))
+        {
+            return IcLoraDriveMediaKind.Video;
+        }
+        if (data.StartsWith("data:audio/", StringComparison.OrdinalIgnoreCase))
+        {
+            return IcLoraDriveMediaKind.Audio;
+        }
+        return IcLoraDriveMediaKind.Unknown;
+    }
+
+    private static void ValidateAutoModel(
+        ClipSpec clip,
+        IcLoraSpec entry,
+        int index,
+        ICollection<VideoPlanDiagnostic> diagnostics)
+    {
+        if (!StringUtils.Equals(entry.Lora, IcLoraWeights.AutoModelToken))
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(entry.Preset))
+        {
+            diagnostics.Add(Error(
+                clip,
+                index,
+                "ltx2.ic-lora.auto-preset-missing",
+                "uses [AUTO] but has no preset"));
+        }
+        else if (string.IsNullOrWhiteSpace(IcLoraWeights.ModelNameFor(entry.Preset)))
+        {
+            diagnostics.Add(Error(
+                clip,
+                index,
+                "ltx2.ic-lora.auto-preset-unknown",
+                $"uses [AUTO], but preset '{entry.Preset}' has no known weights"));
+        }
+    }
 
     private static VideoPlanDiagnostic Error(
         ClipSpec clip,

@@ -8,7 +8,7 @@ namespace VideoStages;
 /// <summary>Materializes embedded VideoStages media only after the parsed spec reaches runtime.</summary>
 internal static class EmbeddedMediaMaterializer
 {
-    public static AudioFile MaterializeAudio(WorkflowGenerator g, UploadedAudioSpec spec)
+    public static AudioFile MaterializeAudio(WorkflowGenerator g, UploadedMediaSpec spec)
     {
         return MaterializeAudio(g, spec?.Data, spec?.FileName);
     }

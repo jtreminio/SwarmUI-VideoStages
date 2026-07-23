@@ -16,7 +16,6 @@ internal static class PlannedAudioSourceSelector
         ArgumentNullException.ThrowIfNull(sources);
         return plan.Kind switch
         {
-            AudioBaseSourceKind.None => null,
             AudioBaseSourceKind.Native => suppressNative ? null : sources.NativeAudio,
             AudioBaseSourceKind.Upload => ForClip(sources.UploadedAudios, clipId),
             AudioBaseSourceKind.AceStepFun or AudioBaseSourceKind.ControlNet =>

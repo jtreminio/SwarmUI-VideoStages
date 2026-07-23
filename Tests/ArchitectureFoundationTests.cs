@@ -626,21 +626,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Capability_validation_rejects_exact_audio_source_kind_for_none()
-    {
-        ClipSpec clip = SourcedClip(0) with
-        {
-            AudioSource = Constants.AudioSourceVoiceRef,
-        };
-        VideoExecutionPlan plan = Compile(clip, new FakeRegistry());
-
-        Assert.Contains(
-            plan.Diagnostics,
-            item => item.Code == "architecture-capability-unsupported"
-                && item.Message.Contains("audio source kind 'VoiceReference'"));
-    }
-
-    [Fact]
     public void Capability_validation_rejects_unsupported_entry_mode()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(

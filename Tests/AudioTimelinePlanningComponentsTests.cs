@@ -61,7 +61,7 @@ public class AudioTimelinePlanningComponentsTests
     public void Compatibility_track_spec_planner_expands_clip_base_and_segment_without_projection()
     {
         AudioSegmentSpec segment = new(
-            new UploadedAudioSpec("data:audio/wav;base64,QUJD", "line.wav"),
+            new UploadedMediaSpec("data:audio/wav;base64,QUJD", "line.wav"),
             StartSeconds: 1,
             TrimStartSeconds: 2,
             LengthSeconds: 0.5);

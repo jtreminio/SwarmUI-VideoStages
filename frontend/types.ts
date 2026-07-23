@@ -59,7 +59,7 @@ export interface VideoStagesConfig {
 
 export const CURRENT_AUTHORING_SCHEMA_VERSION = 3;
 
-export interface UploadedAudio {
+export interface UploadedMedia {
     data: string;
     fileName: string | null;
 }
@@ -81,7 +81,7 @@ export interface StageLora {
  */
 export interface AudioSegment {
     id?: string;
-    source: UploadedAudio | string | null;
+    source: UploadedMedia | string | null;
     startSeconds: number;
     trimStartSeconds: number;
     lengthSeconds: number;
@@ -158,7 +158,7 @@ export interface RefImage {
     id?: string;
     source: string;
     uploadFileName: string | null;
-    uploadedImage: UploadedAudio | null;
+    uploadedImage: UploadedMedia | null;
     frame: number;
     fromEnd: boolean;
 }
@@ -169,13 +169,16 @@ export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
 
 /**
  * One in-context LoRA on a clip. `lora` is the LoRA model name; `preset` is a
- * curated-catalog id ("custom" = none, guidance only — never sent to the
- * backend as behavior); `strength` is the LoRA model strength; an
+ * curated LTX catalog id ("custom" = normal visual-drive behavior) and may
+ * select an architecture-owned Drive Media stream contract. `strength` is the
+ * LoRA model strength; an
  * `attentionStrength` below 1 switches the backend to the Advanced guide node
  * (per-guide self-attention influence); `controlType` renders the drive video
- * into a control signal before guiding; `video` is the uploaded drive video
- * (data URI + name). An entry with no video still applies the LoRA to the
- * model (loader-only — e.g. HDR). `source` is "Upload" for per-entry uploads
+ * into a control signal before guiding; `driveMedia` is the uploaded drive
+ * media (data URI + name). Its accepted types and consumed data are owned by
+ * the LTX IC-LoRA preset contract. An entry with no drive media still applies
+ * the LoRA to the model when its contract permits loader-only use (e.g. HDR).
+ * `source` is "Upload" for per-entry uploads
  * or "Stage Input" for the frames entering the target stage (requires
  * `stage` >= 1). Persisted current-v3 documents can also contain a
  * "ControlNet N" captured-branch source; it remains readable/removable but is
@@ -190,13 +193,7 @@ export interface IcLora {
     strength: number;
     attentionStrength: number;
     controlType: IcLoraControlType;
-    video: UploadedAudio | null;
-    /**
-     * Use the uploaded drive video's own audio as the clip's voice-reference
-     * sample (LTXVSetAudioRefTokens) — the official LipDub one-file flow. The
-     * model then GENERATES new speech matching the prompt in that voice.
-     */
-    driveAudioRef: boolean;
+    driveMedia: UploadedMedia | null;
 }
 
 export interface Clip {
@@ -225,7 +222,7 @@ export interface Clip {
     clipLengthFromAudio: boolean;
     clipLengthFromControlNet: boolean;
     reuseAudio: boolean;
-    uploadedAudio: UploadedAudio | null;
+    uploadedAudio: UploadedMedia | null;
     audioSegments: AudioSegment[];
     prompt: string;
     promptWindows: PromptWindow[];
@@ -246,7 +243,7 @@ export type AudioTrackSourceKind =
 export interface AudioTrackSource {
     kind: AudioTrackSourceKind;
     reference: string;
-    uploadedAudio: UploadedAudio | null;
+    uploadedAudio: UploadedMedia | null;
 }
 
 /**

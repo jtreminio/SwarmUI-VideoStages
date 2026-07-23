@@ -52,7 +52,6 @@
       "audioSourceKinds": [
         "Native",
         "Upload",
-        "Voice Reference",
         "ControlNet",
         "AceStepFun"
       ]

@@ -3,9 +3,9 @@ import type { IcLoraControlType } from "../../types";
 const IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
 
 // Curated LTX-2.3 IC-LoRA presets for the IC-LoRAs section's Preset dropdown: picking one seeds
-// strength / control-type defaults and surfaces a trigger-phrase hint. Guidance only — presets never
-// touch the prompt or gate behavior (any installed LoRA works via "Custom"), and the preset id rides
-// in the JSON purely so the editor reopens with the same context. The exception is the "[AUTO]"
+// strength / control-type defaults and surfaces a trigger-phrase hint. Most presets are guidance only;
+// the media contract is an LTX runtime behavior declaration (any installed LoRA still works via
+// "Custom"). The exception is the "[AUTO]"
 // LoRA choice, which downloads the weights to `LTX-2/IC-LoRA/<original upstream filename>` and
 // resolves the entry to that model by convention (see icLoraAutoModelName).
 
@@ -22,7 +22,33 @@ export interface IcLoraPreset {
     /** Direct safetensors URL for the [AUTO] download. */
     weightsUrl: string;
     note: string;
+    /** LTX-owned declaration of which part of one Drive Media upload this preset consumes. */
+    driveMedia?: IcLoraDriveMediaContract;
 }
+
+export type IcLoraDriveMediaKind = "image" | "video" | "audio";
+export type IcLoraDriveMediaConsumption = "visual" | "audio";
+
+export interface IcLoraDriveMediaContract {
+    acceptedKinds: readonly IcLoraDriveMediaKind[];
+    consumes: IcLoraDriveMediaConsumption;
+    visualSource: "drive-media" | "clip-entry";
+    requiresUpload: boolean;
+}
+
+export const DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT: IcLoraDriveMediaContract = {
+    acceptedKinds: ["image", "video"],
+    consumes: "visual",
+    visualSource: "drive-media",
+    requiresUpload: false,
+};
+
+export const LIPDUB_DRIVE_MEDIA_CONTRACT: IcLoraDriveMediaContract = {
+    acceptedKinds: ["audio", "video"],
+    consumes: "audio",
+    visualSource: "clip-entry",
+    requiresUpload: true,
+};
 
 /** Sentinel id for the "Custom" (no preset) choice. */
 export const IC_LORA_PRESET_CUSTOM_ID = "custom";
@@ -76,7 +102,8 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
-        note: "Generates new speech + lips from the prompt's words. Upload the source video as drive media and enable 'Voice ref from drive audio' (or set the clip's Audio to Voice Reference).",
+        note: "Generates new speech + lips from the prompt's words. Drive Media supplies the speaker sample: audio is used directly, and video uploads have their audio extracted while their frames are ignored.",
+        driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT,
     },
     {
         id: "hdr",
@@ -233,6 +260,15 @@ export const findIcLoraPreset = (id: string): IcLoraPreset | null => {
     }
     return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
 };
+
+/** Returns the LTX media contract for a preset, including Custom/unknown visual defaults. */
+export const icLoraDriveMediaContract = (
+    preset: IcLoraPreset | null,
+): IcLoraDriveMediaContract =>
+    preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+
+export const icLoraPresetConsumesAudio = (presetId: string): boolean =>
+    icLoraDriveMediaContract(findIcLoraPreset(presetId)).consumes === "audio";
 
 /**
  * The model name an [AUTO] entry resolves to — where the preset's weights land in the LoRA

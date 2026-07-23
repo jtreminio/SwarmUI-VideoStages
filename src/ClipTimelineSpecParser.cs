@@ -27,7 +27,7 @@ internal static class ClipTimelineSpecParser
         int fps,
         int clipIndex)
     {
-        UploadedAudioSpec upload = VideoStagesJsonReader.GetEmbeddedUpload(
+        UploadedMediaSpec upload = VideoStagesJsonReader.GetEmbeddedUpload(
             clipObject, UploadContainers.ClipSourceVideo);
         if (upload is null)
         {
@@ -105,7 +105,7 @@ internal static class ClipTimelineSpecParser
         List<AudioSegmentSpec> segments = [];
         foreach (JObject segmentObject in rawSegments)
         {
-            UploadedAudioSpec source = VideoStagesJsonReader.GetEmbeddedUpload(
+            UploadedMediaSpec source = VideoStagesJsonReader.GetEmbeddedUpload(
                 segmentObject, UploadContainers.SegmentSource);
             string aceSource = null;
             if (source is null)

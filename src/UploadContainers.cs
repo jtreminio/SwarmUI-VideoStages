@@ -8,7 +8,7 @@ internal static class UploadContainers
     public const string ClipAudio = "UploadedAudio";
     public const string ClipSourceVideo = "SourceVideo";
     public const string SegmentSource = "Source";
-    public const string IcLoraVideo = "Video";
+    public const string IcLoraDriveMedia = "DriveMedia";
     public const string RefImage = "UploadedImage";
 
     public const string SegmentsCollection = "AudioSegments";
@@ -22,7 +22,7 @@ internal static class UploadContainers
         (null, ClipAudio),
         (null, ClipSourceVideo),
         (SegmentsCollection, SegmentSource),
-        (IcLorasCollection, IcLoraVideo),
+        (IcLorasCollection, IcLoraDriveMedia),
         (RefsCollection, RefImage),
     ];
 }

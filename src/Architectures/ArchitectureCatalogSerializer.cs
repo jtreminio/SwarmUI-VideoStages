@@ -317,7 +317,6 @@ internal static class ArchitectureCatalogSerializer
         ArchitectureAudioSourceKind.Disabled => "Disabled",
         ArchitectureAudioSourceKind.Native => "Native",
         ArchitectureAudioSourceKind.Upload => "Upload",
-        ArchitectureAudioSourceKind.VoiceReference => "Voice Reference",
         ArchitectureAudioSourceKind.ControlNet => "ControlNet",
         ArchitectureAudioSourceKind.AceStepFun => "AceStepFun",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),

@@ -1,0 +1,14 @@
+{
+  "default": {
+    "acceptedKinds": ["image", "video"],
+    "consumes": "visual",
+    "visualSource": "drive-media",
+    "requiresUpload": false
+  },
+  "lipdub": {
+    "acceptedKinds": ["audio", "video"],
+    "consumes": "audio",
+    "visualSource": "clip-entry",
+    "requiresUpload": true
+  }
+}

@@ -1,7 +1,6 @@
 import { hasArchitectureSlotSourcedIcLora } from "../architectures/behaviorRegistry";
 import {
     AUDIO_SOURCE_UPLOAD,
-    AUDIO_SOURCE_VOICE_REF,
     buildAudioSourceOptions,
     canUseClipLengthFromAudio,
     isAceStepFunAudioSource,
@@ -70,8 +69,7 @@ export const buildAudioBody = (
             target.saveAudioTrack =
                 isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
             target.uploadedAudio =
-                nextSource === AUDIO_SOURCE_UPLOAD ||
-                nextSource === AUDIO_SOURCE_VOICE_REF
+                nextSource === AUDIO_SOURCE_UPLOAD
                     ? target.uploadedAudio
                     : null;
         });
@@ -97,8 +95,7 @@ export const buildAudioBody = (
             select,
             undefined,
             "Where this clip's audio comes from: generated from the prompt, " +
-                "an uploaded file, a Voice Reference (clone a speaker sample), " +
-                "or none.",
+                "an uploaded file, or a connected generated-audio source.",
         ),
     );
 
@@ -170,12 +167,10 @@ export const buildAudioBody = (
     );
     body.appendChild(saveRow);
 
-    if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
+    if (source === AUDIO_SOURCE_UPLOAD) {
         body.appendChild(
             buildMediaPickRow(
-                source === AUDIO_SOURCE_VOICE_REF
-                    ? "Voice Sample"
-                    : "Audio Upload",
+                "Audio Upload",
                 "audio/*",
                 ["audio"],
                 clip.uploadedAudio?.fileName,
@@ -194,15 +189,6 @@ export const buildAudioBody = (
             ),
         );
     }
-    if (source === AUDIO_SOURCE_VOICE_REF) {
-        const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
-        hint.textContent =
-            "Speaker sample only — new speech is generated to match the " +
-            "prompt in this voice. Put the spoken words in the clip prompt.";
-        body.appendChild(hint);
-    }
-
     if (!audioDecision.supported) {
         disableCapabilityControls(body, audioDecision, [
             ".vst-remove-unsupported-audio",

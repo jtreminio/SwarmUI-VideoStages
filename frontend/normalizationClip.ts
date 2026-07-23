@@ -25,7 +25,7 @@ import {
     normalizePromptWindows,
     normalizeRetake,
     normalizeSourceVideo,
-    normalizeUploadedAudio,
+    normalizeUploadedMedia,
 } from "./normalizationMedia";
 import { normalizeOptionalEntityId } from "./normalizationShared";
 import {
@@ -233,7 +233,7 @@ export const normalizeClip = (
         clipLengthFromAudio,
         clipLengthFromControlNet,
         reuseAudio: !!rawClip.reuseAudio,
-        uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
+        uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
         audioSegments: normalizeAudioSegments(rawClip.audioSegments, duration),
         prompt: `${rawClip.prompt ?? ""}`,
         promptWindows: normalizePromptWindows(rawClip),

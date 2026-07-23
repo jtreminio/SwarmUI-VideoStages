@@ -40,16 +40,15 @@ internal sealed class StageFrame
 
     public bool NeedsCropGuidesAfterSampler { get; set; }
 
-    /// <summary>Set when this stage's conditioning was wrapped in an LTXVSetAudioRefTokens node
-    /// (voice-reference clip). Drives the frozen-audio carry in CropGuidesAfterSampler.</summary>
-    public bool VoiceRefActive { get; set; }
+    /// <summary>Set when an audio-consuming IC-LoRA wrapped this stage's conditioning in
+    /// LTXVSetAudioRefTokens. Lets guide cropping restore the unwrapped conditioning paths.</summary>
+    public bool AudioReferenceActive { get; set; }
 
-    /// <summary>The conditioning paths as they were BEFORE the voice-ref wrap. LTXVCropGuides
-    /// branches from these (matching the official LipDub graph, where the ref-token wrap feeds only
-    /// the sampler's guider and never flows into the crop).</summary>
-    public JArray VoiceRefPreWrapPosCond { get; set; }
+    /// <summary>The conditioning paths before audio-reference tokens were applied. Crop-guides
+    /// branches from these so the reference-token wrapper affects sampling, not guide cropping.</summary>
+    public JArray AudioReferencePreWrapPosCond { get; set; }
 
-    public JArray VoiceRefPreWrapNegCond { get; set; }
+    public JArray AudioReferencePreWrapNegCond { get; set; }
 }
 
 internal sealed record StageExecutionOptions(

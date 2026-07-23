@@ -9,8 +9,11 @@ import { boundaryOverlapConstraints } from "./architectures/boundaryConstraints"
 import { parseVideoArchitectureCatalog } from "./architectures/catalog";
 import { ltx2Architecture } from "./architectures/ltx2/definition";
 import {
+    DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT,
+    findIcLoraPreset,
     IC_LORA_PRESETS,
     icLoraAutoModelName,
+    icLoraDriveMediaContract,
 } from "./architectures/ltx2/icLoraPresets";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { crossfadePlanForClips } from "./boundaryPlan";
@@ -121,6 +124,34 @@ describe("cross-language mirror: M4 IC-LoRA auto-model naming (icLoraPresets)", 
         }
         expect(preset.weightsUrl).toBe(weightsUrl);
         expect(icLoraAutoModelName(preset)).toBe(autoModelName);
+    });
+});
+
+describe("cross-language mirror: LTX IC-LoRA Drive Media contracts", () => {
+    interface DriveMediaContract {
+        acceptedKinds: string[];
+        consumes: string;
+        visualSource: string;
+        requiresUpload: boolean;
+    }
+    const contract = loadFixture<{
+        default: DriveMediaContract;
+        lipdub: DriveMediaContract;
+    }>("ic-lora-drive-media-contract.json");
+
+    it("keeps default and LipDub stream semantics aligned with the backend", () => {
+        expect(DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT).toEqual({
+            acceptedKinds: contract.default.acceptedKinds,
+            consumes: contract.default.consumes,
+            visualSource: contract.default.visualSource,
+            requiresUpload: contract.default.requiresUpload,
+        });
+        expect(icLoraDriveMediaContract(findIcLoraPreset("lipdub"))).toEqual({
+            acceptedKinds: contract.lipdub.acceptedKinds,
+            consumes: contract.lipdub.consumes,
+            visualSource: contract.lipdub.visualSource,
+            requiresUpload: contract.lipdub.requiresUpload,
+        });
     });
 });
 

@@ -11,22 +11,16 @@ import {
 
 describe("audioSource", () => {
     describe("buildAudioSourceOptions", () => {
-        it("returns Native + Upload + Voice Reference by default", () => {
+        it("returns Native + Upload by default", () => {
             const values = buildAudioSourceOptions().map((o) => o.value);
-            expect(values).toEqual(["Native", "Upload", "Voice Reference"]);
+            expect(values).toEqual(["Native", "Upload"]);
         });
 
         it("appends AceStepFun refs when the registry is enabled", () => {
             stubAceStepFunRegistry(["track-a", "track-b"]);
 
             const values = buildAudioSourceOptions().map((o) => o.value);
-            expect(values).toEqual([
-                "Native",
-                "Upload",
-                "Voice Reference",
-                "track-a",
-                "track-b",
-            ]);
+            expect(values).toEqual(["Native", "Upload", "track-a", "track-b"]);
         });
 
         it("labels AceStepFun audio refs with a friendly display name", () => {
@@ -49,7 +43,7 @@ describe("audioSource", () => {
             stubAceStepFunRegistry(["track-a"], false);
 
             const values = buildAudioSourceOptions().map((o) => o.value);
-            expect(values).toEqual(["Native", "Upload", "Voice Reference"]);
+            expect(values).toEqual(["Native", "Upload"]);
         });
 
         it("trims, dedupes, and skips empty AceStepFun refs", () => {
@@ -62,13 +56,7 @@ describe("audioSource", () => {
             ]);
 
             const values = buildAudioSourceOptions().map((o) => o.value);
-            expect(values).toEqual([
-                "Native",
-                "Upload",
-                "Voice Reference",
-                "track-a",
-                "track-b",
-            ]);
+            expect(values).toEqual(["Native", "Upload", "track-a", "track-b"]);
         });
 
         it("survives a registry that returns a non-array refs payload", () => {
@@ -82,7 +70,7 @@ describe("audioSource", () => {
             };
 
             const values = buildAudioSourceOptions().map((o) => o.value);
-            expect(values).toEqual(["Native", "Upload", "Voice Reference"]);
+            expect(values).toEqual(["Native", "Upload"]);
         });
     });
 
@@ -170,7 +158,6 @@ describe("audioSource", () => {
             expect(values).toEqual([
                 "Native",
                 "Upload",
-                "Voice Reference",
                 "audio0",
                 AUDIO_SOURCE_CONTROLNET,
             ]);
