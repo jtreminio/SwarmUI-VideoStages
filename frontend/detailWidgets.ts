@@ -1,6 +1,49 @@
 import { clamp } from "./constants";
 
 let sliderSeq = 0;
+let helpSeq = 0;
+
+const slugify = (value: string): string =>
+    value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "") || "field";
+
+/**
+ * Append SwarmUI's native "?" info-popover to a field: a qbutton span inside
+ * the label plus a `.sui-popover` div the host's `doPopover` toggles (the host
+ * styles/positions it). `doPopover` lives in ui_improvements.js, which is not
+ * loaded in jest, so the click is guarded. Text-only content — no HTML
+ * injection into the popover body.
+ */
+export const appendHelp = (
+    labelEl: HTMLElement,
+    row: HTMLElement,
+    fieldName: string,
+    helpText: string,
+): void => {
+    const key = `vst_${slugify(fieldName)}_${++helpSeq}`;
+    const btn = document.createElement("span");
+    btn.className = "auto-input-qbutton info-popover-button";
+    btn.textContent = "?";
+    btn.addEventListener("click", (event) => {
+        if (typeof doPopover === "function") {
+            doPopover(key, event);
+        }
+    });
+    labelEl.appendChild(btn);
+    const pop = document.createElement("div");
+    pop.className = "sui-popover sui-info-popover";
+    pop.id = `popover_${key}`;
+    const name = document.createElement("b");
+    name.textContent = fieldName;
+    pop.append(
+        name,
+        document.createElement("br"),
+        document.createTextNode(helpText),
+    );
+    row.appendChild(pop);
+};
 
 const wireNumericInput = (
     input: HTMLInputElement,
@@ -42,6 +85,7 @@ export const buildField = (
     label: string,
     control: HTMLElement,
     hint?: string,
+    help?: string,
 ): HTMLElement => {
     const row = document.createElement("div");
     row.className = "auto-input vst-audio-field";
@@ -54,6 +98,9 @@ export const buildField = (
     text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
     labelEl.appendChild(text);
+    if (help) {
+        appendHelp(labelEl, row, label, help);
+    }
     row.append(labelEl, control);
     if (hint) {
         const small = document.createElement("small");
@@ -127,7 +174,7 @@ export const buildSlider = (
     max: number,
     step: number,
     onChange: (value: number) => void,
-    opts?: { hint?: string; title?: string },
+    opts?: { hint?: string; title?: string; help?: string },
 ): HTMLElement => {
     const holder = document.createElement("div");
     holder.className = "vst-stage-slider";
@@ -157,6 +204,12 @@ export const buildSlider = (
     if (opts?.title) {
         holder.title = opts.title;
     }
+    if (opts?.help) {
+        const labelEl = holder.querySelector<HTMLElement>("label");
+        if (labelEl) {
+            appendHelp(labelEl, holder, label, opts.help);
+        }
+    }
     if (opts?.hint) {
         const small = document.createElement("small");
         small.className = "vst-audio-field-hint";
@@ -170,7 +223,7 @@ export const buildCheckbox = (
     label: string,
     checked: boolean,
     onChange: (value: boolean) => void,
-    opts?: { disabled?: boolean },
+    opts?: { disabled?: boolean; help?: string },
 ): HTMLElement => {
     const row = document.createElement("label");
     row.className =
@@ -184,6 +237,9 @@ export const buildCheckbox = (
     text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
     row.append(input, text);
+    if (opts?.help) {
+        appendHelp(row, row, label, opts.help);
+    }
     if (opts?.disabled) {
         row.classList.add("vst-audio-disabled");
         input.setAttribute("disabled", "");
@@ -224,52 +280,22 @@ const readFileAsDataUri = (
     reader.readAsDataURL(file);
 };
 
-export const buildUploadRow = (
-    label: string,
-    accept: string,
-    name: string | null | undefined,
-    onFile: (data: string, fileName: string) => void,
-    onClear: () => void,
-): HTMLElement => {
-    const row = document.createElement("div");
-    row.className = "auto-input vst-audio-field vst-audio-upload";
-    const uploadLabel = document.createElement("span");
-    uploadLabel.className = "auto-input-name vst-audio-field-label";
-    uploadLabel.textContent = label;
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = accept;
-    const fileName = document.createElement("span");
-    fileName.className = "vst-audio-upload-name";
-    fileName.textContent = name ? name : "No file chosen";
-    const clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
-    clearBtn.textContent = "Clear";
-    clearBtn.hidden = !name;
-    fileInput.addEventListener("change", () => {
-        const file = fileInput.files?.[0];
-        if (file) {
-            readFileAsDataUri(file, onFile);
-        }
-    });
-    clearBtn.addEventListener("click", () => onClear());
-    row.append(uploadLabel, fileInput, fileName, clearBtn);
-    return row;
-};
-
-let videoPickCounter = 0;
+let mediaPickCounter = 0;
 
 /**
- * Video file picker offering both a browser upload and (when the host page
+ * Media file picker offering both a browser upload and (when the host page
  * provides the input browser) SwarmUI's "Select" server-file browser — the
- * same pairing core image params get. Both paths resolve to a data URI before
- * `onFile`; a server pick lands as a View/ URL in `dataset.filedata` (written
- * by site.js `setMediaFileDirect`, which also needs the hidden preview and
- * filename nodes below) and is converted with the host's `toDataURL`.
+ * same pairing core file params get. `accept` filters the browser upload and
+ * `browserTypes` (e.g. ["image"], ["audio"], ["image", "video"]) filters the
+ * host input browser. Both paths resolve to a data URI before `onFile`; a
+ * server pick lands as a View/ URL in `dataset.filedata` (written by site.js
+ * `setMediaFileDirect`, which also needs the hidden preview and filename nodes
+ * below) and is converted with the host's `toDataURL`.
  */
-export const buildVideoPickRow = (
+export const buildMediaPickRow = (
     label: string,
+    accept: string,
+    browserTypes: string[],
     name: string | null | undefined,
     onFile: (data: string, fileName: string) => void,
     onClear: () => void,
@@ -281,8 +307,8 @@ export const buildVideoPickRow = (
     pickLabel.textContent = label;
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = "video/*";
-    fileInput.id = `vst-video-pick-${++videoPickCounter}`;
+    fileInput.accept = accept;
+    fileInput.id = `vst-media-pick-${++mediaPickCounter}`;
     const fileName = document.createElement("span");
     fileName.className = "vst-audio-upload-name";
     fileName.textContent = name ? name : "No file chosen";
@@ -319,10 +345,10 @@ export const buildVideoPickRow = (
     if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
         const selectBtn = document.createElement("button");
         selectBtn.type = "button";
-        selectBtn.className = "basic-button small-button vst-video-pick-select";
+        selectBtn.className = "basic-button small-button vst-media-pick-select";
         selectBtn.textContent = "Select";
         selectBtn.addEventListener("click", () =>
-            inputBrowserHelper.openInputBrowser(fileInput.id, ["video"]),
+            inputBrowserHelper.openInputBrowser(fileInput.id, browserTypes),
         );
         clearBtn.before(selectBtn);
     }

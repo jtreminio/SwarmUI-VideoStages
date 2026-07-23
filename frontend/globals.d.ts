@@ -45,6 +45,8 @@ declare const inputBrowserHelper:
       }
     | undefined;
 
+declare function doPopover(id: string, e?: Event): void;
+
 declare let currentMetadataVal: string | null;
 
 declare function interpretMetadata(metadata: string | null): string | null;

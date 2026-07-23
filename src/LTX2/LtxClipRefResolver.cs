@@ -23,7 +23,11 @@ internal sealed class LtxClipRefResolver(
         bool isTextToVideo = g.GetVideoStagesSpec().IsTextToVideo;
         IReadOnlyList<ImageRefSpec> refs = clip.ImageRefs;
         IReadOnlyList<double> strengths = stage.ImageRefStrengths;
-        if (refs.Count == 0 && !stage.ImageRefWasExplicit)
+        // A sourced clip's footage IS its init reference: never synthesize the implicit
+        // image-to-video ref for it. The default ref would become the primary guide and
+        // inplace-merge the host init image into the encoded footage latent (defeating the
+        // orchestrator's sourced-footage reinjection skip, which requires a null primary guide).
+        if (refs.Count == 0 && !stage.ImageRefWasExplicit && clip.SourceVideo is null)
         {
             ImageRefSpec defaultRef = ResolveDefaultImageToVideoRef(isTextToVideo, refStore);
             if (defaultRef is not null)

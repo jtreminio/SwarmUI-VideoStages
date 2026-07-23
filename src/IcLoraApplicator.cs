@@ -213,6 +213,10 @@ internal class IcLoraApplicator(WorkflowGenerator g)
         if (!ControlNetCapture.TryParseControlNetSourceIndex(entry.Source, out int index)
             || !new ControlNetCapture(g).TryGetCapturedCoreControlImage(index, out WGNodeData controlImage))
         {
+            Logs.Warning(
+                $"VideoStages: IC-LoRA '{entry.Preset ?? entry.Lora}' drive source "
+                + $"'{entry.Source}' could not be resolved; the LoRA applies model-only "
+                + "with no guide.");
             return false;
         }
         slotSource = entry.Source;

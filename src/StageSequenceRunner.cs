@@ -39,9 +39,21 @@ internal sealed class StageSequenceRunner(
         IReadOnlyDictionary<int, WGNodeData> uploadedAudios = null,
         bool rootStageHandoff = false)
     {
+        VideoStagesSpec spec = g.GetVideoStagesSpec();
+        bool sourcedLeadWithGeneratedClips = clips.Count > 0
+            && clips[0].SourceVideo is not null
+            && clips.Any(clip => clip.SourceVideo is null);
+        // In a text-to-video run the generated clips replace the root with their own empty
+        // latents and self-generate audio, so a sourced-lead run has NO consumer for the root
+        // generation. Its audio latent must not become the replacement clips' audio init: that
+        // reference pins the whole unrelated root sampler alive in the graph (a third sampler
+        // generating footage nothing uses).
+        bool dropTextToVideoRootDonor = sourcedLeadWithGeneratedClips && spec.IsTextToVideo;
         RunContext context = new()
         {
-            NativeAudio = nativeAudio ?? g.CurrentMedia?.AttachedAudio,
+            NativeAudio = dropTextToVideoRootDonor
+                ? null
+                : nativeAudio ?? g.CurrentMedia?.AttachedAudio,
             ClipAudios = clipAudios,
             UploadedAudios = uploadedAudios,
             RootStageHandoff = rootStageHandoff
@@ -51,15 +63,47 @@ internal sealed class StageSequenceRunner(
         List<int> usedSectionIds = [];
         bool parallelMultiClip = clips.Count > 1;
         List<WGNodeData> clipParallelOutputs = [];
+        HashSet<string> droppedRootNodeIds = [];
         try
         {
             if (context.RootStageHandoff)
             {
                 rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
             }
-            else if (clips.Count > 0
-                && clips[0].SourceVideo is not null
-                && clips.Any(clip => clip.SourceVideo is null))
+            else if (dropTextToVideoRootDonor)
+            {
+                // Root is getting dropped: stamp the timeline dims as metadata only (the t2v
+                // shortcut inside) — a pixel conform would add a scale node onto a chain that the
+                // generated clips' root-replacement cleanup is about to prune. Strip the root's
+                // attached audio too: every root-media clone inherits it, and a replacement
+                // clip's empty latent adopting that audio-latent ref is exactly the pin that
+                // keeps the root sampler alive. Remember the root's node ids for the final sweep.
+                rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
+                List<string> rootSeedIds = [];
+                if (g.CurrentMedia?.Path is JArray rootMediaPath && rootMediaPath.Count == 2)
+                {
+                    rootSeedIds.Add($"{rootMediaPath[0]}");
+                }
+                if (g.CurrentMedia?.AttachedAudio?.Path is JArray rootAudioPath
+                    && rootAudioPath.Count == 2)
+                {
+                    rootSeedIds.Add($"{rootAudioPath[0]}");
+                }
+                if (rootSeedIds.Count > 0)
+                {
+                    // Capture the component NOW: the per-clip root-replacement cleanups delete
+                    // the seed nodes themselves, and a sweep walked from already-deleted ids
+                    // would never reach the survivors they used to pin.
+                    using WorkflowBridge bridge = BridgeSync.For(g);
+                    droppedRootNodeIds.UnionWith(
+                        WorkflowGraphCleanup.CollectComponentIds(bridge, rootSeedIds));
+                }
+                if (g.CurrentMedia is not null)
+                {
+                    g.CurrentMedia.AttachedAudio = null;
+                }
+            }
+            else if (sourcedLeadWithGeneratedClips)
             {
                 // A sourced first clip keeps the root generation alive as the GENERATED clips'
                 // source/audio donor; conform its pixels to the timeline resolution so every clip
@@ -76,7 +120,6 @@ internal sealed class StageSequenceRunner(
             }
 
             int totalStageCount = TotalStageCount(clips);
-            VideoStagesSpec spec = g.GetVideoStagesSpec();
             List<string> effectiveBoundaryOuts = [.. clips.Select(clip => clip.BoundaryOut)];
             int[] boundaryOverlapPrefs = [.. clips.Select(clip => clip.BoundaryOutOverlap)];
             int[] continueWindows = MultiClipParallelMerger.ResolveContinueWindows(
@@ -237,6 +280,15 @@ internal sealed class StageSequenceRunner(
                     continueWindows,
                     boundaryOverlapPrefs);
             }
+
+            if (droppedRootNodeIds.Count > 0)
+            {
+                // The dropped t2v root generation still lingers when dead consumers hang off it
+                // (its audio-decode sibling, transient detached chains) — the root-replacement
+                // cleanup only walks upstream, so those pin the root sampler alive. Same
+                // bidirectional sweep as the lone-sourced retarget path.
+                SweepDroppedTextToVideoRoot(droppedRootNodeIds);
+            }
         }
         finally
         {
@@ -304,6 +356,27 @@ internal sealed class StageSequenceRunner(
             deadStarts.Add(rootAudio.Node.Id);
         }
         WorkflowGraphCleanup.RemoveDeadComponentAround(bridge, deadStarts, liveRoots, g.NodeHelpers);
+    }
+
+    /// <summary>
+    /// Sweeps the dropped text-to-video root generation's whole dead component (the ids were
+    /// captured before any pruning, so already-removed nodes are skipped). Live = anything a save
+    /// or the current media/audio depends on, so shared loaders survive.
+    /// </summary>
+    private void SweepDroppedTextToVideoRoot(IEnumerable<string> rootNodeIds)
+    {
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        HashSet<string> liveRoots =
+            [.. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Select(save => save.Id)];
+        if (g.CurrentMedia?.Path is JArray currentPath && currentPath.Count == 2)
+        {
+            liveRoots.Add($"{currentPath[0]}");
+        }
+        if (g.CurrentMedia?.AttachedAudio?.Path is JArray audioPath && audioPath.Count == 2)
+        {
+            liveRoots.Add($"{audioPath[0]}");
+        }
+        WorkflowGraphCleanup.RemoveDeadComponentAround(bridge, rootNodeIds, liveRoots, g.NodeHelpers);
     }
 
     /// <summary>

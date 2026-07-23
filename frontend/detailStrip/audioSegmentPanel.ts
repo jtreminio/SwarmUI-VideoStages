@@ -11,9 +11,9 @@ import {
 import {
     buildField,
     buildInstanceRow,
+    buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
-    buildUploadRow,
     clampStartLength,
     wrapForm,
 } from "../detailWidgets";
@@ -88,13 +88,23 @@ export const buildAudioSegmentBody = (
                 ctx.render();
             },
         );
-        fields.appendChild(buildField("Source", segSourceSelect));
+        fields.appendChild(
+            buildField(
+                "Source",
+                segSourceSelect,
+                undefined,
+                "Where this overlay segment's audio comes from — an uploaded " +
+                    "file or a generated track. It is mixed on top of the " +
+                    "clip's base audio.",
+            ),
+        );
 
         if (!segSourceRef) {
             fields.appendChild(
-                buildUploadRow(
+                buildMediaPickRow(
                     "Audio Upload",
                     "audio/*",
+                    ["audio"],
                     typeof segment.source === "string"
                         ? undefined
                         : segment.source?.fileName,
@@ -137,7 +147,15 @@ export const buildAudioSegmentBody = (
                 }
             },
         });
-        fields.appendChild(buildField("Start (s)", startInput));
+        fields.appendChild(
+            buildField(
+                "Start (s)",
+                startInput,
+                undefined,
+                "When this segment begins on the clip's timeline, in seconds " +
+                    "from the clip start.",
+            ),
+        );
 
         const trimInput = buildNumber(
             segment.trimStartSeconds,
@@ -157,7 +175,16 @@ export const buildAudioSegmentBody = (
             },
         );
         trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
-        fields.appendChild(buildField("Trim start (s)", trimInput));
+        fields.appendChild(
+            buildField(
+                "Trim start (s)",
+                trimInput,
+                undefined,
+                "Skip this many seconds from the beginning of the source audio " +
+                    "before it starts playing — lets you use a later portion of " +
+                    "the file.",
+            ),
+        );
 
         const lengthInput = ctx.buildClampedNumber({
             key: `seg-${segIdx}-length`,
@@ -176,7 +203,14 @@ export const buildAudioSegmentBody = (
                 }
             },
         });
-        fields.appendChild(buildField("Length (s)", lengthInput));
+        fields.appendChild(
+            buildField(
+                "Length (s)",
+                lengthInput,
+                undefined,
+                "How long this segment plays on the clip, in seconds.",
+            ),
+        );
         body.appendChild(row);
     });
 

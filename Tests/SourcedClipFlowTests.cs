@@ -446,6 +446,72 @@ public partial class StageFlowTests
         AssertWorkflowHasNoCycles(workflow);
     }
 
+    [Theory]
+    [InlineData("continue")]
+    [InlineData("cut")]
+    [InlineData("crossfade")]
+    public void Sourced_lead_clip_boundary_retargets_the_root_save_to_the_merge(string boundaryOut)
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // Sourced LEAD clip + a generated clip: the root generation survives as the generated
+        // clip's source donor and gets pixel-conformed to the timeline resolution. The core save
+        // consumes the PRE-conform root output, so the merge retarget must still catch it — a
+        // missed retarget ships the unrelated root generation as a second output video.
+        JObject sourced = MakeSourcedClip(models);
+        sourced["BoundaryOut"] = boundaryOut;
+        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
+            models, sourced, MakeGeneratedClip(models));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        List<SwarmSaveAnimationWSNode> saves = [.. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()];
+        string diag = string.Join("; ", saves.Select(s =>
+            $"save {s.Id} <- {s.Images.Connection?.Node.Id}"
+            + $" reachesWindow={ReachesUpstream(bridge, s.Images.Connection!.Node, window.Id)}"));
+        Assert.True(saves.Count == 1, $"Expected one save, got {saves.Count}: {diag}");
+        Assert.True(
+            ReachesUpstream(bridge, saves[0].Images.Connection!.Node, window.Id),
+            "The save does not trace to the cross-clip merge (it still points at the root "
+            + $"generation output). {diag}");
+        // The join itself engaged: continue/crossfade blend at the seam, a cut must not.
+        Assert.Equal(
+            boundaryOut != Constants.BoundaryOutCut,
+            bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>().Any());
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Passthrough_sourced_lead_continue_join_samples_only_the_generated_clip()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // Control 0 on the sourced clip's only stage: upload a video and join it to a generated
+        // clip without altering the footage — no sampler for clip 0, just the conform chain
+        // feeding the merge.
+        JObject sourced = MakeSourcedClip(models);
+        ((JArray)sourced["Stages"])[0]["Control"] = 0.0;
+        sourced["BoundaryOut"] = "continue";
+        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
+            models, sourced, MakeGeneratedClip(models));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        // One sampler total — the generated clip's. (It still traces to the footage: the
+        // continue boundary freezes clip 0's tail as its opening latent context.)
+        Assert.Single(SamplerNodesOrdered(bridge));
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(
+            ReachesUpstream(bridge, save.Images.Connection!.Node, window.Id),
+            "The save does not trace to the merged output containing the footage.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
     [Fact]
     public void Continue_from_sourced_clip_keeps_spec_dims_for_the_generated_clip()
     {
@@ -675,6 +741,50 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Sourced_lead_with_generated_clip_in_t2v_drops_the_root_generation()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // Sourced LEAD clip + generated clip in a real-order text-to-video run: the generated
+        // clip replaces the root with its own empty latent and self-generates audio, so the root
+        // generation has NO consumer and must be dropped. Regression: the root's audio latent was
+        // wired in as the generated clip's audio init, pinning the whole unrelated root sampler
+        // (a third SwarmKSampler) alive in the graph.
+        JObject sourced = MakeSourcedClip(models);
+        sourced["BoundaryOut"] = "continue";
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            MakeRootConfig(512, 512, sourced, MakeGeneratedClip(models)).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 0);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
+                .Concat(WorkflowTestHarness.VideoStagesSteps()),
+            features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        // Exactly two samplers — sourced clip 0's refine and the generated clip. The root t2v
+        // sampler ("10") and its AV chain must be gone.
+        List<SwarmKSamplerNode> samplers = [.. SamplerNodesOrdered(bridge)];
+        Assert.True(
+            samplers.Count == 2,
+            $"Expected 2 samplers, got {samplers.Count}: "
+            + string.Join(", ", samplers.Select(s => s.Id)));
+        Assert.False(workflow.ContainsKey("10"), "Root t2v sampler was left in the workflow.");
+        Assert.False(workflow.ContainsKey("104"), "Root AV concat was left dangling.");
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(
+            ReachesUpstream(bridge, save.Images.Connection!.Node, window.Id),
+            "The save does not trace to the cross-clip merge.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
     public void Sourced_clip0_in_text_to_video_flow_takes_over_the_root_save_and_drops_the_root_generation()
     {
         using SwarmUiTestContext _ = new();
@@ -731,6 +841,74 @@ public partial class StageFlowTests
         Assert.True(
             ReachesUpstream(bridge, sampler, scale.Id),
             "Stage 0 sampler does not consume the upscaled footage.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Generated_t2v_clip_ic_lora_guides_are_cropped_in_real_step_order()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel icLora = new(
+            loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
+        loraHandler.Models[icLora.Name] = icLora;
+
+        // A GENERATED clip 0 in the real text-to-video step order (raw undecoded AV latent at
+        // VideoStages time): every emitted IC-LoRA guide must be paired with an LTXVCropGuides
+        // after its sampler — a guide that reaches a sampler the host built natively would leave
+        // the guide frames in the output.
+        JObject clip = MakeGeneratedClip(models);
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "UnitTest_IcLoraDrive",
+            ["Source"] = Constants.IcLoraSourceUpload,
+            ["Video"] = new JObject
+            {
+                ["Data"] = "data:video/mp4;base64,QUJD",
+                ["FileName"] = "drive.mp4",
+            },
+        });
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel, MakeRootConfig(512, 512, clip).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 0);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
+        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
+                .Concat(WorkflowTestHarness.VideoStagesSteps()),
+            features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        int guides = bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count();
+        int crops = bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count();
+        Assert.True(guides > 0, "No IC-LoRA guide was emitted at all.");
+        Assert.Equal(guides, crops);
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Sourced_clip_with_a_captured_init_image_does_not_reinject_it()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // No explicit stage ImageReference (the fixture default would set ImageRefWasExplicit and
+        // mask the implicit-ref path this test guards).
+        JObject sourced = MakeSourcedClip(models);
+        ((JObject)((JArray)sourced["Stages"])[0]).Remove("ImageReference");
+        (JObject workflow, WorkflowGenerator g) = GenerateSourcedFlow(models, sourced);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // The host init image (Refiner ref) is captured in this flow; without the sourced-clip
+        // guard in ResolveStageClipRefs the implicit image-to-video default ref would become the
+        // primary guide and inplace-merge the init image into the encoded footage latent.
+        Assert.True(
+            g.NodeHelpers.ContainsKey("videostages.refiner.media"),
+            "Harness precondition: the refiner init image was not captured.");
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         AssertWorkflowHasNoCycles(workflow);
     }
 

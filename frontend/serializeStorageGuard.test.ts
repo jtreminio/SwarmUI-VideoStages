@@ -27,7 +27,7 @@ const getRootDefaults = (): RootDefaults => ({
     fps: 24,
     frames: 48,
     control: 0.5,
-    controlMin: 0.05,
+    controlMin: 0,
     controlMax: 1,
     controlStep: 0.05,
     upscale: 1,

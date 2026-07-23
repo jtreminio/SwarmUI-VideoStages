@@ -1068,7 +1068,7 @@ describe("createTimelineDetailStrip", () => {
         const retake = savedClips(saveSpy)[0].retake;
         expect(retake).not.toBeNull();
         expect(retake?.startSeconds).toBe(0);
-        expect(retake?.lengthSeconds).toBe(2); // min(default 2, clip 4)
+        expect(retake?.lengthSeconds).toBe(3); // min(default 3, clip 4)
         expect(retake?.strength).toBe(1);
     });
 
@@ -2763,9 +2763,14 @@ describe("createTimelineDetailStrip", () => {
             // an add button when the clip has no retake.
             const retake = group("vstdock_retake");
             expect(retake).not.toBeNull();
-            expect(retake?.querySelector(".vst-detail-sec")?.textContent).toBe(
-                "Retake",
-            );
+            const retakeSec =
+                retake?.querySelector<HTMLElement>(".vst-detail-sec");
+            // The label text is the section's leading text node; a trailing "?"
+            // help button now shares the element, so read the text node itself.
+            expect(retakeSec?.firstChild?.textContent).toBe("Retake");
+            expect(
+                retakeSec?.querySelector(".info-popover-button"),
+            ).not.toBeNull();
             expect(
                 retake?.querySelector(".vst-detail-add-retake"),
             ).not.toBeNull();

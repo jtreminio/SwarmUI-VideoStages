@@ -259,7 +259,7 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         expect(saveSpy).toHaveBeenCalledTimes(1);
         const retake = savedRetake(saveSpy);
         expect(retake?.startSeconds).toBeCloseTo(3, 5);
-        expect(retake?.lengthSeconds).toBeCloseTo(2, 5); // default length
+        expect(retake?.lengthSeconds).toBeCloseTo(3, 5); // default length
         expect(retake?.strength).toBe(1);
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
     });

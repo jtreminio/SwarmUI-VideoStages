@@ -718,7 +718,7 @@ export const renderAudioTrackRow = (
     );
     // One tag per lane index, mirroring renderAudioSegmentLanes: the last
     // lane is always the blank add-lane, so its tag is the muted "+".
-    const laneTags = [headTag("src", "Src", { active: true })];
+    const laneTags = [headTag("src", "Clip", { active: true })];
     for (let i = 0; i < laneCount; i++) {
         const blank = i === laneCount - 1;
         laneTags.push(

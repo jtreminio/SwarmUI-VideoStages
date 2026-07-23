@@ -1172,6 +1172,30 @@ export const createTimelineDetailStrip = (
             if (newBody && savedScroll > 0) {
                 newBody.scrollTop = savedScroll;
             }
+            // A fresh retake selection lands in the clip panel, whose Retake
+            // section sits at the bottom — bring it into view instead of
+            // leaving the panel scrolled to the top. Re-renders of the same
+            // selection (and in-dock editing) keep their scroll untouched.
+            if (
+                sel.kind === "retake" &&
+                !collapsed &&
+                !(renderedSel && isSameSelection(sel, renderedSel))
+            ) {
+                const focused = document.activeElement;
+                const retakeCol = detail.querySelector<HTMLElement>(
+                    ".vst-detail-retake-col",
+                );
+                if (
+                    !(
+                        focused instanceof HTMLElement &&
+                        detail.contains(focused)
+                    ) &&
+                    retakeCol &&
+                    typeof retakeCol.scrollIntoView === "function"
+                ) {
+                    retakeCol.scrollIntoView({ block: "nearest" });
+                }
+            }
             if (!collapsed) {
                 autoFocusSelection(detail, sel);
             }

@@ -25,18 +25,18 @@ import {
     STAGE_REF_STRENGTH_STEP,
 } from "../constants";
 import {
+    appendHelp,
     buildAddButton,
     buildCheckbox,
     buildField,
     buildGroup,
     buildInstanceRow,
+    buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
     buildSelect,
     buildSlider,
     buildStackSection,
-    buildUploadRow,
-    buildVideoPickRow,
     clampStartLength,
     sectionLabel,
     tagFocus,
@@ -243,7 +243,11 @@ const buildParamsColumn = (
         max: number,
         step: number,
         assign: (target: Stage, value: number) => void,
-        opts?: { title?: string; onValue?: (value: number) => void },
+        opts?: {
+            title?: string;
+            onValue?: (value: number) => void;
+            help?: string;
+        },
     ): HTMLElement =>
         tagFocus(
             buildSlider(
@@ -256,7 +260,9 @@ const buildParamsColumn = (
                     opts?.onValue?.(v);
                     stageDebounced(focusKey, (target) => assign(target, v));
                 },
-                opts?.title ? { title: opts.title } : undefined,
+                opts?.title || opts?.help
+                    ? { title: opts.title, help: opts.help }
+                    : undefined,
             ),
             focusKey,
         );
@@ -309,6 +315,9 @@ const buildParamsColumn = (
                 target.model = value;
             },
         ),
+        undefined,
+        "The video model this stage runs. Later stages can switch to a " +
+            "different model to refine or upscale the previous stage's output.",
     );
     modelField.classList.add("vst-detail-span-2");
     fields.appendChild(modelField);
@@ -324,6 +333,12 @@ const buildParamsColumn = (
             (target, value) => {
                 target.steps = Math.round(value);
             },
+            {
+                help:
+                    "How many denoising steps this stage runs. More steps can " +
+                    "add detail but take longer; there are diminishing returns " +
+                    "past the model's sweet spot.",
+            },
         ),
     );
     fields.appendChild(
@@ -336,6 +351,12 @@ const buildParamsColumn = (
             defaults.cfgScaleStep,
             (target, value) => {
                 target.cfgScale = value;
+            },
+            {
+                help:
+                    "How strongly generation follows the prompt. Higher sticks " +
+                    "closer to the prompt but can look over-cooked; lower is " +
+                    "looser and more natural.",
             },
         ),
     );
@@ -354,6 +375,11 @@ const buildParamsColumn = (
                 },
                 {
                     title: "Regen strength — higher = more of the stage is re-generated",
+                    help:
+                        "Regeneration strength for this refine stage. Higher " +
+                        "re-generates more of the incoming frames (starting " +
+                        "step = floor(Steps × (1 − Control))); at 0 the frames " +
+                        "pass through untouched.",
                 },
             ),
         );
@@ -365,7 +391,13 @@ const buildParamsColumn = (
                 target.upscaleMethod = value;
             },
         );
-        const methodField = buildField("Upscale Method", methodSelect);
+        const methodField = buildField(
+            "Upscale Method",
+            methodSelect,
+            undefined,
+            "How frames are enlarged before this stage refines them. Only " +
+                "applies when Upscale is above 1×.",
+        );
         methodField.classList.add("vst-detail-span-2");
         const syncMethod = (upscale: number): void => {
             const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
@@ -386,7 +418,13 @@ const buildParamsColumn = (
                 (target, value) => {
                     target.upscale = value;
                 },
-                { onValue: syncMethod },
+                {
+                    onValue: syncMethod,
+                    help:
+                        "Resolution multiplier applied to the incoming frames " +
+                        "before this stage refines them. 1× keeps the size; " +
+                        "above 1× enlarges using the Upscale Method.",
+                },
             ),
         );
         fields.appendChild(methodField);
@@ -404,6 +442,9 @@ const buildParamsColumn = (
                     target.sampler = value;
                 },
             ),
+            undefined,
+            "The sampling algorithm used to denoise each step. Leave at the " +
+                "model default unless you have a reason to change it.",
         ),
     );
     fields.appendChild(
@@ -417,6 +458,9 @@ const buildParamsColumn = (
                     target.scheduler = value;
                 },
             ),
+            undefined,
+            "Controls how the noise level is spaced across the steps. Leave at " +
+                "the model default unless you have a reason to change it.",
         ),
     );
 
@@ -482,7 +526,12 @@ const buildParamsColumn = (
                     target.controlNetStrength = value;
                 });
             },
-            { hint: "Drive-video conditioning strength for this stage" },
+            {
+                help:
+                    "How strongly this stage is conditioned by the clip's " +
+                    "IC-LoRA drive video/guides. Higher follows the guide more " +
+                    "closely; lower gives the model more freedom.",
+            },
         );
         tagFocus(controlNetSlider, "controlnet");
         fields.appendChild(controlNetSlider);
@@ -524,6 +573,13 @@ const buildLorasSection = (
     const label = document.createElement("div");
     label.className = "vst-detail-sec";
     label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
+    appendHelp(
+        label,
+        section,
+        "Stage LoRAs",
+        "LoRAs applied to this stage only, on top of the model. Each row " +
+            "picks a LoRA and its weight (negative weights invert its effect).",
+    );
     section.appendChild(label);
 
     if (defaults.loraValues.length === 0) {
@@ -628,6 +684,17 @@ const buildSourceVideoSection = (
         "Source Video",
         "vst-detail-source-col",
     );
+    const secLabel = wrap.querySelector<HTMLElement>(".vst-detail-sec");
+    if (secLabel) {
+        appendHelp(
+            secLabel,
+            wrap,
+            "Source Video",
+            "Start this clip from an existing video instead of generating it. " +
+                "Stages then refine/upscale the footage and a retake can " +
+                "regenerate part of it.",
+        );
+    }
     const source = clip.sourceVideo;
 
     const applyPickedFile = (data: string, fileName: string): void => {
@@ -676,8 +743,10 @@ const buildSourceVideoSection = (
     };
 
     col.appendChild(
-        buildVideoPickRow(
+        buildMediaPickRow(
             "Video file",
+            "video/*",
+            ["video"],
             source?.fileName ?? null,
             applyPickedFile,
             removeSource,
@@ -744,7 +813,15 @@ const buildSourceVideoSection = (
             }
         },
     });
-    col.appendChild(buildField("Start (s)", startInput));
+    col.appendChild(
+        buildField(
+            "Start (s)",
+            startInput,
+            undefined,
+            "Where inside the source file this clip's footage begins. Trims " +
+                "the front of the file.",
+        ),
+    );
 
     const lengthInput = ctx.buildClampedNumber({
         key: "source-length",
@@ -764,7 +841,15 @@ const buildSourceVideoSection = (
             }
         },
     });
-    col.appendChild(buildField("Length (s)", lengthInput));
+    col.appendChild(
+        buildField(
+            "Length (s)",
+            lengthInput,
+            undefined,
+            "How many seconds of the source file this clip uses, starting at " +
+                "Start. This also becomes the clip's duration.",
+        ),
+    );
 
     const note = document.createElement("p");
     note.className = "vst-detail-note";
@@ -797,6 +882,17 @@ const buildRetakeSection = (
     clipIdx: number,
 ): HTMLElement => {
     const { wrap, col } = buildStackSection("Retake", "vst-detail-retake-col");
+    const secLabel = wrap.querySelector<HTMLElement>(".vst-detail-sec");
+    if (secLabel) {
+        appendHelp(
+            secLabel,
+            wrap,
+            "Retake",
+            "Regenerate just a time window of a base video, leaving the rest " +
+                "untouched — handy for fixing one bad stretch without redoing " +
+                "the whole clip.",
+        );
+    }
     const retake = clip.retake;
 
     if (!retake) {
@@ -836,7 +932,15 @@ const buildRetakeSection = (
             }
         },
     });
-    col.appendChild(buildField("Start (s)", startInput));
+    col.appendChild(
+        buildField(
+            "Start (s)",
+            startInput,
+            undefined,
+            "Where the retake window begins inside the clip. Only this " +
+                "sub-range is regenerated.",
+        ),
+    );
 
     const lengthInput = ctx.buildClampedNumber({
         key: "retake-length",
@@ -854,7 +958,15 @@ const buildRetakeSection = (
             }
         },
     });
-    col.appendChild(buildField("Length (s)", lengthInput));
+    col.appendChild(
+        buildField(
+            "Length (s)",
+            lengthInput,
+            undefined,
+            "How long the retake window is, starting at Start. Frames outside " +
+                "the window are kept as-is.",
+        ),
+    );
 
     col.appendChild(
         buildSlider(
@@ -874,6 +986,11 @@ const buildRetakeSection = (
                         );
                     }
                 });
+            },
+            {
+                help:
+                    "How much of the window is regenerated. Higher changes the " +
+                    "footage more; lower keeps it closer to the original.",
             },
         ),
     );
@@ -913,6 +1030,17 @@ const buildIcLorasSection = (
         "IC-LoRAs",
         "vst-detail-iclora-col",
     );
+    const secLabel = wrap.querySelector<HTMLElement>(".vst-detail-sec");
+    if (secLabel) {
+        appendHelp(
+            secLabel,
+            wrap,
+            "IC-LoRAs",
+            "In-context LoRAs condition this clip on a drive video or image — " +
+                "matching pose, depth, motion, or style. Add one per guide you " +
+                "want to apply.",
+        );
+    }
 
     const entryField = (clips: Clip[], entryIdx: number): IcLora | undefined =>
         clips[clipIdx]?.icLoras[entryIdx];
@@ -965,7 +1093,17 @@ const buildIcLorasSection = (
                 ctx.render();
             },
         );
-        fields.appendChild(buildField("Preset", presetSelect));
+        fields.appendChild(
+            buildField(
+                "Preset",
+                presetSelect,
+                undefined,
+                "A curated IC-LoRA setup — picking one fills in the LoRA, " +
+                    "strength, and control type for a known effect (pose, " +
+                    "depth, style, etc.). Choose Custom to set everything " +
+                    "yourself.",
+            ),
+        );
 
         const loraSelect = buildSelect(
             [IC_LORA_AUTO, ...defaults.loraValues],
@@ -984,7 +1122,16 @@ const buildIcLorasSection = (
                 ctx.render();
             },
         );
-        fields.appendChild(buildField("LoRA", loraSelect));
+        fields.appendChild(
+            buildField(
+                "LoRA",
+                loraSelect,
+                undefined,
+                "The in-context LoRA weights that turn the drive media into " +
+                    "conditioning. [AUTO] downloads the preset's recommended " +
+                    "weights when they are not installed.",
+            ),
+        );
 
         const strength = ctx.buildClampedNumber({
             key: `iclora-${entryIdx}-strength`,
@@ -1000,7 +1147,16 @@ const buildIcLorasSection = (
                 }
             },
         });
-        fields.appendChild(buildField("Strength", strength));
+        fields.appendChild(
+            buildField(
+                "Strength",
+                strength,
+                undefined,
+                "How strongly this IC-LoRA steers generation. Higher follows " +
+                    "the drive media more closely; too high can overpower the " +
+                    "prompt.",
+            ),
+        );
 
         const attention = ctx.buildClampedNumber({
             key: `iclora-${entryIdx}-attention`,
@@ -1017,7 +1173,16 @@ const buildIcLorasSection = (
                 }
             },
         });
-        fields.appendChild(buildField("Attention", attention));
+        fields.appendChild(
+            buildField(
+                "Attention",
+                attention,
+                undefined,
+                "Scales how much the IC-LoRA influences the model's attention " +
+                    "layers. A finer control than Strength; leave at the " +
+                    "default unless a preset tunes it.",
+            ),
+        );
 
         /**
          * Control renders the drive video into a signal; only Union Control
@@ -1043,7 +1208,16 @@ const buildIcLorasSection = (
                     });
                 },
             );
-            fields.appendChild(buildField("Control", controlSelect));
+            fields.appendChild(
+                buildField(
+                    "Control",
+                    controlSelect,
+                    undefined,
+                    "Preprocesses the drive video into a control signal before " +
+                        "conditioning: Canny edges, a depth map, or a normal " +
+                        "map. None feeds the raw video straight in.",
+                ),
+            );
         }
 
         const applySelect = buildOptionSelect(
@@ -1071,7 +1245,15 @@ const buildIcLorasSection = (
                 ctx.render();
             },
         );
-        fields.appendChild(buildField("Apply on", applySelect));
+        fields.appendChild(
+            buildField(
+                "Apply on",
+                applySelect,
+                undefined,
+                "Which stage this IC-LoRA conditions — a single stage, or All " +
+                    "stages of the clip.",
+            ),
+        );
 
         /**
          * "Stage input" (the stage's incoming frames as drive media) only
@@ -1103,7 +1285,16 @@ const buildIcLorasSection = (
                     ctx.render();
                 },
             );
-            fields.appendChild(buildField("Source", sourceSelect));
+            fields.appendChild(
+                buildField(
+                    "Source",
+                    sourceSelect,
+                    undefined,
+                    "Where the drive media comes from: Upload your own " +
+                        "video/image, or Stage input to drive from the frames " +
+                        "already entering this stage.",
+                ),
+            );
         }
 
         if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
@@ -1116,9 +1307,10 @@ const buildIcLorasSection = (
             fields.appendChild(hint);
         } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
             fields.appendChild(
-                buildUploadRow(
+                buildMediaPickRow(
                     "Drive Media",
                     "video/*,image/*",
+                    ["image", "video"],
                     entry.video?.fileName,
                     (data, fileName) => {
                         ctx.commit((clips) => {
@@ -1159,11 +1351,13 @@ const buildIcLorasSection = (
                             }
                         });
                     },
+                    {
+                        help:
+                            "Use this drive video's audio as the speaker sample " +
+                            "(LipDub): new speech matching the prompt is " +
+                            "generated in that voice.",
+                    },
                 );
-                voiceRow.title =
-                    "Use this video's audio as the speaker sample " +
-                    "(LipDub): new speech matching the prompt is " +
-                    "generated in that voice.";
                 fields.appendChild(voiceRow);
             }
         } else {

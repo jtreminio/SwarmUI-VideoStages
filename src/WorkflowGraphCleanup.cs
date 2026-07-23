@@ -137,6 +137,47 @@ internal static class WorkflowGraphCleanup
         InvalidateNodeHelperCacheForRemovedIds(nodeHelpers, removed);
     }
 
+    /// <summary>
+    /// Collects the ids of every node connected to <paramref name="startNodeIds"/> (walking BOTH
+    /// directions), removing nothing. For capturing a doomed component BEFORE partial cleanups
+    /// delete the seed nodes — the ids feed a later RemoveDeadComponentAround, whose liveness
+    /// boundary then spares whatever the surviving graph still depends on.
+    /// </summary>
+    public static HashSet<string> CollectComponentIds(
+        WorkflowBridge bridge, IEnumerable<string> startNodeIds)
+    {
+        HashSet<string> seen = [];
+        Queue<string> pending = new(startNodeIds.Where(id => !string.IsNullOrWhiteSpace(id)));
+        while (pending.Count > 0)
+        {
+            string nodeId = pending.Dequeue();
+            if (!seen.Add(nodeId))
+            {
+                continue;
+            }
+            ComfyNode node = bridge.Graph.GetNode(nodeId);
+            if (node is null)
+            {
+                continue;
+            }
+            foreach (INodeInput input in node.Inputs)
+            {
+                if (input.Connection?.Node?.Id is string upId)
+                {
+                    pending.Enqueue(upId);
+                }
+            }
+            foreach (INodeOutput output in node.Outputs)
+            {
+                foreach (var consumer in bridge.Graph.FindInputsConnectedTo(output))
+                {
+                    pending.Enqueue(consumer.Node.Id);
+                }
+            }
+        }
+        return seen;
+    }
+
     private static HashSet<string> CollectUpstreamClosure(
         WorkflowBridge bridge, IEnumerable<string> rootNodeIds)
     {

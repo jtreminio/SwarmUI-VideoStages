@@ -341,9 +341,9 @@
   var CLIP_DURATION_MIN = 1;
   var CLIP_DURATION_MAX = 9999;
   var PROMPT_WINDOW_MIN_DURATION = 0.25;
-  var PROMPT_WINDOW_DEFAULT_DURATION = 1.5;
+  var PROMPT_WINDOW_DEFAULT_DURATION = 3;
   var RETAKE_MIN_DURATION = 0.1;
-  var RETAKE_DEFAULT_DURATION = 2;
+  var RETAKE_DEFAULT_DURATION = 3;
   var RETAKE_DURATION_STEP = 0.1;
   var RETAKE_STRENGTH_MIN = 0;
   var RETAKE_STRENGTH_MAX = 1;
@@ -1751,7 +1751,7 @@
       fps,
       frames,
       control: 0.5,
-      controlMin: 0.05,
+      controlMin: 0,
       controlMax: 1,
       controlStep: 0.05,
       upscale: 1,
@@ -3026,7 +3026,7 @@
       1,
       ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1)
     );
-    const laneTags = [headTag("src", "Src", { active: true })];
+    const laneTags = [headTag("src", "Clip", { active: true })];
     for (let i = 0; i < laneCount; i++) {
       const blank = i === laneCount - 1;
       laneTags.push(
@@ -3907,6 +3907,31 @@
 
   // frontend/detailWidgets.ts
   var sliderSeq = 0;
+  var helpSeq = 0;
+  var slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "field";
+  var appendHelp = (labelEl, row, fieldName, helpText) => {
+    const key = `vst_${slugify(fieldName)}_${++helpSeq}`;
+    const btn = document.createElement("span");
+    btn.className = "auto-input-qbutton info-popover-button";
+    btn.textContent = "?";
+    btn.addEventListener("click", (event) => {
+      if (typeof doPopover === "function") {
+        doPopover(key, event);
+      }
+    });
+    labelEl.appendChild(btn);
+    const pop = document.createElement("div");
+    pop.className = "sui-popover sui-info-popover";
+    pop.id = `popover_${key}`;
+    const name = document.createElement("b");
+    name.textContent = fieldName;
+    pop.append(
+      name,
+      document.createElement("br"),
+      document.createTextNode(helpText)
+    );
+    row.appendChild(pop);
+  };
   var wireNumericInput = (input, fallback, min, max, onChange) => {
     const apply = (normalize) => {
       const parsed = Number.parseFloat(input.value);
@@ -3935,7 +3960,7 @@
     }
     return null;
   };
-  var buildField = (label, control, hint) => {
+  var buildField = (label, control, hint, help) => {
     const row = document.createElement("div");
     row.className = "auto-input vst-audio-field";
     const boxClass = boxClassFor(control);
@@ -3947,6 +3972,9 @@
     text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
     labelEl.appendChild(text);
+    if (help) {
+      appendHelp(labelEl, row, label, help);
+    }
     row.append(labelEl, control);
     if (hint) {
       const small = document.createElement("small");
@@ -4016,6 +4044,12 @@
     if (opts?.title) {
       holder.title = opts.title;
     }
+    if (opts?.help) {
+      const labelEl = holder.querySelector("label");
+      if (labelEl) {
+        appendHelp(labelEl, holder, label, opts.help);
+      }
+    }
     if (opts?.hint) {
       const small = document.createElement("small");
       small.className = "vst-audio-field-hint";
@@ -4036,6 +4070,9 @@
     text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
     row.append(input, text);
+    if (opts?.help) {
+      appendHelp(row, row, label, opts.help);
+    }
     if (opts?.disabled) {
       row.classList.add("vst-audio-disabled");
       input.setAttribute("disabled", "");
@@ -4064,35 +4101,8 @@
     };
     reader.readAsDataURL(file);
   };
-  var buildUploadRow = (label, accept, name, onFile, onClear) => {
-    const row = document.createElement("div");
-    row.className = "auto-input vst-audio-field vst-audio-upload";
-    const uploadLabel = document.createElement("span");
-    uploadLabel.className = "auto-input-name vst-audio-field-label";
-    uploadLabel.textContent = label;
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = accept;
-    const fileName = document.createElement("span");
-    fileName.className = "vst-audio-upload-name";
-    fileName.textContent = name ? name : "No file chosen";
-    const clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
-    clearBtn.textContent = "Clear";
-    clearBtn.hidden = !name;
-    fileInput.addEventListener("change", () => {
-      const file = fileInput.files?.[0];
-      if (file) {
-        readFileAsDataUri(file, onFile);
-      }
-    });
-    clearBtn.addEventListener("click", () => onClear());
-    row.append(uploadLabel, fileInput, fileName, clearBtn);
-    return row;
-  };
-  var videoPickCounter = 0;
-  var buildVideoPickRow = (label, name, onFile, onClear) => {
+  var mediaPickCounter = 0;
+  var buildMediaPickRow = (label, accept, browserTypes, name, onFile, onClear) => {
     const row = document.createElement("div");
     row.className = "auto-input vst-audio-field vst-audio-upload";
     const pickLabel = document.createElement("span");
@@ -4100,8 +4110,8 @@
     pickLabel.textContent = label;
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = "video/*";
-    fileInput.id = `vst-video-pick-${++videoPickCounter}`;
+    fileInput.accept = accept;
+    fileInput.id = `vst-media-pick-${++mediaPickCounter}`;
     const fileName = document.createElement("span");
     fileName.className = "vst-audio-upload-name";
     fileName.textContent = name ? name : "No file chosen";
@@ -4138,11 +4148,11 @@
     if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
       const selectBtn = document.createElement("button");
       selectBtn.type = "button";
-      selectBtn.className = "basic-button small-button vst-video-pick-select";
+      selectBtn.className = "basic-button small-button vst-media-pick-select";
       selectBtn.textContent = "Select";
       selectBtn.addEventListener(
         "click",
-        () => inputBrowserHelper.openInputBrowser(fileInput.id, ["video"])
+        () => inputBrowserHelper.openInputBrowser(fileInput.id, browserTypes)
       );
       clearBtn.before(selectBtn);
     }
@@ -4278,13 +4288,27 @@
         ctx.render();
       }
     );
-    body.appendChild(buildField("Audio Source", select));
     body.appendChild(
-      buildCheckbox("Reuse Audio", clip.reuseAudio === true, (value) => {
-        commitAudio((c) => {
-          c.reuseAudio = value;
-        });
-      })
+      buildField(
+        "Audio Source",
+        select,
+        void 0,
+        "Where this clip's audio comes from: generated from the prompt, an uploaded file, a Voice Reference (clone a speaker sample), or none."
+      )
+    );
+    body.appendChild(
+      buildCheckbox(
+        "Reuse Audio",
+        clip.reuseAudio === true,
+        (value) => {
+          commitAudio((c) => {
+            c.reuseAudio = value;
+          });
+        },
+        {
+          help: "Carry the previous clip's audio into this clip instead of producing new audio — useful for continuous music or speech across a cut."
+        }
+      )
     );
     const lengthRow = buildCheckbox(
       "Clip Length from Audio",
@@ -4294,7 +4318,10 @@
           c.clipLengthFromAudio = value;
         });
       },
-      { disabled: !canLength }
+      {
+        disabled: !canLength,
+        help: "Set the clip's duration to match the length of its audio instead of a fixed value. Available only for sources with a known length."
+      }
     );
     body.appendChild(lengthRow);
     const saveRow = buildCheckbox(
@@ -4305,14 +4332,18 @@
           c.saveAudioTrack = value;
         });
       },
-      { disabled: !isAce }
+      {
+        disabled: !isAce,
+        help: "Export the generated audio as a separate track alongside the video. Only available for generated (AceStep) audio."
+      }
     );
     body.appendChild(saveRow);
     if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
       body.appendChild(
-        buildUploadRow(
+        buildMediaPickRow(
           source === AUDIO_SOURCE_VOICE_REF ? "Voice Sample" : "Audio Upload",
           "audio/*",
+          ["audio"],
           clip.uploadedAudio?.fileName,
           (data, fileName) => {
             commitAudio((c) => {
@@ -4396,12 +4427,20 @@
           ctx.render();
         }
       );
-      fields.appendChild(buildField("Source", segSourceSelect));
+      fields.appendChild(
+        buildField(
+          "Source",
+          segSourceSelect,
+          void 0,
+          "Where this overlay segment's audio comes from — an uploaded file or a generated track. It is mixed on top of the clip's base audio."
+        )
+      );
       if (!segSourceRef) {
         fields.appendChild(
-          buildUploadRow(
+          buildMediaPickRow(
             "Audio Upload",
             "audio/*",
+            ["audio"],
             typeof segment.source === "string" ? void 0 : segment.source?.fileName,
             (data, fileName) => {
               ctx.commit((cs) => {
@@ -4440,7 +4479,14 @@
           }
         }
       });
-      fields.appendChild(buildField("Start (s)", startInput));
+      fields.appendChild(
+        buildField(
+          "Start (s)",
+          startInput,
+          void 0,
+          "When this segment begins on the clip's timeline, in seconds from the clip start."
+        )
+      );
       const trimInput = buildNumber(
         segment.trimStartSeconds,
         0,
@@ -4459,7 +4505,14 @@
         }
       );
       trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
-      fields.appendChild(buildField("Trim start (s)", trimInput));
+      fields.appendChild(
+        buildField(
+          "Trim start (s)",
+          trimInput,
+          void 0,
+          "Skip this many seconds from the beginning of the source audio before it starts playing — lets you use a later portion of the file."
+        )
+      );
       const lengthInput = ctx.buildClampedNumber({
         key: `seg-${segIdx}-length`,
         value: segment.lengthSeconds,
@@ -4476,7 +4529,14 @@
           }
         }
       });
-      fields.appendChild(buildField("Length (s)", lengthInput));
+      fields.appendChild(
+        buildField(
+          "Length (s)",
+          lengthInput,
+          void 0,
+          "How long this segment plays on the clip, in seconds."
+        )
+      );
       body.appendChild(row);
     });
     const note = document.createElement("p");
@@ -4510,7 +4570,12 @@
       ctx.render();
     });
     body.appendChild(
-      buildField(`Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`, select)
+      buildField(
+        `Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
+        select,
+        void 0,
+        "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
+      )
     );
     if (value !== "cut") {
       const overlapValue = clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES;
@@ -4533,7 +4598,14 @@
           ctx.render();
         }
       );
-      body.appendChild(buildField("Overlap", overlapSelect));
+      body.appendChild(
+        buildField(
+          "Overlap",
+          overlapSelect,
+          void 0,
+          "How many frames the two clips share at the join. For continue this is the frozen context handed to the next clip; for crossfade it is the length of the dissolve. A clip too short for the overlap falls back to a cut."
+        )
+      );
     }
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
@@ -4897,7 +4969,7 @@
           opts?.onValue?.(v);
           stageDebounced(focusKey, (target) => assign(target, v));
         },
-        opts?.title ? { title: opts.title } : void 0
+        opts?.title || opts?.help ? { title: opts.title, help: opts.help } : void 0
       ),
       focusKey
     );
@@ -4938,7 +5010,9 @@
         (target, value) => {
           target.model = value;
         }
-      )
+      ),
+      void 0,
+      "The video model this stage runs. Later stages can switch to a different model to refine or upscale the previous stage's output."
     );
     modelField.classList.add("vst-detail-span-2");
     fields.appendChild(modelField);
@@ -4952,6 +5026,9 @@
         defaults.stepsStep,
         (target, value) => {
           target.steps = Math.round(value);
+        },
+        {
+          help: "How many denoising steps this stage runs. More steps can add detail but take longer; there are diminishing returns past the model's sweet spot."
         }
       )
     );
@@ -4965,6 +5042,9 @@
         defaults.cfgScaleStep,
         (target, value) => {
           target.cfgScale = value;
+        },
+        {
+          help: "How strongly generation follows the prompt. Higher sticks closer to the prompt but can look over-cooked; lower is looser and more natural."
         }
       )
     );
@@ -4981,7 +5061,8 @@
             target.control = value;
           },
           {
-            title: "Regen strength — higher = more of the stage is re-generated"
+            title: "Regen strength — higher = more of the stage is re-generated",
+            help: "Regeneration strength for this refine stage. Higher re-generates more of the incoming frames (starting step = floor(Steps × (1 − Control))); at 0 the frames pass through untouched."
           }
         )
       );
@@ -4993,7 +5074,12 @@
           target.upscaleMethod = value;
         }
       );
-      const methodField = buildField("Upscale Method", methodSelect);
+      const methodField = buildField(
+        "Upscale Method",
+        methodSelect,
+        void 0,
+        "How frames are enlarged before this stage refines them. Only applies when Upscale is above 1×."
+      );
       methodField.classList.add("vst-detail-span-2");
       const syncMethod = (upscale) => {
         const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
@@ -5012,7 +5098,10 @@
           (target, value) => {
             target.upscale = value;
           },
-          { onValue: syncMethod }
+          {
+            onValue: syncMethod,
+            help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
+          }
         )
       );
       fields.appendChild(methodField);
@@ -5028,7 +5117,9 @@
           (target, value) => {
             target.sampler = value;
           }
-        )
+        ),
+        void 0,
+        "The sampling algorithm used to denoise each step. Leave at the model default unless you have a reason to change it."
       )
     );
     fields.appendChild(
@@ -5041,7 +5132,9 @@
           (target, value) => {
             target.scheduler = value;
           }
-        )
+        ),
+        void 0,
+        "Controls how the noise level is spaced across the steps. Leave at the model default unless you have a reason to change it."
       )
     );
     if (clip.refs.length > 0) {
@@ -5098,7 +5191,9 @@
             target.controlNetStrength = value;
           });
         },
-        { hint: "Drive-video conditioning strength for this stage" }
+        {
+          help: "How strongly this stage is conditioned by the clip's IC-LoRA drive video/guides. Higher follows the guide more closely; lower gives the model more freedom."
+        }
       );
       tagFocus(controlNetSlider, "controlnet");
       fields.appendChild(controlNetSlider);
@@ -5126,6 +5221,12 @@
     const label = document.createElement("div");
     label.className = "vst-detail-sec";
     label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
+    appendHelp(
+      label,
+      section,
+      "Stage LoRAs",
+      "LoRAs applied to this stage only, on top of the model. Each row picks a LoRA and its weight (negative weights invert its effect)."
+    );
     section.appendChild(label);
     if (defaults.loraValues.length === 0) {
       const empty = document.createElement("small");
@@ -5214,6 +5315,15 @@
       "Source Video",
       "vst-detail-source-col"
     );
+    const secLabel = wrap.querySelector(".vst-detail-sec");
+    if (secLabel) {
+      appendHelp(
+        secLabel,
+        wrap,
+        "Source Video",
+        "Start this clip from an existing video instead of generating it. Stages then refine/upscale the footage and a retake can regenerate part of it."
+      );
+    }
     const source = clip.sourceVideo;
     const applyPickedFile = (data, fileName) => {
       void probeSourceVideo(data).then((probe) => {
@@ -5252,8 +5362,10 @@
       });
     };
     col.appendChild(
-      buildVideoPickRow(
+      buildMediaPickRow(
         "Video file",
+        "video/*",
+        ["video"],
         source?.fileName ?? null,
         applyPickedFile,
         removeSource
@@ -5300,7 +5412,14 @@
         }
       }
     });
-    col.appendChild(buildField("Start (s)", startInput));
+    col.appendChild(
+      buildField(
+        "Start (s)",
+        startInput,
+        void 0,
+        "Where inside the source file this clip's footage begins. Trims the front of the file."
+      )
+    );
     const lengthInput = ctx.buildClampedNumber({
       key: "source-length",
       value: source.lengthSeconds,
@@ -5319,7 +5438,14 @@
         }
       }
     });
-    col.appendChild(buildField("Length (s)", lengthInput));
+    col.appendChild(
+      buildField(
+        "Length (s)",
+        lengthInput,
+        void 0,
+        "How many seconds of the source file this clip uses, starting at Start. This also becomes the clip's duration."
+      )
+    );
     const note = document.createElement("p");
     note.className = "vst-detail-note";
     note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage passes it through, further stages refine or upscale it, and a retake regenerates part of it.";
@@ -5337,6 +5463,15 @@
   };
   var buildRetakeSection = (ctx, clip, clipIdx) => {
     const { wrap, col } = buildStackSection("Retake", "vst-detail-retake-col");
+    const secLabel = wrap.querySelector(".vst-detail-sec");
+    if (secLabel) {
+      appendHelp(
+        secLabel,
+        wrap,
+        "Retake",
+        "Regenerate just a time window of a base video, leaving the rest untouched — handy for fixing one bad stretch without redoing the whole clip."
+      );
+    }
     const retake = clip.retake;
     if (!retake) {
       const hint = document.createElement("small");
@@ -5370,7 +5505,14 @@
         }
       }
     });
-    col.appendChild(buildField("Start (s)", startInput));
+    col.appendChild(
+      buildField(
+        "Start (s)",
+        startInput,
+        void 0,
+        "Where the retake window begins inside the clip. Only this sub-range is regenerated."
+      )
+    );
     const lengthInput = ctx.buildClampedNumber({
       key: "retake-length",
       value: retake.lengthSeconds,
@@ -5387,7 +5529,14 @@
         }
       }
     });
-    col.appendChild(buildField("Length (s)", lengthInput));
+    col.appendChild(
+      buildField(
+        "Length (s)",
+        lengthInput,
+        void 0,
+        "How long the retake window is, starting at Start. Frames outside the window are kept as-is."
+      )
+    );
     col.appendChild(
       buildSlider(
         "Strength",
@@ -5406,6 +5555,9 @@
               );
             }
           });
+        },
+        {
+          help: "How much of the window is regenerated. Higher changes the footage more; lower keeps it closer to the original."
         }
       )
     );
@@ -5429,6 +5581,15 @@
       "IC-LoRAs",
       "vst-detail-iclora-col"
     );
+    const secLabel = wrap.querySelector(".vst-detail-sec");
+    if (secLabel) {
+      appendHelp(
+        secLabel,
+        wrap,
+        "IC-LoRAs",
+        "In-context LoRAs condition this clip on a drive video or image — matching pose, depth, motion, or style. Add one per guide you want to apply."
+      );
+    }
     const entryField = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
     clip.icLoras.forEach((entry, entryIdx) => {
       const { row, fields } = buildInstanceRow({
@@ -5477,7 +5638,14 @@
           ctx.render();
         }
       );
-      fields.appendChild(buildField("Preset", presetSelect));
+      fields.appendChild(
+        buildField(
+          "Preset",
+          presetSelect,
+          void 0,
+          "A curated IC-LoRA setup — picking one fills in the LoRA, strength, and control type for a known effect (pose, depth, style, etc.). Choose Custom to set everything yourself."
+        )
+      );
       const loraSelect = buildSelect(
         [IC_LORA_AUTO, ...defaults.loraValues],
         [IC_LORA_AUTO, ...defaults.loraLabels],
@@ -5495,7 +5663,14 @@
           ctx.render();
         }
       );
-      fields.appendChild(buildField("LoRA", loraSelect));
+      fields.appendChild(
+        buildField(
+          "LoRA",
+          loraSelect,
+          void 0,
+          "The in-context LoRA weights that turn the drive media into conditioning. [AUTO] downloads the preset's recommended weights when they are not installed."
+        )
+      );
       const strength = ctx.buildClampedNumber({
         key: `iclora-${entryIdx}-strength`,
         value: entry.strength,
@@ -5510,7 +5685,14 @@
           }
         }
       });
-      fields.appendChild(buildField("Strength", strength));
+      fields.appendChild(
+        buildField(
+          "Strength",
+          strength,
+          void 0,
+          "How strongly this IC-LoRA steers generation. Higher follows the drive media more closely; too high can overpower the prompt."
+        )
+      );
       const attention = ctx.buildClampedNumber({
         key: `iclora-${entryIdx}-attention`,
         value: entry.attentionStrength,
@@ -5525,7 +5707,14 @@
           }
         }
       });
-      fields.appendChild(buildField("Attention", attention));
+      fields.appendChild(
+        buildField(
+          "Attention",
+          attention,
+          void 0,
+          "Scales how much the IC-LoRA influences the model's attention layers. A finer control than Strength; leave at the default unless a preset tunes it."
+        )
+      );
       const preset = findIcLoraPreset(entry.preset);
       if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
         const controlSelect = buildOptionSelect(
@@ -5545,7 +5734,14 @@
             });
           }
         );
-        fields.appendChild(buildField("Control", controlSelect));
+        fields.appendChild(
+          buildField(
+            "Control",
+            controlSelect,
+            void 0,
+            "Preprocesses the drive video into a control signal before conditioning: Canny edges, a depth map, or a normal map. None feeds the raw video straight in."
+          )
+        );
       }
       const applySelect = buildOptionSelect(
         [
@@ -5569,7 +5765,14 @@
           ctx.render();
         }
       );
-      fields.appendChild(buildField("Apply on", applySelect));
+      fields.appendChild(
+        buildField(
+          "Apply on",
+          applySelect,
+          void 0,
+          "Which stage this IC-LoRA conditions — a single stage, or All stages of the clip."
+        )
+      );
       if ((entry.stage >= 1 || !!clip.sourceVideo) && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
         const sourceSelect = buildOptionSelect(
           [
@@ -5590,7 +5793,14 @@
             ctx.render();
           }
         );
-        fields.appendChild(buildField("Source", sourceSelect));
+        fields.appendChild(
+          buildField(
+            "Source",
+            sourceSelect,
+            void 0,
+            "Where the drive media comes from: Upload your own video/image, or Stage input to drive from the frames already entering this stage."
+          )
+        );
       }
       if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
         const hint = document.createElement("small");
@@ -5599,9 +5809,10 @@
         fields.appendChild(hint);
       } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
         fields.appendChild(
-          buildUploadRow(
+          buildMediaPickRow(
             "Drive Media",
             "video/*,image/*",
+            ["image", "video"],
             entry.video?.fileName,
             (data, fileName) => {
               ctx.commit((clips) => {
@@ -5640,9 +5851,11 @@
                   target.driveAudioRef = value;
                 }
               });
+            },
+            {
+              help: "Use this drive video's audio as the speaker sample (LipDub): new speech matching the prompt is generated in that voice."
             }
           );
-          voiceRow.title = "Use this video's audio as the speaker sample (LipDub): new speech matching the prompt is generated in that voice.";
           fields.appendChild(voiceRow);
         }
       } else {
@@ -5880,7 +6093,14 @@
           }
         }
       });
-      range.appendChild(buildField("Begin (s)", beginInput));
+      range.appendChild(
+        buildField(
+          "Begin (s)",
+          beginInput,
+          void 0,
+          "When this prompt window starts within the clip, in seconds. Its prompt applies from here until End."
+        )
+      );
       const endInput = ctx.buildClampedNumber({
         key: `minor-${idx}-end`,
         value: roundToTenth(w.start + w.duration),
@@ -5898,7 +6118,14 @@
           }
         }
       });
-      range.appendChild(buildField("End (s)", endInput));
+      range.appendChild(
+        buildField(
+          "End (s)",
+          endInput,
+          void 0,
+          "When this prompt window ends within the clip, in seconds. The window can't cross into a neighbouring window."
+        )
+      );
       row.appendChild(range);
       const editor = buildTextarea(
         w.prompt ?? "",
@@ -5988,7 +6215,14 @@
         });
         ctx.render();
       });
-      fields.appendChild(buildField("Image Source", select));
+      fields.appendChild(
+        buildField(
+          "Image Source",
+          select,
+          void 0,
+          "Where this reference image comes from — an upload, or another clip's rendered frame. The image guides how the clip looks at its attach frame."
+        )
+      );
       if (isUpload) {
         const preview = document.createElement("div");
         preview.className = "vst-refs-thumb-preview";
@@ -6019,7 +6253,12 @@
       );
       frameInput.setAttribute("data-vst-focus-key", `ref-${refIdx}-frame`);
       fields.appendChild(
-        buildField(`Attach at Frame (1–${frameMax})`, frameInput)
+        buildField(
+          "Attach at Frame",
+          frameInput,
+          void 0,
+          "The frame within the clip where this reference is anchored. Frame 0 is the first frame; the image influences the clip most strongly around here."
+        )
       );
       fields.appendChild(
         buildCheckbox(
@@ -6032,14 +6271,18 @@
                 r.fromEnd = value;
               }
             });
+          },
+          {
+            help: "Count the attach frame backwards from the last frame instead of forward from the first — so it stays anchored to the end even if the clip length changes."
           }
         )
       );
       if (isUpload) {
         fields.appendChild(
-          buildUploadRow(
+          buildMediaPickRow(
             "Image Upload",
             "image/*",
+            ["image"],
             ref.uploadedImage?.fileName,
             (data, fileName) => {
               ctx.commit((cs) => {
@@ -6965,6 +7208,15 @@
         const newBody = detail.querySelector(".vst-detail-body");
         if (newBody && savedScroll > 0) {
           newBody.scrollTop = savedScroll;
+        }
+        if (sel.kind === "retake" && !collapsed && !(renderedSel && isSameSelection(sel, renderedSel))) {
+          const focused = document.activeElement;
+          const retakeCol = detail.querySelector(
+            ".vst-detail-retake-col"
+          );
+          if (!(focused instanceof HTMLElement && detail.contains(focused)) && retakeCol && typeof retakeCol.scrollIntoView === "function") {
+            retakeCol.scrollIntoView({ block: "nearest" });
+          }
         }
         if (!collapsed) {
           autoFocusSelection(detail, sel);

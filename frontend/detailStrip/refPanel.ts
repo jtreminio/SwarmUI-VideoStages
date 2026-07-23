@@ -3,9 +3,9 @@ import {
     buildCheckbox,
     buildField,
     buildInstanceRow,
+    buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
-    buildUploadRow,
     wrapForm,
 } from "../detailWidgets";
 import {
@@ -70,7 +70,16 @@ export const buildRefBody = (
             });
             ctx.render();
         });
-        fields.appendChild(buildField("Image Source", select));
+        fields.appendChild(
+            buildField(
+                "Image Source",
+                select,
+                undefined,
+                "Where this reference image comes from — an upload, or another " +
+                    "clip's rendered frame. The image guides how the clip looks " +
+                    "at its attach frame.",
+            ),
+        );
 
         if (isUpload) {
             const preview = document.createElement("div");
@@ -103,7 +112,14 @@ export const buildRefBody = (
         );
         frameInput.setAttribute("data-vst-focus-key", `ref-${refIdx}-frame`);
         fields.appendChild(
-            buildField(`Attach at Frame (1–${frameMax})`, frameInput),
+            buildField(
+                "Attach at Frame",
+                frameInput,
+                undefined,
+                "The frame within the clip where this reference is anchored. " +
+                    "Frame 0 is the first frame; the image influences the clip " +
+                    "most strongly around here.",
+            ),
         );
 
         fields.appendChild(
@@ -118,14 +134,21 @@ export const buildRefBody = (
                         }
                     });
                 },
+                {
+                    help:
+                        "Count the attach frame backwards from the last frame " +
+                        "instead of forward from the first — so it stays " +
+                        "anchored to the end even if the clip length changes.",
+                },
             ),
         );
 
         if (isUpload) {
             fields.appendChild(
-                buildUploadRow(
+                buildMediaPickRow(
                     "Image Upload",
                     "image/*",
+                    ["image"],
                     ref.uploadedImage?.fileName,
                     (data, fileName) => {
                         ctx.commit((cs) => {

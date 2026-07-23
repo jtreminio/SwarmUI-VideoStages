@@ -49,7 +49,7 @@ const getRootDefaults = (): RootDefaults => ({
     fps: 24,
     frames: 48,
     control: 0.5,
-    controlMin: 0.05,
+    controlMin: 0,
     controlMax: 1,
     controlStep: 0.05,
     upscale: 1,
@@ -321,6 +321,24 @@ describe("normalization", () => {
         );
         expect(clip.icLoras[0].source).toBe("Upload");
         expect(clip.icLoras[0].stage).toBe(-1);
+    });
+
+    it("normalizeClip keeps Control 0 (passthrough) on sourced and refine stages", () => {
+        // Control 0 = passthrough (no sampler): a sourced clip joining others
+        // without changes authors 0 on its stage 0, and refine stages may skip too.
+        const clip = normalizeClip(
+            {
+                stages: [{ model: "ltx", control: 0 }, { control: 0 }],
+                sourceVideo: {
+                    data: "data:video/mp4;base64,QUJD",
+                    lengthSeconds: 3,
+                },
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.stages[0].control).toBe(0);
+        expect(clip.stages[1].control).toBe(0);
     });
 
     it("normalizeClip keeps a Stage Input source at stage 0 on a sourced clip", () => {

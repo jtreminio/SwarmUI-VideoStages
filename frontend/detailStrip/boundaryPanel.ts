@@ -48,7 +48,15 @@ export const buildBoundaryBody = (
         ctx.render();
     });
     body.appendChild(
-        buildField(`Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`, select),
+        buildField(
+            `Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
+            select,
+            undefined,
+            "How this clip joins the next one. Cut: hard concatenation. " +
+                "Continue: the next clip is generated from this clip's last " +
+                "frames so motion carries through. Crossfade: the overlap is " +
+                "dissolved pixel-by-pixel.",
+        ),
     );
 
     if (value !== "cut") {
@@ -73,7 +81,17 @@ export const buildBoundaryBody = (
                 ctx.render();
             },
         );
-        body.appendChild(buildField("Overlap", overlapSelect));
+        body.appendChild(
+            buildField(
+                "Overlap",
+                overlapSelect,
+                undefined,
+                "How many frames the two clips share at the join. For continue " +
+                    "this is the frozen context handed to the next clip; for " +
+                    "crossfade it is the length of the dissolve. A clip too " +
+                    "short for the overlap falls back to a cut.",
+            ),
+        );
     }
 
     const info = document.createElement("div");

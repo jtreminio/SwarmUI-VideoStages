@@ -122,7 +122,15 @@ export const buildPromptMinorBody = (
                 }
             },
         });
-        range.appendChild(buildField("Begin (s)", beginInput));
+        range.appendChild(
+            buildField(
+                "Begin (s)",
+                beginInput,
+                undefined,
+                "When this prompt window starts within the clip, in seconds. " +
+                    "Its prompt applies from here until End.",
+            ),
+        );
 
         const endInput = ctx.buildClampedNumber({
             key: `minor-${idx}-end`,
@@ -141,7 +149,15 @@ export const buildPromptMinorBody = (
                 }
             },
         });
-        range.appendChild(buildField("End (s)", endInput));
+        range.appendChild(
+            buildField(
+                "End (s)",
+                endInput,
+                undefined,
+                "When this prompt window ends within the clip, in seconds. The " +
+                    "window can't cross into a neighbouring window.",
+            ),
+        );
         row.appendChild(range);
 
         const editor = buildTextarea(

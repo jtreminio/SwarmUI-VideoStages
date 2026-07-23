@@ -9,8 +9,8 @@ import {
 import {
     buildCheckbox,
     buildField,
+    buildMediaPickRow,
     buildOptionSelect,
-    buildUploadRow,
     wrapForm,
 } from "../detailWidgets";
 import { hasSlotSourcedIcLora } from "../normalization";
@@ -78,14 +78,33 @@ export const buildAudioBody = (
             ctx.render();
         },
     );
-    body.appendChild(buildField("Audio Source", select));
+    body.appendChild(
+        buildField(
+            "Audio Source",
+            select,
+            undefined,
+            "Where this clip's audio comes from: generated from the prompt, " +
+                "an uploaded file, a Voice Reference (clone a speaker sample), " +
+                "or none.",
+        ),
+    );
 
     body.appendChild(
-        buildCheckbox("Reuse Audio", clip.reuseAudio === true, (value) => {
-            commitAudio((c) => {
-                c.reuseAudio = value;
-            });
-        }),
+        buildCheckbox(
+            "Reuse Audio",
+            clip.reuseAudio === true,
+            (value) => {
+                commitAudio((c) => {
+                    c.reuseAudio = value;
+                });
+            },
+            {
+                help:
+                    "Carry the previous clip's audio into this clip instead of " +
+                    "producing new audio — useful for continuous music or " +
+                    "speech across a cut.",
+            },
+        ),
     );
 
     const lengthRow = buildCheckbox(
@@ -96,7 +115,13 @@ export const buildAudioBody = (
                 c.clipLengthFromAudio = value;
             });
         },
-        { disabled: !canLength },
+        {
+            disabled: !canLength,
+            help:
+                "Set the clip's duration to match the length of its audio " +
+                "instead of a fixed value. Available only for sources with a " +
+                "known length.",
+        },
     );
     body.appendChild(lengthRow);
 
@@ -108,17 +133,23 @@ export const buildAudioBody = (
                 c.saveAudioTrack = value;
             });
         },
-        { disabled: !isAce },
+        {
+            disabled: !isAce,
+            help:
+                "Export the generated audio as a separate track alongside the " +
+                "video. Only available for generated (AceStep) audio.",
+        },
     );
     body.appendChild(saveRow);
 
     if (source === AUDIO_SOURCE_UPLOAD || source === AUDIO_SOURCE_VOICE_REF) {
         body.appendChild(
-            buildUploadRow(
+            buildMediaPickRow(
                 source === AUDIO_SOURCE_VOICE_REF
                     ? "Voice Sample"
                     : "Audio Upload",
                 "audio/*",
+                ["audio"],
                 clip.uploadedAudio?.fileName,
                 (data, fileName) => {
                     commitAudio((c) => {
