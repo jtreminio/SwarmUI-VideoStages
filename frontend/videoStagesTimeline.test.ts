@@ -6,12 +6,18 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { minimalClip, minimalStage } from "./__test_helpers__/clipFixtures";
 import {
     mountPromptBox,
     mountSelect,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
-import { __resetPersistenceForTests, getClips, saveClips } from "./persistence";
+import {
+    __resetPersistenceForTests,
+    getClips,
+    getTimelineStore,
+    saveClips,
+} from "./persistence";
 import { resetSelectionForTests, setSelection } from "./selection";
 import { clearUiStateForTests } from "./uiState";
 import {
@@ -22,6 +28,16 @@ import {
 const TIMELINE_BODY_ID = "videostages-timeline-body";
 // A little over the controller's 200ms poll interval, so one tick is guaranteed to fire.
 const POLL_ADVANCE_MS = 250;
+const modelGlobals = globalThis as unknown as {
+    modelsHelpers?: {
+        getDataFor: (
+            category: string,
+            modelName: string,
+        ) => {
+            modelClass: { compatClass: { id: string } };
+        };
+    };
+};
 
 const setupBottomBar = (): void => {
     const nav = document.createElement("ul");
@@ -65,6 +81,11 @@ describe("videoStagesTimeline", () => {
     let timeline: VideoStagesTimeline | null = null;
 
     beforeEach(() => {
+        modelGlobals.modelsHelpers = {
+            getDataFor: () => ({
+                modelClass: { compatClass: { id: "ltxv2" } },
+            }),
+        };
         jest.useFakeTimers();
         __resetPersistenceForTests();
         clearUiStateForTests();
@@ -80,6 +101,7 @@ describe("videoStagesTimeline", () => {
         jest.useRealTimers();
         resetSelectionForTests();
         document.body.innerHTML = "";
+        delete modelGlobals.modelsHelpers;
     });
 
     // Group toggle must be present + checked so live-apply writes actually
@@ -411,6 +433,98 @@ describe("videoStagesTimeline", () => {
         expect(regionCount()).toBe(2);
     });
 
+    it("undoes and redoes hues and prompt-window IDs through the repository", () => {
+        mountEnabledToggle();
+        mountState(JSON.stringify({ clips: [] }));
+        saveClips(
+            [
+                minimalClip({
+                    id: "clip-history",
+                    hue: 25,
+                    prompt: "first",
+                    promptWindows: [
+                        {
+                            id: "window-first",
+                            prompt: "first detail",
+                            start: 0,
+                            duration: 1,
+                        },
+                    ],
+                    stages: [minimalStage({ id: "stage-history" })],
+                }),
+            ],
+            { notifyDomChange: false },
+        );
+        timeline = videoStagesTimeline();
+        timeline.init();
+
+        const changed = getClips();
+        changed[0].hue = 275;
+        changed[0].prompt = "second";
+        changed[0].promptWindows = [
+            {
+                id: "window-second",
+                prompt: "second detail",
+                start: 1,
+                duration: 1,
+            },
+        ];
+        saveClips(changed, { notifyDomChange: false });
+        const historyOrigins: string[] = [];
+        getTimelineStore().subscribe((_state, meta) => {
+            historyOrigins.push(meta.origin);
+        });
+
+        const body = (): HTMLElement =>
+            document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
+        body().querySelector<HTMLButtonElement>("[data-vst-undo]")?.click();
+        expect(historyOrigins).toEqual(["history"]);
+        expect(getClips()[0]).toMatchObject({
+            hue: 25,
+            prompt: "first",
+            promptWindows: [
+                {
+                    id: "window-first",
+                    prompt: "first detail",
+                    start: 0,
+                    duration: 1,
+                },
+            ],
+        });
+        expect(promptInput.value).toContain("<videoclip[0]>first");
+        expect(
+            JSON.parse(localStorage.getItem("videostages_ui_state") ?? "{}")
+                .clips[0],
+        ).toMatchObject({
+            id: "clip-history",
+            hue: 25,
+            promptWindows: [{ id: "window-first" }],
+        });
+
+        body().querySelector<HTMLButtonElement>("[data-vst-redo]")?.click();
+        expect(historyOrigins).toEqual(["history", "history"]);
+        expect(getClips()[0]).toMatchObject({
+            hue: 275,
+            prompt: "second",
+            promptWindows: [
+                {
+                    id: "window-second",
+                    prompt: "second detail",
+                    start: 1,
+                    duration: 1,
+                },
+            ],
+        });
+        expect(
+            JSON.parse(localStorage.getItem("videostages_ui_state") ?? "{}")
+                .clips[0],
+        ).toMatchObject({
+            id: "clip-history",
+            hue: 275,
+            promptWindows: [{ id: "window-second" }],
+        });
+    });
+
     it("live-updates the readout's selected-clip segment on click-select without a re-render", async () => {
         mountState(makeClipsJson(2));
         timeline = videoStagesTimeline();
@@ -427,7 +541,7 @@ describe("videoStagesTimeline", () => {
         await Promise.resolve();
 
         expect(sel?.hidden).toBe(false);
-        expect(sel?.textContent).toBe("clip 1");
+        expect(sel?.textContent).toBe("clip 2");
     });
 
     it("renders no playhead (removed until an existing-video workflow needs it)", () => {

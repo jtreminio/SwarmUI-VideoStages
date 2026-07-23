@@ -1,27 +1,16 @@
-const getElementByType = <T extends Element>(
-    id: string,
-    ctor: { new (): T },
-): T | null => {
-    const element = document.getElementById(id);
-    return element instanceof ctor ? element : null;
-};
+import { getLtxHostBridge } from "./host";
 
 /** Accessors for SwarmUI's host form elements (by id) and their values. */
 export const utils = {
     getInputElement: (id: string): HTMLInputElement | null =>
-        getElementByType(id, HTMLInputElement),
+        getLtxHostBridge().getInput(id),
 
     getSelectElement: (id: string): HTMLSelectElement | null =>
-        getElementByType(id, HTMLSelectElement),
+        getLtxHostBridge().getSelect(id),
 
     getSelectValues: (select: HTMLSelectElement | null): string[] =>
-        select ? Array.from(select.options, (option) => option.value) : [],
+        getLtxHostBridge().getSelectOptions(select).values,
 
     getSelectLabels: (select: HTMLSelectElement | null): string[] =>
-        select ? Array.from(select.options, (option) => option.label) : [],
-
-    toNumber: (value: string | null | undefined, fallback: number): number => {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : fallback;
-    },
+        getLtxHostBridge().getSelectOptions(select).labels,
 };

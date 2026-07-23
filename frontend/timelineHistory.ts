@@ -53,11 +53,17 @@ export const createTimelineHistory = (
             return false;
         }
         const current = deps.read() ?? "";
-        const target = from.pop() as string;
-        to.push(current);
+        const target = from[from.length - 1];
         suppress = true;
-        deps.write(target);
-        suppress = false;
+        try {
+            deps.write(target);
+        } catch {
+            return false;
+        } finally {
+            suppress = false;
+        }
+        from.pop();
+        to.push(current);
         last = target;
         return true;
     };

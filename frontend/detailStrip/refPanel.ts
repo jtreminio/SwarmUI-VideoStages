@@ -13,6 +13,7 @@ import {
     resolveImageSourceValue,
 } from "../imageSource";
 import { getReferenceFrameMax } from "../normalization";
+import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
 import { setSelection } from "../selection";
 import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
@@ -35,7 +36,11 @@ export const buildRefBody = (
     const body = document.createElement("div");
     body.className =
         "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
-    const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+    const frameMax = getReferenceFrameMax(
+        getRootDefaults,
+        clip,
+        getState().fps,
+    );
 
     clip.refs.forEach((ref, refIdx) => {
         const options = buildImageSourceOptions(ref.source ?? "");
@@ -117,7 +122,7 @@ export const buildRefBody = (
                 frameInput,
                 undefined,
                 "The frame within the clip where this reference is anchored. " +
-                    "Frame 0 is the first frame; the image influences the clip " +
+                    "Frame 1 is the first frame; the image influences the clip " +
                     "most strongly around here.",
             ),
         );

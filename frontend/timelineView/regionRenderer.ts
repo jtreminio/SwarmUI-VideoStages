@@ -1,0 +1,299 @@
+import { clipHueCss } from "../clipColor";
+import { clamp, mediaPreviewSrc } from "../constants";
+import {
+    escapeHtml,
+    formatTimeLabel,
+    keyframeLeftPercent,
+    keyframeTimeSeconds,
+    refSourceLabel,
+    shortModelName,
+    stageChipLabel,
+    stageChipTitle,
+    type TimelineUnit,
+} from "../timelineDetail";
+import type { BoundaryOut, Clip, RefImage } from "../types";
+import { roundToTenth } from "../utils";
+import type { RegionLayout } from "./layout";
+import {
+    backgroundImageDataAttr,
+    clipInnerWidth,
+    headTag,
+    renderTrackHead,
+    renderWindowSpan,
+} from "./rendering";
+
+const refFrame = (ref: RefImage): number => Math.max(0, ref.frame ?? 0);
+
+const renderRegionThumb = (clip: Clip): string => {
+    const withImage = (clip.refs ?? []).filter(
+        (ref) => !!ref.uploadedImage?.data,
+    );
+    if (withImage.length === 0) {
+        return "";
+    }
+    const startPool = withImage.filter((ref) => ref.fromEnd !== true);
+    const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
+        (best, ref) => (refFrame(ref) < refFrame(best) ? ref : best),
+    );
+    let endRef: RefImage | null =
+        withImage.find((ref) => ref.fromEnd === true) ?? null;
+    if (!endRef) {
+        const highest = withImage.reduce((best, ref) =>
+            refFrame(ref) > refFrame(best) ? ref : best,
+        );
+        if (highest !== startRef) {
+            endRef = highest;
+        }
+    }
+    const cell = (ref: RefImage, side: "start" | "end"): string => {
+        const source = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
+        return `<div class="vst-region-thumb-cell vst-region-thumb-${side}"${backgroundImageDataAttr(source)}></div>`;
+    };
+    const cells = cell(startRef, "start") + (endRef ? cell(endRef, "end") : "");
+    return `<div class="vst-region-thumb" data-cells="${endRef ? 2 : 1}" aria-hidden="true">${cells}</div>`;
+};
+
+const renderRetakeRegionShade = (
+    clip: Clip,
+    durationSeconds: number,
+): string => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+        return "";
+    }
+    const start = clamp(retake.startSeconds, 0, durationSeconds);
+    const end = clamp(
+        retake.startSeconds + retake.lengthSeconds,
+        start,
+        durationSeconds,
+    );
+    if (end <= start) {
+        return "";
+    }
+    const left = (start / durationSeconds) * 100;
+    const width = ((end - start) / durationSeconds) * 100;
+    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
+};
+
+const renderRetakeOverlay = (
+    clip: Clip,
+    clipIdx: number,
+    durationSeconds: number,
+): string => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+        return "";
+    }
+    const start = clamp(retake.startSeconds, 0, durationSeconds);
+    const end = clamp(
+        retake.startSeconds + retake.lengthSeconds,
+        start,
+        durationSeconds,
+    );
+    const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;
+    return renderWindowSpan({
+        className: "vst-retake",
+        dataAttrs: `data-vst-retake data-clip-idx="${clipIdx}"`,
+        edgeAttr: "data-vst-retake-edge",
+        labelClass: "vst-retake-label",
+        label,
+        title: `${label} · drag to move/resize · Shift+click to delete`,
+        ariaLabel: label,
+        startSeconds: retake.startSeconds,
+        lengthSeconds: retake.lengthSeconds,
+        durationSeconds,
+    });
+};
+
+const renderKeyframes = (
+    clip: Clip,
+    clipIdx: number,
+    durationSeconds: number,
+    fps: number,
+    unit: TimelineUnit,
+): string => {
+    const refs = clip.refs ?? [];
+    if (refs.length === 0) {
+        return "";
+    }
+    const markers = refs
+        .map((ref, refIdx) => {
+            const time = keyframeTimeSeconds(
+                ref.frame,
+                ref.fromEnd === true,
+                durationSeconds,
+                fps,
+            );
+            const left = keyframeLeftPercent(time, durationSeconds);
+            const isEnd = ref.fromEnd === true;
+            const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
+            const source = refSourceLabel(ref.source ?? "");
+            const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
+            const kindClass =
+                (isEnd ? " vst-key-end" : " vst-key-start") +
+                (isPrimary ? " vst-key-primary" : "");
+            return (
+                `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" aria-hidden="true">` +
+                `<span class="vst-key-dot" aria-hidden="true"></span>` +
+                `</span>`
+            );
+        })
+        .join("");
+    return `<div class="vst-keys" title="Reference markers">${markers}</div>`;
+};
+
+const renderBadges = (clip: Clip, clipIdx: number): string => {
+    const firstStage = (clip.stages ?? [])[0];
+    if (!firstStage) {
+        return `<div class="vst-badges"></div>`;
+    }
+    const model = firstStage.model ?? "";
+    const title = `Clip model: ${`${model}`.trim() || "(default)"} — click to change (applies to Stage 0)`;
+    const modelBadge =
+        `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">` +
+        `${escapeHtml(shortModelName(model))}</span>`;
+    const icLoraCount = (clip.icLoras ?? []).length;
+    const icLoraTitle = `${icLoraCount} IC-LoRA${icLoraCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
+    const icLoraBadge =
+        icLoraCount > 0
+            ? `<span class="vst-badge vst-badge-iclora" title="${escapeHtml(icLoraTitle)}" aria-label="${escapeHtml(icLoraTitle)}">IC×${icLoraCount}</span>`
+            : "";
+    return `<div class="vst-badges">${modelBadge}${icLoraBadge}</div>`;
+};
+
+const renderStageChips = (clip: Clip, clipIdx: number): string =>
+    (clip.stages ?? [])
+        .map((stage, stageIdx) => {
+            const skipped = stage?.skipped === true;
+            const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
+            const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
+            const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
+            return (
+                `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeHtml(title)}">` +
+                `${escapeHtml(label)}</span>`
+            );
+        })
+        .join("");
+
+const lengthDerived = (clip: Clip): boolean =>
+    clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+
+export const BOUNDARY_GLYPH: Record<BoundaryOut, string> = {
+    cut: "│",
+    continue: "→",
+    crossfade: "⤬",
+};
+
+export const BOUNDARY_LABEL: Record<BoundaryOut, string> = {
+    cut: "Cut",
+    continue: "Continue",
+    crossfade: "Crossfade",
+};
+
+export const renderBoundarySeams = (
+    clips: Clip[],
+    layouts: RegionLayout[],
+): string => {
+    const seams: string[] = [];
+    for (let i = 1; i < layouts.length; i++) {
+        const leftClipIdx = i - 1;
+        const clip = clips[leftClipIdx];
+        if (!clip) {
+            continue;
+        }
+        const value: BoundaryOut = clip.boundaryOut ?? "cut";
+        const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
+        const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
+        const title = `Boundary clip ${leftClipIdx + 1} → ${i + 1}: ${label}. Click to edit.`;
+        const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}. Click to edit.`;
+        seams.push(
+            `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
+                `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
+                `</button>`,
+        );
+    }
+    return seams.join("");
+};
+
+const renderRegions = (
+    clips: Clip[],
+    layouts: RegionLayout[],
+    fps: number,
+    unit: TimelineUnit,
+): string =>
+    layouts
+        .map((layout) => {
+            const clip = clips[layout.index];
+            const skippedClass = layout.skipped ? " vst-region-skipped" : "";
+            const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
+            const skippedChip = layout.skipped
+                ? `<span class="vst-chip vst-chip-skip">skipped</span>`
+                : "";
+            const duration = escapeHtml(
+                formatTimeLabel(layout.durationSeconds, unit, fps),
+            );
+            const skipTitle = layout.skipped ? "Unskip clip" : "Skip clip";
+            const skipGlyph = layout.skipped ? "⟲" : "⊘";
+            const controls =
+                `<div class="vst-region-controls">` +
+                `<button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button>` +
+                `</div>`;
+            const resizeGrip = lengthDerived(clip)
+                ? ""
+                : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
+            const width = clipInnerWidth(layout.widthPx);
+            return (
+                `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` +
+                renderRegionThumb(clip) +
+                renderRetakeRegionShade(clip, layout.durationSeconds) +
+                renderKeyframes(
+                    clip,
+                    layout.index,
+                    layout.durationSeconds,
+                    fps,
+                    unit,
+                ) +
+                `<div class="vst-region-head">` +
+                `<span class="vst-region-name">Clip ${layout.index + 1}</span>` +
+                renderStageChips(clip, layout.index) +
+                `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` +
+                skippedChip +
+                `<span class="vst-region-dur">${duration}</span>` +
+                `</div>` +
+                renderBadges(clip, layout.index) +
+                controls +
+                resizeGrip +
+                `</div>` +
+                `<div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="Click empty space to add a retake window">` +
+                renderRetakeOverlay(
+                    clip,
+                    layout.index,
+                    layout.durationSeconds,
+                ) +
+                `</div>`
+            );
+        })
+        .join("");
+
+export const renderVideoTrackRow = (
+    clips: Clip[],
+    layouts: RegionLayout[],
+    fps: number,
+    unit: TimelineUnit,
+): string => {
+    const head = renderTrackHead(
+        "vst-track-icon-video",
+        "▶",
+        "Video",
+        headTag("clip", "Clip", { active: true }) +
+            headTag("retake", "Retake", {
+                active: clips.some((clip) => clip.retake != null),
+            }),
+    );
+    return (
+        `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` +
+        renderRegions(clips, layouts, fps, unit) +
+        renderBoundarySeams(clips, layouts) +
+        `</div></div>`
+    );
+};

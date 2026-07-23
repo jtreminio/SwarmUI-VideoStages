@@ -12,7 +12,7 @@ import {
 } from "../detailWidgets";
 import { normalizeContinueOverlap } from "../normalization";
 import { getState } from "../persistence";
-import { formatOverlapSeconds } from "../timelineDetail";
+import { formatOverlapSeconds, safeFps } from "../timelineDetail";
 import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView";
 import type { BoundaryOut, Clip, TimelineSelection } from "../types";
 import type { DetailStripContext } from "./context";
@@ -30,7 +30,7 @@ export const buildBoundaryBody = (
     const clip = clips[leftClipIdx];
     const value: BoundaryOut = clip?.boundaryOut ?? "cut";
     const state = getState();
-    const fps = state.fps > 0 ? Math.round(state.fps) : 24;
+    const fps = Math.round(safeFps(state.fps));
 
     const joinSpecs: OptionSpec[] = (
         ["cut", "continue", "crossfade"] as BoundaryOut[]
@@ -49,7 +49,7 @@ export const buildBoundaryBody = (
     });
     body.appendChild(
         buildField(
-            `Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
+            `Join · Clip ${leftClipIdx + 1} → ${leftClipIdx + 2}`,
             select,
             undefined,
             "How this clip joins the next one. Cut: hard concatenation. " +

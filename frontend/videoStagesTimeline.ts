@@ -1,48 +1,43 @@
+import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
 import {
     injectTimelineTab,
     TIMELINE_BODY_ID,
     updateTimelineTabIndicator,
 } from "./bottomTimelineTab";
+import { projectLtxExecutionPath } from "./executionPath";
 import { createGestureRouter } from "./gestureRouter";
 import { buildDefaultClip } from "./normalization";
-import { getClips, getState, getTimelineStore, saveClips } from "./persistence";
+import {
+    getClips,
+    getState,
+    getTimelineStore,
+    saveClips,
+    saveState,
+} from "./persistence";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { setSelection, subscribeSelection } from "./selection";
 import type { UpdateMeta } from "./store";
 import {
-    getGroupToggle,
-    getPromptInput,
+    getRootModelInput,
+    isRootTextToVideoModel,
     isVideoStagesEnabled,
-    readCarrierSnapshot,
     readGlobalPrompt,
-    restoreCarrierSnapshot,
     setVideoStagesEnabled,
 } from "./swarmInputs";
 import { createTimelineAudioSegmentTrack } from "./timelineAudioSegmentTrack";
 import { createTimelineAudioTrack } from "./timelineAudioTrack";
 import { createTimelineBoundaryTrack } from "./timelineBoundaryTrack";
-import { safeFps, type TimelineUnit } from "./timelineDetail";
+import { safeFps } from "./timelineDetail";
 import { createTimelineDetailStrip } from "./timelineDetailStrip";
 import { createTimelineHistory } from "./timelineHistory";
+import { createTimelineHostLifecycle } from "./timelineHostLifecycle";
 import { createTimelineLinking } from "./timelineLinking";
 import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
 import { createTimelineRetakeTrack } from "./timelineRetakeTrack";
 import { applySelectionHighlight } from "./timelineSelectionView";
-import {
-    clampPxPerSecond,
-    computeFitPxPerSecond,
-    DEFAULT_PX_PER_SECOND,
-    renderTimeline,
-    TRACK_HEADER_W_PX,
-    ZOOM_FACTOR,
-    zoomAnchorScrollLeft,
-    zoomAnchorTime,
-} from "./timelineView";
-import {
-    loadViewState as readStoredViewState,
-    saveViewState as writeStoredViewState,
-} from "./timelineViewState";
+import { renderTimeline } from "./timelineView";
+import { createTimelineViewport } from "./timelineViewport";
 
 export interface VideoStagesTimeline {
     init(): void;
@@ -50,27 +45,26 @@ export interface VideoStagesTimeline {
     dispose(): void;
 }
 
-const INPUT_SYNC_INTERVAL_MS = 200;
-
 export const videoStagesTimeline = (): VideoStagesTimeline => {
-    let boundInput: HTMLInputElement | HTMLTextAreaElement | null = null;
-    let boundToggle: HTMLInputElement | null = null;
-    let inputSyncInterval: ReturnType<typeof setInterval> | null = null;
-    let paramRefreshHook: (() => unknown) | null = null;
     let storeUnsub: (() => void) | null = null;
-    let unit: TimelineUnit = "seconds";
-    let pxPerSecond = DEFAULT_PX_PER_SECOND;
-    // Zoom scale of the LAST completed render — lets the scroll restore detect
-    // zoom changes and re-anchor by time instead of raw pixels.
-    let lastRenderedPxPerSecond = 0;
-    let stripCollapsed = false;
     let selectionUnsub: (() => void) | null = null;
+    const timelineBody = (): HTMLElement | null =>
+        document.getElementById(TIMELINE_BODY_ID);
+    const scrollEl = (): HTMLElement | null =>
+        timelineBody()?.querySelector<HTMLElement>(".vst-scroll") ?? null;
+    const viewport = createTimelineViewport({
+        refresh: () => refresh(),
+        totalSeconds: () =>
+            getClips().reduce(
+                (sum, clip) => sum + Math.max(0, clip.duration || 0),
+                0,
+            ),
+        timelineBody,
+        scrollElement: scrollEl,
+    });
     const detailStrip = createTimelineDetailStrip({
-        isCollapsed: () => stripCollapsed,
-        setCollapsed: (collapsed) => {
-            stripCollapsed = collapsed;
-            saveViewState();
-        },
+        isCollapsed: viewport.stripCollapsed,
+        setCollapsed: viewport.setStripCollapsed,
     });
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
@@ -84,44 +78,32 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     // Open the timeline settings panel (docked in the detail strip) from the
     // topbar dims/fps chip: select "nothing" and force the strip open.
     const openSettings = (): void => {
-        stripCollapsed = false;
-        saveViewState();
+        viewport.setStripCollapsed(false);
         setSelection({ kind: "none" });
         detailStrip.render();
     };
 
     const history = createTimelineHistory({
-        read: () => readCarrierSnapshot(),
-        write: (value) => restoreCarrierSnapshot(value),
+        // The canonical model contains everything VideoStages authors across
+        // Data, clip-prompt, and UI-state carriers, including hue and
+        // prompt-window IDs.
+        read: () => JSON.stringify(getState()),
+        write: (value) => {
+            const state = JSON.parse(value) as ReturnType<typeof getState>;
+            const expectedRevision = getTimelineStore().revision();
+            saveState(state, {
+                expectedRevision,
+                notifyDomChange: isVideoStagesEnabled(),
+                origin: "history",
+            });
+        },
     });
-
-    const loadViewState = (): void => {
-        const stored = readStoredViewState();
-        if (!stored) {
-            return;
-        }
-        if (stored.pxPerSecond !== undefined) {
-            pxPerSecond = clampPxPerSecond(stored.pxPerSecond);
-        }
-        if (stored.unit) {
-            unit = stored.unit;
-        }
-        if (stored.stripCollapsed !== undefined) {
-            stripCollapsed = stored.stripCollapsed;
-        }
-    };
-    const saveViewState = (): void => {
-        writeStoredViewState({ pxPerSecond, unit, stripCollapsed });
-    };
-
-    const toggleUnit = (): void => {
-        unit = unit === "seconds" ? "frames" : "seconds";
-        saveViewState();
-        refresh();
-    };
-
-    const timelineBody = (): HTMLElement | null =>
-        document.getElementById(TIMELINE_BODY_ID);
+    const hostLifecycle = createTimelineHostLifecycle({
+        refresh: () => refresh(),
+        syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
+        undo: () => history.undo(),
+        redo: () => history.redo(),
+    });
 
     // The left dock (`.vst-detail`) is a sibling of the tracks body inside the
     // `.vst-timeline` shell, created here so renderTimeline's innerHTML wipe of
@@ -139,50 +121,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         }
         return dock;
     };
-    const scrollEl = (): HTMLElement | null =>
-        timelineBody()?.querySelector<HTMLElement>(".vst-scroll") ?? null;
-
-    const setZoom = (value: number): void => {
-        pxPerSecond = clampPxPerSecond(value);
-        saveViewState();
-        refresh();
-    };
-    const zoomIn = (): void => setZoom(pxPerSecond * ZOOM_FACTOR);
-    const zoomOut = (): void => setZoom(pxPerSecond / ZOOM_FACTOR);
-    const zoomFit = (): void => {
-        const totalSeconds = getClips().reduce(
-            (sum, clip) => sum + Math.max(0, clip.duration || 0),
-            0,
-        );
-        const width =
-            scrollEl()?.clientWidth ?? timelineBody()?.clientWidth ?? 0;
-        setZoom(
-            computeFitPxPerSecond(totalSeconds, width, TRACK_HEADER_W_PX + 24),
-        );
-    };
-    const zoomWheel = (factor: number, clientX: number): void => {
-        const scroll = scrollEl();
-        if (!scroll || pxPerSecond <= 0) {
-            setZoom(pxPerSecond * factor);
-            return;
-        }
-        const offsetX = clientX - scroll.getBoundingClientRect().left;
-        const timeAtPointer = zoomAnchorTime(
-            offsetX,
-            scroll.scrollLeft,
-            pxPerSecond,
-        );
-        setZoom(pxPerSecond * factor);
-        const fresh = scrollEl();
-        if (fresh) {
-            fresh.scrollLeft = zoomAnchorScrollLeft(
-                timeAtPointer,
-                pxPerSecond,
-                offsetX,
-            );
-        }
-    };
-
     const onBodyClickSyncReadout = (): void => {
         void Promise.resolve().then(() => {
             const body = timelineBody();
@@ -201,7 +139,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             }
             selEl.hidden = sel === null;
             dotEl.hidden = sel === null;
-            selEl.textContent = sel === null ? "" : `clip ${sel}`;
+            selEl.textContent = sel === null ? "" : `clip ${sel + 1}`;
         });
     };
 
@@ -249,53 +187,40 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         try {
             const state = getState();
             const clips = state.clips;
+            const globalPrompt = readGlobalPrompt();
             renderTimeline(body, clips, {
                 fps: safeFps(state.fps),
                 width: state.width,
                 height: state.height,
                 dimsExplicit: state.dimsExplicit,
                 fpsExplicit: state.fpsExplicit,
-                unit,
-                pxPerSecond,
+                unit: viewport.unit(),
+                pxPerSecond: viewport.pxPerSecond(),
                 selectedIndex: linking.getSelectedIndex(),
                 enabled,
                 onToggleEnabled: setVideoStagesEnabled,
                 onOpenSettings: () => openSettings(),
-                onToggleUnit: toggleUnit,
+                onToggleUnit: viewport.toggleUnit,
                 onAddClip: addClip,
-                onZoomIn: zoomIn,
-                onZoomOut: zoomOut,
-                onZoomFit: zoomFit,
-                onZoomSlider: setZoom,
-                onZoomWheel: zoomWheel,
+                onZoomIn: viewport.zoomIn,
+                onZoomOut: viewport.zoomOut,
+                onZoomFit: viewport.zoomFit,
+                onZoomSlider: viewport.setZoom,
+                onZoomWheel: viewport.zoomWheel,
                 onUndo: () => history.undo(),
                 onRedo: () => history.redo(),
-                globalPrompt: readGlobalPrompt(),
+                globalPrompt,
+                diagnostics: deriveAuthoringDiagnostics(clips),
+                executionSummary: projectLtxExecutionPath(state, {
+                    generatedEntry:
+                        !`${getRootModelInput()?.value ?? ""}`.trim() ||
+                        isRootTextToVideoModel()
+                            ? "text-to-video"
+                            : "host-image-guidance",
+                    globalPrompt,
+                }),
             });
-            if (prevScrollLeft > 0) {
-                // If the zoom changed since the last render (toolbar buttons,
-                // slider, fit), a raw pixel restore would land on a different
-                // TIME — re-anchor the left edge's time under the new scale.
-                // (zoomWheel then overrides with its own pointer anchor.)
-                const target =
-                    lastRenderedPxPerSecond > 0 &&
-                    lastRenderedPxPerSecond !== pxPerSecond
-                        ? zoomAnchorScrollLeft(
-                              zoomAnchorTime(
-                                  TRACK_HEADER_W_PX,
-                                  prevScrollLeft,
-                                  lastRenderedPxPerSecond,
-                              ),
-                              pxPerSecond,
-                              TRACK_HEADER_W_PX,
-                          )
-                        : prevScrollLeft;
-                const fresh = scrollEl();
-                if (fresh) {
-                    fresh.scrollLeft = target;
-                }
-            }
-            lastRenderedPxPerSecond = pxPerSecond;
+            viewport.restoreScroll(prevScrollLeft);
             linking.reapplySelection(body, clips.length);
             detailStrip.render(meta);
             applySelectionHighlight(body);
@@ -306,97 +231,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
 
     const refresh = (): void => renderAll();
 
-    const onInputChanged = (): void => {
-        getTimelineStore().syncFromCarrier();
-    };
-
-    const bindInputListener = (): void => {
-        const input = getPromptInput();
-        if (!input || input === boundInput) {
-            return;
-        }
-        if (boundInput) {
-            boundInput.removeEventListener("input", onInputChanged);
-            boundInput.removeEventListener("change", onInputChanged);
-        }
-        input.addEventListener("input", onInputChanged);
-        input.addEventListener("change", onInputChanged);
-        boundInput = input;
-    };
-
-    const onEnabledToggled = (): void => {
-        refresh();
-    };
-
-    const bindToggleListener = (): void => {
-        const toggle = getGroupToggle();
-        if (!toggle || toggle === boundToggle) {
-            return;
-        }
-        if (boundToggle) {
-            boundToggle.removeEventListener("change", onEnabledToggled);
-        }
-        toggle.addEventListener("change", onEnabledToggled);
-        boundToggle = toggle;
-    };
-
-    const startInputSync = (): void => {
-        if (inputSyncInterval) {
-            return;
-        }
-        // Catches carrier writers that fire no events (host scripts poking the
-        // inputs) and inherited-dims changes — both are part of the store's
-        // change token, so one sync call covers them.
-        inputSyncInterval = setInterval(() => {
-            getTimelineStore().syncFromCarrier();
-        }, INPUT_SYNC_INTERVAL_MS);
-    };
-
-    // The host's model/lora refresh button repopulates the core dropdowns but
-    // does NOT re-run our init, so our stage model / LoRA / IC-LoRA selects keep
-    // the stale option lists until the next full rebuild. Hook the host's
-    // post-refresh callback array to repaint from the fresh options.
-    const registerParamRefreshHook = (): void => {
-        if (
-            paramRefreshHook ||
-            typeof refreshParamsExtra === "undefined" ||
-            !Array.isArray(refreshParamsExtra)
-        ) {
-            return;
-        }
-        paramRefreshHook = () => {
-            // refreshParamsExtra fires BEFORE the host rebuilds the dropdown
-            // <option> elements, so defer a tick to read the fresh options.
-            setTimeout(() => refresh(), 0);
-        };
-        refreshParamsExtra.push(paramRefreshHook);
-    };
-
-    const onKeydown = (event: KeyboardEvent): void => {
-        if (!(event.ctrlKey || event.metaKey)) {
-            return;
-        }
-        const key = event.key.toLowerCase();
-        const isUndo = key === "z" && !event.shiftKey;
-        const isRedo = (key === "z" && event.shiftKey) || key === "y";
-        if (!isUndo && !isRedo) {
-            return;
-        }
-        const active = document.activeElement;
-        const inTextField =
-            active instanceof HTMLInputElement ||
-            active instanceof HTMLTextAreaElement ||
-            (active instanceof HTMLElement && active.isContentEditable);
-        if (inTextField || !isVideoStagesEnabled()) {
-            return;
-        }
-        if (isUndo ? history.undo() : history.redo()) {
-            event.preventDefault();
-        }
-    };
-
     const init = (): void => {
-        loadViewState();
+        viewport.load();
         injectTimelineTab();
         const body = document.getElementById(TIMELINE_BODY_ID);
         if (body) {
@@ -438,41 +274,13 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             history.capture();
             renderAll(meta);
         });
-        bindInputListener();
-        bindToggleListener();
         history.syncBaseline();
-        document.removeEventListener("keydown", onKeydown);
-        document.addEventListener("keydown", onKeydown);
-        startInputSync();
-        registerParamRefreshHook();
+        hostLifecycle.bind();
         refresh();
     };
 
     const dispose = (): void => {
-        if (inputSyncInterval) {
-            clearInterval(inputSyncInterval);
-            inputSyncInterval = null;
-        }
-        if (boundInput) {
-            boundInput.removeEventListener("input", onInputChanged);
-            boundInput.removeEventListener("change", onInputChanged);
-            boundInput = null;
-        }
-        if (boundToggle) {
-            boundToggle.removeEventListener("change", onEnabledToggled);
-            boundToggle = null;
-        }
-        if (
-            paramRefreshHook &&
-            typeof refreshParamsExtra !== "undefined" &&
-            Array.isArray(refreshParamsExtra)
-        ) {
-            const idx = refreshParamsExtra.indexOf(paramRefreshHook);
-            if (idx !== -1) {
-                refreshParamsExtra.splice(idx, 1);
-            }
-        }
-        paramRefreshHook = null;
+        hostLifecycle.dispose();
         retakeTrack.dispose();
         audioSegmentTrack.dispose();
         linking.dispose();
@@ -488,7 +296,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         storeUnsub = null;
         const body = document.getElementById(TIMELINE_BODY_ID);
         body?.removeEventListener("click", onBodyClickSyncReadout);
-        document.removeEventListener("keydown", onKeydown);
     };
 
     return { init, refresh, dispose };

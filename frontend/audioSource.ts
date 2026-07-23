@@ -1,3 +1,4 @@
+import { getLtxHostBridge } from "./host";
 import {
     preserveSelectedOption,
     resolveSelectValue,
@@ -32,7 +33,7 @@ export const canUseClipLengthFromAudio = (source: string): boolean => {
 };
 
 const getAceStepFunRefs = (): string[] => {
-    const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
+    const snapshot = getLtxHostBridge().getAceStepFunRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
         return [];
     }

@@ -1,0 +1,336 @@
+import {
+    clamp,
+    REF_FRAME_MIN,
+    STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_STEP,
+    STAGE_REF_STRENGTH_DEFAULT,
+    STAGE_REF_STRENGTH_MAX,
+    STAGE_REF_STRENGTH_MIN,
+    STAGE_REF_STRENGTH_STEP,
+} from "./constants";
+import { normalizeUploadedAudio } from "./normalizationMedia";
+import {
+    normalizeOptionalEntityId,
+    readProp,
+    resolveRootPreferredUpscaleMethod,
+    snapStrengthToStep,
+    snapToStep,
+} from "./normalizationShared";
+import { framesForClip } from "./renderUtils";
+import {
+    type Clip,
+    REF_SOURCE_REFINER,
+    type RefImage,
+    type RootDefaults,
+    type Stage,
+    type StageLora,
+} from "./types";
+import { isRecord, toNumber } from "./utils";
+
+export const normalizeStageRefStrengthValue = (value: unknown): number =>
+    snapStrengthToStep(
+        value,
+        STAGE_REF_STRENGTH_DEFAULT,
+        STAGE_REF_STRENGTH_MIN,
+        STAGE_REF_STRENGTH_MAX,
+        STAGE_REF_STRENGTH_STEP,
+    );
+
+export const normalizeStageControlNetStrengthValue = (value: unknown): number =>
+    snapStrengthToStep(
+        value,
+        STAGE_CONTROLNET_STRENGTH_DEFAULT,
+        STAGE_CONTROLNET_STRENGTH_MIN,
+        STAGE_CONTROLNET_STRENGTH_MAX,
+        STAGE_CONTROLNET_STRENGTH_STEP,
+    );
+
+export const buildDefaultStageRefStrengths = (
+    refCount: number,
+    defaultStrength = STAGE_REF_STRENGTH_DEFAULT,
+): number[] => Array.from({ length: refCount }, () => defaultStrength);
+
+export const normalizeStageRefStrengths = (
+    rawStrengths: unknown,
+    refCount: number,
+): number[] => {
+    const strengths: number[] = [];
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    for (let i = 0; i < refCount; i++) {
+        strengths.push(normalizeStageRefStrengthValue(rawValues[i]));
+    }
+    return strengths;
+};
+
+export const readRawStageProp = (
+    raw: Record<string, unknown>,
+    camel: string,
+    pascal: string,
+): unknown => readProp(raw, camel, pascal);
+
+export const readRawStageString = (
+    raw: Record<string, unknown>,
+    camel: string,
+    pascal: string,
+): string | undefined => {
+    const value = readRawStageProp(raw, camel, pascal);
+    if (value == null) {
+        return undefined;
+    }
+    const stringValue = `${value}`.trim();
+    return stringValue.length > 0 ? stringValue : undefined;
+};
+
+export const normalizeStageLoras = (raw: unknown): StageLora[] => {
+    if (!Array.isArray(raw)) {
+        return [];
+    }
+    const out: StageLora[] = [];
+    for (const entry of raw) {
+        if (!isRecord(entry)) {
+            continue;
+        }
+        const name = `${readRawStageProp(entry, "name", "Name") ?? ""}`.trim();
+        if (!name) {
+            continue;
+        }
+        const weightRaw = readRawStageProp(entry, "weight", "Weight");
+        const weight = toNumber(`${weightRaw ?? 1}`, 1);
+        out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
+    }
+    return out;
+};
+
+const cloneStageLoras = (loras: StageLora[]): StageLora[] =>
+    loras.map((lora) => ({ name: lora.name, weight: lora.weight }));
+
+export const buildDefaultStage = (
+    getRootDefaults: () => RootDefaults,
+    getDefaultStageModel: (modelValues: string[]) => string,
+    previousStage: Stage | null,
+    refCount: number,
+): Stage => {
+    const defaults = getRootDefaults();
+    return {
+        skipped: false,
+        control: previousStage ? previousStage.control : defaults.control,
+        controlNetStrength: previousStage
+            ? previousStage.controlNetStrength
+            : STAGE_CONTROLNET_STRENGTH_DEFAULT,
+        refStrengths: buildDefaultStageRefStrengths(refCount),
+        upscale: previousStage ? previousStage.upscale : defaults.upscale,
+        upscaleMethod: previousStage
+            ? previousStage.upscaleMethod
+            : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
+        model: previousStage
+            ? previousStage.model
+            : getDefaultStageModel(defaults.modelValues),
+        steps: previousStage ? previousStage.steps : defaults.steps,
+        cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
+        sampler: previousStage
+            ? previousStage.sampler
+            : (defaults.samplerValues[0] ?? "euler"),
+        scheduler: previousStage
+            ? previousStage.scheduler
+            : (defaults.schedulerValues[0] ?? "normal"),
+        loras: previousStage ? cloneStageLoras(previousStage.loras) : [],
+    };
+};
+
+export const buildDefaultRef = (
+    source: string = REF_SOURCE_REFINER,
+): RefImage => ({
+    source,
+    uploadFileName: null,
+    uploadedImage: null,
+    frame: REF_FRAME_MIN,
+    fromEnd: false,
+});
+
+export const appendRefToClip = (clip: Clip, ref: RefImage): void => {
+    clip.refs.push(ref);
+    for (const stage of clip.stages) {
+        stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+    }
+};
+
+export const removeRefAt = (clip: Clip, refIdx: number): boolean => {
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+        return false;
+    }
+    clip.refs.splice(refIdx, 1);
+    for (const stage of clip.stages) {
+        if (refIdx < stage.refStrengths.length) {
+            stage.refStrengths.splice(refIdx, 1);
+        }
+    }
+    return true;
+};
+
+export const getReferenceFrameMax = (
+    getRootDefaults: () => RootDefaults,
+    clip?: Pick<Clip, "duration">,
+    effectiveFps?: number,
+): number => {
+    const defaults = getRootDefaults();
+    const fps =
+        typeof effectiveFps === "number" &&
+        Number.isFinite(effectiveFps) &&
+        effectiveFps > 0
+            ? effectiveFps
+            : defaults.fps;
+    if (clip) {
+        return Math.max(REF_FRAME_MIN, framesForClip(clip.duration, fps));
+    }
+    return Math.max(REF_FRAME_MIN, defaults.frames);
+};
+
+export const normalizeStage = (
+    getRootDefaults: () => RootDefaults,
+    getDefaultStageModel: (modelValues: string[]) => string,
+    rawStage: Record<string, unknown>,
+    previousStage: Stage | null,
+    refCount: number,
+    stageIndexInClip: number,
+    sourcedClip = false,
+): Stage => {
+    const defaults = getRootDefaults();
+    const fallback = buildDefaultStage(
+        getRootDefaults,
+        getDefaultStageModel,
+        previousStage,
+        refCount,
+    );
+    // A generation first stage forces control/upscale; a sourced clip's stage 0
+    // refines its footage (init-video img2img), so it keeps authored values.
+    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
+    let firstStageUpscale: { upscale: number; upscaleMethod: string };
+    let control: number;
+    if (forcedFirstStage) {
+        firstStageUpscale = {
+            upscale: defaults.upscale,
+            upscaleMethod: resolveRootPreferredUpscaleMethod(
+                defaults.upscaleMethodValues,
+            ),
+        };
+        control = clamp(
+            defaults.control,
+            defaults.controlMin,
+            defaults.controlMax,
+        );
+    } else {
+        firstStageUpscale = {
+            upscale: snapToStep(
+                clamp(
+                    toNumber(
+                        `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+                        fallback.upscale,
+                    ),
+                    defaults.upscaleMin,
+                    defaults.upscaleMax,
+                ),
+                defaults.upscaleStep,
+            ),
+            upscaleMethod:
+                `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
+                fallback.upscaleMethod,
+        };
+        control = clamp(
+            toNumber(
+                `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+                fallback.control,
+            ),
+            defaults.controlMin,
+            defaults.controlMax,
+        );
+    }
+    const stage: Stage = {
+        id: normalizeOptionalEntityId(readProp(rawStage, "id", "Id")),
+        skipped: !!rawStage.skipped,
+        control,
+        controlNetStrength: normalizeStageControlNetStrengthValue(
+            readRawStageProp(
+                rawStage,
+                "controlNetStrength",
+                "ControlNetStrength",
+            ) ?? fallback.controlNetStrength,
+        ),
+        refStrengths: normalizeStageRefStrengths(
+            rawStage.refStrengths,
+            refCount,
+        ),
+        upscale: firstStageUpscale.upscale,
+        upscaleMethod: firstStageUpscale.upscaleMethod,
+        model: `${rawStage.model ?? fallback.model}` || fallback.model,
+        steps: Math.max(
+            1,
+            Math.round(
+                clamp(
+                    toNumber(
+                        `${rawStage.steps ?? fallback.steps}`,
+                        fallback.steps,
+                    ),
+                    defaults.stepsMin,
+                    defaults.stepsMax,
+                ),
+            ),
+        ),
+        cfgScale: clamp(
+            toNumber(
+                `${rawStage.cfgScale ?? fallback.cfgScale}`,
+                fallback.cfgScale,
+            ),
+            defaults.cfgScaleMin,
+            defaults.cfgScaleMax,
+        ),
+        sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
+        scheduler:
+            `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
+        loras: normalizeStageLoras(
+            readRawStageProp(rawStage, "loras", "Loras"),
+        ),
+    };
+
+    if (
+        !defaults.upscaleMethodValues.includes(stage.upscaleMethod) &&
+        defaults.upscaleMethodValues.length > 0
+    ) {
+        stage.upscaleMethod = forcedFirstStage
+            ? (defaults.upscaleMethodValues[0] ?? "")
+            : stage.upscaleMethod || fallback.upscaleMethod;
+    }
+    return stage;
+};
+
+export const normalizeRef = (
+    rawRef: Record<string, unknown>,
+    frameMax: number,
+): RefImage => {
+    const fallback = buildDefaultRef();
+    const source = `${rawRef.source ?? fallback.source}` || fallback.source;
+    return {
+        id: normalizeOptionalEntityId(readProp(rawRef, "id", "Id")),
+        source,
+        uploadFileName:
+            rawRef.uploadFileName == null || rawRef.uploadFileName === ""
+                ? null
+                : `${rawRef.uploadFileName}`,
+        uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
+        frame: Math.max(
+            REF_FRAME_MIN,
+            Math.round(
+                clamp(
+                    toNumber(
+                        `${rawRef.frame ?? fallback.frame}`,
+                        fallback.frame,
+                    ),
+                    REF_FRAME_MIN,
+                    frameMax,
+                ),
+            ),
+        ),
+        fromEnd: !!rawRef.fromEnd,
+    };
+};

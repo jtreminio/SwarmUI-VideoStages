@@ -1,4 +1,12 @@
 import { clamp } from "./constants";
+import { getLtxHostBridge } from "./host";
+import {
+    enhanceHostPromptEditor,
+    hasHostInputBrowser,
+    openHostInputBrowser,
+    renderHostSlider,
+    showHostPopover,
+} from "./host/swarmUiAdapters";
 
 let sliderSeq = 0;
 let helpSeq = 0;
@@ -27,9 +35,7 @@ export const appendHelp = (
     btn.className = "auto-input-qbutton info-popover-button";
     btn.textContent = "?";
     btn.addEventListener("click", (event) => {
-        if (typeof doPopover === "function") {
-            doPopover(key, event);
-        }
+        showHostPopover(key, event);
     });
     labelEl.appendChild(btn);
     const pop = document.createElement("div");
@@ -179,22 +185,14 @@ export const buildSlider = (
     const holder = document.createElement("div");
     holder.className = "vst-stage-slider";
     const id = `vst_stage_slider_${++sliderSeq}`;
-    holder.innerHTML = makeSliderInput(
-        null,
+    holder.innerHTML = renderHostSlider({
         id,
-        "",
         label,
-        "",
         value,
         min,
         max,
-        min,
-        max,
         step,
-        false,
-        false,
-        false,
-    );
+    });
     const number = holder.querySelector<HTMLInputElement>(
         "input.auto-slider-number",
     );
@@ -260,9 +258,7 @@ export const buildTextarea = (
     editor.placeholder = placeholder;
     editor.setAttribute("data-vst-focus-key", focusKey);
     editor.addEventListener("input", () => onInput(editor.value));
-    if (typeof textPromptAddKeydownHandler === "function") {
-        textPromptAddKeydownHandler(editor);
-    }
+    enhanceHostPromptEditor(editor);
     return editor;
 };
 
@@ -338,17 +334,19 @@ export const buildMediaPickRow = (
             onFile(picked, pickedName);
             return;
         }
-        toDataURL(picked, (data) => onFile(data, pickedName));
+        void getLtxHostBridge()
+            .toDataUrl(picked)
+            .then((data) => onFile(data, pickedName));
     });
     clearBtn.addEventListener("click", () => onClear());
     row.append(pickLabel, fileInput, fileName, clearBtn, preview, previewName);
-    if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
+    if (hasHostInputBrowser()) {
         const selectBtn = document.createElement("button");
         selectBtn.type = "button";
         selectBtn.className = "basic-button small-button vst-media-pick-select";
         selectBtn.textContent = "Select";
         selectBtn.addEventListener("click", () =>
-            inputBrowserHelper.openInputBrowser(fileInput.id, browserTypes),
+            openHostInputBrowser(fileInput.id, browserTypes),
         );
         clearBtn.before(selectBtn);
     }

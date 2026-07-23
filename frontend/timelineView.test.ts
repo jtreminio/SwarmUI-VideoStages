@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
+import { projectLtxExecutionPath } from "./executionPath";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -338,6 +339,29 @@ describe("renderTimeline (DOM)", () => {
         // getImageOutPrefix is absent in tests, so the src is the root-relative path.
         expect(start?.style.backgroundImage).toContain(
             "inputs/VideoStages/abc123.png",
+        );
+    });
+
+    it("assigns thumbnail URLs through CSSOM without allowing style injection", () => {
+        const clip = {
+            duration: 2,
+            stages: [{}],
+            refs: [
+                {
+                    uploadedImage: {
+                        data: "inputs/preview';color:red;.png",
+                    },
+                },
+            ],
+        } as unknown as Clip;
+        renderTimeline(body, [clip]);
+        const start = body.querySelector<HTMLElement>(
+            ".vst-region-thumb-start",
+        );
+        expect(start?.style.color).toBe("");
+        expect(start?.getAttribute("data-vst-background-image")).toBeNull();
+        expect(body.querySelectorAll(".vst-region-thumb-start")).toHaveLength(
+            1,
         );
     });
 
@@ -685,7 +709,7 @@ describe("renderTimeline (DOM)", () => {
         renderTimeline(body, [makeClip(2, 1, 0)], { selectedIndex: 0 });
         const sel = body.querySelector<HTMLElement>("[data-vst-readout-sel]");
         expect(sel?.hidden).toBe(false);
-        expect(sel?.textContent).toBe("clip 0");
+        expect(sel?.textContent).toBe("clip 1");
     });
 
     it("bounds the audio waveform bar count (min 8, cap 400)", () => {
@@ -818,6 +842,12 @@ describe("renderTimeline (DOM)", () => {
         expect(marks[1].querySelector(".vst-refs-ph")?.textContent).toBe(
             "R -6",
         );
+        expect(marks[0].getAttribute("aria-label")).toBe(
+            "Edit reference 1 (Refiner)",
+        );
+        expect(marks[1].getAttribute("aria-label")).toBe(
+            "Edit reference 2 (Base, from end)",
+        );
     });
 
     it("edge-aligns refs within a few frames of a clip boundary, centers the rest", () => {
@@ -927,5 +957,52 @@ describe("track-head lane tags", () => {
         );
         expect(html).toContain("vst-head-tag-relay");
         expect(html).not.toContain("vst-head-tag-relay vst-head-tag-active");
+    });
+});
+
+describe("authoring diagnostics", () => {
+    it("renders backend-aligned messages above the timeline", () => {
+        renderTimeline(document.body, [minimalClip()], {
+            diagnostics: [
+                {
+                    severity: "error",
+                    code: "retake-frame-references-unsupported",
+                    message: "Retake and references cannot run together.",
+                    clipIdx: 0,
+                },
+            ],
+        });
+        const item = document.querySelector<HTMLElement>(
+            '[data-vst-diagnostic="retake-frame-references-unsupported"]',
+        );
+        expect(item?.textContent).toContain("Clip 1:");
+        expect(item?.textContent).toContain(
+            "Retake and references cannot run together.",
+        );
+        expect(item?.className).toContain("vst-diagnostic-error");
+    });
+});
+
+describe("execution path summary", () => {
+    it("renders the compact nontechnical projection above the tracks", () => {
+        const clip = minimalClip();
+        const summary = projectLtxExecutionPath({
+            width: 1280,
+            height: 720,
+            fps: 24,
+            dimsExplicit: false,
+            fpsExplicit: false,
+            clips: [clip],
+        });
+
+        renderTimeline(document.body, [clip], { executionSummary: summary });
+
+        const panel = document.querySelector<HTMLElement>(
+            "[data-vst-execution-summary]",
+        );
+        expect(panel?.textContent).toContain("Execution path");
+        expect(panel?.textContent).toContain(
+            "LTX Video → Text-to-video → Single clip · single stage",
+        );
     });
 });

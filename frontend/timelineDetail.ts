@@ -17,7 +17,7 @@ export const keyframeTimeSeconds = (
     frame: number,
     fromEnd: boolean,
     clipDurationSeconds: number,
-    fps: number,
+    fps?: number,
 ): number => {
     const duration = Math.max(0, clipDurationSeconds || 0);
     const offset = Math.max(0, frame || 0) / safeFps(fps);

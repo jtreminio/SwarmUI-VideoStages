@@ -71,6 +71,34 @@ describe("timelineHistory", () => {
         expect(get()).toBe("B");
     });
 
+    it("keeps both stacks intact when a guarded restore fails", () => {
+        let value = "A";
+        let rejectRestore = false;
+        const history = createTimelineHistory({
+            read: () => value,
+            write: (next) => {
+                if (rejectRestore) {
+                    throw new Error("stale-revision");
+                }
+                value = next;
+            },
+        });
+        history.syncBaseline();
+        value = "B";
+        history.capture();
+        rejectRestore = true;
+
+        expect(history.undo()).toBe(false);
+        expect(value).toBe("B");
+        expect(history.canUndo()).toBe(true);
+        expect(history.canRedo()).toBe(false);
+
+        rejectRestore = false;
+        expect(history.undo()).toBe(true);
+        expect(value).toBe("A");
+        expect(history.canRedo()).toBe(true);
+    });
+
     it("caps the undo stack at maxDepth", () => {
         const { history, set } = make("v0", 2);
         for (let i = 1; i <= 5; i++) {

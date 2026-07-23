@@ -128,6 +128,17 @@ const mountRootDefaults = (loras: string[] = ["lora-x.safetensors"]): void => {
     });
 };
 
+const modelGlobals = globalThis as unknown as {
+    modelsHelpers?: {
+        getDataFor: (
+            category: string,
+            modelName: string,
+        ) => {
+            modelClass: { compatClass: { id: string } };
+        };
+    };
+};
+
 // The dock (`.vst-detail`, render-host) is a sibling of the tracks body
 // (listener-host) inside the `.vst-timeline` shell, matching production.
 const makeBody = (): HTMLElement => {
@@ -225,6 +236,11 @@ describe("createTimelineDetailStrip", () => {
     let collapsed = false;
 
     beforeEach(() => {
+        modelGlobals.modelsHelpers = {
+            getDataFor: () => ({
+                modelClass: { compatClass: { id: "ltxv2" } },
+            }),
+        };
         resetSelectionForTests();
         persistence.__resetPersistenceForTests();
         resetIcLoraAutoDownloads();
@@ -241,6 +257,7 @@ describe("createTimelineDetailStrip", () => {
         jest.restoreAllMocks();
         resetSelectionForTests();
         document.body.innerHTML = "";
+        delete modelGlobals.modelsHelpers;
         delete swarmGlobals.makeWSRequest;
         delete swarmGlobals.refreshParameterValues;
     });
@@ -275,6 +292,13 @@ describe("createTimelineDetailStrip", () => {
         persistence.getTimelineStore().subscribe(() => refreshSpy());
         strip.attach(body, dockHost(body));
         return body;
+    };
+
+    const renderStrip = (): void => {
+        if (!strip) {
+            throw new Error("detail strip is not initialized");
+        }
+        strip.render();
     };
 
     const clickRegionStageChip = (
@@ -320,12 +344,19 @@ describe("createTimelineDetailStrip", () => {
         expect(
             dims?.querySelector('input[data-vst-focus-key="settings-height"]'),
         ).not.toBeNull();
+        expect(
+            detail()?.querySelector(".vst-audio-tracks-panel"),
+        ).not.toBeNull();
+        expect(
+            detail()?.querySelector(".vst-audio-tracks-planned-warning")
+                ?.textContent,
+        ).toBe("Planned — runtime mixer not yet connected");
     });
 
     it("renders the clip/stage columns when a stage chip is clicked", () => {
         const body = setup([{ duration: 4, stages: [{}, {}] }]);
         clickRegionStageChip(body, 0, 1);
-        expect(crumbText()).toBe("Clip 0 · S1");
+        expect(crumbText()).toBe("Clip 1 · S1");
         expect(activeRailLabel()).toBe("S1");
         expect(detailBody()?.querySelector(".vst-detail-clip")).not.toBeNull();
         expect(detailBody()?.querySelector(".vst-detail-rail")).not.toBeNull();
@@ -871,7 +902,7 @@ describe("createTimelineDetailStrip", () => {
     it("clears the selection to none on Escape", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(crumbText()).toBe("Clip 0 · S0");
+        expect(crumbText()).toBe("Clip 1 · S0");
         detail()?.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
         );
@@ -890,7 +921,7 @@ describe("createTimelineDetailStrip", () => {
         search.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
         );
-        expect(crumbText()).toBe("Clip 0 · S0");
+        expect(crumbText()).toBe("Clip 1 · S0");
     });
 
     it("shift+clicking a region stage chip deletes the stage", () => {
@@ -937,7 +968,7 @@ describe("createTimelineDetailStrip", () => {
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedClips(saveSpy)[0].stages).toHaveLength(2);
         expect(activeRailLabel()).toBe("S1");
-        expect(crumbText()).toBe("Clip 0 · S1");
+        expect(crumbText()).toBe("Clip 1 · S1");
         expect(
             document.querySelector<HTMLButtonElement>(
                 ".vst-detail-delete-stage",
@@ -1093,7 +1124,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
+        expect(crumbText()).toBe("Retake · Clip 1 · 2–5 s");
         expect(
             fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input")
                 ?.value,
@@ -1155,7 +1186,7 @@ describe("createTimelineDetailStrip", () => {
                 'input[data-vst-focus-key="retake-start"]',
             ),
         ).not.toBeNull();
-        expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
+        expect(crumbText()).toBe("Retake · Clip 1 · 2–5 s");
     });
 
     it("removes the retake and falls back to the owning clip's panel", () => {
@@ -1324,7 +1355,7 @@ describe("createTimelineDetailStrip", () => {
             { duration: 4, stages: [{}] },
         ]);
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
-        expect(crumbText()).toBe("Clip 1 · S0");
+        expect(crumbText()).toBe("Clip 2 · S0");
 
         const clips = persistence.getClips().slice(0, 1);
         persistence.saveClips(clips, { notifyDomChange: false });
@@ -1365,7 +1396,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 1 });
-        expect(crumbText()).toBe("Ref 1 · Clip 0");
+        expect(crumbText()).toBe("Ref 2 · Clip 1");
         expect(document.querySelectorAll(".vst-detail-ref-row")).toHaveLength(
             2,
         );
@@ -1477,9 +1508,15 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("renders the audio editor and live-applies source + flags", () => {
-        setup([{ duration: 5, stages: [{}], controlNetLora: "some-lora" }]);
+        setup([
+            {
+                duration: 5,
+                stages: [{}, {}, {}],
+                controlNetLora: "some-lora",
+            },
+        ]);
         setSelection({ kind: "audio", clipIdx: 0 });
-        expect(crumbText()).toBe("Audio · Clip 0");
+        expect(crumbText()).toBe("Audio · Clip 1");
         const select =
             fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
                 "select",
@@ -1495,10 +1532,9 @@ describe("createTimelineDetailStrip", () => {
                 ?.disabled,
         ).toBe(true);
 
-        const reuse =
-            fieldByLabel("Reuse Audio").querySelector<HTMLInputElement>(
-                "input",
-            );
+        const reuse = fieldByLabel(
+            "Reuse Captured Stage Audio",
+        ).querySelector<HTMLInputElement>("input");
         if (!reuse) {
             throw new Error("reuse checkbox missing");
         }
@@ -1513,6 +1549,16 @@ describe("createTimelineDetailStrip", () => {
             fieldByLabel("Clip Length from Audio").querySelector("input")
                 ?.disabled,
         ).toBe(false);
+    });
+
+    it("disables captured-stage audio reuse until three stages are active", () => {
+        setup([{ duration: 5, stages: [{}, {}, { skipped: true }] }]);
+        setSelection({ kind: "audio", clipIdx: 0 });
+        const row = fieldByLabel("Reuse Captured Stage Audio");
+        const reuse = row.querySelector<HTMLInputElement>("input");
+        expect(reuse?.disabled).toBe(true);
+        expect(row.textContent).toContain("second active stage");
+        expect(row.textContent).toContain("third active stage");
     });
 
     it("shows + Add segment in the audio editor and creates+selects a segment", () => {
@@ -1576,7 +1622,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        expect(crumbText()).toBe("Audio segment · Clip 0 · 2–5 s");
+        expect(crumbText()).toBe("Audio segment · Clip 1 · 2–5 s");
         expect(
             fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input")
                 ?.value,
@@ -1772,7 +1818,7 @@ describe("createTimelineDetailStrip", () => {
     it("edits the clip's major prompt (debounced) through saveClips", () => {
         setup([{ duration: 5, stages: [{}] }]);
         setSelection({ kind: "prompt-major", clipIdx: 0 });
-        expect(crumbText()).toBe("Prompt · Clip 0");
+        expect(crumbText()).toBe("Prompt · Clip 1");
         jest.useFakeTimers();
         const editor =
             document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
@@ -1818,7 +1864,7 @@ describe("createTimelineDetailStrip", () => {
         before.setSelectionRange(3, 3);
         // A self-triggered re-render must preserve the caret, not snap it back
         // to the end via auto-focus.
-        strip.render();
+        renderStrip();
         const after =
             document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
         if (!after) {
@@ -2201,7 +2247,7 @@ describe("createTimelineDetailStrip", () => {
             expect(savedClips(saveSpy)[0].promptWindows[0].duration).toBe(3);
             expect(refreshSpy).toHaveBeenCalled();
             // The value-derived breadcrumb was synced WITHOUT a rebuild.
-            expect(crumbText()).toBe("Relay 1–4s · Clip 0");
+            expect(crumbText()).toBe("Relay 1–4s · Clip 1");
         });
 
         it("keeps focus and the same node on a first Duration change", () => {
@@ -2341,7 +2387,7 @@ describe("createTimelineDetailStrip", () => {
             expect(after).toBe(begin); // same node — no rebuild
             expect(after?.value).toBe("3"); // shows the clamped stored value
             expect(document.activeElement).toBe(begin); // focus intact
-            expect(crumbText()).toBe("Relay 3–8s · Clip 0");
+            expect(crumbText()).toBe("Relay 3–8s · Clip 1");
         });
 
         it("re-displays a relay End clamped to the minimum duration", () => {
@@ -2441,7 +2487,7 @@ describe("createTimelineDetailStrip", () => {
                 throw new Error("retake length input missing");
             }
             commitNumber(len, "5");
-            expect(savedClips(saveSpy)[0].retake.lengthSeconds).toBe(2);
+            expect(savedClips(saveSpy)[0].retake?.lengthSeconds).toBe(2);
             const after = fieldByLabel(
                 "Length (s)",
             ).querySelector<HTMLInputElement>(
@@ -2525,7 +2571,7 @@ describe("createTimelineDetailStrip", () => {
                 .display,
         ).not.toBe("none");
         // The panel's one label is the breadcrumb.
-        expect(crumbText()).toBe("Prompt · Clip 0");
+        expect(crumbText()).toBe("Prompt · Clip 1");
 
         setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
         const minor = detail()?.querySelector<HTMLElement>(
@@ -2782,7 +2828,7 @@ describe("createTimelineDetailStrip", () => {
             const audio = group("vstdock_audio");
             expect(audio).not.toBeNull();
             // The breadcrumb is the panel's one label; the group has no header.
-            expect(crumbText()).toBe("Audio · Clip 0");
+            expect(crumbText()).toBe("Audio · Clip 1");
             expect(audio?.querySelector(".input-group-header")).toBeNull();
             expect(detail()?.querySelectorAll(".input-group")).toHaveLength(1);
         });
@@ -2858,7 +2904,7 @@ describe("createTimelineDetailStrip", () => {
                 { duration: 4, stages: [{}] },
             ]);
             setSelection({ kind: "boundary", leftClipIdx: 0 });
-            expect(crumbText()).toBe("Boundary · Clip 0 → 1");
+            expect(crumbText()).toBe("Boundary · Clip 1 → 2");
             expect(boundarySelect().value).toBe("cut");
         });
 
@@ -2934,7 +2980,7 @@ describe("createTimelineDetailStrip", () => {
                 { duration: 4, stages: [{}] },
             ]);
             setSelection({ kind: "boundary", leftClipIdx: 0 });
-            expect(crumbText()).toBe("Boundary · Clip 0 → 1");
+            expect(crumbText()).toBe("Boundary · Clip 1 → 2");
             // Drop the second clip: boundary 0 no longer has a follower.
             const clips = persistence.getClips();
             clips.splice(1, 1);
@@ -3045,7 +3091,7 @@ describe("createTimelineDetailStrip", () => {
             editor.dispatchEvent(new Event("input", { bubbles: true }));
             blurOutOfDock(editor);
             // A later refresh/render must NOT yank focus back into the prompt.
-            strip.render();
+            renderStrip();
             const after =
                 document.querySelector<HTMLTextAreaElement>(
                     ".vst-detail-prompt",
@@ -3087,7 +3133,7 @@ describe("createTimelineDetailStrip", () => {
             e1.focus();
             // A render keeps focus on the field the user moved TO, never the one
             // they left.
-            strip.render();
+            renderStrip();
             const e1After = document.querySelector<HTMLTextAreaElement>(
                 'textarea[data-vst-focus-key="minor-1"]',
             );

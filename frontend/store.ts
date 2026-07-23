@@ -1,3 +1,10 @@
+import {
+    type ChangeImpact,
+    type CommandFailure,
+    type DocumentCommand,
+    reduceDocumentCommand,
+} from "./documentCommands";
+import { ensureAuthoringDocumentIdentity } from "./identity";
 import type { VideoStagesConfig } from "./types";
 
 /** Which component committed a state change; "external" marks host-side edits. */
@@ -9,6 +16,7 @@ export type UpdateOrigin =
     | "boundary-track"
     | "references-track"
     | "retake-track"
+    | "history"
     | "timeline"
     | "external";
 
@@ -19,12 +27,29 @@ export interface UpdateMeta {
      * structure — the dock keeps its DOM (no rebuild) for these commits.
      */
     hint?: "value-only";
+    /** Domain invalidation categories emitted by atomic command dispatches. */
+    impacts?: readonly ChangeImpact[];
 }
 
 export type StoreSubscriber = (
     state: VideoStagesConfig,
     meta: UpdateMeta,
 ) => void;
+
+export interface TimelineStoreSnapshot {
+    state: VideoStagesConfig;
+    /** Monotonic document revision suitable for fail-closed async commands. */
+    revision: number;
+}
+
+export type DispatchFailure = CommandFailure | "stale-revision";
+
+export interface TimelineDispatchResult {
+    applied: boolean;
+    failure?: DispatchFailure;
+    revision: number;
+    impacts: readonly ChangeImpact[];
+}
 
 /**
  * Carrier access injected by persistence.ts. The store never touches the DOM
@@ -55,6 +80,10 @@ export interface StoreDeps {
 export interface TimelineStore {
     /** Deep clone of the canonical model; callers may mutate freely. */
     getState(): VideoStagesConfig;
+    /** Atomically read an isolated document snapshot and its revision. */
+    getSnapshot(): TimelineStoreSnapshot;
+    /** Current document revision, revalidating the live carriers first. */
+    revision(): number;
     /**
      * Commit `state`: write carriers, adopt the re-parsed post-write model as
      * canonical, then (optionally) notify the host and always notify
@@ -66,6 +95,18 @@ export interface TimelineStore {
         notifyDomChange: boolean,
         hint?: UpdateMeta["hint"],
     ): string;
+    /**
+     * Atomically revalidate, optionally compare-and-swap by revision, reduce
+     * one stable-ID command, and commit it through the normal carrier path.
+     * No mutable document state escapes in the result.
+     */
+    dispatch(
+        command: DocumentCommand,
+        origin: UpdateOrigin,
+        notifyDomChange: boolean,
+        expectedRevision?: number,
+        hint?: UpdateMeta["hint"],
+    ): TimelineDispatchResult;
     /**
      * Absorb a carrier change made by someone else (host undo, paste, prompt
      * typing). No-ops and returns false when the live token matches the
@@ -90,6 +131,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
     // inherited-dims change absorbed by a racing read would never repaint.
     let syncedToken: string | null = null;
     let lastGoodSerialized = "";
+    let documentRevision = 0;
     const subscribers = new Set<StoreSubscriber>();
 
     /** getState read path: live param, else last-good, else empty. */
@@ -119,6 +161,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         }
         canonical = parseCurrent();
         cachedToken = token;
+        documentRevision++;
         if (syncedToken === null) {
             // First read adopts the current carrier as the sync baseline.
             // Later reads never touch syncedToken.
@@ -140,11 +183,12 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         }
     };
 
-    const save = (
+    const commit = (
         state: VideoStagesConfig,
         origin: UpdateOrigin,
         notifyDomChange: boolean,
         hint?: UpdateMeta["hint"],
+        impacts?: readonly ChangeImpact[],
     ): string => {
         // Ordering is load-bearing: the host change events dispatched by
         // notifyHost() run our own carrier listeners SYNCHRONOUSLY, and those
@@ -156,11 +200,78 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         canonical = deps.parse(serialized) ?? structuredClone(state);
         cachedToken = deps.readToken();
         syncedToken = cachedToken;
+        documentRevision++;
         if (notifyDomChange) {
             deps.notifyHost();
         }
-        notify({ origin, hint });
+        notify({
+            origin,
+            hint,
+            impacts: impacts ? [...impacts] : undefined,
+        });
         return serialized;
+    };
+
+    const save = (
+        state: VideoStagesConfig,
+        origin: UpdateOrigin,
+        notifyDomChange: boolean,
+        hint?: UpdateMeta["hint"],
+    ): string => commit(state, origin, notifyDomChange, hint);
+
+    const dispatch = (
+        command: DocumentCommand,
+        origin: UpdateOrigin,
+        notifyDomChange: boolean,
+        expectedRevision?: number,
+        hint?: UpdateMeta["hint"],
+    ): TimelineDispatchResult => {
+        // This is the dispatch's only pre-reduction carrier revalidation.
+        const source = structuredClone(revalidate());
+        if (
+            expectedRevision !== undefined &&
+            expectedRevision !== documentRevision
+        ) {
+            return {
+                applied: false,
+                failure: "stale-revision",
+                revision: documentRevision,
+                impacts: [],
+            };
+        }
+
+        ensureAuthoringDocumentIdentity(source);
+        const reduced = reduceDocumentCommand(source, command);
+        if (!reduced.applied) {
+            return {
+                applied: false,
+                failure: reduced.failure,
+                revision: documentRevision,
+                impacts: [],
+            };
+        }
+        // An empty diff batch is still a successful atomic dispatch, but it
+        // must not rewrite carriers, advance the revision, or notify anyone.
+        if (reduced.impacts.length === 0) {
+            return {
+                applied: true,
+                revision: documentRevision,
+                impacts: [],
+            };
+        }
+
+        commit(
+            reduced.document,
+            origin,
+            notifyDomChange,
+            hint,
+            reduced.impacts,
+        );
+        return {
+            applied: true,
+            revision: documentRevision,
+            impacts: [...reduced.impacts],
+        };
     };
 
     const syncFromCarrier = (): boolean => {
@@ -178,7 +289,16 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
 
     return {
         getState: (): VideoStagesConfig => structuredClone(revalidate()),
+        getSnapshot: (): TimelineStoreSnapshot => ({
+            state: structuredClone(revalidate()),
+            revision: documentRevision,
+        }),
+        revision: (): number => {
+            revalidate();
+            return documentRevision;
+        },
         save,
+        dispatch,
         syncFromCarrier,
         subscribe: (cb: StoreSubscriber): (() => void) => {
             subscribers.add(cb);
@@ -194,6 +314,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
             cachedToken = null;
             syncedToken = null;
             lastGoodSerialized = "";
+            documentRevision = 0;
             subscribers.clear();
         },
     };

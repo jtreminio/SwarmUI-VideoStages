@@ -10,7 +10,7 @@ const glob = globalThis as MutableGlobal;
 
 describe("buildField help popovers", () => {
     afterEach(() => {
-        delete glob.doPopover;
+        Reflect.deleteProperty(glob, "doPopover");
     });
 
     it("renders no ? button or popover when no help text is given", () => {

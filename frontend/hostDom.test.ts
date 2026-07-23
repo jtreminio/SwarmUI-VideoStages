@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import { utils } from "./hostDom";
+import { toNumber } from "./utils";
 
 describe("utils", () => {
     describe("getInputElement", () => {
@@ -46,13 +47,13 @@ describe("utils", () => {
 
     describe("toNumber", () => {
         it("parses numeric strings", () => {
-            expect(utils.toNumber("42", 0)).toBe(42);
-            expect(utils.toNumber("3.14", 0)).toBeCloseTo(3.14);
+            expect(toNumber("42", 0)).toBe(42);
+            expect(toNumber("3.14", 0)).toBeCloseTo(3.14);
         });
 
         it("falls back when the value cannot be parsed", () => {
-            expect(utils.toNumber("not a number", 7)).toBe(7);
-            expect(utils.toNumber(undefined, 13)).toBe(13);
+            expect(toNumber("not a number", 7)).toBe(7);
+            expect(toNumber(undefined, 13)).toBe(13);
         });
     });
 });

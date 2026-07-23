@@ -1,3 +1,4 @@
+import { getLtxHostBridge } from "./host";
 import { readProp } from "./normalization";
 import { getState } from "./persistence";
 import { isVideoStagesEnabled } from "./swarmInputs";
@@ -5,7 +6,7 @@ import type { VideoStagesConfig } from "./types";
 import { isRecord, safeJsonParse } from "./utils";
 
 export const refineNeedsExtraStageMessage = (skipCount: number): string =>
-    `Refine Video needs clip 0 to have at least one active stage after Stage ${skipCount - 1} ` +
+    `Refine Video needs Clip 1 to have at least one active stage after Stage ${skipCount - 1} ` +
     `(for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
 
 export const countActiveStagesInMetadataClip0 = (
@@ -49,17 +50,18 @@ export const hasRefinementWorkToDo = (
 };
 
 export const refineVideoButton = (): void => {
-    if (typeof registerMediaButton !== "function") {
-        return;
-    }
-
-    registerMediaButton(
-        "Refine Video",
-        (src: string): void => {
+    const description =
+        "Re-runs VideoStages using this video as the source for Clip 1 (skips the first N stage samplers, " +
+        "where N is read from the source video's metadata). Requires an extra stage beyond those.";
+    getLtxHostBridge().registerRefineVideoButton((src: string): void => {
+        const host = getLtxHostBridge();
+        const run = async (): Promise<void> => {
             let parsedMetadata: unknown = null;
-            if (currentMetadataVal) {
+            const currentMetadata = host.getCurrentMediaMetadata();
+            if (currentMetadata) {
                 try {
-                    const readable = interpretMetadata(currentMetadataVal);
+                    const readable =
+                        host.interpretMediaMetadata(currentMetadata);
                     parsedMetadata = readable ? JSON.parse(readable) : null;
                 } catch (error) {
                     console.warn(
@@ -89,30 +91,26 @@ export const refineVideoButton = (): void => {
                     skipCount,
                 )
             ) {
-                showError(refineNeedsExtraStageMessage(skipCount));
+                host.showError(refineNeedsExtraStageMessage(skipCount));
                 return;
             }
 
-            toDataURL(src, (videoDataUrl: string): void => {
-                const inputOverrides: Record<string, unknown> = {
-                    videostagesrefinesourcevideo: videoDataUrl,
-                    videostagesrefineskipstages: skipCount,
-                    images: 1,
-                };
+            const videoDataUrl = await host.toDataUrl(src);
+            const inputOverrides: Record<string, unknown> = {
+                videostagesrefinesourcevideo: videoDataUrl,
+                videostagesrefineskipstages: skipCount,
+                images: 1,
+            };
 
-                const seed = isRecord(params)
-                    ? readProp(params, "seed")
-                    : undefined;
-                if (typeof seed === "number") {
-                    inputOverrides.seed = seed;
-                }
+            const seed = isRecord(params)
+                ? readProp(params, "seed")
+                : undefined;
+            if (typeof seed === "number") {
+                inputOverrides.seed = seed;
+            }
 
-                mainGenHandler.doGenerate(inputOverrides, {});
-            });
-        },
-        "Re-runs VideoStages using this video as the source for clip 0 (skips the first N stage samplers, " +
-            "where N is read from the source video's metadata). Requires an extra stage beyond those.",
-        ["video"],
-        true,
-    );
+            host.generate(inputOverrides);
+        };
+        void run();
+    }, description);
 };

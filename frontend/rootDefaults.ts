@@ -1,11 +1,14 @@
 import { ROOT_DIMENSION_MIN } from "./constants";
+import { getLtxHostBridge } from "./host";
 import { utils } from "./hostDom";
+import { filterLtxModelOptions, isLtxVideoModelValue } from "./ltxCapabilities";
 import {
     getDropdownOptions,
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
 import type { RootDefaults } from "./types";
+import { toNumber } from "./utils";
 
 const trimDomValue = (el: { value: string } | null | undefined): string =>
     `${el?.value ?? ""}`.trim();
@@ -13,7 +16,8 @@ const trimDomValue = (el: { value: string } | null | undefined): string =>
 /** Core input ids that carry the inherited dims/fps, in probe order. */
 const WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
 const HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
-const FPS_INPUT_IDS = ["input_videofps", "input_videoframespersecond"];
+const rootVideoFpsInput = (): HTMLInputElement | null =>
+    getLtxHostBridge().getRootVideoFpsInput();
 
 const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
     for (let i = 0; i < ids.length; i++) {
@@ -28,12 +32,12 @@ const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
 export const getDefaultStageModel = (modelValues: string[]): string => {
     if (isRootTextToVideoModel()) {
         const modelName = trimDomValue(getRootModelInput());
-        if (modelName) {
+        if (modelName && isLtxVideoModelValue(modelName)) {
             return modelName;
         }
     }
     const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
-    if (videoModel) {
+    if (videoModel && isLtxVideoModelValue(videoModel)) {
         return videoModel;
     }
     return modelValues[0] ?? "";
@@ -42,7 +46,7 @@ export const getDefaultStageModel = (modelValues: string[]): string => {
 export const readInheritedDimsSignature = (): string => {
     const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
     const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
-    const fps = trimDomValue(firstPresentInput(...FPS_INPUT_IDS));
+    const fps = trimDomValue(rootVideoFpsInput());
     return `${width}|${height}|${fps}`;
 };
 
@@ -67,29 +71,27 @@ export const getRootDefaults = (): RootDefaults => {
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
+    const models = filterLtxModelOptions(
+        utils.getSelectValues(model),
+        utils.getSelectLabels(model),
+    );
 
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
     const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
     const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
-    const fpsInput = firstPresentInput(
-        "input_videofps",
-        "input_videoframespersecond",
-    );
+    const fpsInput = rootVideoFpsInput();
     const framesInput = firstPresentInput(
         "input_videoframes",
         "input_text2videoframes",
     );
 
-    const fps = Math.max(1, Math.round(utils.toNumber(fpsInput?.value, 24)));
-    const frames = Math.max(
-        1,
-        Math.round(utils.toNumber(framesInput?.value, 24)),
-    );
+    const fps = Math.max(1, Math.round(toNumber(fpsInput?.value, 24)));
+    const frames = Math.max(1, Math.round(toNumber(framesInput?.value, 24)));
 
     return {
-        modelValues: utils.getSelectValues(model),
-        modelLabels: utils.getSelectLabels(model),
+        modelValues: models.values,
+        modelLabels: models.labels,
         loraValues: loras.values,
         loraLabels: loras.labels,
         samplerValues: sampler.values,
@@ -100,11 +102,11 @@ export const getRootDefaults = (): RootDefaults => {
         upscaleMethodLabels,
         width: Math.max(
             ROOT_DIMENSION_MIN,
-            Math.round(utils.toNumber(widthInput?.value, 1024)),
+            Math.round(toNumber(widthInput?.value, 1024)),
         ),
         height: Math.max(
             ROOT_DIMENSION_MIN,
-            Math.round(utils.toNumber(heightInput?.value, 1024)),
+            Math.round(toNumber(heightInput?.value, 1024)),
         ),
         fps,
         frames,
@@ -117,15 +119,15 @@ export const getRootDefaults = (): RootDefaults => {
         upscaleMax: 4,
         upscaleStep: 0.25,
         steps: 8,
-        stepsMin: Math.max(1, Math.round(utils.toNumber(steps?.min, 1))),
+        stepsMin: Math.max(1, Math.round(toNumber(steps?.min, 1))),
         stepsMax: Math.min(
             50,
-            Math.max(1, Math.round(utils.toNumber(steps?.max, 200))),
+            Math.max(1, Math.round(toNumber(steps?.max, 200))),
         ),
-        stepsStep: Math.max(1, Math.round(utils.toNumber(steps?.step, 1))),
+        stepsStep: Math.max(1, Math.round(toNumber(steps?.step, 1))),
         cfgScale: 1,
-        cfgScaleMin: utils.toNumber(cfgScale?.min, 0),
-        cfgScaleMax: Math.min(10, utils.toNumber(cfgScale?.max, 10)),
-        cfgScaleStep: utils.toNumber(cfgScale?.step, 0.5),
+        cfgScaleMin: toNumber(cfgScale?.min, 0),
+        cfgScaleMax: Math.min(10, toNumber(cfgScale?.max, 10)),
+        cfgScaleStep: toNumber(cfgScale?.step, 0.5),
     };
 };

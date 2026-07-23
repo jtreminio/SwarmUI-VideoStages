@@ -1,4 +1,5 @@
 import { injectTimelineTab } from "./bottomTimelineTab";
+import { getLtxHostBridge } from "./host";
 import { refineVideoButton } from "./refineVideoButton";
 import { DATA_INPUT_ID } from "./swarmInputs";
 import { videoStagesTimeline } from "./videoStagesTimeline";
@@ -14,7 +15,7 @@ const warnIfDataInputNeverAppears = (): void => {
         return;
     }
     dataInputWatchdog = setTimeout(() => {
-        if (!document.getElementById(DATA_INPUT_ID)) {
+        if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
             console.warn(
                 `VideoStages: Data param input (#${DATA_INPUT_ID}) never appeared — ` +
                     "is the VideoStages backend extension loaded?",
@@ -24,16 +25,12 @@ const warnIfDataInputNeverAppears = (): void => {
 };
 
 const registerVideoStagesPromptPrefix = (): void => {
-    if (typeof promptTabComplete === "undefined") {
-        return;
-    }
-
-    promptTabComplete.registerPrefix(
+    getLtxHostBridge().registerPromptPrefix(
         "videoclip",
         "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
         () => [
-            "\n<videoclip[0]>clip 0's prompt text — everything until the next <videoclip...> tag.",
-            "\n<videoclip[0]:1.5-4>a prompt window on clip 0 from 1.5s to 4s.",
+            "\n<videoclip[0]>the first clip's prompt text — everything until the next <videoclip...> tag.",
+            "\n<videoclip[0]:1.5-4>a prompt window on the first clip from 1.5s to 4s.",
             "\nThe timeline owns these; structured config (stages, refs, audio) rides in the hidden Data param.",
         ],
         true,
@@ -49,7 +46,7 @@ const initTimeline = (): void => {
     // us. Initializing against a paramless DOM would parse an empty carrier
     // and silently no-op every save, so keep retrying until the input exists;
     // init is re-runnable by design, so a later host-triggered call is fine.
-    if (!document.getElementById(DATA_INPUT_ID)) {
+    if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
         warnIfDataInputNeverAppears();
         if (!dataInputRetryTimer) {
             dataInputRetryTimer = setTimeout(() => {
@@ -67,11 +64,9 @@ const initTimeline = (): void => {
 };
 
 const scheduleTimelineInit = (): void => {
-    if (!Array.isArray(postParamBuildSteps)) {
+    if (!getLtxHostBridge().addPostParamBuildStep(initTimeline)) {
         setTimeout(scheduleTimelineInit, 200);
-        return;
     }
-    postParamBuildSteps.push(initTimeline);
 };
 
 scheduleTimelineInit();

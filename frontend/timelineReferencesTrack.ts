@@ -1,4 +1,5 @@
 import { clamp, REF_FRAME_MIN } from "./constants";
+import { documentFps } from "./documentQueries";
 import {
     claimOnly,
     type GestureRouter,
@@ -10,7 +11,7 @@ import {
     getReferenceFrameMax,
     removeRefAt,
 } from "./normalization";
-import { getClips } from "./persistence";
+import { getClips, getState } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
@@ -18,7 +19,6 @@ import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
 import {
     commitClipMutation,
-    currentTimelineFps,
     isActivateKey,
     parseIntAttr,
 } from "./trackDomUtils";
@@ -82,6 +82,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         frame: number,
         sourceJson: string,
     ): void => {
+        const fps = documentFps(getState());
         let newRefIdx = -1;
         const saved = commitClipMutation(
             sourceJson,
@@ -91,7 +92,11 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
                 if (!clip) {
                     return null;
                 }
-                const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+                const frameMax = getReferenceFrameMax(
+                    getRootDefaults,
+                    clip,
+                    fps,
+                );
                 const ref = buildDefaultRef();
                 ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
                 appendRefToClip(clip, ref);
@@ -229,7 +234,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
                 mark.querySelector<HTMLElement>(".vst-refs-ph")?.textContent ??
                 "",
             durationSeconds: clip.duration,
-            fps: currentTimelineFps(),
+            fps: documentFps(getState()),
             fromEnd: ref.fromEnd === true,
             sourceJson: readStateToken(),
         });
@@ -273,7 +278,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             (event as MouseEvent).clientX - rect.left,
             rect.width,
             clip.duration,
-            currentTimelineFps(),
+            documentFps(getState()),
             false,
         );
         addRefAtFrame(clipIdx, frame, readStateToken());

@@ -7,6 +7,8 @@
  * jsdom in tests) still yields a usable clip.
  */
 
+import { getLtxHostBridge } from "./host";
+
 export interface SourceVideoProbe {
     durationSeconds: number;
     fps: number | null;
@@ -55,7 +57,8 @@ export const probeSourceVideo = (
     timeoutMs = 8000,
 ): Promise<SourceVideoProbe | null> =>
     new Promise((resolve) => {
-        const video = document.createElement("video") as VideoWithFrameCallback;
+        const video =
+            getLtxHostBridge().createSourceVideoElement() as VideoWithFrameCallback;
         video.muted = true;
         video.preload = "auto";
         let settled = false;

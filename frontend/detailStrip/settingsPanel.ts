@@ -22,6 +22,7 @@ import {
 } from "../dimensionPresets";
 import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
+import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
 
 const GROUP_SETTINGS = "vstdock_settings";
@@ -192,5 +193,6 @@ export const buildSettingsBody = (ctx: DetailStripContext): HTMLElement => {
         fpsField.classList.add("vst-audio-disabled");
     }
     body.appendChild(fpsField);
+    body.appendChild(buildAudioTracksPanel(ctx, state));
     return wrapForm(GROUP_SETTINGS, body);
 };

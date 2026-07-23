@@ -69,9 +69,13 @@ describe("livePxPerSecond", () => {
 // The config rides in the hidden VideoStages Data param.
 const clipsSection = (
     clips: Array<Record<string, unknown>>,
+    fps?: number,
 ): HTMLTextAreaElement => {
     mountPromptBox("");
-    return mountVideoStagesData({ clips });
+    return mountVideoStagesData({
+        ...(fps === undefined ? {} : { fps }),
+        clips,
+    });
 };
 
 const durationClips = (durations: number[]): Array<Record<string, unknown>> =>
@@ -343,5 +347,38 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const clips = savedClips(saveSpy);
         expect(clips[0].duration).toBe(4);
         expect(clips[1].duration).toBe(2);
+    });
+
+    it("uses stored 16fps for duration snapping and reference clamping on resize", () => {
+        clipsSection(
+            [
+                {
+                    duration: 5,
+                    stages: [{}],
+                    refs: [{ source: "Base", frame: 999 }],
+                },
+            ],
+            16,
+        );
+        const body = makeBody();
+        renderRegions(body, 1);
+        stubRegionRects(body);
+        const saveSpy = jest.spyOn(persistence, "saveClips");
+
+        linking = createTimelineLinking();
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
+
+        region(body, 0)
+            .querySelector<HTMLElement>(".vst-region-resize")
+            ?.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 56));
+        document.dispatchEvent(mouse("mouseup", 56));
+
+        const clips = savedClips(saveSpy);
+        expect(persistence.getState().fps).toBe(16);
+        expect(clips[0].duration).toBe(1.3);
+        expect(clips[0].refs[0].frame).toBe(25);
     });
 });

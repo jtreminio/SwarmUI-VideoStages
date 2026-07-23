@@ -1,5 +1,6 @@
+import { documentFps } from "./documentQueries";
 import type { GestureRouter, GestureSession } from "./gestureRouter";
-import { getClips, saveClips } from "./persistence";
+import { getClips, getState, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { getSelectedClipIndex, getSelection, setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
@@ -13,7 +14,6 @@ import {
 } from "./timelineReorder";
 import {
     commitClipMutation,
-    currentTimelineFps,
     livePxPerSecond,
     parseIntAttr,
 } from "./trackDomUtils";
@@ -254,16 +254,18 @@ export const createTimelineLinking = (): TimelineLinking => {
                         ) {
                             return null;
                         }
+                        const fps = documentFps(getState());
                         const newDuration = pxToDuration(
                             width,
                             livePxPerSecond(body),
-                            currentTimelineFps(),
+                            fps,
                         );
                         if (
                             !applyClipDurationResize(
                                 clip,
                                 newDuration,
                                 getRootDefaults,
+                                fps,
                             )
                         ) {
                             return null;

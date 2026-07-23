@@ -1,3 +1,5 @@
+import { getLtxHostBridge } from "./host";
+
 export const REF_FRAME_MIN = 1;
 export const DEFAULT_CLIP_DURATION_SECONDS = 5;
 export const CLIP_DURATION_MIN = 1;
@@ -82,7 +84,6 @@ export const mediaPreviewSrc = (value: string): string => {
     if (`${value ?? ""}`.startsWith("data:")) {
         return value;
     }
-    const prefix =
-        typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "";
+    const prefix = getLtxHostBridge().getMediaOutputPrefix();
     return `${prefix}/${value}`;
 };

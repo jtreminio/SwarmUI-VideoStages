@@ -32,13 +32,25 @@ export interface RootDefaults {
 }
 
 export interface VideoStagesConfig {
+    /**
+     * Version of the frontend authoring document. Legacy array/object payloads
+     * omit this; persistence upgrades them to CURRENT_AUTHORING_SCHEMA_VERSION.
+     */
+    schemaVersion?: number;
     width: number;
     height: number;
     fps: number;
     dimsExplicit: boolean;
     fpsExplicit: boolean;
     clips: Clip[];
+    /**
+     * Planned timeline-wide audio authoring. The backend currently ignores
+     * this root field; clip-local audio remains the runtime compatibility path.
+     */
+    audioTracks?: AudioTrack[];
 }
+
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 2;
 
 export interface UploadedAudio {
     data: string;
@@ -60,6 +72,7 @@ export interface StageLora {
  * inside the clip. Backend mixes each segment additively over the base audio.
  */
 export interface AudioSegment {
+    id?: string;
     source: UploadedAudio | string | null;
     startSeconds: number;
     trimStartSeconds: number;
@@ -67,6 +80,7 @@ export interface AudioSegment {
 }
 
 export interface Stage {
+    id?: string;
     skipped: boolean;
     control: number;
     controlNetStrength: number;
@@ -82,6 +96,12 @@ export interface Stage {
 }
 
 export interface PromptWindow {
+    /**
+     * Prompt windows ride the prompt carrier, whose syntax has no ID slot.
+     * Persistence keeps this ID in the versioned UI-state sidecar when
+     * possible; it is regenerated if that browser-local sidecar is absent.
+     */
+    id?: string;
     prompt: string;
     start: number;
     duration: number;
@@ -93,6 +113,7 @@ export interface PromptWindow {
  * rest stay locked; `strength` is the per-frame noise-mask value inside it.
  */
 export interface Retake {
+    id?: string;
     startSeconds: number;
     lengthSeconds: number;
     strength: number;
@@ -107,8 +128,8 @@ export interface Retake {
  * the file, and the clip's own duration follows `lengthSeconds`. The backend
  * conforms the range to the timeline (fps resample, exact frame window,
  * resize) and feeds it to the clip's stage chain as per-clip refine input:
- * stage 0 passes it through, later stages refine/upscale it, and a retake
- * window regenerates part of it.
+ * stage 0 refines it according to its Control value, later stages
+ * refine/upscale it, and a retake window regenerates part of it.
  */
 export interface SourceVideo {
     data: string;
@@ -120,6 +141,7 @@ export interface SourceVideo {
 }
 
 export interface RefImage {
+    id?: string;
     source: string;
     uploadFileName: string | null;
     uploadedImage: UploadedAudio | null;
@@ -163,6 +185,7 @@ export interface IcLora {
 }
 
 export interface Clip {
+    id?: string;
     skipped: boolean;
     hue: number;
     boundaryOut: BoundaryOut;
@@ -190,6 +213,77 @@ export interface Clip {
     stages: Stage[];
 }
 
+export type AudioTrackSourceKind =
+    | "Upload"
+    | "AceStepFun"
+    | "Native"
+    | "ControlNet"
+    | "External";
+
+/** Metadata-only source identity for a planned timeline-wide audio track. */
+export interface AudioTrackSource {
+    kind: AudioTrackSourceKind;
+    reference: string;
+    uploadedAudio: UploadedAudio | null;
+}
+
+/**
+ * One addressable interval of a root audio track. Clip endpoints are inclusive
+ * stable clip IDs; a missing first or last endpoint means timeline start or
+ * timeline end. With both endpoints missing, a complete timeline start/length
+ * owns the span. A timeline window and clip range may coexist (intersection);
+ * a clip-relative window requires the same concrete clip at both endpoints.
+ */
+export interface AudioTrackSpan {
+    id?: string;
+    firstClipId: string | null;
+    lastClipId: string | null;
+    timelineStartSeconds: number | null;
+    timelineLengthSeconds: number | null;
+    sourceStartSeconds: number;
+    clipStartOffsetSeconds: number | null;
+    clipLengthSeconds: number | null;
+}
+
+/** A logical source with one or more independently addressable spans. */
+export interface AudioTrack {
+    id?: string;
+    source: AudioTrackSource;
+    spans: AudioTrackSpan[];
+}
+
+type WithRequiredId<T extends { id?: string }> = Omit<T, "id"> & {
+    id: string;
+};
+
+export type CanonicalAudioSegment = WithRequiredId<AudioSegment>;
+export type CanonicalStage = WithRequiredId<Stage>;
+export type CanonicalPromptWindow = WithRequiredId<PromptWindow>;
+export type CanonicalRetake = WithRequiredId<Retake>;
+export type CanonicalRefImage = WithRequiredId<RefImage>;
+export type CanonicalAudioTrackSpan = WithRequiredId<AudioTrackSpan>;
+export type CanonicalAudioTrack = Omit<WithRequiredId<AudioTrack>, "spans"> & {
+    spans: CanonicalAudioTrackSpan[];
+};
+export type CanonicalClip = Omit<
+    WithRequiredId<Clip>,
+    "audioSegments" | "promptWindows" | "retake" | "refs" | "stages"
+> & {
+    audioSegments: CanonicalAudioSegment[];
+    promptWindows: CanonicalPromptWindow[];
+    retake: CanonicalRetake | null;
+    refs: CanonicalRefImage[];
+    stages: CanonicalStage[];
+};
+export type CanonicalVideoStagesConfig = Omit<
+    VideoStagesConfig,
+    "schemaVersion" | "clips" | "audioTracks"
+> & {
+    schemaVersion: number;
+    clips: CanonicalClip[];
+    audioTracks: CanonicalAudioTrack[];
+};
+
 /**
  * Canonical lists of the fields each `Stored*` type persists. These are the
  * single source of truth: the `Stored*` types below are derived from them, and
@@ -201,6 +295,7 @@ export interface Clip {
  * elsewhere (`UNSTORED_CLIP_KEYS`).
  */
 export const STORED_REF_KEYS = [
+    "id",
     "source",
     "uploadFileName",
     "uploadedImage",
@@ -209,6 +304,7 @@ export const STORED_REF_KEYS = [
 ] as const satisfies readonly (keyof RefImage)[];
 
 export const STORED_STAGE_KEYS = [
+    "id",
     "skipped",
     "control",
     "controlNetStrength",
@@ -224,6 +320,7 @@ export const STORED_STAGE_KEYS = [
 ] as const satisfies readonly (keyof Stage)[];
 
 export const STORED_CLIP_KEYS = [
+    "id",
     "skipped",
     "boundaryOut",
     "boundaryOutOverlap",
@@ -244,9 +341,12 @@ export const STORED_CLIP_KEYS = [
 
 /**
  * Clip fields deliberately NOT in the Data param: `prompt`/`promptWindows` ride
- * the prompt carrier, `hue` rides the UI-state store. Listing them here is what
- * keeps them out of the exhaustiveness error while still forcing a new Clip
- * field to be a conscious choice between stored and carried-elsewhere.
+ * the prompt carrier, while prompt-window IDs and `hue` ride the versioned,
+ * browser-local UI-state sidecar keyed by the Data-carried clip ID. Without
+ * that sidecar, prompt-window IDs are deterministically re-derived from their
+ * clip/window paths. Listing them here keeps them out of the exhaustiveness
+ * error while still forcing a new Clip field to be a conscious choice between
+ * stored and carried-elsewhere.
  */
 export const UNSTORED_CLIP_KEYS = [
     "hue",
@@ -280,14 +380,29 @@ const _clipKeysExhaustive: AssertClassified<
 > = true;
 void [_refKeysExhaustive, _stageKeysExhaustive, _clipKeysExhaustive];
 
-export type StoredRefImage = Pick<RefImage, (typeof STORED_REF_KEYS)[number]>;
+type RequireEntityId<T extends { id?: string }> = Omit<T, "id"> & {
+    id: string;
+};
 
-export type StoredStage = Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>;
+export type StoredRefImage = RequireEntityId<
+    Pick<RefImage, (typeof STORED_REF_KEYS)[number]>
+>;
 
-export type StoredClip = Pick<
-    Clip,
-    Exclude<(typeof STORED_CLIP_KEYS)[number], "refs" | "stages">
+export type StoredStage = RequireEntityId<
+    Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>
+>;
+
+export type StoredClip = RequireEntityId<
+    Pick<
+        Clip,
+        Exclude<
+            (typeof STORED_CLIP_KEYS)[number],
+            "audioSegments" | "retake" | "refs" | "stages"
+        >
+    >
 > & {
+    audioSegments: CanonicalAudioSegment[];
+    retake: CanonicalRetake | null;
     refs: StoredRefImage[];
     stages: StoredStage[];
 };

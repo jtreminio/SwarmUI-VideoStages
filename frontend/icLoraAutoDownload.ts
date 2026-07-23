@@ -1,5 +1,10 @@
 import { IC_LORA_AUTO } from "./constants";
 import {
+    canRequestHostWs,
+    refreshHostParameters,
+    requestHostWs,
+} from "./host/swarmUiAdapters";
+import {
     findIcLoraPreset,
     type IcLoraPreset,
     icLoraAutoModelName,
@@ -70,9 +75,7 @@ const finish = (preset: IcLoraPreset, onSettled: () => void): void => {
     setStatus(preset, { state: "done" });
     // DoModelDownloadWS does not refresh model lists itself; this pulls the new file into the
     // core LoRA param (and thus this strip's dropdown values) and into the backend model set.
-    if (typeof refreshParameterValues === "function") {
-        refreshParameterValues(true);
-    }
+    refreshHostParameters();
     onSettled();
 };
 
@@ -98,7 +101,7 @@ export const ensureIcLoraAutoWeights = (
     ) {
         return;
     }
-    if (typeof makeWSRequest !== "function") {
+    if (!canRequestHostWs()) {
         statuses.set(preset.id, {
             state: "error",
             message: "Model downloader is unavailable.",
@@ -106,7 +109,7 @@ export const ensureIcLoraAutoWeights = (
         return;
     }
     statuses.set(preset.id, { state: "downloading", percent: 0 });
-    makeWSRequest(
+    requestHostWs(
         "VideoStagesDownloadIcLoraWS",
         { presetId: preset.id },
         (data) => {
@@ -121,7 +124,6 @@ export const ensureIcLoraAutoWeights = (
                 finish(preset, onSettled);
             }
         },
-        0,
         (error) => {
             if (`${error}` === "Model at that save path already exists.") {
                 finish(preset, onSettled);

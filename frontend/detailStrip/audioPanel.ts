@@ -6,6 +6,7 @@ import {
     isAceStepFunAudioSource,
     resolveAudioSourceValue,
 } from "../audioSource";
+import { isAudioReuseEligible } from "../authoringDiagnostics";
 import {
     buildCheckbox,
     buildField,
@@ -33,6 +34,7 @@ export const buildAudioBody = (
     const source = resolveAudioSourceValue(clip.audioSource ?? "", options);
     const canLength = canUseClipLengthFromAudio(source);
     const isAce = isAceStepFunAudioSource(source);
+    const canReuseStageAudio = isAudioReuseEligible(clip);
 
     const commitAudio = (mutate: (clip: Clip) => void): void => {
         ctx.commit((cs) => {
@@ -91,7 +93,7 @@ export const buildAudioBody = (
 
     body.appendChild(
         buildCheckbox(
-            "Reuse Audio",
+            "Reuse Captured Stage Audio",
             clip.reuseAudio === true,
             (value) => {
                 commitAudio((c) => {
@@ -99,10 +101,11 @@ export const buildAudioBody = (
                 });
             },
             {
+                disabled: !canReuseStageAudio,
                 help:
-                    "Carry the previous clip's audio into this clip instead of " +
-                    "producing new audio — useful for continuous music or " +
-                    "speech across a cut.",
+                    "Capture this clip's audio after its second active stage and " +
+                    "reuse that captured audio from the third active stage onward. " +
+                    "Requires at least three active stages.",
             },
         ),
     );

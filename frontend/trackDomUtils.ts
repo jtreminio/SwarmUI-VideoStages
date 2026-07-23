@@ -4,7 +4,6 @@
 
 import { clamp } from "./constants";
 import { getClips, saveClips } from "./persistence";
-import { getRootDefaults } from "./rootDefaults";
 import type { UpdateOrigin } from "./store";
 import { readStateToken } from "./swarmInputs";
 import { DEFAULT_PX_PER_SECOND } from "./timelineView";
@@ -69,16 +68,6 @@ export const commitClipMutation = (
     }
     saveClips(next, { origin });
     return true;
-};
-
-/** The timeline's fps for frame math, with the 24fps fallback. */
-export const currentTimelineFps = (): number => {
-    try {
-        const fps = getRootDefaults().fps;
-        return typeof fps === "number" && fps > 0 ? fps : 24;
-    } catch {
-        return 24;
-    }
 };
 
 /**

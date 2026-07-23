@@ -1,0 +1,226 @@
+import {
+    type CanonicalVideoStagesConfig,
+    CURRENT_AUTHORING_SCHEMA_VERSION,
+    type VideoStagesConfig,
+} from "./types";
+
+export type EntityKind =
+    | "clip"
+    | "stage"
+    | "ref"
+    | "audio_segment"
+    | "prompt_window"
+    | "retake"
+    | "audio_track"
+    | "audio_span";
+
+interface MaybeIdentified {
+    id?: string;
+}
+
+interface IdentityEntry {
+    entity: MaybeIdentified;
+    kind: EntityKind;
+    migrationPath: string;
+}
+
+let fallbackSequence = 0;
+
+const normalizedExistingId = (value: unknown): string | null => {
+    if (typeof value !== "string") {
+        return null;
+    }
+    const id = value.trim();
+    return id.length > 0 ? id : null;
+};
+
+export const createEntityId = (kind: EntityKind): string => {
+    const randomUuid = globalThis.crypto?.randomUUID?.();
+    if (randomUuid) {
+        return `${kind}_${randomUuid}`;
+    }
+    fallbackSequence += 1;
+    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
+};
+
+const assignUniqueId = (
+    entry: IdentityEntry,
+    reserved: ReadonlyMap<MaybeIdentified, string>,
+    used: Set<string>,
+): string => {
+    const reservedId = reserved.get(entry.entity);
+    if (reservedId) {
+        entry.entity.id = reservedId;
+        return reservedId;
+    }
+
+    const base = `${entry.kind}_legacy_${entry.migrationPath}`;
+    let id = base;
+    let collision = 1;
+    while (used.has(id)) {
+        collision += 1;
+        id = `${base}_${collision}`;
+    }
+    entry.entity.id = id;
+    used.add(id);
+    return id;
+};
+
+const clipIdentityEntries = (
+    clips: VideoStagesConfig["clips"],
+): IdentityEntry[] => {
+    const entries: IdentityEntry[] = [];
+    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
+        const clip = clips[clipIndex];
+        entries.push({
+            entity: clip,
+            kind: "clip",
+            migrationPath: `${clipIndex}`,
+        });
+        for (
+            let stageIndex = 0;
+            stageIndex < clip.stages.length;
+            stageIndex++
+        ) {
+            entries.push({
+                entity: clip.stages[stageIndex],
+                kind: "stage",
+                migrationPath: `${clipIndex}_${stageIndex}`,
+            });
+        }
+        for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
+            entries.push({
+                entity: clip.refs[refIndex],
+                kind: "ref",
+                migrationPath: `${clipIndex}_${refIndex}`,
+            });
+        }
+        for (
+            let segmentIndex = 0;
+            segmentIndex < clip.audioSegments.length;
+            segmentIndex++
+        ) {
+            entries.push({
+                entity: clip.audioSegments[segmentIndex],
+                kind: "audio_segment",
+                migrationPath: `${clipIndex}_${segmentIndex}`,
+            });
+        }
+        for (
+            let windowIndex = 0;
+            windowIndex < clip.promptWindows.length;
+            windowIndex++
+        ) {
+            entries.push({
+                entity: clip.promptWindows[windowIndex],
+                kind: "prompt_window",
+                migrationPath: `${clipIndex}_${windowIndex}`,
+            });
+        }
+        if (clip.retake) {
+            entries.push({
+                entity: clip.retake,
+                kind: "retake",
+                migrationPath: `${clipIndex}`,
+            });
+        }
+    }
+    return entries;
+};
+
+const audioTrackIdentityEntries = (
+    tracks: NonNullable<VideoStagesConfig["audioTracks"]>,
+): IdentityEntry[] => {
+    const entries: IdentityEntry[] = [];
+    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+        const track = tracks[trackIndex];
+        entries.push({
+            entity: track,
+            kind: "audio_track",
+            migrationPath: `${trackIndex}`,
+        });
+        for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
+            entries.push({
+                entity: track.spans[spanIndex],
+                kind: "audio_span",
+                migrationPath: `${trackIndex}_${spanIndex}`,
+            });
+        }
+    }
+    return entries;
+};
+
+const assignEntryIdentities = (
+    entries: readonly IdentityEntry[],
+    used: Set<string>,
+): void => {
+    // Reserve every first valid existing occurrence before filling any gaps.
+    // Otherwise an earlier missing positional ID can steal a later entity's
+    // durable legacy ID and silently retarget stable references.
+    const reserved = new Map<MaybeIdentified, string>();
+    for (const { entity } of entries) {
+        const existing = normalizedExistingId(entity.id);
+        if (existing && !used.has(existing)) {
+            reserved.set(entity, existing);
+            used.add(existing);
+        }
+    }
+    for (const entry of entries) {
+        assignUniqueId(entry, reserved, used);
+    }
+};
+
+/**
+ * Adds and de-duplicates every clip-owned identity in place. This is the
+ * compatibility seam for legacy UI constructors, which may still create an
+ * entity without an id before the next save.
+ */
+export const ensureClipEntityIdentities = (
+    clips: VideoStagesConfig["clips"],
+    seen: Set<string> = new Set<string>(),
+): Set<string> => {
+    assignEntryIdentities(clipIdentityEntries(clips), seen);
+    return seen;
+};
+
+/**
+ * Upgrades a raw/legacy working config into the canonical versioned authoring
+ * document in place. Existing unique IDs survive; missing, blank, or duplicate
+ * IDs are replaced once and then persist through the normal carriers.
+ */
+export function ensureAuthoringDocumentIdentity(
+    state: VideoStagesConfig,
+): asserts state is CanonicalVideoStagesConfig {
+    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    state.audioTracks ??= [];
+    assignEntryIdentities(
+        [
+            ...clipIdentityEntries(state.clips),
+            ...audioTrackIdentityEntries(state.audioTracks),
+        ],
+        new Set<string>(),
+    );
+}
+
+export const collectAuthoringEntityIds = (
+    state: VideoStagesConfig,
+): string[] => {
+    const ids: string[] = [];
+    for (const clip of state.clips) {
+        if (clip.id) ids.push(clip.id);
+        for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
+        for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+        for (const segment of clip.audioSegments) {
+            if (segment.id) ids.push(segment.id);
+        }
+        for (const window of clip.promptWindows) {
+            if (window.id) ids.push(window.id);
+        }
+        if (clip.retake?.id) ids.push(clip.retake.id);
+    }
+    for (const track of state.audioTracks ?? []) {
+        if (track.id) ids.push(track.id);
+        for (const span of track.spans) if (span.id) ids.push(span.id);
+    }
+    return ids;
+};

@@ -33,6 +33,7 @@ interface Harness {
     carrier: FakeCarrier;
     deps: StoreDeps;
     parseCalls: string[];
+    writeQuietCalls: VideoStagesConfig[];
     notifyHostCalls: number[];
     onNotifyHost: (() => void) | null;
 }
@@ -41,6 +42,7 @@ const makeHarness = (): Harness => {
     const carrier: FakeCarrier = { data: "", prompt: "", dims: "w|h|f" };
     const harness = {} as Harness;
     const parseCalls: string[] = [];
+    const writeQuietCalls: VideoStagesConfig[] = [];
     const notifyHostCalls: number[] = [];
     const deps: StoreDeps = {
         readToken: () =>
@@ -67,6 +69,7 @@ const makeHarness = (): Harness => {
         },
         parseEmpty: emptyConfig,
         writeQuiet: (state: VideoStagesConfig): string => {
+            writeQuietCalls.push(structuredClone(state));
             const serialized = JSON.stringify({
                 width: state.width,
                 clips: state.clips.map((clip) => ({
@@ -86,6 +89,7 @@ const makeHarness = (): Harness => {
     harness.carrier = carrier;
     harness.deps = deps;
     harness.parseCalls = parseCalls;
+    harness.writeQuietCalls = writeQuietCalls;
     harness.notifyHostCalls = notifyHostCalls;
     harness.onNotifyHost = null;
     return harness;
@@ -171,10 +175,28 @@ describe("createTimelineStore", () => {
             h.store.getState();
             expect(h.parseCalls).toHaveLength(2);
         });
+
+        it("returns an atomic isolated snapshot with a monotonic revision", () => {
+            h.carrier.data = '{"width":640,"clips":[]}';
+            const first = h.store.getSnapshot();
+            const cached = h.store.getSnapshot();
+            expect(first.revision).toBeGreaterThan(0);
+            expect(cached.revision).toBe(first.revision);
+
+            first.state.width = 1;
+            expect(h.store.getState().width).toBe(640);
+
+            h.carrier.data = '{"width":512,"clips":[]}';
+            const changed = h.store.getSnapshot();
+            expect(changed.state.width).toBe(512);
+            expect(changed.revision).toBe(first.revision + 1);
+            expect(h.store.revision()).toBe(changed.revision);
+        });
     });
 
     describe("save", () => {
         it("writes carriers, adopts the re-parsed model, and notifies host", () => {
+            const before = h.store.revision();
             const state = emptyConfig();
             state.clips = [clipStub(3, "a fox")];
             const serialized = h.store.save(state, "linking", true);
@@ -185,6 +207,7 @@ describe("createTimelineStore", () => {
             const parseCountAfterSave = h.parseCalls.length;
             expect(h.store.getState().clips[0].prompt).toBe("a fox");
             expect(h.parseCalls).toHaveLength(parseCountAfterSave);
+            expect(h.store.revision()).toBe(before + 1);
         });
 
         it("skips the host notification when notifyDomChange is false", () => {
@@ -228,6 +251,133 @@ describe("createTimelineStore", () => {
             h.store.save(state, "linking", false);
             state.clips[0].duration = 99;
             expect(h.store.getState().clips[0].duration).toBe(3);
+        });
+    });
+
+    describe("dispatch", () => {
+        it("atomically applies a command with one write and one host notification", () => {
+            const snapshot = h.store.getSnapshot();
+            const result = h.store.dispatch(
+                {
+                    type: "root.patch",
+                    patch: { width: 640, dimsExplicit: true },
+                },
+                "timeline",
+                true,
+                snapshot.revision,
+            );
+
+            expect(result).toEqual({
+                applied: true,
+                revision: snapshot.revision + 1,
+                impacts: ["value", "capabilities"],
+            });
+            expect(h.writeQuietCalls).toHaveLength(1);
+            expect(h.notifyHostCalls).toHaveLength(1);
+            expect(h.store.getState().width).toBe(640);
+        });
+
+        it("fails closed on a missing target without writing or notifying", () => {
+            const before = h.store.getSnapshot();
+            const result = h.store.dispatch(
+                { type: "clip.remove", clipId: "missing" },
+                "timeline",
+                true,
+                before.revision,
+            );
+
+            expect(result).toEqual({
+                applied: false,
+                failure: "missing-target",
+                revision: before.revision,
+                impacts: [],
+            });
+            expect(h.writeQuietCalls).toHaveLength(0);
+            expect(h.notifyHostCalls).toHaveLength(0);
+            expect(h.store.getSnapshot()).toEqual(before);
+        });
+
+        it("treats an empty atomic batch as a no-op without writing or notifying", () => {
+            const before = h.store.getSnapshot();
+            const seen: UpdateMeta[] = [];
+            h.store.subscribe((_state, meta) => {
+                seen.push(meta);
+            });
+
+            const result = h.store.dispatch(
+                { type: "batch", commands: [] },
+                "detail-strip",
+                true,
+                before.revision,
+                "value-only",
+            );
+
+            expect(result).toEqual({
+                applied: true,
+                revision: before.revision,
+                impacts: [],
+            });
+            expect(h.writeQuietCalls).toHaveLength(0);
+            expect(h.notifyHostCalls).toHaveLength(0);
+            expect(seen).toEqual([]);
+            expect(h.store.getSnapshot()).toEqual(before);
+        });
+
+        it("revalidates and rejects a stale revision before reducing or writing", () => {
+            h.carrier.data = '{"width":640,"clips":[]}';
+            const stale = h.store.getSnapshot();
+            h.carrier.data = '{"width":512,"clips":[]}';
+
+            const result = h.store.dispatch(
+                {
+                    type: "root.patch",
+                    patch: { width: 999, dimsExplicit: true },
+                },
+                "timeline",
+                true,
+                stale.revision,
+            );
+
+            expect(result).toEqual({
+                applied: false,
+                failure: "stale-revision",
+                revision: stale.revision + 1,
+                impacts: [],
+            });
+            expect(h.writeQuietCalls).toHaveLength(0);
+            expect(h.notifyHostCalls).toHaveLength(0);
+            expect(h.store.getState().width).toBe(512);
+        });
+
+        it("notifies subscribers once with command impacts after the host echo", () => {
+            const seen: UpdateMeta[] = [];
+            h.store.subscribe((_state, meta) => {
+                seen.push(meta);
+            });
+            let reentrantResult: boolean | null = null;
+            h.onNotifyHost = () => {
+                reentrantResult = h.store.syncFromCarrier();
+            };
+
+            const result = h.store.dispatch(
+                { type: "root.patch", patch: { fps: 30 } },
+                "detail-strip",
+                true,
+                undefined,
+                "value-only",
+            );
+
+            expect(result.applied).toBe(true);
+            expect(reentrantResult).toBe(false);
+            expect(seen).toEqual([
+                {
+                    origin: "detail-strip",
+                    hint: "value-only",
+                    impacts: ["value", "capabilities"],
+                },
+            ]);
+            expect(h.writeQuietCalls).toHaveLength(1);
+            expect(h.notifyHostCalls).toHaveLength(1);
         });
     });
 

@@ -1,10 +1,90 @@
 "use strict";
 (() => {
+  // frontend/host/swarmUiAdapters.ts
+  var findHostBottomTabLink = (tabId) => document.querySelector(`a[href="#${tabId}"]`);
+  var getHostBottomTabMount = () => {
+    const nav = document.getElementById("bottombartabcollection");
+    const content = document.getElementById("t2i_bottom_bar_content");
+    if (!nav || !content) {
+      return null;
+    }
+    return {
+      nav,
+      content,
+      toolsTabItem: nav.querySelector('a[href="#Tools-Tab"]')?.parentElement ?? null
+    };
+  };
+  var registerBottomTabWithHost = (navLink) => {
+    if (typeof genTabLayout === "undefined" || !genTabLayout) {
+      return;
+    }
+    const tab = new MovableGenTab(navLink, genTabLayout);
+    genTabLayout.managedTabs.push(tab);
+    if (genTabLayout.managedTabContainers.length === 0) {
+      return;
+    }
+    tab.contentElem.style.height = "100%";
+    tab.contentElem.style.width = "100%";
+    const parent = tab.contentElem.parentElement;
+    if (parent && !genTabLayout.managedTabContainers.includes(parent)) {
+      genTabLayout.managedTabContainers.push(parent);
+    }
+    tab.update();
+    tab.navElem.addEventListener("click", () => {
+      browserUtil.makeVisible(tab.contentElem);
+    });
+    genTabLayout.reapplyPositions();
+  };
+  var showHostPopover = (id, event) => {
+    if (typeof doPopover === "function") {
+      doPopover(id, event);
+    }
+  };
+  var renderHostSlider = (spec) => makeSliderInput(
+    null,
+    spec.id,
+    "",
+    spec.label,
+    "",
+    spec.value,
+    spec.min,
+    spec.max,
+    spec.min,
+    spec.max,
+    spec.step,
+    false,
+    false,
+    false
+  );
+  var enhanceHostPromptEditor = (editor) => {
+    if (typeof textPromptAddKeydownHandler === "function") {
+      textPromptAddKeydownHandler(editor);
+    }
+  };
+  var hasHostInputBrowser = () => typeof inputBrowserHelper !== "undefined" && Boolean(inputBrowserHelper);
+  var openHostInputBrowser = (inputId, browserTypes) => {
+    if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
+      inputBrowserHelper.openInputBrowser(inputId, browserTypes);
+    }
+  };
+  var refreshHostParameters = () => {
+    if (typeof refreshParameterValues === "function") {
+      refreshParameterValues(true);
+    }
+  };
+  var canRequestHostWs = () => typeof makeWSRequest === "function";
+  var requestHostWs = (route, payload, onMessage, onError) => {
+    if (typeof makeWSRequest !== "function") {
+      return;
+    }
+    makeWSRequest(route, payload, onMessage, 0, onError);
+  };
+
   // frontend/bottomTimelineTab.ts
   var TAB_ID = "VideoStages-Timeline-Tab";
   var TIMELINE_BODY_ID = "videostages-timeline-body";
   var updateTimelineTabIndicator = (enabled) => {
-    const navLink = document.querySelector(`a[href="#${TAB_ID}"]`);
+    const navLink = findHostBottomTabLink(TAB_ID);
     if (!navLink) {
       return;
     }
@@ -21,45 +101,23 @@
       navLink.removeAttribute("title");
     }
   };
-  var registerTabWithLayout = (navLink) => {
-    if (typeof genTabLayout === "undefined" || !genTabLayout) {
-      return;
-    }
-    const tab = new MovableGenTab(navLink, genTabLayout);
-    genTabLayout.managedTabs.push(tab);
-    if (genTabLayout.managedTabContainers.length > 0) {
-      tab.contentElem.style.height = "100%";
-      tab.contentElem.style.width = "100%";
-      const parent = tab.contentElem.parentElement;
-      if (parent && !genTabLayout.managedTabContainers.includes(parent)) {
-        genTabLayout.managedTabContainers.push(parent);
-      }
-      tab.update();
-      tab.navElem.addEventListener("click", () => {
-        browserUtil.makeVisible(tab.contentElem);
-      });
-      genTabLayout.reapplyPositions();
-    }
-  };
   var injectTimelineTab = () => {
     const existing = document.getElementById(TIMELINE_BODY_ID);
     if (existing) {
       return existing;
     }
-    const nav = document.getElementById("bottombartabcollection");
-    const content = document.getElementById("t2i_bottom_bar_content");
-    if (!nav || !content) {
+    const mount = getHostBottomTabMount();
+    if (!mount) {
       return null;
     }
     const li = document.createElement("li");
     li.className = "nav-item";
     li.setAttribute("role", "presentation");
     li.innerHTML = `<a class="nav-link translate" data-bs-toggle="tab" href="#${TAB_ID}" aria-selected="false" tabindex="-1" role="tab">VideoStages</a>`;
-    const toolsNav = nav.querySelector('a[href="#Tools-Tab"]');
-    if (toolsNav?.parentElement) {
-      nav.insertBefore(li, toolsNav.parentElement);
+    if (mount.toolsTabItem) {
+      mount.nav.insertBefore(li, mount.toolsTabItem);
     } else {
-      nav.appendChild(li);
+      mount.nav.appendChild(li);
     }
     const pane = document.createElement("div");
     pane.className = "tab-pane genpage-bottom-tab";
@@ -72,13 +130,168 @@
     body.id = TIMELINE_BODY_ID;
     shell.appendChild(body);
     pane.appendChild(shell);
-    content.appendChild(pane);
+    mount.content.appendChild(pane);
     const navLink = li.querySelector("a");
     if (navLink) {
-      registerTabWithLayout(navLink);
+      registerBottomTabWithHost(navLink);
     }
     return body;
   };
+
+  // frontend/host/defaultLtxHostBridge.ts
+  var textInput = (id) => {
+    const element = document.getElementById(id);
+    return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
+  };
+  var input = (id) => {
+    const element = document.getElementById(id);
+    return element instanceof HTMLInputElement ? element : null;
+  };
+  var select = (id) => {
+    const element = document.getElementById(id);
+    return element instanceof HTMLSelectElement ? element : null;
+  };
+  var selectOptions = (element) => ({
+    values: element ? Array.from(element.options, (option) => option.value) : [],
+    labels: element ? Array.from(element.options, (option) => option.label) : []
+  });
+  var registrySnapshot = (registry) => registry?.getSnapshot?.() ?? null;
+  var withSuppressedPromptCompletion = (fn) => {
+    const completion = typeof promptTabComplete !== "undefined" ? promptTabComplete : null;
+    if (!completion) {
+      fn();
+      return;
+    }
+    const previous = completion.blockInput;
+    completion.blockInput = true;
+    try {
+      fn();
+    } finally {
+      completion.blockInput = previous;
+    }
+  };
+  var createDefaultLtxHostBridge = () => ({
+    hasElement: (id) => document.getElementById(id) !== null,
+    getTextInput: textInput,
+    getInput: input,
+    getRootVideoFpsInput: () => input("input_videofps") ?? input("input_videoframespersecond"),
+    getSelect: select,
+    getSelectOptions: selectOptions,
+    getParamOptions: (paramId) => {
+      if (typeof getParamById !== "function") {
+        return null;
+      }
+      const param = getParamById(paramId);
+      if (!Array.isArray(param?.values) || param.values.length === 0) {
+        return null;
+      }
+      const labels = Array.isArray(param.value_names) && param.value_names.length === param.values.length ? [...param.value_names] : [...param.values];
+      return { values: [...param.values], labels };
+    },
+    notifyChanged: (element, suppressPromptCompletion = false) => {
+      const notify = () => triggerChangeFor(element);
+      if (suppressPromptCompletion) {
+        withSuppressedPromptCompletion(notify);
+      } else {
+        notify();
+      }
+    },
+    getBase2EditRegistry: () => registrySnapshot(window.base2editStageRegistry),
+    getAceStepFunRegistry: () => registrySnapshot(window.acestepfunTrackRegistry),
+    getModelCompatId: (modelName) => {
+      if (typeof modelsHelpers === "undefined" || !modelsHelpers || typeof modelsHelpers.getDataFor !== "function") {
+        return null;
+      }
+      const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)?.modelClass?.compatClass?.id;
+      return typeof id === "string" && id.trim() ? id : null;
+    },
+    getCurrentModelCompatId: () => {
+      if (typeof currentModelHelper === "undefined" || !currentModelHelper?.curCompatClass || typeof modelsHelpers === "undefined" || !modelsHelpers?.compatClasses) {
+        return null;
+      }
+      const key = currentModelHelper.curCompatClass;
+      const compat = modelsHelpers.compatClasses[key];
+      const id = compat?.id ?? key;
+      return typeof id === "string" && id.trim() ? id : null;
+    },
+    registerPromptPrefix: (prefix, description, examples, isMulti) => {
+      if (typeof promptTabComplete === "undefined") {
+        return false;
+      }
+      promptTabComplete.registerPrefix(
+        prefix,
+        description,
+        examples,
+        isMulti
+      );
+      return true;
+    },
+    addPostParamBuildStep: (step) => {
+      if (typeof postParamBuildSteps === "undefined" || !Array.isArray(postParamBuildSteps)) {
+        return false;
+      }
+      postParamBuildSteps.push(step);
+      return true;
+    },
+    addParamRefreshHook: (hook) => {
+      if (typeof refreshParamsExtra === "undefined" || !Array.isArray(refreshParamsExtra)) {
+        return null;
+      }
+      refreshParamsExtra.push(hook);
+      return () => {
+        if (typeof refreshParamsExtra === "undefined" || !Array.isArray(refreshParamsExtra)) {
+          return;
+        }
+        const index = refreshParamsExtra.indexOf(hook);
+        if (index >= 0) {
+          refreshParamsExtra.splice(index, 1);
+        }
+      };
+    },
+    getMediaOutputPrefix: () => typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "",
+    createSourceVideoElement: () => document.createElement("video"),
+    enableSliders: (element) => {
+      if (typeof enableSlidersIn === "function") {
+        enableSlidersIn(element);
+      }
+    },
+    registerRefineVideoButton: (onSelect, description) => {
+      if (typeof registerMediaButton !== "function") {
+        return false;
+      }
+      registerMediaButton(
+        "Refine Video",
+        onSelect,
+        description,
+        ["video"],
+        true
+      );
+      return true;
+    },
+    getCurrentMediaMetadata: () => typeof currentMetadataVal === "string" ? currentMetadataVal : null,
+    interpretMediaMetadata: (metadata) => typeof interpretMetadata === "function" ? interpretMetadata(metadata) : metadata,
+    showError: (message) => {
+      if (typeof showError === "function") {
+        showError(message);
+      }
+    },
+    toDataUrl: (src) => new Promise((resolve) => {
+      if (typeof toDataURL !== "function") {
+        resolve(src);
+        return;
+      }
+      toDataURL(src, resolve);
+    }),
+    generate: (inputOverrides) => {
+      if (typeof mainGenHandler !== "undefined" && typeof mainGenHandler?.doGenerate === "function") {
+        mainGenHandler.doGenerate(inputOverrides, {});
+      }
+    }
+  });
+
+  // frontend/host/index.ts
+  var bridge = createDefaultLtxHostBridge();
+  var getLtxHostBridge = () => bridge;
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -114,7 +327,7 @@
     return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
   };
   var getAceStepFunRefs = () => {
-    const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
+    const snapshot = getLtxHostBridge().getAceStepFunRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
       return [];
     }
@@ -173,6 +386,400 @@
     return options;
   };
   var resolveAudioSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, AUDIO_SOURCE_NATIVE);
+
+  // frontend/constants.ts
+  var REF_FRAME_MIN = 1;
+  var DEFAULT_CLIP_DURATION_SECONDS = 5;
+  var CLIP_DURATION_MIN = 1;
+  var CLIP_DURATION_MAX = 9999;
+  var PROMPT_WINDOW_MIN_DURATION = 0.25;
+  var PROMPT_WINDOW_DEFAULT_DURATION = 3;
+  var RETAKE_MIN_DURATION = 0.1;
+  var RETAKE_DEFAULT_DURATION = 3;
+  var RETAKE_DURATION_STEP = 0.1;
+  var RETAKE_STRENGTH_MIN = 0;
+  var RETAKE_STRENGTH_MAX = 1;
+  var RETAKE_STRENGTH_STEP = 0.05;
+  var RETAKE_STRENGTH_DEFAULT = 1;
+  var AUDIO_SEGMENT_MIN_LENGTH = 0.1;
+  var AUDIO_SEGMENT_DEFAULT_LENGTH = 2;
+  var AUDIO_SEGMENT_STEP = 0.1;
+  var ROOT_DIMENSION_MIN = 256;
+  var ROOT_DIMENSION_MAX = 4096;
+  var ROOT_DIMENSION_STEP = 32;
+  var ROOT_FPS_MIN = 1;
+  var ROOT_FPS_MAX = 120;
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
+  var STAGE_REF_STRENGTH_MIN = 0;
+  var STAGE_REF_STRENGTH_MAX = 1;
+  var STAGE_REF_STRENGTH_STEP = 0.1;
+  var STAGE_REF_STRENGTH_DEFAULT = 0.8;
+  var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_SOURCE_UPLOAD = "Upload";
+  var IC_LORA_SOURCE_STAGE_INPUT = "Stage Input";
+  var IC_LORA_STAGE_ALL = -1;
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 2;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
+  var IC_LORA_AUTO = "[AUTO]";
+  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+  var parseBase2EditStageIndex = (value) => {
+    const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
+    if (!match) {
+      return null;
+    }
+    return parseInt(match[1], 10);
+  };
+  var normalizeUploadFileName = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    if (!raw) {
+      return null;
+    }
+    const slashIndex = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
+    return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
+  };
+  var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+  var mediaPreviewSrc = (value) => {
+    if (`${value ?? ""}`.startsWith("data:")) {
+      return value;
+    }
+    const prefix = getLtxHostBridge().getMediaOutputPrefix();
+    return `${prefix}/${value}`;
+  };
+
+  // frontend/utils.ts
+  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var toNumber = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  var roundToTenth = (seconds) => Math.round(seconds * 10) / 10;
+  var gridCeil = (seconds) => Math.ceil(seconds * 10) / 10;
+  var gridFloor = (seconds) => Math.floor(seconds * 10) / 10;
+  var safeJsonParse = (raw, fallback) => {
+    if (raw == null) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  };
+
+  // frontend/normalizationShared.ts
+  var readProp = (raw, ...keys) => {
+    for (const key of keys) {
+      if (Object.hasOwn(raw, key)) {
+        return raw[key];
+      }
+    }
+    return void 0;
+  };
+  var normalizeOptionalEntityId = (value) => {
+    if (typeof value !== "string") {
+      return void 0;
+    }
+    const id = value.trim();
+    return id || void 0;
+  };
+  var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
+  var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
+    if (!(lengthRaw > 0)) {
+      return null;
+    }
+    const maxStart = Math.max(0, clipDuration - minLength);
+    const startSeconds = clamp(startRaw, 0, maxStart);
+    const lengthSeconds = clamp(
+      lengthRaw,
+      minLength,
+      Math.max(minLength, clipDuration - startSeconds)
+    );
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return { startSeconds, lengthSeconds };
+  };
+  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
+    (value) => value.trim().toLowerCase().startsWith("latentmodel-")
+  ) ?? upscaleMethodValues[0] ?? "";
+  var snapStrengthToStep = (value, fallback, min, max, step) => {
+    const unitScale = 1 / step;
+    return Math.round(
+      clamp(toNumber(`${value ?? fallback}`, fallback), min, max) * unitScale
+    ) / unitScale;
+  };
+
+  // frontend/normalizationMedia.ts
+  var normalizePromptWindow = (raw) => {
+    const duration = toNumber(
+      `${readProp(raw, "duration", "Duration") ?? 0}`,
+      0
+    );
+    if (!(duration > 0)) {
+      return null;
+    }
+    const start = Math.max(
+      0,
+      toNumber(`${readProp(raw, "start", "Start") ?? 0}`, 0)
+    );
+    return {
+      id: normalizeOptionalEntityId(readProp(raw, "id", "Id")),
+      prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
+      start,
+      duration
+    };
+  };
+  var normalizePromptWindows = (rawClip) => {
+    const rawList = readProp(rawClip, "promptWindows", "PromptWindows");
+    if (!Array.isArray(rawList)) {
+      return [];
+    }
+    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
+  };
+  var normalizeRetake = (value, clipDuration) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const startRaw = Math.max(
+      0,
+      toNumber(`${readProp(value, "startSeconds", "StartSeconds") ?? 0}`, 0)
+    );
+    const lengthRaw = toNumber(
+      `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
+      0
+    );
+    const window2 = clampWindowInDuration(
+      startRaw,
+      lengthRaw,
+      clipDuration,
+      RETAKE_MIN_DURATION
+    );
+    if (!window2) {
+      return null;
+    }
+    const strengthRaw = readProp(value, "strength", "Strength");
+    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clamp(
+      toNumber(`${strengthRaw}`, RETAKE_STRENGTH_DEFAULT),
+      RETAKE_STRENGTH_MIN,
+      RETAKE_STRENGTH_MAX
+    );
+    return {
+      id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
+      startSeconds: roundToTenth(window2.startSeconds),
+      lengthSeconds: roundToTenth(window2.lengthSeconds),
+      strength
+    };
+  };
+  var normalizeSourceVideo = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = `${value.data ?? ""}`.trim();
+    if (!data) {
+      return null;
+    }
+    const nonNegative = (raw) => Math.max(0, toNumber(`${raw ?? 0}`, 0));
+    const durationSeconds = nonNegative(
+      readProp(value, "durationSeconds", "DurationSeconds")
+    );
+    let startSeconds = nonNegative(
+      readProp(value, "startSeconds", "StartSeconds")
+    );
+    let lengthSeconds = nonNegative(
+      readProp(value, "lengthSeconds", "LengthSeconds")
+    );
+    if (durationSeconds > 0) {
+      startSeconds = Math.min(
+        startSeconds,
+        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
+      );
+      if (!(lengthSeconds > 0)) {
+        lengthSeconds = durationSeconds - startSeconds;
+      }
+      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
+    }
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : `${value.fileName}`
+      ),
+      fps: nonNegative(readProp(value, "fps", "Fps")),
+      durationSeconds: roundToTenth(durationSeconds),
+      startSeconds: roundToTenth(startSeconds),
+      lengthSeconds: roundToTenth(lengthSeconds)
+    };
+  };
+  var normalizeUploadedAudio = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = `${value.data ?? ""}`.trim();
+    if (!data) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : `${value.fileName}`
+      )
+    };
+  };
+
+  // frontend/normalizationAudio.ts
+  var normalizeOptionalNonNegative = (value) => {
+    if (value == null || `${value}`.trim() === "") {
+      return null;
+    }
+    const number = toNumber(`${value}`, Number.NaN);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+  var normalizeOptionalPositive = (value) => {
+    const number = normalizeOptionalNonNegative(value);
+    return number !== null && number > 0 ? number : null;
+  };
+  var normalizeAudioTrackSourceKind = (value) => {
+    const compact = `${value ?? ""}`.trim().toLowerCase();
+    switch (compact) {
+      case "upload":
+        return "Upload";
+      case "acestepfun":
+        return "AceStepFun";
+      case "native":
+        return "Native";
+      case "controlnet":
+        return "ControlNet";
+      default:
+        return "External";
+    }
+  };
+  var normalizeClipEntityId = (value) => normalizeOptionalEntityId(value) ?? null;
+  var normalizeAudioTrackSpan = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const sourceStart = normalizeOptionalNonNegative(
+      readProp(value, "sourceStartSeconds", "SourceStartSeconds")
+    ) ?? 0;
+    return {
+      id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
+      firstClipId: normalizeClipEntityId(
+        readProp(value, "firstClipId", "FirstClipId")
+      ),
+      lastClipId: normalizeClipEntityId(
+        readProp(value, "lastClipId", "LastClipId")
+      ),
+      timelineStartSeconds: normalizeOptionalNonNegative(
+        readProp(value, "timelineStartSeconds", "TimelineStartSeconds")
+      ),
+      timelineLengthSeconds: normalizeOptionalPositive(
+        readProp(value, "timelineLengthSeconds", "TimelineLengthSeconds")
+      ),
+      sourceStartSeconds: sourceStart,
+      clipStartOffsetSeconds: normalizeOptionalNonNegative(
+        readProp(value, "clipStartOffsetSeconds", "ClipStartOffsetSeconds")
+      ),
+      clipLengthSeconds: normalizeOptionalPositive(
+        readProp(value, "clipLengthSeconds", "ClipLengthSeconds")
+      )
+    };
+  };
+  var normalizeAudioTracks = (value) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const tracks = [];
+    for (const rawTrack of value) {
+      if (!isRecord(rawTrack)) {
+        continue;
+      }
+      const rawSource = readProp(rawTrack, "source", "Source");
+      const source = isRecord(rawSource) ? rawSource : {};
+      const rawSpans = readProp(rawTrack, "spans", "Spans");
+      tracks.push({
+        id: normalizeOptionalEntityId(
+          readProp(rawTrack, "id", "Id", "trackId", "TrackId")
+        ),
+        source: {
+          kind: normalizeAudioTrackSourceKind(
+            readProp(source, "kind", "Kind")
+          ),
+          reference: `${readProp(source, "reference", "Reference") ?? ""}`.trim(),
+          uploadedAudio: normalizeUploadedAudio(
+            readProp(
+              source,
+              "uploadedAudio",
+              "UploadedAudio",
+              "upload",
+              "Upload"
+            )
+          )
+        },
+        spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter((span) => span !== null) : []
+      });
+    }
+    return tracks;
+  };
+  var normalizeAudioSegment = (value, clipDuration) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const rawSource = readProp(value, "source", "Source");
+    const source = typeof rawSource === "string" && isAceStepFunAudioSource(rawSource) ? rawSource.trim() : normalizeUploadedAudio(rawSource);
+    const startRaw = Math.max(
+      0,
+      toNumber(`${readProp(value, "startSeconds", "StartSeconds") ?? 0}`, 0)
+    );
+    const trimStartRaw = Math.max(
+      0,
+      toNumber(
+        `${readProp(value, "trimStartSeconds", "TrimStartSeconds") ?? 0}`,
+        0
+      )
+    );
+    const lengthRaw = toNumber(
+      `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
+      0
+    );
+    const window2 = clampWindowInDuration(
+      startRaw,
+      lengthRaw,
+      clipDuration,
+      AUDIO_SEGMENT_MIN_LENGTH
+    );
+    if (!window2) {
+      return null;
+    }
+    return {
+      id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
+      source,
+      startSeconds: roundToTenth(window2.startSeconds),
+      trimStartSeconds: roundToTenth(trimStartRaw),
+      lengthSeconds: roundToTenth(window2.lengthSeconds)
+    };
+  };
+  var normalizeAudioSegments = (value, clipDuration) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.map((raw) => normalizeAudioSegment(raw, clipDuration)).filter((seg) => seg !== null);
+  };
 
   // frontend/renderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -333,95 +940,6 @@
   var clipHueCss = (hue) => {
     const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
     return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
-  };
-
-  // frontend/constants.ts
-  var REF_FRAME_MIN = 1;
-  var DEFAULT_CLIP_DURATION_SECONDS = 5;
-  var CLIP_DURATION_MIN = 1;
-  var CLIP_DURATION_MAX = 9999;
-  var PROMPT_WINDOW_MIN_DURATION = 0.25;
-  var PROMPT_WINDOW_DEFAULT_DURATION = 3;
-  var RETAKE_MIN_DURATION = 0.1;
-  var RETAKE_DEFAULT_DURATION = 3;
-  var RETAKE_DURATION_STEP = 0.1;
-  var RETAKE_STRENGTH_MIN = 0;
-  var RETAKE_STRENGTH_MAX = 1;
-  var RETAKE_STRENGTH_STEP = 0.05;
-  var RETAKE_STRENGTH_DEFAULT = 1;
-  var AUDIO_SEGMENT_MIN_LENGTH = 0.1;
-  var AUDIO_SEGMENT_DEFAULT_LENGTH = 2;
-  var AUDIO_SEGMENT_STEP = 0.1;
-  var ROOT_DIMENSION_MIN = 256;
-  var ROOT_DIMENSION_MAX = 4096;
-  var ROOT_DIMENSION_STEP = 32;
-  var ROOT_FPS_MIN = 1;
-  var ROOT_FPS_MAX = 120;
-  var CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3"
-  ];
-  var STAGE_REF_STRENGTH_MIN = 0;
-  var STAGE_REF_STRENGTH_MAX = 1;
-  var STAGE_REF_STRENGTH_STEP = 0.1;
-  var STAGE_REF_STRENGTH_DEFAULT = 0.8;
-  var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
-  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
-  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
-  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-  var IC_LORA_SOURCE_UPLOAD = "Upload";
-  var IC_LORA_SOURCE_STAGE_INPUT = "Stage Input";
-  var IC_LORA_STAGE_ALL = -1;
-  var IC_LORA_STRENGTH_MIN = 0;
-  var IC_LORA_STRENGTH_MAX = 2;
-  var IC_LORA_STRENGTH_STEP = 0.05;
-  var IC_LORA_STRENGTH_DEFAULT = 1;
-  var IC_LORA_ATTENTION_MIN = 0;
-  var IC_LORA_ATTENTION_MAX = 1;
-  var IC_LORA_ATTENTION_STEP = 0.05;
-  var IC_LORA_ATTENTION_DEFAULT = 1;
-  var IC_LORA_AUTO = "[AUTO]";
-  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
-  var parseBase2EditStageIndex = (value) => {
-    const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
-    if (!match) {
-      return null;
-    }
-    return parseInt(match[1], 10);
-  };
-  var normalizeUploadFileName = (value) => {
-    const raw = `${value ?? ""}`.trim();
-    if (!raw) {
-      return null;
-    }
-    const slashIndex = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
-    return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
-  };
-  var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-  var mediaPreviewSrc = (value) => {
-    if (`${value ?? ""}`.startsWith("data:")) {
-      return value;
-    }
-    const prefix = typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "";
-    return `${prefix}/${value}`;
-  };
-
-  // frontend/hostDom.ts
-  var getElementByType = (id, ctor) => {
-    const element = document.getElementById(id);
-    return element instanceof ctor ? element : null;
-  };
-  var utils = {
-    getInputElement: (id) => getElementByType(id, HTMLInputElement),
-    getSelectElement: (id) => getElementByType(id, HTMLSelectElement),
-    getSelectValues: (select) => select ? Array.from(select.options, (option) => option.value) : [],
-    getSelectLabels: (select) => select ? Array.from(select.options, (option) => option.label) : [],
-    toNumber: (value, fallback) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : fallback;
-    }
   };
 
   // frontend/icLoraPresets.ts
@@ -641,237 +1159,7 @@
     return `Prepend "${preset.triggerPhrase}" to your prompt`;
   };
 
-  // frontend/types.ts
-  var REF_SOURCE_BASE = "Base";
-  var REF_SOURCE_REFINER = "Refiner";
-  var REF_SOURCE_UPLOAD = "Upload";
-
-  // frontend/utils.ts
-  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-  var roundToTenth = (seconds) => Math.round(seconds * 10) / 10;
-  var gridCeil = (seconds) => Math.ceil(seconds * 10) / 10;
-  var gridFloor = (seconds) => Math.floor(seconds * 10) / 10;
-  var safeJsonParse = (raw, fallback) => {
-    if (raw == null) {
-      return fallback;
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return fallback;
-    }
-  };
-
-  // frontend/normalization.ts
-  var readProp = (raw, ...keys) => {
-    for (const key of keys) {
-      if (Object.hasOwn(raw, key)) {
-        return raw[key];
-      }
-    }
-    return void 0;
-  };
-  var normalizePromptWindow = (raw) => {
-    const duration = utils.toNumber(
-      `${readProp(raw, "duration", "Duration") ?? 0}`,
-      0
-    );
-    if (!(duration > 0)) {
-      return null;
-    }
-    const start = Math.max(
-      0,
-      utils.toNumber(`${readProp(raw, "start", "Start") ?? 0}`, 0)
-    );
-    return {
-      prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
-      start,
-      duration
-    };
-  };
-  var normalizePromptWindows = (rawClip) => {
-    const rawList = readProp(rawClip, "promptWindows", "PromptWindows");
-    if (!Array.isArray(rawList)) {
-      return [];
-    }
-    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
-  };
-  var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
-  var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
-    if (!(lengthRaw > 0)) {
-      return null;
-    }
-    const maxStart = Math.max(0, clipDuration - minLength);
-    const startSeconds = clamp(startRaw, 0, maxStart);
-    const lengthSeconds = clamp(
-      lengthRaw,
-      minLength,
-      Math.max(minLength, clipDuration - startSeconds)
-    );
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return { startSeconds, lengthSeconds };
-  };
-  var normalizeRetake = (value, clipDuration) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const startRaw = Math.max(
-      0,
-      utils.toNumber(
-        `${readProp(value, "startSeconds", "StartSeconds") ?? 0}`,
-        0
-      )
-    );
-    const lengthRaw = utils.toNumber(
-      `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
-      0
-    );
-    const window2 = clampWindowInDuration(
-      startRaw,
-      lengthRaw,
-      clipDuration,
-      RETAKE_MIN_DURATION
-    );
-    if (!window2) {
-      return null;
-    }
-    const strengthRaw = readProp(value, "strength", "Strength");
-    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clamp(
-      utils.toNumber(`${strengthRaw}`, RETAKE_STRENGTH_DEFAULT),
-      RETAKE_STRENGTH_MIN,
-      RETAKE_STRENGTH_MAX
-    );
-    return {
-      startSeconds: roundToTenth(window2.startSeconds),
-      lengthSeconds: roundToTenth(window2.lengthSeconds),
-      strength
-    };
-  };
-  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
-    (value) => value.trim().toLowerCase().startsWith("latentmodel-")
-  ) ?? upscaleMethodValues[0] ?? "";
-  var snapStrengthToStep = (value, fallback, min, max, step) => {
-    const unitScale = 1 / step;
-    return Math.round(
-      clamp(utils.toNumber(`${value ?? fallback}`, fallback), min, max) * unitScale
-    ) / unitScale;
-  };
-  var normalizeSourceVideo = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = `${value.data ?? ""}`.trim();
-    if (!data) {
-      return null;
-    }
-    const nonNegative = (raw) => Math.max(0, utils.toNumber(`${raw ?? 0}`, 0));
-    const durationSeconds = nonNegative(
-      readProp(value, "durationSeconds", "DurationSeconds")
-    );
-    let startSeconds = nonNegative(
-      readProp(value, "startSeconds", "StartSeconds")
-    );
-    let lengthSeconds = nonNegative(
-      readProp(value, "lengthSeconds", "LengthSeconds")
-    );
-    if (durationSeconds > 0) {
-      startSeconds = Math.min(
-        startSeconds,
-        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
-      );
-      if (!(lengthSeconds > 0)) {
-        lengthSeconds = durationSeconds - startSeconds;
-      }
-      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
-    }
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : `${value.fileName}`
-      ),
-      fps: nonNegative(readProp(value, "fps", "Fps")),
-      durationSeconds: roundToTenth(durationSeconds),
-      startSeconds: roundToTenth(startSeconds),
-      lengthSeconds: roundToTenth(lengthSeconds)
-    };
-  };
-  var normalizeUploadedAudio = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = `${value.data ?? ""}`.trim();
-    if (!data) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : `${value.fileName}`
-      )
-    };
-  };
-  var normalizeAudioSegment = (value, clipDuration) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const rawSource = readProp(value, "source", "Source");
-    const source = typeof rawSource === "string" && isAceStepFunAudioSource(rawSource) ? rawSource.trim() : normalizeUploadedAudio(rawSource);
-    const startRaw = Math.max(
-      0,
-      utils.toNumber(
-        `${readProp(value, "startSeconds", "StartSeconds") ?? 0}`,
-        0
-      )
-    );
-    const trimStartRaw = Math.max(
-      0,
-      utils.toNumber(
-        `${readProp(value, "trimStartSeconds", "TrimStartSeconds") ?? 0}`,
-        0
-      )
-    );
-    const lengthRaw = utils.toNumber(
-      `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
-      0
-    );
-    const window2 = clampWindowInDuration(
-      startRaw,
-      lengthRaw,
-      clipDuration,
-      AUDIO_SEGMENT_MIN_LENGTH
-    );
-    if (!window2) {
-      return null;
-    }
-    return {
-      source,
-      startSeconds: roundToTenth(window2.startSeconds),
-      trimStartSeconds: roundToTenth(trimStartRaw),
-      lengthSeconds: roundToTenth(window2.lengthSeconds)
-    };
-  };
-  var normalizeAudioSegments = (value, clipDuration) => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((raw) => normalizeAudioSegment(raw, clipDuration)).filter((seg) => seg !== null);
-  };
-  var normalizeBoundaryOut = (value) => {
-    const raw = `${value ?? ""}`.trim().toLowerCase();
-    return raw === "continue" || raw === "crossfade" ? raw : "cut";
-  };
-  var normalizeContinueOverlap = (value) => {
-    const num = Math.trunc(Number(value));
-    if (!Number.isFinite(num) || num < DEFAULT_CONTINUE_OVERLAP_FRAMES) {
-      return DEFAULT_CONTINUE_OVERLAP_FRAMES;
-    }
-    return Math.min(CONTINUE_OVERLAP_MAX_FRAMES, num - num % 8);
-  };
+  // frontend/normalizationIcLora.ts
   var normalizeControlNetSource = (value) => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
     for (const option of CONTROLNET_SOURCE_OPTIONS) {
@@ -1002,6 +1290,14 @@
   var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
     (entry) => entry.source !== IC_LORA_SOURCE_UPLOAD && entry.source !== IC_LORA_SOURCE_STAGE_INPUT
   );
+
+  // frontend/types.ts
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 2;
+  var REF_SOURCE_BASE = "Base";
+  var REF_SOURCE_REFINER = "Refiner";
+  var REF_SOURCE_UPLOAD = "Upload";
+
+  // frontend/normalizationStage.ts
   var normalizeStageRefStrengthValue = (value) => snapStrengthToStep(
     value,
     STAGE_REF_STRENGTH_DEFAULT,
@@ -1027,12 +1323,12 @@
   };
   var readRawStageProp = (raw, camel, pascal) => readProp(raw, camel, pascal);
   var readRawStageString = (raw, camel, pascal) => {
-    const v = readRawStageProp(raw, camel, pascal);
-    if (v == null) {
+    const value = readRawStageProp(raw, camel, pascal);
+    if (value == null) {
       return void 0;
     }
-    const s = `${v}`.trim();
-    return s.length > 0 ? s : void 0;
+    const stringValue = `${value}`.trim();
+    return stringValue.length > 0 ? stringValue : void 0;
   };
   var normalizeStageLoras = (raw) => {
     if (!Array.isArray(raw)) {
@@ -1048,7 +1344,7 @@
         continue;
       }
       const weightRaw = readRawStageProp(entry, "weight", "Weight");
-      const weight = utils.toNumber(`${weightRaw ?? 1}`, 1);
+      const weight = toNumber(`${weightRaw ?? 1}`, 1);
       out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
     }
     return out;
@@ -1096,6 +1392,148 @@
     }
     return true;
   };
+  var getReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
+    if (clip) {
+      return Math.max(REF_FRAME_MIN, framesForClip(clip.duration, fps));
+    }
+    return Math.max(REF_FRAME_MIN, defaults.frames);
+  };
+  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false) => {
+    const defaults = getRootDefaults2();
+    const fallback = buildDefaultStage(
+      getRootDefaults2,
+      getDefaultStageModel2,
+      previousStage,
+      refCount
+    );
+    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
+    let firstStageUpscale;
+    let control;
+    if (forcedFirstStage) {
+      firstStageUpscale = {
+        upscale: defaults.upscale,
+        upscaleMethod: resolveRootPreferredUpscaleMethod(
+          defaults.upscaleMethodValues
+        )
+      };
+      control = clamp(
+        defaults.control,
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    } else {
+      firstStageUpscale = {
+        upscale: snapToStep(
+          clamp(
+            toNumber(
+              `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+              fallback.upscale
+            ),
+            defaults.upscaleMin,
+            defaults.upscaleMax
+          ),
+          defaults.upscaleStep
+        ),
+        upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
+      };
+      control = clamp(
+        toNumber(
+          `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+          fallback.control
+        ),
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    }
+    const stage = {
+      id: normalizeOptionalEntityId(readProp(rawStage, "id", "Id")),
+      skipped: !!rawStage.skipped,
+      control,
+      controlNetStrength: normalizeStageControlNetStrengthValue(
+        readRawStageProp(
+          rawStage,
+          "controlNetStrength",
+          "ControlNetStrength"
+        ) ?? fallback.controlNetStrength
+      ),
+      refStrengths: normalizeStageRefStrengths(
+        rawStage.refStrengths,
+        refCount
+      ),
+      upscale: firstStageUpscale.upscale,
+      upscaleMethod: firstStageUpscale.upscaleMethod,
+      model: `${rawStage.model ?? fallback.model}` || fallback.model,
+      steps: Math.max(
+        1,
+        Math.round(
+          clamp(
+            toNumber(
+              `${rawStage.steps ?? fallback.steps}`,
+              fallback.steps
+            ),
+            defaults.stepsMin,
+            defaults.stepsMax
+          )
+        )
+      ),
+      cfgScale: clamp(
+        toNumber(
+          `${rawStage.cfgScale ?? fallback.cfgScale}`,
+          fallback.cfgScale
+        ),
+        defaults.cfgScaleMin,
+        defaults.cfgScaleMax
+      ),
+      sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
+      scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
+      loras: normalizeStageLoras(
+        readRawStageProp(rawStage, "loras", "Loras")
+      )
+    };
+    if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
+      stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
+    }
+    return stage;
+  };
+  var normalizeRef = (rawRef, frameMax) => {
+    const fallback = buildDefaultRef();
+    const source = `${rawRef.source ?? fallback.source}` || fallback.source;
+    return {
+      id: normalizeOptionalEntityId(readProp(rawRef, "id", "Id")),
+      source,
+      uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
+      uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
+      frame: Math.max(
+        REF_FRAME_MIN,
+        Math.round(
+          clamp(
+            toNumber(
+              `${rawRef.frame ?? fallback.frame}`,
+              fallback.frame
+            ),
+            REF_FRAME_MIN,
+            frameMax
+          )
+        )
+      ),
+      fromEnd: !!rawRef.fromEnd
+    };
+  };
+
+  // frontend/normalizationClip.ts
+  var normalizeBoundaryOut = (value) => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "continue" || raw === "crossfade" ? raw : "cut";
+  };
+  var normalizeContinueOverlap = (value) => {
+    const num = Math.trunc(Number(value));
+    if (!Number.isFinite(num) || num < DEFAULT_CONTINUE_OVERLAP_FRAMES) {
+      return DEFAULT_CONTINUE_OVERLAP_FRAMES;
+    }
+    return Math.min(CONTINUE_OVERLAP_MAX_FRAMES, num - num % 8);
+  };
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
@@ -1137,137 +1575,7 @@
       ]
     };
   };
-  var getReferenceFrameMax = (getRootDefaults2, clip) => {
-    const defaults = getRootDefaults2();
-    if (clip) {
-      return Math.max(
-        REF_FRAME_MIN,
-        framesForClip(clip.duration, defaults.fps)
-      );
-    }
-    return Math.max(REF_FRAME_MIN, defaults.frames);
-  };
-  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false) => {
-    const defaults = getRootDefaults2();
-    const fallback = buildDefaultStage(
-      getRootDefaults2,
-      getDefaultStageModel2,
-      previousStage,
-      refCount
-    );
-    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
-    let firstStageUpscale;
-    let control;
-    if (forcedFirstStage) {
-      firstStageUpscale = {
-        upscale: defaults.upscale,
-        upscaleMethod: resolveRootPreferredUpscaleMethod(
-          defaults.upscaleMethodValues
-        )
-      };
-      control = clamp(
-        defaults.control,
-        defaults.controlMin,
-        defaults.controlMax
-      );
-    } else {
-      firstStageUpscale = {
-        upscale: snapToStep(
-          clamp(
-            utils.toNumber(
-              `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
-              fallback.upscale
-            ),
-            defaults.upscaleMin,
-            defaults.upscaleMax
-          ),
-          defaults.upscaleStep
-        ),
-        upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
-      };
-      control = clamp(
-        utils.toNumber(
-          `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
-          fallback.control
-        ),
-        defaults.controlMin,
-        defaults.controlMax
-      );
-    }
-    const stage = {
-      skipped: !!rawStage.skipped,
-      control,
-      controlNetStrength: normalizeStageControlNetStrengthValue(
-        readRawStageProp(
-          rawStage,
-          "controlNetStrength",
-          "ControlNetStrength"
-        ) ?? fallback.controlNetStrength
-      ),
-      refStrengths: normalizeStageRefStrengths(
-        rawStage.refStrengths,
-        refCount
-      ),
-      upscale: firstStageUpscale.upscale,
-      upscaleMethod: firstStageUpscale.upscaleMethod,
-      model: `${rawStage.model ?? fallback.model}` || fallback.model,
-      steps: Math.max(
-        1,
-        Math.round(
-          clamp(
-            utils.toNumber(
-              `${rawStage.steps ?? fallback.steps}`,
-              fallback.steps
-            ),
-            defaults.stepsMin,
-            defaults.stepsMax
-          )
-        )
-      ),
-      cfgScale: clamp(
-        utils.toNumber(
-          `${rawStage.cfgScale ?? fallback.cfgScale}`,
-          fallback.cfgScale
-        ),
-        defaults.cfgScaleMin,
-        defaults.cfgScaleMax
-      ),
-      sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
-      scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
-      loras: normalizeStageLoras(
-        readRawStageProp(rawStage, "loras", "Loras")
-      )
-    };
-    if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
-      stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
-    }
-    return stage;
-  };
-  var normalizeRef = (rawRef, frameMax) => {
-    const fallback = buildDefaultRef();
-    const source = `${rawRef.source ?? fallback.source}` || fallback.source;
-    const ref = {
-      source,
-      uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
-      uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
-      frame: Math.max(
-        REF_FRAME_MIN,
-        Math.round(
-          clamp(
-            utils.toNumber(
-              `${rawRef.frame ?? fallback.frame}`,
-              fallback.frame
-            ),
-            REF_FRAME_MIN,
-            frameMax
-          )
-        )
-      ),
-      fromEnd: !!rawRef.fromEnd
-    };
-    return ref;
-  };
-  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2) => {
+  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
@@ -1282,14 +1590,21 @@
     const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
       controlNetEnabled: hasSlotSourcedIcLora(icLoras)
     });
-    const fps = Math.max(1, defaults.fps);
-    const rawDuration = sourceVideo?.lengthSeconds ?? utils.toNumber(`${rawClip.duration}`, defaults.frames / fps);
+    const fps = Math.max(
+      1,
+      typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
+    );
+    const rawDuration = sourceVideo?.lengthSeconds ?? toNumber(`${rawClip.duration}`, defaults.frames / fps);
     const duration = snapDurationToFps(
       Math.max(CLIP_DURATION_MIN, rawDuration),
       fps
     );
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
-    const refFrameMax = getReferenceFrameMax(getRootDefaults2, { duration });
+    const refFrameMax = getReferenceFrameMax(
+      getRootDefaults2,
+      { duration },
+      fps
+    );
     const refs = refsRaw.map(
       (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
     );
@@ -1314,7 +1629,8 @@
     );
     const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet = hasSlotSourcedIcLora(icLoras) && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
-    const clip = {
+    return {
+      id: normalizeOptionalEntityId(readProp(rawClip, "id", "Id")),
       skipped: !!rawClip.skipped,
       hue: normalizeStoredHue(rawClip.hue),
       boundaryOut: normalizeBoundaryOut(
@@ -1345,7 +1661,6 @@
       refs,
       stages
     };
-    return clip;
   };
 
   // frontend/debugLog.ts
@@ -1355,6 +1670,605 @@
       return;
     }
     console.debug(`[VideoStages debug ${area}]`, message, ...details);
+  };
+
+  // frontend/documentDiff.ts
+  var DocumentDiffError = class extends Error {
+    failure;
+    constructor(failure2) {
+      super(`Cannot diff authoring documents: ${failure2}`);
+      this.name = "DocumentDiffError";
+      this.failure = failure2;
+    }
+  };
+  var ROOT_PATCH_KEYS = [
+    "schemaVersion",
+    "width",
+    "height",
+    "fps",
+    "dimsExplicit",
+    "fpsExplicit"
+  ];
+  var CLIP_PATCH_KEYS = [
+    "skipped",
+    "hue",
+    "boundaryOut",
+    "boundaryOutOverlap",
+    "duration",
+    "audioSource",
+    "icLoras",
+    "saveAudioTrack",
+    "clipLengthFromAudio",
+    "clipLengthFromControlNet",
+    "reuseAudio",
+    "uploadedAudio",
+    "prompt",
+    "sourceVideo"
+  ];
+  var STAGE_PATCH_KEYS = [
+    "skipped",
+    "control",
+    "controlNetStrength",
+    "refStrengths",
+    "upscale",
+    "upscaleMethod",
+    "model",
+    "steps",
+    "cfgScale",
+    "sampler",
+    "scheduler",
+    "loras"
+  ];
+  var REF_PATCH_KEYS = [
+    "source",
+    "uploadFileName",
+    "uploadedImage",
+    "frame",
+    "fromEnd"
+  ];
+  var AUDIO_SEGMENT_PATCH_KEYS = [
+    "source",
+    "startSeconds",
+    "trimStartSeconds",
+    "lengthSeconds"
+  ];
+  var PROMPT_WINDOW_PATCH_KEYS = [
+    "prompt",
+    "start",
+    "duration"
+  ];
+  var RETAKE_PATCH_KEYS = [
+    "startSeconds",
+    "lengthSeconds",
+    "strength"
+  ];
+  var AUDIO_TRACK_PATCH_KEYS = [
+    "source"
+  ];
+  var AUDIO_SPAN_PATCH_KEYS = [
+    "firstClipId",
+    "lastClipId",
+    "timelineStartSeconds",
+    "timelineLengthSeconds",
+    "sourceStartSeconds",
+    "clipStartOffsetSeconds",
+    "clipLengthSeconds"
+  ];
+  var clone = (value) => structuredClone(value);
+  var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var deepEqual = (left, right) => {
+    if (Object.is(left, right)) {
+      return true;
+    }
+    if (Array.isArray(left) || Array.isArray(right)) {
+      return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => deepEqual(value, right[index]));
+    }
+    if (!isRecord2(left) || !isRecord2(right)) {
+      return false;
+    }
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return leftKeys.length === rightKeys.length && leftKeys.every(
+      (key, index) => key === rightKeys[index] && deepEqual(left[key], right[key])
+    );
+  };
+  var changedPatch = (before, after, keys) => {
+    const patch = {};
+    for (const key of keys) {
+      if (!deepEqual(before[key], after[key])) {
+        patch[key] = clone(after[key]);
+      }
+    }
+    return patch;
+  };
+  var hasPatch = (patch) => Object.keys(patch).length > 0;
+  var allEntityIds = (document2) => [
+    ...document2.clips.flatMap((clip) => [
+      clip.id,
+      ...clip.stages.map((stage) => stage.id),
+      ...clip.refs.map((ref) => ref.id),
+      ...clip.audioSegments.map((segment) => segment.id),
+      ...clip.promptWindows.map((window2) => window2.id),
+      ...clip.retake ? [clip.retake.id] : []
+    ]),
+    ...document2.audioTracks.flatMap((track) => [
+      track.id,
+      ...track.spans.map((span) => span.id)
+    ])
+  ];
+  var validateDocumentIds = (document2) => {
+    const ids = allEntityIds(document2);
+    if (ids.some(
+      (id) => typeof id !== "string" || id.trim().length === 0 || id.trim() !== id
+    )) {
+      throw new DocumentDiffError("invalid-id");
+    }
+    if (new Set(ids).size !== ids.length) {
+      throw new DocumentDiffError("duplicate-id");
+    }
+  };
+  var insertBeforeId = (ids, id, beforeId) => {
+    if (beforeId === null) {
+      ids.push(id);
+      return;
+    }
+    const index = ids.indexOf(beforeId);
+    ids.splice(index, 0, id);
+  };
+  var moveBeforeId = (ids, id, beforeId) => {
+    ids.splice(ids.indexOf(id), 1);
+    insertBeforeId(ids, id, beforeId);
+  };
+  var diffEntityList = (before, after, phases, callbacks) => {
+    const beforeById = new Map(before.map((entity) => [entity.id, entity]));
+    const afterIds = new Set(after.map((entity) => entity.id));
+    const currentIds = before.map((entity) => entity.id);
+    for (const entity of before) {
+      if (!afterIds.has(entity.id)) {
+        phases.removes.push(callbacks.remove(entity.id));
+        currentIds.splice(currentIds.indexOf(entity.id), 1);
+      }
+    }
+    for (let index = after.length - 1; index >= 0; index--) {
+      const entity = after[index];
+      if (beforeById.has(entity.id)) {
+        continue;
+      }
+      const beforeId = after[index + 1]?.id ?? null;
+      phases.adds.push(callbacks.add(clone(entity), beforeId));
+      insertBeforeId(currentIds, entity.id, beforeId);
+    }
+    for (let index = 0; index < after.length; index++) {
+      const targetId = after[index].id;
+      if (currentIds[index] === targetId) {
+        continue;
+      }
+      const beforeId = currentIds[index] ?? null;
+      phases.moves.push(callbacks.move(targetId, beforeId));
+      moveBeforeId(currentIds, targetId, beforeId);
+    }
+    for (const entity of after) {
+      const previous = beforeById.get(entity.id);
+      if (previous) {
+        callbacks.patch(previous, entity);
+      }
+    }
+  };
+  var diffStages = (before, after, phases) => diffEntityList(before.stages, after.stages, phases, {
+    remove: (stageId) => ({
+      type: "stage.remove",
+      clipId: before.id,
+      stageId
+    }),
+    add: (stage, beforeStageId) => ({
+      type: "stage.add",
+      clipId: after.id,
+      stage,
+      beforeStageId
+    }),
+    move: (stageId, beforeStageId) => ({
+      type: "stage.move",
+      clipId: after.id,
+      stageId,
+      beforeStageId
+    }),
+    patch: (previous, next) => {
+      const patch = changedPatch(previous, next, STAGE_PATCH_KEYS);
+      if (hasPatch(patch)) {
+        phases.patches.push({
+          type: "stage.patch",
+          clipId: after.id,
+          stageId: next.id,
+          patch
+        });
+      }
+    }
+  });
+  var diffRefs = (before, after, phases) => diffEntityList(before.refs, after.refs, phases, {
+    remove: (refId) => ({
+      type: "ref.remove",
+      clipId: before.id,
+      refId
+    }),
+    add: (ref, beforeRefId) => ({
+      type: "ref.add",
+      clipId: after.id,
+      ref,
+      beforeRefId
+    }),
+    move: (refId, beforeRefId) => ({
+      type: "ref.move",
+      clipId: after.id,
+      refId,
+      beforeRefId
+    }),
+    patch: (previous, next) => {
+      const patch = changedPatch(previous, next, REF_PATCH_KEYS);
+      if (hasPatch(patch)) {
+        phases.patches.push({
+          type: "ref.patch",
+          clipId: after.id,
+          refId: next.id,
+          patch
+        });
+      }
+    }
+  });
+  var diffAudioSegments = (before, after, phases) => diffEntityList(before.audioSegments, after.audioSegments, phases, {
+    remove: (segmentId) => ({
+      type: "audio-segment.remove",
+      clipId: before.id,
+      segmentId
+    }),
+    add: (segment, beforeSegmentId) => ({
+      type: "audio-segment.add",
+      clipId: after.id,
+      segment,
+      beforeSegmentId
+    }),
+    move: (segmentId, beforeSegmentId) => ({
+      type: "audio-segment.move",
+      clipId: after.id,
+      segmentId,
+      beforeSegmentId
+    }),
+    patch: (previous, next) => {
+      const patch = changedPatch(
+        previous,
+        next,
+        AUDIO_SEGMENT_PATCH_KEYS
+      );
+      if (hasPatch(patch)) {
+        phases.patches.push({
+          type: "audio-segment.patch",
+          clipId: after.id,
+          segmentId: next.id,
+          patch
+        });
+      }
+    }
+  });
+  var diffPromptWindows = (before, after, phases) => diffEntityList(before.promptWindows, after.promptWindows, phases, {
+    remove: (windowId) => ({
+      type: "prompt-window.remove",
+      clipId: before.id,
+      windowId
+    }),
+    add: (window2, beforeWindowId) => ({
+      type: "prompt-window.add",
+      clipId: after.id,
+      window: window2,
+      beforeWindowId
+    }),
+    move: (windowId, beforeWindowId) => ({
+      type: "prompt-window.move",
+      clipId: after.id,
+      windowId,
+      beforeWindowId
+    }),
+    patch: (previous, next) => {
+      const patch = changedPatch(
+        previous,
+        next,
+        PROMPT_WINDOW_PATCH_KEYS
+      );
+      if (hasPatch(patch)) {
+        phases.patches.push({
+          type: "prompt-window.patch",
+          clipId: after.id,
+          windowId: next.id,
+          patch
+        });
+      }
+    }
+  });
+  var diffRetake = (before, after, phases) => {
+    if (before.retake?.id !== after.retake?.id) {
+      if (before.retake) {
+        phases.removes.push({
+          type: "retake.remove",
+          clipId: before.id,
+          retakeId: before.retake.id
+        });
+      }
+      if (after.retake) {
+        phases.adds.push({
+          type: "retake.add",
+          clipId: after.id,
+          retake: clone(after.retake)
+        });
+      }
+      return;
+    }
+    if (!before.retake || !after.retake) {
+      return;
+    }
+    const patch = changedPatch(before.retake, after.retake, RETAKE_PATCH_KEYS);
+    if (hasPatch(patch)) {
+      phases.patches.push({
+        type: "retake.patch",
+        clipId: after.id,
+        retakeId: after.retake.id,
+        patch
+      });
+    }
+  };
+  var diffClipChildren = (before, after, phases) => {
+    diffStages(before, after, phases);
+    diffRefs(before, after, phases);
+    diffAudioSegments(before, after, phases);
+    diffPromptWindows(before, after, phases);
+    diffRetake(before, after, phases);
+  };
+  var diffSpans = (before, after, phases) => diffEntityList(before.spans, after.spans, phases, {
+    remove: (spanId) => ({
+      type: "audio-span.remove",
+      trackId: before.id,
+      spanId
+    }),
+    add: (span, beforeSpanId) => ({
+      type: "audio-span.add",
+      trackId: after.id,
+      span,
+      beforeSpanId
+    }),
+    move: (spanId, beforeSpanId) => ({
+      type: "audio-span.move",
+      trackId: after.id,
+      spanId,
+      beforeSpanId
+    }),
+    patch: (previous, next) => {
+      const patch = changedPatch(previous, next, AUDIO_SPAN_PATCH_KEYS);
+      if (hasPatch(patch)) {
+        phases.patches.push({
+          type: "audio-span.patch",
+          trackId: after.id,
+          spanId: next.id,
+          patch
+        });
+      }
+    }
+  });
+  var diffClips = (before, after, phases) => diffEntityList(before.clips, after.clips, phases, {
+    remove: (clipId) => ({ type: "clip.remove", clipId }),
+    add: (clip, beforeClipId) => ({
+      type: "clip.add",
+      clip,
+      beforeClipId
+    }),
+    move: (clipId, beforeClipId) => ({
+      type: "clip.move",
+      clipId,
+      beforeClipId
+    }),
+    patch: (previous, next) => {
+      const patch = changedPatch(previous, next, CLIP_PATCH_KEYS);
+      if (hasPatch(patch)) {
+        phases.patches.push({
+          type: "clip.patch",
+          clipId: next.id,
+          patch
+        });
+      }
+      diffClipChildren(previous, next, phases);
+    }
+  });
+  var diffAudioTracks = (before, after, phases) => diffEntityList(before.audioTracks, after.audioTracks, phases, {
+    remove: (trackId) => ({ type: "audio-track.remove", trackId }),
+    add: (track, beforeTrackId) => ({
+      type: "audio-track.add",
+      track,
+      beforeTrackId
+    }),
+    move: (trackId, beforeTrackId) => ({
+      type: "audio-track.move",
+      trackId,
+      beforeTrackId
+    }),
+    patch: (previous, next) => {
+      const patch = changedPatch(previous, next, AUDIO_TRACK_PATCH_KEYS);
+      if (hasPatch(patch)) {
+        phases.patches.push({
+          type: "audio-track.patch",
+          trackId: next.id,
+          patch
+        });
+      }
+      diffSpans(previous, next, phases);
+    }
+  });
+  var diffDocuments = (before, after) => {
+    validateDocumentIds(before);
+    validateDocumentIds(after);
+    const phases = {
+      removes: [],
+      adds: [],
+      moves: [],
+      patches: []
+    };
+    const rootPatch = changedPatch(before, after, ROOT_PATCH_KEYS);
+    diffClips(before, after, phases);
+    diffAudioTracks(before, after, phases);
+    return {
+      type: "batch",
+      commands: [
+        ...hasPatch(rootPatch) ? [{ type: "root.patch", patch: rootPatch }] : [],
+        ...phases.removes,
+        ...phases.adds,
+        ...phases.moves,
+        ...phases.patches
+      ]
+    };
+  };
+
+  // frontend/identity.ts
+  var fallbackSequence = 0;
+  var normalizedExistingId = (value) => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const id = value.trim();
+    return id.length > 0 ? id : null;
+  };
+  var createEntityId = (kind) => {
+    const randomUuid = globalThis.crypto?.randomUUID?.();
+    if (randomUuid) {
+      return `${kind}_${randomUuid}`;
+    }
+    fallbackSequence += 1;
+    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
+  };
+  var assignUniqueId = (entry, reserved, used) => {
+    const reservedId = reserved.get(entry.entity);
+    if (reservedId) {
+      entry.entity.id = reservedId;
+      return reservedId;
+    }
+    const base = `${entry.kind}_legacy_${entry.migrationPath}`;
+    let id = base;
+    let collision = 1;
+    while (used.has(id)) {
+      collision += 1;
+      id = `${base}_${collision}`;
+    }
+    entry.entity.id = id;
+    used.add(id);
+    return id;
+  };
+  var clipIdentityEntries = (clips) => {
+    const entries = [];
+    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
+      const clip = clips[clipIndex];
+      entries.push({
+        entity: clip,
+        kind: "clip",
+        migrationPath: `${clipIndex}`
+      });
+      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
+        entries.push({
+          entity: clip.stages[stageIndex],
+          kind: "stage",
+          migrationPath: `${clipIndex}_${stageIndex}`
+        });
+      }
+      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
+        entries.push({
+          entity: clip.refs[refIndex],
+          kind: "ref",
+          migrationPath: `${clipIndex}_${refIndex}`
+        });
+      }
+      for (let segmentIndex = 0; segmentIndex < clip.audioSegments.length; segmentIndex++) {
+        entries.push({
+          entity: clip.audioSegments[segmentIndex],
+          kind: "audio_segment",
+          migrationPath: `${clipIndex}_${segmentIndex}`
+        });
+      }
+      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
+        entries.push({
+          entity: clip.promptWindows[windowIndex],
+          kind: "prompt_window",
+          migrationPath: `${clipIndex}_${windowIndex}`
+        });
+      }
+      if (clip.retake) {
+        entries.push({
+          entity: clip.retake,
+          kind: "retake",
+          migrationPath: `${clipIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var audioTrackIdentityEntries = (tracks) => {
+    const entries = [];
+    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+      const track = tracks[trackIndex];
+      entries.push({
+        entity: track,
+        kind: "audio_track",
+        migrationPath: `${trackIndex}`
+      });
+      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
+        entries.push({
+          entity: track.spans[spanIndex],
+          kind: "audio_span",
+          migrationPath: `${trackIndex}_${spanIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var assignEntryIdentities = (entries, used) => {
+    const reserved = /* @__PURE__ */ new Map();
+    for (const { entity } of entries) {
+      const existing = normalizedExistingId(entity.id);
+      if (existing && !used.has(existing)) {
+        reserved.set(entity, existing);
+        used.add(existing);
+      }
+    }
+    for (const entry of entries) {
+      assignUniqueId(entry, reserved, used);
+    }
+  };
+  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
+    assignEntryIdentities(clipIdentityEntries(clips), seen);
+    return seen;
+  };
+  function ensureAuthoringDocumentIdentity(state) {
+    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    state.audioTracks ??= [];
+    assignEntryIdentities(
+      [
+        ...clipIdentityEntries(state.clips),
+        ...audioTrackIdentityEntries(state.audioTracks)
+      ],
+      /* @__PURE__ */ new Set()
+    );
+  }
+  var collectAuthoringEntityIds = (state) => {
+    const ids = [];
+    for (const clip of state.clips) {
+      if (clip.id) ids.push(clip.id);
+      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
+      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+      for (const segment of clip.audioSegments) {
+        if (segment.id) ids.push(segment.id);
+      }
+      for (const window2 of clip.promptWindows) {
+        if (window2.id) ids.push(window2.id);
+      }
+      if (clip.retake?.id) ids.push(clip.retake.id);
+    }
+    for (const track of state.audioTracks ?? []) {
+      if (track.id) ids.push(track.id);
+      for (const span of track.spans) if (span.id) ids.push(span.id);
+    }
+    return ids;
   };
 
   // frontend/promptSegments.ts
@@ -1519,16 +2433,66 @@
   };
   var extractGlobalPrompt = (prompt) => tokenizePrompt(prompt).leading.trim();
 
+  // frontend/hostDom.ts
+  var utils = {
+    getInputElement: (id) => getLtxHostBridge().getInput(id),
+    getSelectElement: (id) => getLtxHostBridge().getSelect(id),
+    getSelectValues: (select2) => getLtxHostBridge().getSelectOptions(select2).values,
+    getSelectLabels: (select2) => getLtxHostBridge().getSelectOptions(select2).labels
+  };
+
+  // frontend/ltxCapabilities.ts
+  var LTX_V2_COMPAT_ID = "ltxv2";
+  var LTX_NAME_PATTERN = /(^|[/\\_. -])ltx(?:v?2(?:[_. -]\d+)?)?($|[/\\_. -])/i;
+  var compactCompatId = (value) => `${value ?? ""}`.trim().replace(/[^a-z0-9]/gi, "").toLowerCase();
+  var isLtxV2CompatId = (value) => compactCompatId(value) === LTX_V2_COMPAT_ID;
+  var modelCompatId = (modelName) => {
+    return getLtxHostBridge().getModelCompatId(modelName);
+  };
+  var isLtxVideoModelValue = (modelName) => {
+    const value = `${modelName ?? ""}`.trim();
+    if (!value) {
+      return false;
+    }
+    const compatId = modelCompatId(value);
+    if (compatId !== null) {
+      return isLtxV2CompatId(compatId);
+    }
+    return LTX_NAME_PATTERN.test(value);
+  };
+  var filterLtxModelOptions = (values, labels) => {
+    const filtered = { values: [], labels: [] };
+    values.forEach((value, index) => {
+      if (!isLtxVideoModelValue(value)) {
+        return;
+      }
+      filtered.values.push(value);
+      filtered.labels.push(labels[index] ?? value);
+    });
+    return filtered;
+  };
+  var isCurrentRootLtxVideoModel = (modelName) => {
+    const value = `${modelName ?? ""}`.trim();
+    if (!value) {
+      return false;
+    }
+    const compatId = modelCompatId(value);
+    if (compatId !== null) {
+      return isLtxV2CompatId(compatId);
+    }
+    if (LTX_NAME_PATTERN.test(value)) {
+      return true;
+    }
+    return isLtxV2CompatId(getLtxHostBridge().getCurrentModelCompatId());
+  };
+
   // frontend/swarmInputs.ts
   var DATA_INPUT_ID = "input_videostages";
   var warnedMissingDataInput = false;
-  var getPromptInput = () => {
-    const el = document.getElementById("input_prompt");
-    return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el : null;
-  };
+  var getPromptInput = () => getLtxHostBridge().getTextInput("input_prompt");
   var getDataInput = () => {
-    const el = document.getElementById(DATA_INPUT_ID);
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    const el = getLtxHostBridge().getTextInput(DATA_INPUT_ID);
+    if (el) {
       return el;
     }
     if (!warnedMissingDataInput) {
@@ -1548,20 +2512,6 @@
     el.value = json;
   };
   var readStateToken = () => `${readDataParam()}\0${getPromptInput()?.value ?? ""}`;
-  var withSuppressedPromptTabComplete = (fn) => {
-    const tc = typeof promptTabComplete !== "undefined" ? promptTabComplete : null;
-    if (!tc) {
-      fn();
-      return;
-    }
-    const prev = tc.blockInput;
-    tc.blockInput = true;
-    try {
-      fn();
-    } finally {
-      tc.blockInput = prev;
-    }
-  };
   var writeClipPrompts = (clips) => {
     const el = getPromptInput();
     if (!el) {
@@ -1572,42 +2522,23 @@
   var notifyCarrierChanged = () => {
     const dataEl = getDataInput();
     if (dataEl) {
-      triggerChangeFor(dataEl);
+      getLtxHostBridge().notifyChanged(dataEl);
     }
     const promptEl = getPromptInput();
     if (promptEl) {
-      withSuppressedPromptTabComplete(() => triggerChangeFor(promptEl));
+      getLtxHostBridge().notifyChanged(promptEl, true);
     }
   };
   var readGlobalPrompt = () => extractGlobalPrompt(getPromptInput()?.value ?? "");
-  var readCarrierSnapshot = () => JSON.stringify({
-    data: readDataParam(),
-    prompt: getPromptInput()?.value ?? ""
-  });
-  var restoreCarrierSnapshot = (snapshot) => {
-    let parsed;
-    try {
-      parsed = JSON.parse(snapshot);
-    } catch {
-      return;
-    }
-    writeDataParam(typeof parsed.data === "string" ? parsed.data : "");
-    const el = getPromptInput();
-    if (!el) {
-      return;
-    }
-    el.value = typeof parsed.prompt === "string" ? parsed.prompt : "";
-    triggerChangeFor(el);
-  };
-  var getGroupToggle = () => utils.getInputElement("input_group_content_videostages_toggle");
-  var getRootModelInput = () => utils.getInputElement("input_model");
+  var getGroupToggle = () => getLtxHostBridge().getInput("input_group_content_videostages_toggle");
+  var getRootModelInput = () => getLtxHostBridge().getInput("input_model");
   var getBase2EditStageRefs = () => {
-    const snapshot = window.base2editStageRegistry?.getSnapshot?.();
+    const snapshot = getLtxHostBridge().getBase2EditRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
       return [];
     }
     const refs = snapshot.refs.map((value) => {
-      const stageIndex = parseBase2EditStageIndex(value);
+      const stageIndex = parseBase2EditStageIndex(`${value ?? ""}`);
       return stageIndex == null ? null : `edit${stageIndex}`;
     }).filter((value) => !!value);
     return [...new Set(refs)].sort(
@@ -1619,34 +2550,15 @@
     if (!modelName) {
       return false;
     }
-    if (typeof modelsHelpers !== "undefined" && modelsHelpers && typeof modelsHelpers.getDataFor === "function") {
-      const modelData = modelsHelpers.getDataFor(
-        "Stable-Diffusion",
-        modelName
-      );
-      if (modelData?.modelClass?.compatClass?.isText2Video) {
-        return true;
-      }
-    }
-    if (typeof currentModelHelper !== "undefined" && currentModelHelper && currentModelHelper.curCompatClass && typeof modelsHelpers !== "undefined" && modelsHelpers?.compatClasses) {
-      const compatClass = modelsHelpers.compatClasses[currentModelHelper.curCompatClass];
-      return !!compatClass?.isText2Video;
-    }
-    return false;
+    return isCurrentRootLtxVideoModel(modelName);
   };
   var getDropdownOptions = (paramId, fallbackSelectId) => {
-    if (typeof getParamById === "function") {
-      const param = getParamById(paramId);
-      if (param?.values && Array.isArray(param.values) && param.values.length > 0) {
-        const labels = Array.isArray(param.value_names) && param.value_names.length === param.values.length ? [...param.value_names] : [...param.values];
-        return { values: [...param.values], labels };
-      }
+    const registered = getLtxHostBridge().getParamOptions(paramId);
+    if (registered) {
+      return registered;
     }
-    const select = utils.getSelectElement(fallbackSelectId);
-    return {
-      values: utils.getSelectValues(select),
-      labels: utils.getSelectLabels(select)
-    };
+    const bridge2 = getLtxHostBridge();
+    return bridge2.getSelectOptions(bridge2.getSelect(fallbackSelectId));
   };
   var isVideoStagesEnabled = () => {
     const toggler = getGroupToggle();
@@ -1658,14 +2570,14 @@
       return;
     }
     toggler.checked = enabled;
-    triggerChangeFor(toggler);
+    getLtxHostBridge().notifyChanged(toggler);
   };
 
   // frontend/rootDefaults.ts
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
   var HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
-  var FPS_INPUT_IDS = ["input_videofps", "input_videoframespersecond"];
+  var rootVideoFpsInput = () => getLtxHostBridge().getRootVideoFpsInput();
   var firstPresentInput = (...ids) => {
     for (let i = 0; i < ids.length; i++) {
       const el = utils.getInputElement(ids[i]);
@@ -1678,12 +2590,12 @@
   var getDefaultStageModel = (modelValues) => {
     if (isRootTextToVideoModel()) {
       const modelName = trimDomValue(getRootModelInput());
-      if (modelName) {
+      if (modelName && isLtxVideoModelValue(modelName)) {
         return modelName;
       }
     }
     const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
-    if (videoModel) {
+    if (videoModel && isLtxVideoModelValue(videoModel)) {
       return videoModel;
     }
     return modelValues[0] ?? "";
@@ -1691,7 +2603,7 @@
   var readInheritedDimsSignature = () => {
     const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
     const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
-    const fps = trimDomValue(firstPresentInput(...FPS_INPUT_IDS));
+    const fps = trimDomValue(rootVideoFpsInput());
     return `${width}|${height}|${fps}`;
   };
   var getRootDefaults = () => {
@@ -1712,26 +2624,24 @@
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
+    const models = filterLtxModelOptions(
+      utils.getSelectValues(model),
+      utils.getSelectLabels(model)
+    );
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
     const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
     const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
-    const fpsInput = firstPresentInput(
-      "input_videofps",
-      "input_videoframespersecond"
-    );
+    const fpsInput = rootVideoFpsInput();
     const framesInput = firstPresentInput(
       "input_videoframes",
       "input_text2videoframes"
     );
-    const fps = Math.max(1, Math.round(utils.toNumber(fpsInput?.value, 24)));
-    const frames = Math.max(
-      1,
-      Math.round(utils.toNumber(framesInput?.value, 24))
-    );
+    const fps = Math.max(1, Math.round(toNumber(fpsInput?.value, 24)));
+    const frames = Math.max(1, Math.round(toNumber(framesInput?.value, 24)));
     return {
-      modelValues: utils.getSelectValues(model),
-      modelLabels: utils.getSelectLabels(model),
+      modelValues: models.values,
+      modelLabels: models.labels,
       loraValues: loras.values,
       loraLabels: loras.labels,
       samplerValues: sampler.values,
@@ -1742,11 +2652,11 @@
       upscaleMethodLabels,
       width: Math.max(
         ROOT_DIMENSION_MIN,
-        Math.round(utils.toNumber(widthInput?.value, 1024))
+        Math.round(toNumber(widthInput?.value, 1024))
       ),
       height: Math.max(
         ROOT_DIMENSION_MIN,
-        Math.round(utils.toNumber(heightInput?.value, 1024))
+        Math.round(toNumber(heightInput?.value, 1024))
       ),
       fps,
       frames,
@@ -1759,17 +2669,377 @@
       upscaleMax: 4,
       upscaleStep: 0.25,
       steps: 8,
-      stepsMin: Math.max(1, Math.round(utils.toNumber(steps?.min, 1))),
+      stepsMin: Math.max(1, Math.round(toNumber(steps?.min, 1))),
       stepsMax: Math.min(
         50,
-        Math.max(1, Math.round(utils.toNumber(steps?.max, 200)))
+        Math.max(1, Math.round(toNumber(steps?.max, 200)))
       ),
-      stepsStep: Math.max(1, Math.round(utils.toNumber(steps?.step, 1))),
+      stepsStep: Math.max(1, Math.round(toNumber(steps?.step, 1))),
       cfgScale: 1,
-      cfgScaleMin: utils.toNumber(cfgScale?.min, 0),
-      cfgScaleMax: Math.min(10, utils.toNumber(cfgScale?.max, 10)),
-      cfgScaleStep: utils.toNumber(cfgScale?.step, 0.5)
+      cfgScaleMin: toNumber(cfgScale?.min, 0),
+      cfgScaleMax: Math.min(10, toNumber(cfgScale?.max, 10)),
+      cfgScaleStep: toNumber(cfgScale?.step, 0.5)
     };
+  };
+
+  // frontend/documentCommands.ts
+  var VALUE = ["value"];
+  var VALUE_CAPABILITIES = ["value", "capabilities"];
+  var STRUCTURE = ["structure", "capabilities"];
+  var REMOVE_STRUCTURE = [
+    "structure",
+    "selection",
+    "capabilities"
+  ];
+  var MOVE_STRUCTURE = ["structure"];
+  var IMPACT_ORDER = [
+    "value",
+    "structure",
+    "selection",
+    "capabilities"
+  ];
+  var clone2 = (value) => structuredClone(value);
+  var normalizedId = (value) => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const id = value.trim();
+    return id.length > 0 ? id : null;
+  };
+  var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
+  var findTrack = (document2, trackId) => document2.audioTracks.find((track) => track.id === trackId) ?? null;
+  var candidateIds = (entity) => {
+    if ("stages" in entity && "refs" in entity) {
+      return [
+        entity.id,
+        ...entity.stages.map((stage) => stage.id),
+        ...entity.refs.map((ref) => ref.id),
+        ...entity.audioSegments.map((segment) => segment.id),
+        ...entity.promptWindows.map((window2) => window2.id),
+        ...entity.retake ? [entity.retake.id] : []
+      ];
+    }
+    if ("spans" in entity) {
+      return [entity.id, ...entity.spans.map((span) => span.id)];
+    }
+    return [entity.id];
+  };
+  var validateNewEntity = (document2, entity) => {
+    const ids = candidateIds(entity);
+    if (ids.some((id) => normalizedId(id) !== id)) {
+      return "invalid-id";
+    }
+    if (new Set(ids).size !== ids.length) {
+      return "duplicate-id";
+    }
+    const existing = new Set(collectAuthoringEntityIds(document2));
+    return ids.some((id) => existing.has(id)) ? "duplicate-id" : null;
+  };
+  var addBefore = (items, item, beforeId) => {
+    if (beforeId == null) {
+      items.push(item);
+      return true;
+    }
+    const beforeIndex = items.findIndex(
+      (candidate) => candidate.id === beforeId
+    );
+    if (beforeIndex < 0) {
+      return false;
+    }
+    items.splice(beforeIndex, 0, item);
+    return true;
+  };
+  var removeById = (items, id) => {
+    const index = items.findIndex((item) => item.id === id);
+    if (index < 0) {
+      return false;
+    }
+    items.splice(index, 1);
+    return true;
+  };
+  var moveBefore = (items, id, beforeId) => {
+    const fromIndex = items.findIndex((item2) => item2.id === id);
+    if (fromIndex < 0) {
+      return false;
+    }
+    if (beforeId !== null && !items.some((item2) => item2.id === beforeId)) {
+      return false;
+    }
+    if (id === beforeId) {
+      return true;
+    }
+    const [item] = items.splice(fromIndex, 1);
+    if (beforeId === null) {
+      items.push(item);
+      return true;
+    }
+    const toIndex = items.findIndex((candidate) => candidate.id === beforeId);
+    items.splice(toIndex, 0, item);
+    return true;
+  };
+  var patchById = (items, id, patch) => {
+    const entity = items.find((item) => item.id === id);
+    if (!entity) {
+      return false;
+    }
+    Object.assign(entity, clone2(patch), { id });
+    return true;
+  };
+  var success = (document2, impacts) => ({ document: document2, applied: true, impacts });
+  var failure = (document2, reason) => ({
+    document: document2,
+    applied: false,
+    impacts: [],
+    failure: reason
+  });
+  var invalidNewEntity = (document2, entity) => {
+    const reason = validateNewEntity(document2, entity);
+    return reason ? failure(document2, reason) : null;
+  };
+  var assertNever = (command) => {
+    throw new Error(`Unhandled document command: ${JSON.stringify(command)}`);
+  };
+  var combineImpacts = (impacts) => {
+    const included = new Set(impacts.flat());
+    return IMPACT_ORDER.filter((impact) => included.has(impact));
+  };
+  var reduceDocumentCommand = (source, command) => {
+    const document2 = clone2(source);
+    switch (command.type) {
+      case "batch": {
+        let current = document2;
+        const impacts = [];
+        for (const child of command.commands) {
+          const result = reduceDocumentCommand(current, child);
+          if (!result.applied) {
+            return failure(
+              clone2(source),
+              result.failure
+            );
+          }
+          current = result.document;
+          impacts.push(result.impacts);
+        }
+        return success(current, combineImpacts(impacts));
+      }
+      case "root.patch": {
+        Object.assign(document2, clone2(command.patch));
+        return success(document2, VALUE_CAPABILITIES);
+      }
+      case "clip.add": {
+        const invalid = invalidNewEntity(document2, command.clip);
+        if (invalid) return invalid;
+        if (!addBefore(
+          document2.clips,
+          clone2(command.clip),
+          command.beforeClipId
+        )) {
+          return failure(clone2(source), "missing-target");
+        }
+        return success(document2, STRUCTURE);
+      }
+      case "clip.remove":
+        return removeById(document2.clips, command.clipId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+      case "clip.move":
+        return moveBefore(
+          document2.clips,
+          command.clipId,
+          command.beforeClipId
+        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+      case "clip.patch":
+        return patchById(document2.clips, command.clipId, command.patch) ? success(document2, VALUE_CAPABILITIES) : failure(document2, "missing-target");
+      case "stage.add": {
+        const clip = findClip(document2, command.clipId);
+        if (!clip) return failure(document2, "missing-target");
+        const invalid = invalidNewEntity(document2, command.stage);
+        if (invalid) return invalid;
+        if (!addBefore(
+          clip.stages,
+          clone2(command.stage),
+          command.beforeStageId
+        )) {
+          return failure(clone2(source), "missing-target");
+        }
+        return success(document2, STRUCTURE);
+      }
+      case "stage.remove": {
+        const clip = findClip(document2, command.clipId);
+        return clip && removeById(clip.stages, command.stageId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "stage.move": {
+        const clip = findClip(document2, command.clipId);
+        return clip && moveBefore(clip.stages, command.stageId, command.beforeStageId) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "stage.patch": {
+        const clip = findClip(document2, command.clipId);
+        return clip && patchById(clip.stages, command.stageId, command.patch) ? success(document2, VALUE_CAPABILITIES) : failure(document2, "missing-target");
+      }
+      case "ref.add": {
+        const clip = findClip(document2, command.clipId);
+        if (!clip) return failure(document2, "missing-target");
+        const invalid = invalidNewEntity(document2, command.ref);
+        if (invalid) return invalid;
+        if (!addBefore(clip.refs, clone2(command.ref), command.beforeRefId)) {
+          return failure(clone2(source), "missing-target");
+        }
+        return success(document2, STRUCTURE);
+      }
+      case "ref.remove": {
+        const clip = findClip(document2, command.clipId);
+        return clip && removeById(clip.refs, command.refId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "ref.move": {
+        const clip = findClip(document2, command.clipId);
+        return clip && moveBefore(clip.refs, command.refId, command.beforeRefId) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "ref.patch": {
+        const clip = findClip(document2, command.clipId);
+        return clip && patchById(clip.refs, command.refId, command.patch) ? success(document2, VALUE_CAPABILITIES) : failure(document2, "missing-target");
+      }
+      case "audio-segment.add": {
+        const clip = findClip(document2, command.clipId);
+        if (!clip) return failure(document2, "missing-target");
+        const invalid = invalidNewEntity(document2, command.segment);
+        if (invalid) return invalid;
+        if (!addBefore(
+          clip.audioSegments,
+          clone2(command.segment),
+          command.beforeSegmentId
+        )) {
+          return failure(clone2(source), "missing-target");
+        }
+        return success(document2, STRUCTURE);
+      }
+      case "audio-segment.remove": {
+        const clip = findClip(document2, command.clipId);
+        return clip && removeById(clip.audioSegments, command.segmentId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "audio-segment.move": {
+        const clip = findClip(document2, command.clipId);
+        return clip && moveBefore(
+          clip.audioSegments,
+          command.segmentId,
+          command.beforeSegmentId
+        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "audio-segment.patch": {
+        const clip = findClip(document2, command.clipId);
+        return clip && patchById(clip.audioSegments, command.segmentId, command.patch) ? success(document2, VALUE) : failure(document2, "missing-target");
+      }
+      case "prompt-window.add": {
+        const clip = findClip(document2, command.clipId);
+        if (!clip) return failure(document2, "missing-target");
+        const invalid = invalidNewEntity(document2, command.window);
+        if (invalid) return invalid;
+        if (!addBefore(
+          clip.promptWindows,
+          clone2(command.window),
+          command.beforeWindowId
+        )) {
+          return failure(clone2(source), "missing-target");
+        }
+        return success(document2, STRUCTURE);
+      }
+      case "prompt-window.remove": {
+        const clip = findClip(document2, command.clipId);
+        return clip && removeById(clip.promptWindows, command.windowId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "prompt-window.move": {
+        const clip = findClip(document2, command.clipId);
+        return clip && moveBefore(
+          clip.promptWindows,
+          command.windowId,
+          command.beforeWindowId
+        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "prompt-window.patch": {
+        const clip = findClip(document2, command.clipId);
+        return clip && patchById(clip.promptWindows, command.windowId, command.patch) ? success(document2, VALUE) : failure(document2, "missing-target");
+      }
+      case "retake.add": {
+        const clip = findClip(document2, command.clipId);
+        if (!clip) return failure(document2, "missing-target");
+        if (clip.retake) {
+          return failure(document2, "retake-already-exists");
+        }
+        const invalid = invalidNewEntity(document2, command.retake);
+        if (invalid) return invalid;
+        clip.retake = clone2(command.retake);
+        return success(document2, STRUCTURE);
+      }
+      case "retake.remove": {
+        const clip = findClip(document2, command.clipId);
+        if (!clip || clip.retake?.id !== command.retakeId) {
+          return failure(document2, "missing-target");
+        }
+        clip.retake = null;
+        return success(document2, REMOVE_STRUCTURE);
+      }
+      case "retake.patch": {
+        const clip = findClip(document2, command.clipId);
+        if (!clip || clip.retake?.id !== command.retakeId) {
+          return failure(document2, "missing-target");
+        }
+        Object.assign(clip.retake, clone2(command.patch), {
+          id: command.retakeId
+        });
+        return success(document2, VALUE_CAPABILITIES);
+      }
+      case "audio-track.add": {
+        const invalid = invalidNewEntity(document2, command.track);
+        if (invalid) return invalid;
+        if (!addBefore(
+          document2.audioTracks,
+          clone2(command.track),
+          command.beforeTrackId
+        )) {
+          return failure(clone2(source), "missing-target");
+        }
+        return success(document2, STRUCTURE);
+      }
+      case "audio-track.remove":
+        return removeById(document2.audioTracks, command.trackId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+      case "audio-track.move":
+        return moveBefore(
+          document2.audioTracks,
+          command.trackId,
+          command.beforeTrackId
+        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+      case "audio-track.patch":
+        return patchById(
+          document2.audioTracks,
+          command.trackId,
+          command.patch
+        ) ? success(document2, VALUE) : failure(document2, "missing-target");
+      case "audio-span.add": {
+        const track = findTrack(document2, command.trackId);
+        if (!track) return failure(document2, "missing-target");
+        const invalid = invalidNewEntity(document2, command.span);
+        if (invalid) return invalid;
+        if (!addBefore(
+          track.spans,
+          clone2(command.span),
+          command.beforeSpanId
+        )) {
+          return failure(clone2(source), "missing-target");
+        }
+        return success(document2, STRUCTURE);
+      }
+      case "audio-span.remove": {
+        const track = findTrack(document2, command.trackId);
+        return track && removeById(track.spans, command.spanId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "audio-span.move": {
+        const track = findTrack(document2, command.trackId);
+        return track && moveBefore(track.spans, command.spanId, command.beforeSpanId) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+      }
+      case "audio-span.patch": {
+        const track = findTrack(document2, command.trackId);
+        return track && patchById(track.spans, command.spanId, command.patch) ? success(document2, VALUE) : failure(document2, "missing-target");
+      }
+      default:
+        return assertNever(command);
+    }
   };
 
   // frontend/store.ts
@@ -1778,6 +3048,7 @@
     let cachedToken = null;
     let syncedToken = null;
     let lastGoodSerialized = "";
+    let documentRevision = 0;
     const subscribers = /* @__PURE__ */ new Set();
     const parseCurrent = () => {
       const serialized = deps.readDataParam() || lastGoodSerialized;
@@ -1804,6 +3075,7 @@
       }
       canonical = parseCurrent();
       cachedToken = token;
+      documentRevision++;
       if (syncedToken === null) {
         syncedToken = token;
       }
@@ -1822,17 +3094,63 @@
         }
       }
     };
-    const save = (state, origin, notifyDomChange, hint) => {
+    const commit = (state, origin, notifyDomChange, hint, impacts) => {
       const serialized = deps.writeQuiet(state);
       lastGoodSerialized = serialized;
       canonical = deps.parse(serialized) ?? structuredClone(state);
       cachedToken = deps.readToken();
       syncedToken = cachedToken;
+      documentRevision++;
       if (notifyDomChange) {
         deps.notifyHost();
       }
-      notify({ origin, hint });
+      notify({
+        origin,
+        hint,
+        impacts: impacts ? [...impacts] : void 0
+      });
       return serialized;
+    };
+    const save = (state, origin, notifyDomChange, hint) => commit(state, origin, notifyDomChange, hint);
+    const dispatch = (command, origin, notifyDomChange, expectedRevision, hint) => {
+      const source = structuredClone(revalidate());
+      if (expectedRevision !== void 0 && expectedRevision !== documentRevision) {
+        return {
+          applied: false,
+          failure: "stale-revision",
+          revision: documentRevision,
+          impacts: []
+        };
+      }
+      ensureAuthoringDocumentIdentity(source);
+      const reduced = reduceDocumentCommand(source, command);
+      if (!reduced.applied) {
+        return {
+          applied: false,
+          failure: reduced.failure,
+          revision: documentRevision,
+          impacts: []
+        };
+      }
+      if (reduced.impacts.length === 0) {
+        return {
+          applied: true,
+          revision: documentRevision,
+          impacts: []
+        };
+      }
+      commit(
+        reduced.document,
+        origin,
+        notifyDomChange,
+        hint,
+        reduced.impacts
+      );
+      return {
+        applied: true,
+        revision: documentRevision,
+        impacts: [...reduced.impacts]
+      };
     };
     const syncFromCarrier = () => {
       const token = deps.readToken();
@@ -1846,7 +3164,16 @@
     };
     return {
       getState: () => structuredClone(revalidate()),
+      getSnapshot: () => ({
+        state: structuredClone(revalidate()),
+        revision: documentRevision
+      }),
+      revision: () => {
+        revalidate();
+        return documentRevision;
+      },
       save,
+      dispatch,
       syncFromCarrier,
       subscribe: (cb) => {
         subscribers.add(cb);
@@ -1862,6 +3189,7 @@
         cachedToken = null;
         syncedToken = null;
         lastGoodSerialized = "";
+        documentRevision = 0;
         subscribers.clear();
       }
     };
@@ -1869,13 +3197,48 @@
 
   // frontend/uiState.ts
   var UI_STATE_KEY = "videostages_ui_state";
+  var UI_STATE_SCHEMA_VERSION = 2;
   var serializeUiState = (clips) => {
+    ensureClipEntityIdentities(clips);
     const state = {
+      schemaVersion: UI_STATE_SCHEMA_VERSION,
       clips: clips.map((clip) => ({
-        hue: typeof clip.hue === "number" ? clip.hue : null
+        id: clip.id,
+        hue: typeof clip.hue === "number" ? clip.hue : null,
+        promptWindows: clip.promptWindows.map((window2) => ({
+          id: window2.id,
+          prompt: window2.prompt,
+          start: window2.start,
+          duration: window2.duration
+        }))
       }))
     };
     return JSON.stringify(state);
+  };
+  var promptWindowKey = (window2) => JSON.stringify([window2.prompt, window2.start, window2.duration]);
+  var restorePromptWindowIds = (stored, clip) => {
+    const rawWindows = Array.isArray(stored.promptWindows) ? stored.promptWindows : [];
+    const idsByWindow = /* @__PURE__ */ new Map();
+    for (const rawWindow of rawWindows) {
+      if (!isRecord(rawWindow) || typeof rawWindow.id !== "string" || !rawWindow.id.trim() || typeof rawWindow.prompt !== "string" || typeof rawWindow.start !== "number" || typeof rawWindow.duration !== "number") {
+        continue;
+      }
+      const key = promptWindowKey({
+        prompt: rawWindow.prompt,
+        start: rawWindow.start,
+        duration: rawWindow.duration
+      });
+      const ids = idsByWindow.get(key) ?? [];
+      ids.push(rawWindow.id.trim());
+      idsByWindow.set(key, ids);
+    }
+    for (const window2 of clip.promptWindows) {
+      const ids = idsByWindow.get(promptWindowKey(window2));
+      const id = ids?.shift();
+      if (id) {
+        window2.id = id;
+      }
+    }
   };
   var applyUiStateFrom = (raw, clips) => {
     if (!raw) {
@@ -1883,14 +3246,23 @@
     }
     const parsed = safeJsonParse(raw, null);
     const storedClips = isRecord(parsed) && Array.isArray(parsed.clips) ? parsed.clips : [];
+    const storedById = /* @__PURE__ */ new Map();
+    for (const stored of storedClips) {
+      if (isRecord(stored) && typeof stored.id === "string" && stored.id.trim()) {
+        storedById.set(stored.id.trim(), stored);
+      }
+    }
     for (let i = 0; i < clips.length; i++) {
-      const stored = storedClips[i];
+      const clipId = clips[i].id;
+      const positional = storedClips[i];
+      const stored = (clipId ? storedById.get(clipId) : void 0) ?? (isRecord(positional) && !positional.id ? positional : void 0);
       if (!isRecord(stored)) {
         continue;
       }
       if (typeof stored.hue === "number" && Number.isFinite(stored.hue)) {
         clips[i].hue = stored.hue;
       }
+      restorePromptWindowIds(stored, clips[i]);
     }
   };
   var applyUiState = (clips) => {
@@ -1911,7 +3283,7 @@
     if (value == null || value === "") {
       return null;
     }
-    const num = utils.toNumber(`${value}`, Number.NaN);
+    const num = toNumber(`${value}`, Number.NaN);
     return Number.isFinite(num) ? Math.round(num) : null;
   };
   var resolveRootDims = (inherited, stored) => {
@@ -1928,80 +3300,97 @@
       fpsExplicit
     };
   };
-  var rootConfig = (dims, clips) => ({
-    ...dims,
-    clips
-  });
-  var serializeClipsForStorage = (clips) => clips.map(
-    (clip) => ({
-      skipped: clip.skipped,
-      boundaryOut: clip.boundaryOut,
-      boundaryOutOverlap: clip.boundaryOutOverlap,
-      duration: clip.duration,
-      audioSource: clip.audioSource,
-      icLoras: clip.icLoras.map((entry) => ({
-        lora: entry.lora,
-        preset: entry.preset,
-        source: entry.source,
-        stage: entry.stage,
-        strength: entry.strength,
-        attentionStrength: entry.attentionStrength,
-        controlType: entry.controlType,
-        video: entry.video,
-        driveAudioRef: entry.driveAudioRef
-      })),
-      saveAudioTrack: clip.saveAudioTrack,
-      clipLengthFromAudio: clip.clipLengthFromAudio,
-      clipLengthFromControlNet: clip.clipLengthFromControlNet,
-      reuseAudio: clip.reuseAudio,
-      uploadedAudio: clip.uploadedAudio,
-      sourceVideo: clip.sourceVideo ? {
-        data: clip.sourceVideo.data,
-        fileName: clip.sourceVideo.fileName,
-        fps: clip.sourceVideo.fps,
-        durationSeconds: clip.sourceVideo.durationSeconds,
-        startSeconds: clip.sourceVideo.startSeconds,
-        lengthSeconds: clip.sourceVideo.lengthSeconds
-      } : null,
-      audioSegments: clip.audioSegments.map((seg) => ({
-        source: seg.source,
-        startSeconds: seg.startSeconds,
-        trimStartSeconds: seg.trimStartSeconds,
-        lengthSeconds: seg.lengthSeconds
-      })),
-      retake: clip.retake ? {
-        startSeconds: clip.retake.startSeconds,
-        lengthSeconds: clip.retake.lengthSeconds,
-        strength: clip.retake.strength
-      } : null,
-      refs: clip.refs.map((ref) => ({
-        source: ref.source,
-        uploadFileName: ref.uploadFileName,
-        uploadedImage: ref.uploadedImage,
-        frame: ref.frame,
-        fromEnd: ref.fromEnd
-      })),
-      stages: clip.stages.map((stage) => ({
-        skipped: stage.skipped,
-        control: stage.control,
-        controlNetStrength: stage.controlNetStrength,
-        refStrengths: stage.refStrengths,
-        upscale: stage.upscale,
-        upscaleMethod: stage.upscaleMethod,
-        model: stage.model,
-        steps: stage.steps,
-        cfgScale: stage.cfgScale,
-        sampler: stage.sampler,
-        scheduler: stage.scheduler,
-        loras: stage.loras.map((lora) => ({
-          name: lora.name,
-          weight: lora.weight
+  var rootConfig = (dims, clips, audioTracks = []) => {
+    const config = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+      ...dims,
+      clips,
+      audioTracks
+    };
+    ensureAuthoringDocumentIdentity(config);
+    return config;
+  };
+  var serializeClipsForStorage = (clips) => {
+    ensureClipEntityIdentities(clips);
+    return clips.map(
+      (clip) => ({
+        id: clip.id,
+        skipped: clip.skipped,
+        boundaryOut: clip.boundaryOut,
+        boundaryOutOverlap: clip.boundaryOutOverlap,
+        duration: clip.duration,
+        audioSource: clip.audioSource,
+        icLoras: clip.icLoras.map((entry) => ({
+          lora: entry.lora,
+          preset: entry.preset,
+          source: entry.source,
+          stage: entry.stage,
+          strength: entry.strength,
+          attentionStrength: entry.attentionStrength,
+          controlType: entry.controlType,
+          video: entry.video,
+          driveAudioRef: entry.driveAudioRef
+        })),
+        saveAudioTrack: clip.saveAudioTrack,
+        clipLengthFromAudio: clip.clipLengthFromAudio,
+        clipLengthFromControlNet: clip.clipLengthFromControlNet,
+        reuseAudio: clip.reuseAudio,
+        uploadedAudio: clip.uploadedAudio,
+        sourceVideo: clip.sourceVideo ? {
+          data: clip.sourceVideo.data,
+          fileName: clip.sourceVideo.fileName,
+          fps: clip.sourceVideo.fps,
+          durationSeconds: clip.sourceVideo.durationSeconds,
+          startSeconds: clip.sourceVideo.startSeconds,
+          lengthSeconds: clip.sourceVideo.lengthSeconds
+        } : null,
+        audioSegments: clip.audioSegments.map((seg) => ({
+          id: seg.id,
+          source: seg.source,
+          startSeconds: seg.startSeconds,
+          trimStartSeconds: seg.trimStartSeconds,
+          lengthSeconds: seg.lengthSeconds
+        })),
+        retake: clip.retake ? {
+          id: clip.retake.id,
+          startSeconds: clip.retake.startSeconds,
+          lengthSeconds: clip.retake.lengthSeconds,
+          strength: clip.retake.strength
+        } : null,
+        refs: clip.refs.map((ref) => ({
+          id: ref.id,
+          source: ref.source,
+          uploadFileName: ref.uploadFileName,
+          uploadedImage: ref.uploadedImage,
+          frame: ref.frame,
+          fromEnd: ref.fromEnd
+        })),
+        stages: clip.stages.map((stage) => ({
+          id: stage.id,
+          skipped: stage.skipped,
+          control: stage.control,
+          controlNetStrength: stage.controlNetStrength,
+          refStrengths: stage.refStrengths,
+          upscale: stage.upscale,
+          upscaleMethod: stage.upscaleMethod,
+          model: stage.model,
+          steps: stage.steps,
+          cfgScale: stage.cfgScale,
+          sampler: stage.sampler,
+          scheduler: stage.scheduler,
+          loras: stage.loras.map((lora) => ({
+            name: lora.name,
+            weight: lora.weight
+          }))
         }))
-      }))
-    })
-  );
+      })
+    );
+  };
   var serializeStateForStorage = (state) => {
-    const out = {};
+    ensureAuthoringDocumentIdentity(state);
+    const out = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
+    };
     if (state.dimsExplicit) {
       out.width = Math.round(state.width);
       out.height = Math.round(state.height);
@@ -2010,9 +3399,28 @@
       out.fps = Math.round(state.fps);
     }
     out.clips = serializeClipsForStorage(state.clips);
+    out.audioTracks = state.audioTracks.map((track) => ({
+      id: track.id,
+      source: {
+        kind: track.source.kind,
+        reference: track.source.reference,
+        uploadedAudio: track.source.uploadedAudio
+      },
+      spans: track.spans.map((span) => ({
+        id: span.id,
+        firstClipId: span.firstClipId,
+        lastClipId: span.lastClipId,
+        timelineStartSeconds: span.timelineStartSeconds,
+        timelineLengthSeconds: span.timelineLengthSeconds,
+        sourceStartSeconds: span.sourceStartSeconds,
+        clipStartOffsetSeconds: span.clipStartOffsetSeconds,
+        clipLengthSeconds: span.clipLengthSeconds
+      }))
+    }));
     return JSON.stringify(out);
   };
   var overlayPromptAndUiState = (clips) => {
+    ensureClipEntityIdentities(clips);
     const { sections, windows } = parseClipPrompts(
       getPromptInput()?.value ?? ""
     );
@@ -2025,6 +3433,7 @@
       }));
     }
     applyUiState(clips);
+    ensureClipEntityIdentities(clips);
     assignMissingHues(clips);
   };
   var parseSerializedState = (serialized, inherited) => {
@@ -2039,20 +3448,27 @@
         stored = {
           width: parsed.width,
           height: parsed.height,
-          fps: parsed.fps
+          fps: parsed.fps,
+          audioTracks: parsed.audioTracks
         };
       } else {
         clipsRaw = [];
       }
+      const dims = resolveRootDims(inherited, stored);
       const clips = clipsRaw.map(
         (el) => normalizeClip(
           isRecord(el) ? el : {},
           getRootDefaults,
-          getDefaultStageModel
+          getDefaultStageModel,
+          dims.fps
         )
       );
       overlayPromptAndUiState(clips);
-      return rootConfig(resolveRootDims(inherited, stored), clips);
+      return rootConfig(
+        dims,
+        clips,
+        normalizeAudioTracks(stored.audioTracks)
+      );
     } catch {
       return null;
     }
@@ -2071,6 +3487,7 @@
     return rootConfig(resolveRootDims(inheritedDims(), {}), clips);
   };
   var writeQuietly = (state) => {
+    ensureAuthoringDocumentIdentity(state);
     assignMissingHues(state.clips);
     const serialized = serializeStateForStorage(state);
     writeDataParam(serialized);
@@ -2093,33 +3510,113 @@
   });
   var getTimelineStore = () => store;
   var getState = () => store.getState();
-  var saveState = (state, options) => {
+  var throwSaveFailure = (phase, error) => {
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    console.error(`[VideoStages persistence] saveState ${phase} failed`, error);
+    videoStagesDebugLog("persistence", `saveState ${phase} failed`, {
+      detail
+    });
+    throw new Error(`VideoStages saveState ${phase} failed: ${detail}`, {
+      cause: error
+    });
+  };
+  var hasCanonicalStoredId = (value, seen) => {
+    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
+      return false;
+    }
+    seen.add(value.id);
+    return true;
+  };
+  var dataCarrierNeedsCanonicalMigration = () => {
+    try {
+      const parsed = JSON.parse(readDataParam());
+      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
+        return true;
+      }
+      const seenIds = /* @__PURE__ */ new Set();
+      for (const rawClip of parsed.clips) {
+        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
+        for (const key of ["stages", "refs", "audioSegments"]) {
+          const children = rawClip[key];
+          if (!Array.isArray(children) || children.some(
+            (child) => !hasCanonicalStoredId(child, seenIds)
+          )) {
+            return true;
+          }
+        }
+        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
+          return true;
+        }
+      }
+      for (const rawTrack of parsed.audioTracks) {
+        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
+          (span) => !hasCanonicalStoredId(span, seenIds)
+        )) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  var saveRequestedState = (requestedInput, options, snapshot = store.getSnapshot()) => {
+    const requested = structuredClone(requestedInput);
+    ensureAuthoringDocumentIdentity(requested);
+    assignMissingHues(requested.clips);
+    const before = structuredClone(snapshot.state);
+    ensureAuthoringDocumentIdentity(before);
+    assignMissingHues(before.clips);
+    const diffCommand = (() => {
+      try {
+        return diffDocuments(before, requested);
+      } catch (error) {
+        return throwSaveFailure("diff", error);
+      }
+    })();
+    const command = diffCommand.commands.length === 0 && dataCarrierNeedsCanonicalMigration() ? {
+      type: "batch",
+      commands: [
+        {
+          type: "root.patch",
+          patch: { schemaVersion: requested.schemaVersion }
+        }
+      ]
+    } : diffCommand;
     const willNotifyDom = options?.notifyDomChange !== false;
-    const serialized = store.save(
-      state,
+    const result = store.dispatch(
+      command,
       options?.origin ?? "timeline",
       willNotifyDom,
+      options?.expectedRevision ?? snapshot.revision,
       options?.valueOnly ? "value-only" : void 0
     );
+    if (!result.applied) {
+      throwSaveFailure("dispatch", result.failure ?? "unknown failure");
+    }
     videoStagesDebugLog("persistence", "saveState", {
       notifyDomChange: options?.notifyDomChange,
       willNotifyDom,
-      jsonChars: serialized.length
+      commandCount: command.commands.length,
+      revision: result.revision,
+      impacts: result.impacts
     });
   };
+  var saveState = (state, options) => saveRequestedState(state, options);
   var getClips = () => getState().clips;
   var saveClips = (clips, options) => {
     videoStagesDebugLog("persistence", "saveClips", {
       clipCount: clips.length
     });
-    const state = getState();
-    state.clips = clips;
+    const snapshot = store.getSnapshot();
+    const state = structuredClone(snapshot.state);
+    state.clips = structuredClone(clips);
     const notifyDomChange = options?.notifyDomChange !== void 0 ? options.notifyDomChange : isVideoStagesEnabled();
-    saveState(state, { ...options, notifyDomChange });
+    saveRequestedState(state, { ...options, notifyDomChange }, snapshot);
   };
 
   // frontend/refineVideoButton.ts
-  var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs clip 0 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
+  var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs Clip 1 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
   var countActiveStagesInMetadataClip0 = (videostagesJson) => {
     const parsed = safeJsonParse(videostagesJson, null);
     if (!isRecord(parsed)) {
@@ -2149,20 +3646,19 @@
     if (!clip0 || clip0.skipped) {
       return false;
     }
-    const activeStages = clip0.stages.filter((stage) => !stage.skipped);
-    return activeStages.length > skipCount;
+    const activeStages2 = clip0.stages.filter((stage) => !stage.skipped);
+    return activeStages2.length > skipCount;
   };
   var refineVideoButton = () => {
-    if (typeof registerMediaButton !== "function") {
-      return;
-    }
-    registerMediaButton(
-      "Refine Video",
-      (src) => {
+    const description = "Re-runs VideoStages using this video as the source for Clip 1 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.";
+    getLtxHostBridge().registerRefineVideoButton((src) => {
+      const host = getLtxHostBridge();
+      const run = async () => {
         let parsedMetadata = null;
-        if (currentMetadataVal) {
+        const currentMetadata = host.getCurrentMediaMetadata();
+        if (currentMetadata) {
           try {
-            const readable = interpretMetadata(currentMetadataVal);
+            const readable = host.interpretMediaMetadata(currentMetadata);
             parsedMetadata = readable ? JSON.parse(readable) : null;
           } catch (error) {
             console.warn(
@@ -2182,26 +3678,573 @@
           isVideoStagesEnabled(),
           skipCount
         )) {
-          showError(refineNeedsExtraStageMessage(skipCount));
+          host.showError(refineNeedsExtraStageMessage(skipCount));
           return;
         }
-        toDataURL(src, (videoDataUrl) => {
-          const inputOverrides = {
-            videostagesrefinesourcevideo: videoDataUrl,
-            videostagesrefineskipstages: skipCount,
-            images: 1
-          };
-          const seed = isRecord(params) ? readProp(params, "seed") : void 0;
-          if (typeof seed === "number") {
-            inputOverrides.seed = seed;
-          }
-          mainGenHandler.doGenerate(inputOverrides, {});
-        });
-      },
-      "Re-runs VideoStages using this video as the source for clip 0 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.",
-      ["video"],
-      true
+        const videoDataUrl = await host.toDataUrl(src);
+        const inputOverrides = {
+          videostagesrefinesourcevideo: videoDataUrl,
+          videostagesrefineskipstages: skipCount,
+          images: 1
+        };
+        const seed = isRecord(params) ? readProp(params, "seed") : void 0;
+        if (typeof seed === "number") {
+          inputOverrides.seed = seed;
+        }
+        host.generate(inputOverrides);
+      };
+      void run();
+    }, description);
+  };
+
+  // frontend/authoringDiagnostics.ts
+  var activeStageCount = (clip) => clip.stages.filter((stage) => stage.skipped !== true).length;
+  var isAudioReuseEligible = (clip) => activeStageCount(clip) >= 3;
+  var isExecutableClip = (clip) => clip.skipped !== true && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
+  var isHdrIcLora = (entry) => `${entry.preset ?? ""}`.trim().toLowerCase() === "hdr" || `${entry.lora ?? ""}`.toLowerCase().includes("ic-lora-hdr");
+  var clipHasActiveHdr = (clip) => clip.icLoras.some(
+    (entry) => isHdrIcLora(entry) && clip.stages.some(
+      (stage, rawStageIdx) => stage.skipped !== true && (entry.stage < 0 || entry.stage === rawStageIdx)
+    )
+  );
+  var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
+  var deriveAuthoringDiagnostics = (clips, context = {}) => {
+    const diagnostics = [];
+    const executable = clips.map((clip, clipIdx) => ({ clip, clipIdx })).filter(({ clip }) => isExecutableClip(clip));
+    for (const { clip, clipIdx } of executable) {
+      if (clip.reuseAudio && !isAudioReuseEligible(clip)) {
+        diagnostics.push(
+          diagnostic(
+            "warning",
+            "audio.reuse.requires_three_stages",
+            "Audio reuse needs at least three active stages: generate, capture, then reuse.",
+            clipIdx
+          )
+        );
+      }
+      if (clip.promptWindows.length > 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet)) {
+        diagnostics.push(
+          diagnostic(
+            "error",
+            "prompt-relay-dynamic-length-unsupported",
+            "Prompt relay cannot be combined with audio-owned or ControlNet-owned clip length because the relay schedule requires a fixed frame count.",
+            clipIdx
+          )
+        );
+      }
+      if (clip.retake && !clip.sourceVideo && !context.globalRefineMode) {
+        diagnostics.push(
+          diagnostic(
+            "warning",
+            "retake-source-required",
+            "Retake requires a source video on this clip or the Refine Video flow; normal generation will ignore it.",
+            clipIdx
+          )
+        );
+      }
+      if (clip.retake && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode)) {
+        diagnostics.push(
+          diagnostic(
+            "error",
+            "retake-frame-references-unsupported",
+            "A retake cannot run with frame references because guide merges would overwrite the retake mask.",
+            clipIdx
+          )
+        );
+      }
+    }
+    if (executable.length > 1) {
+      const hdr = executable.map(({ clip }) => clipHasActiveHdr(clip));
+      if (hdr.some(Boolean) && hdr.some((value) => !value)) {
+        diagnostics.push(
+          diagnostic(
+            "error",
+            "mixed-hdr-timeline-unsupported",
+            "A multi-clip timeline cannot mix HDR IC-LoRA clips with non-HDR clips because final HDR conversion applies to the complete timeline."
+          )
+        );
+      }
+    }
+    return diagnostics;
+  };
+
+  // frontend/executionPath.ts
+  var hostEntryLabel = {
+    "text-to-video": "Text-to-video",
+    "host-image-guidance": "Host image guidance",
+    "init-image-guidance": "User-provided init image guidance",
+    "source-video": "User-provided source video",
+    "source-video-only": "Source video without generation stages",
+    "global-refine-video": "Refine an existing video"
+  };
+  var plural = (count, singular, pluralWord = `${singular}s`) => `${count} ${count === 1 ? singular : pluralWord}`;
+  var projectedStages = (clip, clipIndex, context) => {
+    const refineSkip = context.entryPoint === "global-refine-video" && clipIndex === 0 ? Math.max(0, context.refineSkipStages ?? 1) : 0;
+    return clip.stages.flatMap(
+      (stage, rawIndex) => stage.skipped !== true && rawIndex >= refineSkip ? [{ stage, rawIndex }] : []
     );
+  };
+  var activeStages = (clip) => clip.stages.filter((stage) => stage.skipped !== true);
+  var isExecutable = (clip, stages) => clip.skipped !== true && (clip.sourceVideo !== null || stages.length > 0);
+  var referenceSourceLabel = (reference) => {
+    if (reference.source === REF_SOURCE_UPLOAD) {
+      return "uploaded image";
+    }
+    if (reference.source === REF_SOURCE_BASE) {
+      return "host image";
+    }
+    if (reference.source === REF_SOURCE_REFINER) {
+      return "refiner image";
+    }
+    return reference.source || "image";
+  };
+  var audioSourceLabel = (source) => {
+    const trimmed = `${source ?? ""}`.trim();
+    const aceMatch = /^audio(\d+)$/i.exec(trimmed);
+    if (aceMatch) {
+      return `AceStepFun track ${aceMatch[1]}`;
+    }
+    return trimmed || "Native";
+  };
+  var isInitialGuidance = (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1;
+  var inferHostEntry = (clips, context) => {
+    if (context.entryPoint) {
+      return context.entryPoint;
+    }
+    const firstClip = clips[0];
+    if (firstClip?.sourceVideo) {
+      return activeStages(firstClip).length === 0 ? "source-video-only" : "source-video";
+    }
+    const initialReferences = firstClip?.refs.filter(isInitialGuidance) ?? [];
+    if (initialReferences.some(
+      (reference) => reference.source === REF_SOURCE_UPLOAD
+    )) {
+      return "init-image-guidance";
+    }
+    if (context.generatedEntry) {
+      return context.generatedEntry;
+    }
+    if (initialReferences.length > 0) {
+      return "host-image-guidance";
+    }
+    return "text-to-video";
+  };
+  var describeShape = (stageCounts) => {
+    if (stageCounts.length === 0) {
+      return { kind: "no-executable-clips", label: "No executable clips" };
+    }
+    if (stageCounts.length === 1) {
+      if (stageCounts[0] === 0) {
+        return {
+          kind: "single-clip-no-stage",
+          label: "Single clip · no generation stages"
+        };
+      }
+      return stageCounts[0] === 1 ? {
+        kind: "single-clip-single-stage",
+        label: "Single clip · single stage"
+      } : {
+        kind: "single-clip-multi-stage",
+        label: "Single clip · multi-stage"
+      };
+    }
+    if (stageCounts.every((count) => count === 0)) {
+      return {
+        kind: "multi-clip-no-stage",
+        label: "Multiple clips · no generation stages"
+      };
+    }
+    if (stageCounts.some((count) => count === 0)) {
+      const categories = [
+        "source-only",
+        ...stageCounts.some((count) => count === 1) ? ["single-stage"] : [],
+        ...stageCounts.some((count) => count > 1) ? ["multi-stage"] : []
+      ];
+      return {
+        kind: "multi-clip-mixed-stages",
+        label: `Multiple clips · mixed ${categories.join(", ")}`
+      };
+    }
+    return stageCounts.every((count) => count === 1) ? {
+      kind: "multi-clip-single-stage-each",
+      label: "Multiple clips · single stage each"
+    } : {
+      kind: "multi-clip-multi-stage",
+      label: "Multiple clips · multi-stage"
+    };
+  };
+  var describeClip = (clip, clipNumber, effectiveStages) => {
+    const activeStageCount2 = effectiveStages.length;
+    const stageCount = clip.stages.length;
+    if (clip.skipped) {
+      return {
+        clipNumber,
+        kind: "skipped",
+        stageCount,
+        activeStageCount: activeStageCount2,
+        label: `Clip ${clipNumber}: skipped`
+      };
+    }
+    if (clip.sourceVideo && activeStageCount2 === 0) {
+      return {
+        clipNumber,
+        kind: "source-video-only",
+        stageCount,
+        activeStageCount: activeStageCount2,
+        label: `Clip ${clipNumber}: source video only`
+      };
+    }
+    if (clip.sourceVideo) {
+      return {
+        clipNumber,
+        kind: "source-video",
+        stageCount,
+        activeStageCount: activeStageCount2,
+        label: `Clip ${clipNumber}: source video + ${plural(activeStageCount2, "active stage")}`
+      };
+    }
+    return {
+      clipNumber,
+      kind: "generated",
+      stageCount,
+      activeStageCount: activeStageCount2,
+      label: `Clip ${clipNumber}: generated + ${plural(activeStageCount2, "active stage")}`
+    };
+  };
+  var describeAuthoredAudioSpan = (track, span, spanIndex, clipIndexById, clipCount) => {
+    const firstIndex = span.firstClipId ? clipIndexById.get(span.firstClipId) : void 0;
+    const lastIndex = span.lastClipId ? clipIndexById.get(span.lastClipId) : void 0;
+    const hasClipRange = span.firstClipId !== null || span.lastClipId !== null;
+    const missingEndpoint = span.firstClipId !== null && firstIndex === void 0 || span.lastClipId !== null && lastIndex === void 0;
+    const rangeStart = span.firstClipId === null ? 0 : firstIndex;
+    const rangeEnd = span.lastClipId === null ? clipCount - 1 : lastIndex;
+    const reversed = rangeStart !== void 0 && rangeEnd !== void 0 && rangeStart > rangeEnd;
+    const clipNumbers = hasClipRange && !missingEndpoint && !reversed && rangeStart !== void 0 && rangeEnd !== void 0 ? Array.from(
+      { length: rangeEnd - rangeStart + 1 },
+      (_, offset) => rangeStart + offset + 1
+    ) : [];
+    const timelineFields = [
+      span.timelineStartSeconds,
+      span.timelineLengthSeconds
+    ];
+    const hasTimelineWindow = timelineFields.some((value) => value !== null);
+    const incompleteTimelineWindow = hasTimelineWindow && timelineFields.some((value) => value === null);
+    const clipRelativeFields = [
+      span.clipStartOffsetSeconds,
+      span.clipLengthSeconds
+    ];
+    const hasClipRelativeWindow = clipRelativeFields.some(
+      (value) => value !== null
+    );
+    const incompleteClipRelativeWindow = hasClipRelativeWindow && clipRelativeFields.some((value) => value === null);
+    const clipRelativeRangeInvalid = hasClipRelativeWindow && (span.firstClipId === null || span.lastClipId === null || span.firstClipId !== span.lastClipId || clipNumbers.length !== 1 || missingEndpoint || reversed);
+    const pending = missingEndpoint || reversed || incompleteTimelineWindow || incompleteClipRelativeWindow || clipRelativeRangeInvalid || !hasClipRange && !hasTimelineWindow && !hasClipRelativeWindow;
+    const coverage = clipNumbers.length === 0 ? hasTimelineWindow ? "timeline window" : "unresolved clip coverage" : clipNumbers.length === 1 ? `clip ${clipNumbers[0]}` : `clips ${clipNumbers[0]}–${clipNumbers.at(-1)}`;
+    const timeline2 = span.timelineStartSeconds !== null && span.timelineLengthSeconds !== null ? ` · timeline ${span.timelineStartSeconds}–${span.timelineStartSeconds + span.timelineLengthSeconds}s` : "";
+    const source = span.sourceStartSeconds > 0 ? ` · source +${span.sourceStartSeconds}s` : "";
+    const clipRelative = span.clipStartOffsetSeconds !== null && span.clipLengthSeconds !== null ? ` · within clip ${span.clipStartOffsetSeconds}–${span.clipStartOffsetSeconds + span.clipLengthSeconds}s` : "";
+    return {
+      trackId: track.id ?? "",
+      spanId: span.id ?? "",
+      firstClipNumber: firstIndex === void 0 ? null : firstIndex + 1,
+      lastClipNumber: lastIndex === void 0 ? null : lastIndex + 1,
+      clipNumbers,
+      pending,
+      label: `Span ${spanIndex + 1}: ${coverage}${timeline2}${clipRelative}${source}${pending ? " · pending" : ""}`
+    };
+  };
+  var describeAuthoredAudioTracks = (config) => {
+    const clipIndexById = /* @__PURE__ */ new Map();
+    config.clips.forEach((clip, index) => {
+      if (clip.id) {
+        clipIndexById.set(clip.id, index);
+      }
+    });
+    return (config.audioTracks ?? []).map((track, trackIndex) => {
+      const spans = track.spans.map(
+        (span, spanIndex) => describeAuthoredAudioSpan(
+          track,
+          span,
+          spanIndex,
+          clipIndexById,
+          config.clips.length
+        )
+      );
+      const clipNumbers = [
+        ...new Set(spans.flatMap((span) => span.clipNumbers))
+      ].sort((a, b) => a - b);
+      const pendingSpanCount = spans.filter((span) => span.pending).length;
+      const sourceUploadFileName = track.source.uploadedAudio?.fileName?.trim() || null;
+      const source = track.source.reference.trim() || sourceUploadFileName || `${track.source.kind} source pending`;
+      const coverage = clipNumbers.length === 0 ? "unresolved coverage" : clipNumbers.length === 1 ? `clip ${clipNumbers[0]}` : `clips ${clipNumbers[0]}–${clipNumbers.at(-1)}`;
+      return {
+        trackId: track.id ?? "",
+        sourceKind: track.source.kind,
+        sourceReference: track.source.reference,
+        sourceUploadFileName,
+        spanCount: spans.length,
+        clipNumbers,
+        pendingSpanCount,
+        spans,
+        label: `Track ${trackIndex + 1}: ${source} · ${plural(spans.length, "span")} · ${coverage}${pendingSpanCount > 0 ? ` · ${plural(pendingSpanCount, "pending span")}` : ""}`
+      };
+    });
+  };
+  var projectLtxExecutionPath = (config, context = {}) => {
+    const activeEntries = config.clips.map((clip, index) => ({
+      clip,
+      index,
+      stages: projectedStages(clip, index, context)
+    })).filter(({ clip, stages }) => isExecutable(clip, stages));
+    const executable = activeEntries.map(({ clip }) => clip);
+    const clips = config.clips.map(
+      (clip, index) => describeClip(clip, index + 1, projectedStages(clip, index, context))
+    );
+    const shape = describeShape(
+      activeEntries.map(({ stages }) => stages.length)
+    );
+    const hostEntry = inferHostEntry(config.clips, context);
+    const isTextToVideoRoot = context.generatedEntry !== void 0 ? context.generatedEntry === "text-to-video" : context.entryPoint === "text-to-video" || hostEntry === "text-to-video";
+    const boundaries = activeEntries.slice(0, -1).map((left, index) => {
+      const right = activeEntries[index + 1];
+      const requested = left.clip.boundaryOut;
+      let effective = requested;
+      let fallback = "none";
+      if (requested === "continue" && right.clip.sourceVideo !== null) {
+        effective = "cut";
+        fallback = "target-is-sourced-video";
+      } else if (requested === "continue" && right.stages.length === 0) {
+        effective = "cut";
+        fallback = "target-has-no-stage";
+      } else if (requested === "continue" && right.clip.refs.some(isInitialGuidance)) {
+        effective = "cut";
+        fallback = "target-has-first-frame-reference";
+      }
+      const overlapFrames = effective === "cut" ? 0 : left.clip.boundaryOutOverlap;
+      const title = effective === "continue" && overlapFrames > 0 ? `Continue (${plural(overlapFrames, "frame")} overlap)` : effective[0].toUpperCase() + effective.slice(1);
+      const fallbackDescription = fallback === "target-is-sourced-video" ? "next clip is sourced footage" : fallback === "target-has-no-stage" ? "next clip has no generation stage" : fallback === "target-has-first-frame-reference" ? "next clip has a first-frame reference" : "";
+      const result = fallback === "none" ? title : `${requested} → cut (${fallbackDescription})`;
+      return {
+        leftClipNumber: left.index + 1,
+        rightClipNumber: right.index + 1,
+        kind: requested,
+        requested,
+        effective,
+        fallback,
+        overlapFrames,
+        label: `Clip ${left.index + 1} → ${right.index + 1}: ${result}`
+      };
+    });
+    const references = activeEntries.flatMap(
+      ({ clip, index }) => clip.refs.filter(
+        (reference) => !isTextToVideoRoot || reference.source === REF_SOURCE_UPLOAD
+      ).map((reference) => {
+        const frame = Math.max(1, Math.round(reference.frame));
+        const position = reference.fromEnd ? `${plural(frame, "frame")} from end` : `frame ${frame}`;
+        return {
+          clipNumber: index + 1,
+          frame,
+          fromEnd: reference.fromEnd,
+          source: reference.source,
+          label: `Clip ${index + 1}: ${referenceSourceLabel(reference)} at ${position}`
+        };
+      })
+    );
+    const audioClips = activeEntries.map(({ clip, index, stages }) => ({
+      clipNumber: index + 1,
+      source: clip.audioSource,
+      label: `Clip ${index + 1}: ${audioSourceLabel(clip.audioSource)} audio`,
+      lengthFromAudio: clip.clipLengthFromAudio === true,
+      lengthFromControlNet: clip.clipLengthFromControlNet === true,
+      reusesStageAudio: clip.reuseAudio === true && stages.length >= 3,
+      savesTrack: clip.saveAudioTrack === true,
+      segmentCount: clip.audioSegments.length
+    }));
+    const sourceVideoClipNumbers = activeEntries.filter(({ clip }) => clip.sourceVideo !== null).map(({ index }) => index + 1);
+    const sourceVideoOnlyClipNumbers = activeEntries.filter(
+      ({ clip, stages }) => clip.sourceVideo !== null && stages.length === 0
+    ).map(({ index }) => index + 1);
+    const upscaledStageCount = activeEntries.reduce(
+      (total, { clip, stages }) => total + stages.filter(
+        ({ stage, rawIndex }) => stage.upscale > 1 && (clip.sourceVideo !== null || rawIndex > 0)
+      ).length,
+      0
+    );
+    const loraCount = activeEntries.reduce(
+      (total, { stages }) => total + stages.reduce(
+        (stageTotal, { stage }) => stageTotal + stage.loras.filter((lora) => lora.name.trim().length > 0).length,
+        0
+      ),
+      0
+    );
+    const icLoraCount = activeEntries.reduce(
+      (total, { clip, stages }) => total + clip.icLoras.filter(
+        (entry) => entry.lora.trim().length > 0 && (entry.stage < 0 ? stages.length > 0 : stages.some(
+          ({ rawIndex }) => rawIndex === entry.stage
+        ))
+      ).length,
+      0
+    );
+    const hasGlobalPrompt = `${context.globalPrompt ?? ""}`.trim().length > 0;
+    const majorPromptOverrideClipNumbers = activeEntries.filter(({ clip }) => clip.prompt.trim().length > 0).map(({ index }) => index + 1);
+    const majorPromptInheritedClipNumbers = hasGlobalPrompt ? activeEntries.filter(({ clip }) => clip.prompt.trim().length === 0).map(({ index }) => index + 1) : [];
+    const majorPromptClipNumbers = [
+      ...majorPromptOverrideClipNumbers,
+      ...majorPromptInheritedClipNumbers
+    ].sort((a, b) => a - b);
+    const relayPromptCount = activeEntries.reduce(
+      (total, { clip }) => total + clip.promptWindows.filter(
+        (window2) => window2.duration > 0 && window2.prompt.trim().length > 0
+      ).length,
+      0
+    );
+    const retakeClipNumbers = activeEntries.filter(
+      ({ clip, stages }) => clip.retake !== null && stages.length > 0 && (clip.sourceVideo !== null || context.entryPoint === "global-refine-video")
+    ).map(({ index }) => index + 1);
+    const lengthFromAudioClipNumbers = audioClips.filter((clip) => clip.lengthFromAudio).map((clip) => clip.clipNumber);
+    const lengthFromControlNetClipNumbers = audioClips.filter((clip) => clip.lengthFromControlNet).map((clip) => clip.clipNumber);
+    const segmentCount = audioClips.reduce(
+      (total, clip) => total + clip.segmentCount,
+      0
+    );
+    const authoredTracks = describeAuthoredAudioTracks(config);
+    const authoredSpanCount = authoredTracks.reduce(
+      (total, track) => total + track.spanCount,
+      0
+    );
+    const pendingAuthoredSpanCount = authoredTracks.reduce(
+      (total, track) => total + track.pendingSpanCount,
+      0
+    );
+    const labels = ["LTX Video", hostEntryLabel[hostEntry], shape.label];
+    if (sourceVideoClipNumbers.length > 0) {
+      labels.push(
+        `${plural(sourceVideoClipNumbers.length, "source-video clip")}`
+      );
+    }
+    if (sourceVideoOnlyClipNumbers.length > 0) {
+      labels.push(
+        `${plural(sourceVideoOnlyClipNumbers.length, "source-video-only clip")}`
+      );
+    }
+    if (boundaries.length > 0) {
+      labels.push(
+        `${plural(boundaries.length, "clip boundary", "clip boundaries")}: ${boundaries.map((boundary) => boundary.fallback === "none" ? boundary.effective : `${boundary.requested}→${boundary.effective}`).join(", ")}`
+      );
+    }
+    if (upscaledStageCount > 0) {
+      labels.push(`Upscaling in ${plural(upscaledStageCount, "stage")}`);
+    }
+    if (icLoraCount > 0) {
+      labels.push(`${plural(icLoraCount, "IC-LoRA")}`);
+    }
+    if (loraCount > 0) {
+      labels.push(`${plural(loraCount, "LoRA")}`);
+    }
+    if (majorPromptOverrideClipNumbers.length > 0 || majorPromptInheritedClipNumbers.length > 0) {
+      const promptSources = [
+        ...majorPromptOverrideClipNumbers.length > 0 ? [
+          plural(
+            majorPromptOverrideClipNumbers.length,
+            "clip override"
+          )
+        ] : [],
+        ...majorPromptInheritedClipNumbers.length > 0 ? [
+          `${majorPromptInheritedClipNumbers.length} inherit${majorPromptInheritedClipNumbers.length === 1 ? "s" : ""} global`
+        ] : []
+      ];
+      labels.push(`Major prompts: ${promptSources.join(", ")}`);
+    }
+    if (relayPromptCount > 0) {
+      labels.push(`${plural(relayPromptCount, "relay prompt")}`);
+    }
+    if (retakeClipNumbers.length > 0) {
+      labels.push(`${plural(retakeClipNumbers.length, "retake")}`);
+    }
+    if (references.length > 0) {
+      labels.push(`${plural(references.length, "frame reference")}`);
+    }
+    if (lengthFromAudioClipNumbers.length > 0) {
+      labels.push(
+        `Audio sets ${plural(lengthFromAudioClipNumbers.length, "clip length")}`
+      );
+    }
+    if (lengthFromControlNetClipNumbers.length > 0) {
+      labels.push(
+        `ControlNet sets ${plural(lengthFromControlNetClipNumbers.length, "clip length")}`
+      );
+    }
+    if (segmentCount > 0) {
+      labels.push(`${plural(segmentCount, "audio segment")}`);
+    }
+    if (audioClips.length > 0) {
+      labels.push(
+        `Audio sources: ${[
+          ...new Set(
+            audioClips.map((clip) => audioSourceLabel(clip.source))
+          )
+        ].join(", ")}`
+      );
+    }
+    const reuseCount = audioClips.filter(
+      (clip) => clip.reusesStageAudio
+    ).length;
+    if (reuseCount > 0) {
+      labels.push(
+        `${plural(reuseCount, "clip")} reuses captured stage audio`
+      );
+    }
+    const savedTrackCount = audioClips.filter((clip) => clip.savesTrack).length;
+    if (savedTrackCount > 0) {
+      labels.push(`${plural(savedTrackCount, "saved audio output")}`);
+    }
+    if (authoredTracks.length > 0) {
+      labels.push(
+        `${plural(authoredTracks.length, "planned audio track")} · ${plural(authoredSpanCount, "span")}${pendingAuthoredSpanCount > 0 ? ` · ${plural(pendingAuthoredSpanCount, "pending span")}` : ""}`
+      );
+    }
+    return {
+      engine: "LTX Video",
+      hostEntry: { kind: hostEntry, label: hostEntryLabel[hostEntry] },
+      shape,
+      counts: {
+        clips: config.clips.length,
+        executableClips: executable.length,
+        stages: config.clips.reduce(
+          (total, clip) => total + clip.stages.length,
+          0
+        ),
+        activeStages: activeEntries.reduce(
+          (total, entry) => total + entry.stages.length,
+          0
+        ),
+        authoredAudioTracks: authoredTracks.length,
+        authoredAudioSpans: authoredSpanCount
+      },
+      clips,
+      boundaries,
+      features: {
+        sourceVideoClipNumbers,
+        sourceVideoOnlyClipNumbers,
+        upscaledStageCount,
+        icLoraCount,
+        loraCount,
+        majorPromptClipNumbers,
+        majorPromptOverrideClipNumbers,
+        majorPromptInheritedClipNumbers,
+        relayPromptCount,
+        retakeClipNumbers,
+        references,
+        audio: {
+          clips: audioClips,
+          segmentCount,
+          lengthFromAudioClipNumbers,
+          lengthFromControlNetClipNumbers,
+          authoredTracks
+        }
+      },
+      labels
+    };
   };
 
   // frontend/gestureRouter.ts
@@ -2404,6 +4447,408 @@
     };
   };
 
+  // frontend/timelineDetail.ts
+  var DEFAULT_FPS = 24;
+  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
+  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
+    const duration = Math.max(0, clipDurationSeconds || 0);
+    const offset = Math.max(0, frame || 0) / safeFps(fps);
+    const raw = fromEnd ? duration - offset : offset;
+    return Math.min(Math.max(raw, 0), duration);
+  };
+  var keyframeLeftPercent = (time, duration) => {
+    const dur = Math.max(0, duration || 0);
+    const fraction = dur > 0 ? (time || 0) / dur : 0;
+    return Math.min(100, Math.max(0, fraction * 100));
+  };
+  var formatTimeLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const rounded = Math.round((seconds || 0) * 10) / 10;
+    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
+  };
+  var formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
+  var RULER_MIN_TICK_SPACING_PX = 60;
+  var RULER_STEP_LADDER_SECONDS = [
+    0.5,
+    1,
+    2,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+    600,
+    900,
+    1800,
+    3600
+  ];
+  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
+    for (const step of RULER_STEP_LADDER_SECONDS) {
+      if (step * pps >= minSpacingPx) {
+        return step;
+      }
+    }
+    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
+  };
+  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const total = Math.max(0, totalSeconds || 0);
+    if (total <= 0 || pxPerSecond <= 0) {
+      return [{ x: 0, seconds: 0 }];
+    }
+    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
+    const ticks = [];
+    const MAX_TICKS = 1e3;
+    for (let i = 0; i < MAX_TICKS; i++) {
+      const t = i * step;
+      if (t > total + 1e-6) {
+        break;
+      }
+      ticks.push({ x: t * pxPerSecond, seconds: t });
+    }
+    return ticks;
+  };
+  var formatRulerLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const s = Math.max(0, seconds || 0);
+    if (s >= 60) {
+      const totalWhole = Math.round(s);
+      const mm = Math.floor(totalWhole / 60);
+      const ss = totalWhole % 60;
+      return `${mm}:${`${ss}`.padStart(2, "0")}`;
+    }
+    return formatTimeLabel(s, unit, fps);
+  };
+  var truncate = (value, max = 80) => {
+    const text = `${value ?? ""}`;
+    return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
+  };
+  var refSourceLabel = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value) {
+      return REF_SOURCE_REFINER;
+    }
+    const editStage = parseBase2EditStageIndex(value);
+    if (editStage != null) {
+      return `Base2Edit Edit ${editStage}`;
+    }
+    return value;
+  };
+  var audioSourceBadge = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value || value === "Native") {
+      return { label: "Native", title: "Audio source: Native" };
+    }
+    return { label: value, title: `Audio source: ${value}` };
+  };
+  var shortModelName = (model) => {
+    const raw = `${model ?? ""}`.trim();
+    if (!raw) {
+      return "(default)";
+    }
+    const segment = raw.split(/[\\/]/).pop() ?? raw;
+    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
+  };
+  var stageChipLabel = (index) => `S${index}`;
+  var stageChipTitle = (stage, index) => {
+    const parts = [
+      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
+      `model: ${shortModelName(stage?.model ?? "")}`,
+      `steps: ${stage?.steps ?? "?"}`,
+      `cfg: ${stage?.cfgScale ?? "?"}`,
+      `control: ${stage?.control ?? "?"}`
+    ];
+    if (stage?.skipped) {
+      parts.push("skipped");
+    }
+    return parts.join(" · ");
+  };
+
+  // frontend/timelineView/layout.ts
+  var DEFAULT_PX_PER_SECOND = 44;
+  var DEFAULT_MIN_WIDTH_PX = 8;
+  var MIN_PX_PER_SECOND = 6;
+  var MAX_PX_PER_SECOND = 400;
+  var ZOOM_FACTOR = 1.25;
+  var TRACK_HEADER_W_PX = 168;
+  var waveBarHeights = (clipIdx, count) => {
+    const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+    const heights = [];
+    for (let i = 0; i < n; i++) {
+      const raw = Math.sin((clipIdx * 131 + i) * 12.9898) * 43758.5453;
+      const fract = raw - Math.floor(raw);
+      heights.push(Math.round((20 + fract * 80) * 10) / 10);
+    }
+    return heights;
+  };
+  var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
+  var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
+    if (pxPerSecond <= 0) {
+      return 0;
+    }
+    const effectiveOffsetX = Math.max(offsetX, headerW);
+    return Math.max(0, (effectiveOffsetX + scrollLeft - headerW) / pxPerSecond);
+  };
+  var zoomAnchorScrollLeft = (time, pxPerSecond, offsetX, headerW = TRACK_HEADER_W_PX) => {
+    const effectiveOffsetX = Math.max(offsetX, headerW);
+    return Math.max(0, headerW + time * pxPerSecond - effectiveOffsetX);
+  };
+  var computeFitPxPerSecond = (totalSeconds, containerWidthPx, padPx = 24) => {
+    if (totalSeconds <= 0 || containerWidthPx <= padPx) {
+      return DEFAULT_PX_PER_SECOND;
+    }
+    return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
+  };
+  var computeRegionLayout = (clips, options) => {
+    const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
+    const layouts = [];
+    let cursorSeconds = 0;
+    let cursorPx = 0;
+    for (let index = 0; index < clips.length; index++) {
+      const clip = clips[index];
+      const durationSeconds = Math.max(0, clip.duration || 0);
+      const widthPx = Math.max(
+        DEFAULT_MIN_WIDTH_PX,
+        durationSeconds * pxPerSecond
+      );
+      layouts.push({
+        index,
+        startSeconds: cursorSeconds,
+        durationSeconds,
+        startPx: cursorPx,
+        widthPx,
+        stageCount: (clip.stages ?? []).length,
+        keyframeCount: (clip.refs ?? []).length,
+        skipped: clip.skipped === true
+      });
+      cursorSeconds += durationSeconds;
+      cursorPx += durationSeconds * pxPerSecond;
+    }
+    return layouts;
+  };
+
+  // frontend/timelineView/rendering.ts
+  var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
+  var backgroundImageDataAttr = (source) => ` data-vst-background-image="${escapeAttr(source)}"`;
+  var applyBackgroundImages = (root) => {
+    for (const element of root.querySelectorAll(
+      "[data-vst-background-image]"
+    )) {
+      const source = element.dataset.vstBackgroundImage;
+      if (source) {
+        element.style.backgroundImage = `url(${JSON.stringify(source)})`;
+      }
+      element.removeAttribute("data-vst-background-image");
+    }
+  };
+  var renderWindowSpan = (options) => {
+    const start = clamp(options.startSeconds, 0, options.durationSeconds);
+    const end = clamp(
+      options.startSeconds + options.lengthSeconds,
+      start,
+      options.durationSeconds
+    );
+    if (end <= start) {
+      return "";
+    }
+    const left = start / options.durationSeconds * 100;
+    const width = (end - start) / options.durationSeconds * 100;
+    return `<div class="${options.className}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(options.title)}" aria-label="${escapeAttr(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span><span class="${options.labelClass}">${escapeAttr(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
+  };
+  var headTag = (kind, label, options) => {
+    const classes = `vst-head-tag vst-head-tag-${kind}` + (options?.active ? " vst-head-tag-active" : "") + (options?.muted ? " vst-head-tag-muted" : "");
+    const style = options?.style ? ` style="${options.style}"` : "";
+    return `<div class="${classes}"${style} aria-hidden="true"><span class="vst-head-tag-pill">${label}</span><span class="vst-head-tag-tick"></span></div>`;
+  };
+  var renderTrackHead = (iconClass, icon, title, tags) => `<div class="vst-track-head"><div class="vst-head-top"><div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div><div class="vst-track-label"><strong>${title}</strong></div></div><div class="vst-head-tags">${tags}</div></div>`;
+
+  // frontend/timelineView/regionRenderer.ts
+  var refFrame = (ref) => Math.max(0, ref.frame ?? 0);
+  var renderRegionThumb = (clip) => {
+    const withImage = (clip.refs ?? []).filter(
+      (ref) => !!ref.uploadedImage?.data
+    );
+    if (withImage.length === 0) {
+      return "";
+    }
+    const startPool = withImage.filter((ref) => ref.fromEnd !== true);
+    const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
+      (best, ref) => refFrame(ref) < refFrame(best) ? ref : best
+    );
+    let endRef = withImage.find((ref) => ref.fromEnd === true) ?? null;
+    if (!endRef) {
+      const highest = withImage.reduce(
+        (best, ref) => refFrame(ref) > refFrame(best) ? ref : best
+      );
+      if (highest !== startRef) {
+        endRef = highest;
+      }
+    }
+    const cell = (ref, side) => {
+      const source = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
+      return `<div class="vst-region-thumb-cell vst-region-thumb-${side}"${backgroundImageDataAttr(source)}></div>`;
+    };
+    const cells = cell(startRef, "start") + (endRef ? cell(endRef, "end") : "");
+    return `<div class="vst-region-thumb" data-cells="${endRef ? 2 : 1}" aria-hidden="true">${cells}</div>`;
+  };
+  var renderRetakeRegionShade = (clip, durationSeconds) => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+      return "";
+    }
+    const start = clamp(retake.startSeconds, 0, durationSeconds);
+    const end = clamp(
+      retake.startSeconds + retake.lengthSeconds,
+      start,
+      durationSeconds
+    );
+    if (end <= start) {
+      return "";
+    }
+    const left = start / durationSeconds * 100;
+    const width = (end - start) / durationSeconds * 100;
+    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
+  };
+  var renderRetakeOverlay = (clip, clipIdx, durationSeconds) => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+      return "";
+    }
+    const start = clamp(retake.startSeconds, 0, durationSeconds);
+    const end = clamp(
+      retake.startSeconds + retake.lengthSeconds,
+      start,
+      durationSeconds
+    );
+    const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;
+    return renderWindowSpan({
+      className: "vst-retake",
+      dataAttrs: `data-vst-retake data-clip-idx="${clipIdx}"`,
+      edgeAttr: "data-vst-retake-edge",
+      labelClass: "vst-retake-label",
+      label,
+      title: `${label} · drag to move/resize · Shift+click to delete`,
+      ariaLabel: label,
+      startSeconds: retake.startSeconds,
+      lengthSeconds: retake.lengthSeconds,
+      durationSeconds
+    });
+  };
+  var renderKeyframes = (clip, clipIdx, durationSeconds, fps, unit) => {
+    const refs = clip.refs ?? [];
+    if (refs.length === 0) {
+      return "";
+    }
+    const markers = refs.map((ref, refIdx) => {
+      const time = keyframeTimeSeconds(
+        ref.frame,
+        ref.fromEnd === true,
+        durationSeconds,
+        fps
+      );
+      const left = keyframeLeftPercent(time, durationSeconds);
+      const isEnd = ref.fromEnd === true;
+      const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
+      const source = refSourceLabel(ref.source ?? "");
+      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
+      const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
+      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
+    }).join("");
+    return `<div class="vst-keys" title="Reference markers">${markers}</div>`;
+  };
+  var renderBadges = (clip, clipIdx) => {
+    const firstStage = (clip.stages ?? [])[0];
+    if (!firstStage) {
+      return `<div class="vst-badges"></div>`;
+    }
+    const model = firstStage.model ?? "";
+    const title = `Clip model: ${`${model}`.trim() || "(default)"} — click to change (applies to Stage 0)`;
+    const modelBadge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${escapeAttr(shortModelName(model))}</span>`;
+    const icLoraCount = (clip.icLoras ?? []).length;
+    const icLoraTitle = `${icLoraCount} IC-LoRA${icLoraCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
+    const icLoraBadge = icLoraCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeAttr(icLoraTitle)}" aria-label="${escapeAttr(icLoraTitle)}">IC×${icLoraCount}</span>` : "";
+    return `<div class="vst-badges">${modelBadge}${icLoraBadge}</div>`;
+  };
+  var renderStageChips = (clip, clipIdx) => (clip.stages ?? []).map((stage, stageIdx) => {
+    const skipped = stage?.skipped === true;
+    const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
+    const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
+    const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
+    return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(label)}</span>`;
+  }).join("");
+  var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+  var BOUNDARY_GLYPH = {
+    cut: "│",
+    continue: "→",
+    crossfade: "⤬"
+  };
+  var BOUNDARY_LABEL = {
+    cut: "Cut",
+    continue: "Continue",
+    crossfade: "Crossfade"
+  };
+  var renderBoundarySeams = (clips, layouts) => {
+    const seams = [];
+    for (let i = 1; i < layouts.length; i++) {
+      const leftClipIdx = i - 1;
+      const clip = clips[leftClipIdx];
+      if (!clip) {
+        continue;
+      }
+      const value = clip.boundaryOut ?? "cut";
+      const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
+      const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
+      const title = `Boundary clip ${leftClipIdx + 1} → ${i + 1}: ${label}. Click to edit.`;
+      const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}. Click to edit.`;
+      seams.push(
+        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
+      );
+    }
+    return seams.join("");
+  };
+  var renderRegions = (clips, layouts, fps, unit) => layouts.map((layout) => {
+    const clip = clips[layout.index];
+    const skippedClass = layout.skipped ? " vst-region-skipped" : "";
+    const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
+    const skippedChip = layout.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
+    const duration = escapeAttr(
+      formatTimeLabel(layout.durationSeconds, unit, fps)
+    );
+    const skipTitle = layout.skipped ? "Unskip clip" : "Skip clip";
+    const skipGlyph = layout.skipped ? "⟲" : "⊘";
+    const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button></div>`;
+    const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
+    const width = clipInnerWidth(layout.widthPx);
+    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
+      clip,
+      layout.index,
+      layout.durationSeconds,
+      fps,
+      unit
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index + 1}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="Click empty space to add a retake window">` + renderRetakeOverlay(
+      clip,
+      layout.index,
+      layout.durationSeconds
+    ) + `</div>`;
+  }).join("");
+  var renderVideoTrackRow = (clips, layouts, fps, unit) => {
+    const head = renderTrackHead(
+      "vst-track-icon-video",
+      "▶",
+      "Video",
+      headTag("clip", "Clip", { active: true }) + headTag("retake", "Retake", {
+        active: clips.some((clip) => clip.retake != null)
+      })
+    );
+    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit) + renderBoundarySeams(clips, layouts) + `</div></div>`;
+  };
+
   // frontend/dimensionPresets.ts
   var DIMENSION_PRESET_METADATA = {
     "256x384": [
@@ -2528,357 +4973,123 @@
   };
   var presetBadgeElements = (presetKey) => parsePresetStops(presetKey).map((stop) => upscaleBadgeElement(stop));
 
-  // frontend/timelineDetail.ts
-  var DEFAULT_FPS = 24;
-  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
-  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
-    const duration = Math.max(0, clipDurationSeconds || 0);
-    const offset = Math.max(0, frame || 0) / safeFps(fps);
-    const raw = fromEnd ? duration - offset : offset;
-    return Math.min(Math.max(raw, 0), duration);
-  };
-  var keyframeLeftPercent = (time, duration) => {
-    const dur = Math.max(0, duration || 0);
-    const fraction = dur > 0 ? (time || 0) / dur : 0;
-    return Math.min(100, Math.max(0, fraction * 100));
-  };
-  var formatTimeLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+  // frontend/timelineView/toolbar.ts
+  var renderExecutionSummary = (summary) => {
+    if (!summary) {
+      return "";
     }
-    const rounded = Math.round((seconds || 0) * 10) / 10;
-    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
+    const [engine, entry, shape, ...features] = summary.labels;
+    const core = [engine, entry, shape].filter(Boolean).join(" → ");
+    const detail = features.length > 0 ? ` · ${features.join(" · ")}` : "";
+    return `<div class="vst-execution-summary" data-vst-execution-summary role="status"><strong>Execution path</strong><span>${escapeAttr(core + detail)}</span></div>`;
   };
-  var formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
-  var RULER_MIN_TICK_SPACING_PX = 60;
-  var RULER_STEP_LADDER_SECONDS = [
-    0.5,
-    1,
-    2,
-    5,
-    10,
-    15,
-    30,
-    60,
-    120,
-    300,
-    600,
-    900,
-    1800,
-    3600
-  ];
-  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
-    for (const step of RULER_STEP_LADDER_SECONDS) {
-      if (step * pps >= minSpacingPx) {
-        return step;
+  var renderDiagnosticPanel = (diagnostics = []) => {
+    const content = diagnostics.map(
+      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx + 1}:</strong> `}${escapeAttr(item.message)}</div>`
+    ).join("");
+    return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
+  };
+  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options) => {
+    const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
+    const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
+    const totalLabel = escapeAttr(formatTimeLabel(totalSeconds, unit, fps));
+    const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
+    const rawSelected = options?.selectedIndex;
+    const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
+    const selectedHidden = selectedIndex === null ? " hidden" : "";
+    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex + 1}` : ""}</span></span>`;
+    const width = Math.max(0, Math.round(options?.width ?? 0));
+    const height = Math.max(0, Math.round(options?.height ?? 0));
+    const dimsExplicit = options?.dimsExplicit === true;
+    const fpsExplicit = options?.fpsExplicit === true;
+    const presetKey = dimsExplicit && width > 0 && height > 0 ? matchPresetKey(width, height) : null;
+    const dimsSource = dimsExplicit ? presetKey ? `${presetKey} preset` : "custom" : "inherited from image resolution";
+    const fpsSource = fpsExplicit ? "custom" : "inherited from Video FPS";
+    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
+    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
+    const enabled = options?.enabled !== false;
+    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
+    return `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clipCount}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
+  };
+  var wireTimelineToolbar = (body, options) => {
+    const wire = (selector, handler) => {
+      if (!handler) {
+        return;
+      }
+      body.querySelector(selector)?.addEventListener(
+        "click",
+        () => handler()
+      );
+    };
+    const enableInput = body.querySelector("[data-vst-enable]");
+    if (enableInput && options?.onToggleEnabled) {
+      enableInput.addEventListener("change", () => {
+        options.onToggleEnabled?.(enableInput.checked);
+      });
+    }
+    const settingsButton = body.querySelector(
+      "[data-vst-settings]"
+    );
+    if (settingsButton && options?.onOpenSettings) {
+      settingsButton.addEventListener("click", () => {
+        options.onOpenSettings?.(settingsButton);
+      });
+    }
+    wire("[data-vst-unit-toggle]", options?.onToggleUnit);
+    wire("[data-vst-zoom-in]", options?.onZoomIn);
+    wire("[data-vst-zoom-out]", options?.onZoomOut);
+    wire("[data-vst-zoom-fit]", options?.onZoomFit);
+    wire("[data-vst-undo]", options?.onUndo);
+    wire("[data-vst-redo]", options?.onRedo);
+    const slider = body.querySelector(
+      "[data-vst-zoom-slider]"
+    );
+    if (slider) {
+      slider.addEventListener("input", () => {
+        const percent = body.querySelector(
+          "[data-vst-zoom-pct]"
+        );
+        if (percent) {
+          const value = Number.parseFloat(slider.value);
+          percent.textContent = `${Math.round(value / DEFAULT_PX_PER_SECOND * 100)}%`;
+        }
+      });
+      if (options?.onZoomSlider) {
+        slider.addEventListener("change", () => {
+          options.onZoomSlider?.(Number.parseFloat(slider.value));
+        });
       }
     }
-    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
-  };
-  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const total = Math.max(0, totalSeconds || 0);
-    if (total <= 0 || pxPerSecond <= 0) {
-      return [{ x: 0, seconds: 0 }];
-    }
-    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
-    const ticks = [];
-    const MAX_TICKS = 1e3;
-    for (let i = 0; i < MAX_TICKS; i++) {
-      const t = i * step;
-      if (t > total + 1e-6) {
-        break;
+    if (options?.onAddClip) {
+      for (const button of body.querySelectorAll("[data-vst-add-clip]")) {
+        button.addEventListener("click", () => options.onAddClip?.());
       }
-      ticks.push({ x: t * pxPerSecond, seconds: t });
     }
-    return ticks;
   };
-  var formatRulerLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+  var wireTimelineZoomWheel = (body, options) => {
+    const onZoomWheel = options?.onZoomWheel;
+    if (!onZoomWheel) {
+      return;
     }
-    const s = Math.max(0, seconds || 0);
-    if (s >= 60) {
-      const totalWhole = Math.round(s);
-      const mm = Math.floor(totalWhole / 60);
-      const ss = totalWhole % 60;
-      return `${mm}:${`${ss}`.padStart(2, "0")}`;
-    }
-    return formatTimeLabel(s, unit, fps);
-  };
-  var truncate = (value, max = 80) => {
-    const text = `${value ?? ""}`;
-    return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
-  };
-  var refSourceLabel = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value) {
-      return REF_SOURCE_REFINER;
-    }
-    const editStage = parseBase2EditStageIndex(value);
-    if (editStage != null) {
-      return `Base2Edit Edit ${editStage}`;
-    }
-    return value;
-  };
-  var audioSourceBadge = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value || value === "Native") {
-      return { label: "Native", title: "Audio source: Native" };
-    }
-    return { label: value, title: `Audio source: ${value}` };
-  };
-  var shortModelName = (model) => {
-    const raw = `${model ?? ""}`.trim();
-    if (!raw) {
-      return "(default)";
-    }
-    const segment = raw.split(/[\\/]/).pop() ?? raw;
-    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
-  };
-  var stageChipLabel = (index) => `S${index}`;
-  var stageChipTitle = (stage, index) => {
-    const parts = [
-      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
-      `model: ${shortModelName(stage?.model ?? "")}`,
-      `steps: ${stage?.steps ?? "?"}`,
-      `cfg: ${stage?.cfgScale ?? "?"}`,
-      `control: ${stage?.control ?? "?"}`
-    ];
-    if (stage?.skipped) {
-      parts.push("skipped");
-    }
-    return parts.join(" · ");
+    body.querySelector(".vst-scroll")?.addEventListener(
+      "wheel",
+      (event) => {
+        if (!event.ctrlKey && !event.metaKey) {
+          return;
+        }
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
+        onZoomWheel(factor, event.clientX);
+      },
+      { passive: false }
+    );
   };
 
-  // frontend/timelineView.ts
-  var DEFAULT_PX_PER_SECOND = 44;
-  var DEFAULT_MIN_WIDTH_PX = 8;
-  var MIN_PX_PER_SECOND = 6;
-  var MAX_PX_PER_SECOND = 400;
-  var ZOOM_FACTOR = 1.25;
-  var TRACK_HEADER_W_PX = 168;
-  var waveBarHeights = (clipIdx, count) => {
-    const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
-    const heights = [];
-    for (let i = 0; i < n; i++) {
-      const raw = Math.sin((clipIdx * 131 + i) * 12.9898) * 43758.5453;
-      const fract = raw - Math.floor(raw);
-      heights.push(Math.round((20 + fract * 80) * 10) / 10);
-    }
-    return heights;
-  };
-  var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
-  var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
-    if (pxPerSecond <= 0) {
-      return 0;
-    }
-    const effOffsetX = Math.max(offsetX, headerW);
-    return Math.max(0, (effOffsetX + scrollLeft - headerW) / pxPerSecond);
-  };
-  var zoomAnchorScrollLeft = (time, pxPerSecond, offsetX, headerW = TRACK_HEADER_W_PX) => {
-    const effOffsetX = Math.max(offsetX, headerW);
-    return Math.max(0, headerW + time * pxPerSecond - effOffsetX);
-  };
-  var computeFitPxPerSecond = (totalSeconds, containerWidthPx, padPx = 24) => {
-    if (totalSeconds <= 0 || containerWidthPx <= padPx) {
-      return DEFAULT_PX_PER_SECOND;
-    }
-    return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
-  };
-  var computeRegionLayout = (clips, options) => {
-    const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
-    const minWidthPx = DEFAULT_MIN_WIDTH_PX;
-    const layouts = [];
-    let cursorSeconds = 0;
-    let cursorPx = 0;
-    for (let index = 0; index < clips.length; index++) {
-      const clip = clips[index];
-      const durationSeconds = Math.max(0, clip.duration || 0);
-      const widthPx = Math.max(minWidthPx, durationSeconds * pxPerSecond);
-      layouts.push({
-        index,
-        startSeconds: cursorSeconds,
-        durationSeconds,
-        startPx: cursorPx,
-        widthPx,
-        stageCount: (clip.stages ?? []).length,
-        keyframeCount: (clip.refs ?? []).length,
-        skipped: clip.skipped === true
-      });
-      cursorSeconds += durationSeconds;
-      cursorPx += durationSeconds * pxPerSecond;
-    }
-    return layouts;
-  };
-  var refFrame = (ref) => Math.max(0, ref.frame ?? 0);
-  var renderRegionThumb = (clip) => {
-    const withImage = (clip.refs ?? []).filter(
-      (ref) => !!ref.uploadedImage?.data
-    );
-    if (withImage.length === 0) {
-      return "";
-    }
-    const startPool = withImage.filter((ref) => ref.fromEnd !== true);
-    const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
-      (best, ref) => refFrame(ref) < refFrame(best) ? ref : best
-    );
-    let endRef = withImage.find((ref) => ref.fromEnd === true) ?? null;
-    if (!endRef) {
-      const highest = withImage.reduce(
-        (best, ref) => refFrame(ref) > refFrame(best) ? ref : best
-      );
-      if (highest !== startRef) {
-        endRef = highest;
-      }
-    }
-    const cell = (ref, side) => {
-      const src = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
-      return `<div class="vst-region-thumb-cell vst-region-thumb-${side}" style="background-image:url('${escapeAttr(src)}')"></div>`;
-    };
-    const cells = cell(startRef, "start") + (endRef ? cell(endRef, "end") : "");
-    const cellCount = endRef ? 2 : 1;
-    return `<div class="vst-region-thumb" data-cells="${cellCount}" aria-hidden="true">${cells}</div>`;
-  };
-  var renderWindowSpan = (opts) => {
-    const start = clamp(opts.startSeconds, 0, opts.durationSeconds);
-    const end = clamp(
-      opts.startSeconds + opts.lengthSeconds,
-      start,
-      opts.durationSeconds
-    );
-    if (end <= start) {
-      return "";
-    }
-    const left = start / opts.durationSeconds * 100;
-    const width = (end - start) / opts.durationSeconds * 100;
-    return `<div class="${opts.className}" ${opts.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(opts.title)}" aria-label="${escapeAttr(opts.ariaLabel)}"><span class="${opts.className}-resize ${opts.className}-resize-l" ${opts.edgeAttr}="left" aria-hidden="true"></span><span class="${opts.labelClass}">${escapeAttr(opts.label)}</span><span class="${opts.className}-resize ${opts.className}-resize-r" ${opts.edgeAttr}="right" aria-hidden="true"></span></div>`;
-  };
-  var renderRetakeRegionShade = (clip, durationSeconds) => {
-    const retake = clip.retake;
-    if (!retake || durationSeconds <= 0) {
-      return "";
-    }
-    const start = clamp(retake.startSeconds, 0, durationSeconds);
-    const end = clamp(
-      retake.startSeconds + retake.lengthSeconds,
-      start,
-      durationSeconds
-    );
-    if (end <= start) {
-      return "";
-    }
-    const left = start / durationSeconds * 100;
-    const width = (end - start) / durationSeconds * 100;
-    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
-  };
-  var renderRetakeOverlay = (clip, clipIdx, durationSeconds) => {
-    const retake = clip.retake;
-    if (!retake || durationSeconds <= 0) {
-      return "";
-    }
-    const start = clamp(retake.startSeconds, 0, durationSeconds);
-    const end = clamp(
-      retake.startSeconds + retake.lengthSeconds,
-      start,
-      durationSeconds
-    );
-    const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;
-    return renderWindowSpan({
-      className: "vst-retake",
-      dataAttrs: `data-vst-retake data-clip-idx="${clipIdx}"`,
-      edgeAttr: "data-vst-retake-edge",
-      labelClass: "vst-retake-label",
-      label,
-      title: `${label} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: label,
-      startSeconds: retake.startSeconds,
-      lengthSeconds: retake.lengthSeconds,
-      durationSeconds
-    });
-  };
-  var renderKeyframes = (clip, clipIdx, durationSeconds, fps, unit) => {
-    const refs = clip.refs ?? [];
-    if (refs.length === 0) {
-      return "";
-    }
-    const pips = refs.map((ref, refIdx) => {
-      const time = keyframeTimeSeconds(
-        ref.frame,
-        ref.fromEnd === true,
-        durationSeconds,
-        fps
-      );
-      const left = keyframeLeftPercent(time, durationSeconds);
-      const isEnd = ref.fromEnd === true;
-      const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
-      const source = refSourceLabel(ref.source ?? "");
-      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
-      const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
-      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
-    }).join("");
-    return `<div class="vst-keys" title="Reference markers">${pips}</div>`;
-  };
-  var renderBadges = (clip, clipIdx) => {
-    const stage0 = (clip.stages ?? [])[0];
-    if (!stage0) {
-      return `<div class="vst-badges"></div>`;
-    }
-    const model = stage0.model ?? "";
-    const short = shortModelName(model);
-    const full = `${model}`.trim() || "(default)";
-    const title = `Clip model: ${full} — click to change (applies to Stage 0)`;
-    const badge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${escapeAttr(short)}</span>`;
-    const icCount = (clip.icLoras ?? []).length;
-    const icTitle = `${icCount} IC-LoRA${icCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
-    const icBadge = icCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeAttr(icTitle)}" aria-label="${escapeAttr(icTitle)}">IC×${icCount}</span>` : "";
-    return `<div class="vst-badges">${badge}${icBadge}</div>`;
-  };
-  var renderStageChips = (clip, clipIdx) => {
-    const stages = clip.stages ?? [];
-    const chips = stages.map((stage, stageIdx) => {
-      const skipped = stage?.skipped === true;
-      const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
-      const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
-      const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
-      return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(label)}</span>`;
-    }).join("");
-    return chips;
-  };
-  var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
-  var BOUNDARY_GLYPH = {
-    cut: "│",
-    continue: "→",
-    crossfade: "⤬"
-  };
-  var BOUNDARY_LABEL = {
-    cut: "Cut",
-    continue: "Continue",
-    crossfade: "Crossfade"
-  };
-  var renderBoundarySeams = (clips, layouts) => {
-    const seams = [];
-    for (let i = 1; i < layouts.length; i++) {
-      const leftClipIdx = i - 1;
-      const clip = clips[leftClipIdx];
-      if (!clip) {
-        continue;
-      }
-      const value = clip.boundaryOut ?? "cut";
-      const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
-      const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-      const title = `Boundary clip ${leftClipIdx} → ${i}: ${label}. Click to edit.`;
-      const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}. Click to edit.`;
-      seams.push(
-        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
-      );
-    }
-    return seams.join("");
-  };
+  // frontend/timelineView/trackRows.ts
   var promptWindowGeom = (layout, window2, pxPerSecond) => {
-    const clipDur = Math.max(0, layout.durationSeconds);
-    const startSec = clamp(window2.start, 0, clipDur);
-    const endSec = clamp(window2.start + window2.duration, startSec, clipDur);
+    const duration = Math.max(0, layout.durationSeconds);
+    const startSec = clamp(window2.start, 0, duration);
+    const endSec = clamp(window2.start + window2.duration, startSec, duration);
     return {
       startSec,
       endSec,
@@ -2887,13 +5098,6 @@
       active: `${window2.prompt ?? ""}`.trim() !== ""
     };
   };
-  var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
-  var headTag = (kind, label, opts) => {
-    const cls = `vst-head-tag vst-head-tag-${kind}` + (opts?.active ? " vst-head-tag-active" : "") + (opts?.muted ? " vst-head-tag-muted" : "");
-    const style = opts?.style ? ` style="${opts.style}"` : "";
-    return `<div class="${cls}"${style} aria-hidden="true"><span class="vst-head-tag-pill">${label}</span><span class="vst-head-tag-tick"></span></div>`;
-  };
-  var renderTrackHead = (iconClass, icon, title, tags) => `<div class="vst-track-head"><div class="vst-head-top"><div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div><div class="vst-track-label"><strong>${title}</strong></div></div><div class="vst-head-tags">${tags}</div></div>`;
   var PROMPT_PLACEHOLDER = "(no prompt)";
   var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt) => {
     const globalTrimmed = `${globalPrompt ?? ""}`.trim();
@@ -2904,28 +5108,30 @@
       if (!clip) {
         continue;
       }
-      const clipWidth = clipInnerWidth(layout.widthPx);
+      const width = clipInnerWidth(layout.widthPx);
       const windows = clip.promptWindows ?? [];
       const ownPrompt = `${clip.prompt ?? ""}`.trim();
       const inherited = ownPrompt === "";
       const major = inherited ? globalTrimmed : ownPrompt;
-      const overlays = windows.map((w) => promptWindowGeom(layout, w, pxPerSecond)).filter((g) => g.active && g.endSec > g.startSec).map(
-        (g) => `<div class="vst-major-off" style="left:${g.leftPx}px;width:${g.widthPx}px" aria-hidden="true"></div>`
+      const overlays = windows.map((window2) => promptWindowGeom(layout, window2, pxPerSecond)).filter(
+        (geometry) => geometry.active && geometry.endSec > geometry.startSec
+      ).map(
+        (geometry) => `<div class="vst-major-off" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" aria-hidden="true"></div>`
       ).join("");
       const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
       const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
       const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
       parts.push(
-        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="${escapeAttr(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
       );
-      const minorSegs = windows.map((w, j) => {
-        const g = promptWindowGeom(layout, w, pxPerSecond);
-        const text = `${w.prompt ?? ""}`.trim();
+      const minorSegments = windows.map((window2, windowIdx) => {
+        const geometry = promptWindowGeom(layout, window2, pxPerSecond);
+        const text = `${window2.prompt ?? ""}`.trim();
         const label = text === "" ? "(empty)" : truncate(text, 60);
-        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${g.leftPx}px;width:${g.widthPx}px" title="${escapeAttr(`${text || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(`${text || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
       }).join("");
       parts.push(
-        `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${clipWidth}px" title="Click empty space to add a minor prompt">${minorSegs}</div>`
+        `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="Click empty space to add a minor prompt">${minorSegments}</div>`
       );
     }
     return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
@@ -2934,7 +5140,7 @@
       "Prompt",
       headTag("major", "Major", { active: true }) + headTag("relay", "Relay", {
         active: clips.some(
-          (c) => (c.promptWindows?.length ?? 0) > 0
+          (clip) => (clip.promptWindows?.length ?? 0) > 0
         )
       })
     ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
@@ -2943,7 +5149,7 @@
     const chips = [];
     if (clip.reuseAudio === true) {
       chips.push(
-        `<span class="vst-audio-flag" title="Reuse the first stage's audio latent for later stages">↻</span>`
+        `<span class="vst-audio-flag" title="Capture audio after the second active stage and reuse it from the third active stage onward">↻</span>`
       );
     }
     if (clip.clipLengthFromAudio === true) {
@@ -2958,26 +5164,26 @@
     }
     return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
   };
-  var renderAudioSegmentBlock = (seg, clipIdx, segIdx, durationSeconds) => {
-    const start = clamp(seg.startSeconds, 0, durationSeconds);
+  var renderAudioSegmentBlock = (segment, clipIdx, segmentIdx, durationSeconds) => {
+    const start = clamp(segment.startSeconds, 0, durationSeconds);
     const end = clamp(
-      seg.startSeconds + seg.lengthSeconds,
+      segment.startSeconds + segment.lengthSeconds,
       start,
       durationSeconds
     );
-    const name = typeof seg.source === "string" ? seg.source : seg.source?.fileName;
-    const labelText = name ? name : "audio segment";
-    const label = `${roundToTenth(start)}–${roundToTenth(end)} s`;
+    const name = typeof segment.source === "string" ? segment.source : segment.source?.fileName;
+    const labelText = name || "audio segment";
+    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
     return renderWindowSpan({
       className: "vst-audio-seg",
-      dataAttrs: `data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segIdx}"`,
+      dataAttrs: `data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segmentIdx}"`,
       edgeAttr: "data-vst-audio-seg-edge",
       labelClass: "vst-audio-seg-label",
       label: labelText,
-      title: `${labelText} · ${label} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: `Edit audio segment ${segIdx} for clip ${clipIdx}`,
-      startSeconds: seg.startSeconds,
-      lengthSeconds: seg.lengthSeconds,
+      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
+      ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx + 1}`,
+      startSeconds: segment.startSeconds,
+      lengthSeconds: segment.lengthSeconds,
       durationSeconds
     });
   };
@@ -2989,20 +5195,25 @@
     }
     const segments = clip.audioSegments ?? [];
     const lanes = segments.map(
-      (seg, segIdx) => `<div class="vst-audio-seg-lane" style="${place(segIdx)}">` + renderAudioSegmentBlock(seg, clipIdx, segIdx, durationSeconds) + `</div>`
+      (segment, segmentIdx) => `<div class="vst-audio-seg-lane" style="${place(segmentIdx)}">` + renderAudioSegmentBlock(
+        segment,
+        clipIdx,
+        segmentIdx,
+        durationSeconds
+      ) + `</div>`
     );
     lanes.push(blankLane(segments.length));
     return lanes.join("");
   };
   var renderAudioTrackRow = (clips, layouts) => {
-    const segments = layouts.map((l) => {
-      const clip = clips[l.index];
+    const segments = layouts.map((layout) => {
+      const clip = clips[layout.index];
       if (!clip) {
         return "";
       }
       const badge = audioSourceBadge(clip.audioSource ?? "");
       const native = badge.label === "Native";
-      const width = clipInnerWidth(l.widthPx);
+      const width = clipInnerWidth(layout.widthPx);
       const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : clip.audioSource === AUDIO_SOURCE_VOICE_REF ? " vst-audio-kind-voiceref" : " vst-audio-kind-upload";
       const upload = !native && (clip.audioSource === "Upload" || clip.audioSource === AUDIO_SOURCE_VOICE_REF) ? clip.uploadedAudio?.fileName : null;
       const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
@@ -3011,14 +5222,14 @@
         400,
         Math.max(8, Math.floor(width / 5.5))
       );
-      const bars = waveBarHeights(l.index, barCount).map((h) => `<span style="height:${h}%"></span>`).join("");
+      const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
       const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      return `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${l.index}" role="button" tabindex="0" style="left:${l.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${l.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
+      return `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${layout.index + 1}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
         clip,
-        l.index,
+        layout.index,
         clip.duration || 0,
-        l.startPx,
+        layout.startPx,
         width
       );
     }).join("");
@@ -3046,12 +5257,12 @@
   };
   var REF_EDGE_ALIGN_FRAMES = 3;
   var renderReferencesTrackRow = (clips, layouts, fps, unit) => {
-    const lanes = layouts.map((l) => {
-      const clip = clips[l.index];
+    const lanes = layouts.map((layout) => {
+      const clip = clips[layout.index];
       if (!clip) {
         return "";
       }
-      const laneWidth = clipInnerWidth(l.widthPx);
+      const width = clipInnerWidth(layout.widthPx);
       const marks = (clip.refs ?? []).map((ref, refIdx) => {
         const isEnd = ref.fromEnd === true;
         const frame = Math.max(0, ref.frame ?? 0);
@@ -3059,33 +5270,64 @@
         const time = keyframeTimeSeconds(
           ref.frame,
           isEnd,
-          l.durationSeconds,
+          layout.durationSeconds,
           fps
         );
-        const left = keyframeLeftPercent(time, l.durationSeconds);
+        const left = keyframeLeftPercent(
+          time,
+          layout.durationSeconds
+        );
         const source = refSourceLabel(ref.source ?? "");
         const image = ref.uploadedImage?.data;
-        const thumbStyle = image ? ` style="background-image:url('${escapeAttr(mediaPreviewSrc(image))}')"` : "";
+        const thumbnailData = image ? backgroundImageDataAttr(mediaPreviewSrc(image)) : "";
         const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
-        const thumbClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
-        const thumbInner = `<span class="vst-refs-ph">${escapeAttr(frameLabel)}</span>`;
+        const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
         const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
         const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
         const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete`;
-        const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
-        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${l.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbClass}"${thumbStyle}>${thumbInner}</span></div>`;
+        const label = `Edit reference ${refIdx + 1} (${source}${isEnd ? ", from end" : ""})`;
+        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
       }).join("");
-      return `<div class="vst-refs-lane" data-vst-ref-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${laneWidth}px" title="Click to add a reference image at this frame">${marks}</div>`;
+      return `<div class="vst-refs-lane" data-vst-ref-add data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="Click to add a reference image at this frame">${marks}</div>`;
     }).join("");
     return `<div class="vst-track-row vst-track-refs">` + renderTrackHead(
       "vst-track-icon-refs",
       "⧉",
       "References",
       headTag("refs", "Refs", {
-        active: clips.some((c) => (c.refs?.length ?? 0) > 0),
+        active: clips.some((clip) => (clip.refs?.length ?? 0) > 0),
         muted: true
       })
     ) + `<div class="vst-track-cell">${lanes}</div></div>`;
+  };
+
+  // frontend/timelineView.ts
+  var renderRulerTicks = (layouts, totalSeconds, pxPerSecond, fps, unit) => {
+    const lastLayout = layouts[layouts.length - 1];
+    const endPx = lastLayout.startPx + lastLayout.widthPx;
+    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).map(
+      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
+    );
+    const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
+    const minorTicks = [];
+    const maxMinorTicks = 5e3;
+    for (let i = 1; i <= maxMinorTicks; i++) {
+      const seconds = i * minorStep;
+      if (seconds > totalSeconds + 1e-6) {
+        break;
+      }
+      if (i % 5 === 0) {
+        continue;
+      }
+      minorTicks.push(
+        `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`
+      );
+    }
+    const seamTicks = layouts.slice(1).map(
+      (layout) => `<span class="vst-tick vst-tick-seam" style="left:${layout.startPx}px" aria-hidden="true"></span>`
+    );
+    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(totalSeconds, unit, fps))}</span></span>`;
+    return [...minorTicks, ...gridTicks, ...seamTicks, endTick].join("");
   };
   var renderTimeline = (body, clips, options) => {
     const fps = safeFps(options?.fps);
@@ -3096,177 +5338,43 @@
     body.dataset.vstPps = String(pxPerSecond);
     body.dataset.vstFps = String(fps);
     const layouts = computeRegionLayout(clips, { pxPerSecond });
-    const totalSeconds = layouts.reduce((sum, l) => sum + l.durationSeconds, 0);
-    const totalPx = layouts.reduce(
-      (max, l) => Math.max(max, l.startPx + l.widthPx),
+    const totalSeconds = layouts.reduce(
+      (sum, layout) => sum + layout.durationSeconds,
       0
     );
-    const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
-    const clipWord = `clip${clips.length === 1 ? "" : "s"}`;
-    const totalLabel = escapeAttr(formatTimeLabel(totalSeconds, unit, fps));
-    const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
-    const rawSelected = options?.selectedIndex;
-    const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clips.length ? rawSelected : null;
-    const selHidden = selectedIndex === null ? " hidden" : "";
-    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
-    const chipWidth = Math.max(0, Math.round(options?.width ?? 0));
-    const chipHeight = Math.max(0, Math.round(options?.height ?? 0));
-    const chipFps = fps;
-    const chipDimsExplicit = options?.dimsExplicit === true;
-    const chipFpsExplicit = options?.fpsExplicit === true;
-    const chipPresetKey = chipDimsExplicit && chipWidth > 0 && chipHeight > 0 ? matchPresetKey(chipWidth, chipHeight) : null;
-    const dimsSource = chipDimsExplicit ? chipPresetKey ? `${chipPresetKey} preset` : "custom" : "inherited from image resolution";
-    const fpsSource = chipFpsExplicit ? "custom" : "inherited from Video FPS";
-    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
-    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${chipWidth}×${chipHeight}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${chipFps} fps</span></button>`;
-    const enabled = options?.enabled !== false;
-    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
-    const header = `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clips.length}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
-    const wireTopbar = () => {
-      const wire = (selector, handler) => {
-        if (!handler) {
-          return;
-        }
-        const btn = body.querySelector(selector);
-        if (btn) {
-          btn.addEventListener("click", () => handler());
-        }
-      };
-      const enableInput = body.querySelector("[data-vst-enable]");
-      if (enableInput && options?.onToggleEnabled) {
-        enableInput.addEventListener("change", () => {
-          options.onToggleEnabled?.(enableInput.checked);
-        });
-      }
-      const settingsBtn = body.querySelector(
-        "[data-vst-settings]"
-      );
-      if (settingsBtn && options?.onOpenSettings) {
-        settingsBtn.addEventListener("click", () => {
-          options.onOpenSettings?.(settingsBtn);
-        });
-      }
-      wire("[data-vst-unit-toggle]", options?.onToggleUnit);
-      wire("[data-vst-zoom-in]", options?.onZoomIn);
-      wire("[data-vst-zoom-out]", options?.onZoomOut);
-      wire("[data-vst-zoom-fit]", options?.onZoomFit);
-      wire("[data-vst-undo]", options?.onUndo);
-      wire("[data-vst-redo]", options?.onRedo);
-      const slider = body.querySelector(
-        "[data-vst-zoom-slider]"
-      );
-      if (slider) {
-        slider.addEventListener("input", () => {
-          const pct = body.querySelector(
-            "[data-vst-zoom-pct]"
-          );
-          if (pct) {
-            const value = Number.parseFloat(slider.value);
-            pct.textContent = `${Math.round(value / DEFAULT_PX_PER_SECOND * 100)}%`;
-          }
-        });
-        if (options?.onZoomSlider) {
-          slider.addEventListener("change", () => {
-            options.onZoomSlider?.(Number.parseFloat(slider.value));
-          });
-        }
-      }
-      if (options?.onAddClip) {
-        for (const btn of body.querySelectorAll("[data-vst-add-clip]")) {
-          btn.addEventListener("click", () => options.onAddClip?.());
-        }
-      }
-    };
-    const wireScroll = () => {
-      const onZoomWheel = options?.onZoomWheel;
-      if (!onZoomWheel) {
-        return;
-      }
-      const scroll = body.querySelector(".vst-scroll");
-      scroll?.addEventListener(
-        "wheel",
-        (event) => {
-          if (!event.ctrlKey && !event.metaKey) {
-            return;
-          }
-          event.preventDefault();
-          const factor = event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-          onZoomWheel(factor, event.clientX);
-        },
-        { passive: false }
-      );
-    };
+    const totalPx = layouts.reduce(
+      (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
+      0
+    );
+    const header = renderTimelineHeader(
+      clips.length,
+      totalSeconds,
+      fps,
+      unit,
+      pxPerSecond,
+      options
+    );
+    const diagnostics = renderDiagnosticPanel(options?.diagnostics);
+    const executionSummary = renderExecutionSummary(options?.executionSummary);
     if (clips.length === 0) {
-      body.innerHTML = `${header}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
-      wireTopbar();
+      body.innerHTML = `${header}${executionSummary}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
+      wireTimelineToolbar(body, options);
       return;
     }
-    const lastLayout = layouts[layouts.length - 1];
-    const endPx = lastLayout.startPx + lastLayout.widthPx;
-    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).map(
-      (t) => `<span class="vst-tick vst-tick-grid" style="left:${t.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(t.seconds, unit, fps))}</span></span>`
-    );
-    const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
-    const minorTicks = [];
-    const MAX_MINOR_TICKS = 5e3;
-    for (let i = 1; i <= MAX_MINOR_TICKS; i++) {
-      const t = i * minorStep;
-      if (t > totalSeconds + 1e-6) {
-        break;
-      }
-      if (i % 5 === 0) {
-        continue;
-      }
-      minorTicks.push(
-        `<span class="vst-tick vst-tick-minor" style="left:${t * pxPerSecond}px" aria-hidden="true"></span>`
-      );
-    }
-    const seamTicks = layouts.slice(1).map(
-      (l) => `<span class="vst-tick vst-tick-seam" style="left:${l.startPx}px" aria-hidden="true"></span>`
-    );
-    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(totalSeconds, unit, fps))}</span></span>`;
-    const ticks = [
-      ...minorTicks,
-      ...gridTicks,
-      ...seamTicks,
-      endTick
-    ];
-    const regions = layouts.map((l) => {
-      const clip = clips[l.index];
-      const skipClass = l.skipped ? " vst-region-skipped" : "";
-      const tinyClass = l.widthPx <= 12 ? " vst-region-tiny" : "";
-      const skipChip = l.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
-      const dur = escapeAttr(
-        formatTimeLabel(l.durationSeconds, unit, fps)
-      );
-      const skipTitle = l.skipped ? "Unskip clip" : "Skip clip";
-      const skipGlyph = l.skipped ? "⟲" : "⊘";
-      const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${l.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button></div>`;
-      const rightGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
-      const hue = clipHueCss(clip.hue);
-      const renderWidth = clipInnerWidth(l.widthPx);
-      return `<div class="vst-region${skipClass}${tinyClass}" style="left:${l.startPx}px;width:${renderWidth}px;--clip-hue:${hue}" data-clip-idx="${l.index}" title="Clip ${l.index} · ${dur} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, l.durationSeconds) + renderKeyframes(clip, l.index, l.durationSeconds, fps, unit) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${l.index}</span>` + renderStageChips(clip, l.index) + `<span class="vst-chip" title="Keyframes">◆ ${l.keyframeCount}</span>` + skipChip + `<span class="vst-region-dur">${dur}</span></div>` + renderBadges(clip, l.index) + controls + rightGrip + `</div><div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${l.index}" style="left:${l.startPx}px;width:${renderWidth}px" title="Click empty space to add a retake window">` + renderRetakeOverlay(clip, l.index, l.durationSeconds) + `</div>`;
-    }).join("");
-    const audioRow = renderAudioTrackRow(clips, layouts);
-    const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
-    const videoHead = renderTrackHead(
-      "vst-track-icon-video",
-      "▶",
-      "Video",
-      headTag("clip", "Clip", { active: true }) + headTag("retake", "Retake", {
-        active: clips.some((c) => c.retake != null)
-      })
-    );
     const promptRow = renderPromptTrackRow(
       clips,
       layouts,
       pxPerSecond,
       `${options?.globalPrompt ?? ""}`
     );
+    const videoRow = renderVideoTrackRow(clips, layouts, fps, unit);
+    const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
+    const audioRow = renderAudioTrackRow(clips, layouts);
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${ticks.join("")}</div></div>` + promptRow + `<div class="vst-track-row vst-track-video">${videoHead}<div class="vst-track-cell">${regions}${renderBoundarySeams(clips, layouts)}</div></div>` + referencesRow + audioRow + `</div></div>`;
-    wireTopbar();
-    wireScroll();
+    body.innerHTML = `${header}${executionSummary}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div></div>` + promptRow + videoRow + referencesRow + audioRow + `</div></div>`;
+    applyBackgroundImages(body);
+    wireTimelineToolbar(body, options);
+    wireTimelineZoomWheel(body, options);
   };
 
   // frontend/trackDomUtils.ts
@@ -3299,14 +5407,6 @@
     }
     saveClips(next, { origin });
     return true;
-  };
-  var currentTimelineFps = () => {
-    try {
-      const fps = getRootDefaults().fps;
-      return typeof fps === "number" && fps > 0 ? fps : 24;
-    } catch {
-      return 24;
-    }
   };
   var isActivateKey = (ke) => ke.key === "Enter" || ke.key === " " || ke.key === "Spacebar";
   var bindClickSelectableTrack = (body, selector, activate) => {
@@ -3915,9 +6015,7 @@
     btn.className = "auto-input-qbutton info-popover-button";
     btn.textContent = "?";
     btn.addEventListener("click", (event) => {
-      if (typeof doPopover === "function") {
-        doPopover(key, event);
-      }
+      showHostPopover(key, event);
     });
     labelEl.appendChild(btn);
     const pop = document.createElement("div");
@@ -3932,9 +6030,9 @@
     );
     row.appendChild(pop);
   };
-  var wireNumericInput = (input, fallback, min, max, onChange) => {
+  var wireNumericInput = (input2, fallback, min, max, onChange) => {
     const apply = (normalize) => {
-      const parsed = Number.parseFloat(input.value);
+      const parsed = Number.parseFloat(input2.value);
       const next = clamp(
         Number.isFinite(parsed) ? parsed : fallback,
         min,
@@ -3942,11 +6040,11 @@
       );
       onChange(next);
       if (normalize) {
-        input.value = `${next}`;
+        input2.value = `${next}`;
       }
     };
-    input.addEventListener("input", () => apply(false));
-    input.addEventListener("change", () => apply(true));
+    input2.addEventListener("input", () => apply(false));
+    input2.addEventListener("change", () => apply(true));
   };
   var boxClassFor = (control) => {
     if (control.classList.contains("auto-dropdown")) {
@@ -3985,8 +6083,8 @@
     return row;
   };
   var buildOptionSelect = (specs, selected, onChange) => {
-    const select = document.createElement("select");
-    select.className = "auto-dropdown vst-audio-select";
+    const select2 = document.createElement("select");
+    select2.className = "auto-dropdown vst-audio-select";
     for (const spec of specs) {
       const opt = document.createElement("option");
       opt.value = spec.value;
@@ -3994,10 +6092,10 @@
       opt.dataset.cleanname = spec.label;
       opt.disabled = spec.disabled === true;
       opt.selected = spec.value === selected;
-      select.appendChild(opt);
+      select2.appendChild(opt);
     }
-    select.addEventListener("change", () => onChange(select.value));
-    return select;
+    select2.addEventListener("change", () => onChange(select2.value));
+    return select2;
   };
   var buildSelect = (values, labels, selected, onChange) => buildOptionSelect(
     values.map((value, i) => ({ value, label: labels[i] ?? value })),
@@ -4005,36 +6103,28 @@
     onChange
   );
   var buildNumber = (value, min, max, step, onChange) => {
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "auto-number vst-refs-num";
-    input.min = `${min}`;
-    input.max = `${max}`;
-    input.step = `${step}`;
-    input.value = `${value}`;
-    wireNumericInput(input, value, min, max, onChange);
-    return input;
+    const input2 = document.createElement("input");
+    input2.type = "number";
+    input2.className = "auto-number vst-refs-num";
+    input2.min = `${min}`;
+    input2.max = `${max}`;
+    input2.step = `${step}`;
+    input2.value = `${value}`;
+    wireNumericInput(input2, value, min, max, onChange);
+    return input2;
   };
   var buildSlider = (label, value, min, max, step, onChange, opts) => {
     const holder = document.createElement("div");
     holder.className = "vst-stage-slider";
     const id = `vst_stage_slider_${++sliderSeq}`;
-    holder.innerHTML = makeSliderInput(
-      null,
+    holder.innerHTML = renderHostSlider({
       id,
-      "",
       label,
-      "",
       value,
       min,
       max,
-      min,
-      max,
-      step,
-      false,
-      false,
-      false
-    );
+      step
+    });
     const number = holder.querySelector(
       "input.auto-slider-number"
     );
@@ -4061,21 +6151,21 @@
   var buildCheckbox = (label, checked, onChange, opts) => {
     const row = document.createElement("label");
     row.className = "auto-input auto-checkbox-box auto-input-flex vst-audio-field vst-audio-field-check";
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.className = "auto-checkbox";
-    input.checked = checked;
-    input.addEventListener("change", () => onChange(input.checked));
+    const input2 = document.createElement("input");
+    input2.type = "checkbox";
+    input2.className = "auto-checkbox";
+    input2.checked = checked;
+    input2.addEventListener("change", () => onChange(input2.checked));
     const text = document.createElement("span");
     text.className = "auto-input-name vst-audio-field-label";
     text.textContent = label;
-    row.append(input, text);
+    row.append(input2, text);
     if (opts?.help) {
       appendHelp(row, row, label, opts.help);
     }
     if (opts?.disabled) {
       row.classList.add("vst-audio-disabled");
-      input.setAttribute("disabled", "");
+      input2.setAttribute("disabled", "");
     }
     return row;
   };
@@ -4086,9 +6176,7 @@
     editor.placeholder = placeholder;
     editor.setAttribute("data-vst-focus-key", focusKey);
     editor.addEventListener("input", () => onInput(editor.value));
-    if (typeof textPromptAddKeydownHandler === "function") {
-      textPromptAddKeydownHandler(editor);
-    }
+    enhanceHostPromptEditor(editor);
     return editor;
   };
   var readFileAsDataUri = (file, onFile) => {
@@ -4141,18 +6229,18 @@
         onFile(picked, pickedName);
         return;
       }
-      toDataURL(picked, (data) => onFile(data, pickedName));
+      void getLtxHostBridge().toDataUrl(picked).then((data) => onFile(data, pickedName));
     });
     clearBtn.addEventListener("click", () => onClear());
     row.append(pickLabel, fileInput, fileName, clearBtn, preview, previewName);
-    if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
+    if (hasHostInputBrowser()) {
       const selectBtn = document.createElement("button");
       selectBtn.type = "button";
       selectBtn.className = "basic-button small-button vst-media-pick-select";
       selectBtn.textContent = "Select";
       selectBtn.addEventListener(
         "click",
-        () => inputBrowserHelper.openInputBrowser(fileInput.id, browserTypes)
+        () => openHostInputBrowser(fileInput.id, browserTypes)
       );
       clearBtn.before(selectBtn);
     }
@@ -4241,6 +6329,371 @@
     return btn;
   };
 
+  // frontend/detailStrip/draftQueue.ts
+  var DEBOUNCE_MS = 200;
+  var createDetailDraftQueue = (options) => {
+    let sourceToken = "";
+    let pendingTimer = null;
+    let flushing = false;
+    const pending = /* @__PURE__ */ new Map();
+    const markCurrentSource = () => {
+      sourceToken = readStateToken();
+    };
+    const isStale = () => readStateToken() !== sourceToken;
+    const writeBackClamped = (entries, clips) => {
+      const dock = options.getDock();
+      if (!dock || !clips) {
+        return;
+      }
+      for (const [key, entry] of entries) {
+        if (!entry.readBack) {
+          continue;
+        }
+        const input2 = dock.querySelector(
+          `input[data-vst-focus-key="${key}"]`
+        );
+        const display = entry.readBack(clips);
+        if (input2 && display != null && input2.value !== `${display}`) {
+          input2.value = `${display}`;
+        }
+      }
+    };
+    const flush = () => {
+      if (pendingTimer) {
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+      if (flushing || pending.size === 0) {
+        return;
+      }
+      const entryList = [...pending.entries()];
+      const entries = entryList.map(([, entry]) => entry);
+      pending.clear();
+      options.focus.capture();
+      if (isStale()) {
+        return;
+      }
+      const clipMutations = entries.filter((entry) => entry.kind === "clips").map((entry) => entry.mutate);
+      const stateMutations = entries.filter((entry) => entry.kind === "state").map((entry) => entry.mutate);
+      flushing = true;
+      let flushedClips = null;
+      try {
+        if (clipMutations.length > 0) {
+          const clips = getClips();
+          for (const mutate of clipMutations) {
+            mutate(clips);
+          }
+          saveClips(clips, {
+            origin: "detail-strip",
+            valueOnly: true
+          });
+          flushedClips = clips;
+        }
+        if (stateMutations.length > 0) {
+          const state = getState();
+          for (const mutate of stateMutations) {
+            mutate(state);
+          }
+          saveState(state, {
+            notifyDomChange: isVideoStagesEnabled(),
+            origin: "detail-strip",
+            valueOnly: true
+          });
+        }
+        markCurrentSource();
+      } finally {
+        flushing = false;
+      }
+      writeBackClamped(entryList, flushedClips);
+      options.syncValueDerivedUi(options.getRenderedSelection());
+    };
+    const schedule = (key, entry) => {
+      if (options.isRendering()) {
+        return;
+      }
+      pending.set(key, entry);
+      if (pendingTimer) {
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
+      if (options.focus.isTypingInDock() || options.focus.isSliderGesture()) {
+        return;
+      }
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null;
+        flush();
+      }, DEBOUNCE_MS);
+    };
+    const commit = (mutate) => {
+      flush();
+      options.focus.capture();
+      if (isStale()) {
+        options.render();
+        return;
+      }
+      const clips = getClips();
+      mutate(clips);
+      saveClips(clips, {
+        origin: "detail-strip",
+        valueOnly: true
+      });
+      markCurrentSource();
+      options.syncValueDerivedUi(options.getRenderedSelection());
+    };
+    const commitState = (mutate) => {
+      flush();
+      options.focus.capture();
+      if (isStale()) {
+        options.render();
+        return;
+      }
+      const state = getState();
+      mutate(state);
+      saveState(state, {
+        notifyDomChange: isVideoStagesEnabled(),
+        origin: "detail-strip",
+        valueOnly: true
+      });
+      markCurrentSource();
+      options.syncValueDerivedUi(options.getRenderedSelection());
+    };
+    const structuralCommit = (apply, structuralOptions) => {
+      flush();
+      if (isStale()) {
+        options.render();
+        return;
+      }
+      const clips = getClips();
+      const outcome = apply(clips);
+      if (outcome === null) {
+        return;
+      }
+      saveClips(clips, { origin: "detail-strip" });
+      markCurrentSource();
+      if (outcome === "render") {
+        options.render();
+        return;
+      }
+      if (structuralOptions?.rebuildAfterSelect) {
+        options.setSelectionSilently(outcome);
+        options.render();
+        return;
+      }
+      setSelection(outcome);
+    };
+    return {
+      markCurrentSource,
+      flush,
+      dispose: () => {
+        flush();
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          pendingTimer = null;
+        }
+        pending.clear();
+      },
+      commit,
+      commitState,
+      debouncedCommit: (key, mutate) => schedule(key, { kind: "clips", mutate }),
+      debouncedCommitState: (key, mutate) => schedule(key, { kind: "state", mutate }),
+      buildClampedNumber: (clampedOptions) => {
+        const input2 = buildNumber(
+          clampedOptions.value,
+          clampedOptions.min,
+          clampedOptions.max,
+          clampedOptions.step,
+          (value) => {
+            schedule(clampedOptions.key, {
+              kind: "clips",
+              mutate: (clips) => clampedOptions.mutate(clips, value),
+              readBack: clampedOptions.readBack
+            });
+          }
+        );
+        input2.setAttribute("data-vst-focus-key", clampedOptions.key);
+        return input2;
+      },
+      structuralCommit
+    };
+  };
+
+  // frontend/detailStrip/focusSession.ts
+  var createDetailFocusSession = (options) => {
+    let sliderDragActive = false;
+    let focusLeftDock = false;
+    let pendingFocus = null;
+    const isTypingInDock = () => {
+      const dock = options.getDock();
+      const active = document.activeElement;
+      if (!dock || !(active instanceof HTMLElement) || !dock.contains(active)) {
+        return false;
+      }
+      return active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement && (active.type === "text" || active.type === "number");
+    };
+    const isSliderGesture = () => {
+      if (sliderDragActive) {
+        return true;
+      }
+      const dock = options.getDock();
+      const active = document.activeElement;
+      if (!dock || !(active instanceof HTMLInputElement) || !dock.contains(active)) {
+        return false;
+      }
+      return active.type === "range" || active.classList.contains("auto-slider-number");
+    };
+    const capture = () => {
+      const dock = options.getDock();
+      if (focusLeftDock) {
+        pendingFocus = null;
+        return;
+      }
+      const active = document.activeElement;
+      if (!dock || !(active instanceof HTMLElement) || !dock.contains(active)) {
+        pendingFocus = null;
+        return;
+      }
+      const holder = active.closest("[data-vst-focus-key]");
+      if (!holder || !dock.contains(holder)) {
+        pendingFocus = null;
+        return;
+      }
+      let start = null;
+      let end = null;
+      if (active instanceof HTMLInputElement && (active.type === "number" || active.type === "text") || active instanceof HTMLTextAreaElement) {
+        try {
+          start = active.selectionStart;
+          end = active.selectionEnd;
+        } catch {
+        }
+      }
+      pendingFocus = {
+        key: holder.getAttribute("data-vst-focus-key") ?? "",
+        start,
+        end
+      };
+    };
+    const restore = (detail) => {
+      const focus = pendingFocus;
+      pendingFocus = null;
+      if (!focus?.key) {
+        return;
+      }
+      const holder = detail.querySelector(
+        `[data-vst-focus-key="${focus.key}"]`
+      );
+      if (!holder) {
+        return;
+      }
+      holder.focus();
+      if ((holder instanceof HTMLInputElement || holder instanceof HTMLTextAreaElement) && focus.start != null) {
+        try {
+          holder.setSelectionRange(focus.start, focus.end ?? focus.start);
+        } catch {
+        }
+      }
+    };
+    const focusKeyForSelection = (selection2) => {
+      if (selection2.kind === "prompt-major") {
+        return "prompt-major";
+      }
+      if (selection2.kind === "prompt-minor") {
+        return `minor-${selection2.windowIdx}`;
+      }
+      return null;
+    };
+    const autoFocusSelection = (detail, selection2) => {
+      if (focusLeftDock) {
+        return;
+      }
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && detail.contains(active)) {
+        return;
+      }
+      const focusKey = focusKeyForSelection(selection2);
+      if (!focusKey) {
+        return;
+      }
+      const editor = detail.querySelector(
+        `textarea[data-vst-focus-key="${focusKey}"]`
+      );
+      if (!editor) {
+        return;
+      }
+      editor.focus();
+      const length = editor.value.length;
+      try {
+        editor.setSelectionRange(length, length);
+      } catch {
+      }
+      if (typeof editor.scrollIntoView === "function") {
+        editor.scrollIntoView({ block: "nearest" });
+      }
+    };
+    const onDockFocusOut = (event) => {
+      if (options.isRendering()) {
+        return;
+      }
+      const next = event.relatedTarget;
+      const dock = options.getDock();
+      if (next instanceof Node && dock?.contains(next)) {
+        return;
+      }
+      focusLeftDock = true;
+      pendingFocus = null;
+      options.flushPending();
+    };
+    const onDockFocusIn = () => {
+      focusLeftDock = false;
+    };
+    const onDockChange = (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.type === "number" && document.activeElement === target) {
+        options.flushPending();
+      }
+    };
+    const onDocumentPointerDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (!options.getDock()?.contains(target)) {
+        options.flushPending();
+        return;
+      }
+      if (target.closest('input[type="range"]')) {
+        sliderDragActive = true;
+      }
+    };
+    const onDocumentPointerUp = () => {
+      if (!sliderDragActive) {
+        return;
+      }
+      sliderDragActive = false;
+      options.flushPending();
+    };
+    return {
+      isTypingInDock,
+      isSliderGesture,
+      capture,
+      restore,
+      autoFocusSelection,
+      beginSelectionSession: () => {
+        pendingFocus = null;
+        focusLeftDock = false;
+      },
+      reset: () => {
+        sliderDragActive = false;
+        focusLeftDock = false;
+        pendingFocus = null;
+      },
+      onDockFocusOut,
+      onDockFocusIn,
+      onDockChange,
+      onDocumentPointerDown,
+      onDocumentPointerUp
+    };
+  };
+
   // frontend/detailStrip/audioPanel.ts
   var GROUP_AUDIO = "vstdock_audio";
   var buildAudioBody = (ctx, sel, clips) => {
@@ -4253,6 +6706,7 @@
     const source = resolveAudioSourceValue(clip.audioSource ?? "", options);
     const canLength = canUseClipLengthFromAudio(source);
     const isAce = isAceStepFunAudioSource(source);
+    const canReuseStageAudio = isAudioReuseEligible(clip);
     const commitAudio = (mutate) => {
       ctx.commit((cs) => {
         const target = cs[clipIdx];
@@ -4278,7 +6732,7 @@
     };
     const body = document.createElement("div");
     body.className = "vst-detail-form-body";
-    const select = buildOptionSelect(
+    const select2 = buildOptionSelect(
       options.map((o) => ({ value: o.value, label: o.label })),
       source,
       (value) => {
@@ -4291,14 +6745,14 @@
     body.appendChild(
       buildField(
         "Audio Source",
-        select,
+        select2,
         void 0,
         "Where this clip's audio comes from: generated from the prompt, an uploaded file, a Voice Reference (clone a speaker sample), or none."
       )
     );
     body.appendChild(
       buildCheckbox(
-        "Reuse Audio",
+        "Reuse Captured Stage Audio",
         clip.reuseAudio === true,
         (value) => {
           commitAudio((c) => {
@@ -4306,7 +6760,8 @@
           });
         },
         {
-          help: "Carry the previous clip's audio into this clip instead of producing new audio — useful for continuous music or speech across a cut."
+          disabled: !canReuseStageAudio,
+          help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages."
         }
       )
     );
@@ -4555,12 +7010,12 @@
     const clip = clips[leftClipIdx];
     const value = clip?.boundaryOut ?? "cut";
     const state = getState();
-    const fps = state.fps > 0 ? Math.round(state.fps) : 24;
+    const fps = Math.round(safeFps(state.fps));
     const joinSpecs = ["cut", "continue", "crossfade"].map((mode) => ({
       value: mode,
       label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
     }));
-    const select = buildOptionSelect(joinSpecs, value, (next) => {
+    const select2 = buildOptionSelect(joinSpecs, value, (next) => {
       ctx.commit((cs) => {
         const c = cs[leftClipIdx];
         if (c) {
@@ -4571,8 +7026,8 @@
     });
     body.appendChild(
       buildField(
-        `Join · Clip ${leftClipIdx} → ${leftClipIdx + 1}`,
-        select,
+        `Join · Clip ${leftClipIdx + 1} → ${leftClipIdx + 2}`,
+        select2,
         void 0,
         "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
       )
@@ -4644,6 +7099,86 @@
     return wrapForm(GROUP_BOUNDARY, body);
   };
 
+  // frontend/timelineEdit.ts
+  var pxToDuration = (px, pxPerSecond, fps) => {
+    if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
+      return CLIP_DURATION_MIN;
+    }
+    const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
+    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
+  };
+  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd) => {
+    const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
+    const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps2));
+    if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
+      return REF_FRAME_MIN;
+    }
+    const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
+    const time = fraction * duration;
+    const rawFrame = fromEnd ? (duration - time) * safeFps2 : time * safeFps2;
+    return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
+  };
+  var clampClipRefsToDuration = (clip, getRootDefaults2, effectiveFps) => {
+    const frameMax = getReferenceFrameMax(getRootDefaults2, clip, effectiveFps);
+    for (const ref of clip.refs) {
+      ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
+    }
+  };
+  var applyClipDurationResize = (clip, newDuration, getRootDefaults2, effectiveFps) => {
+    if (clip.duration === newDuration) {
+      return false;
+    }
+    clip.duration = newDuration;
+    clampClipRefsToDuration(clip, getRootDefaults2, effectiveFps);
+    return true;
+  };
+
+  // frontend/detailStrip/clipBasics.ts
+  var DURATION_STEP = 0.1;
+  var buildClipColumn = (context, clip, clipIdx) => {
+    const column = document.createElement("div");
+    column.className = "vst-detail-col vst-detail-clip";
+    const sourced = !!clip.sourceVideo;
+    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || sourced;
+    const durationInput = buildNumber(
+      clip.duration,
+      CLIP_DURATION_MIN,
+      CLIP_DURATION_MAX,
+      DURATION_STEP,
+      (value) => {
+        context.debouncedCommit("duration", (clips) => {
+          const target = clips[clipIdx];
+          if (target && !lengthDerived2) {
+            applyClipDurationResize(target, value, getRootDefaults);
+          }
+        });
+      }
+    );
+    durationInput.setAttribute("data-vst-focus-key", "duration");
+    const durationField = buildField(
+      "Duration (s)",
+      durationInput,
+      lengthDerived2 ? sourced ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
+    );
+    if (lengthDerived2) {
+      durationInput.disabled = true;
+      durationField.classList.add("vst-field-disabled");
+    }
+    column.appendChild(durationField);
+    column.appendChild(
+      buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
+        context.commit((clips) => {
+          const target = clips[clipIdx];
+          if (target) {
+            target.skipped = value;
+          }
+        });
+      })
+    );
+    return column;
+  };
+
   // frontend/icLoraAutoDownload.ts
   var IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
   var statuses = /* @__PURE__ */ new Map();
@@ -4675,9 +7210,7 @@
   };
   var finish = (preset, onSettled) => {
     setStatus(preset, { state: "done" });
-    if (typeof refreshParameterValues === "function") {
-      refreshParameterValues(true);
-    }
+    refreshHostParameters();
     onSettled();
   };
   var ensureIcLoraAutoWeights = (entry, installedLoras, onSettled) => {
@@ -4688,7 +7221,7 @@
     if (!preset || hasAutoWeights(preset, installedLoras) || statuses.has(preset.id)) {
       return;
     }
-    if (typeof makeWSRequest !== "function") {
+    if (!canRequestHostWs()) {
       statuses.set(preset.id, {
         state: "error",
         message: "Model downloader is unavailable."
@@ -4696,7 +7229,7 @@
       return;
     }
     statuses.set(preset.id, { state: "downloading", percent: 0 });
-    makeWSRequest(
+    requestHostWs(
       "VideoStagesDownloadIcLoraWS",
       { presetId: preset.id },
       (data) => {
@@ -4709,7 +7242,6 @@
           finish(preset, onSettled);
         }
       },
-      0,
       (error) => {
         if (`${error}` === "Model at that save path already exists.") {
           finish(preset, onSettled);
@@ -4735,6 +7267,460 @@
     return status ? statusTextFor(preset, status) : "Preparing preset weights download…";
   };
 
+  // frontend/detailStrip/icLoraPanel.ts
+  var buildIcLorasSection = (context, clip, clipIdx, defaults) => {
+    const { wrap, col } = buildStackSection(
+      "IC-LoRAs",
+      "vst-detail-iclora-col"
+    );
+    const sectionLabel2 = wrap.querySelector(".vst-detail-sec");
+    if (sectionLabel2) {
+      appendHelp(
+        sectionLabel2,
+        wrap,
+        "IC-LoRAs",
+        "In-context LoRAs condition this clip on a drive video or image — matching pose, depth, motion, or style. Add one per guide you want to apply."
+      );
+    }
+    const entryAt = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
+    clip.icLoras.forEach((entry, entryIdx) => {
+      const { row, fields } = buildInstanceRow({
+        rowClass: "vst-detail-iclora",
+        indexAttr: "data-vst-iclora-idx",
+        index: entryIdx,
+        active: false,
+        title: `IC-LoRA ${entryIdx + 1}`,
+        deleteLabel: "Remove",
+        onDelete: () => {
+          context.structuralCommit((clips) => {
+            const target = clips[clipIdx];
+            if (!target || entryIdx >= target.icLoras.length) {
+              return null;
+            }
+            target.icLoras.splice(entryIdx, 1);
+            return "render";
+          });
+        },
+        repoint: () => {
+        }
+      });
+      const presetSelect = buildOptionSelect(
+        [
+          { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+          ...IC_LORA_PRESETS.map((preset2) => ({
+            value: preset2.id,
+            label: preset2.displayName
+          }))
+        ],
+        entry.preset,
+        (value) => {
+          context.commit((clips) => {
+            const target = entryAt(clips, entryIdx);
+            if (!target) {
+              return;
+            }
+            target.preset = value;
+            const preset2 = findIcLoraPreset(value);
+            if (preset2) {
+              target.strength = preset2.strength;
+              target.controlType = preset2.controlType;
+            }
+          });
+          clearIcLoraAutoFailure(value);
+          context.render();
+        }
+      );
+      fields.appendChild(
+        buildField(
+          "Preset",
+          presetSelect,
+          void 0,
+          "A curated IC-LoRA setup — picking one fills in the LoRA, strength, and control type for a known effect (pose, depth, style, etc.). Choose Custom to set everything yourself."
+        )
+      );
+      const loraSelect = buildSelect(
+        [IC_LORA_AUTO, ...defaults.loraValues],
+        [IC_LORA_AUTO, ...defaults.loraLabels],
+        entry.lora,
+        (value) => {
+          context.commit((clips) => {
+            const target = entryAt(clips, entryIdx);
+            if (target) {
+              target.lora = value;
+            }
+          });
+          if (value === IC_LORA_AUTO) {
+            clearIcLoraAutoFailure(entry.preset);
+          }
+          context.render();
+        }
+      );
+      fields.appendChild(
+        buildField(
+          "LoRA",
+          loraSelect,
+          void 0,
+          "The in-context LoRA weights that turn the drive media into conditioning. [AUTO] downloads the preset's recommended weights when they are not installed."
+        )
+      );
+      const strength = context.buildClampedNumber({
+        key: `iclora-${entryIdx}-strength`,
+        value: entry.strength,
+        min: IC_LORA_STRENGTH_MIN,
+        max: IC_LORA_STRENGTH_MAX,
+        step: IC_LORA_STRENGTH_STEP,
+        readBack: (clips) => entryAt(clips, entryIdx)?.strength ?? null,
+        mutate: (clips, value) => {
+          const target = entryAt(clips, entryIdx);
+          if (target) {
+            target.strength = value;
+          }
+        }
+      });
+      fields.appendChild(
+        buildField(
+          "Strength",
+          strength,
+          void 0,
+          "How strongly this IC-LoRA steers generation. Higher follows the drive media more closely; too high can overpower the prompt."
+        )
+      );
+      const attention = context.buildClampedNumber({
+        key: `iclora-${entryIdx}-attention`,
+        value: entry.attentionStrength,
+        min: IC_LORA_ATTENTION_MIN,
+        max: IC_LORA_ATTENTION_MAX,
+        step: IC_LORA_ATTENTION_STEP,
+        readBack: (clips) => entryAt(clips, entryIdx)?.attentionStrength ?? null,
+        mutate: (clips, value) => {
+          const target = entryAt(clips, entryIdx);
+          if (target) {
+            target.attentionStrength = value;
+          }
+        }
+      });
+      fields.appendChild(
+        buildField(
+          "Attention",
+          attention,
+          void 0,
+          "Scales how much the IC-LoRA influences the model's attention layers. A finer control than Strength; leave at the default unless a preset tunes it."
+        )
+      );
+      const preset = findIcLoraPreset(entry.preset);
+      if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
+        const controlSelect = buildOptionSelect(
+          [
+            { value: "none", label: "None (raw video)" },
+            { value: "canny", label: "Canny edges" },
+            { value: "depth", label: "Depth map" },
+            { value: "normal", label: "Normal map" }
+          ],
+          entry.controlType,
+          (value) => {
+            context.commit((clips) => {
+              const target = entryAt(clips, entryIdx);
+              if (target) {
+                target.controlType = value;
+              }
+            });
+          }
+        );
+        fields.appendChild(
+          buildField(
+            "Control",
+            controlSelect,
+            void 0,
+            "Preprocesses the drive video into a control signal before conditioning: Canny edges, a depth map, or a normal map. None feeds the raw video straight in."
+          )
+        );
+      }
+      const applySelect = buildOptionSelect(
+        [
+          { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
+          ...clip.stages.map((_, stageIdx) => ({
+            value: `${stageIdx}`,
+            label: `Stage ${stageIdx}`
+          }))
+        ],
+        `${entry.stage}`,
+        (value) => {
+          context.commit((clips) => {
+            const target = entryAt(clips, entryIdx);
+            if (!target) {
+              return;
+            }
+            const stage = Number(value);
+            target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
+            reconcileIcLoraStage(target, !!clips[clipIdx]?.sourceVideo);
+          });
+          context.render();
+        }
+      );
+      fields.appendChild(
+        buildField(
+          "Apply on",
+          applySelect,
+          void 0,
+          "Which stage this IC-LoRA conditions — a single stage, or All stages of the clip."
+        )
+      );
+      if ((entry.stage >= 1 || !!clip.sourceVideo) && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
+        const sourceSelect = buildOptionSelect(
+          [
+            { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
+            {
+              value: IC_LORA_SOURCE_STAGE_INPUT,
+              label: "Stage input"
+            }
+          ],
+          entry.source,
+          (value) => {
+            context.commit((clips) => {
+              const target = entryAt(clips, entryIdx);
+              if (target) {
+                target.source = value;
+              }
+            });
+            context.render();
+          }
+        );
+        fields.appendChild(
+          buildField(
+            "Source",
+            sourceSelect,
+            void 0,
+            "Where the drive media comes from: Upload your own video/image, or Stage input to drive from the frames already entering this stage."
+          )
+        );
+      }
+      if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+        const hint = document.createElement("small");
+        hint.className = "vst-audio-field-hint";
+        hint.textContent = entry.stage >= 1 ? `Driven by stage ${entry.stage}'s input (the previous stage's output).` : "Driven by each stage's incoming frames (the source footage on stage 0).";
+        fields.appendChild(hint);
+      } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
+        fields.appendChild(
+          buildMediaPickRow(
+            "Drive Media",
+            "video/*,image/*",
+            ["image", "video"],
+            entry.video?.fileName,
+            (data, fileName) => {
+              context.commit((clips) => {
+                const target = entryAt(clips, entryIdx);
+                if (target) {
+                  target.video = { data, fileName };
+                }
+              });
+              context.render();
+            },
+            () => {
+              context.commit((clips) => {
+                const target = entryAt(clips, entryIdx);
+                if (target) {
+                  target.video = null;
+                }
+              });
+              context.render();
+            }
+          )
+        );
+        if (!entry.video?.data && !!clip.sourceVideo) {
+          const hint = document.createElement("small");
+          hint.className = "vst-audio-field-hint";
+          hint.textContent = "No upload — drives from the stage's incoming footage.";
+          fields.appendChild(hint);
+        }
+        if (entry.video?.data?.startsWith("data:video/")) {
+          fields.appendChild(
+            buildCheckbox(
+              "Voice ref from drive audio",
+              entry.driveAudioRef === true,
+              (value) => {
+                context.commit((clips) => {
+                  const target = entryAt(clips, entryIdx);
+                  if (target) {
+                    target.driveAudioRef = value;
+                  }
+                });
+              },
+              {
+                help: "Use this drive video's audio as the speaker sample (LipDub): new speech matching the prompt is generated in that voice."
+              }
+            )
+          );
+        }
+      } else {
+        const slot = document.createElement("small");
+        slot.className = "vst-audio-field-hint";
+        slot.textContent = `Driven by ${entry.source} (legacy source)`;
+        fields.appendChild(slot);
+      }
+      const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
+      if (hintText || preset) {
+        const hint = document.createElement("small");
+        hint.className = "vst-audio-field-hint";
+        hint.textContent = hintText ? `${hintText} ` : "";
+        if (preset) {
+          const link = document.createElement("a");
+          link.href = icLoraRepoUrl(preset);
+          link.target = "_blank";
+          link.rel = "noopener";
+          link.textContent = "repo";
+          hint.appendChild(link);
+        }
+        fields.appendChild(hint);
+      }
+      ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
+      const autoText = icLoraAutoHint(entry, defaults.loraValues);
+      if (autoText) {
+        const autoHint = document.createElement("small");
+        autoHint.className = "vst-audio-field-hint";
+        if (preset) {
+          autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
+        }
+        autoHint.textContent = autoText;
+        fields.appendChild(autoHint);
+      }
+      col.appendChild(row);
+    });
+    col.appendChild(
+      buildAddButton("+ Add IC-LoRA", "vst-detail-add-iclora", () => {
+        context.structuralCommit((clips) => {
+          const target = clips[clipIdx];
+          if (!target) {
+            return null;
+          }
+          target.icLoras.push(
+            defaultIcLora({
+              lora: defaults.loraValues[0] ?? IC_LORA_AUTO
+            })
+          );
+          return "render";
+        });
+      })
+    );
+    return wrap;
+  };
+
+  // frontend/detailStrip/retakePanel.ts
+  var buildRetakeSection = (context, clip, clipIdx) => {
+    const { wrap, col } = buildStackSection("Retake", "vst-detail-retake-col");
+    const sectionLabel2 = wrap.querySelector(".vst-detail-sec");
+    if (sectionLabel2) {
+      appendHelp(
+        sectionLabel2,
+        wrap,
+        "Retake",
+        "Regenerate just a time window of a base video, leaving the rest untouched — handy for fixing one bad stretch without redoing the whole clip."
+      );
+    }
+    const retake = clip.retake;
+    if (!retake) {
+      const hint = document.createElement("small");
+      hint.className = "vst-audio-field-hint";
+      hint.textContent = "Regenerates a sub-range when refining a base video.";
+      col.append(
+        hint,
+        buildAddButton(
+          "Add retake",
+          "vst-detail-add-retake",
+          () => context.createRetake(clipIdx)
+        )
+      );
+      return wrap;
+    }
+    const clipDuration = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
+    const clampRetake = (start, length) => clampStartLength(start, length, clipDuration, RETAKE_MIN_DURATION);
+    const startInput = context.buildClampedNumber({
+      key: "retake-start",
+      value: retake.startSeconds,
+      min: 0,
+      max: Math.max(0, clipDuration - RETAKE_MIN_DURATION),
+      step: RETAKE_DURATION_STEP,
+      readBack: (clips) => clips[clipIdx]?.retake?.startSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx]?.retake;
+        if (target) {
+          const next = clampRetake(value, target.lengthSeconds);
+          target.startSeconds = next.start;
+          target.lengthSeconds = next.length;
+        }
+      }
+    });
+    col.appendChild(
+      buildField(
+        "Start (s)",
+        startInput,
+        void 0,
+        "Where the retake window begins inside the clip. Only this sub-range is regenerated."
+      )
+    );
+    const lengthInput = context.buildClampedNumber({
+      key: "retake-length",
+      value: retake.lengthSeconds,
+      min: RETAKE_MIN_DURATION,
+      max: clipDuration,
+      step: RETAKE_DURATION_STEP,
+      readBack: (clips) => clips[clipIdx]?.retake?.lengthSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx]?.retake;
+        if (target) {
+          const next = clampRetake(target.startSeconds, value);
+          target.startSeconds = next.start;
+          target.lengthSeconds = next.length;
+        }
+      }
+    });
+    col.appendChild(
+      buildField(
+        "Length (s)",
+        lengthInput,
+        void 0,
+        "How long the retake window is, starting at Start. Frames outside the window are kept as-is."
+      )
+    );
+    col.appendChild(
+      buildSlider(
+        "Strength",
+        retake.strength,
+        RETAKE_STRENGTH_MIN,
+        RETAKE_STRENGTH_MAX,
+        RETAKE_STRENGTH_STEP,
+        (value) => {
+          context.debouncedCommit("retake-strength", (clips) => {
+            const target = clips[clipIdx]?.retake;
+            if (target) {
+              target.strength = clamp(
+                value,
+                RETAKE_STRENGTH_MIN,
+                RETAKE_STRENGTH_MAX
+              );
+            }
+          });
+        },
+        {
+          help: "How much of the window is regenerated. Higher changes the footage more; lower keeps it closer to the original."
+        }
+      )
+    );
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
+    col.appendChild(note);
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+    removeButton.textContent = "Remove retake";
+    removeButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      context.removeRetake(clipIdx);
+    });
+    col.appendChild(removeButton);
+    return wrap;
+  };
+
   // frontend/sourceVideoProbe.ts
   var FPS_SAMPLE_FRAMES = 12;
   var MIN_FRAME_DELTA_SECONDS = 5e-4;
@@ -4756,7 +7742,7 @@
     return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
   };
   var probeSourceVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
-    const video = document.createElement("video");
+    const video = getLtxHostBridge().createSourceVideoElement();
     video.muted = true;
     video.preload = "auto";
     let settled = false;
@@ -4802,557 +7788,82 @@
     video.src = src;
   });
 
-  // frontend/timelineEdit.ts
-  var pxToDuration = (px, pxPerSecond, fps) => {
-    if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
-      return CLIP_DURATION_MIN;
-    }
-    const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
-    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
-  };
-  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd) => {
-    const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
-    const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
-    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps2));
-    if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
-      return REF_FRAME_MIN;
-    }
-    const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
-    const time = fraction * duration;
-    const rawFrame = fromEnd ? (duration - time) * safeFps2 : time * safeFps2;
-    return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
-  };
-  var clampClipRefsToDuration = (clip, getRootDefaults2) => {
-    const frameMax = getReferenceFrameMax(getRootDefaults2, clip);
-    for (const ref of clip.refs) {
-      ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
-    }
-  };
-  var applyClipDurationResize = (clip, newDuration, getRootDefaults2) => {
-    if (clip.duration === newDuration) {
-      return false;
-    }
-    clip.duration = newDuration;
-    clampClipRefsToDuration(clip, getRootDefaults2);
-    return true;
+  // frontend/sourceVideoProbeGuard.ts
+  var nextOperationId = 0;
+  var currentOperations = /* @__PURE__ */ new Map();
+  var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
+  var beginSourceVideoProbeOperation = (clipId, revisionAtStart) => {
+    const operationId = ++nextOperationId;
+    currentOperations.set(clipId, operationId);
+    const release = () => {
+      if (currentOperations.get(clipId) === operationId) {
+        currentOperations.delete(clipId);
+      }
+    };
+    return {
+      clipId,
+      claim: (currentRevision) => {
+        const current = currentRevision === revisionAtStart && currentOperations.get(clipId) === operationId;
+        release();
+        return current;
+      },
+      cancel: release
+    };
   };
 
-  // frontend/detailStrip/clipPanel.ts
-  var GROUP_STAGES = "vstdock_stages";
-  var GROUP_ICLORA = "vstdock_iclora";
-  var GROUP_RETAKE = "vstdock_retake";
-  var GROUP_SOURCE = "vstdock_source";
-  var DURATION_STEP = 0.1;
-  var UPSCALE_EPSILON = 1e-6;
-  var LORA_WEIGHT_STEP = 0.05;
-  var LORA_WEIGHT_DEFAULT = 1;
-  var buildClipColumn = (ctx, clip, clipIdx) => {
-    const col = document.createElement("div");
-    col.className = "vst-detail-col vst-detail-clip";
-    const sourced = !!clip.sourceVideo;
-    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || sourced;
-    const durationInput = buildNumber(
-      clip.duration,
-      CLIP_DURATION_MIN,
-      CLIP_DURATION_MAX,
-      DURATION_STEP,
-      (value) => {
-        ctx.debouncedCommit("duration", (clips) => {
-          const target = clips[clipIdx];
-          if (target && !lengthDerived2) {
-            applyClipDurationResize(target, value, getRootDefaults);
-          }
-        });
+  // frontend/detailStrip/sourceVideoPanel.ts
+  var DURATION_STEP2 = 0.1;
+  var applyPickedSourceVideo = (context, clipId, data, fileName) => {
+    const store2 = getTimelineStore();
+    const { revision } = store2.getSnapshot();
+    const operation = beginSourceVideoProbeOperation(clipId, revision);
+    void probeSourceVideo(data).then((probe) => {
+      if (!operation.claim(store2.revision())) {
+        return;
       }
-    );
-    durationInput.setAttribute("data-vst-focus-key", "duration");
-    const durationField = buildField(
-      "Duration (s)",
-      durationInput,
-      lengthDerived2 ? sourced ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
-    );
-    if (lengthDerived2) {
-      durationInput.disabled = true;
-      durationField.classList.add("vst-field-disabled");
-    }
-    col.appendChild(durationField);
-    col.appendChild(
-      buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
-        ctx.commit((clips) => {
-          const target = clips[clipIdx];
-          if (target) {
-            target.skipped = value;
-          }
-        });
-      })
-    );
-    return col;
-  };
-  var buildStageRail = (ctx, clip, clipIdx, stageIdx) => {
-    const col = document.createElement("div");
-    col.className = "vst-detail-col vst-detail-rail";
-    const list = document.createElement("div");
-    list.className = "vst-detail-rail-list";
-    clip.stages.forEach((stage, idx) => {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "vst-chip vst-stage-tab";
-      if (idx === stageIdx) {
-        chip.classList.add("vst-stage-tab-active");
+      const state = store2.getState();
+      const clips = state.clips;
+      const target = findClipByStableId(clips, operation.clipId);
+      if (!target) {
+        return;
       }
-      if (stage.skipped) {
-        chip.classList.add("vst-stage-tab-skipped");
-      }
-      chip.textContent = stageChipLabel(idx);
-      chip.title = `${stageChipTitle(stage, idx)} · click to edit · Shift+click to delete`;
-      chip.addEventListener("click", (event) => {
-        if (event.shiftKey) {
-          ctx.deleteStage(clipIdx, idx);
-        } else {
-          ctx.selectStage(clipIdx, idx);
-        }
-      });
-      list.appendChild(chip);
-    });
-    col.appendChild(list);
-    const actions = document.createElement("div");
-    actions.className = "vst-detail-rail-actions";
-    const addBtn = buildAddButton(
-      "Add stage",
-      "vst-detail-add-stage",
-      () => ctx.addStage(clipIdx)
-    );
-    addBtn.title = "Add a refine stage";
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
-    deleteBtn.textContent = "Delete stage";
-    deleteBtn.disabled = clip.stages.length <= 1;
-    deleteBtn.title = deleteBtn.disabled ? "A clip always keeps at least one stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
-    deleteBtn.addEventListener("click", (event) => {
-      event.preventDefault();
-      ctx.deleteStage(clipIdx, stageIdx);
-    });
-    actions.append(addBtn, deleteBtn);
-    col.appendChild(actions);
-    return col;
-  };
-  var buildParamsColumn = (ctx, clip, clipIdx, stageIdx, stage, defaults) => {
-    const col = document.createElement("div");
-    col.className = "vst-detail-col vst-detail-params";
-    const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
-    const isRefine = stageIdx >= 1 || sourcedStage0;
-    const stageCommit = (mutate) => {
-      ctx.commit((clips) => {
-        const target = clips[clipIdx]?.stages[stageIdx];
-        if (target) {
-          mutate(target);
-        }
-      });
-    };
-    const stageDebounced = (key, mutate) => {
-      ctx.debouncedCommit(key, (clips) => {
-        const target = clips[clipIdx]?.stages[stageIdx];
-        if (target) {
-          mutate(target);
-        }
-      });
-    };
-    const stageSlider = (label, focusKey, value, min, max, step, assign, opts) => tagFocus(
-      buildSlider(
-        label,
-        value,
-        min,
-        max,
-        step,
-        (v) => {
-          opts?.onValue?.(v);
-          stageDebounced(focusKey, (target) => assign(target, v));
-        },
-        opts?.title || opts?.help ? { title: opts.title, help: opts.help } : void 0
-      ),
-      focusKey
-    );
-    const stageSelect = (values, labels, selected, assign) => buildSelect(
-      values,
-      labels,
-      selected,
-      (v) => stageCommit((target) => assign(target, v))
-    );
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-fields";
-    const applyMute = () => {
-      fields.classList.toggle(
-        "vst-stage-fields-muted",
-        stage.skipped === true
-      );
-    };
-    let railSkipSync = () => {
-    };
-    col.appendChild(
-      buildCheckbox("Skip this stage", stage.skipped === true, (value) => {
-        stage.skipped = value;
-        applyMute();
-        railSkipSync(value);
-        stageCommit((target) => {
-          target.skipped = value;
-        });
-      })
-    );
-    col.appendChild(fields);
-    applyMute();
-    const modelField = buildField(
-      "Model",
-      stageSelect(
-        defaults.modelValues,
-        defaults.modelLabels,
-        `${stage.model ?? ""}`,
-        (target, value) => {
-          target.model = value;
-        }
-      ),
-      void 0,
-      "The video model this stage runs. Later stages can switch to a different model to refine or upscale the previous stage's output."
-    );
-    modelField.classList.add("vst-detail-span-2");
-    fields.appendChild(modelField);
-    fields.appendChild(
-      stageSlider(
-        "Steps",
-        "steps",
-        stage.steps,
-        defaults.stepsMin,
-        defaults.stepsMax,
-        defaults.stepsStep,
-        (target, value) => {
-          target.steps = Math.round(value);
-        },
-        {
-          help: "How many denoising steps this stage runs. More steps can add detail but take longer; there are diminishing returns past the model's sweet spot."
-        }
-      )
-    );
-    fields.appendChild(
-      stageSlider(
-        "CFG Scale",
-        "cfg",
-        stage.cfgScale,
-        defaults.cfgScaleMin,
-        defaults.cfgScaleMax,
-        defaults.cfgScaleStep,
-        (target, value) => {
-          target.cfgScale = value;
-        },
-        {
-          help: "How strongly generation follows the prompt. Higher sticks closer to the prompt but can look over-cooked; lower is looser and more natural."
-        }
-      )
-    );
-    if (isRefine) {
-      fields.appendChild(
-        stageSlider(
-          "Control",
-          "control",
-          stage.control,
-          defaults.controlMin,
-          defaults.controlMax,
-          defaults.controlStep,
-          (target, value) => {
-            target.control = value;
-          },
-          {
-            title: "Regen strength — higher = more of the stage is re-generated",
-            help: "Regeneration strength for this refine stage. Higher re-generates more of the incoming frames (starting step = floor(Steps × (1 − Control))); at 0 the frames pass through untouched."
-          }
-        )
-      );
-      const methodSelect = stageSelect(
-        defaults.upscaleMethodValues,
-        defaults.upscaleMethodLabels,
-        `${stage.upscaleMethod ?? ""}`,
-        (target, value) => {
-          target.upscaleMethod = value;
-        }
-      );
-      const methodField = buildField(
-        "Upscale Method",
-        methodSelect,
-        void 0,
-        "How frames are enlarged before this stage refines them. Only applies when Upscale is above 1×."
-      );
-      methodField.classList.add("vst-detail-span-2");
-      const syncMethod = (upscale) => {
-        const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
-        methodSelect.disabled = disabled;
-        methodField.classList.toggle("vst-field-disabled", disabled);
-        methodField.title = disabled ? "Set Upscale above 1× to choose a method" : "";
+      const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+      const lengthSeconds = durationSeconds > 0 ? durationSeconds : target.duration;
+      target.sourceVideo = {
+        data,
+        fileName,
+        fps: probe?.fps ?? 0,
+        durationSeconds,
+        startSeconds: 0,
+        lengthSeconds
       };
-      fields.appendChild(
-        stageSlider(
-          "Upscale",
-          "upscale",
-          stage.upscale,
-          defaults.upscaleMin,
-          defaults.upscaleMax,
-          defaults.upscaleStep,
-          (target, value) => {
-            target.upscale = value;
-          },
-          {
-            onValue: syncMethod,
-            help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
-          }
-        )
+      applyClipDurationResize(
+        target,
+        Math.max(CLIP_DURATION_MIN, lengthSeconds),
+        getRootDefaults,
+        state.fps
       );
-      fields.appendChild(methodField);
-      syncMethod(stage.upscale);
-    }
-    fields.appendChild(
-      buildField(
-        "Sampler",
-        stageSelect(
-          defaults.samplerValues,
-          defaults.samplerLabels,
-          `${stage.sampler ?? ""}`,
-          (target, value) => {
-            target.sampler = value;
-          }
-        ),
-        void 0,
-        "The sampling algorithm used to denoise each step. Leave at the model default unless you have a reason to change it."
-      )
-    );
-    fields.appendChild(
-      buildField(
-        "Scheduler",
-        stageSelect(
-          defaults.schedulerValues,
-          defaults.schedulerLabels,
-          `${stage.scheduler ?? ""}`,
-          (target, value) => {
-            target.scheduler = value;
-          }
-        ),
-        void 0,
-        "Controls how the noise level is spaced across the steps. Leave at the model default unless you have a reason to change it."
-      )
-    );
-    if (clip.refs.length > 0) {
-      const refsHeader = document.createElement("div");
-      refsHeader.className = "vst-detail-sec vst-detail-span-full";
-      refsHeader.textContent = "Reference Strengths";
-      fields.appendChild(refsHeader);
-      const setRefHover = (refIdx, on) => {
-        ctx.getBoundBody()?.querySelector(
-          `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
-        )?.classList.toggle("vst-ref-hover", on);
-      };
-      clip.refs.forEach((ref, refIdx) => {
-        const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
-        const slider = buildSlider(
-          `R${refIdx}`,
-          current,
-          STAGE_REF_STRENGTH_MIN,
-          STAGE_REF_STRENGTH_MAX,
-          STAGE_REF_STRENGTH_STEP,
-          (value) => {
-            stageDebounced(`refstrength-${refIdx}`, (target) => {
-              if (refIdx < target.refStrengths.length) {
-                target.refStrengths[refIdx] = value;
-              }
-            });
-          },
-          {
-            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
-          }
-        );
-        slider.classList.add("vst-stage-ref-slider");
-        tagFocus(slider, `ref-${refIdx}`);
-        slider.addEventListener(
-          "mouseenter",
-          () => setRefHover(refIdx, true)
-        );
-        slider.addEventListener(
-          "mouseleave",
-          () => setRefHover(refIdx, false)
-        );
-        fields.appendChild(slider);
-      });
-    }
-    if (clip.icLoras.length > 0) {
-      const controlNetSlider = buildSlider(
-        "IC-LoRA Guide Strength",
-        stage.controlNetStrength,
-        STAGE_CONTROLNET_STRENGTH_MIN,
-        STAGE_CONTROLNET_STRENGTH_MAX,
-        STAGE_CONTROLNET_STRENGTH_STEP,
-        (value) => {
-          stageDebounced("controlnet", (target) => {
-            target.controlNetStrength = value;
-          });
-        },
-        {
-          help: "How strongly this stage is conditioned by the clip's IC-LoRA drive video/guides. Higher follows the guide more closely; lower gives the model more freedom."
-        }
-      );
-      tagFocus(controlNetSlider, "controlnet");
-      fields.appendChild(controlNetSlider);
-    }
-    fields.appendChild(
-      buildLorasSection(ctx, clipIdx, stageIdx, stage, defaults)
-    );
-    if (sourcedStage0) {
-      const note = document.createElement("p");
-      note.className = "vst-detail-note vst-stage-passthrough-note";
-      note.textContent = "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
-      col.insertBefore(note, fields);
-    }
-    railSkipSync = (skipped) => {
-      const railChip = ctx.getDockEl()?.querySelector(
-        `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
-      );
-      railChip?.classList.toggle("vst-stage-tab-skipped", skipped);
-    };
-    return { col, railSkipSync };
+      saveClips(clips, { origin: "detail-strip" });
+      context.render();
+    }, operation.cancel);
   };
-  var buildLorasSection = (ctx, clipIdx, stageIdx, stage, defaults) => {
-    const section = document.createElement("div");
-    section.className = "vst-audio-field vst-stage-loras vst-detail-span-full";
-    const label = document.createElement("div");
-    label.className = "vst-detail-sec";
-    label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
-    appendHelp(
-      label,
-      section,
-      "Stage LoRAs",
-      "LoRAs applied to this stage only, on top of the model. Each row picks a LoRA and its weight (negative weights invert its effect)."
-    );
-    section.appendChild(label);
-    if (defaults.loraValues.length === 0) {
-      const empty = document.createElement("small");
-      empty.className = "vst-audio-field-hint";
-      empty.textContent = "(no LoRAs available)";
-      section.appendChild(empty);
-    } else {
-      const list = document.createElement("div");
-      list.className = "vst-stage-lora-list";
-      stage.loras.forEach((lora, index) => {
-        const row = document.createElement("div");
-        row.className = "vst-stage-lora-row";
-        const select = buildSelect(
-          defaults.loraValues,
-          defaults.loraLabels,
-          lora.name,
-          (value) => {
-            ctx.commit((clips) => {
-              const target = clips[clipIdx]?.stages[stageIdx];
-              const entry = target?.loras[index];
-              if (entry) {
-                entry.name = value;
-              }
-            });
-          }
-        );
-        const weight = buildNumber(
-          lora.weight,
-          -10,
-          10,
-          LORA_WEIGHT_STEP,
-          (value) => {
-            ctx.debouncedCommit(`lora-${index}-weight`, (clips) => {
-              const target = clips[clipIdx]?.stages[stageIdx];
-              const entry = target?.loras[index];
-              if (entry) {
-                entry.weight = value;
-              }
-            });
-          }
-        );
-        weight.classList.add("vst-stage-lora-weight");
-        weight.setAttribute("data-vst-focus-key", `lora-${index}-weight`);
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "basic-button vst-stage-lora-remove";
-        remove.textContent = "×";
-        remove.title = "Remove this LoRA";
-        remove.addEventListener("click", () => {
-          ctx.structuralCommit((clips) => {
-            const target = clips[clipIdx]?.stages[stageIdx];
-            if (!target) {
-              return null;
-            }
-            target.loras.splice(index, 1);
-            return "render";
-          });
-        });
-        row.append(select, weight, remove);
-        list.appendChild(row);
-      });
-      section.appendChild(list);
-      const addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "basic-button small-button vst-stage-lora-add";
-      addBtn.textContent = "+ Add LoRA";
-      addBtn.addEventListener("click", () => {
-        ctx.structuralCommit((clips) => {
-          const target = clips[clipIdx]?.stages[stageIdx];
-          if (!target) {
-            return null;
-          }
-          target.loras.push({
-            name: defaults.loraValues[0] ?? "",
-            weight: LORA_WEIGHT_DEFAULT
-          });
-          return "render";
-        });
-      });
-      section.appendChild(addBtn);
-    }
-    return section;
-  };
-  var buildSourceVideoSection = (ctx, clip, clipIdx) => {
+  var buildSourceVideoSection = (context, clip, clipIdx) => {
     const { wrap, col } = buildStackSection(
       "Source Video",
       "vst-detail-source-col"
     );
-    const secLabel = wrap.querySelector(".vst-detail-sec");
-    if (secLabel) {
+    const sectionLabel2 = wrap.querySelector(".vst-detail-sec");
+    if (sectionLabel2) {
       appendHelp(
-        secLabel,
+        sectionLabel2,
         wrap,
         "Source Video",
         "Start this clip from an existing video instead of generating it. Stages then refine/upscale the footage and a retake can regenerate part of it."
       );
     }
     const source = clip.sourceVideo;
-    const applyPickedFile = (data, fileName) => {
-      void probeSourceVideo(data).then((probe) => {
-        const clips = getClips();
-        const target = clips.includes(clip) ? clip : clips[clipIdx];
-        if (!target) {
-          return;
-        }
-        const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
-        const lengthSeconds = durationSeconds > 0 ? durationSeconds : target.duration;
-        target.sourceVideo = {
-          data,
-          fileName,
-          fps: probe?.fps ?? 0,
-          durationSeconds,
-          startSeconds: 0,
-          lengthSeconds
-        };
-        applyClipDurationResize(
-          target,
-          Math.max(CLIP_DURATION_MIN, lengthSeconds),
-          getRootDefaults
-        );
-        saveClips(clips, { origin: "detail-strip" });
-        ctx.render();
-      });
-    };
     const removeSource = () => {
-      ctx.structuralCommit((clips) => {
+      context.structuralCommit((clips) => {
         const target = clips[clipIdx];
         if (!target?.sourceVideo) {
           return null;
@@ -5367,7 +7878,11 @@
         "video/*",
         ["video"],
         source?.fileName ?? null,
-        applyPickedFile,
+        (data, fileName) => {
+          if (clip.id) {
+            applyPickedSourceVideo(context, clip.id, data, fileName);
+          }
+        },
         removeSource
       )
     );
@@ -5390,24 +7905,25 @@
           CLIP_DURATION_MIN,
           target.sourceVideo?.lengthSeconds ?? target.duration
         ),
-        getRootDefaults
+        getRootDefaults,
+        getTimelineStore().getState().fps
       );
     };
     const clampSource = (start, length) => clampStartLength(start, length, fileLimit, CLIP_DURATION_MIN);
-    const startInput = ctx.buildClampedNumber({
+    const startInput = context.buildClampedNumber({
       key: "source-start",
       value: source.startSeconds,
       min: 0,
       max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
-      step: DURATION_STEP,
-      readBack: (cs) => cs[clipIdx]?.sourceVideo?.startSeconds ?? null,
-      mutate: (cs, value) => {
-        const target = cs[clipIdx];
-        const s = target?.sourceVideo;
-        if (target && s) {
-          const next = clampSource(value, s.lengthSeconds);
-          s.startSeconds = next.start;
-          s.lengthSeconds = next.length;
+      step: DURATION_STEP2,
+      readBack: (clips) => clips[clipIdx]?.sourceVideo?.startSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx];
+        const targetSource = target?.sourceVideo;
+        if (target && targetSource) {
+          const next = clampSource(value, targetSource.lengthSeconds);
+          targetSource.startSeconds = next.start;
+          targetSource.lengthSeconds = next.length;
           syncClipDuration(target);
         }
       }
@@ -5420,20 +7936,20 @@
         "Where inside the source file this clip's footage begins. Trims the front of the file."
       )
     );
-    const lengthInput = ctx.buildClampedNumber({
+    const lengthInput = context.buildClampedNumber({
       key: "source-length",
       value: source.lengthSeconds,
       min: CLIP_DURATION_MIN,
       max: fileLimit,
-      step: DURATION_STEP,
-      readBack: (cs) => cs[clipIdx]?.sourceVideo?.lengthSeconds ?? null,
-      mutate: (cs, value) => {
-        const target = cs[clipIdx];
-        const s = target?.sourceVideo;
-        if (target && s) {
-          const next = clampSource(s.startSeconds, value);
-          s.startSeconds = next.start;
-          s.lengthSeconds = next.length;
+      step: DURATION_STEP2,
+      readBack: (clips) => clips[clipIdx]?.sourceVideo?.lengthSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx];
+        const targetSource = target?.sourceVideo;
+        if (target && targetSource) {
+          const next = clampSource(targetSource.startSeconds, value);
+          targetSource.startSeconds = next.start;
+          targetSource.lengthSeconds = next.length;
           syncClipDuration(target);
         }
       }
@@ -5448,505 +7964,493 @@
     );
     const note = document.createElement("p");
     note.className = "vst-detail-note";
-    note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage passes it through, further stages refine or upscale it, and a retake regenerates part of it.";
+    note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage refines it using its Control value, later stages refine or upscale it, and a retake regenerates part of it.";
     col.appendChild(note);
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
-    del.textContent = "Remove source video";
-    del.addEventListener("click", (event) => {
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+    removeButton.textContent = "Remove source video";
+    removeButton.addEventListener("click", (event) => {
       event.preventDefault();
       removeSource();
     });
-    col.appendChild(del);
+    col.appendChild(removeButton);
     return wrap;
   };
-  var buildRetakeSection = (ctx, clip, clipIdx) => {
-    const { wrap, col } = buildStackSection("Retake", "vst-detail-retake-col");
-    const secLabel = wrap.querySelector(".vst-detail-sec");
-    if (secLabel) {
-      appendHelp(
-        secLabel,
-        wrap,
-        "Retake",
-        "Regenerate just a time window of a base video, leaving the rest untouched — handy for fixing one bad stretch without redoing the whole clip."
-      );
+
+  // frontend/detailStrip/stageLorasPanel.ts
+  var LORA_WEIGHT_STEP = 0.05;
+  var LORA_WEIGHT_DEFAULT = 1;
+  var buildStageLorasSection = (context, clipIdx, stageIdx, stage, defaults) => {
+    const section = document.createElement("div");
+    section.className = "vst-audio-field vst-stage-loras vst-detail-span-full";
+    const label = document.createElement("div");
+    label.className = "vst-detail-sec";
+    label.textContent = `LoRAs — Stage ${stageChipLabel(stageIdx)}`;
+    appendHelp(
+      label,
+      section,
+      "Stage LoRAs",
+      "LoRAs applied to this stage only, on top of the model. Each row picks a LoRA and its weight (negative weights invert its effect)."
+    );
+    section.appendChild(label);
+    if (defaults.loraValues.length === 0) {
+      const empty = document.createElement("small");
+      empty.className = "vst-audio-field-hint";
+      empty.textContent = "(no LoRAs available)";
+      section.appendChild(empty);
+      return section;
     }
-    const retake = clip.retake;
-    if (!retake) {
-      const hint = document.createElement("small");
-      hint.className = "vst-audio-field-hint";
-      hint.textContent = "Regenerates a sub-range when refining a base video.";
-      col.append(
-        hint,
-        buildAddButton(
-          "Add retake",
-          "vst-detail-add-retake",
-          () => ctx.createRetake(clipIdx)
-        )
-      );
-      return wrap;
-    }
-    const clipDur = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
-    const clampRetake = (start, length) => clampStartLength(start, length, clipDur, RETAKE_MIN_DURATION);
-    const startInput = ctx.buildClampedNumber({
-      key: "retake-start",
-      value: retake.startSeconds,
-      min: 0,
-      max: Math.max(0, clipDur - RETAKE_MIN_DURATION),
-      step: RETAKE_DURATION_STEP,
-      readBack: (cs) => cs[clipIdx]?.retake?.startSeconds ?? null,
-      mutate: (cs, value) => {
-        const r = cs[clipIdx]?.retake;
-        if (r) {
-          const next = clampRetake(value, r.lengthSeconds);
-          r.startSeconds = next.start;
-          r.lengthSeconds = next.length;
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "Start (s)",
-        startInput,
-        void 0,
-        "Where the retake window begins inside the clip. Only this sub-range is regenerated."
-      )
-    );
-    const lengthInput = ctx.buildClampedNumber({
-      key: "retake-length",
-      value: retake.lengthSeconds,
-      min: RETAKE_MIN_DURATION,
-      max: clipDur,
-      step: RETAKE_DURATION_STEP,
-      readBack: (cs) => cs[clipIdx]?.retake?.lengthSeconds ?? null,
-      mutate: (cs, value) => {
-        const r = cs[clipIdx]?.retake;
-        if (r) {
-          const next = clampRetake(r.startSeconds, value);
-          r.startSeconds = next.start;
-          r.lengthSeconds = next.length;
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "Length (s)",
-        lengthInput,
-        void 0,
-        "How long the retake window is, starting at Start. Frames outside the window are kept as-is."
-      )
-    );
-    col.appendChild(
-      buildSlider(
-        "Strength",
-        retake.strength,
-        RETAKE_STRENGTH_MIN,
-        RETAKE_STRENGTH_MAX,
-        RETAKE_STRENGTH_STEP,
+    const list = document.createElement("div");
+    list.className = "vst-stage-lora-list";
+    stage.loras.forEach((lora, index) => {
+      const row = document.createElement("div");
+      row.className = "vst-stage-lora-row";
+      const select2 = buildSelect(
+        defaults.loraValues,
+        defaults.loraLabels,
+        lora.name,
         (value) => {
-          ctx.debouncedCommit("retake-strength", (cs) => {
-            const r = cs[clipIdx]?.retake;
-            if (r) {
-              r.strength = clamp(
-                value,
-                RETAKE_STRENGTH_MIN,
-                RETAKE_STRENGTH_MAX
-              );
+          context.commit((clips) => {
+            const entry = clips[clipIdx]?.stages[stageIdx]?.loras[index];
+            if (entry) {
+              entry.name = value;
             }
           });
-        },
-        {
-          help: "How much of the window is regenerated. Higher changes the footage more; lower keeps it closer to the original."
         }
-      )
-    );
-    const note = document.createElement("p");
-    note.className = "vst-detail-note";
-    note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
-    col.appendChild(note);
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
-    del.textContent = "Remove retake";
-    del.addEventListener("click", (event) => {
-      event.preventDefault();
-      ctx.removeRetake(clipIdx);
-    });
-    col.appendChild(del);
-    return wrap;
-  };
-  var buildIcLorasSection = (ctx, clip, clipIdx, defaults) => {
-    const { wrap, col } = buildStackSection(
-      "IC-LoRAs",
-      "vst-detail-iclora-col"
-    );
-    const secLabel = wrap.querySelector(".vst-detail-sec");
-    if (secLabel) {
-      appendHelp(
-        secLabel,
-        wrap,
-        "IC-LoRAs",
-        "In-context LoRAs condition this clip on a drive video or image — matching pose, depth, motion, or style. Add one per guide you want to apply."
       );
-    }
-    const entryField = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
-    clip.icLoras.forEach((entry, entryIdx) => {
-      const { row, fields } = buildInstanceRow({
-        rowClass: "vst-detail-iclora",
-        indexAttr: "data-vst-iclora-idx",
-        index: entryIdx,
-        active: false,
-        title: `IC-LoRA ${entryIdx + 1}`,
-        deleteLabel: "Remove",
-        onDelete: () => {
-          ctx.structuralCommit((clips) => {
-            const target = clips[clipIdx];
-            if (!target || entryIdx >= target.icLoras.length) {
-              return null;
-            }
-            target.icLoras.splice(entryIdx, 1);
-            return "render";
-          });
-        },
-        repoint: () => {
-        }
-      });
-      const presetSelect = buildOptionSelect(
-        [
-          { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
-          ...IC_LORA_PRESETS.map((preset2) => ({
-            value: preset2.id,
-            label: preset2.displayName
-          }))
-        ],
-        entry.preset,
+      const weight = buildNumber(
+        lora.weight,
+        -10,
+        10,
+        LORA_WEIGHT_STEP,
         (value) => {
-          ctx.commit((clips) => {
-            const target = entryField(clips, entryIdx);
-            if (!target) {
-              return;
-            }
-            target.preset = value;
-            const preset2 = findIcLoraPreset(value);
-            if (preset2) {
-              target.strength = preset2.strength;
-              target.controlType = preset2.controlType;
+          context.debouncedCommit(`lora-${index}-weight`, (clips) => {
+            const entry = clips[clipIdx]?.stages[stageIdx]?.loras[index];
+            if (entry) {
+              entry.weight = value;
             }
           });
-          clearIcLoraAutoFailure(value);
-          ctx.render();
         }
       );
-      fields.appendChild(
-        buildField(
-          "Preset",
-          presetSelect,
-          void 0,
-          "A curated IC-LoRA setup — picking one fills in the LoRA, strength, and control type for a known effect (pose, depth, style, etc.). Choose Custom to set everything yourself."
-        )
-      );
-      const loraSelect = buildSelect(
-        [IC_LORA_AUTO, ...defaults.loraValues],
-        [IC_LORA_AUTO, ...defaults.loraLabels],
-        entry.lora,
-        (value) => {
-          ctx.commit((clips) => {
-            const target = entryField(clips, entryIdx);
-            if (target) {
-              target.lora = value;
-            }
-          });
-          if (value === IC_LORA_AUTO) {
-            clearIcLoraAutoFailure(entry.preset);
-          }
-          ctx.render();
-        }
-      );
-      fields.appendChild(
-        buildField(
-          "LoRA",
-          loraSelect,
-          void 0,
-          "The in-context LoRA weights that turn the drive media into conditioning. [AUTO] downloads the preset's recommended weights when they are not installed."
-        )
-      );
-      const strength = ctx.buildClampedNumber({
-        key: `iclora-${entryIdx}-strength`,
-        value: entry.strength,
-        min: IC_LORA_STRENGTH_MIN,
-        max: IC_LORA_STRENGTH_MAX,
-        step: IC_LORA_STRENGTH_STEP,
-        readBack: (cs) => entryField(cs, entryIdx)?.strength ?? null,
-        mutate: (cs, value) => {
-          const target = entryField(cs, entryIdx);
-          if (target) {
-            target.strength = value;
-          }
-        }
-      });
-      fields.appendChild(
-        buildField(
-          "Strength",
-          strength,
-          void 0,
-          "How strongly this IC-LoRA steers generation. Higher follows the drive media more closely; too high can overpower the prompt."
-        )
-      );
-      const attention = ctx.buildClampedNumber({
-        key: `iclora-${entryIdx}-attention`,
-        value: entry.attentionStrength,
-        min: IC_LORA_ATTENTION_MIN,
-        max: IC_LORA_ATTENTION_MAX,
-        step: IC_LORA_ATTENTION_STEP,
-        readBack: (cs) => entryField(cs, entryIdx)?.attentionStrength ?? null,
-        mutate: (cs, value) => {
-          const target = entryField(cs, entryIdx);
-          if (target) {
-            target.attentionStrength = value;
-          }
-        }
-      });
-      fields.appendChild(
-        buildField(
-          "Attention",
-          attention,
-          void 0,
-          "Scales how much the IC-LoRA influences the model's attention layers. A finer control than Strength; leave at the default unless a preset tunes it."
-        )
-      );
-      const preset = findIcLoraPreset(entry.preset);
-      if (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID) {
-        const controlSelect = buildOptionSelect(
-          [
-            { value: "none", label: "None (raw video)" },
-            { value: "canny", label: "Canny edges" },
-            { value: "depth", label: "Depth map" },
-            { value: "normal", label: "Normal map" }
-          ],
-          entry.controlType,
-          (value) => {
-            ctx.commit((clips) => {
-              const target = entryField(clips, entryIdx);
-              if (target) {
-                target.controlType = value;
-              }
-            });
-          }
-        );
-        fields.appendChild(
-          buildField(
-            "Control",
-            controlSelect,
-            void 0,
-            "Preprocesses the drive video into a control signal before conditioning: Canny edges, a depth map, or a normal map. None feeds the raw video straight in."
-          )
-        );
-      }
-      const applySelect = buildOptionSelect(
-        [
-          { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
-          ...clip.stages.map((_, stageIdx) => ({
-            value: `${stageIdx}`,
-            label: `Stage ${stageIdx}`
-          }))
-        ],
-        `${entry.stage}`,
-        (value) => {
-          ctx.commit((clips) => {
-            const target = entryField(clips, entryIdx);
-            if (!target) {
-              return;
-            }
-            const stage = Number(value);
-            target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
-            reconcileIcLoraStage(target, !!clips[clipIdx]?.sourceVideo);
-          });
-          ctx.render();
-        }
-      );
-      fields.appendChild(
-        buildField(
-          "Apply on",
-          applySelect,
-          void 0,
-          "Which stage this IC-LoRA conditions — a single stage, or All stages of the clip."
-        )
-      );
-      if ((entry.stage >= 1 || !!clip.sourceVideo) && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
-        const sourceSelect = buildOptionSelect(
-          [
-            { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
-            {
-              value: IC_LORA_SOURCE_STAGE_INPUT,
-              label: "Stage input"
-            }
-          ],
-          entry.source,
-          (value) => {
-            ctx.commit((clips) => {
-              const target = entryField(clips, entryIdx);
-              if (target) {
-                target.source = value;
-              }
-            });
-            ctx.render();
-          }
-        );
-        fields.appendChild(
-          buildField(
-            "Source",
-            sourceSelect,
-            void 0,
-            "Where the drive media comes from: Upload your own video/image, or Stage input to drive from the frames already entering this stage."
-          )
-        );
-      }
-      if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
-        const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
-        hint.textContent = entry.stage >= 1 ? `Driven by stage ${entry.stage}'s input (the previous stage's output).` : "Driven by each stage's incoming frames (the source footage on stage 0).";
-        fields.appendChild(hint);
-      } else if (entry.source === IC_LORA_SOURCE_UPLOAD) {
-        fields.appendChild(
-          buildMediaPickRow(
-            "Drive Media",
-            "video/*,image/*",
-            ["image", "video"],
-            entry.video?.fileName,
-            (data, fileName) => {
-              ctx.commit((clips) => {
-                const target = entryField(clips, entryIdx);
-                if (target) {
-                  target.video = { data, fileName };
-                }
-              });
-              ctx.render();
-            },
-            () => {
-              ctx.commit((clips) => {
-                const target = entryField(clips, entryIdx);
-                if (target) {
-                  target.video = null;
-                }
-              });
-              ctx.render();
-            }
-          )
-        );
-        if (!entry.video?.data && !!clip.sourceVideo) {
-          const hint = document.createElement("small");
-          hint.className = "vst-audio-field-hint";
-          hint.textContent = "No upload — drives from the stage's incoming footage.";
-          fields.appendChild(hint);
-        }
-        if (entry.video?.data?.startsWith("data:video/")) {
-          const voiceRow = buildCheckbox(
-            "Voice ref from drive audio",
-            entry.driveAudioRef === true,
-            (value) => {
-              ctx.commit((clips) => {
-                const target = entryField(clips, entryIdx);
-                if (target) {
-                  target.driveAudioRef = value;
-                }
-              });
-            },
-            {
-              help: "Use this drive video's audio as the speaker sample (LipDub): new speech matching the prompt is generated in that voice."
-            }
-          );
-          fields.appendChild(voiceRow);
-        }
-      } else {
-        const slot = document.createElement("small");
-        slot.className = "vst-audio-field-hint";
-        slot.textContent = `Driven by ${entry.source} (legacy source)`;
-        fields.appendChild(slot);
-      }
-      const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
-      if (hintText || preset) {
-        const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
-        hint.textContent = hintText ? `${hintText} ` : "";
-        if (preset) {
-          const link = document.createElement("a");
-          link.href = icLoraRepoUrl(preset);
-          link.target = "_blank";
-          link.rel = "noopener";
-          link.textContent = "repo";
-          hint.appendChild(link);
-        }
-        fields.appendChild(hint);
-      }
-      ensureIcLoraAutoWeights(entry, defaults.loraValues, ctx.render);
-      const autoText = icLoraAutoHint(entry, defaults.loraValues);
-      if (autoText) {
-        const autoHint = document.createElement("small");
-        autoHint.className = "vst-audio-field-hint";
-        if (preset) {
-          autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
-        }
-        autoHint.textContent = autoText;
-        fields.appendChild(autoHint);
-      }
-      col.appendChild(row);
-    });
-    col.appendChild(
-      buildAddButton("+ Add IC-LoRA", "vst-detail-add-iclora", () => {
-        ctx.structuralCommit((clips) => {
-          const target = clips[clipIdx];
+      weight.classList.add("vst-stage-lora-weight");
+      weight.setAttribute("data-vst-focus-key", `lora-${index}-weight`);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "basic-button vst-stage-lora-remove";
+      remove.textContent = "×";
+      remove.title = "Remove this LoRA";
+      remove.addEventListener("click", () => {
+        context.structuralCommit((clips) => {
+          const target = clips[clipIdx]?.stages[stageIdx];
           if (!target) {
             return null;
           }
-          target.icLoras.push(
-            defaultIcLora({
-              lora: defaults.loraValues[0] ?? IC_LORA_AUTO
-            })
-          );
+          target.loras.splice(index, 1);
           return "render";
+        });
+      });
+      row.append(select2, weight, remove);
+      list.appendChild(row);
+    });
+    section.appendChild(list);
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "basic-button small-button vst-stage-lora-add";
+    addButton.textContent = "+ Add LoRA";
+    addButton.addEventListener("click", () => {
+      context.structuralCommit((clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (!target) {
+          return null;
+        }
+        target.loras.push({
+          name: defaults.loraValues[0] ?? "",
+          weight: LORA_WEIGHT_DEFAULT
+        });
+        return "render";
+      });
+    });
+    section.appendChild(addButton);
+    return section;
+  };
+
+  // frontend/detailStrip/stagePanel.ts
+  var UPSCALE_EPSILON = 1e-6;
+  var buildStageParamsColumn = (context, clip, clipIdx, stageIdx, stage, defaults) => {
+    const column = document.createElement("div");
+    column.className = "vst-detail-col vst-detail-params";
+    const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
+    const isRefine = stageIdx >= 1 || sourcedStage0;
+    const commit = (mutate) => {
+      context.commit((clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) {
+          mutate(target);
+        }
+      });
+    };
+    const debouncedCommit = (key, mutate) => {
+      context.debouncedCommit(key, (clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) {
+          mutate(target);
+        }
+      });
+    };
+    const slider = (label, focusKey, value, min, max, step, assign, options) => tagFocus(
+      buildSlider(
+        label,
+        value,
+        min,
+        max,
+        step,
+        (nextValue) => {
+          options?.onValue?.(nextValue);
+          debouncedCommit(
+            focusKey,
+            (target) => assign(target, nextValue)
+          );
+        },
+        options?.title || options?.help ? { title: options.title, help: options.help } : void 0
+      ),
+      focusKey
+    );
+    const select2 = (values, labels, selected, assign) => buildSelect(
+      values,
+      labels,
+      selected,
+      (value) => commit((target) => assign(target, value))
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-fields";
+    const applyMutedStyle = () => {
+      fields.classList.toggle(
+        "vst-stage-fields-muted",
+        stage.skipped === true
+      );
+    };
+    const syncRailChip = (skipped) => {
+      context.getDockEl()?.querySelector(
+        `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
+      )?.classList.toggle("vst-stage-tab-skipped", skipped);
+    };
+    column.appendChild(
+      buildCheckbox("Skip this stage", stage.skipped === true, (value) => {
+        stage.skipped = value;
+        applyMutedStyle();
+        syncRailChip(value);
+        commit((target) => {
+          target.skipped = value;
         });
       })
     );
-    return wrap;
+    column.appendChild(fields);
+    applyMutedStyle();
+    const modelField = buildField(
+      "Model",
+      select2(
+        defaults.modelValues,
+        defaults.modelLabels,
+        `${stage.model ?? ""}`,
+        (target, value) => {
+          target.model = value;
+        }
+      ),
+      void 0,
+      "The video model this stage runs. Later stages can switch to a different model to refine or upscale the previous stage's output."
+    );
+    modelField.classList.add("vst-detail-span-2");
+    fields.appendChild(modelField);
+    fields.appendChild(
+      slider(
+        "Steps",
+        "steps",
+        stage.steps,
+        defaults.stepsMin,
+        defaults.stepsMax,
+        defaults.stepsStep,
+        (target, value) => {
+          target.steps = Math.round(value);
+        },
+        {
+          help: "How many denoising steps this stage runs. More steps can add detail but take longer; there are diminishing returns past the model's sweet spot."
+        }
+      )
+    );
+    fields.appendChild(
+      slider(
+        "CFG Scale",
+        "cfg",
+        stage.cfgScale,
+        defaults.cfgScaleMin,
+        defaults.cfgScaleMax,
+        defaults.cfgScaleStep,
+        (target, value) => {
+          target.cfgScale = value;
+        },
+        {
+          help: "How strongly generation follows the prompt. Higher sticks closer to the prompt but can look over-cooked; lower is looser and more natural."
+        }
+      )
+    );
+    if (isRefine) {
+      fields.appendChild(
+        slider(
+          "Control",
+          "control",
+          stage.control,
+          defaults.controlMin,
+          defaults.controlMax,
+          defaults.controlStep,
+          (target, value) => {
+            target.control = value;
+          },
+          {
+            title: "Regen strength — higher = more of the stage is re-generated",
+            help: "Regeneration strength for this refine stage. Higher re-generates more of the incoming frames (starting step = floor(Steps × (1 − Control))); at 0 the frames pass through untouched."
+          }
+        )
+      );
+      const methodSelect = select2(
+        defaults.upscaleMethodValues,
+        defaults.upscaleMethodLabels,
+        `${stage.upscaleMethod ?? ""}`,
+        (target, value) => {
+          target.upscaleMethod = value;
+        }
+      );
+      const methodField = buildField(
+        "Upscale Method",
+        methodSelect,
+        void 0,
+        "How frames are enlarged before this stage refines them. Only applies when Upscale is above 1×."
+      );
+      methodField.classList.add("vst-detail-span-2");
+      const syncMethod = (upscale) => {
+        const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
+        methodSelect.disabled = disabled;
+        methodField.classList.toggle("vst-field-disabled", disabled);
+        methodField.title = disabled ? "Set Upscale above 1× to choose a method" : "";
+      };
+      fields.appendChild(
+        slider(
+          "Upscale",
+          "upscale",
+          stage.upscale,
+          defaults.upscaleMin,
+          defaults.upscaleMax,
+          defaults.upscaleStep,
+          (target, value) => {
+            target.upscale = value;
+          },
+          {
+            onValue: syncMethod,
+            help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
+          }
+        )
+      );
+      fields.appendChild(methodField);
+      syncMethod(stage.upscale);
+    }
+    fields.appendChild(
+      buildField(
+        "Sampler",
+        select2(
+          defaults.samplerValues,
+          defaults.samplerLabels,
+          `${stage.sampler ?? ""}`,
+          (target, value) => {
+            target.sampler = value;
+          }
+        ),
+        void 0,
+        "The sampling algorithm used to denoise each step. Leave at the model default unless you have a reason to change it."
+      )
+    );
+    fields.appendChild(
+      buildField(
+        "Scheduler",
+        select2(
+          defaults.schedulerValues,
+          defaults.schedulerLabels,
+          `${stage.scheduler ?? ""}`,
+          (target, value) => {
+            target.scheduler = value;
+          }
+        ),
+        void 0,
+        "Controls how the noise level is spaced across the steps. Leave at the model default unless you have a reason to change it."
+      )
+    );
+    if (clip.refs.length > 0) {
+      const refsHeader = document.createElement("div");
+      refsHeader.className = "vst-detail-sec vst-detail-span-full";
+      refsHeader.textContent = "Reference Strengths";
+      fields.appendChild(refsHeader);
+      const setRefHover = (refIdx, on) => {
+        context.getBoundBody()?.querySelector(
+          `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
+        )?.classList.toggle("vst-ref-hover", on);
+      };
+      clip.refs.forEach((ref, refIdx) => {
+        const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
+        const refSlider = buildSlider(
+          `R${refIdx}`,
+          current,
+          STAGE_REF_STRENGTH_MIN,
+          STAGE_REF_STRENGTH_MAX,
+          STAGE_REF_STRENGTH_STEP,
+          (value) => {
+            debouncedCommit(`refstrength-${refIdx}`, (target) => {
+              if (refIdx < target.refStrengths.length) {
+                target.refStrengths[refIdx] = value;
+              }
+            });
+          },
+          {
+            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
+          }
+        );
+        refSlider.classList.add("vst-stage-ref-slider");
+        tagFocus(refSlider, `ref-${refIdx}`);
+        refSlider.addEventListener(
+          "mouseenter",
+          () => setRefHover(refIdx, true)
+        );
+        refSlider.addEventListener(
+          "mouseleave",
+          () => setRefHover(refIdx, false)
+        );
+        fields.appendChild(refSlider);
+      });
+    }
+    if (clip.icLoras.length > 0) {
+      const controlNetSlider = buildSlider(
+        "IC-LoRA Guide Strength",
+        stage.controlNetStrength,
+        STAGE_CONTROLNET_STRENGTH_MIN,
+        STAGE_CONTROLNET_STRENGTH_MAX,
+        STAGE_CONTROLNET_STRENGTH_STEP,
+        (value) => {
+          debouncedCommit("controlnet", (target) => {
+            target.controlNetStrength = value;
+          });
+        },
+        {
+          help: "How strongly this stage is conditioned by the clip's IC-LoRA drive video/guides. Higher follows the guide more closely; lower gives the model more freedom."
+        }
+      );
+      tagFocus(controlNetSlider, "controlnet");
+      fields.appendChild(controlNetSlider);
+    }
+    fields.appendChild(
+      buildStageLorasSection(context, clipIdx, stageIdx, stage, defaults)
+    );
+    if (sourcedStage0) {
+      const note = document.createElement("p");
+      note.className = "vst-detail-note vst-stage-passthrough-note";
+      note.textContent = "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
+      column.insertBefore(note, fields);
+    }
+    return column;
   };
-  var buildClipBody = (ctx, sel, clips) => {
+
+  // frontend/detailStrip/stageRail.ts
+  var buildStageRail = (context, clip, clipIdx, stageIdx) => {
+    const column = document.createElement("div");
+    column.className = "vst-detail-col vst-detail-rail";
+    const list = document.createElement("div");
+    list.className = "vst-detail-rail-list";
+    clip.stages.forEach((stage, index) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "vst-chip vst-stage-tab";
+      if (index === stageIdx) {
+        chip.classList.add("vst-stage-tab-active");
+      }
+      if (stage.skipped) {
+        chip.classList.add("vst-stage-tab-skipped");
+      }
+      chip.textContent = stageChipLabel(index);
+      chip.title = `${stageChipTitle(stage, index)} · click to edit · Shift+click to delete`;
+      chip.addEventListener("click", (event) => {
+        if (event.shiftKey) {
+          context.deleteStage(clipIdx, index);
+        } else {
+          context.selectStage(clipIdx, index);
+        }
+      });
+      list.appendChild(chip);
+    });
+    column.appendChild(list);
+    const actions = document.createElement("div");
+    actions.className = "vst-detail-rail-actions";
+    const addButton = buildAddButton(
+      "Add stage",
+      "vst-detail-add-stage",
+      () => context.addStage(clipIdx)
+    );
+    addButton.title = "Add a refine stage";
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
+    deleteButton.textContent = "Delete stage";
+    deleteButton.disabled = clip.stages.length <= 1;
+    deleteButton.title = deleteButton.disabled ? "A clip always keeps at least one stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
+    deleteButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      context.deleteStage(clipIdx, stageIdx);
+    });
+    actions.append(addButton, deleteButton);
+    column.appendChild(actions);
+    return column;
+  };
+
+  // frontend/detailStrip/clipPanel.ts
+  var GROUP_STAGES = "vstdock_stages";
+  var GROUP_ICLORA = "vstdock_iclora";
+  var GROUP_RETAKE = "vstdock_retake";
+  var GROUP_SOURCE = "vstdock_source";
+  var buildClipBody = (context, selection2, clips) => {
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
-    const clip = clips[sel.clipIdx];
-    const stage = clip.stages[sel.stageIdx];
+    const clip = clips[selection2.clipIdx];
+    const stage = clip.stages[selection2.stageIdx];
     const defaults = getRootDefaults();
-    body.appendChild(buildClipColumn(ctx, clip, sel.clipIdx));
-    const params = buildParamsColumn(
-      ctx,
-      clip,
-      sel.clipIdx,
-      sel.stageIdx,
-      stage,
-      defaults
-    );
-    const stagesWrap = document.createElement("div");
-    stagesWrap.className = "vst-detail-stages-wrap";
-    stagesWrap.append(
+    body.appendChild(buildClipColumn(context, clip, selection2.clipIdx));
+    const stages = document.createElement("div");
+    stages.className = "vst-detail-stages-wrap";
+    stages.append(
       sectionLabel("Stages"),
-      buildStageRail(ctx, clip, sel.clipIdx, sel.stageIdx),
-      params.col
+      buildStageRail(context, clip, selection2.clipIdx, selection2.stageIdx),
+      buildStageParamsColumn(
+        context,
+        clip,
+        selection2.clipIdx,
+        selection2.stageIdx,
+        stage,
+        defaults
+      )
     );
-    body.appendChild(buildGroup(GROUP_STAGES, stagesWrap));
+    body.appendChild(buildGroup(GROUP_STAGES, stages));
     body.appendChild(
       buildGroup(
         GROUP_ICLORA,
-        buildIcLorasSection(ctx, clip, sel.clipIdx, defaults)
+        buildIcLorasSection(context, clip, selection2.clipIdx, defaults)
       )
     );
     body.appendChild(
       buildGroup(
         GROUP_SOURCE,
-        buildSourceVideoSection(ctx, clip, sel.clipIdx)
+        buildSourceVideoSection(context, clip, selection2.clipIdx)
       )
     );
     body.appendChild(
-      buildGroup(GROUP_RETAKE, buildRetakeSection(ctx, clip, sel.clipIdx))
+      buildGroup(
+        GROUP_RETAKE,
+        buildRetakeSection(context, clip, selection2.clipIdx)
+      )
     );
     return body;
   };
@@ -6182,7 +8686,11 @@
     const clip = clips[clipIdx];
     const body = document.createElement("div");
     body.className = "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
-    const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+    const frameMax = getReferenceFrameMax(
+      getRootDefaults,
+      clip,
+      getState().fps
+    );
     clip.refs.forEach((ref, refIdx) => {
       const options = buildImageSourceOptions(ref.source ?? "");
       const source = resolveImageSourceValue(ref.source ?? "", options);
@@ -6197,7 +8705,7 @@
         onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
         repoint: () => setSelection({ kind: "ref", clipIdx, refIdx })
       });
-      const select = buildOptionSelect(options, source, (value) => {
+      const select2 = buildOptionSelect(options, source, (value) => {
         ctx.commit((cs) => {
           const r = cs[clipIdx]?.refs[refIdx];
           if (!r) {
@@ -6218,7 +8726,7 @@
       fields.appendChild(
         buildField(
           "Image Source",
-          select,
+          select2,
           void 0,
           "Where this reference image comes from — an upload, or another clip's rendered frame. The image guides how the clip looks at its attach frame."
         )
@@ -6257,7 +8765,7 @@
           "Attach at Frame",
           frameInput,
           void 0,
-          "The frame within the clip where this reference is anchored. Frame 0 is the first frame; the image influences the clip most strongly around here."
+          "The frame within the clip where this reference is anchored. Frame 1 is the first frame; the image influences the clip most strongly around here."
         )
       );
       fields.appendChild(
@@ -6310,6 +8818,306 @@
       body.appendChild(row);
     });
     return wrapForm(GROUP_REF, body);
+  };
+
+  // frontend/detailStrip/audioTracksPanel.ts
+  var SOURCE_KINDS = [
+    "Upload",
+    "AceStepFun",
+    "Native",
+    "ControlNet",
+    "External"
+  ];
+  var commitTrack = (ctx, trackId, mutate) => {
+    ctx.commitState((state) => {
+      const track = state.audioTracks?.find((entry) => entry.id === trackId);
+      if (track) {
+        mutate(track);
+      }
+    });
+  };
+  var commitSpan = (ctx, trackId, spanId, mutate) => commitTrack(ctx, trackId, (track) => {
+    const span = track.spans.find((entry) => entry.id === spanId);
+    if (span) {
+      mutate(span);
+    }
+  });
+  var buildTextInput = (value, focusKey, onInput) => {
+    const input2 = document.createElement("input");
+    input2.type = "text";
+    input2.className = "auto-text vst-audio-track-reference";
+    input2.value = value;
+    input2.setAttribute("data-vst-focus-key", focusKey);
+    input2.addEventListener("input", () => onInput(input2.value));
+    return input2;
+  };
+  var buildOptionalNumber = (value, focusKey, onChange) => {
+    const input2 = document.createElement("input");
+    input2.type = "number";
+    input2.className = "auto-number vst-audio-track-number";
+    input2.min = "0";
+    input2.step = "0.1";
+    input2.value = value === null ? "" : `${value}`;
+    input2.placeholder = "Optional";
+    input2.setAttribute("data-vst-focus-key", focusKey);
+    input2.addEventListener("change", () => {
+      const raw = input2.value.trim();
+      if (!raw) {
+        onChange(null);
+        return;
+      }
+      const parsed = Number.parseFloat(raw);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        onChange(parsed);
+      }
+    });
+    return input2;
+  };
+  var buildRequiredNumber = (value, focusKey, onChange) => {
+    const input2 = buildOptionalNumber(value, focusKey, (next) => {
+      if (next !== null) {
+        onChange(next);
+      }
+    });
+    input2.placeholder = "";
+    return input2;
+  };
+  var clipOptions = (state, selectedId, openLabel) => {
+    const options = [
+      { value: "", label: openLabel },
+      ...state.clips.map((clip, index) => ({
+        value: clip.id,
+        label: `Clip ${index + 1}`
+      }))
+    ];
+    if (selectedId && !state.clips.some((clip) => clip.id === selectedId)) {
+      options.push({
+        value: selectedId,
+        label: `Missing clip (${selectedId})`
+      });
+    }
+    return options;
+  };
+  var buildSpanRow = (ctx, state, track, span, spanIndex) => {
+    const trackId = track.id;
+    const spanId = span.id;
+    const { row, fields } = buildInstanceRow({
+      rowClass: "vst-audio-track-span",
+      indexAttr: "data-vst-audio-span-index",
+      index: spanIndex,
+      active: false,
+      title: `Span ${spanIndex + 1}`,
+      deleteLabel: "Delete span",
+      onDelete: () => {
+        commitTrack(ctx, trackId, (nextTrack) => {
+          nextTrack.spans = nextTrack.spans.filter(
+            (entry) => entry.id !== spanId
+          );
+        });
+        ctx.render();
+      },
+      repoint: () => {
+      }
+    });
+    row.dataset.vstAudioSpanId = spanId;
+    fields.append(
+      buildField(
+        "First clip (inclusive)",
+        buildOptionSelect(
+          clipOptions(state, span.firstClipId, "Timeline start (open)"),
+          span.firstClipId ?? "",
+          (value) => commitSpan(ctx, trackId, spanId, (next) => {
+            next.firstClipId = value || null;
+          })
+        ),
+        "Leave open to begin at the timeline start. If both clip endpoints are open, provide a complete timeline start and length."
+      ),
+      buildField(
+        "Last clip (inclusive)",
+        buildOptionSelect(
+          clipOptions(state, span.lastClipId, "Timeline end (open)"),
+          span.lastClipId ?? "",
+          (value) => commitSpan(ctx, trackId, spanId, (next) => {
+            next.lastClipId = value || null;
+          })
+        ),
+        "Leave open to continue through the timeline end. The span may cover one clip or a multi-clip range."
+      ),
+      buildField(
+        "Timeline start (s)",
+        buildOptionalNumber(
+          span.timelineStartSeconds,
+          `audio-span-${spanId}-timeline-start`,
+          (value) => commitSpan(ctx, trackId, spanId, (next) => {
+            next.timelineStartSeconds = value;
+          })
+        )
+      ),
+      buildField(
+        "Timeline length (s)",
+        buildOptionalNumber(
+          span.timelineLengthSeconds,
+          `audio-span-${spanId}-timeline-length`,
+          (value) => commitSpan(ctx, trackId, spanId, (next) => {
+            next.timelineLengthSeconds = value;
+          })
+        ),
+        "Start and length are optional but validated together."
+      ),
+      buildField(
+        "Source start (s)",
+        buildRequiredNumber(
+          span.sourceStartSeconds,
+          `audio-span-${spanId}-source-start`,
+          (value) => commitSpan(ctx, trackId, spanId, (next) => {
+            next.sourceStartSeconds = value;
+          })
+        )
+      ),
+      buildField(
+        "Clip start offset (s)",
+        buildOptionalNumber(
+          span.clipStartOffsetSeconds,
+          `audio-span-${spanId}-clip-start`,
+          (value) => commitSpan(ctx, trackId, spanId, (next) => {
+            next.clipStartOffsetSeconds = value;
+          })
+        )
+      ),
+      buildField(
+        "Clip length (s)",
+        buildOptionalNumber(
+          span.clipLengthSeconds,
+          `audio-span-${spanId}-clip-length`,
+          (value) => commitSpan(ctx, trackId, spanId, (next) => {
+            next.clipLengthSeconds = value;
+          })
+        ),
+        "Clip offset and length are optional but must be set together, with the same first and last clip."
+      )
+    );
+    return row;
+  };
+  var buildTrackRow = (ctx, state, track, trackIndex) => {
+    const trackId = track.id;
+    const { row, fields } = buildInstanceRow({
+      rowClass: "vst-audio-track",
+      indexAttr: "data-vst-audio-track-index",
+      index: trackIndex,
+      active: false,
+      title: `Track ${trackIndex + 1}`,
+      deleteLabel: "Delete track",
+      onDelete: () => {
+        ctx.commitState((next) => {
+          next.audioTracks = (next.audioTracks ?? []).filter(
+            (entry) => entry.id !== trackId
+          );
+        });
+        ctx.render();
+      },
+      repoint: () => {
+      }
+    });
+    row.dataset.vstAudioTrackId = trackId;
+    fields.append(
+      buildField(
+        "Source kind",
+        buildOptionSelect(
+          SOURCE_KINDS.map((kind) => ({
+            value: kind,
+            label: kind
+          })),
+          track.source.kind,
+          (value) => commitTrack(ctx, trackId, (next) => {
+            next.source.kind = value;
+          })
+        )
+      ),
+      buildField(
+        "Source reference",
+        buildTextInput(
+          track.source.reference,
+          `audio-track-${trackId}-reference`,
+          (value) => commitTrack(ctx, trackId, (next) => {
+            next.source.reference = value;
+          })
+        ),
+        "Metadata only until the runtime mixer is connected. For Upload, enter a file name or other durable reference; this editor does not upload or mix the file yet."
+      )
+    );
+    if (track.source.uploadedAudio) {
+      const metadata = document.createElement("span");
+      metadata.className = "vst-audio-track-upload-metadata";
+      metadata.textContent = track.source.uploadedAudio.fileName?.trim() || "Embedded audio";
+      fields.append(
+        buildField(
+          "Stored upload metadata",
+          metadata,
+          "Preserved for compatibility; planned tracks do not execute it yet."
+        )
+      );
+    }
+    const spans = document.createElement("div");
+    spans.className = "vst-audio-track-spans";
+    for (let index = 0; index < track.spans.length; index++) {
+      spans.appendChild(
+        buildSpanRow(ctx, state, track, track.spans[index], index)
+      );
+    }
+    spans.appendChild(
+      buildAddButton("Add span", "vst-audio-track-add-span", () => {
+        const ownerId = state.clips[0]?.id ?? null;
+        commitTrack(ctx, trackId, (next) => {
+          next.spans.push({
+            id: createEntityId("audio_span"),
+            firstClipId: ownerId,
+            lastClipId: ownerId,
+            timelineStartSeconds: null,
+            timelineLengthSeconds: null,
+            sourceStartSeconds: 0,
+            clipStartOffsetSeconds: null,
+            clipLengthSeconds: null
+          });
+        });
+        ctx.render();
+      })
+    );
+    fields.appendChild(spans);
+    return row;
+  };
+  var buildAudioTracksPanel = (ctx, state) => {
+    const { wrap, col } = buildStackSection(
+      "Planned multi-clip audio",
+      "vst-audio-tracks-col"
+    );
+    wrap.classList.add("vst-audio-tracks-panel");
+    const warning = document.createElement("div");
+    warning.className = "vst-audio-tracks-planned-warning";
+    warning.textContent = "Planned — runtime mixer not yet connected";
+    col.appendChild(warning);
+    for (let index = 0; index < (state.audioTracks ?? []).length; index++) {
+      col.appendChild(
+        buildTrackRow(ctx, state, (state.audioTracks ?? [])[index], index)
+      );
+    }
+    col.appendChild(
+      buildAddButton("Add track", "vst-audio-track-add", () => {
+        ctx.commitState((next) => {
+          next.audioTracks ??= [];
+          next.audioTracks.push({
+            id: createEntityId("audio_track"),
+            source: {
+              kind: "External",
+              reference: "",
+              uploadedAudio: null
+            },
+            spans: []
+          });
+        });
+        ctx.render();
+      })
+    );
+    return wrap;
   };
 
   // frontend/detailStrip/settingsPanel.ts
@@ -6459,316 +9267,289 @@
       fpsField.classList.add("vst-audio-disabled");
     }
     body.appendChild(fpsField);
+    body.appendChild(buildAudioTracksPanel(ctx, state));
     return wrapForm(GROUP_SETTINGS, body);
   };
 
-  // frontend/timelineDetailStrip.ts
-  var STAGE_SELECTOR = "[data-vst-stage]";
-  var MODEL_SELECTOR = "[data-vst-model]";
-  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
-  var DETAIL_CLASS = "vst-detail";
-  var DEBOUNCE_MS = 200;
-  var clampSelection = (sel, clips) => {
-    if (sel.kind === "none") {
-      return sel;
+  // frontend/detailStrip/panelRouter.ts
+  var clampDetailSelection = (selection2, clips) => {
+    if (selection2.kind === "none") {
+      return selection2;
     }
-    if (sel.kind === "boundary") {
-      return sel.leftClipIdx >= 0 && sel.leftClipIdx <= clips.length - 2 ? sel : { kind: "none" };
+    if (selection2.kind === "boundary") {
+      return selection2.leftClipIdx >= 0 && selection2.leftClipIdx <= clips.length - 2 ? selection2 : { kind: "none" };
     }
-    if (sel.clipIdx < 0 || sel.clipIdx >= clips.length) {
+    if (selection2.clipIdx < 0 || selection2.clipIdx >= clips.length) {
       return { kind: "none" };
     }
-    if (sel.kind === "clip") {
-      const stageCount = clips[sel.clipIdx].stages.length;
-      if (stageCount === 0) {
+    const clip = clips[selection2.clipIdx];
+    if (selection2.kind === "clip") {
+      if (clip.stages.length === 0) {
         return { kind: "none" };
       }
-      const stageIdx = clamp(sel.stageIdx, 0, stageCount - 1);
-      return stageIdx === sel.stageIdx ? sel : { kind: "clip", clipIdx: sel.clipIdx, stageIdx };
+      const stageIdx = clamp(selection2.stageIdx, 0, clip.stages.length - 1);
+      return stageIdx === selection2.stageIdx ? selection2 : { kind: "clip", clipIdx: selection2.clipIdx, stageIdx };
     }
-    if (sel.kind === "ref") {
-      return sel.refIdx >= 0 && sel.refIdx < clips[sel.clipIdx].refs.length ? sel : { kind: "none" };
+    if (selection2.kind === "ref") {
+      return selection2.refIdx >= 0 && selection2.refIdx < clip.refs.length ? selection2 : { kind: "none" };
     }
-    if (sel.kind === "prompt-minor") {
-      const windows = clips[sel.clipIdx].promptWindows ?? [];
-      return sel.windowIdx >= 0 && sel.windowIdx < windows.length ? sel : { kind: "none" };
+    if (selection2.kind === "prompt-minor") {
+      const windows = clip.promptWindows ?? [];
+      return selection2.windowIdx >= 0 && selection2.windowIdx < windows.length ? selection2 : { kind: "none" };
     }
-    if (sel.kind === "retake") {
-      return clips[sel.clipIdx].retake ? sel : { kind: "none" };
+    if (selection2.kind === "retake") {
+      return clip.retake ? selection2 : { kind: "none" };
     }
-    if (sel.kind === "audio-segment") {
-      const segments = clips[sel.clipIdx].audioSegments ?? [];
-      return sel.segIdx >= 0 && sel.segIdx < segments.length ? sel : { kind: "none" };
+    if (selection2.kind === "audio-segment") {
+      const segments = clip.audioSegments ?? [];
+      return selection2.segIdx >= 0 && selection2.segIdx < segments.length ? selection2 : { kind: "none" };
     }
-    return sel;
+    return selection2;
   };
-  var createTimelineDetailStrip = (options) => {
-    let boundBody = null;
-    let dockEl = null;
-    let unsubscribe = null;
-    let sourceToken = "";
-    let pendingTimer = null;
-    let flushing = false;
-    let rendering = false;
-    let suppressSelectionRender = false;
-    let sliderDragActive = false;
-    let settingsMode = null;
-    let pendingFocus = null;
-    let focusLeftDock = false;
-    let renderedSel = null;
-    const isTypingInDock = () => {
-      if (!dockEl) {
+  var detailBreadcrumb = (selection2, clips) => {
+    switch (selection2.kind) {
+      case "clip":
+        return `Clip ${selection2.clipIdx + 1} · ${stageChipLabel(selection2.stageIdx)}`;
+      case "ref":
+        return `Ref ${selection2.refIdx + 1} · Clip ${selection2.clipIdx + 1}`;
+      case "audio":
+        return `Audio · Clip ${selection2.clipIdx + 1}`;
+      case "audio-segment": {
+        const segment = clips[selection2.clipIdx]?.audioSegments?.[selection2.segIdx];
+        if (!segment) {
+          return `Audio segment · Clip ${selection2.clipIdx + 1}`;
+        }
+        const start = roundToTenth(segment.startSeconds);
+        const end = roundToTenth(
+          segment.startSeconds + segment.lengthSeconds
+        );
+        return `Audio segment · Clip ${selection2.clipIdx + 1} · ${start}–${end} s`;
+      }
+      case "boundary":
+        return `Boundary · Clip ${selection2.leftClipIdx + 1} → ${selection2.leftClipIdx + 2}`;
+      case "prompt-major":
+        return `Prompt · Clip ${selection2.clipIdx + 1}`;
+      case "prompt-minor": {
+        const window2 = clips[selection2.clipIdx]?.promptWindows?.[selection2.windowIdx];
+        if (!window2) {
+          return `Relay · Clip ${selection2.clipIdx + 1}`;
+        }
+        const start = roundToTenth(window2.start);
+        const end = roundToTenth(window2.start + window2.duration);
+        return `Relay ${start}–${end}s · Clip ${selection2.clipIdx + 1}`;
+      }
+      case "retake": {
+        const retake = clips[selection2.clipIdx]?.retake;
+        if (!retake) {
+          return `Retake · Clip ${selection2.clipIdx + 1}`;
+        }
+        const start = roundToTenth(retake.startSeconds);
+        const end = roundToTenth(
+          retake.startSeconds + retake.lengthSeconds
+        );
+        return `Retake · Clip ${selection2.clipIdx + 1} · ${start}–${end} s`;
+      }
+      default:
+        return "Timeline settings";
+    }
+  };
+  var buildDetailHeader = (selection2, clips, collapsed, actions) => {
+    const header = document.createElement("div");
+    header.className = "vst-detail-head";
+    const breadcrumb = document.createElement("span");
+    breadcrumb.className = "vst-detail-crumb";
+    breadcrumb.textContent = detailBreadcrumb(selection2, clips);
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "basic-button small-button vst-detail-clear";
+    clear.textContent = "Clear";
+    clear.title = "Clear selection (show timeline settings)";
+    clear.setAttribute("aria-label", clear.title);
+    clear.hidden = selection2.kind === "none";
+    clear.addEventListener("click", actions.clearSelection);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "basic-button small-button vst-detail-collapse";
+    toggle.textContent = collapsed ? "▸" : "▾";
+    toggle.title = collapsed ? "Expand detail strip" : "Collapse detail strip";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.addEventListener("click", actions.toggleCollapsed);
+    header.append(breadcrumb, clear, toggle);
+    return header;
+  };
+  var buildDetailPanelBody = (context, selection2, clips) => {
+    switch (selection2.kind) {
+      case "clip":
+        return buildClipBody(context, selection2, clips);
+      case "ref":
+        return buildRefBody(context, selection2, clips);
+      case "audio":
+        return buildAudioBody(context, selection2, clips);
+      case "audio-segment":
+        return buildAudioSegmentBody(context, selection2, clips);
+      case "prompt-major":
+        return buildPromptMajorBody(context, selection2, clips);
+      case "prompt-minor":
+        return buildPromptMinorBody(context, selection2, clips);
+      case "retake":
+        return buildClipBody(
+          context,
+          {
+            kind: "clip",
+            clipIdx: selection2.clipIdx,
+            stageIdx: 0
+          },
+          clips
+        );
+      case "boundary":
+        return buildBoundaryBody(context, selection2, clips);
+      default:
+        return buildSettingsBody(context);
+    }
+  };
+
+  // frontend/detailStrip/panelSelectionSession.ts
+  var createPanelSelectionSession = () => {
+    let rendered = null;
+    const syncBreadcrumb = (dock, clips) => {
+      if (!dock || !rendered) {
+        return;
+      }
+      const breadcrumb = dock.querySelector(".vst-detail-crumb");
+      if (breadcrumb) {
+        breadcrumb.textContent = detailBreadcrumb(rendered, clips);
+      }
+    };
+    const targetedReselect = (selection2, dock, collapsed, clips) => {
+      if (!dock || !rendered || collapsed || rendered.kind !== selection2.kind) {
         return false;
       }
+      const previous = rendered;
       const active = document.activeElement;
-      if (!(active instanceof HTMLElement) || !dockEl.contains(active)) {
-        return false;
-      }
-      if (active instanceof HTMLTextAreaElement) {
+      const fromOutside = !(active instanceof HTMLElement && dock.contains(active));
+      const swap = (rowSelector, activeClass, index) => {
+        const rows = Array.from(
+          dock.querySelectorAll(rowSelector)
+        );
+        if (index < 0 || index >= rows.length) {
+          return false;
+        }
+        rows.forEach((row, rowIndex) => {
+          row.classList.toggle(activeClass, rowIndex === index);
+        });
+        rendered = selection2;
+        syncBreadcrumb(dock, clips);
+        if (fromOutside && typeof rows[index].scrollIntoView === "function") {
+          rows[index].scrollIntoView({ block: "nearest" });
+        }
         return true;
+      };
+      if (selection2.kind === "prompt-minor" && previous.kind === "prompt-minor") {
+        if (selection2.clipIdx !== previous.clipIdx) {
+          return false;
+        }
+        const swapped = swap(
+          ".vst-detail-minor-window",
+          "vst-detail-minor-active",
+          selection2.windowIdx
+        );
+        if (swapped && fromOutside) {
+          const editor = dock.querySelector(
+            `.vst-detail-minor-window[data-vst-minor-window="${selection2.windowIdx}"] textarea`
+          );
+          if (editor) {
+            editor.focus();
+            const length = editor.value.length;
+            try {
+              editor.setSelectionRange(length, length);
+            } catch {
+            }
+          }
+        }
+        return swapped;
       }
-      if (active instanceof HTMLInputElement) {
-        return active.type === "text" || active.type === "number";
+      if (selection2.kind === "ref" && previous.kind === "ref") {
+        return selection2.clipIdx === previous.clipIdx && swap(
+          ".vst-detail-ref-row",
+          "vst-detail-instance-active",
+          selection2.refIdx
+        );
+      }
+      if (selection2.kind === "audio-segment" && previous.kind === "audio-segment") {
+        return selection2.clipIdx === previous.clipIdx && swap(
+          ".vst-detail-seg-row",
+          "vst-detail-instance-active",
+          selection2.segIdx
+        );
       }
       return false;
     };
-    const isSliderGesture = () => {
-      if (sliderDragActive) {
-        return true;
-      }
-      if (!dockEl) {
-        return false;
-      }
-      const active = document.activeElement;
-      if (!(active instanceof HTMLInputElement) || !dockEl.contains(active)) {
-        return false;
-      }
-      return active.type === "range" || active.classList.contains("auto-slider-number");
+    return {
+      getRendered: () => rendered,
+      setRendered: (selection2) => {
+        rendered = selection2;
+      },
+      clear: () => {
+        rendered = null;
+      },
+      syncBreadcrumb,
+      targetedReselect
     };
-    const captureFocus = () => {
-      if (focusLeftDock) {
-        pendingFocus = null;
-        return;
-      }
-      const active = document.activeElement;
-      if (!(active instanceof HTMLElement) || !dockEl?.contains(active)) {
-        pendingFocus = null;
-        return;
-      }
-      const holder = active.closest("[data-vst-focus-key]");
-      if (!holder || !dockEl.contains(holder)) {
-        pendingFocus = null;
-        return;
-      }
-      let start = null;
-      let end = null;
-      if (active instanceof HTMLInputElement && (active.type === "number" || active.type === "text") || active instanceof HTMLTextAreaElement) {
-        try {
-          start = active.selectionStart;
-          end = active.selectionEnd;
-        } catch {
-        }
-      }
-      pendingFocus = {
-        key: holder.getAttribute("data-vst-focus-key") ?? "",
-        start,
-        end
-      };
-    };
-    const restoreFocus = (detail) => {
-      const focus = pendingFocus;
-      pendingFocus = null;
-      if (!focus?.key) {
-        return;
-      }
-      const holder = detail.querySelector(
-        `[data-vst-focus-key="${focus.key}"]`
+  };
+  var isRenderedSelection = (session, selection2) => {
+    const rendered = session.getRendered();
+    return !!rendered && isSameSelection(selection2, rendered);
+  };
+
+  // frontend/detailStrip/renderShell.ts
+  var DETAIL_CLASS = "vst-detail";
+  var renderDetailShell = (options) => {
+    const previousBody = options.detail.querySelector(".vst-detail-body");
+    const savedScroll = previousBody?.scrollTop ?? 0;
+    options.focus.capture();
+    options.detail.className = `${DETAIL_CLASS}${options.collapsed ? " vst-detail-collapsed" : ""}`;
+    options.detail.innerHTML = "";
+    options.detail.appendChild(
+      buildDetailHeader(options.selection, options.clips, options.collapsed, {
+        clearSelection: options.clearSelection,
+        toggleCollapsed: options.toggleCollapsed
+      })
+    );
+    if (!options.collapsed) {
+      const body = buildDetailPanelBody(
+        options.context,
+        options.selection,
+        options.clips
       );
-      if (!holder) {
-        return;
+      options.detail.appendChild(body);
+      if (options.selection.kind === "clip" || options.selection.kind === "retake") {
+        getLtxHostBridge().enableSliders(body);
       }
-      holder.focus();
-      if ((holder instanceof HTMLInputElement || holder instanceof HTMLTextAreaElement) && focus.start != null) {
-        try {
-          holder.setSelectionRange(focus.start, focus.end ?? focus.start);
-        } catch {
-        }
-      }
-    };
-    const isStale = () => readStateToken() !== sourceToken;
-    const pending = /* @__PURE__ */ new Map();
-    const flushPending = () => {
-      if (pendingTimer) {
-        clearTimeout(pendingTimer);
-        pendingTimer = null;
-      }
-      if (flushing || pending.size === 0) {
-        return;
-      }
-      const entryList = [...pending.entries()];
-      const entries = entryList.map(([, e]) => e);
-      pending.clear();
-      captureFocus();
-      if (isStale()) {
-        return;
-      }
-      const clipMutates = entries.filter((e) => e.kind === "clips").map((e) => e.mutate);
-      const stateMutates = entries.filter((e) => e.kind === "state").map((e) => e.mutate);
-      flushing = true;
-      let flushedClips = null;
-      try {
-        if (clipMutates.length > 0) {
-          const clips = getClips();
-          for (const m of clipMutates) {
-            m(clips);
-          }
-          saveClips(clips, {
-            origin: "detail-strip",
-            valueOnly: true
-          });
-          flushedClips = clips;
-        }
-        if (stateMutates.length > 0) {
-          const state = getState();
-          for (const m of stateMutates) {
-            m(state);
-          }
-          saveState(state, {
-            notifyDomChange: isVideoStagesEnabled(),
-            origin: "detail-strip",
-            valueOnly: true
-          });
-        }
-        sourceToken = readStateToken();
-      } finally {
-        flushing = false;
-      }
-      writeBackClamped(entryList, flushedClips);
-      syncValueDerivedUI(renderedSel);
-    };
-    const writeBackClamped = (entryList, clips) => {
-      if (!dockEl || !clips) {
-        return;
-      }
-      for (const [key, entry] of entryList) {
-        if (!entry.readBack) {
-          continue;
-        }
-        const input = dockEl.querySelector(
-          `input[data-vst-focus-key="${key}"]`
-        );
-        if (!input) {
-          continue;
-        }
-        const display = entry.readBack(clips);
-        if (display == null) {
-          continue;
-        }
-        const next = `${display}`;
-        if (input.value !== next) {
-          input.value = next;
-        }
-      }
-    };
-    const schedulePending = (key, entry) => {
-      if (rendering) {
-        return;
-      }
-      pending.set(key, entry);
-      if (pendingTimer) {
-        clearTimeout(pendingTimer);
-        pendingTimer = null;
-      }
-      if (isTypingInDock() || isSliderGesture()) {
-        return;
-      }
-      pendingTimer = setTimeout(() => {
-        pendingTimer = null;
-        flushPending();
-      }, DEBOUNCE_MS);
-    };
-    const debouncedCommit = (key, mutate) => {
-      schedulePending(key, { kind: "clips", mutate });
-    };
-    const debouncedCommitState = (key, mutate) => {
-      schedulePending(key, { kind: "state", mutate });
-    };
-    const buildClampedNumber = (opts) => {
-      const input = buildNumber(
-        opts.value,
-        opts.min,
-        opts.max,
-        opts.step,
-        (value) => {
-          schedulePending(opts.key, {
-            kind: "clips",
-            mutate: (clips) => opts.mutate(clips, value),
-            readBack: opts.readBack
-          });
-        }
+    }
+    options.focus.restore(options.detail);
+    const newBody = options.detail.querySelector(".vst-detail-body");
+    if (newBody && savedScroll > 0) {
+      newBody.scrollTop = savedScroll;
+    }
+    if (options.selection.kind === "retake" && !options.collapsed && !(options.previousSelection && isSameSelection(options.selection, options.previousSelection))) {
+      const active = document.activeElement;
+      const retakeColumn = options.detail.querySelector(
+        ".vst-detail-retake-col"
       );
-      input.setAttribute("data-vst-focus-key", opts.key);
-      return input;
-    };
-    const commit = (mutate) => {
-      flushPending();
-      captureFocus();
-      if (isStale()) {
-        render();
-        return;
+      if (!(active instanceof HTMLElement && options.detail.contains(active)) && retakeColumn && typeof retakeColumn.scrollIntoView === "function") {
+        retakeColumn.scrollIntoView({ block: "nearest" });
       }
-      const clips = getClips();
-      mutate(clips);
-      saveClips(clips, {
-        origin: "detail-strip",
-        valueOnly: true
-      });
-      sourceToken = readStateToken();
-      syncValueDerivedUI(renderedSel);
-    };
-    const commitState = (mutate) => {
-      flushPending();
-      captureFocus();
-      if (isStale()) {
-        render();
-        return;
-      }
-      const state = getState();
-      mutate(state);
-      saveState(state, {
-        notifyDomChange: isVideoStagesEnabled(),
-        origin: "detail-strip",
-        valueOnly: true
-      });
-      sourceToken = readStateToken();
-      syncValueDerivedUI(renderedSel);
-    };
-    const structuralCommit = (apply, opts) => {
-      flushPending();
-      if (isStale()) {
-        render();
-        return;
-      }
-      const clips = getClips();
-      const outcome = apply(clips);
-      if (outcome === null) {
-        return;
-      }
-      saveClips(clips, { origin: "detail-strip" });
-      sourceToken = readStateToken();
-      if (outcome === "render") {
-        render();
-        return;
-      }
-      if (opts?.rebuildAfterSelect) {
-        suppressSelectionRender = true;
-        setSelection(outcome);
-        suppressSelectionRender = false;
-        render();
-        return;
-      }
-      setSelection(outcome);
-    };
+    }
+    if (!options.collapsed) {
+      options.focus.autoFocusSelection(options.detail, options.selection);
+    }
+  };
+
+  // frontend/detailStrip/selectionOperations.ts
+  var STAGE_SELECTOR = "[data-vst-stage]";
+  var MODEL_SELECTOR = "[data-vst-model]";
+  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
+  var createDetailSelectionOperations = (structuralCommit) => {
     const commitRemoval = (remove, index, neighbour, fallback) => structuralCommit((clips) => {
       const remaining = remove(clips);
       if (remaining === null) {
@@ -6783,7 +9564,7 @@
           return clip && removeRefAt(clip, refIdx) ? clip.refs.length : null;
         },
         refIdx,
-        (idx) => ({ kind: "ref", clipIdx, refIdx: idx }),
+        (index) => ({ kind: "ref", clipIdx, refIdx: index }),
         { kind: "clip", clipIdx, stageIdx: 0 }
       );
     };
@@ -6798,7 +9579,11 @@
           return windows.length;
         },
         windowIdx,
-        (idx) => ({ kind: "prompt-minor", clipIdx, windowIdx: idx }),
+        (index) => ({
+          kind: "prompt-minor",
+          clipIdx,
+          windowIdx: index
+        }),
         { kind: "prompt-major", clipIdx }
       );
     };
@@ -6808,17 +9593,16 @@
         if (!clip || clip.retake) {
           return null;
         }
-        const clipDur = Math.max(0, clip.duration || 0);
-        const lengthSeconds = Math.max(
-          RETAKE_MIN_DURATION,
-          Math.min(
-            RETAKE_DEFAULT_DURATION,
-            clipDur || RETAKE_DEFAULT_DURATION
-          )
-        );
+        const clipDuration = Math.max(0, clip.duration || 0);
         clip.retake = {
           startSeconds: 0,
-          lengthSeconds,
+          lengthSeconds: Math.max(
+            RETAKE_MIN_DURATION,
+            Math.min(
+              RETAKE_DEFAULT_DURATION,
+              clipDuration || RETAKE_DEFAULT_DURATION
+            )
+          ),
           strength: RETAKE_STRENGTH_DEFAULT
         };
         return { kind: "retake", clipIdx };
@@ -6840,8 +9624,8 @@
         if (!clip) {
           return null;
         }
-        const clipDur = Math.max(0, clip.duration || 0);
-        if (clipDur < AUDIO_SEGMENT_MIN_LENGTH) {
+        const clipDuration = Math.max(0, clip.duration || 0);
+        if (clipDuration < AUDIO_SEGMENT_MIN_LENGTH) {
           return null;
         }
         const segment = {
@@ -6849,32 +9633,35 @@
           startSeconds: 0,
           trimStartSeconds: 0,
           lengthSeconds: roundToTenth(
-            Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDur)
+            Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDuration)
           )
         };
-        const segments = [...clip.audioSegments ?? [], segment];
-        clip.audioSegments = segments;
+        clip.audioSegments = [...clip.audioSegments ?? [], segment];
         return {
           kind: "audio-segment",
           clipIdx,
-          segIdx: segments.length - 1
+          segIdx: clip.audioSegments.length - 1
         };
       });
     };
-    const removeAudioSegment = (clipIdx, segIdx) => {
+    const removeAudioSegment = (clipIdx, segmentIdx) => {
       commitRemoval(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip?.audioSegments?.[segIdx]) {
+          if (!clip?.audioSegments?.[segmentIdx]) {
             return null;
           }
           clip.audioSegments = clip.audioSegments.filter(
-            (_, i) => i !== segIdx
+            (_, index) => index !== segmentIdx
           );
           return clip.audioSegments.length;
         },
-        segIdx,
-        (idx) => ({ kind: "audio-segment", clipIdx, segIdx: idx }),
+        segmentIdx,
+        (index) => ({
+          kind: "audio-segment",
+          clipIdx,
+          segIdx: index
+        }),
         { kind: "audio", clipIdx }
       );
     };
@@ -6910,10 +9697,7 @@
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip || clip.stages.length <= 1) {
-            return null;
-          }
-          if (stageIdx < 0 || stageIdx >= clip.stages.length) {
+          if (!clip || clip.stages.length <= 1 || stageIdx < 0 || stageIdx >= clip.stages.length) {
             return null;
           }
           clip.stages.splice(stageIdx, 1);
@@ -6957,167 +9741,7 @@
         }
       }
     };
-    const onMouseDownCapture = (event) => {
-      if (event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR)) {
-        event.stopPropagation();
-      }
-    };
-    const onClickCapture = (event) => {
-      if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
-        return;
-      }
-      event.stopPropagation();
-      handleActivation(event.target, event.shiftKey);
-    };
-    const onKeyDownCapture = (event) => {
-      if (event.key !== "Enter" && event.key !== " ") {
-        return;
-      }
-      if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      handleActivation(event.target, event.shiftKey);
-    };
-    const onStripKeyDown = (event) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-      if (event.target instanceof Element && event.target.closest(".sui-popover")) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      setSelection({ kind: "none" });
-    };
-    const onDockFocusOut = (event) => {
-      if (rendering) {
-        return;
-      }
-      const next = event.relatedTarget;
-      if (next instanceof Node && dockEl?.contains(next)) {
-        return;
-      }
-      focusLeftDock = true;
-      pendingFocus = null;
-      flushPending();
-    };
-    const onDockFocusIn = () => {
-      focusLeftDock = false;
-    };
-    const onDockChange = (event) => {
-      const target = event.target;
-      if (target instanceof HTMLInputElement && target.type === "number" && document.activeElement === target) {
-        flushPending();
-      }
-    };
-    const onDocPointerDown = (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-      if (!dockEl?.contains(target)) {
-        flushPending();
-        return;
-      }
-      if (target.closest('input[type="range"]')) {
-        sliderDragActive = true;
-      }
-    };
-    const onDocPointerUp = () => {
-      if (!sliderDragActive) {
-        return;
-      }
-      sliderDragActive = false;
-      flushPending();
-    };
-    const ensureDetail = () => {
-      if (!dockEl) {
-        throw new Error("detail strip not attached");
-      }
-      return dockEl;
-    };
-    const breadcrumbFor = (sel) => {
-      switch (sel.kind) {
-        case "clip":
-          return `Clip ${sel.clipIdx} · ${stageChipLabel(sel.stageIdx)}`;
-        case "ref":
-          return `Ref ${sel.refIdx} · Clip ${sel.clipIdx}`;
-        case "audio":
-          return `Audio · Clip ${sel.clipIdx}`;
-        case "audio-segment": {
-          const seg = getClips()[sel.clipIdx]?.audioSegments?.[sel.segIdx];
-          if (!seg) {
-            return `Audio segment · Clip ${sel.clipIdx}`;
-          }
-          const start = roundToTenth(seg.startSeconds);
-          const end = roundToTenth(seg.startSeconds + seg.lengthSeconds);
-          return `Audio segment · Clip ${sel.clipIdx} · ${start}–${end} s`;
-        }
-        case "boundary":
-          return `Boundary · Clip ${sel.leftClipIdx} → ${sel.leftClipIdx + 1}`;
-        case "prompt-major":
-          return `Prompt · Clip ${sel.clipIdx}`;
-        case "prompt-minor": {
-          const w = getClips()[sel.clipIdx]?.promptWindows?.[sel.windowIdx];
-          if (!w) {
-            return `Relay · Clip ${sel.clipIdx}`;
-          }
-          const start = roundToTenth(w.start);
-          const end = roundToTenth(w.start + w.duration);
-          return `Relay ${start}–${end}s · Clip ${sel.clipIdx}`;
-        }
-        case "retake": {
-          const r = getClips()[sel.clipIdx]?.retake;
-          if (!r) {
-            return `Retake · Clip ${sel.clipIdx}`;
-          }
-          const start = roundToTenth(r.startSeconds);
-          const end = roundToTenth(r.startSeconds + r.lengthSeconds);
-          return `Retake · Clip ${sel.clipIdx} · ${start}–${end} s`;
-        }
-        default:
-          return "Timeline settings";
-      }
-    };
-    const buildHeader = (sel, collapsed) => {
-      const head = document.createElement("div");
-      head.className = "vst-detail-head";
-      const crumb = document.createElement("span");
-      crumb.className = "vst-detail-crumb";
-      crumb.textContent = breadcrumbFor(sel);
-      const clear = document.createElement("button");
-      clear.type = "button";
-      clear.className = "basic-button small-button vst-detail-clear";
-      clear.textContent = "Clear";
-      clear.title = "Clear selection (show timeline settings)";
-      clear.setAttribute("aria-label", clear.title);
-      clear.hidden = sel.kind === "none";
-      clear.addEventListener("click", () => {
-        setSelection({ kind: "none" });
-      });
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = "basic-button small-button vst-detail-collapse";
-      toggle.textContent = collapsed ? "▸" : "▾";
-      toggle.title = collapsed ? "Expand detail strip" : "Collapse detail strip";
-      toggle.setAttribute("aria-label", toggle.title);
-      toggle.addEventListener("click", () => {
-        options.setCollapsed(!options.isCollapsed());
-        render();
-      });
-      head.append(crumb, clear, toggle);
-      return head;
-    };
-    const ctx = {
-      commit,
-      commitState,
-      debouncedCommit,
-      debouncedCommitState,
-      buildClampedNumber,
-      structuralCommit,
-      render: () => render(),
+    return {
       deleteRefEntry,
       deleteWindowEntry,
       createRetake,
@@ -7127,6 +9751,98 @@
       addStage,
       deleteStage,
       selectStage,
+      onMouseDownCapture: (event) => {
+        if (event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR)) {
+          event.stopPropagation();
+        }
+      },
+      onClickCapture: (event) => {
+        if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
+          return;
+        }
+        event.stopPropagation();
+        handleActivation(event.target, event.shiftKey);
+      },
+      onKeyDownCapture: (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        handleActivation(event.target, event.shiftKey);
+      },
+      onStripKeyDown: (event) => {
+        if (event.key !== "Escape" || event.target instanceof Element && event.target.closest(".sui-popover")) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        setSelection({ kind: "none" });
+      }
+    };
+  };
+
+  // frontend/timelineDetailStrip.ts
+  var DETAIL_CLASS2 = "vst-detail";
+  var createTimelineDetailStrip = (options) => {
+    let boundBody = null;
+    let dockEl = null;
+    let unsubscribe = null;
+    let rendering = false;
+    let suppressSelectionRender = false;
+    let settingsMode = null;
+    let draftQueue;
+    let renderImplementation = () => {
+    };
+    const render = (meta) => renderImplementation(meta);
+    const panelSelection = createPanelSelectionSession();
+    const focus = createDetailFocusSession({
+      getDock: () => dockEl,
+      isRendering: () => rendering,
+      flushPending: () => draftQueue?.flush()
+    });
+    const syncValueDerivedUi = (selection2) => {
+      if (!selection2) {
+        return;
+      }
+      panelSelection.syncBreadcrumb(dockEl, getClips());
+    };
+    draftQueue = createDetailDraftQueue({
+      focus,
+      getDock: () => dockEl,
+      isRendering: () => rendering,
+      getRenderedSelection: panelSelection.getRendered,
+      syncValueDerivedUi,
+      render,
+      setSelectionSilently: (selection2) => {
+        suppressSelectionRender = true;
+        setSelection(selection2);
+        suppressSelectionRender = false;
+      }
+    });
+    const selectionOperations = createDetailSelectionOperations(
+      draftQueue.structuralCommit
+    );
+    const context = {
+      commit: draftQueue.commit,
+      commitState: draftQueue.commitState,
+      debouncedCommit: draftQueue.debouncedCommit,
+      debouncedCommitState: draftQueue.debouncedCommitState,
+      buildClampedNumber: draftQueue.buildClampedNumber,
+      structuralCommit: draftQueue.structuralCommit,
+      render,
+      deleteRefEntry: selectionOperations.deleteRefEntry,
+      deleteWindowEntry: selectionOperations.deleteWindowEntry,
+      createRetake: selectionOperations.createRetake,
+      removeRetake: selectionOperations.removeRetake,
+      addAudioSegment: selectionOperations.addAudioSegment,
+      removeAudioSegment: selectionOperations.removeAudioSegment,
+      addStage: selectionOperations.addStage,
+      deleteStage: selectionOperations.deleteStage,
+      selectStage: selectionOperations.selectStage,
       getBoundBody: () => boundBody,
       getDockEl: () => dockEl,
       getSettingsMode: () => settingsMode,
@@ -7134,228 +9850,124 @@
         settingsMode = mode;
       }
     };
-    const buildBody = (sel, clips) => {
-      switch (sel.kind) {
-        case "clip":
-          return buildClipBody(ctx, sel, clips);
-        case "ref":
-          return buildRefBody(ctx, sel, clips);
-        case "audio":
-          return buildAudioBody(ctx, sel, clips);
-        case "audio-segment":
-          return buildAudioSegmentBody(ctx, sel, clips);
-        case "prompt-major":
-          return buildPromptMajorBody(ctx, sel, clips);
-        case "prompt-minor":
-          return buildPromptMinorBody(ctx, sel, clips);
-        case "retake":
-          return buildClipBody(
-            ctx,
-            { kind: "clip", clipIdx: sel.clipIdx, stageIdx: 0 },
-            clips
-          );
-        case "boundary":
-          return buildBoundaryBody(ctx, sel, clips);
-        default:
-          return buildSettingsBody(ctx);
+    const ensureDetail = () => {
+      if (!dockEl) {
+        throw new Error("detail strip not attached");
       }
+      return dockEl;
     };
-    const syncValueDerivedUI = (sel) => {
-      if (!dockEl || !sel) {
-        return;
-      }
-      const crumb = dockEl.querySelector(".vst-detail-crumb");
-      if (crumb) {
-        crumb.textContent = breadcrumbFor(sel);
-      }
-    };
-    const render = (meta) => {
+    renderImplementation = (meta) => {
       if (!dockEl) {
         return;
       }
-      if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSel && !options.isCollapsed() && isSameSelection(getSelection(), renderedSel)) {
-        sourceToken = readStateToken();
-        syncValueDerivedUI(renderedSel);
+      const renderedSelection = panelSelection.getRendered();
+      if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSelection && !options.isCollapsed() && isRenderedSelection(panelSelection, getSelection())) {
+        draftQueue.markCurrentSource();
+        syncValueDerivedUi(renderedSelection);
         return;
       }
-      flushPending();
+      draftQueue.flush();
       rendering = true;
       try {
-        sourceToken = readStateToken();
+        draftQueue.markCurrentSource();
         const detail = ensureDetail();
         const clips = getClips();
-        const raw = getSelection();
-        const sel = clampSelection(raw, clips);
-        if (!isSameSelection(raw, sel)) {
-          setSelection(sel);
+        const rawSelection = getSelection();
+        const selection2 = clampDetailSelection(rawSelection, clips);
+        if (!isSameSelection(rawSelection, selection2)) {
+          setSelection(selection2);
           return;
         }
         const collapsed = options.isCollapsed();
-        const prevBody = detail.querySelector(".vst-detail-body");
-        const savedScroll = prevBody ? prevBody.scrollTop : 0;
-        captureFocus();
-        detail.className = `${DETAIL_CLASS}${collapsed ? " vst-detail-collapsed" : ""}`;
-        detail.innerHTML = "";
-        detail.appendChild(buildHeader(sel, collapsed));
-        if (!collapsed) {
-          const body = buildBody(sel, clips);
-          detail.appendChild(body);
-          if (sel.kind === "clip" || sel.kind === "retake") {
-            enableSlidersIn(body);
+        renderDetailShell({
+          detail,
+          context,
+          focus,
+          clips,
+          selection: selection2,
+          previousSelection: renderedSelection,
+          collapsed,
+          clearSelection: () => setSelection({ kind: "none" }),
+          toggleCollapsed: () => {
+            options.setCollapsed(!options.isCollapsed());
+            render();
           }
-        }
-        restoreFocus(detail);
-        const newBody = detail.querySelector(".vst-detail-body");
-        if (newBody && savedScroll > 0) {
-          newBody.scrollTop = savedScroll;
-        }
-        if (sel.kind === "retake" && !collapsed && !(renderedSel && isSameSelection(sel, renderedSel))) {
-          const focused = document.activeElement;
-          const retakeCol = detail.querySelector(
-            ".vst-detail-retake-col"
-          );
-          if (!(focused instanceof HTMLElement && detail.contains(focused)) && retakeCol && typeof retakeCol.scrollIntoView === "function") {
-            retakeCol.scrollIntoView({ block: "nearest" });
-          }
-        }
-        if (!collapsed) {
-          autoFocusSelection(detail, sel);
-        }
-        renderedSel = sel;
+        });
+        panelSelection.setRendered(selection2);
       } finally {
         rendering = false;
       }
     };
-    const focusKeyForSelection = (sel) => {
-      switch (sel.kind) {
-        case "prompt-major":
-          return "prompt-major";
-        case "prompt-minor":
-          return `minor-${sel.windowIdx}`;
-        default:
-          return null;
-      }
-    };
-    const autoFocusSelection = (detail, sel) => {
-      if (focusLeftDock) {
-        return;
-      }
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && detail.contains(active)) {
-        return;
-      }
-      const wantKey = focusKeyForSelection(sel);
-      if (!wantKey) {
-        return;
-      }
-      const editor = detail.querySelector(
-        `textarea[data-vst-focus-key="${wantKey}"]`
-      );
-      if (!editor) {
-        return;
-      }
-      editor.focus();
-      const len = editor.value.length;
-      try {
-        editor.setSelectionRange(len, len);
-      } catch {
-      }
-      if (typeof editor.scrollIntoView === "function") {
-        editor.scrollIntoView({ block: "nearest" });
-      }
-    };
-    const targetedReselect = (sel) => {
-      if (!dockEl || !renderedSel || options.isCollapsed()) {
-        return false;
-      }
-      const prev = renderedSel;
-      if (prev.kind !== sel.kind) {
-        return false;
-      }
-      const active = document.activeElement;
-      const fromOutside = !(active instanceof HTMLElement && dockEl.contains(active));
-      const swap = (rowSelector, activeClass, index) => {
-        const rows = Array.from(
-          dockEl?.querySelectorAll(rowSelector) ?? []
-        );
-        if (index < 0 || index >= rows.length) {
-          return false;
-        }
-        rows.forEach((row, i) => {
-          row.classList.toggle(activeClass, i === index);
-        });
-        const crumb = dockEl?.querySelector(".vst-detail-crumb");
-        if (crumb) {
-          crumb.textContent = breadcrumbFor(sel);
-        }
-        if (fromOutside && typeof rows[index].scrollIntoView === "function") {
-          rows[index].scrollIntoView({ block: "nearest" });
-        }
-        renderedSel = sel;
-        return true;
-      };
-      if (sel.kind === "prompt-minor" && prev.kind === "prompt-minor") {
-        if (sel.clipIdx !== prev.clipIdx) {
-          return false;
-        }
-        const ok = swap(
-          ".vst-detail-minor-window",
-          "vst-detail-minor-active",
-          sel.windowIdx
-        );
-        if (ok) {
-          if (fromOutside) {
-            const editor = dockEl?.querySelector(
-              `.vst-detail-minor-window[data-vst-minor-window="${sel.windowIdx}"] textarea`
-            );
-            if (editor) {
-              editor.focus();
-              const len = editor.value.length;
-              try {
-                editor.setSelectionRange(len, len);
-              } catch {
-              }
-            }
-          }
-        }
-        return ok;
-      }
-      if (sel.kind === "ref" && prev.kind === "ref") {
-        if (sel.clipIdx !== prev.clipIdx) {
-          return false;
-        }
-        return swap(
-          ".vst-detail-ref-row",
-          "vst-detail-instance-active",
-          sel.refIdx
-        );
-      }
-      if (sel.kind === "audio-segment" && prev.kind === "audio-segment") {
-        if (sel.clipIdx !== prev.clipIdx) {
-          return false;
-        }
-        return swap(
-          ".vst-detail-seg-row",
-          "vst-detail-instance-active",
-          sel.segIdx
-        );
-      }
-      return false;
-    };
-    const onSelectionChanged = (sel) => {
+    const onSelectionChanged = (selection2) => {
       if (suppressSelectionRender) {
         return;
       }
-      if (targetedReselect(sel)) {
+      if (panelSelection.targetedReselect(
+        selection2,
+        dockEl,
+        options.isCollapsed(),
+        getClips()
+      )) {
         return;
       }
-      pendingFocus = null;
-      focusLeftDock = false;
+      focus.beginSelectionSession();
       settingsMode = null;
-      if (sel.kind !== "none" && options.isCollapsed()) {
+      if (selection2.kind !== "none" && options.isCollapsed()) {
         options.setCollapsed(false);
       }
       render();
+    };
+    const dispose = () => {
+      draftQueue.dispose();
+      focus.reset();
+      document.removeEventListener(
+        "pointerdown",
+        focus.onDocumentPointerDown,
+        true
+      );
+      document.removeEventListener(
+        "pointerup",
+        focus.onDocumentPointerUp,
+        true
+      );
+      document.removeEventListener(
+        "pointercancel",
+        focus.onDocumentPointerUp,
+        true
+      );
+      unsubscribe?.();
+      unsubscribe = null;
+      if (boundBody) {
+        boundBody.removeEventListener(
+          "mousedown",
+          selectionOperations.onMouseDownCapture,
+          true
+        );
+        boundBody.removeEventListener(
+          "click",
+          selectionOperations.onClickCapture,
+          true
+        );
+        boundBody.removeEventListener(
+          "keydown",
+          selectionOperations.onKeyDownCapture,
+          true
+        );
+        boundBody = null;
+      }
+      if (dockEl) {
+        dockEl.removeEventListener(
+          "keydown",
+          selectionOperations.onStripKeyDown
+        );
+        dockEl.removeEventListener("focusout", focus.onDockFocusOut);
+        dockEl.removeEventListener("focusin", focus.onDockFocusIn);
+        dockEl.removeEventListener("change", focus.onDockChange);
+        dockEl.className = DETAIL_CLASS2;
+        dockEl.innerHTML = "";
+        dockEl = null;
+      }
+      panelSelection.clear();
     };
     const attach = (body, dock) => {
       if (boundBody === body && dockEl === dock) {
@@ -7364,55 +9976,38 @@
       dispose();
       boundBody = body;
       dockEl = dock;
-      body.addEventListener("mousedown", onMouseDownCapture, true);
-      body.addEventListener("click", onClickCapture, true);
-      body.addEventListener("keydown", onKeyDownCapture, true);
-      dock.addEventListener("keydown", onStripKeyDown);
-      dock.addEventListener("focusout", onDockFocusOut);
-      dock.addEventListener("focusin", onDockFocusIn);
-      dock.addEventListener("change", onDockChange);
-      document.addEventListener("pointerdown", onDocPointerDown, true);
-      document.addEventListener("pointerup", onDocPointerUp, true);
-      document.addEventListener("pointercancel", onDocPointerUp, true);
+      body.addEventListener(
+        "mousedown",
+        selectionOperations.onMouseDownCapture,
+        true
+      );
+      body.addEventListener(
+        "click",
+        selectionOperations.onClickCapture,
+        true
+      );
+      body.addEventListener(
+        "keydown",
+        selectionOperations.onKeyDownCapture,
+        true
+      );
+      dock.addEventListener("keydown", selectionOperations.onStripKeyDown);
+      dock.addEventListener("focusout", focus.onDockFocusOut);
+      dock.addEventListener("focusin", focus.onDockFocusIn);
+      dock.addEventListener("change", focus.onDockChange);
+      document.addEventListener(
+        "pointerdown",
+        focus.onDocumentPointerDown,
+        true
+      );
+      document.addEventListener("pointerup", focus.onDocumentPointerUp, true);
+      document.addEventListener(
+        "pointercancel",
+        focus.onDocumentPointerUp,
+        true
+      );
       unsubscribe = subscribeSelection(onSelectionChanged);
       render();
-    };
-    const dispose = () => {
-      flushPending();
-      if (pendingTimer) {
-        clearTimeout(pendingTimer);
-        pendingTimer = null;
-      }
-      pending.clear();
-      sliderDragActive = false;
-      focusLeftDock = false;
-      document.removeEventListener("pointerdown", onDocPointerDown, true);
-      document.removeEventListener("pointerup", onDocPointerUp, true);
-      document.removeEventListener("pointercancel", onDocPointerUp, true);
-      if (unsubscribe) {
-        unsubscribe();
-        unsubscribe = null;
-      }
-      if (boundBody) {
-        boundBody.removeEventListener(
-          "mousedown",
-          onMouseDownCapture,
-          true
-        );
-        boundBody.removeEventListener("click", onClickCapture, true);
-        boundBody.removeEventListener("keydown", onKeyDownCapture, true);
-        boundBody = null;
-      }
-      if (dockEl) {
-        dockEl.removeEventListener("keydown", onStripKeyDown);
-        dockEl.removeEventListener("focusout", onDockFocusOut);
-        dockEl.removeEventListener("focusin", onDockFocusIn);
-        dockEl.removeEventListener("change", onDockChange);
-        dockEl.className = DETAIL_CLASS;
-        dockEl.innerHTML = "";
-        dockEl = null;
-      }
-      renderedSel = null;
     };
     return { attach, render, dispose };
   };
@@ -7449,11 +10044,17 @@
         return false;
       }
       const current = deps.read() ?? "";
-      const target = from.pop();
-      to.push(current);
+      const target = from[from.length - 1];
       suppress = true;
-      deps.write(target);
-      suppress = false;
+      try {
+        deps.write(target);
+      } catch {
+        return false;
+      } finally {
+        suppress = false;
+      }
+      from.pop();
+      to.push(current);
       last = target;
       return true;
     };
@@ -7466,6 +10067,79 @@
       canRedo: () => redoStack.length > 0
     };
   };
+
+  // frontend/timelineHostLifecycle.ts
+  var INPUT_SYNC_INTERVAL_MS = 200;
+  var createTimelineHostLifecycle = (options) => {
+    let boundInput = null;
+    let boundToggle = null;
+    let inputSyncInterval = null;
+    let paramRefreshCleanup = null;
+    const onInputChanged = () => options.syncFromCarrier();
+    const onEnabledToggled = () => options.refresh();
+    const bindInput = () => {
+      const input2 = getPromptInput();
+      if (!input2 || input2 === boundInput) return;
+      boundInput?.removeEventListener("input", onInputChanged);
+      boundInput?.removeEventListener("change", onInputChanged);
+      input2.addEventListener("input", onInputChanged);
+      input2.addEventListener("change", onInputChanged);
+      boundInput = input2;
+    };
+    const bindToggle = () => {
+      const toggle = getGroupToggle();
+      if (!toggle || toggle === boundToggle) return;
+      boundToggle?.removeEventListener("change", onEnabledToggled);
+      toggle.addEventListener("change", onEnabledToggled);
+      boundToggle = toggle;
+    };
+    const onKeydown = (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      const isUndo = key === "z" && !event.shiftKey;
+      const isRedo = key === "z" && event.shiftKey || key === "y";
+      if (!isUndo && !isRedo) return;
+      const active = document.activeElement;
+      const inTextField = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLElement && active.isContentEditable;
+      if (inTextField || !isVideoStagesEnabled()) return;
+      if (isUndo ? options.undo() : options.redo()) event.preventDefault();
+    };
+    const bind = () => {
+      bindInput();
+      bindToggle();
+      document.removeEventListener("keydown", onKeydown);
+      document.addEventListener("keydown", onKeydown);
+      if (!inputSyncInterval) {
+        inputSyncInterval = setInterval(
+          options.syncFromCarrier,
+          INPUT_SYNC_INTERVAL_MS
+        );
+      }
+      if (!paramRefreshCleanup) {
+        paramRefreshCleanup = getLtxHostBridge().addParamRefreshHook(() => {
+          setTimeout(options.refresh, 0);
+        });
+      }
+    };
+    const dispose = () => {
+      if (inputSyncInterval) {
+        clearInterval(inputSyncInterval);
+        inputSyncInterval = null;
+      }
+      boundInput?.removeEventListener("input", onInputChanged);
+      boundInput?.removeEventListener("change", onInputChanged);
+      boundInput = null;
+      boundToggle?.removeEventListener("change", onEnabledToggled);
+      boundToggle = null;
+      paramRefreshCleanup?.();
+      paramRefreshCleanup = null;
+      document.removeEventListener("keydown", onKeydown);
+    };
+    return { bind, dispose };
+  };
+
+  // frontend/documentQueries.ts
+  var documentFps = (document2) => safeFps(document2.fps);
 
   // frontend/timelineReorder.ts
   var computeDropIndex = (pointerX, regions) => {
@@ -7662,15 +10336,17 @@
               if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet || clip.sourceVideo) {
                 return null;
               }
+              const fps = documentFps(getState());
               const newDuration = pxToDuration(
                 width,
                 livePxPerSecond(body),
-                currentTimelineFps()
+                fps
               );
               if (!applyClipDurationResize(
                 clip,
                 newDuration,
-                getRootDefaults
+                getRootDefaults,
+                fps
               )) {
                 return null;
               }
@@ -7968,6 +10644,7 @@
       }
     };
     const addRefAtFrame = (clipIdx, frame, sourceJson) => {
+      const fps = documentFps(getState());
       let newRefIdx = -1;
       const saved = commitClipMutation(
         sourceJson,
@@ -7977,7 +10654,11 @@
           if (!clip) {
             return null;
           }
-          const frameMax = getReferenceFrameMax(getRootDefaults, clip);
+          const frameMax = getReferenceFrameMax(
+            getRootDefaults,
+            clip,
+            fps
+          );
           const ref = buildDefaultRef();
           ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
           appendRefToClip(clip, ref);
@@ -8089,7 +10770,7 @@
         arrowOriginalLeft: arrow?.style.left ?? "",
         originalLabel: mark.querySelector(".vst-refs-ph")?.textContent ?? "",
         durationSeconds: clip.duration,
-        fps: currentTimelineFps(),
+        fps: documentFps(getState()),
         fromEnd: ref.fromEnd === true,
         sourceJson: readStateToken()
       });
@@ -8131,7 +10812,7 @@
         event.clientX - rect.left,
         rect.width,
         clip.duration,
-        currentTimelineFps(),
+        documentFps(getState()),
         false
       );
       addRefAtFrame(clipIdx, frame, readStateToken());
@@ -8342,25 +11023,123 @@
     }
   };
 
-  // frontend/videoStagesTimeline.ts
-  var INPUT_SYNC_INTERVAL_MS = 200;
-  var videoStagesTimeline = () => {
-    let boundInput = null;
-    let boundToggle = null;
-    let inputSyncInterval = null;
-    let paramRefreshHook = null;
-    let storeUnsub = null;
-    let unit = "seconds";
-    let pxPerSecond = DEFAULT_PX_PER_SECOND;
+  // frontend/timelineViewport.ts
+  var createTimelineViewport = (options) => {
+    let currentUnit = "seconds";
+    let currentPxPerSecond = DEFAULT_PX_PER_SECOND;
+    let collapsed = false;
     let lastRenderedPxPerSecond = 0;
-    let stripCollapsed = false;
-    let selectionUnsub = null;
-    const detailStrip = createTimelineDetailStrip({
-      isCollapsed: () => stripCollapsed,
-      setCollapsed: (collapsed) => {
-        stripCollapsed = collapsed;
-        saveViewState2();
+    const save = () => {
+      saveViewState({
+        pxPerSecond: currentPxPerSecond,
+        unit: currentUnit,
+        stripCollapsed: collapsed
+      });
+    };
+    const load = () => {
+      const stored = loadViewState();
+      if (!stored) return;
+      if (stored.pxPerSecond !== void 0) {
+        currentPxPerSecond = clampPxPerSecond(stored.pxPerSecond);
       }
+      if (stored.unit) currentUnit = stored.unit;
+      if (stored.stripCollapsed !== void 0) {
+        collapsed = stored.stripCollapsed;
+      }
+    };
+    const setZoom = (value) => {
+      currentPxPerSecond = clampPxPerSecond(value);
+      save();
+      options.refresh();
+    };
+    const zoomWheel = (factor, clientX) => {
+      const scroll = options.scrollElement();
+      if (!scroll || currentPxPerSecond <= 0) {
+        setZoom(currentPxPerSecond * factor);
+        return;
+      }
+      const offsetX = clientX - scroll.getBoundingClientRect().left;
+      const timeAtPointer = zoomAnchorTime(
+        offsetX,
+        scroll.scrollLeft,
+        currentPxPerSecond
+      );
+      setZoom(currentPxPerSecond * factor);
+      const fresh = options.scrollElement();
+      if (fresh) {
+        fresh.scrollLeft = zoomAnchorScrollLeft(
+          timeAtPointer,
+          currentPxPerSecond,
+          offsetX
+        );
+      }
+    };
+    const restoreScroll = (prevScrollLeft) => {
+      if (prevScrollLeft > 0) {
+        const target = lastRenderedPxPerSecond > 0 && lastRenderedPxPerSecond !== currentPxPerSecond ? zoomAnchorScrollLeft(
+          zoomAnchorTime(
+            TRACK_HEADER_W_PX,
+            prevScrollLeft,
+            lastRenderedPxPerSecond
+          ),
+          currentPxPerSecond,
+          TRACK_HEADER_W_PX
+        ) : prevScrollLeft;
+        const fresh = options.scrollElement();
+        if (fresh) fresh.scrollLeft = target;
+      }
+      lastRenderedPxPerSecond = currentPxPerSecond;
+    };
+    return {
+      load,
+      unit: () => currentUnit,
+      pxPerSecond: () => currentPxPerSecond,
+      stripCollapsed: () => collapsed,
+      setStripCollapsed: (value) => {
+        collapsed = value;
+        save();
+      },
+      toggleUnit: () => {
+        currentUnit = currentUnit === "seconds" ? "frames" : "seconds";
+        save();
+        options.refresh();
+      },
+      zoomIn: () => setZoom(currentPxPerSecond * ZOOM_FACTOR),
+      zoomOut: () => setZoom(currentPxPerSecond / ZOOM_FACTOR),
+      zoomFit: () => {
+        const width = options.scrollElement()?.clientWidth ?? options.timelineBody()?.clientWidth ?? 0;
+        setZoom(
+          computeFitPxPerSecond(
+            options.totalSeconds(),
+            width,
+            TRACK_HEADER_W_PX + 24
+          )
+        );
+      },
+      setZoom,
+      zoomWheel,
+      restoreScroll
+    };
+  };
+
+  // frontend/videoStagesTimeline.ts
+  var videoStagesTimeline = () => {
+    let storeUnsub = null;
+    let selectionUnsub = null;
+    const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
+    const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
+    const viewport = createTimelineViewport({
+      refresh: () => refresh(),
+      totalSeconds: () => getClips().reduce(
+        (sum, clip) => sum + Math.max(0, clip.duration || 0),
+        0
+      ),
+      timelineBody,
+      scrollElement: scrollEl
+    });
+    const detailStrip = createTimelineDetailStrip({
+      isCollapsed: viewport.stripCollapsed,
+      setCollapsed: viewport.setStripCollapsed
     });
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
@@ -8371,39 +11150,31 @@
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack();
     const openSettings = () => {
-      stripCollapsed = false;
-      saveViewState2();
+      viewport.setStripCollapsed(false);
       setSelection({ kind: "none" });
       detailStrip.render();
     };
     const history = createTimelineHistory({
-      read: () => readCarrierSnapshot(),
-      write: (value) => restoreCarrierSnapshot(value)
+      // The canonical model contains everything VideoStages authors across
+      // Data, clip-prompt, and UI-state carriers, including hue and
+      // prompt-window IDs.
+      read: () => JSON.stringify(getState()),
+      write: (value) => {
+        const state = JSON.parse(value);
+        const expectedRevision = getTimelineStore().revision();
+        saveState(state, {
+          expectedRevision,
+          notifyDomChange: isVideoStagesEnabled(),
+          origin: "history"
+        });
+      }
     });
-    const loadViewState2 = () => {
-      const stored = loadViewState();
-      if (!stored) {
-        return;
-      }
-      if (stored.pxPerSecond !== void 0) {
-        pxPerSecond = clampPxPerSecond(stored.pxPerSecond);
-      }
-      if (stored.unit) {
-        unit = stored.unit;
-      }
-      if (stored.stripCollapsed !== void 0) {
-        stripCollapsed = stored.stripCollapsed;
-      }
-    };
-    const saveViewState2 = () => {
-      saveViewState({ pxPerSecond, unit, stripCollapsed });
-    };
-    const toggleUnit = () => {
-      unit = unit === "seconds" ? "frames" : "seconds";
-      saveViewState2();
-      refresh();
-    };
-    const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
+    const hostLifecycle = createTimelineHostLifecycle({
+      refresh: () => refresh(),
+      syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
+      undo: () => history.undo(),
+      redo: () => history.redo()
+    });
     const ensureDock = (body) => {
       const shell = body.parentElement;
       if (!shell) {
@@ -8416,46 +11187,6 @@
         shell.insertBefore(dock, body);
       }
       return dock;
-    };
-    const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
-    const setZoom = (value) => {
-      pxPerSecond = clampPxPerSecond(value);
-      saveViewState2();
-      refresh();
-    };
-    const zoomIn = () => setZoom(pxPerSecond * ZOOM_FACTOR);
-    const zoomOut = () => setZoom(pxPerSecond / ZOOM_FACTOR);
-    const zoomFit = () => {
-      const totalSeconds = getClips().reduce(
-        (sum, clip) => sum + Math.max(0, clip.duration || 0),
-        0
-      );
-      const width = scrollEl()?.clientWidth ?? timelineBody()?.clientWidth ?? 0;
-      setZoom(
-        computeFitPxPerSecond(totalSeconds, width, TRACK_HEADER_W_PX + 24)
-      );
-    };
-    const zoomWheel = (factor, clientX) => {
-      const scroll = scrollEl();
-      if (!scroll || pxPerSecond <= 0) {
-        setZoom(pxPerSecond * factor);
-        return;
-      }
-      const offsetX = clientX - scroll.getBoundingClientRect().left;
-      const timeAtPointer = zoomAnchorTime(
-        offsetX,
-        scroll.scrollLeft,
-        pxPerSecond
-      );
-      setZoom(pxPerSecond * factor);
-      const fresh = scrollEl();
-      if (fresh) {
-        fresh.scrollLeft = zoomAnchorScrollLeft(
-          timeAtPointer,
-          pxPerSecond,
-          offsetX
-        );
-      }
     };
     const onBodyClickSyncReadout = () => {
       void Promise.resolve().then(() => {
@@ -8475,7 +11206,7 @@
         }
         selEl.hidden = sel === null;
         dotEl.hidden = sel === null;
-        selEl.textContent = sel === null ? "" : `clip ${sel}`;
+        selEl.textContent = sel === null ? "" : `clip ${sel + 1}`;
       });
     };
     const addClip = () => {
@@ -8507,45 +11238,36 @@
       try {
         const state = getState();
         const clips = state.clips;
+        const globalPrompt = readGlobalPrompt();
         renderTimeline(body, clips, {
           fps: safeFps(state.fps),
           width: state.width,
           height: state.height,
           dimsExplicit: state.dimsExplicit,
           fpsExplicit: state.fpsExplicit,
-          unit,
-          pxPerSecond,
+          unit: viewport.unit(),
+          pxPerSecond: viewport.pxPerSecond(),
           selectedIndex: linking.getSelectedIndex(),
           enabled,
           onToggleEnabled: setVideoStagesEnabled,
           onOpenSettings: () => openSettings(),
-          onToggleUnit: toggleUnit,
+          onToggleUnit: viewport.toggleUnit,
           onAddClip: addClip,
-          onZoomIn: zoomIn,
-          onZoomOut: zoomOut,
-          onZoomFit: zoomFit,
-          onZoomSlider: setZoom,
-          onZoomWheel: zoomWheel,
+          onZoomIn: viewport.zoomIn,
+          onZoomOut: viewport.zoomOut,
+          onZoomFit: viewport.zoomFit,
+          onZoomSlider: viewport.setZoom,
+          onZoomWheel: viewport.zoomWheel,
           onUndo: () => history.undo(),
           onRedo: () => history.redo(),
-          globalPrompt: readGlobalPrompt()
+          globalPrompt,
+          diagnostics: deriveAuthoringDiagnostics(clips),
+          executionSummary: projectLtxExecutionPath(state, {
+            generatedEntry: !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel() ? "text-to-video" : "host-image-guidance",
+            globalPrompt
+          })
         });
-        if (prevScrollLeft > 0) {
-          const target = lastRenderedPxPerSecond > 0 && lastRenderedPxPerSecond !== pxPerSecond ? zoomAnchorScrollLeft(
-            zoomAnchorTime(
-              TRACK_HEADER_W_PX,
-              prevScrollLeft,
-              lastRenderedPxPerSecond
-            ),
-            pxPerSecond,
-            TRACK_HEADER_W_PX
-          ) : prevScrollLeft;
-          const fresh = scrollEl();
-          if (fresh) {
-            fresh.scrollLeft = target;
-          }
-        }
-        lastRenderedPxPerSecond = pxPerSecond;
+        viewport.restoreScroll(prevScrollLeft);
         linking.reapplySelection(body, clips.length);
         detailStrip.render(meta);
         applySelectionHighlight(body);
@@ -8554,74 +11276,8 @@
       }
     };
     const refresh = () => renderAll();
-    const onInputChanged = () => {
-      getTimelineStore().syncFromCarrier();
-    };
-    const bindInputListener = () => {
-      const input = getPromptInput();
-      if (!input || input === boundInput) {
-        return;
-      }
-      if (boundInput) {
-        boundInput.removeEventListener("input", onInputChanged);
-        boundInput.removeEventListener("change", onInputChanged);
-      }
-      input.addEventListener("input", onInputChanged);
-      input.addEventListener("change", onInputChanged);
-      boundInput = input;
-    };
-    const onEnabledToggled = () => {
-      refresh();
-    };
-    const bindToggleListener = () => {
-      const toggle = getGroupToggle();
-      if (!toggle || toggle === boundToggle) {
-        return;
-      }
-      if (boundToggle) {
-        boundToggle.removeEventListener("change", onEnabledToggled);
-      }
-      toggle.addEventListener("change", onEnabledToggled);
-      boundToggle = toggle;
-    };
-    const startInputSync = () => {
-      if (inputSyncInterval) {
-        return;
-      }
-      inputSyncInterval = setInterval(() => {
-        getTimelineStore().syncFromCarrier();
-      }, INPUT_SYNC_INTERVAL_MS);
-    };
-    const registerParamRefreshHook = () => {
-      if (paramRefreshHook || typeof refreshParamsExtra === "undefined" || !Array.isArray(refreshParamsExtra)) {
-        return;
-      }
-      paramRefreshHook = () => {
-        setTimeout(() => refresh(), 0);
-      };
-      refreshParamsExtra.push(paramRefreshHook);
-    };
-    const onKeydown = (event) => {
-      if (!(event.ctrlKey || event.metaKey)) {
-        return;
-      }
-      const key = event.key.toLowerCase();
-      const isUndo = key === "z" && !event.shiftKey;
-      const isRedo = key === "z" && event.shiftKey || key === "y";
-      if (!isUndo && !isRedo) {
-        return;
-      }
-      const active = document.activeElement;
-      const inTextField = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLElement && active.isContentEditable;
-      if (inTextField || !isVideoStagesEnabled()) {
-        return;
-      }
-      if (isUndo ? history.undo() : history.redo()) {
-        event.preventDefault();
-      }
-    };
     const init = () => {
-      loadViewState2();
+      viewport.load();
       injectTimelineTab();
       const body = document.getElementById(TIMELINE_BODY_ID);
       if (body) {
@@ -8651,36 +11307,12 @@
         history.capture();
         renderAll(meta);
       });
-      bindInputListener();
-      bindToggleListener();
       history.syncBaseline();
-      document.removeEventListener("keydown", onKeydown);
-      document.addEventListener("keydown", onKeydown);
-      startInputSync();
-      registerParamRefreshHook();
+      hostLifecycle.bind();
       refresh();
     };
     const dispose = () => {
-      if (inputSyncInterval) {
-        clearInterval(inputSyncInterval);
-        inputSyncInterval = null;
-      }
-      if (boundInput) {
-        boundInput.removeEventListener("input", onInputChanged);
-        boundInput.removeEventListener("change", onInputChanged);
-        boundInput = null;
-      }
-      if (boundToggle) {
-        boundToggle.removeEventListener("change", onEnabledToggled);
-        boundToggle = null;
-      }
-      if (paramRefreshHook && typeof refreshParamsExtra !== "undefined" && Array.isArray(refreshParamsExtra)) {
-        const idx = refreshParamsExtra.indexOf(paramRefreshHook);
-        if (idx !== -1) {
-          refreshParamsExtra.splice(idx, 1);
-        }
-      }
-      paramRefreshHook = null;
+      hostLifecycle.dispose();
       retakeTrack.dispose();
       audioSegmentTrack.dispose();
       linking.dispose();
@@ -8696,7 +11328,6 @@
       storeUnsub = null;
       const body = document.getElementById(TIMELINE_BODY_ID);
       body?.removeEventListener("click", onBodyClickSyncReadout);
-      document.removeEventListener("keydown", onKeydown);
     };
     return { init, refresh, dispose };
   };
@@ -8709,7 +11340,7 @@
       return;
     }
     dataInputWatchdog = setTimeout(() => {
-      if (!document.getElementById(DATA_INPUT_ID)) {
+      if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
         console.warn(
           `VideoStages: Data param input (#${DATA_INPUT_ID}) never appeared — is the VideoStages backend extension loaded?`
         );
@@ -8717,15 +11348,12 @@
     }, 1e4);
   };
   var registerVideoStagesPromptPrefix = () => {
-    if (typeof promptTabComplete === "undefined") {
-      return;
-    }
-    promptTabComplete.registerPrefix(
+    getLtxHostBridge().registerPromptPrefix(
       "videoclip",
       "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
       () => [
-        "\n<videoclip[0]>clip 0's prompt text — everything until the next <videoclip...> tag.",
-        "\n<videoclip[0]:1.5-4>a prompt window on clip 0 from 1.5s to 4s.",
+        "\n<videoclip[0]>the first clip's prompt text — everything until the next <videoclip...> tag.",
+        "\n<videoclip[0]:1.5-4>a prompt window on the first clip from 1.5s to 4s.",
         "\nThe timeline owns these; structured config (stages, refs, audio) rides in the hidden Data param."
       ],
       true
@@ -8734,7 +11362,7 @@
   var DATA_INPUT_RETRY_MS = 250;
   var dataInputRetryTimer = null;
   var initTimeline = () => {
-    if (!document.getElementById(DATA_INPUT_ID)) {
+    if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
       warnIfDataInputNeverAppears();
       if (!dataInputRetryTimer) {
         dataInputRetryTimer = setTimeout(() => {
@@ -8751,11 +11379,9 @@
     }
   };
   var scheduleTimelineInit = () => {
-    if (!Array.isArray(postParamBuildSteps)) {
+    if (!getLtxHostBridge().addPostParamBuildStep(initTimeline)) {
       setTimeout(scheduleTimelineInit, 200);
-      return;
     }
-    postParamBuildSteps.push(initTimeline);
   };
   scheduleTimelineInit();
   registerVideoStagesPromptPrefix();

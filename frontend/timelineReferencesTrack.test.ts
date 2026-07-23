@@ -50,9 +50,12 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     promptWindows: [],
 });
 
-const mountPrompt = (clips: ClipFixture[]): void => {
+const mountPrompt = (clips: ClipFixture[], fps?: number): void => {
     mountPromptBox("");
-    mountVideoStagesData({ clips: clips.map(clipRecord) });
+    mountVideoStagesData({
+        ...(fps === undefined ? {} : { fps }),
+        clips: clips.map(clipRecord),
+    });
 };
 
 const makeBody = (): HTMLElement => {
@@ -94,8 +97,8 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         document.body.innerHTML = "";
     });
 
-    const setup = (fixtures: ClipFixture[]): HTMLElement => {
-        mountPrompt(fixtures);
+    const setup = (fixtures: ClipFixture[], fps?: number): HTMLElement => {
+        mountPrompt(fixtures, fps);
         const body = makeBody();
         renderRefs(body, persistence.getClips());
         track = createTimelineReferencesTrack();
@@ -225,6 +228,20 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 1 });
     });
 
+    it("uses the stored 16fps timeline when adding a ref", () => {
+        const body = setup([{ duration: 5, refs: [] }], 16);
+        stubLaneRect(body, 0, 0, 120);
+        body.querySelector<HTMLElement>(
+            '.vst-refs-lane[data-clip-idx="0"]',
+        )?.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, clientX: 60 }),
+        );
+
+        // Half-way across five seconds is frame 40 at the stored 16fps, not 60
+        // at the host's default 24fps.
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(40);
+    });
+
     it("retimes a ref by dragging its thumbnail, suppressing the trailing click", () => {
         const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
@@ -238,6 +255,16 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         expect(saveSpy).toHaveBeenCalledTimes(1);
         // Half-way across a 5s clip @24fps → frame 60.
         expect(savedClips(saveSpy)[0].refs[0].frame).toBe(60);
+    });
+
+    it("uses the stored 16fps timeline when dragging a ref", () => {
+        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }], 16);
+        stubLaneRect(body, 0, 0, 120);
+        const thumb = markEl(body, 0, 0);
+
+        dragThumb(thumb, 0, 60);
+
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(40);
     });
 
     it("treats a sub-threshold press as a select, not a drag", () => {

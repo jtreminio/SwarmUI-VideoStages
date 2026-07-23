@@ -1,0 +1,566 @@
+import { beforeEach, describe, expect, it } from "@jest/globals";
+import {
+    minimalClip,
+    minimalRef,
+    minimalStage,
+} from "./__test_helpers__/clipFixtures";
+import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    collectAuthoringEntityIds,
+    ensureAuthoringDocumentIdentity,
+} from "./identity";
+import {
+    __resetPersistenceForTests,
+    getState,
+    saveState,
+    serializeStateForStorage,
+} from "./persistence";
+import {
+    CURRENT_AUTHORING_SCHEMA_VERSION,
+    type VideoStagesConfig,
+} from "./types";
+import { clearUiStateForTests } from "./uiState";
+
+const baseState = (
+    clips: VideoStagesConfig["clips"],
+    overrides: Partial<VideoStagesConfig> = {},
+): VideoStagesConfig => ({
+    width: 1024,
+    height: 1024,
+    fps: 24,
+    dimsExplicit: false,
+    fpsExplicit: false,
+    clips,
+    ...overrides,
+});
+
+const dataJson = (): Record<string, unknown> =>
+    JSON.parse(
+        (document.getElementById("input_videostages") as HTMLTextAreaElement)
+            .value,
+    ) as Record<string, unknown>;
+
+describe("versioned authoring document identity", () => {
+    beforeEach(() => {
+        __resetPersistenceForTests();
+        clearUiStateForTests();
+        document.body.innerHTML = "";
+        mountVideoStagesData({ clips: [] });
+        mountPromptBox("");
+    });
+
+    it("migrates a legacy array once, serializes all stored entity IDs, and reloads them unchanged", () => {
+        mountVideoStagesData([
+            {
+                duration: 5,
+                audioSegments: [
+                    {
+                        source: "audio0",
+                        startSeconds: 0,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 1,
+                    },
+                ],
+                retake: {
+                    startSeconds: 2,
+                    lengthSeconds: 1,
+                    strength: 0.5,
+                },
+                refs: [{ source: "Base", frame: 1 }],
+                stages: [{ model: "m" }],
+            },
+        ]);
+        mountPromptBox("<videoclip[0]>base\n<videoclip[0]:1-2>window");
+
+        const migrated = getState();
+        expect(migrated.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);
+        expect(migrated.audioTracks).toEqual([]);
+        const firstIds = collectAuthoringEntityIds(migrated);
+        expect(firstIds).toHaveLength(6);
+        expect(new Set(firstIds).size).toBe(firstIds.length);
+
+        saveState(migrated, { notifyDomChange: false });
+        const stored = dataJson() as {
+            schemaVersion: number;
+            clips: {
+                id: string;
+                audioSegments: { id: string }[];
+                retake: { id: string };
+                refs: { id: string }[];
+                stages: { id: string }[];
+            }[];
+            audioTracks: unknown[];
+        };
+        expect(stored.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);
+        expect(stored.audioTracks).toEqual([]);
+        expect(stored.clips[0].id).toBe(migrated.clips[0].id);
+        expect(stored.clips[0].audioSegments[0].id).toBe(
+            migrated.clips[0].audioSegments[0].id,
+        );
+        expect(stored.clips[0].retake.id).toBe(migrated.clips[0].retake?.id);
+        expect(stored.clips[0].refs[0].id).toBe(migrated.clips[0].refs[0].id);
+        expect(stored.clips[0].stages[0].id).toBe(
+            migrated.clips[0].stages[0].id,
+        );
+
+        __resetPersistenceForTests();
+        const reloaded = getState();
+        expect(collectAuthoringEntityIds(reloaded)).toEqual(firstIds);
+        expect(reloaded.clips[0].promptWindows[0].id).toBe(
+            migrated.clips[0].promptWindows[0].id,
+        );
+    });
+
+    it("derives the same legacy IDs across a prompt-only cache invalidation before save", () => {
+        mountVideoStagesData([
+            {
+                duration: 3,
+                refs: [{ source: "Base", frame: 1 }],
+                stages: [{ model: "m" }],
+            },
+        ]);
+        const prompt = mountPromptBox(
+            "<videoclip[0]>first\n<videoclip[0]:0-1>detail one",
+        );
+        const before = collectAuthoringEntityIds(getState());
+
+        prompt.value = "<videoclip[0]>second\n<videoclip[0]:0-1>detail two";
+        const after = collectAuthoringEntityIds(getState());
+
+        expect(after).toEqual(before);
+        expect(after).toEqual([
+            "clip_legacy_0",
+            "stage_legacy_0_0",
+            "ref_legacy_0_0",
+            "prompt_window_legacy_0_0",
+        ]);
+    });
+
+    it("durably canonicalizes whitespace and globally duplicate v2 carrier IDs on a no-op save", () => {
+        mountVideoStagesData({
+            schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+            clips: [
+                {
+                    id: " clip-a ",
+                    duration: 3,
+                    stages: [{ id: "duplicate", model: "m" }],
+                    refs: [{ id: "duplicate", source: "Base", frame: 1 }],
+                    audioSegments: [],
+                    retake: null,
+                },
+            ],
+            audioTracks: [],
+        });
+        const repaired = getState();
+        const repairedIds = collectAuthoringEntityIds(repaired);
+        expect(repaired.clips[0].id).toBe("clip-a");
+        expect(new Set(repairedIds).size).toBe(repairedIds.length);
+
+        saveState(repaired, { notifyDomChange: false });
+
+        const stored = dataJson() as {
+            clips: {
+                id: string;
+                stages: { id: string }[];
+                refs: { id: string }[];
+            }[];
+        };
+        const storedIds = [
+            stored.clips[0].id,
+            stored.clips[0].stages[0].id,
+            stored.clips[0].refs[0].id,
+        ];
+        expect(storedIds).toEqual([
+            repaired.clips[0].id,
+            repaired.clips[0].stages[0].id,
+            repaired.clips[0].refs[0].id,
+        ]);
+        expect(storedIds.every((id) => id.trim() === id)).toBe(true);
+        expect(new Set(storedIds).size).toBe(storedIds.length);
+    });
+
+    it("repairs missing and duplicate IDs across every entity namespace", () => {
+        const duplicate = "same";
+        const state = baseState(
+            [
+                minimalClip({
+                    id: duplicate,
+                    stages: [minimalStage({ id: duplicate })],
+                    refs: [minimalRef({ id: duplicate })],
+                    audioSegments: [
+                        {
+                            id: duplicate,
+                            source: "audio0",
+                            startSeconds: 0,
+                            trimStartSeconds: 0,
+                            lengthSeconds: 1,
+                        },
+                    ],
+                    promptWindows: [
+                        {
+                            id: duplicate,
+                            prompt: "window",
+                            start: 0,
+                            duration: 1,
+                        },
+                    ],
+                    retake: {
+                        id: duplicate,
+                        startSeconds: 0,
+                        lengthSeconds: 1,
+                        strength: 1,
+                    },
+                }),
+            ],
+            {
+                audioTracks: [
+                    {
+                        id: duplicate,
+                        source: {
+                            kind: "External",
+                            reference: "music",
+                            uploadedAudio: null,
+                        },
+                        spans: [
+                            {
+                                id: duplicate,
+                                firstClipId: duplicate,
+                                lastClipId: duplicate,
+                                timelineStartSeconds: null,
+                                timelineLengthSeconds: null,
+                                sourceStartSeconds: 0,
+                                clipStartOffsetSeconds: null,
+                                clipLengthSeconds: null,
+                            },
+                        ],
+                    },
+                ],
+            },
+        );
+
+        ensureAuthoringDocumentIdentity(state);
+        const ids = collectAuthoringEntityIds(state);
+        expect(ids).toHaveLength(8);
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(state.clips[0].id).toBe(duplicate);
+        expect(state.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);
+    });
+
+    it("reserves later stable IDs before assigning missing clip and nested IDs", () => {
+        const stableClip = minimalClip({
+            id: "clip_legacy_0",
+            stages: [minimalStage({ id: "stage-stable" })],
+        });
+        const nestedClip = minimalClip({
+            id: "clip-nested",
+            stages: [minimalStage(), minimalStage({ id: "stage_legacy_1_0" })],
+            refs: [minimalRef(), minimalRef({ id: "ref_legacy_1_0" })],
+            audioSegments: [
+                {
+                    source: "audio0",
+                    startSeconds: 0,
+                    trimStartSeconds: 0,
+                    lengthSeconds: 0.5,
+                },
+                {
+                    id: "audio_segment_legacy_1_0",
+                    source: "audio1",
+                    startSeconds: 1,
+                    trimStartSeconds: 0,
+                    lengthSeconds: 0.5,
+                },
+            ],
+            promptWindows: [
+                { prompt: "new", start: 0, duration: 0.5 },
+                {
+                    id: "prompt_window_legacy_1_0",
+                    prompt: "stable",
+                    start: 1,
+                    duration: 0.5,
+                },
+            ],
+        });
+        const missingClip = minimalClip({
+            stages: [minimalStage({ id: "stage-new-clip" })],
+        });
+        const stableStage = nestedClip.stages[1];
+        const stableRef = nestedClip.refs[1];
+        const stableSegment = nestedClip.audioSegments[1];
+        const stableWindow = nestedClip.promptWindows[1];
+        const stableSpan = {
+            id: "audio_span_legacy_0_0",
+            firstClipId: stableClip.id as string,
+            lastClipId: stableClip.id as string,
+            timelineStartSeconds: null,
+            timelineLengthSeconds: null,
+            sourceStartSeconds: 0,
+            clipStartOffsetSeconds: null,
+            clipLengthSeconds: null,
+        };
+        const state = baseState([missingClip, nestedClip, stableClip], {
+            audioTracks: [
+                {
+                    id: "track-fixed",
+                    source: {
+                        kind: "External",
+                        reference: "music",
+                        uploadedAudio: null,
+                    },
+                    spans: [
+                        {
+                            firstClipId: stableClip.id as string,
+                            lastClipId: stableClip.id as string,
+                            timelineStartSeconds: 0,
+                            timelineLengthSeconds: 1,
+                            sourceStartSeconds: 0,
+                            clipStartOffsetSeconds: null,
+                            clipLengthSeconds: null,
+                        },
+                        stableSpan,
+                    ],
+                },
+            ],
+        });
+
+        ensureAuthoringDocumentIdentity(state);
+
+        expect(stableClip.id).toBe("clip_legacy_0");
+        expect(missingClip.id).not.toBe(stableClip.id);
+        expect(stableStage.id).toBe("stage_legacy_1_0");
+        expect(nestedClip.stages[0].id).not.toBe(stableStage.id);
+        expect(stableRef.id).toBe("ref_legacy_1_0");
+        expect(nestedClip.refs[0].id).not.toBe(stableRef.id);
+        expect(stableSegment.id).toBe("audio_segment_legacy_1_0");
+        expect(nestedClip.audioSegments[0].id).not.toBe(stableSegment.id);
+        expect(stableWindow.id).toBe("prompt_window_legacy_1_0");
+        expect(nestedClip.promptWindows[0].id).not.toBe(stableWindow.id);
+        expect(stableSpan.id).toBe("audio_span_legacy_0_0");
+        expect(state.audioTracks?.[0].spans[0].id).not.toBe(stableSpan.id);
+        expect(stableSpan.firstClipId).toBe("clip_legacy_0");
+        expect(new Set(collectAuthoringEntityIds(state)).size).toBe(
+            collectAuthoringEntityIds(state).length,
+        );
+    });
+
+    it("preserves clip, hue, and prompt-window identity after clip reorder", () => {
+        const state = baseState([
+            minimalClip({
+                id: "clip-a",
+                hue: 10,
+                prompt: "a",
+                promptWindows: [
+                    {
+                        id: "window-a",
+                        prompt: "detail-a",
+                        start: 0,
+                        duration: 1,
+                    },
+                ],
+            }),
+            minimalClip({
+                id: "clip-b",
+                hue: 220,
+                prompt: "b",
+                promptWindows: [
+                    {
+                        id: "window-b",
+                        prompt: "detail-b",
+                        start: 1,
+                        duration: 1,
+                    },
+                ],
+            }),
+        ]);
+        saveState(state, { notifyDomChange: false });
+
+        const reordered = getState();
+        reordered.clips.reverse();
+        saveState(reordered, { notifyDomChange: false });
+        __resetPersistenceForTests();
+
+        const reloaded = getState();
+        expect(reloaded.clips.map((clip) => clip.id)).toEqual([
+            "clip-b",
+            "clip-a",
+        ]);
+        expect(reloaded.clips.map((clip) => clip.hue)).toEqual([220, 10]);
+        expect(reloaded.clips.map((clip) => clip.promptWindows[0].id)).toEqual([
+            "window-b",
+            "window-a",
+        ]);
+    });
+
+    it("keeps nested IDs attached when stored collections are reordered", () => {
+        const state = baseState(
+            [
+                minimalClip({
+                    id: "clip-nested",
+                    refs: [
+                        minimalRef({ id: "ref-a", frame: 1 }),
+                        minimalRef({ id: "ref-b", frame: 2 }),
+                    ],
+                    stages: [
+                        minimalStage({ id: "stage-a" }),
+                        minimalStage({ id: "stage-b" }),
+                    ],
+                    audioSegments: [
+                        {
+                            id: "segment-a",
+                            source: "audio0",
+                            startSeconds: 0,
+                            trimStartSeconds: 0,
+                            lengthSeconds: 0.5,
+                        },
+                        {
+                            id: "segment-b",
+                            source: "audio1",
+                            startSeconds: 1,
+                            trimStartSeconds: 0,
+                            lengthSeconds: 0.5,
+                        },
+                    ],
+                }),
+            ],
+            {
+                audioTracks: [
+                    {
+                        id: "track-a",
+                        source: {
+                            kind: "External",
+                            reference: "a",
+                            uploadedAudio: null,
+                        },
+                        spans: [
+                            {
+                                id: "span-a",
+                                firstClipId: "clip-nested",
+                                lastClipId: "clip-nested",
+                                timelineStartSeconds: null,
+                                timelineLengthSeconds: null,
+                                sourceStartSeconds: 0,
+                                clipStartOffsetSeconds: null,
+                                clipLengthSeconds: null,
+                            },
+                            {
+                                id: "span-b",
+                                firstClipId: "clip-nested",
+                                lastClipId: "clip-nested",
+                                timelineStartSeconds: 1,
+                                timelineLengthSeconds: 0.5,
+                                sourceStartSeconds: 0,
+                                clipStartOffsetSeconds: null,
+                                clipLengthSeconds: null,
+                            },
+                        ],
+                    },
+                ],
+            },
+        );
+        saveState(state, { notifyDomChange: false });
+
+        const reordered = getState();
+        const clip = reordered.clips[0];
+        clip.refs.reverse();
+        clip.stages.reverse();
+        clip.audioSegments.reverse();
+        reordered.audioTracks?.[0].spans.reverse();
+        saveState(reordered, { notifyDomChange: false });
+        __resetPersistenceForTests();
+
+        const reloaded = getState();
+        expect(reloaded.clips[0].refs.map((ref) => ref.id)).toEqual([
+            "ref-b",
+            "ref-a",
+        ]);
+        expect(reloaded.clips[0].stages.map((stage) => stage.id)).toEqual([
+            "stage-b",
+            "stage-a",
+        ]);
+        expect(
+            reloaded.clips[0].audioSegments.map((segment) => segment.id),
+        ).toEqual(["segment-b", "segment-a"]);
+        expect(reloaded.audioTracks?.[0].spans.map((span) => span.id)).toEqual([
+            "span-b",
+            "span-a",
+        ]);
+    });
+
+    it("round-trips a one-clip relative root audio span", () => {
+        const state = baseState([minimalClip({ id: "clip-one" })], {
+            audioTracks: [
+                {
+                    id: "track-voice",
+                    source: {
+                        kind: "Upload",
+                        reference: "voice.wav",
+                        uploadedAudio: {
+                            data: "data:audio/wav;base64,AAAA",
+                            fileName: "voice.wav",
+                        },
+                    },
+                    spans: [
+                        {
+                            id: "span-voice",
+                            firstClipId: "clip-one",
+                            lastClipId: "clip-one",
+                            timelineStartSeconds: null,
+                            timelineLengthSeconds: null,
+                            sourceStartSeconds: 0.5,
+                            clipStartOffsetSeconds: 1,
+                            clipLengthSeconds: 2,
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const serialized = serializeStateForStorage(state);
+        mountVideoStagesData(serialized);
+        __resetPersistenceForTests();
+        expect(getState().audioTracks).toEqual(state.audioTracks);
+    });
+
+    it("round-trips a multi-clip root audio span with an optional timeline window", () => {
+        const state = baseState(
+            [
+                minimalClip({ id: "clip-first" }),
+                minimalClip({ id: "clip-last" }),
+            ],
+            {
+                audioTracks: [
+                    {
+                        id: "track-score",
+                        source: {
+                            kind: "AceStepFun",
+                            reference: "audio1",
+                            uploadedAudio: null,
+                        },
+                        spans: [
+                            {
+                                id: "span-score",
+                                firstClipId: "clip-first",
+                                lastClipId: "clip-last",
+                                timelineStartSeconds: 0.5,
+                                timelineLengthSeconds: 3,
+                                sourceStartSeconds: 4,
+                                clipStartOffsetSeconds: null,
+                                clipLengthSeconds: null,
+                            },
+                        ],
+                    },
+                ],
+            },
+        );
+
+        saveState(state, { notifyDomChange: false });
+        __resetPersistenceForTests();
+        const reloaded = getState();
+        expect(reloaded.audioTracks).toEqual(state.audioTracks);
+        expect(reloaded.audioTracks?.[0].spans[0]).toMatchObject({
+            firstClipId: "clip-first",
+            lastClipId: "clip-last",
+            timelineStartSeconds: 0.5,
+            timelineLengthSeconds: 3,
+        });
+    });
+});

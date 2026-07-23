@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it } from "@jest/globals";
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    jest,
+} from "@jest/globals";
 import {
     minimalClip,
     minimalRef,
@@ -7,8 +14,10 @@ import {
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import {
     __resetPersistenceForTests,
+    dispatchDocumentCommand,
     getClips,
     getState,
+    getTimelineStore,
     saveClips,
     saveState,
     serializeClipsForStorage,
@@ -27,6 +36,10 @@ const promptEl = (): HTMLTextAreaElement =>
     document.getElementById("input_prompt") as HTMLTextAreaElement;
 
 describe("persistence", () => {
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
     describe("serializeClipsForStorage", () => {
         it("serializes only structural clip, ref, and stage fields (no UI/prompt fields)", () => {
             const clips = [
@@ -59,8 +72,10 @@ describe("persistence", () => {
                     ],
                 }),
             ];
+            const serialized = serializeClipsForStorage(clips);
             const expected: StoredClip[] = [
                 {
+                    id: clips[0].id as string,
                     skipped: false,
                     boundaryOut: "cut",
                     boundaryOutOverlap: 8,
@@ -89,6 +104,7 @@ describe("persistence", () => {
                     retake: null,
                     refs: [
                         {
+                            id: clips[0].refs[0].id as string,
                             source: REF_SOURCE_BASE,
                             uploadFileName: null,
                             uploadedImage: null,
@@ -98,6 +114,7 @@ describe("persistence", () => {
                     ],
                     stages: [
                         {
+                            id: clips[0].stages[0].id as string,
                             skipped: false,
                             control: 1,
                             controlNetStrength: 0.7,
@@ -116,7 +133,6 @@ describe("persistence", () => {
                     ],
                 },
             ];
-            const serialized = serializeClipsForStorage(clips);
             expect(serialized).toEqual(expected);
             expect(JSON.stringify(serialized)).not.toContain("prompt");
             expect(JSON.stringify(serialized)).not.toContain("hue");
@@ -156,6 +172,248 @@ describe("persistence", () => {
             ]);
         });
 
+        it("dispatches stable-ID commands through the repository facade", () => {
+            saveClips([minimalClip({ duration: 3, prompt: "a red fox" })], {
+                notifyDomChange: false,
+            });
+            const snapshot = getTimelineStore().getSnapshot();
+            const clipId = snapshot.state.clips[0].id as string;
+
+            const result = dispatchDocumentCommand(
+                {
+                    type: "clip.patch",
+                    clipId,
+                    patch: { duration: 7 },
+                },
+                {
+                    origin: "timeline",
+                    notifyDomChange: false,
+                    expectedRevision: snapshot.revision,
+                },
+            );
+
+            expect(result).toEqual({
+                applied: true,
+                revision: snapshot.revision + 1,
+                impacts: ["value", "capabilities"],
+            });
+            expect(getState().clips[0]).toMatchObject({
+                id: clipId,
+                duration: 7,
+                prompt: "a red fox",
+            });
+            expect(
+                (JSON.parse(dataInput().value) as { clips: { id: string }[] })
+                    .clips[0].id,
+            ).toBe(clipId);
+        });
+
+        it("reduces a legacy saveClips mutation to one atomic batch and one notification", () => {
+            const clips = [minimalClip({ duration: 3, prompt: "a red fox" })];
+            const callerSnapshot = structuredClone(clips);
+            const store = getTimelineStore();
+            const dispatchSpy = jest.spyOn(store, "dispatch");
+            const subscriber = jest.fn();
+            store.subscribe(subscriber);
+            const dataChange = jest.fn();
+            const promptChange = jest.fn();
+            dataInput().addEventListener("change", dataChange);
+            promptEl().addEventListener("change", promptChange);
+
+            saveClips(clips, {
+                origin: "detail-strip",
+                notifyDomChange: true,
+                valueOnly: true,
+            });
+
+            expect(dispatchSpy).toHaveBeenCalledTimes(1);
+            expect(dispatchSpy.mock.calls[0][0]).toMatchObject({
+                type: "batch",
+                commands: expect.any(Array),
+            });
+            expect(dispatchSpy.mock.calls[0][3]).toEqual(expect.any(Number));
+            expect(subscriber).toHaveBeenCalledTimes(1);
+            expect(subscriber.mock.calls[0][1]).toMatchObject({
+                origin: "detail-strip",
+                hint: "value-only",
+            });
+            expect(dataChange).toHaveBeenCalledTimes(1);
+            expect(promptChange).toHaveBeenCalledTimes(1);
+            expect(clips).toEqual(callerSnapshot);
+            expect(clips[0].id).toBeUndefined();
+            expect(clips[0].stages[0].id).toBeUndefined();
+        });
+
+        it("preserves structural order and prompt/UI sidecars through compatibility saves", () => {
+            saveClips(
+                [
+                    minimalClip({
+                        id: "clip-a",
+                        hue: 15,
+                        prompt: "alpha",
+                        promptWindows: [
+                            {
+                                id: "window-a",
+                                prompt: "alpha gust",
+                                start: 0.5,
+                                duration: 1,
+                            },
+                        ],
+                        stages: [minimalStage({ id: "stage-a" })],
+                    }),
+                    minimalClip({
+                        id: "clip-b",
+                        hue: 120,
+                        prompt: "beta",
+                        stages: [minimalStage({ id: "stage-b" })],
+                    }),
+                    minimalClip({
+                        id: "clip-c",
+                        hue: 225,
+                        prompt: "gamma",
+                        stages: [minimalStage({ id: "stage-c" })],
+                    }),
+                ],
+                { notifyDomChange: false },
+            );
+            const [clipA, , clipC] = getClips();
+            const clipD = minimalClip({
+                id: "clip-d",
+                hue: 300,
+                prompt: "delta",
+                promptWindows: [
+                    {
+                        id: "window-d",
+                        prompt: "delta rain",
+                        start: 1,
+                        duration: 0.5,
+                    },
+                ],
+                stages: [minimalStage({ id: "stage-d" })],
+            });
+
+            saveClips([clipC, clipD, clipA], {
+                notifyDomChange: false,
+            });
+
+            const stored = JSON.parse(dataInput().value) as {
+                clips: { id: string }[];
+            };
+            expect(stored.clips.map((clip) => clip.id)).toEqual([
+                "clip-c",
+                "clip-d",
+                "clip-a",
+            ]);
+            expect(getClips().map((clip) => clip.prompt)).toEqual([
+                "gamma",
+                "delta",
+                "alpha",
+            ]);
+            expect(promptEl().value).toContain("<videoclip[1]>delta");
+            expect(promptEl().value).toContain(
+                "<videoclip[1]:1-1.5>delta rain",
+            );
+
+            const ui = JSON.parse(
+                localStorage.getItem("videostages_ui_state") ?? "{}",
+            ) as {
+                clips: {
+                    id: string;
+                    hue: number;
+                    promptWindows: { id: string }[];
+                }[];
+            };
+            expect(ui.clips.map(({ id, hue }) => ({ id, hue }))).toEqual([
+                { id: "clip-c", hue: 225 },
+                { id: "clip-d", hue: 300 },
+                { id: "clip-a", hue: 15 },
+            ]);
+            expect(ui.clips[1].promptWindows[0].id).toBe("window-d");
+            expect(ui.clips[2].promptWindows[0].id).toBe("window-a");
+        });
+
+        it("dispatches an empty batch for a no-op without writing or notifying", () => {
+            saveClips([minimalClip({ duration: 3, prompt: "steady" })], {
+                notifyDomChange: false,
+            });
+            const state = getState();
+            const store = getTimelineStore();
+            const beforeRevision = store.revision();
+            const beforeData = dataInput().value;
+            const beforePrompt = promptEl().value;
+            const dispatchSpy = jest.spyOn(store, "dispatch");
+            const subscriber = jest.fn();
+            store.subscribe(subscriber);
+            const dataChange = jest.fn();
+            const promptChange = jest.fn();
+            dataInput().addEventListener("change", dataChange);
+            promptEl().addEventListener("change", promptChange);
+
+            saveState(state, {
+                origin: "prompt-track",
+                notifyDomChange: true,
+                valueOnly: true,
+            });
+
+            expect(dispatchSpy).toHaveBeenCalledTimes(1);
+            expect(dispatchSpy.mock.calls[0][0]).toEqual({
+                type: "batch",
+                commands: [],
+            });
+            expect(dispatchSpy.mock.calls[0][3]).toBe(beforeRevision);
+            expect(store.revision()).toBe(beforeRevision);
+            expect(dataInput().value).toBe(beforeData);
+            expect(promptEl().value).toBe(beforePrompt);
+            expect(subscriber).not.toHaveBeenCalled();
+            expect(dataChange).not.toHaveBeenCalled();
+            expect(promptChange).not.toHaveBeenCalled();
+        });
+
+        it("rejects a carrier race so a stale compatibility save cannot overwrite it", () => {
+            saveClips([minimalClip({ duration: 3, prompt: "original" })], {
+                notifyDomChange: false,
+            });
+            const requested = getState();
+            requested.clips[0].duration = 9;
+            const store = getTimelineStore();
+            const originalDispatch = store.dispatch.bind(store);
+            const consoleErrorSpy = jest
+                .spyOn(console, "error")
+                .mockImplementation(() => {});
+            jest.spyOn(store, "dispatch").mockImplementation(
+                (command, origin, notifyDomChange, expectedRevision, hint) => {
+                    const external = JSON.parse(dataInput().value) as {
+                        clips: { duration: number }[];
+                    };
+                    external.clips[0].duration = 5;
+                    dataInput().value = JSON.stringify(external);
+                    return originalDispatch(
+                        command,
+                        origin,
+                        notifyDomChange,
+                        expectedRevision,
+                        hint,
+                    );
+                },
+            );
+
+            expect(() =>
+                saveState(requested, { notifyDomChange: false }),
+            ).toThrow("stale-revision");
+            expect(consoleErrorSpy).toHaveBeenCalledWith(
+                "[VideoStages persistence] saveState dispatch failed",
+                "stale-revision",
+            );
+            expect(
+                (
+                    JSON.parse(dataInput().value) as {
+                        clips: { duration: number }[];
+                    }
+                ).clips[0].duration,
+            ).toBe(5);
+            expect(getState().clips[0].duration).toBe(5);
+        });
+
         it("round-trips per-clip boundaryOut through the Data param", () => {
             saveClips([
                 minimalClip({ duration: 3, boundaryOut: "crossfade" }),
@@ -189,11 +447,13 @@ describe("persistence", () => {
                 clips: { retake: unknown }[];
             };
             expect(stored.clips[0].retake).toEqual({
+                id: expect.any(String),
                 startSeconds: 2,
                 lengthSeconds: 3,
                 strength: 0.6,
             });
             expect(getClips()[0].retake).toEqual({
+                id: expect.any(String),
                 startSeconds: 2,
                 lengthSeconds: 3,
                 strength: 0.6,
@@ -221,7 +481,12 @@ describe("persistence", () => {
 
             const windows = getClips()[0].promptWindows;
             expect(windows).toEqual([
-                { start: 1, duration: 2, prompt: "gust" },
+                {
+                    id: expect.any(String),
+                    start: 1,
+                    duration: 2,
+                    prompt: "gust",
+                },
             ]);
         });
 
@@ -306,6 +571,29 @@ describe("persistence", () => {
             expect(state.height).toBe(384);
             expect(state.fpsExplicit).toBe(true);
             expect(state.fps).toBe(16);
+        });
+
+        it("normalizes stored refs with an explicit FPS before serializing and reloading", () => {
+            saveState(
+                baseState({
+                    fps: 16,
+                    fpsExplicit: true,
+                    clips: [
+                        minimalClip({
+                            duration: 5,
+                            refs: [minimalRef({ frame: 120 })],
+                        }),
+                    ],
+                }),
+            );
+
+            // 5 seconds at the saved 16fps timeline has an aligned max of 81,
+            // not the host's 24fps max of 121.
+            __resetPersistenceForTests();
+            const reloaded = getState();
+            expect(reloaded.fps).toBe(16);
+            expect(reloaded.clips[0].refs[0].frame).toBe(81);
+            expect(JSON.parse(dataInput().value).fps).toBe(16);
         });
 
         it("treats omitted keys as inherit, falling back to root defaults", () => {
