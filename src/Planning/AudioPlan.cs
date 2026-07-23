@@ -33,25 +33,6 @@ internal enum AudioLengthOwner
     ControlNet
 }
 
-internal enum AudioSegmentMode
-{
-    None,
-    MixOverBase,
-    PreserveWindowedNoBase
-}
-
-/// <summary>
-/// Whether the segment executor must wait for artifact resolution before it can commit to the
-/// preferred segment mode. Native, AceStepFun and ControlNet tracks are configured here but can
-/// still be absent from a particular host workflow.
-/// </summary>
-internal enum AudioSegmentBaseResolutionRequirement
-{
-    NotRequired,
-    NoBaseConfigured,
-    ResolveAtExecution
-}
-
 internal enum AudioSegmentSourceKind
 {
     Upload,
@@ -84,12 +65,13 @@ internal sealed record AudioVoiceReferencePlan(
     bool IsRequested,
     bool HasConfiguredSample,
     AudioMediaIdentityPlan Media,
-    int? IcLoraEntryIndex);
+    int? IcLoraEntryIndex,
+    IcLoraUploadedMediaKind? DriveMediaKind,
+    AudioMediaIdentityPlan FallbackMedia);
 
 internal sealed record AudioLengthPlan(
     AudioLengthOwner Owner,
-    bool AudioWasRequested,
-    bool ControlNetWasRequested,
+    int? ControlNetSourceIndex,
     bool NonHandoffInjectionMatchesAudioLength,
     bool RootHandoffInjectionMatchesAudioLength);
 
@@ -105,10 +87,7 @@ internal sealed record AudioSegmentItemPlan(
 /// The declared segments are represented as simple values rather than graph paths. A later executor
 /// resolves uploads/tracks, reports unavailable runtime sources, and uses these windows unchanged.
 /// </summary>
-internal sealed record AudioSegmentPlan(
-    AudioSegmentMode Mode,
-    AudioSegmentBaseResolutionRequirement BaseResolutionRequirement,
-    ImmutableArray<AudioSegmentItemPlan> Items);
+internal sealed record AudioSegmentPlan(ImmutableArray<AudioSegmentItemPlan> Items);
 
 internal sealed record AudioReusePlan(
     bool IsRequested,

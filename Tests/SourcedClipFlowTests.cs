@@ -27,6 +27,7 @@ public partial class StageFlowTests
     {
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        ((JObject)((JArray)clip["Stages"])[0]).Remove("ImageReference");
         clip["Duration"] = SourcedClipDuration;
         clip["SourceVideo"] = new JObject
         {

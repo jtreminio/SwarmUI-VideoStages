@@ -12,14 +12,13 @@ public class VideoExecutionPlanCompilerTests
             isTextToVideo: true,
             GeneratedClip(0, Stage(10))));
 
-        Assert.Equal(VideoModelFamily.Ltx, plan.ModelFamily);
         Assert.Equal(RootUse.Discard, plan.Root.Use);
         Assert.Equal(HostCoreDisposition.Drop, plan.Root.CoreDisposition);
         Assert.Equal(TimelineOutputDisposition.PublishTimelineOutput, plan.Root.OutputDisposition);
         Assert.Equal(NativeAudioDisposition.DiscardWithRoot, plan.Root.NativeAudioDisposition);
         StagePlan stage = Assert.Single(Assert.Single(plan.Clips).Stages);
         Assert.Equal(StageInputKind.EmptyLatent, stage.Input);
-        Assert.Equal(StageExecutionMode.GenerateFromEmptyLatent, stage.Execution);
+        Assert.False(stage.IsPassthrough);
     }
 
     [Fact]
@@ -39,14 +38,14 @@ public class VideoExecutionPlanCompilerTests
         ClipPlan clip = Assert.Single(plan.Clips);
         Assert.Equal(ClipInputKind.SourceVideo, clip.Input);
         Assert.Equal(StageInputKind.SourceVideo, clip.Stages[0].Input);
-        Assert.Equal(StageExecutionMode.Passthrough, clip.Stages[0].Execution);
-        Assert.Equal(StageExecutionMode.Refine, clip.Stages[1].Execution);
-        Assert.Equal(StageExecutionMode.Retake, clip.Stages[2].Execution);
+        Assert.True(clip.Stages[0].IsPassthrough);
+        Assert.False(clip.Stages[1].IsPassthrough);
+        Assert.False(clip.Stages[2].IsPassthrough);
+        Assert.NotNull(clip.Stages[2].Retake);
         Assert.Equal(StageInputKind.PreviousStage, clip.Stages[2].Input);
         Assert.Equal("data", clip.SourceVideo.Data);
         Assert.Equal("source.mp4", clip.SourceVideo.FileName);
         Assert.Equal(0, clip.SourceVideo.StartSeconds);
-        Assert.Equal(49, clip.SourceVideo.TargetFrames);
         Assert.Equal(512, clip.SourceVideo.TargetWidth);
         Assert.Equal(512, clip.SourceVideo.TargetHeight);
         Assert.Equal(24, clip.SourceVideo.TargetFramesPerSecond);
@@ -72,7 +71,7 @@ public class VideoExecutionPlanCompilerTests
 
         StagePlan stage = plan.Clips[0].Stages[0];
         Assert.Equal(StageInputKind.RootMedia, stage.Input);
-        Assert.Equal(StageExecutionMode.GenerateOrRefineFromRootMedia, stage.Execution);
+        Assert.False(stage.IsPassthrough);
     }
 
     [Theory]
@@ -118,6 +117,10 @@ public class VideoExecutionPlanCompilerTests
         Assert.Single(compiled.Stages[0].FrameReferences);
         Assert.Empty(compiled.Stages[1].IcLoras);
         Assert.Contains(compiled.Audio.Diagnostics, d => d.Code == "audio.reuse.requires_three_stages");
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.reuse.requires_three_stages"
+            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Warning
+            && diagnostic.ClipId == clip.Id);
     }
 
     [Theory]
@@ -242,14 +245,12 @@ public class VideoExecutionPlanCompilerTests
             compiled.Loras,
             lora =>
             {
-                Assert.Equal(NormalLoraScope.Clip, lora.Scope);
                 Assert.Equal("clip.safetensors", lora.Name);
                 Assert.Equal(0.6, lora.ModelWeight);
                 Assert.Equal(0.4, lora.TextEncoderWeight);
             },
             lora =>
             {
-                Assert.Equal(NormalLoraScope.Stage, lora.Scope);
                 Assert.Equal("stage.safetensors", lora.Name);
                 Assert.Equal(1.2, lora.TextEncoderWeight);
             });
@@ -260,13 +261,11 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(IcLoraDriveSourceKind.UploadedMedia, uploaded.Drive.Kind);
         Assert.Equal(IcLoraUploadedMediaKind.Image, uploaded.Drive.UploadedMediaKind);
         Assert.Equal(IcLoraControlMode.Canny, uploaded.ControlMode);
-        Assert.Equal(IcLoraGuideStrengthSource.StageOverride, uploaded.GuideStrengthSource);
         Assert.Equal(0.55, uploaded.GuideStrength);
-        Assert.True(uploaded.DrivesAudioReference);
         Assert.Equal(IcLoraDriveSourceKind.ControlNet, compiled.IcLoras[1].Drive.Kind);
         Assert.Equal(1, compiled.IcLoras[1].Drive.ControlNetIndex);
 
-        Assert.Equal(new RetakePlan(8, 16, 24, 0.75), compiled.Retake);
+        Assert.Equal(new RetakePlan(8, 16, 0.75), compiled.Retake);
         Assert.Equal(PromptRelayMode.Relay, compiled.PromptRelay.Mode);
         Assert.Equal(2, compiled.PromptRelay.AuthoredWindows.Length);
         Assert.Contains(compiled.PromptRelay.Segments, segment => segment.Prompt == "opening prompt");
@@ -288,17 +287,14 @@ public class VideoExecutionPlanCompilerTests
                 Assert.Equal(0.9, reference.Strength);
             });
         Assert.Equal(StageAudioAction.CaptureForReuse, compiled.AudioAction);
-        Assert.False(compiled.Output.IsClipTerminal);
         Assert.Equal(
             IntermediateOutputPolicy.ControlledByHostSetting,
             compiled.Output.IntermediatePolicy);
         Assert.True(compiled.Output.PreserveConfiguredAudioTrackSave);
 
-        NormalLoraPlan plannedLora = Assert.Single(
-            compiled.Loras,
-            lora => lora.Scope == NormalLoraScope.Stage);
+        NormalLoraPlan plannedLora = compiled.Loras[1];
         Assert.Equal("stage.safetensors", plannedLora.Name);
-        Assert.Null(plannedLora.AuthoredTextEncoderWeight);
+        Assert.Equal(plannedLora.ModelWeight, plannedLora.TextEncoderWeight);
     }
 
     [Fact]
@@ -319,6 +315,75 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Equal(PromptRelayMode.Relay, relay.Mode);
         Assert.Equal(49d / 24d, relay.Segments.Sum(segment => segment.Seconds), 12);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Compile_PromptRelayWithDynamicLength_IsRejected(bool controlNetOwnsLength)
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10)) with
+        {
+            Frames = null,
+            AudioSource = controlNetOwnsLength ? Constants.AudioSourceControlNet : Constants.AudioSourceUpload,
+            UploadedAudio = controlNetOwnsLength ? null : new UploadedAudioSpec("audio", "track.wav"),
+            ClipLengthFromAudio = !controlNetOwnsLength,
+            ClipLengthFromControlNet = controlNetOwnsLength,
+            IcLoras = controlNetOwnsLength
+                ? [new IcLoraSpec("control", Constants.ControlNetSourceOne, 1, 1, Constants.IcLoraControlNone, null)]
+                : [],
+            PromptWindows = [new PromptWindowSpec("opening", 0, 1)],
+        };
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(Spec(false, clip));
+
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "prompt-relay-dynamic-length-unsupported"
+            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error
+            && diagnostic.ClipId == clip.Id);
+    }
+
+    [Fact]
+    public void Compile_RetakeWithFrameReferences_IsRejected()
+    {
+        ClipSpec clip = GeneratedClip(
+            0,
+            Stage(10, retake: new RetakeWindowSpec(8, 16, 1))) with
+        {
+            ImageRefs = [new ImageRefSpec("Upload", 2, false, "ref.png", "image")],
+        };
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(Spec(false, clip));
+
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "retake-frame-references-unsupported"
+            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void Compile_MixedHdrMultiClipTimeline_IsRejected()
+    {
+        IcLoraSpec hdr = new(
+            "ltx-2.3-22b-ic-lora-hdr-0.9",
+            Constants.IcLoraSourceUpload,
+            1,
+            1,
+            Constants.IcLoraControlNone,
+            null,
+            Preset: "hdr");
+        ClipSpec hdrClip = GeneratedClip(0, Stage(10)) with { IcLoras = [hdr] };
+        ClipSpec sdrClip = GeneratedClip(1, Stage(11));
+
+        VideoExecutionPlan mixed = VideoExecutionPlanCompiler.Compile(Spec(false, hdrClip, sdrClip));
+        VideoExecutionPlan allHdr = VideoExecutionPlanCompiler.Compile(
+            Spec(false, hdrClip, GeneratedClip(1, Stage(11)) with { IcLoras = [hdr] }));
+
+        Assert.Contains(mixed.Diagnostics, diagnostic =>
+            diagnostic.Code == "mixed-hdr-timeline-unsupported"
+            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+        Assert.DoesNotContain(
+            allHdr.Diagnostics,
+            diagnostic => diagnostic.Code == "mixed-hdr-timeline-unsupported");
     }
 
     [Fact]
@@ -350,7 +415,6 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(Spec(false, first, source));
 
         BoundaryPlan boundary = plan.Boundaries[0];
-        Assert.Equal(BoundaryExecutionMode.Continue, boundary.Requested);
         Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
         Assert.Equal(BoundaryFallback.TargetIsSourcedVideo, boundary.Fallback);
         Assert.Equal(0, boundary.ContinuityWindowFrames);
@@ -370,7 +434,6 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Equal(BoundaryFallback.TargetHasFirstFrameReference, plan.Boundaries[0].Fallback);
         Assert.Equal(BoundaryExecutionMode.Cut, plan.Boundaries[0].Effective);
-        Assert.False(plan.Clips[1].UsesIncomingContinuity);
     }
 
     [Fact]
@@ -380,7 +443,25 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(Spec(false, first, GeneratedClip(1, Stage(11))));
 
         Assert.Equal(BoundaryExecutionMode.Continue, plan.Boundaries[0].Effective);
-        Assert.True(plan.Clips[1].UsesIncomingContinuity);
+    }
+
+    [Fact]
+    public void Compile_ShortContinue_UsesOneResolvedTrimForBoundaryAndAudioTimeline()
+    {
+        ClipSpec first = GeneratedClip(0, Stage(10)) with
+        {
+            Frames = 5,
+            BoundaryOut = Constants.BoundaryOutContinue,
+            BoundaryOutOverlap = 8,
+        };
+        ClipSpec second = GeneratedClip(1, Stage(11)) with { Frames = 5 };
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(Spec(false, first, second));
+
+        Assert.Equal(1, plan.Boundaries[0].ContinuityWindowFrames);
+        Assert.Equal(1, plan.AudioTimeline.ClipWindows[0].OutgoingTrimFrames);
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "boundary-frame-budget-reconciled");
     }
 
     [Fact]
@@ -403,7 +484,6 @@ public class VideoExecutionPlanCompilerTests
             plan.Clips.Select(clip => Assert.Single(clip.Stages).Output),
             output =>
             {
-                Assert.True(output.FeedsClipAssembly);
                 Assert.False(output.IsTimelineTerminal);
             });
     }

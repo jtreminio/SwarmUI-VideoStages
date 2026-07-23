@@ -7,6 +7,7 @@ using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
+using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -714,20 +715,24 @@ public sealed class LtxIcLoraTests
         string lora,
         int expected)
     {
-        ClipSpec clip = new(
-            Id: 0,
-            Frames: null,
-            AudioSource: null,
-            IcLoras: [new IcLoraSpec(lora, Constants.IcLoraSourceUpload, 1, 1,
-                Constants.IcLoraControlNone, null, Preset: preset)],
-            SaveAudioTrack: false,
-            ClipLengthFromAudio: false,
-            ClipLengthFromControlNet: false,
-            ReuseAudio: false,
-            UploadedAudio: null,
-            ImageRefs: [],
-            Stages: []);
-        Assert.Equal(expected, IcLoraApplicator.MaxKnownIcLoraDownscaleFactor(clip, 0));
+        IcLoraPlan plan = new(
+            EntryIndex: 0,
+            ModelName: lora,
+            UsesAutoModel: lora == Constants.IcLoraAutoModel,
+            Preset: preset,
+            ModelStrength: 1,
+            AttentionStrength: 1,
+            ControlMode: IcLoraControlMode.None,
+            Drive: new(
+                IcLoraDriveSourceKind.LoaderOnly,
+                RawSource: "",
+                ControlNetIndex: null,
+                UploadedMediaKind: IcLoraUploadedMediaKind.None,
+                UploadedData: null,
+                HasDriveMedia: false),
+            GuideStrength: null);
+
+        Assert.Equal(expected, IcLoraApplicator.MaxKnownIcLoraDownscaleFactor([plan]));
     }
 
     [Fact]

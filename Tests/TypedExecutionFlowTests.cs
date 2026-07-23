@@ -94,6 +94,61 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Typed_plan_multi_stage_applies_global_trim_only_after_the_terminal_stage()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+                MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 10)));
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        Assert.False(ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, trim.Id));
+        Assert.True(ReachesUpstream(bridge, trim.Image.Connection!.Node, samplers[1].Id));
+        Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(11, generator.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void Typed_plan_terminal_trim_updates_published_frame_metadata()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8)));
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 1);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 4);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(11, generator.CurrentMedia.Frames);
+        Assert.Equal(512, generator.CurrentMedia.Width);
+        Assert.Equal(512, generator.CurrentMedia.Height);
+        Assert.Equal(24, generator.CurrentMedia.FPS);
+    }
+
+    [Fact]
     public void Typed_plan_sourced_ltx_preserves_source_refine_graph()
     {
         using SwarmUiTestContext _ = new();
@@ -120,6 +175,88 @@ public partial class StageFlowTests
 
         Assert.Equal(2, SamplerNodesOrdered(bridge).Count);
         Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+    }
+
+    [Fact]
+    public void Typed_plan_multi_clip_applies_global_trim_once_after_timeline_assembly()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(
+                512,
+                512,
+                MakeGeneratedClip(models),
+                MakeGeneratedClip(models)).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true),
+                features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        BatchImagesNodeNode merge = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        Assert.True(ReachesUpstream(bridge, trim.Image.Connection!.Node, merge.Id));
+        Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(27, generator.CurrentMedia.Frames);
+        Assert.Equal(512, generator.CurrentMedia.Width);
+        Assert.Equal(512, generator.CurrentMedia.Height);
+        Assert.Equal(24, generator.CurrentMedia.FPS);
+
+        WGNodeData attachedAudio = generator.CurrentMedia.AttachedAudio;
+        Assert.NotNull(attachedAudio);
+        string attachedAudioNodeId = $"{attachedAudio.Path[0]}";
+        INodeOutput attachedAudioOutput = bridge.ResolvePath((JArray)attachedAudio.Path);
+        Assert.NotNull(attachedAudioOutput);
+        Assert.Contains(
+            bridge.Graph.NodesOfType<AudioConcatNode>(),
+            concat => ReachesUpstream(bridge, attachedAudioOutput.Node, concat.Id));
+
+        SwarmSaveAnimationWSNode finalSave = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Equal(
+            attachedAudioNodeId,
+            finalSave.Audio.Connection?.Node.Id);
+    }
+
+    [Fact]
+    public void Typed_plan_multi_clip_host_wrapper_is_not_reapplied_to_assembled_output()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(
+                512,
+                512,
+                MakeGeneratedClip(models),
+                MakeGeneratedClip(models)).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeStepsWithTrimWrapper(attachAudioToCurrentMedia: true),
+                features: SourcedClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        BatchImagesNodeNode merge = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        List<SwarmTrimFramesNode> outputTrims = [
+            .. bridge.Graph.NodesOfType<SwarmTrimFramesNode>()
+                .Where(trim => ReachesUpstream(bridge, trim.Image.Connection!.Node, merge.Id))
+        ];
+        SwarmTrimFramesNode timelineTrim = Assert.Single(outputTrims);
+        Assert.Equal(new JArray(timelineTrim.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(23, generator.CurrentMedia.Frames);
+        Assert.NotNull(generator.CurrentMedia.AttachedAudio);
     }
 
     [Fact]

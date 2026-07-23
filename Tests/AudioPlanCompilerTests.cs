@@ -113,6 +113,30 @@ public class AudioPlanCompilerTests
     }
 
     [Fact]
+    public void Compile_drive_audio_reference_keeps_the_typed_voice_upload_fallback()
+    {
+        IcLoraSpec missingDrive = new(
+            Lora: "voice.safetensors",
+            Source: Constants.IcLoraSourceUpload,
+            Strength: 1,
+            AttentionStrength: 1,
+            ControlType: Constants.IcLoraControlNone,
+            Video: null,
+            DriveAudioRef: true);
+
+        AudioPlan plan = AudioPlanCompiler.Compile(Clip(
+            source: Constants.AudioSourceVoiceRef,
+            uploadedAudio: Upload("data:audio/wav;base64,RkFMTEJBQ0s="),
+            icLoras: [missingDrive]));
+
+        Assert.Equal(AudioVoiceReferenceKind.IcLoraDriveVideo, plan.VoiceReference.Kind);
+        Assert.False(plan.VoiceReference.HasConfiguredSample);
+        Assert.Equal(IcLoraUploadedMediaKind.None, plan.VoiceReference.DriveMediaKind);
+        Assert.Equal("data:audio/wav;base64,RkFMTEJBQ0s=", plan.VoiceReference.FallbackMedia.Data);
+        Assert.Equal("clip.wav", plan.VoiceReference.FallbackMedia.FileName);
+    }
+
+    [Fact]
     public void Compile_voice_reference_source_has_no_locked_track_and_reports_missing_upload()
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: Constants.AudioSourceVoiceRef));
@@ -127,15 +151,22 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_makes_controlnet_length_precedence_explicit()
     {
+        IcLoraSpec controlNetDrive = new(
+            Lora: "drive.safetensors",
+            Source: Constants.ControlNetSourceTwo,
+            Strength: 1,
+            AttentionStrength: 1,
+            ControlType: Constants.IcLoraControlNone,
+            Video: null);
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(
             source: Constants.AudioSourceUpload,
             audioLength: true,
             controlNetLength: true,
-            uploadedAudio: Upload()));
+            uploadedAudio: Upload(),
+            icLoras: [controlNetDrive]));
 
         Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
-        Assert.True(plan.Length.AudioWasRequested);
-        Assert.True(plan.Length.ControlNetWasRequested);
+        Assert.Equal(1, plan.Length.ControlNetSourceIndex);
         Assert.Contains(plan.Diagnostics, d => d.Code == "audio.length.controlnet_overrides_audio");
     }
 
@@ -145,6 +176,17 @@ public class AudioPlanCompilerTests
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: Constants.AudioSourceUpload, uploadedAudio: Upload()));
 
         Assert.Equal(AudioLengthOwner.Timeline, plan.Length.Owner);
+    }
+
+    [Fact]
+    public void Compile_reports_controlnet_length_owner_without_a_typed_source()
+    {
+        AudioPlan plan = AudioPlanCompiler.Compile(Clip(controlNetLength: true));
+
+        Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
+        Assert.Null(plan.Length.ControlNetSourceIndex);
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.length.controlnet_owner_has_no_source");
     }
 
     [Fact]
@@ -174,9 +216,6 @@ public class AudioPlanCompilerTests
                 new(null, StartSeconds: 1, TrimStartSeconds: 0.5, LengthSeconds: 2, AceStepFunSource: "audio3")
             ]));
 
-        Assert.Equal(AudioSegmentMode.MixOverBase, plan.Segments.Mode);
-        Assert.Equal(AudioSegmentBaseResolutionRequirement.ResolveAtExecution,
-            plan.Segments.BaseResolutionRequirement);
         Assert.Equal([1, 4], plan.Segments.Items.Select(item => item.StartSeconds));
         Assert.Equal(AudioSegmentSourceKind.AceStepFun, plan.Segments.Items[0].SourceKind);
         Assert.Equal(3, plan.Segments.Items[0].AceStepFunTrack);
@@ -193,30 +232,8 @@ public class AudioPlanCompilerTests
             uploadedAudio: Upload(),
             segments: [new(Upload(), StartSeconds: 1, TrimStartSeconds: 0, LengthSeconds: 2)]));
 
-        Assert.Equal(AudioSegmentMode.PreserveWindowedNoBase, plan.Segments.Mode);
-        Assert.Equal(AudioSegmentBaseResolutionRequirement.NoBaseConfigured,
-            plan.Segments.BaseResolutionRequirement);
+        Assert.Single(plan.Segments.Items);
         Assert.Contains(plan.Diagnostics, d => d.Code == "audio.segments.preserve_windowed_no_base");
-    }
-
-    [Fact]
-    public void Compile_segments_with_runtime_resolved_bases_defers_the_final_mode_to_execution()
-    {
-        AudioSegmentSpec segment = new(Upload(), StartSeconds: 1, TrimStartSeconds: 0, LengthSeconds: 2);
-        AudioPlan native = AudioPlanCompiler.Compile(Clip(segments: [segment]));
-        AudioPlan controlNet = AudioPlanCompiler.Compile(Clip(
-            source: Constants.AudioSourceControlNet,
-            segments: [segment]));
-        AudioPlan ace = AudioPlanCompiler.Compile(Clip(source: "audio1", segments: [segment]));
-
-        // A configured source is not proof that its host artifact exists. The executor must use
-        // PreserveWindowedNoBase if resolution yields null, exactly as the current workflow path does.
-        Assert.All([native, controlNet, ace], plan =>
-        {
-            Assert.Equal(AudioSegmentMode.MixOverBase, plan.Segments.Mode);
-            Assert.Equal(AudioSegmentBaseResolutionRequirement.ResolveAtExecution,
-                plan.Segments.BaseResolutionRequirement);
-        });
     }
 
     [Fact]

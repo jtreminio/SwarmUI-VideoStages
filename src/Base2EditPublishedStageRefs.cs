@@ -46,24 +46,6 @@ internal sealed class Base2EditPublishedStageRefs(WorkflowGenerator g)
         return true;
     }
 
-    public static WGNodeData ResolveToRawImage(StageRefStore.StageRef stageRef)
-    {
-        if (stageRef?.Media is null)
-        {
-            return null;
-        }
-        if (stageRef.Media.IsRawMedia)
-        {
-            return stageRef.Media;
-        }
-        if (!stageRef.Media.IsLatentData || stageRef.Vae is null)
-        {
-            return null;
-        }
-
-        return VaeDecodePreference.AsRawImage(stageRef.Media.Gen, stageRef.Media, stageRef.Vae);
-    }
-
     private WGNodeData BuildNodeData(WorkflowBridge bridge, JObject data, WGNodeData fallbackVae)
     {
         if (data is null || data["path"] is not JArray rawPath || bridge.ResolvePath(rawPath) is not INodeOutput output)

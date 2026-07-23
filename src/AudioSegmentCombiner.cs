@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Utils;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -34,14 +35,14 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
     /// materialized, for generation-time audio conditioning (preserve windows).
     /// </summary>
     public WGNodeData Combine(
-        ClipSpec clip,
+        int clipId,
+        AudioSegmentPlan segmentPlan,
         WGNodeData baseAudio,
         double clipDurationSeconds,
         out IReadOnlyList<(double Start, double End)> loadedWindows)
     {
         loadedWindows = [];
-        IReadOnlyList<AudioSegmentSpec> segments = clip?.AudioSegments;
-        if (segments is null || segments.Count == 0)
+        if (segmentPlan.Items.IsDefaultOrEmpty)
         {
             return baseAudio;
         }
@@ -51,32 +52,34 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
         // parse for all segments).
         AudioHandler audioHandler = new(g);
         WorkflowBridge detectBridge = null;
-        List<(AudioSegmentSpec Spec, JArray Path)> loaded = [];
-        foreach (AudioSegmentSpec seg in segments)
+        List<(AudioSegmentItemPlan Plan, JArray Path)> loaded = [];
+        foreach (AudioSegmentItemPlan segment in segmentPlan.Items)
         {
-            if (seg.AceStepFunSource is not null)
+            if (segment.SourceKind == AudioSegmentSourceKind.AceStepFun)
             {
                 detectBridge ??= WorkflowBridge.Create(g.Workflow);
-                WGNodeData ace = audioHandler.DetectAceStepFunAudio(seg.AceStepFunSource, detectBridge);
+                WGNodeData ace = segment.AceStepFunTrack is int track
+                    ? audioHandler.DetectAceStepFunAudio(track, detectBridge)
+                    : null;
                 if (ace?.Path is JArray acePath)
                 {
-                    loaded.Add((seg, acePath));
+                    loaded.Add((segment, acePath));
                 }
                 else
                 {
                     Logs.Warning(
-                        $"VideoStages: clip {clip.Id} audio segment references AceStepFun track "
-                        + $"'{seg.AceStepFunSource}', which is not present in the workflow; skipping the segment.");
+                        $"VideoStages: clip {clipId} audio segment references AceStepFun track "
+                        + $"'{segment.AceStepFunTrack}', which is not present in the workflow; skipping the segment.");
                 }
                 continue;
             }
-            AudioFile file = VideoStagesSpecParser.MaterializeUploadedAudio(g, seg.Source);
+            AudioFile file = EmbeddedMediaMaterializer.MaterializeAudio(g, segment.UploadedMedia);
             if (file is null)
             {
                 continue;
             }
             string loadNodeId = g.CreateAudioLoadNode(file, SegmentUploadPlaceholder);
-            loaded.Add((seg, new JArray(loadNodeId, 0)));
+            loaded.Add((segment, new JArray(loadNodeId, 0)));
         }
         detectBridge?.Dispose();
         if (loaded.Count == 0)
@@ -84,7 +87,7 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
             return baseAudio;
         }
         loadedWindows = [.. loaded.Select(entry =>
-            (entry.Spec.StartSeconds, entry.Spec.StartSeconds + entry.Spec.LengthSeconds))];
+            (entry.Plan.StartSeconds, entry.Plan.StartSeconds + entry.Plan.LengthSeconds))];
 
         using WorkflowBridge bridge = BridgeSync.For(g);
 
@@ -94,14 +97,14 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
             accumulator = Silence(bridge, clipDurationSeconds);
         }
 
-        foreach ((AudioSegmentSpec seg, JArray path) in loaded)
+        foreach ((AudioSegmentItemPlan segment, JArray path) in loaded)
         {
             INodeOutput source = bridge.ResolvePath(path);
             if (source is null)
             {
                 continue;
             }
-            INodeOutput placed = PlaceSegment(bridge, source, seg);
+            INodeOutput placed = PlaceSegment(bridge, source, segment);
             accumulator = accumulator is null ? placed : Merge(bridge, accumulator, placed);
         }
 
@@ -116,30 +119,33 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
             baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
     }
 
-    private static INodeOutput PlaceSegment(WorkflowBridge bridge, INodeOutput source, AudioSegmentSpec seg)
+    private static INodeOutput PlaceSegment(
+        WorkflowBridge bridge,
+        INodeOutput source,
+        AudioSegmentItemPlan segment)
     {
         // Pad the source up to trim-start + length first: TrimAudioDuration returns the shorter clip
         // when the source runs out (so the segment's declared window would lock silent bed in the
         // conditioning mask), and it throws outright when the trim start is past the source's end.
         // Padding makes the declared window authoritative: a short source plays, then intended silence.
         SwarmEnsureAudioNode ensure = bridge.AddNode(new SwarmEnsureAudioNode().With(
-            TargetDuration: seg.TrimStartSeconds + seg.LengthSeconds));
+            TargetDuration: segment.TrimStartSeconds + segment.LengthSeconds));
         ensure.Audio.ConnectToUntyped(source);
         bridge.SyncNode(ensure);
 
         TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode()).With(
-            StartIndex: seg.TrimStartSeconds,
-            Duration: seg.LengthSeconds);
+            StartIndex: segment.TrimStartSeconds,
+            Duration: segment.LengthSeconds);
         trim.Audio.ConnectTo(ensure.AUDIO);
         bridge.SyncNode(trim);
         INodeOutput trimmed = trim.AUDIO;
 
-        if (seg.StartSeconds <= 0)
+        if (segment.StartSeconds <= 0)
         {
             return trimmed;
         }
 
-        INodeOutput silence = Silence(bridge, seg.StartSeconds);
+        INodeOutput silence = Silence(bridge, segment.StartSeconds);
         AudioConcatNode concat = bridge.AddNode(new AudioConcatNode()).With(Direction: ConcatDirectionAfter);
         concat.Audio1.ConnectToUntyped(silence);
         concat.Audio2.ConnectToUntyped(trimmed);

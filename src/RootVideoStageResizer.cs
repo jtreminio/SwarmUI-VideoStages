@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -74,7 +75,9 @@ internal sealed class RootVideoStageResizer(
         {
             return;
         }
-        if (g.GetVideoStagesSpec().IsTextToVideo || CurrentMediaFeedsSaveImage())
+        if (g.RequireLtxVideoExecutionPlanContext().Plan.Root.HostKind
+                == HostRootKind.TextToVideoRoot
+            || CurrentMediaFeedsSaveImage())
         {
             SetCurrentMediaDimensions(width, height);
             return;
@@ -99,8 +102,9 @@ internal sealed class RootVideoStageResizer(
 
     internal bool TryGetRootStageResolution(out int width, out int height)
     {
-        (int? rawJsonWidth, int? rawJsonHeight) = VideoStagesSpecParser.GetRawJsonTopLevelDimensions(g);
-        if (TryPositiveDimensionPair(rawJsonWidth, rawJsonHeight, out width, out height))
+        VideoExecutionPlan plan = g.GetLtxVideoExecutionPlanContext()?.Plan;
+        if (plan?.HasConfiguredResolution == true
+            && TryPositiveDimensionPair(plan.Width, plan.Height, out width, out height))
         {
             return true;
         }

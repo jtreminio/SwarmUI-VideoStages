@@ -16,27 +16,24 @@ namespace VideoStages.Execution;
 internal sealed class RootRuntimeSession
 {
     private readonly WorkflowGenerator _generator;
+    private readonly RootPlan _rootPlan;
+    private readonly OutputRegistry _outputs;
     private readonly IReadOnlySet<string> _capturedRootComponentIds;
+    private readonly bool _requiresDedicatedAudioPublication;
 
     private RootRuntimeSession(
         WorkflowGenerator generator,
         RootPlan rootPlan,
-        RuntimeArtifact hostRoot,
         OutputRegistry outputs,
-        IReadOnlySet<string> capturedRootComponentIds)
+        IReadOnlySet<string> capturedRootComponentIds,
+        bool requiresDedicatedAudioPublication)
     {
         _generator = generator;
-        RootPlan = rootPlan;
-        HostRoot = hostRoot;
-        Outputs = outputs;
+        _rootPlan = rootPlan;
+        _outputs = outputs;
         _capturedRootComponentIds = capturedRootComponentIds;
+        _requiresDedicatedAudioPublication = requiresDedicatedAudioPublication;
     }
-
-    public RootPlan RootPlan { get; }
-
-    public RuntimeArtifact HostRoot { get; }
-
-    public OutputRegistry Outputs { get; }
 
     public static RootRuntimeSession Capture(
         WorkflowGenerator generator,
@@ -62,15 +59,15 @@ internal sealed class RootRuntimeSession
         return new RootRuntimeSession(
             generator,
             planContext.Plan.Root,
-            hostRoot,
             outputs,
-            rootComponentIds);
+            rootComponentIds,
+            planContext.Plan.Clips.Count > 1);
     }
 
     public OutputPublication PublishTimeline(RuntimeArtifact timeline)
     {
         ArgumentNullException.ThrowIfNull(timeline);
-        if (RootPlan.OutputDisposition != TimelineOutputDisposition.PublishTimelineOutput)
+        if (_rootPlan.OutputDisposition != TimelineOutputDisposition.PublishTimelineOutput)
         {
             return OutputPublication.NotRequired;
         }
@@ -80,15 +77,15 @@ internal sealed class RootRuntimeSession
                 "VideoStages: the completed LTX timeline did not produce a publishable video artifact.");
         }
 
-        bool rootIsDisplaced = RootPlan.Use is RootUse.Discard
+        bool rootIsDisplaced = _rootPlan.Use is RootUse.Discard
             or RootUse.GlobalRefineReplacement;
         OutputPublisher publisher = new(
             _generator,
-            Outputs,
+            _outputs,
             _generator.GetStableDynamicID(OutputPublisher.DefaultFinalSaveId, 0));
         OutputPublication publication = publisher.Publish(
             timeline,
-            replaceCapturedAudio: rootIsDisplaced);
+            publishAudio: rootIsDisplaced || _requiresDedicatedAudioPublication);
         if (publication.Result == OutputPublicationResult.Failed)
         {
             throw new SwarmUserErrorException(
@@ -177,7 +174,7 @@ internal sealed class OutputPublisher(
 {
     internal const int DefaultFinalSaveId = 52200;
 
-    public OutputPublication Publish(RuntimeArtifact artifact, bool replaceCapturedAudio)
+    public OutputPublication Publish(RuntimeArtifact artifact, bool publishAudio)
     {
         if (generator.UserInput.Get(T2IParamTypes.DoNotSave, false))
         {
@@ -198,12 +195,9 @@ internal sealed class OutputPublisher(
             return OutputPublication.Failed;
         }
 
-        // A retained I2V root keeps the host save-audio wrapper exactly as authored. Its stage
-        // path already handles any needed retarget. Only a displaced root transfers audio
-        // ownership here; eagerly decoding final audio would orphan the host's wrapper chain.
-        WGNodeData audio = replaceCapturedAudio
-            ? ResolvePublishedAudio(media.AttachedAudio)
-            : null;
+        // Parallel multi-clip execution publishes merged audio from a dedicated branch. A retained
+        // single-clip I2V root has already spliced its existing save-audio wrapper in place.
+        WGNodeData audio = publishAudio ? ResolvePublishedAudio(media.AttachedAudio) : null;
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         INodeOutput videoOutput = bridge.ResolvePath(mediaPath);
         if (videoOutput is null)
@@ -231,16 +225,13 @@ internal sealed class OutputPublisher(
         foreach (SwarmSaveAnimationWSNode save in hostSaves)
         {
             save.Images.ConnectToUntyped(videoOutput);
-            if (replaceCapturedAudio)
+            if (publishAudio && save.Audio.Connection?.Node?.Id is string staleAudioId)
             {
-                if (save.Audio.Connection?.Node?.Id is string staleAudioId)
-                {
-                    staleAudioNodeIds.Add(staleAudioId);
-                }
-                if (!save.Audio.TryConnectToUntyped(audioOutput))
-                {
-                    save.Audio.Clear();
-                }
+                staleAudioNodeIds.Add(staleAudioId);
+            }
+            if (publishAudio && !save.Audio.TryConnectToUntyped(audioOutput))
+            {
+                save.Audio.Clear();
             }
             bridge.SyncNode(save);
         }

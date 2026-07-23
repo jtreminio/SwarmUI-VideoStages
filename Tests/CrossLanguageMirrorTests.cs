@@ -3,6 +3,7 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -12,9 +13,9 @@ namespace VideoStages.Tests;
 /// <c>Tests/fixtures/</c> that the matching jest test also asserts against, so a deliberate constant
 /// change on either side breaks the pair:
 /// <list type="bullet">
-/// <item>M1 — crossfade planning: <see cref="MultiClipParallelMerger.ResolveCrossfadePlan"/> vs
+/// <item>M1 — typed boundary budgeting via <see cref="BoundaryOverlapPlanner"/> vs
 /// frontend <c>boundaryPlan.crossfadePlanForClips</c>.</item>
-/// <item>M2 — frame alignment: <see cref="VideoStagesSpecParser.CalculateAlignedFrameCount"/> vs
+/// <item>M2 — frame alignment: <see cref="ClipTimelineSpecParser.CalculateAlignedFrameCount"/> vs
 /// frontend <c>renderUtils.framesForClip</c>.</item>
 /// <item>M4 — IC-LoRA auto-model naming: <see cref="IcLoraWeights"/> vs frontend
 /// <c>icLoraPresets</c>.</item>
@@ -44,7 +45,7 @@ public class CrossLanguageMirrorTests
             double duration = c.Value<double>("durationSeconds");
             int fps = c.Value<int>("fps");
             int expected = c.Value<int>("expectedFrames");
-            Assert.Equal(expected, VideoStagesSpecParser.CalculateAlignedFrameCount(duration, fps));
+            Assert.Equal(expected, ClipTimelineSpecParser.CalculateAlignedFrameCount(duration, fps));
         }
     }
 
@@ -73,12 +74,11 @@ public class CrossLanguageMirrorTests
                 });
             }
 
-            // Same two-step flow as StageSequenceRunner: resolve continue windows, then plan with them
-            // plus the raw prefs (each crossfade boundary's requested dissolve).
-            int[] windows = MultiClipParallelMerger.ResolveContinueWindows(
-                [.. frames.Select(f => (int?)f)], boundaries, boundaryOverlaps);
-            MultiClipParallelMerger.CrossfadePlan plan = MultiClipParallelMerger.ResolveCrossfadePlan(
-                clips, boundaries, allFramesKnown: true, windows, boundaryOverlaps);
+            BoundaryBudgetResolution resolution = BoundaryPlanFixture.Resolve(
+                [.. frames.Select(frame => (int?)frame)],
+                boundaries,
+                boundaryOverlaps);
+            BoundaryOverlapPlan plan = BoundaryOverlapPlanner.ToOverlapPlan(resolution.Boundaries);
 
             int boundaryCount = Math.Max(0, frames.Length - 1);
             int[] actualOverlaps = plan?.BoundaryOverlap ?? new int[boundaryCount];
@@ -87,7 +87,9 @@ public class CrossLanguageMirrorTests
             bool anyRequested = boundaries.Take(boundaryCount).Any(
                 b => string.Equals(b, Constants.BoundaryOutCrossfade, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(b, Constants.BoundaryOutContinue, StringComparison.OrdinalIgnoreCase));
-            bool actualFallback = plan is null && anyRequested;
+            bool actualFallback = resolution.Boundaries.All(
+                boundary => boundary.Effective == BoundaryExecutionMode.Cut)
+                && anyRequested;
 
             Assert.Equal(expectedOverlaps, actualOverlaps);
             Assert.Equal(expectedFallback, actualFallback);

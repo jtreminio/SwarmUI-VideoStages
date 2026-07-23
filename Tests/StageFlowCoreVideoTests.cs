@@ -309,6 +309,36 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Controlnet_owned_clip_length_fails_when_captured_frame_count_is_missing()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "unused-before-length-validation.safetensors",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
+        clip["ClipLengthFromControlNet"] = true;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            new JArray(clip).ToString());
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: false),
+                features: [Constants.LtxVideoFeatureFlag, "variation_seed"]));
+
+        Assert.Contains(
+            "ControlNet 1 owns clip 0 length",
+            error.Message,
+            StringComparison.Ordinal);
+        Assert.Contains("frame count is unavailable", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Clip_length_from_controlnet_uses_captured_video_batch_count_for_ltx_lengths()
     {
         using SwarmUiTestContext _ = new();
@@ -688,7 +718,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Two_defaulted_ltx_stages_use_root_image_refs_and_save_second_stage_audio()
+    public void Two_defaulted_ltx_stages_use_generated_then_previous_stage_guides_and_save_second_stage_audio()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -708,25 +738,29 @@ public partial class StageFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         StageRefStore store = new(generator);
-        Assert.NotNull(store.Refiner);
+        Assert.NotNull(store.Generated);
 
         List<LTXVImgToVideoInplaceNode> imgToVideoNodes = bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()
             .OrderBy(node => int.Parse(node.Id))
             .ToList();
         Assert.Equal(2, imgToVideoNodes.Count);
-        LTXVPreprocessNode preprocessNode = Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-        foreach (LTXVImgToVideoInplaceNode imgToVideo in imgToVideoNodes)
-        {
-            AssertGuideReferenceResolvesToPreprocessInput(
-                workflow,
-                WorkflowBridge.ToPath(imgToVideo.Image.Connection!),
-                store.Refiner);
-            Assert.Same(preprocessNode.OutputImage, imgToVideo.Image.Connection);
-        }
+        List<LTXVPreprocessNode> preprocessNodes = bridge.Graph.NodesOfType<LTXVPreprocessNode>()
+            .OrderBy(node => int.Parse(node.Id))
+            .ToList();
+        Assert.Equal(2, preprocessNodes.Count);
+        AssertGuideReferenceResolvesToPreprocessInput(
+            workflow,
+            WorkflowBridge.ToPath(imgToVideoNodes[0].Image.Connection!),
+            store.Generated);
+        Assert.True(
+            ReachesUpstream(bridge, imgToVideoNodes[1].Image.Connection!.Node, SamplerNodesOrdered(bridge)[0].Id),
+            "The default PreviousStage guide does not trace to stage 0.");
 
         ImageScaleNode guideScale = Assert.Single(
             bridge.Graph.NodesOfType<ImageScaleNode>(),
-            node => node.Width.LiteralAsInt() == 1024 && node.Height.LiteralAsInt() == 1024);
+            node => node.Id == "105");
+        Assert.Equal(1024, guideScale.Width.LiteralAsInt());
+        Assert.Equal(1024, guideScale.Height.LiteralAsInt());
         Assert.Equal("center", guideScale.Crop.LiteralAsString());
 
         List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);

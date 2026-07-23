@@ -11,16 +11,16 @@ internal sealed record VideoExecutionPlan(
     int Width,
     int Height,
     int FramesPerSecond,
-    VideoModelFamily ModelFamily,
     RootPlan Root,
     IReadOnlyList<ClipPlan> Clips,
     IReadOnlyList<BoundaryPlan> Boundaries,
     IReadOnlyList<VideoPlanDiagnostic> Diagnostics)
 {
-    public bool HasTimelineOutput => Clips.Count > 0;
+    /// <summary>Whether the author explicitly configured both timeline dimensions.</summary>
+    public bool HasConfiguredResolution { get; init; } = true;
 
     /// <summary>
-    /// Compatibility projection with no authored cross-clip tracks. Call
+    /// Clip-local audio projected onto the timeline. Call
     /// <see cref="AudioTimelinePlanCompiler"/> when a caller supplies timeline track spans; the per-clip <see cref="ClipPlan.Audio"/> remains
     /// the existing single-clip plan either way.
     /// </summary>
@@ -34,12 +34,6 @@ internal sealed record RootPlan(
     HostCoreDisposition CoreDisposition,
     TimelineOutputDisposition OutputDisposition,
     NativeAudioDisposition NativeAudioDisposition);
-
-/// <summary>This planner describes the LTX execution path; WAN is outside its contract.</summary>
-internal enum VideoModelFamily
-{
-    Ltx,
-}
 
 internal enum HostRootKind
 {
@@ -108,14 +102,12 @@ internal sealed record ClipPlan(
     bool IsSourced,
     SourceVideoPlan SourceVideo,
     IReadOnlyList<StagePlan> Stages,
-    AudioPlan Audio,
-    bool UsesIncomingContinuity);
+    AudioPlan Audio);
 
 internal sealed record SourceVideoPlan(
     string Data,
     string FileName,
     double StartSeconds,
-    int? TargetFrames,
     int TargetWidth,
     int TargetHeight,
     int TargetFramesPerSecond);
@@ -128,7 +120,7 @@ internal sealed record StagePlan(
     int ClipStageIndex,
     int ClipStageRawIndex,
     StageInputKind Input,
-    StageExecutionMode Execution,
+    bool IsPassthrough,
     StageCorePlan Core,
     GuideReferencePlan Guide,
     StageUpscalePlan Upscale,
@@ -157,15 +149,6 @@ internal enum StageInputKind
     EmptyLatent,
     SourceVideo,
     PreviousStage,
-}
-
-internal enum StageExecutionMode
-{
-    GenerateFromEmptyLatent,
-    GenerateOrRefineFromRootMedia,
-    Refine,
-    Retake,
-    Passthrough,
 }
 
 internal enum StageUpscaleMode
@@ -200,19 +183,10 @@ internal sealed record GuideReferencePlan(
     string RawValue,
     int? ReferencedStageIndex);
 
-internal enum NormalLoraScope
-{
-    Clip,
-    Stage,
-}
-
 internal sealed record NormalLoraPlan(
-    int Order,
-    NormalLoraScope Scope,
     string Name,
     double ModelWeight,
-    double TextEncoderWeight,
-    double? AuthoredTextEncoderWeight);
+    double TextEncoderWeight);
 
 internal enum IcLoraDriveSourceKind
 {
@@ -241,20 +215,11 @@ internal enum IcLoraUploadedMediaKind
     Unknown,
 }
 
-internal enum IcLoraGuideStrengthSource
-{
-    StageOverride,
-    ControlNetSlot,
-    DefaultOne,
-    NotApplicable,
-}
-
 internal sealed record IcLoraDrivePlan(
     IcLoraDriveSourceKind Kind,
     string RawSource,
     int? ControlNetIndex,
     IcLoraUploadedMediaKind UploadedMediaKind,
-    string UploadedFileName,
     string UploadedData,
     bool HasDriveMedia);
 
@@ -267,16 +232,11 @@ internal sealed record IcLoraPlan(
     double AttentionStrength,
     IcLoraControlMode ControlMode,
     IcLoraDrivePlan Drive,
-    IcLoraGuideStrengthSource GuideStrengthSource,
-    double? GuideStrength,
-    bool DrivesAudioReference,
-    bool AppliesToEveryStage,
-    int? TargetRawStageIndex);
+    double? GuideStrength);
 
 internal sealed record RetakePlan(
     int StartFrame,
     int LengthFrames,
-    int EndFrameExclusive,
     double Strength);
 
 internal enum PromptRelayMode
@@ -342,17 +302,13 @@ internal enum IntermediateOutputPolicy
 }
 
 internal sealed record StageOutputPlan(
-    bool IsClipTerminal,
     bool IsTimelineTerminal,
-    bool FeedsClipAssembly,
     IntermediateOutputPolicy IntermediatePolicy,
     bool PreserveConfiguredAudioTrackSave);
 
 /// <summary>A normalized outgoing boundary from clip N to clip N + 1.</summary>
 internal sealed record BoundaryPlan(
     int FromClipId,
-    int ToClipId,
-    BoundaryExecutionMode Requested,
     BoundaryExecutionMode Effective,
     int OverlapFrames,
     int ContinuityWindowFrames,
@@ -373,6 +329,7 @@ internal enum BoundaryFallback
     TargetHasNoStage,
     TargetHasFirstFrameReference,
     UnknownBoundaryKind,
+    InsufficientFrameBudget,
 }
 
 internal sealed record VideoPlanDiagnostic(

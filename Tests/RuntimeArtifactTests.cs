@@ -47,35 +47,6 @@ public class RuntimeArtifactTests
     }
 
     [Fact]
-    public void Clone_detaches_mutable_media_refs_and_can_change_origin()
-    {
-        JObject workflow = [];
-        WorkflowGenerator generator = new()
-        {
-            Workflow = workflow,
-            UserInput = new(null)
-        };
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        UnknownNode video = bridge.AddStub("UnitTestVideo", "20").WithOutputs(WGNodeData.DT_VIDEO);
-        UnknownNode audio = bridge.AddStub("UnitTestAudio", "21").WithOutputs(WGNodeData.DT_LATENT_AUDIO);
-        generator.CurrentMedia = Data(generator, "20", WGNodeData.DT_VIDEO);
-        generator.CurrentMedia.AttachedAudio =
-            Data(generator, "21", WGNodeData.DT_LATENT_AUDIO);
-
-        RuntimeArtifact original = RuntimeArtifact.Capture(
-            generator,
-            bridge,
-            ArtifactOrigin.HostRoot);
-        RuntimeArtifact cloned = original.Copy(ArtifactOrigin.StageOutput);
-
-        Assert.NotSame(original.Media, cloned.Media);
-        Assert.NotSame(original.Media.AttachedAudio, cloned.Media.AttachedAudio);
-        Assert.Equal(WGNodeData.DT_LATENT_AUDIO, cloned.Media.AttachedAudio.DataType);
-        Assert.Equal(ArtifactOrigin.StageOutput, cloned.Origin);
-        Assert.Equal(ArtifactOrigin.HostRoot, original.Origin);
-    }
-
-    [Fact]
     public void Capture_without_current_media_is_an_empty_artifact()
     {
         JObject workflow = [];
@@ -94,34 +65,6 @@ public class RuntimeArtifactTests
         Assert.False(artifact.HasMedia);
         Assert.Null(artifact.Media);
         Assert.Null(artifact.Vae);
-    }
-
-    [Fact]
-    public void Publish_with_preserve_host_vae_does_not_clear_ambient_vae()
-    {
-        JObject workflow = [];
-        WorkflowGenerator generator = new()
-        {
-            Workflow = workflow,
-            UserInput = new(null)
-        };
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        UnknownNode video = bridge.AddStub("UnitTestVideo", "30").WithOutputs(WGNodeData.DT_VIDEO);
-        UnknownNode vae = bridge.AddStub("UnitTestVae", "31").WithOutputs(WGNodeData.DT_VAE);
-        generator.CurrentVae = Data(generator, "31", WGNodeData.DT_VAE);
-
-        RuntimeArtifact artifact = new(
-            MediaRef.FromWGNodeData(
-                Data(generator, "30", WGNodeData.DT_VIDEO),
-                bridge),
-            Vae: null,
-            ArtifactOrigin.SourceVideo,
-            ArtifactVaeDisposition.PreserveHost);
-
-        artifact.PublishTo(generator);
-
-        Assert.Equal("30", $"{generator.CurrentMedia.Path[0]}");
-        Assert.Equal("31", $"{generator.CurrentVae.Path[0]}");
     }
 
     [Fact]

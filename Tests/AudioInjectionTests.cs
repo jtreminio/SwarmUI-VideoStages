@@ -6,6 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
+using VideoStages.LTX2;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -15,6 +16,16 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class AudioInjectionTests
 {
+    private static bool TryInject(
+        WorkflowGenerator generator,
+        WGNodeData audio,
+        bool matchVideoLengthToAudio = true,
+        IReadOnlyList<(double Start, double End)> preserveWindows = null) =>
+        new LtxAudioInjector(
+            generator,
+            Runner.GetRootVideoStageResizer(generator))
+        .TryInject(audio, matchVideoLengthToAudio, preserveWindows);
+
     // Local override of Fixtures.MakeStage: pins Steps=10 and ImageReference="Generated" for audio-injection tests.
     private static JObject MakeStage(string model) => new()
     {
@@ -206,7 +217,7 @@ public class AudioInjectionTests
             WGNodeData.DT_AUDIO,
             generator.CurrentAudioVae?.Compat ?? generator.CurrentCompat());
 
-        Assert.True(Runner.TryInjectLtxAudio(generator, audio));
+        Assert.True(TryInject(generator, audio));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
@@ -253,7 +264,7 @@ public class AudioInjectionTests
             WGNodeData.DT_AUDIO,
             generator.CurrentAudioVae?.Compat ?? generator.CurrentCompat());
 
-        Assert.True(Runner.TryInjectLtxAudio(
+        Assert.True(TryInject(
             generator,
             audio,
             matchVideoLengthToAudio: false,
@@ -356,6 +367,48 @@ public class AudioInjectionTests
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
         Assert.Contains("supports LTX-Video timelines only", error.Message);
+    }
+
+    [Fact]
+    public void Missing_selected_ace_audio_track_is_a_user_error()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(MakeClipConfig("audio7", MakeStage(models.VideoModel.Name))).ToString());
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
+
+        Assert.Contains("audio7", error.Message);
+        Assert.Contains("not present", error.Message);
+    }
+
+    [Fact]
+    public void Missing_selected_controlnet_audio_capture_is_a_user_error()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject clip = MakeClipConfig(
+            Constants.AudioSourceControlNet,
+            MakeStage(models.VideoModel.Name));
+        clip["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = "unused-control",
+            ["Source"] = Constants.ControlNetSourceOne,
+        });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(clip).ToString());
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
+
+        Assert.Contains("ControlNet 1 audio", error.Message);
+        Assert.Contains("unavailable", error.Message);
     }
 
     [Fact]

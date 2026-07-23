@@ -5,19 +5,25 @@ namespace VideoStages;
 
 internal sealed class ClipContext
 {
-    public ClipContext(ClipSpec clip, int width, int height, WGNodeData sourceMedia, WGNodeData sourceVae)
+    public ClipContext(
+        VideoExecutionPlan plan,
+        ClipPlan plannedClip,
+        WGNodeData sourceMedia,
+        WGNodeData sourceVae)
     {
-        Clip = clip;
+        Plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        PlannedClip = plannedClip ?? throw new ArgumentNullException(nameof(plannedClip));
         SourceMedia = sourceMedia;
         SourceVae = sourceVae;
         Dimensions = new ClipDimensionState
         {
-            Width = width,
-            Height = height
+            Width = plan.Width,
+            Height = plan.Height
         };
     }
 
-    public ClipSpec Clip { get; }
+    public VideoExecutionPlan Plan { get; }
+    public ClipPlan PlannedClip { get; }
     public ClipDimensionState Dimensions { get; }
     public WGNodeData SourceMedia { get; }
     public WGNodeData SourceVae { get; }
@@ -34,4 +40,5 @@ internal sealed class ClipDimensionState
 {
     public int Width;
     public int Height;
+    public bool HasLatentUpscale;
 }

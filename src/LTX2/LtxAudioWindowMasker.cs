@@ -40,7 +40,9 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
         {
             return default;
         }
-        int pixelFrames = clipFrames is > 0 ? clipFrames.Value : LtxStageExecutor.DefaultFrameCountValue;
+        int pixelFrames = clipFrames is > 0
+            ? clipFrames.Value
+            : LtxStageRuntimeSettings.DefaultFrameCount;
         LtxVideoRetakeMasker.LatentWindow blocks =
             LtxVideoRetakeMasker.ComputeLatentWindow(pixelFrames, retake.StartFrame, retake.LengthFrames);
         if (blocks.Window <= 0)
@@ -82,7 +84,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
             return false;
         }
 
-        int fps = genInfo.VideoFPS ?? LtxStageExecutor.DefaultFpsValue;
+        int fps = genInfo.VideoFPS ?? LtxStageRuntimeSettings.DefaultFps;
         LTXVSetAudioVideoMaskByTimeNode mask = bridge.AddNode(
             new LTXVSetAudioVideoMaskByTimeNode().With(
                 StartTime: window.StartTime,
@@ -122,8 +124,10 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
     private static AudioMaskWindow ResolveWindow(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageFrame stageFrame)
     {
         StagePlan stage = stageFrame.Stage;
-        ClipSpec clip = stageFrame.ClipContext.Clip;
-        int fps = genInfo.VideoFPS ?? LtxStageExecutor.DefaultFpsValue;
+        ClipPlan clip = stageFrame.ClipContext.PlannedClip
+            ?? throw new InvalidOperationException(
+                "LTX stage execution requires the compiled clip plan.");
+        int fps = genInfo.VideoFPS ?? LtxStageRuntimeSettings.DefaultFps;
 
         // Retake: preserved-frame audio stays locked to the base encoding. Matches the video retake mask's
         // frame-count preference (genInfo.Frames first) so both windows describe the same span.

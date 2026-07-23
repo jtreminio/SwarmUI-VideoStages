@@ -46,14 +46,10 @@ internal sealed class LtxManager
         int stableIdSlot) =>
         audioInjector.TryBuildPreserveWindowedAudioLatent(audio, preserveWindows, stableIdSlot);
 
-    public bool TryApplyControlNetFrameCount(string controlNetSource)
+    public bool TryApplyControlNetFrameCount(int controlNetSourceIndex)
     {
-        if (!g.IsLTXV2())
-        {
-            return false;
-        }
         if (!new ControlNetCapture(g).TryCreateCapturedControlImageFrameCount(
-                controlNetSource,
+                controlNetSourceIndex,
                 out JArray framesConnection))
         {
             return false;
@@ -64,9 +60,6 @@ internal sealed class LtxManager
 
     public void ApplyRootAudioMaskDimensionsAfterNativeVideo() =>
         audioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo();
-
-    public static void ApplyCurrentAudioMaskDimensions(WGNodeData media) =>
-        LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(media);
 
     public void PrepareReusableAudio(ClipContext clipContext, StagePlan stage) =>
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);

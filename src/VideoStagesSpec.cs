@@ -177,34 +177,11 @@ public sealed record ClipSpec(
     SourceVideoSpec SourceVideo = null
 )
 {
-    // The selection rules below (PrimarySlotEntry / VoiceRefDriveEntry / UsesVoiceRefAudio) are
-    // intentional read-only workflow projections: generation policy expressed against, and colocated
-    // with, the clip data — pure derivations of the record's own fields, not behavior.
-
     /// <summary>First IC-LoRA entry driven by a captured core "ControlNet N" branch, or null. That
     /// entry's slot doubles as the clip's audio-capture and clip-length-from-controlnet source.</summary>
     public IcLoraSpec PrimarySlotEntry => IcLoras?.FirstOrDefault(
         entry => !StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload)
             && !StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput));
-
-    public bool HasIcLoras => IcLoras is { Count: > 0 };
-
-    /// <summary>Audio latents may be reused across this clip's stages: the clip opts in and has
-    /// enough stages for a distinct capture-then-reuse split.</summary>
-    public bool CanReuseAudio => ReuseAudio && Stages.Count >= 3;
-
-    /// <summary>First IC-LoRA entry whose uploaded drive video doubles as the clip's
-    /// voice-reference sample, or null. Takes precedence over a clip-level
-    /// "Voice Reference" audio upload (the official LipDub one-file flow).</summary>
-    public IcLoraSpec VoiceRefDriveEntry => IcLoras?.FirstOrDefault(
-        entry => entry.DriveAudioRef
-            && StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload)
-            && !string.IsNullOrWhiteSpace(entry.Video?.Data));
-
-    /// <summary>True when this clip conditions audio generation on a voice-reference sample
-    /// (per-entry drive audio or clip-level "Voice Reference" upload) instead of locking a track.</summary>
-    public bool UsesVoiceRefAudio => VoiceRefDriveEntry is not null
-        || StringUtils.Equals(AudioSource, Constants.AudioSourceVoiceRef);
 }
 
 public sealed record VideoStagesSpec(
@@ -212,5 +189,6 @@ public sealed record VideoStagesSpec(
     int Height,
     int FPS,
     bool IsTextToVideo,
-    IReadOnlyList<ClipSpec> Clips
+    IReadOnlyList<ClipSpec> Clips,
+    bool HasConfiguredResolution = true
 );

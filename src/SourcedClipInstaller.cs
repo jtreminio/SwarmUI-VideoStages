@@ -6,6 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using VideoStages.Generated;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -19,17 +20,28 @@ namespace VideoStages;
 /// </summary>
 internal sealed class SourcedClipInstaller(WorkflowGenerator g)
 {
-    public WGNodeData TryInstall(ClipSpec clip, VideoStagesSpec spec)
+    /// <summary>
+    /// Installs a sourced clip from its immutable execution plan. LTX execution intentionally does
+    /// not return to <see cref="ClipSpec"/> for embedded-media identity or timeline dimensions.
+    /// </summary>
+    public WGNodeData TryInstall(ClipPlan plan)
     {
-        ImageFile video = VideoStagesSpecParser.MaterializeSourceVideoForClip(g, clip);
-        if (video is null || clip.Frames is not int frames || frames <= 0 || spec.FPS <= 0)
+        ArgumentNullException.ThrowIfNull(plan);
+        SourceVideoPlan source = plan.SourceVideo;
+        ImageFile video = EmbeddedMediaMaterializer.MaterializeSourceVideo(g, source);
+        if (!plan.IsSourced
+            || source is null
+            || video is null
+            || plan.Frames is not int frames
+            || frames <= 0
+            || source.TargetFramesPerSecond <= 0)
         {
             return null;
         }
 
-        WGNodeData loaded = g.LoadImage(video, $"${{vssourcevideo{clip.Id}}}", resize: false);
-        int fps = spec.FPS;
-        int startFrame = (int)Math.Round(clip.SourceVideo.StartSeconds * fps);
+        WGNodeData loaded = g.LoadImage(video, $"${{vssourcevideo{plan.ClipId}}}", resize: false);
+        int fps = source.TargetFramesPerSecond;
+        int startFrame = (int)Math.Round(source.StartSeconds * fps);
 
         using WorkflowBridge bridge = BridgeSync.For(g);
         SwarmVideoResampleFPSNode resample = bridge.AddNode(new SwarmVideoResampleFPSNode().With(
@@ -46,19 +58,23 @@ internal sealed class SourcedClipInstaller(WorkflowGenerator g)
             FrameCount: frames));
 
         ImageScaleNode scale = ImageScaleReuse.Create(
-            bridge, new JArray(window.Id, 0), spec.Width, spec.Height, crop: "center");
+            bridge,
+            new JArray(window.Id, 0),
+            source.TargetWidth,
+            source.TargetHeight,
+            crop: "center");
 
         WGNodeData output = new(
             new JArray(scale.Id, 0), g, WGNodeData.DT_VIDEO, T2IModelClassSorter.CompatLtxv2)
         {
-            Width = spec.Width,
-            Height = spec.Height,
+            Width = source.TargetWidth,
+            Height = source.TargetHeight,
             Frames = frames,
             FPS = fps
         };
 
         TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode().With(
-            StartIndex: clip.SourceVideo.StartSeconds,
+            StartIndex: source.StartSeconds,
             Duration: frames / (double)fps));
         trim.Audio.TryConnectFromPath(bridge, (JArray)loaded.AttachedAudio.Path);
         output.AttachedAudio = new WGNodeData(

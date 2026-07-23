@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
 using SwarmUI.Utils;
 
 namespace VideoStages;
@@ -12,7 +13,8 @@ namespace VideoStages;
 internal static class VideoStagesGate
 {
     public static bool IsRefineSourceVideoMode(WorkflowGenerator g) =>
-        g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image source) && source is not null;
+        g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image source)
+        && source?.Type?.MetaType == MediaMetaType.Video;
 
     public static int ResolveRefineSkipStages(WorkflowGenerator g, bool refineMode)
     {

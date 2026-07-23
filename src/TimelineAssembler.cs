@@ -17,18 +17,13 @@ internal sealed class TimelineAssembler(
     internal TimelineAssemblySession Begin(VideoExecutionPlan plan) => new(g, merger, plan);
 }
 
-internal sealed record RuntimeBoundaryDegradation(int FromClipId, string Reason);
-
 internal sealed class TimelineAssemblySession
 {
     private readonly WorkflowGenerator _generator;
     private readonly MultiClipParallelMerger _merger;
+    private readonly GlobalVideoFrameTrimmer _outputTrimmer;
     private readonly VideoExecutionPlan _plan;
-    private readonly List<BoundaryExecutionMode> _effectiveModes;
-    private readonly int[] _continueWindows;
-    private readonly List<RuntimeBoundaryDegradation> _degradations = [];
-
-    public IReadOnlyList<RuntimeBoundaryDegradation> RuntimeDegradations => _degradations;
+    private readonly List<BoundaryPlan> _effectiveBoundaries;
 
     public TimelineAssemblySession(
         WorkflowGenerator generator,
@@ -37,20 +32,18 @@ internal sealed class TimelineAssemblySession
     {
         _generator = generator;
         _merger = merger;
+        _outputTrimmer = new GlobalVideoFrameTrimmer(generator);
         _plan = plan;
-        _effectiveModes = [.. plan.Boundaries.Select(boundary => boundary.Effective)];
-        _continueWindows = MultiClipParallelMerger.ResolveContinueWindows(
-            [.. plan.Clips.Select(clip => clip.Frames)],
-            [.. _effectiveModes.Select(ToBoundaryOut)],
-            [.. plan.Boundaries.Select(boundary => boundary.OverlapFrames)]);
+        _effectiveBoundaries = [.. plan.Boundaries];
     }
 
     public bool TryGetContinueWindow(int fromClipId, out int window)
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
-        if (boundaryIndex >= 0 && _effectiveModes[boundaryIndex] == BoundaryExecutionMode.Continue)
+        if (boundaryIndex >= 0
+            && _effectiveBoundaries[boundaryIndex].Effective == BoundaryExecutionMode.Continue)
         {
-            window = _continueWindows[boundaryIndex];
+            window = _effectiveBoundaries[boundaryIndex].ContinuityWindowFrames;
             return true;
         }
         window = 0;
@@ -60,12 +53,15 @@ internal sealed class TimelineAssemblySession
     public void DegradeToCut(int fromClipId, string reason)
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
-        if (boundaryIndex < 0 || _effectiveModes[boundaryIndex] == BoundaryExecutionMode.Cut)
+        if (boundaryIndex < 0
+            || _effectiveBoundaries[boundaryIndex].Effective == BoundaryExecutionMode.Cut)
         {
             return;
         }
-        _effectiveModes[boundaryIndex] = BoundaryExecutionMode.Cut;
-        _degradations.Add(new RuntimeBoundaryDegradation(fromClipId, reason));
+        _effectiveBoundaries[boundaryIndex] =
+            BoundaryOverlapPlanner.DegradeToCut(_effectiveBoundaries[boundaryIndex]);
+        Logs.Warning(
+            $"VideoStages: clip {fromClipId} continuity boundary degraded to a cut because {reason}.");
     }
 
     public void Assemble(IReadOnlyList<RuntimeArtifact> clipOutputs)
@@ -88,11 +84,24 @@ internal sealed class TimelineAssemblySession
         }
 
         List<WGNodeData> media = [.. clipOutputs.Select(output => output.Media?.ToWGNodeData(_generator))];
-        _merger.Apply(
-            media,
-            [.. _effectiveModes.Select(ToBoundaryOut)],
-            continueWindows: _continueWindows,
-            boundaryOverlapPrefs: [.. _plan.Boundaries.Select(boundary => boundary.OverlapFrames)]);
+        BoundaryBudgetResolution resolution = _merger.Apply(media, _effectiveBoundaries);
+        _effectiveBoundaries.Clear();
+        _effectiveBoundaries.AddRange(resolution.Boundaries);
+        _outputTrimmer.Apply();
+    }
+
+    /// <summary>
+    /// A sourced-only one-clip timeline has no stage finalizer, so timeline assembly owns its
+    /// one terminal trim explicitly.
+    /// </summary>
+    public void FinalizeUnstagedSingleClip()
+    {
+        if (_plan.Clips.Count != 1 || _plan.Clips[0].Stages.Count != 0)
+        {
+            throw new InvalidOperationException(
+                "Only an unstaged single-clip timeline can use sourced-only finalization.");
+        }
+        _outputTrimmer.Apply();
     }
 
     private int BoundaryIndex(int fromClipId) =>
@@ -102,10 +111,4 @@ internal sealed class TimelineAssemblySession
             .DefaultIfEmpty(-1)
             .Single();
 
-    private static string ToBoundaryOut(BoundaryExecutionMode mode) => mode switch
-    {
-        BoundaryExecutionMode.Continue => Constants.BoundaryOutContinue,
-        BoundaryExecutionMode.Crossfade => Constants.BoundaryOutCrossfade,
-        _ => Constants.BoundaryOutCut,
-    };
 }

@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 
@@ -191,13 +192,20 @@ public class VideoStagesSpecParserClipsTests
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json, prompt)).Clips);
 
-        List<(string Prompt, double Seconds)> tiled =
-            VideoStages.LTX2.PromptWindowTiler.TilePromptWindows(parsed.PromptWindows, clipSeconds: 8.0);
+        var tiled = PromptRelayPlanResolver.Tile(
+            parsed.PromptWindows.Select(window => new PromptWindowPlan(
+                window.Prompt,
+                window.Start,
+                window.Duration,
+                window.Start + window.Duration)),
+            clipSeconds: 8.0);
 
         Assert.Equal("clip early", tiled[0].Prompt);
         Assert.Contains(tiled, segment => segment.Prompt == "clip late");
+        PromptRelaySegmentPlan[] tiledArray = tiled.ToArray();
         Assert.True(
-            tiled.FindIndex(s => s.Prompt == "clip early") < tiled.FindIndex(s => s.Prompt == "clip late"),
+            Array.FindIndex(tiledArray, s => s.Prompt == "clip early")
+                < Array.FindIndex(tiledArray, s => s.Prompt == "clip late"),
             "Clip windows must tile sorted by start (early before late).");
     }
 
@@ -410,8 +418,12 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal("first.wav", clips[0].UploadedAudio.FileName);
         Assert.Equal("second.wav", clips[1].UploadedAudio.FileName);
 
-        AudioFile firstAudio = VideoStagesSpecParser.MaterializeUploadedAudioForClip(parser, clips[0]);
-        AudioFile secondAudio = VideoStagesSpecParser.MaterializeUploadedAudioForClip(parser, clips[1]);
+        AudioFile firstAudio = EmbeddedMediaMaterializer.MaterializeAudio(
+            parser,
+            clips[0].UploadedAudio);
+        AudioFile secondAudio = EmbeddedMediaMaterializer.MaterializeAudio(
+            parser,
+            clips[1].UploadedAudio);
         Assert.Equal("first.wav", firstAudio.SourceFilePath);
         Assert.Equal("second.wav", secondAudio.SourceFilePath);
     }
@@ -434,7 +446,9 @@ public class VideoStagesSpecParserClipsTests
 
         Assert.Equal("inputs/_comfy1/clip_part02.wav", clip.UploadedAudio.Data);
 
-        AudioFile audio = VideoStagesSpecParser.MaterializeUploadedAudioForClip(parser, clip);
+        AudioFile audio = EmbeddedMediaMaterializer.MaterializeAudio(
+            parser,
+            clip.UploadedAudio);
 
         Assert.Null(audio);
     }

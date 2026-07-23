@@ -6,32 +6,28 @@ using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
-internal class VoiceRefApplicator(WorkflowGenerator g)
+/// <summary>
+/// Applies the compiled voice-reference policy. The plan owns whether a sample is a drive-video
+/// audio track or a clip upload, including the optional upload fallback for a missing drive sample.
+/// </summary>
+internal sealed class VoiceRefApplicator(WorkflowGenerator g)
 {
     private const string VoiceRefSampleKeyPrefix = "videostages.voiceref.sample.";
     internal const string VoiceRefStageAudioKeyPrefix = "videostages.voiceref.stageaudio.";
 
-    /// <summary>
-    /// Wraps this stage's conditioning in an LTXVSetAudioRefTokens node for voice-reference clips:
-    /// the sample provides speaker identity as context tokens, and the model GENERATES the speech
-    /// matching the prompt — so the clip's audio is never injected as a locked sampling track
-    /// (ClipAudioWorkflowHelper resolves a voice-ref source to null). The sample is the flagged
-    /// entry's drive-video audio, else the clip's "Voice Reference" upload. Refine stages prefer the
-    /// previous stage's generated audio latent (stashed by CropGuidesAfterSampler), matching the
-    /// official LipDub two-stage graph. No-op off LTX-2 or when no sample resolves.
-    /// </summary>
-    public void ApplyVoiceRefTokens(
+    internal void ApplyVoiceRefTokens(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        ClipSpec clip,
+        ClipPlan clip,
         StageFrame stageFrame,
         bool isGeneratingStage)
     {
-        if (!clip.UsesVoiceRefAudio
-            && FindDriveAudioReferenceRequest(clip) is null
-            || genInfo?.Model is null
+        AudioVoiceReferencePlan voiceReference = clip.Audio.VoiceReference;
+        if (!voiceReference.IsRequested
+            || genInfo.Model is null
             || genInfo.VideoModel?.ModelClass?.CompatClass?.ID != T2IModelClassSorter.CompatLtxv2.ID
             || genInfo.PosCond is null
             || genInfo.NegCond is null)
@@ -39,7 +35,7 @@ internal class VoiceRefApplicator(WorkflowGenerator g)
             return;
         }
 
-        JArray audioLatentPath = ResolveVoiceRefAudioLatent(clip, isGeneratingStage);
+        JArray audioLatentPath = ResolveVoiceRefAudioLatent(clip, voiceReference, isGeneratingStage);
         if (audioLatentPath is null)
         {
             return;
@@ -58,87 +54,114 @@ internal class VoiceRefApplicator(WorkflowGenerator g)
         stageFrame.VoiceRefActive = true;
     }
 
-    // The encoded sample latent is built once per clip and reused by every stage's wrap.
-    private JArray ResolveVoiceRefAudioLatent(ClipSpec clip, bool isGeneratingStage)
+    private JArray ResolveVoiceRefAudioLatent(
+        ClipPlan clip,
+        AudioVoiceReferencePlan voiceReference,
+        bool isGeneratingStage)
     {
         if (!isGeneratingStage
-            && VideoGraphHelpers.TryGetCachedPath(g, null, $"{VoiceRefStageAudioKeyPrefix}{clip.Id}", out JArray staged))
+            && VideoGraphHelpers.TryGetCachedPath(
+                g, null, $"{VoiceRefStageAudioKeyPrefix}{clip.ClipId}", out JArray staged))
         {
             return staged;
         }
-        string sampleKey = $"{VoiceRefSampleKeyPrefix}{clip.Id}";
+        string sampleKey = $"{VoiceRefSampleKeyPrefix}{clip.ClipId}";
         if (VideoGraphHelpers.TryGetCachedPath(g, null, sampleKey, out JArray cached))
         {
             return cached;
         }
         if (g.CurrentAudioVae is null)
         {
-            Logs.Warning("VideoStages: voice-reference audio needs an audio VAE; skipping ref tokens.");
+            Logs.Warning("VideoStages: planned voice-reference audio needs an audio VAE; skipping ref tokens.");
             return null;
         }
+
         JArray samplePath;
         using (WorkflowBridge bridge = BridgeSync.For(g))
         {
-            samplePath = ResolveVoiceRefSampleAudio(bridge, clip);
+            samplePath = ResolveVoiceRefSampleAudio(bridge, clip.ClipId, voiceReference);
         }
         if (samplePath is null)
         {
             return null;
         }
-        // Encoded outside any bridge scope (EncodeToLatent writes to the workflow directly).
         WGNodeData sample = new(samplePath, g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
         JArray encoded = sample.EncodeToLatent(g.CurrentAudioVae).Path;
         VideoGraphHelpers.CachePath(g, sampleKey, encoded);
         return encoded;
     }
 
-    private JArray ResolveVoiceRefSampleAudio(WorkflowBridge bridge, ClipSpec clip)
+    private JArray ResolveVoiceRefSampleAudio(
+        WorkflowBridge bridge,
+        int clipId,
+        AudioVoiceReferencePlan voiceReference)
     {
-        if (FindDriveAudioReferenceRequest(clip) is IcLoraSpec driveEntry)
+        if (voiceReference.Kind == AudioVoiceReferenceKind.IcLoraDriveVideo)
         {
-            if (string.IsNullOrWhiteSpace(driveEntry.Video?.Data))
+            JArray driveAudio = ResolveDriveAudio(bridge, clipId, voiceReference);
+            if (driveAudio is not null)
             {
-                Logs.Warning(
-                    "VideoStages: IC-LoRA drive-audio voice reference was enabled but no drive video "
-                    + "was uploaded; skipping the drive sample.");
-                // A separately configured clip voice-reference upload remains a valid fallback.
-                if (!StringUtils.Equals(clip.AudioSource, Constants.AudioSourceVoiceRef))
-                {
-                    return null;
-                }
+                return driveAudio;
             }
-            else
-            {
-                if (VideoGraphHelpers.IsImageDataUri(driveEntry.Video.Data))
-                {
-                    throw new SwarmUserErrorException(
-                        "An IC-LoRA drive image has no audio to use as a voice reference. Upload a "
-                        + "drive video with sound, or set the clip's Audio source to Voice Reference.");
-                }
-                int entryIdx = 0;
-                while (entryIdx < clip.IcLoras.Count && !ReferenceEquals(clip.IcLoras[entryIdx], driveEntry))
-                {
-                    entryIdx++;
-                }
-                _ = new IcLoraApplicator(g).GetOrCreateUploadedDriveImages(bridge, clip.Id, entryIdx, driveEntry.Video);
-                return VideoGraphHelpers.TryGetCachedPath(
-                    g, bridge, $"{IcLoraApplicator.UploadedDriveAudioKeyPrefix}{clip.Id}.{entryIdx}", out JArray driveAudio)
-                    ? driveAudio
-                    : null;
-            }
+            return LoadUploadedVoiceReference(voiceReference.FallbackMedia);
         }
-        AudioFile uploaded = VideoStagesSpecParser.MaterializeUploadedAudioForClip(g, clip);
+        if (voiceReference.Kind == AudioVoiceReferenceKind.ClipUpload)
+        {
+            return LoadUploadedVoiceReference(voiceReference.Media);
+        }
+        return null;
+    }
+
+    private JArray ResolveDriveAudio(
+        WorkflowBridge bridge,
+        int clipId,
+        AudioVoiceReferencePlan voiceReference)
+    {
+        if (!voiceReference.HasConfiguredSample
+            || voiceReference.IcLoraEntryIndex is not int entryIndex
+            || string.IsNullOrWhiteSpace(voiceReference.Media?.Data))
+        {
+            Logs.Warning(
+                "VideoStages: planned IC-LoRA drive-audio voice reference has no drive media; "
+                + "using the planned clip voice-reference fallback when available.");
+            return null;
+        }
+        if (voiceReference.DriveMediaKind == IcLoraUploadedMediaKind.Image)
+        {
+            throw new SwarmUserErrorException(
+                "An IC-LoRA drive image has no audio to use as a voice reference. Upload a "
+                + "drive video with sound, or set the clip's Audio source to Voice Reference.");
+        }
+        _ = new IcLoraDriveMediaResolver(g).GetOrCreateUploadedDriveImages(
+            bridge,
+            clipId,
+            entryIndex,
+            voiceReference.DriveMediaKind ?? IcLoraUploadedMediaKind.Unknown,
+            voiceReference.Media.Data);
+        return VideoGraphHelpers.TryGetCachedPath(
+            g,
+            bridge,
+            $"{IcLoraDriveMediaResolver.UploadedDriveAudioKeyPrefix}{clipId}.{entryIndex}",
+            out JArray driveAudio)
+            ? driveAudio
+            : null;
+    }
+
+    private JArray LoadUploadedVoiceReference(AudioMediaIdentityPlan media)
+    {
+        if (media is null || string.IsNullOrWhiteSpace(media.Data))
+        {
+            Logs.Warning(
+                "VideoStages: planned voice-reference media is missing; skipping ref tokens.");
+            return null;
+        }
+        AudioFile uploaded = EmbeddedMediaMaterializer.MaterializeAudio(g, media);
         if (uploaded is null)
         {
             Logs.Warning(
-                "VideoStages: clip audio is 'Voice Reference' but no audio file was uploaded.");
+                "VideoStages: planned voice-reference media could not be materialized; skipping ref tokens.");
             return null;
         }
         return new JArray(g.CreateAudioLoadNode(uploaded, "${vsvoiceref}"), 0);
     }
-
-    private static IcLoraSpec FindDriveAudioReferenceRequest(ClipSpec clip) =>
-        clip?.IcLoras?.FirstOrDefault(entry =>
-            entry.DriveAudioRef
-            && StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload));
 }

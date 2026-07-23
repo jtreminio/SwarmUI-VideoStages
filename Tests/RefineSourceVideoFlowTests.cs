@@ -7,6 +7,7 @@ using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
+using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -237,12 +238,19 @@ public partial class StageFlowTests
             VideoStagesExtension.RefineSourceVideo,
             new Image([0xFF], MediaType.ImagePng));
 
-        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
             features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        StageSpec stage = Assert.Single(Assert.Single(generator.GetVideoStagesSpec().Clips).Stages);
+        Assert.NotEqual(0, stage.Control);
+        StagePlan plannedStage = Assert.Single(
+            Assert.Single(
+                generator.RequireLtxVideoExecutionPlanContext().Plan.Clips)
+            .Stages);
+        Assert.False(plannedStage.IsPassthrough);
     }
 }

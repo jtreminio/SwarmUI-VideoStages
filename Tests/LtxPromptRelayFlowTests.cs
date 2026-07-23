@@ -31,8 +31,8 @@ public partial class StageFlowTests
 
         // One short MINOR window over the opening of the clip; the remainder is a gap that the node
         // fills with the global (MAJOR) prompt — two tiled windows, so the relay activates. The window
-        // duration is kept well under the harness clip length (VideoFrames 16 @ 24fps ≈ 0.67s) so a gap
-        // is guaranteed. The tiling is measured against the actual generated frame count, not Duration.
+        // duration is kept well under the planned clip length so a gap is guaranteed. The runtime
+        // must use the compiler's aligned 97-frame prompt plan, not the harness's 16-frame host input.
         string stagesJson = ClipWithDurationJson(
             duration: 4.0,
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
@@ -58,6 +58,9 @@ public partial class StageFlowTests
         Assert.True((double)windows[0]["seconds"] > 0);
         Assert.True(windows.Count >= 2);
         Assert.Equal("", (string)windows[^1]["prompt"]);
+        Assert.True(
+            windows.Sum(window => (double)window["seconds"]) > 3.5,
+            "Prompt relay windows must retain the compiled clip duration.");
 
         // The positive conditioning is taken from the relay's positive output (slot 1).
         LTXVConditioningNode conditioning = Assert.Single(bridge.Graph.NodesOfType<LTXVConditioningNode>());
@@ -100,7 +103,7 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, stagesJson,
-            prompt: $"global words {ClipWindowTag("whole clip", start: 0.0, duration: 4.0)}");
+            prompt: $"global words {ClipWindowTag("whole clip", start: 0.0, duration: 5.0)}");
         (JObject workflow, WorkflowGenerator _unused) = WorkflowTestHarness.GenerateWithStepsAndState(
             input, BuildNativeSteps(attachAudioToCurrentMedia: false));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);

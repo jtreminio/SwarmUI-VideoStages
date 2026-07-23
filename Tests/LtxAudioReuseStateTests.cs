@@ -49,9 +49,8 @@ public class LtxAudioReuseStateTests
         ImageRefs: [],
         Stages: [MakeStage(0), MakeStage(1), MakeStage(2)]);
 
-    private static StagePlan PlanStage(ClipSpec clip, int stageIndex) =>
-        VideoExecutionPlanCompiler.Compile(new VideoStagesSpec(512, 512, 24, false, [clip]))
-            .Clips[0].Stages[stageIndex];
+    private static VideoExecutionPlan Plan(ClipSpec clip) =>
+        VideoExecutionPlanCompiler.Compile(new VideoStagesSpec(512, 512, 24, false, [clip]));
 
     private static WGNodeData MakeVideoMedia(WorkflowGenerator g, JArray attachedAudioPath = null)
     {
@@ -72,12 +71,14 @@ public class LtxAudioReuseStateTests
         g.CurrentMedia = MakeVideoMedia(g, new JArray("200", 0));
 
         ClipSpec clip = MakeReusableAudioClip();
-        ClipContext clipContext = new(clip, 512, 512, sourceMedia: null, sourceVae: null);
+        VideoExecutionPlan plan = Plan(clip);
+        ClipPlan plannedClip = plan.Clips[0];
+        ClipContext clipContext = new(plan, plannedClip, sourceMedia: null, sourceVae: null);
 
         WGNodeData mediaBefore = g.CurrentMedia;
         WGNodeData attachedBefore = g.CurrentMedia.AttachedAudio;
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, PlanStage(clip, 1));
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, plannedClip.Stages[1]);
 
         Assert.True(clipContext.AudioReuse.TryGetPath(out JArray remembered));
         Assert.Equal("200", $"{remembered[0]}");
@@ -96,10 +97,12 @@ public class LtxAudioReuseStateTests
         g.CurrentMedia = MakeVideoMedia(g);
 
         ClipSpec clip = MakeReusableAudioClip();
-        ClipContext clipContext = new(clip, 512, 512, sourceMedia: null, sourceVae: null);
+        VideoExecutionPlan plan = Plan(clip);
+        ClipPlan plannedClip = plan.Clips[0];
+        ClipContext clipContext = new(plan, plannedClip, sourceMedia: null, sourceVae: null);
         clipContext.AudioReuse.Remember(new JArray("999", 0));
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, PlanStage(clip, 0));
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, plannedClip.Stages[0]);
 
         Assert.False(clipContext.AudioReuse.TryGetPath(out JArray _));
     }
@@ -112,10 +115,12 @@ public class LtxAudioReuseStateTests
         g.CurrentMedia = MakeVideoMedia(g, new JArray("400", 0));
 
         ClipSpec clip = MakeReusableAudioClip();
-        ClipContext clipContext = new(clip, 512, 512, sourceMedia: null, sourceVae: null);
+        VideoExecutionPlan plan = Plan(clip);
+        ClipPlan plannedClip = plan.Clips[0];
+        ClipContext clipContext = new(plan, plannedClip, sourceMedia: null, sourceVae: null);
         clipContext.AudioReuse.Remember(new JArray("200", 0));
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, PlanStage(clip, 2));
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, plannedClip.Stages[2]);
 
         Assert.NotNull(g.CurrentMedia.AttachedAudio);
         JArray applied = (JArray)g.CurrentMedia.AttachedAudio.Path;

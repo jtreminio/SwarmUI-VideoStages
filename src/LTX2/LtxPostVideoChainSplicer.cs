@@ -15,14 +15,20 @@ internal static class LtxPostVideoChainSplicer
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        LtxChainCapture chainCapture = capture.BuildChainCapture(bridge);
+        LtxChainCapture chainCapture =
+            LtxPostVideoChainInspector.Rehydrate(capture.State, bridge);
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
         MediaRef vaeRef =
             MediaRef.FromWGNodeData(vae, bridge) ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
-        LtxChainOps.DecodeConfig decodeConfig = capture.BuildDecodeConfig();
+        LtxDecodeConfig decodeConfig = LtxPostChainRebuilder.BuildDecodeConfig(g);
 
         MediaRef result =
-            LtxChainOps.SpliceCurrentOutput(bridge, chainCapture, stageOutput, vaeRef, decodeConfig);
+            LtxPostChainRebuilder.SpliceCurrentOutput(
+                bridge,
+                chainCapture,
+                stageOutput,
+                vaeRef,
+                decodeConfig);
 
         if (result is not null)
         {
@@ -46,13 +52,14 @@ internal static class LtxPostVideoChainSplicer
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        LtxChainCapture chainCapture = capture.BuildChainCapture(bridge);
+        LtxChainCapture chainCapture =
+            LtxPostVideoChainInspector.Rehydrate(capture.State, bridge);
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
         MediaRef vaeRef =
             MediaRef.FromWGNodeData(vae, bridge) ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
-        LtxChainOps.DecodeConfig decodeConfig = capture.BuildDecodeConfig();
+        LtxDecodeConfig decodeConfig = LtxPostChainRebuilder.BuildDecodeConfig(g);
 
-        MediaRef result = LtxChainOps.SpliceCurrentOutputToDedicatedBranch(
+        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutputToDedicatedBranch(
             bridge,
             chainCapture,
             stageOutput,

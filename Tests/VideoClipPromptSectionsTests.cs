@@ -25,22 +25,22 @@ public partial class StageFlowTests
 
         Assert.Equal(
             "exclusive-stage-zero",
-            PromptParser.ExtractPromptWithoutReferences(prompt, 0, 0, 0).Trim());
+            VideoClipPromptText.ExtractWithoutReferences(prompt, 0, 0, 0).Trim());
         Assert.Contains(
             "global preamble",
-            PromptParser.ExtractPromptWithoutReferences(prompt, 0, 1, 1).Trim());
+            VideoClipPromptText.ExtractWithoutReferences(prompt, 0, 1, 1).Trim());
         Assert.DoesNotContain(
             "exclusive-stage-zero",
-            PromptParser.ExtractPromptWithoutReferences(prompt, 0, 1, 1));
+            VideoClipPromptText.ExtractWithoutReferences(prompt, 0, 1, 1));
     }
 
     [Fact]
     public void Videoclip_raw_clip_stage_predicate_matches_comma_bracket_syntax()
     {
         string prompt = "global <videoclip[0,0]>tiered";
-        Assert.Equal("tiered", PromptParser.ExtractPromptWithoutReferences(prompt, 0, 0, 0).Trim());
-        Assert.DoesNotContain("tiered", PromptParser.ExtractPromptWithoutReferences(prompt, 0, 1, 1));
-        Assert.True(PromptParser.HasAnyVideoClipSectionForClip(prompt, 0));
+        Assert.Equal("tiered", VideoClipPromptText.ExtractWithoutReferences(prompt, 0, 0, 0).Trim());
+        Assert.DoesNotContain("tiered", VideoClipPromptText.ExtractWithoutReferences(prompt, 0, 1, 1));
+        Assert.True(VideoClipPromptText.HasAnySectionForClip(prompt, 0));
     }
 
     [Fact]

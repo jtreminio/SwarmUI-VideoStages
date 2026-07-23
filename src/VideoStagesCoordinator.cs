@@ -3,46 +3,39 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Utils;
 using VideoStages.Execution;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
-    RootVideoStageHandoff rootVideoStageHandoff,
     StageSequenceRunner stageSequenceRunner,
     AudioTimelineExecutor audioTimelineExecutor)
 {
     public void RunConfiguredStages()
     {
-        VideoStagesSpec spec = g.GetVideoStagesSpec();
         LtxVideoExecutionPlanContext planContext = g.RequireLtxVideoExecutionPlanContext();
 
         // Every active execution is plan-backed and owns the host root before any coordinator
         // transform. Unsupported model families fail above.
         RootRuntimeSession rootSession = RootRuntimeSession.Capture(g, planContext);
 
-        List<ClipSpec> clips = [.. spec.Clips];
-        bool refineSourceVideo = TryInstallRefineSourceVideo(clips);
-        // A sourced first clip contributes footage, not a generation, so it can't absorb the core
-        // root stage; keep the root alive as the guide/source for the generated clips (mirroring
-        // the refine-source rule).
-        bool firstClipSourced = clips.Count > 0 && clips[0].SourceVideo is not null;
-        bool rootStageHandoff = !refineSourceVideo
-            && !firstClipSourced
-            && rootVideoStageHandoff.ShouldHandoffRootStage();
-        if (clips.Count > 0)
+        bool refineSourceVideo = TryInstallRefineSourceVideo(
+            planContext.Plan.Clips.Count > 0);
+        RootExecutionPolicy rootPolicy = new(
+            planContext.Plan.Root,
+            RootExecutionFacts.FromPlan(planContext.Plan, refineSourceVideo));
+        if (planContext.Plan.Clips.Count > 0)
         {
-            EnsureComfyDependencies(clips);
+            EnsureComfyDependencies(planContext.Plan);
         }
-        PreparedAudioRuntimeSources preparedAudioSources =
-            audioTimelineExecutor.PrepareRuntimeSources(clips, planContext.Plan);
+        AudioRuntimeSources preparedAudioSources =
+            audioTimelineExecutor.PrepareRuntimeSources(planContext.Plan);
         audioTimelineExecutor.PrepareRootAudio(
-            clips,
             planContext.Plan,
             preparedAudioSources,
-            rootStageHandoff,
-            firstClipSourced);
-        if (clips.Count == 0)
+            rootPolicy);
+        if (planContext.Plan.Clips.Count == 0)
         {
             return;
         }
@@ -50,10 +43,9 @@ internal sealed class VideoStagesCoordinator(
         g.LastID = Math.Max(g.LastID, Constants.StagedNodeIdReservationFloor);
 
         stageSequenceRunner.Run(
-            clips,
             planContext.Plan,
             preparedAudioSources,
-            rootStageHandoff: rootStageHandoff);
+            rootPolicy);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         RuntimeArtifact finalArtifact = RuntimeArtifact.Capture(
             g,
@@ -61,15 +53,15 @@ internal sealed class VideoStagesCoordinator(
             ArtifactOrigin.ClipAssembly);
         OutputPublication publication = rootSession.PublishTimeline(finalArtifact);
         new HdrPostprocessApplicator(g).ApplyHdrPostprocessToFinalSaves(
-            clips,
+            planContext.Plan,
             publication.SaveNodeIds);
     }
 
-    private bool TryInstallRefineSourceVideo(IReadOnlyList<ClipSpec> clips)
+    private bool TryInstallRefineSourceVideo(bool hasClips)
     {
         if (!g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image refineSource)
             || refineSource is null
-            || clips.Count == 0)
+            || !hasClips)
         {
             return false;
         }
@@ -86,12 +78,10 @@ internal sealed class VideoStagesCoordinator(
         return true;
     }
 
-    private void EnsureComfyDependencies(IReadOnlyList<ClipSpec> clips)
+    private void EnsureComfyDependencies(VideoExecutionPlan plan)
     {
         if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
-            || !clips.Any(clip =>
-                clip.HasIcLoras
-                && clip.Stages.Any(stage => VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))))
+            || !plan.Clips.Any(clip => clip.Stages.Any(stage => !stage.IcLoras.IsDefaultOrEmpty)))
         {
             return;
         }

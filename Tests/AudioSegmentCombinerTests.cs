@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -32,8 +33,8 @@ public class AudioSegmentCombinerTests
     private static UploadedAudioSpec Upload(string base64 = "QUJD") =>
         new($"data:audio/wav;base64,{base64}", "seg.wav");
 
-    private static ClipSpec ClipWithSegments(params AudioSegmentSpec[] segments) =>
-        new(
+    private static AudioSegmentPlan SegmentPlan(params AudioSegmentSpec[] segments) =>
+        AudioPlanCompiler.Compile(new ClipSpec(
             Id: 0,
             Frames: 240,
             AudioSource: Constants.AudioSourceNative,
@@ -45,7 +46,7 @@ public class AudioSegmentCombinerTests
             UploadedAudio: null,
             ImageRefs: [],
             Stages: [],
-            AudioSegments: segments);
+            AudioSegments: segments)).Segments;
 
     private static int CountClassType(JObject workflow, string classType)
     {
@@ -70,7 +71,8 @@ public class AudioSegmentCombinerTests
         int before = workflow.Count;
 
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
-            ClipWithSegments(),
+            0,
+            SegmentPlan(),
             baseAudio,
             clipDurationSeconds: 10.0,
             out _);
@@ -89,7 +91,8 @@ public class AudioSegmentCombinerTests
         WGNodeData baseAudio = BaseAudio(g);
 
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
-            ClipWithSegments(
+            0,
+            SegmentPlan(
                 new AudioSegmentSpec(Upload("QUJD"), StartSeconds: 0.0, TrimStartSeconds: 1.0, LengthSeconds: 3.0),
                 new AudioSegmentSpec(Upload("WFla"), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
@@ -120,7 +123,8 @@ public class AudioSegmentCombinerTests
         WGNodeData baseAudio = BaseAudio(g);
 
         _ = new AudioSegmentCombiner(g).Combine(
-            ClipWithSegments(
+            0,
+            SegmentPlan(
                 new AudioSegmentSpec(Upload("QUJD"), StartSeconds: 0.5, TrimStartSeconds: 0.0, LengthSeconds: 3.0),
                 new AudioSegmentSpec(Upload("WFla"), StartSeconds: 6.0, TrimStartSeconds: 0.0, LengthSeconds: 2.0)),
             baseAudio,
@@ -138,7 +142,8 @@ public class AudioSegmentCombinerTests
         WGNodeData baseAudio = BaseAudio(g);
 
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
-            ClipWithSegments(new AudioSegmentSpec(
+            0,
+            SegmentPlan(new AudioSegmentSpec(
                 Source: null, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
                 AceStepFunSource: "audio5")),
             baseAudio,
@@ -162,10 +167,17 @@ public class AudioSegmentCombinerTests
         WorkflowGenerator g = BuildGenerator(workflow);
         WGNodeData baseAudio = BaseAudio(g);
 
+        AudioSegmentPlan segmentPlan = new(
+            [new AudioSegmentItemPlan(
+                AudioSegmentSourceKind.AceStepFun,
+                AceStepFunTrack: 2,
+                StartSeconds: 2.0,
+                TrimStartSeconds: 0.0,
+                LengthSeconds: 3.0,
+                UploadedMedia: null)]);
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
-            ClipWithSegments(new AudioSegmentSpec(
-                Source: null, StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
-                AceStepFunSource: "audio2")),
+            0,
+            segmentPlan,
             baseAudio,
             clipDurationSeconds: 10.0,
             out _);
@@ -196,7 +208,8 @@ public class AudioSegmentCombinerTests
         int before = workflow.Count;
 
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
-            ClipWithSegments(new AudioSegmentSpec(
+            0,
+            SegmentPlan(new AudioSegmentSpec(
                 Source: null, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
                 AceStepFunSource: "audio5")),
             baseAudio,
@@ -214,7 +227,8 @@ public class AudioSegmentCombinerTests
         WorkflowGenerator g = BuildGenerator(workflow);
 
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
-            ClipWithSegments(
+            0,
+            SegmentPlan(
                 new AudioSegmentSpec(Upload(), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio: null,
             clipDurationSeconds: 10.0,

@@ -289,7 +289,7 @@ public class TypedBoundaryTests
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  LtxChainOps.TryCapture tests
+    //  LtxPostVideoChainInspector tests
     // ═══════════════════════════════════════════════════════════════
 
     [Fact]
@@ -308,7 +308,7 @@ public class TypedBoundaryTests
             Height = 720
         };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, currentMedia, currentAudioVae: null, useReusedAudio: false);
 
         Assert.NotNull(capture);
@@ -334,7 +334,7 @@ public class TypedBoundaryTests
         INodeOutput output = bridge.ResolvePath(new JArray("1", 0));
         MediaRef media = new() { Output = output, DataType = WGNodeData.DT_VIDEO };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         Assert.Null(capture);
@@ -365,7 +365,7 @@ public class TypedBoundaryTests
         INodeOutput output = bridge.ResolvePath(new JArray("2", 0));
         MediaRef media = new() { Output = output, DataType = WGNodeData.DT_VIDEO };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         Assert.Null(capture);
@@ -428,7 +428,7 @@ public class TypedBoundaryTests
         INodeOutput audioVaeOutput = bridge.ResolvePath(new JArray("2", 0));
         MediaRef audioVae = new() { Output = audioVaeOutput, DataType = WGNodeData.DT_AUDIOVAE };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: audioVae, useReusedAudio: false);
 
         Assert.NotNull(capture);
@@ -452,7 +452,7 @@ public class TypedBoundaryTests
         INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
         MediaRef mediaThroughDecode = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO };
 
-        LtxChainCapture directCapture = LtxChainOps.TryCapture(
+        LtxChainCapture directCapture = LtxPostVideoChainInspector.TryCapture(
             bridge, mediaThroughDecode, currentAudioVae: null, useReusedAudio: false);
 
         Assert.NotNull(directCapture);
@@ -468,7 +468,7 @@ public class TypedBoundaryTests
         INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
         MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         Assert.NotNull(capture);
@@ -478,7 +478,7 @@ public class TypedBoundaryTests
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  LtxChainOps.SpliceCurrentOutput tests
+    //  LtxPostChainRebuilder.SpliceCurrentOutput tests
     // ═══════════════════════════════════════════════════════════════
 
     [Fact]
@@ -490,7 +490,7 @@ public class TypedBoundaryTests
         INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
         MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         // Simulate generation: add a new KSampler that produced stage output
@@ -501,9 +501,9 @@ public class TypedBoundaryTests
         INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
         MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
 
-        var config = new LtxChainOps.DecodeConfig(UseTiledDecode: false);
+        var config = new LtxDecodeConfig(UseTiledDecode: false);
 
-        MediaRef result = LtxChainOps.SpliceCurrentOutput(
+        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
             bridge, capture, stageOutputRef, vaeRef, config);
 
         Assert.NotNull(result);
@@ -527,7 +527,7 @@ public class TypedBoundaryTests
         INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
         MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
@@ -535,9 +535,14 @@ public class TypedBoundaryTests
         INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
         MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
 
-        var config = new LtxChainOps.DecodeConfig(UseTiledDecode: false);
+        var config = new LtxDecodeConfig(UseTiledDecode: false);
 
-        LtxChainOps.SpliceCurrentOutput(bridge, capture, stageOutputRef, vaeRef, config);
+        LtxPostChainRebuilder.SpliceCurrentOutput(
+            bridge,
+            capture,
+            stageOutputRef,
+            vaeRef,
+            config);
 
         // After splice, decode("5") should point to the NEW separate's video output (slot 0)
         JObject decodeNode = workflow["5"] as JObject;
@@ -563,7 +568,7 @@ public class TypedBoundaryTests
         INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
         MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
@@ -571,9 +576,14 @@ public class TypedBoundaryTests
         INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
         MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
 
-        var config = new LtxChainOps.DecodeConfig(UseTiledDecode: false);
+        var config = new LtxDecodeConfig(UseTiledDecode: false);
 
-        LtxChainOps.SpliceCurrentOutput(bridge, capture, stageOutputRef, vaeRef, config);
+        LtxPostChainRebuilder.SpliceCurrentOutput(
+            bridge,
+            capture,
+            stageOutputRef,
+            vaeRef,
+            config);
 
         // Audio decode("6") should now point to the new separate's audio output (slot 1)
         JObject audioDecodeNode = workflow["6"] as JObject;
@@ -602,7 +612,7 @@ public class TypedBoundaryTests
             FPS = 24
         };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
@@ -610,9 +620,9 @@ public class TypedBoundaryTests
         INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
         MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
 
-        var config = new LtxChainOps.DecodeConfig(UseTiledDecode: false);
+        var config = new LtxDecodeConfig(UseTiledDecode: false);
 
-        MediaRef result = LtxChainOps.SpliceCurrentOutput(
+        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
             bridge, capture, stageOutputRef, vaeRef, config);
 
         Assert.NotNull(result);
@@ -631,7 +641,7 @@ public class TypedBoundaryTests
         INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
         MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             bridge, media, currentAudioVae: null, useReusedAudio: false);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
@@ -639,9 +649,14 @@ public class TypedBoundaryTests
         INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
         MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
 
-        var config = new LtxChainOps.DecodeConfig(UseTiledDecode: false);
+        var config = new LtxDecodeConfig(UseTiledDecode: false);
 
-        LtxChainOps.SpliceCurrentOutput(bridge, capture, stageOutputRef, vaeRef, config);
+        LtxPostChainRebuilder.SpliceCurrentOutput(
+            bridge,
+            capture,
+            stageOutputRef,
+            vaeRef,
+            config);
 
         // The new separate node should have av_latent pointing to the new KSampler
         string newSeparateId = null;
@@ -663,7 +678,7 @@ public class TypedBoundaryTests
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  LtxChainOps.AttachDecodedLtxAudio tests
+    //  LtxPostChainRebuilder.AttachDecodedLtxAudio tests
     // ═══════════════════════════════════════════════════════════════
 
     [Fact]
@@ -678,7 +693,7 @@ public class TypedBoundaryTests
         INodeOutput audioVaeOutput = bridge.ResolvePath(new JArray("2", 0));
         MediaRef audioVae = new() { Output = audioVaeOutput, DataType = WGNodeData.DT_AUDIOVAE };
 
-        LtxChainOps.AttachDecodedLtxAudio(bridge, media, audioVae);
+        LtxPostChainRebuilder.AttachDecodedLtxAudio(bridge, media, audioVae);
 
         Assert.NotNull(media.AttachedAudio);
         Assert.Equal(WGNodeData.DT_AUDIO, media.AttachedAudio.DataType);
@@ -707,7 +722,7 @@ public class TypedBoundaryTests
         MediaRef media = new() { Output = output, DataType = WGNodeData.DT_VIDEO };
         MediaRef audioVae = new() { Output = output, DataType = WGNodeData.DT_AUDIOVAE };
 
-        LtxChainOps.AttachDecodedLtxAudio(bridge, media, audioVae);
+        LtxPostChainRebuilder.AttachDecodedLtxAudio(bridge, media, audioVae);
 
         Assert.Null(media.AttachedAudio);
     }
@@ -733,7 +748,7 @@ public class TypedBoundaryTests
             Frames = 97,
             FPS = 24
         };
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             preGenBridge, media, currentAudioVae: null, useReusedAudio: false);
         Assert.NotNull(capture);
 
@@ -774,9 +789,9 @@ public class TypedBoundaryTests
         INodeOutput vaeOutput = postGenBridge.ResolvePath(new JArray("1", 2));
         MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
 
-        var config = new LtxChainOps.DecodeConfig(UseTiledDecode: false);
+        var config = new LtxDecodeConfig(UseTiledDecode: false);
 
-        MediaRef result = LtxChainOps.SpliceCurrentOutput(
+        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
             postGenBridge, capture, stageOutputRef, vaeRef, config);
         Assert.NotNull(result);
 
@@ -801,7 +816,7 @@ public class TypedBoundaryTests
         INodeOutput decodeOutput = preGenBridge.ResolvePath(new JArray("5", 0));
         MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO };
 
-        LtxChainCapture capture = LtxChainOps.TryCapture(
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
             preGenBridge, media, currentAudioVae: null, useReusedAudio: false);
 
         // Add nodes (simulating generation)

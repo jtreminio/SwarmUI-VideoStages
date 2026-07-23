@@ -22,7 +22,6 @@ internal static class LtxAudioReuseState
             return;
         }
 
-        ClipSpec clip = clipContext.Clip;
         ClipAudioState audioReuse = clipContext.AudioReuse;
         if (stage.AudioAction == StageAudioAction.None)
         {

@@ -83,16 +83,7 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        if (ImageScaleReuse.TryNormalizeExisting(
-            bridge,
-            resolvedGuideMedia.Path,
-            targetWidth,
-            targetHeight,
-            out string normalizedScaleId))
-        {
-            resolvedGuideMedia = resolvedGuideMedia.WithPath([normalizedScaleId, 0]);
-        }
-        else if (currentWidth != targetWidth || currentHeight != targetHeight)
+        if (currentWidth != targetWidth || currentHeight != targetHeight)
         {
             if (ImageScaleReuse.TryFind(
                 bridge,

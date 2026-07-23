@@ -149,7 +149,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Native_ltx_latent_model_upscale_keeps_core_default_guide_source_when_no_clip_refs_are_defined()
+    public void Native_ltx_latent_model_upscale_uses_the_authored_base_guide_when_no_clip_refs_are_defined()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -174,7 +174,7 @@ public partial class StageFlowTests
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
             WorkflowBridge.ToPath(preprocessNode.Image.Connection!),
-            store.Generated);
+            store.Base);
     }
 
     [Fact]

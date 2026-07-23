@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -19,21 +20,16 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
             && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;
     }
 
-    /// <summary>A sourced clip's first stage refines its own footage, so it never absorbs the
-    /// text-to-video root generation.</summary>
-    public bool ShouldReplaceTextToVideoRootStage(
-        Planning.StagePlan stage,
-        Planning.ClipPlan clip)
+    public RootExecutionPolicy CreatePolicy(RootExecutionFacts facts = null)
     {
-        return clip?.Input != Planning.ClipInputKind.SourceVideo
-            && stage.ClipStageIndex == 0
-            && g.GetVideoStagesSpec().IsTextToVideo;
+        VideoExecutionPlan plan = g.RequireLtxVideoExecutionPlanContext().Plan;
+        facts ??= RootExecutionFacts.FromPlan(plan, hasInstalledRefineSource: false);
+        return new RootExecutionPolicy(plan.Root, facts);
     }
 
     public bool ShouldHandoffRootStage()
     {
-        return g.RequireLtxVideoExecutionPlanContext()
-            .Plan.Root.CoreDisposition is not Planning.HostCoreDisposition.Keep;
+        return CreatePolicy().InterceptsHostCore;
     }
 
     internal static bool CanInterceptHostCore(WorkflowGenerator g, VideoStagesSpec spec)

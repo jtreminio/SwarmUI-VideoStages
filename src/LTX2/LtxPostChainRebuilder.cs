@@ -4,79 +4,28 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
 
 namespace VideoStages.LTX2;
 
-internal static class LtxChainOps
+internal sealed record LtxDecodeConfig(
+    bool UseTiledDecode,
+    int TileSize = 768,
+    int Overlap = 64,
+    int TemporalSize = 4096,
+    int TemporalOverlap = 4);
+
+/// <summary>
+/// Rebuilds decode branches and retargets consumers after a stage replaces the AV latent.
+/// </summary>
+internal static class LtxPostChainRebuilder
 {
-    public static LtxChainCapture TryCapture(
-        WorkflowBridge bridge,
-        MediaRef currentMedia,
-        MediaRef currentAudioVae,
-        bool useReusedAudio)
-    {
-        if (currentMedia?.Output?.Node is not ComfyNode mediaNode)
-        {
-            return null;
-        }
-
-        IVaeDecode decode = mediaNode as IVaeDecode
-            ?? bridge.Graph.FindNearestUpstream<IVaeDecode>(mediaNode);
-        if (decode is null)
-        {
-            return null;
-        }
-
-        if (decode.Samples.Connection?.Node is not LTXVSeparateAVLatentNode separate)
-        {
-            return null;
-        }
-
-        if (separate.AvLatent.Connection is null)
-        {
-            return null;
-        }
-        if (decode.Vae.Connection is null)
-        {
-            return null;
-        }
-
-        LTXVAudioVAEDecodeNode audioDecode = bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>()
-            .FirstOrDefault(n =>
-                n.Samples.Connection?.Node == separate
-                && n.Samples.Connection?.SlotIndex == 1);
-
-        INodeOutput audioVaeSource = audioDecode?.AudioVae.Connection ?? currentAudioVae?.Output;
-        if (audioVaeSource is null)
-        {
-            return null;
-        }
-
-        bool hasPostDecodeWrappers = !ReferenceEquals(currentMedia.Output.Node, decode);
-
-        return new LtxChainCapture(
-            DecodeId: decode.Id,
-            SeparateId: separate.Id,
-            AudioDecodeId: audioDecode?.Id,
-            AudioVaeSource: audioVaeSource,
-            CurrentOutputMedia: currentMedia.Clone(),
-            HasPostDecodeWrappers: hasPostDecodeWrappers,
-            UseReusedAudio: useReusedAudio);
-    }
-
-    internal sealed record DecodeConfig(
-        bool UseTiledDecode,
-        int TileSize = 768,
-        int Overlap = 64,
-        int TemporalSize = 4096,
-        int TemporalOverlap = 4);
-
     public static MediaRef SpliceCurrentOutput(
         WorkflowBridge bridge,
         LtxChainCapture capture,
         MediaRef stageOutput,
         MediaRef vae,
-        DecodeConfig decodeConfig)
+        LtxDecodeConfig decodeConfig)
     {
         if (stageOutput?.Output is null)
         {
@@ -94,29 +43,7 @@ internal static class LtxChainOps
             newSeparate,
             decodeConfig);
 
-        if (capture.AudioDecodeId is not null)
-        {
-            LTXVSeparateAVLatentNode oldSeparate =
-                bridge.Graph.GetNode<LTXVSeparateAVLatentNode>(capture.SeparateId);
-            if (oldSeparate is not null)
-            {
-                int retargeted = bridge.Graph.RetargetConnections(
-                    oldSeparate.AudioLatent,
-                    newSeparate.AudioLatent,
-                    (node, input) => node.Id == capture.AudioDecodeId
-                                  && input.Name == "samples");
-                if (retargeted > 0)
-                {
-                    bridge.SyncNode(capture.AudioDecodeId);
-                }
-            }
-
-            if (!HasAudioDecodeConnectedToSeparate(bridge, capture.AudioDecodeId, newSeparate.Id))
-            {
-                RetargetCapturedAudioDecodeViaJObject(bridge, capture.AudioDecodeId, newSeparate);
-            }
-        }
-
+        RetargetCapturedAudioDecode(bridge, capture, newSeparate);
         return capture.CurrentOutputMedia.Clone();
     }
 
@@ -125,7 +52,7 @@ internal static class LtxChainOps
         LtxChainCapture capture,
         MediaRef stageOutput,
         MediaRef vae,
-        DecodeConfig decodeConfig,
+        LtxDecodeConfig decodeConfig,
         int outputWidth,
         int outputHeight,
         int? outputFrames,
@@ -145,15 +72,15 @@ internal static class LtxChainOps
             return null;
         }
 
-        ComfyNode dedicatedDecode = AddDecode(
-            bridge, vae.Output, newSeparate.VideoLatent, decodeConfig);
+        ComfyNode dedicatedDecode =
+            AddDecode(bridge, vae.Output, newSeparate.VideoLatent, decodeConfig);
 
-        LTXVAudioVAEDecodeNode dedicatedAudioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode().With(
-            Samples: newSeparate.AudioLatent));
+        LTXVAudioVAEDecodeNode dedicatedAudioDecode = bridge.AddNode(
+            new LTXVAudioVAEDecodeNode().With(Samples: newSeparate.AudioLatent));
         dedicatedAudioDecode.AudioVae.TryConnectToUntyped(capture.AudioVaeSource);
         bridge.SyncNode(dedicatedAudioDecode);
 
-        MediaRef decodedVideo = new()
+        return new MediaRef
         {
             Output = dedicatedDecode.Outputs[0],
             DataType = WGNodeData.DT_VIDEO,
@@ -171,8 +98,6 @@ internal static class LtxChainOps
                     : null
             }
         };
-
-        return decodedVideo;
     }
 
     public static void AttachDecodedLtxAudio(
@@ -191,8 +116,8 @@ internal static class LtxChainOps
             return;
         }
 
-        LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode().With(
-            Samples: separate.AudioLatent));
+        LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(
+            new LTXVAudioVAEDecodeNode().With(Samples: separate.AudioLatent));
         audioDecode.AudioVae.ConnectFrom(audioVae);
         bridge.SyncNode(audioDecode);
 
@@ -204,38 +129,26 @@ internal static class LtxChainOps
         };
     }
 
-    private static void ReplaceVideoDecode(
-        WorkflowBridge bridge,
-        string decodeId,
-        MediaRef vae,
-        LTXVSeparateAVLatentNode newSeparate,
-        DecodeConfig decodeConfig)
+    internal static LtxDecodeConfig BuildDecodeConfig(WorkflowGenerator generator)
     {
-        if (string.IsNullOrWhiteSpace(decodeId) || vae?.Output is null)
+        if (!generator.UserInput.TryGet(T2IParamTypes.VAETileSize, out _))
         {
-            return;
+            return new LtxDecodeConfig(false);
         }
 
-        ComfyNode oldDecode = bridge.Graph.GetNode(decodeId);
-        if (oldDecode is null)
-        {
-            return;
-        }
-
-        INodeOutput oldImageOutput = oldDecode.Outputs[0];
-        bridge.RemoveNode(decodeId);
-
-        ComfyNode newDecode = AddDecode(
-            bridge, vae.Output, newSeparate.VideoLatent, decodeConfig, preserveId: decodeId);
-
-        bridge.Graph.RetargetConnections(oldImageOutput, newDecode.Outputs[0]);
+        return new LtxDecodeConfig(
+            UseTiledDecode: true,
+            TileSize: generator.UserInput.Get(T2IParamTypes.VAETileSize, 768),
+            Overlap: generator.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
+            TemporalSize: generator.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
+            TemporalOverlap: generator.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
     }
 
     internal static ComfyNode AddDecode(
         WorkflowBridge bridge,
         INodeOutput vaeOutput,
         INodeOutput samplesOutput,
-        DecodeConfig config,
+        LtxDecodeConfig config,
         string preserveId = null)
     {
         if (config.UseTiledDecode)
@@ -264,17 +177,78 @@ internal static class LtxChainOps
         return addedBasic;
     }
 
+    private static void ReplaceVideoDecode(
+        WorkflowBridge bridge,
+        string decodeId,
+        MediaRef vae,
+        LTXVSeparateAVLatentNode newSeparate,
+        LtxDecodeConfig decodeConfig)
+    {
+        if (string.IsNullOrWhiteSpace(decodeId) || vae?.Output is null)
+        {
+            return;
+        }
+
+        ComfyNode oldDecode = bridge.Graph.GetNode(decodeId);
+        if (oldDecode is null)
+        {
+            return;
+        }
+
+        INodeOutput oldImageOutput = oldDecode.Outputs[0];
+        bridge.RemoveNode(decodeId);
+
+        ComfyNode newDecode = AddDecode(
+            bridge,
+            vae.Output,
+            newSeparate.VideoLatent,
+            decodeConfig,
+            preserveId: decodeId);
+
+        bridge.Graph.RetargetConnections(oldImageOutput, newDecode.Outputs[0]);
+    }
+
+    private static void RetargetCapturedAudioDecode(
+        WorkflowBridge bridge,
+        LtxChainCapture capture,
+        LTXVSeparateAVLatentNode newSeparate)
+    {
+        if (capture.AudioDecodeId is null)
+        {
+            return;
+        }
+
+        LTXVSeparateAVLatentNode oldSeparate =
+            bridge.Graph.GetNode<LTXVSeparateAVLatentNode>(capture.SeparateId);
+        if (oldSeparate is not null)
+        {
+            int retargeted = bridge.Graph.RetargetConnections(
+                oldSeparate.AudioLatent,
+                newSeparate.AudioLatent,
+                (node, input) => node.Id == capture.AudioDecodeId
+                              && input.Name == "samples");
+            if (retargeted > 0)
+            {
+                bridge.SyncNode(capture.AudioDecodeId);
+            }
+        }
+
+        if (!HasAudioDecodeConnectedToSeparate(bridge, capture.AudioDecodeId, newSeparate.Id))
+        {
+            RetargetCapturedAudioDecodeViaJObject(
+                bridge,
+                capture.AudioDecodeId,
+                newSeparate);
+        }
+    }
+
     private static void RetargetCapturedAudioDecodeViaJObject(
         WorkflowBridge bridge,
         string audioDecodeId,
         LTXVSeparateAVLatentNode newSeparate)
     {
-        if (string.IsNullOrWhiteSpace(audioDecodeId))
-        {
-            return;
-        }
-
-        if (bridge.Workflow[audioDecodeId] is not JObject audioDecode)
+        if (string.IsNullOrWhiteSpace(audioDecodeId)
+            || bridge.Workflow[audioDecodeId] is not JObject audioDecode)
         {
             return;
         }

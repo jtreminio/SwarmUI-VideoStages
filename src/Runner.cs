@@ -19,8 +19,7 @@ namespace VideoStages;
 // 7  11.5   RunConfiguredStages                           StageRefStore.Base/Refiner,                    writes StageRefStore.Generated (intra-phase reference only)
 //                                                         videostages.controlnet.fullimage.{i}
 //
-// Non-phase entry points (NOT registered as workflow steps — called from outside the pipeline):
-//   TryInjectLtxAudio         Tests/AudioInjectionTests — unit-level audio injection coverage.
+// Non-phase entry point (NOT registered as a workflow step — called from outside the pipeline):
 //   GetRootVideoStageResizer  RootVideoStageResizer.RegisterHandlers — static AltImageToVideo handlers.
 public static class Runner
 {
@@ -99,37 +98,41 @@ public static class Runner
 
         Pipeline pipeline = BuildPipeline(g);
         AudioHandler audioHandler = new(g);
-        AudioTimelineExecutor audioTimelineExecutor = new(g, pipeline.Handoff, pipeline.LtxManager, audioHandler);
+        AudioTimelineExecutor audioTimelineExecutor = new(g, pipeline.LtxManager, audioHandler);
         MultiClipParallelMerger multiClipParallelMerger = new(g);
         TimelineAssembler timelineAssembler = new(g, multiClipParallelMerger);
         StageRunner stageRunner = new(g, pipeline.LtxManager);
-        StageSequenceRunner stageSequenceRunner = new(
+        StageSequenceRootSetup rootSetup = new(
+            g,
+            pipeline.StageRefStore,
+            pipeline.Resizer,
+            pipeline.LtxManager);
+        StageGuideReferenceState guideReferences = new(
+            g,
+            pipeline.StageRefStore,
+            pipeline.Base2Edit,
+            pipeline.LtxManager);
+        StageClipExecutor clipExecutor = new(
             g,
             pipeline.StageRefStore,
             stageRunner,
-            pipeline.Base2Edit,
-            pipeline.Resizer,
+            audioTimelineExecutor,
+            guideReferences,
+            new ContinuityGuideBuilder(g));
+        StageSequenceRunner stageSequenceRunner = new(
+            g,
             timelineAssembler,
-            pipeline.LtxManager,
-            audioTimelineExecutor);
+            rootSetup,
+            guideReferences,
+            clipExecutor);
         VideoStagesCoordinator coordinator = new(
             g,
-            pipeline.Handoff,
             stageSequenceRunner,
             audioTimelineExecutor);
         coordinator.RunConfiguredStages();
     }
 
     // --- Non-phase entry points (not registered as workflow steps; see header map) ---
-
-    public static bool TryInjectLtxAudio(
-        WorkflowGenerator g,
-        WGNodeData audio,
-        bool matchVideoLengthToAudio = true,
-        IReadOnlyList<(double Start, double End)> preserveWindows = null)
-    {
-        return BuildPipeline(g).LtxManager.TryInjectAudio(audio, matchVideoLengthToAudio, preserveWindows);
-    }
 
     internal static RootVideoStageResizer GetRootVideoStageResizer(WorkflowGenerator g) =>
         BuildPipeline(g).Resizer;
@@ -172,6 +175,7 @@ public static class Runner
             return false;
         }
 
-        return g.GetVideoStagesSpec().Clips.Any(c => c.Stages.Count > 0);
+        return g.RequireLtxVideoExecutionPlanContext().Plan.Clips.Any(
+            clip => clip.Stages.Count > 0);
     }
 }

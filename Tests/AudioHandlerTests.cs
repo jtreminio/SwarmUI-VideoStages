@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -10,19 +11,34 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class AudioHandlerTests
 {
-    private static ClipSpec Clip(int id, string audioSource, bool saveAudioTrack) => new(
-        Id: id,
-        Frames: null,
-        AudioSource: audioSource,
-        IcLoras: null,
-        SaveAudioTrack: saveAudioTrack,
-        ClipLengthFromAudio: false,
-        ClipLengthFromControlNet: false,
-        ReuseAudio: false,
-        UploadedAudio: null,
-        ImageRefs: [],
-        Stages: []
-    );
+    private static ClipPlan Clip(int id, string audioSource, bool saveAudioTrack)
+    {
+        StageSpec stage = new(
+            Id: id,
+            Control: 1,
+            Upscale: 1,
+            UpscaleMethod: "pixel-lanczos",
+            Model: "ltx-2",
+            Steps: 8,
+            CfgScale: 1,
+            Sampler: "euler",
+            Scheduler: "normal",
+            ImageReference: "Generated");
+        ClipSpec clip = new(
+            Id: id,
+            Frames: 49,
+            AudioSource: audioSource,
+            IcLoras: [],
+            SaveAudioTrack: saveAudioTrack,
+            ClipLengthFromAudio: false,
+            ClipLengthFromControlNet: false,
+            ReuseAudio: false,
+            UploadedAudio: null,
+            ImageRefs: [],
+            Stages: [stage]);
+        VideoStagesSpec spec = new(768, 512, 24, true, [clip]);
+        return Assert.Single(VideoExecutionPlanCompiler.Compile(spec).Clips);
+    }
 
     private static WorkflowGenerator CreateGenerator(JObject workflow)
     {
@@ -48,7 +64,7 @@ public class AudioHandlerTests
         bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(1));
 
         WGNodeData audio = new AudioHandler(CreateGenerator(workflow))
-            .DetectAceStepFunAudio("audio1");
+            .DetectAceStepFunAudio(1);
 
         Assert.True(JToken.DeepEquals(
             audio.Path,
@@ -63,7 +79,7 @@ public class AudioHandlerTests
         bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(0));
 
         WGNodeData audio = new AudioHandler(CreateGenerator(workflow))
-            .DetectAceStepFunAudio("audio0");
+            .DetectAceStepFunAudio(0);
 
         Assert.True(JToken.DeepEquals(
             audio.Path,
@@ -71,11 +87,11 @@ public class AudioHandlerTests
     }
 
     [Fact]
-    public void DetectAceStepFunAudio_returns_null_for_non_acestepfun_source()
+    public void DetectAceStepFunAudio_returns_null_for_invalid_track()
     {
         JObject workflow = [];
         WGNodeData audio = new AudioHandler(CreateGenerator(workflow))
-            .DetectAceStepFunAudio(Constants.AudioSourceNative);
+            .DetectAceStepFunAudio(-1);
 
         Assert.Null(audio);
     }
@@ -88,7 +104,7 @@ public class AudioHandlerTests
         bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(0));
 
         WGNodeData audio = new AudioHandler(CreateGenerator(workflow))
-            .DetectAceStepFunAudio("audio7");
+            .DetectAceStepFunAudio(7);
 
         Assert.Null(audio);
     }

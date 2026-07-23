@@ -12,16 +12,9 @@ namespace VideoStages.Execution;
 internal enum ArtifactOrigin
 {
     HostRoot,
-    GlobalRefineVideo,
     SourceVideo,
     StageOutput,
     ClipAssembly
-}
-
-internal enum ArtifactVaeDisposition
-{
-    PreserveHost,
-    Replace
 }
 
 /// <summary>
@@ -31,17 +24,9 @@ internal enum ArtifactVaeDisposition
 internal sealed record RuntimeArtifact(
     MediaRef Media,
     MediaRef Vae,
-    ArtifactOrigin Origin,
-    ArtifactVaeDisposition VaeDisposition = ArtifactVaeDisposition.Replace)
+    ArtifactOrigin Origin)
 {
     public bool HasMedia => Media?.Output is not null;
-
-    public RuntimeArtifact Copy(ArtifactOrigin? origin = null) =>
-        new(Media?.Clone(), Vae?.Clone(), origin ?? Origin, VaeDisposition);
-
-    /// <summary>Copies the graph-bound refs so changing metadata on one orchestration value cannot
-    /// accidentally mutate another value that points at the same mutable <see cref="MediaRef"/>.</summary>
-    public RuntimeArtifact WithOrigin(ArtifactOrigin origin) => Copy(origin);
 
     public static RuntimeArtifact Capture(
         WorkflowGenerator generator,
@@ -53,8 +38,7 @@ internal sealed record RuntimeArtifact(
         return new RuntimeArtifact(
             MediaRef.FromWGNodeData(generator.CurrentMedia, bridge),
             MediaRef.FromWGNodeData(generator.CurrentVae, bridge),
-            origin,
-            ArtifactVaeDisposition.Replace);
+            origin);
     }
 
     /// <summary>
@@ -65,9 +49,6 @@ internal sealed record RuntimeArtifact(
     {
         ArgumentNullException.ThrowIfNull(generator);
         generator.CurrentMedia = Media?.ToWGNodeData(generator);
-        if (VaeDisposition == ArtifactVaeDisposition.Replace)
-        {
-            generator.CurrentVae = Vae?.ToWGNodeData(generator);
-        }
+        generator.CurrentVae = Vae?.ToWGNodeData(generator);
     }
 }

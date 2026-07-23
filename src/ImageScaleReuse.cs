@@ -88,44 +88,4 @@ internal static class ImageScaleReuse
         return Create(bridge, sourcePath, width, height, crop, upscaleMethod);
     }
 
-    /// <summary>When <paramref name="sourcePath"/> already points at an ImageScale node, re-fits it to
-    /// (targetWidth, targetHeight) with center crop (collapsing a redundant upstream ImageScale) and
-    /// returns its id. A second reuse strategy alongside <see cref="TryFind"/>.</summary>
-    public static bool TryNormalizeExisting(
-        WorkflowBridge bridge,
-        JArray sourcePath,
-        int targetWidth,
-        int targetHeight,
-        out string scaleNodeId)
-    {
-        scaleNodeId = null;
-        if (sourcePath is not { Count: 2 }
-            || bridge.NodeAt(sourcePath) is not ImageScaleNode scale)
-        {
-            return false;
-        }
-
-        ImageScaleNode collapsed = scale;
-        if (scale.Image.Connection?.Node is ImageScaleNode upstream)
-        {
-            INodeOutput outerOutput = bridge.ResolvePath(sourcePath);
-            if (outerOutput is not null && !bridge.Graph.FindDownstream(outerOutput).Any())
-            {
-                bridge.RemoveNode(scale);
-            }
-            collapsed = upstream;
-        }
-
-        collapsed.With(
-            Width: targetWidth,
-            Height: targetHeight,
-            Crop: "center");
-        if (!collapsed.UpscaleMethod.HasValue)
-        {
-            collapsed.UpscaleMethod.Set("lanczos");
-        }
-        bridge.SyncNode(collapsed);
-        scaleNodeId = collapsed.Id;
-        return true;
-    }
 }

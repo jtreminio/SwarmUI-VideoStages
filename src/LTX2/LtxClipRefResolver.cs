@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Planning;
 
@@ -15,50 +14,29 @@ internal sealed class LtxClipRefResolver(
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
     internal List<ResolvedClipRef> ResolveStageClipRefs(
-        ClipSpec clip,
+        ClipPlan clip,
         StagePlan stage,
+        bool isTextToVideo,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia)
     {
-        bool isTextToVideo = g.GetVideoStagesSpec().IsTextToVideo;
-        IReadOnlyList<ImageRefSpec> refs = stage.FrameReferences.Select(reference => new ImageRefSpec(
-            reference.RawSource,
-            reference.Frame,
-            reference.FrameOrigin == ImageReferenceFrameOrigin.End,
-            reference.UploadFileName,
-            reference.InlineData)).ToArray();
-        IReadOnlyList<double> strengths = stage.FrameReferences.Select(reference => reference.Strength).ToArray();
-        // A sourced clip's footage IS its init reference: never synthesize the implicit
-        // image-to-video ref for it. The default ref would become the primary guide and
-        // inplace-merge the host init image into the encoded footage latent (defeating the
-        // orchestrator's sourced-footage reinjection skip, which requires a null primary guide).
-        if (refs.Count == 0 && !stage.Core.ImageReferenceWasExplicit && clip.SourceVideo is null)
-        {
-            ImageRefSpec defaultRef = ResolveDefaultImageToVideoRef(isTextToVideo, refStore);
-            if (defaultRef is not null)
-            {
-                refs = [defaultRef];
-                strengths = [1.0];
-            }
-        }
+        ArgumentNullException.ThrowIfNull(clip);
+        IReadOnlyList<ImageReferencePlan> refs = stage.FrameReferences;
         List<ResolvedClipRef> resolved = [];
         for (int i = 0; i < refs.Count; i++)
         {
-            ImageRefSpec spec = refs[i];
+            ImageReferencePlan reference = refs[i];
             if (isTextToVideo
-                && !StringUtils.Equals(spec.Source, "Upload"))
+                && reference.SourceKind != ImageReferenceSourceKind.Upload)
             {
                 continue;
             }
-            double strength = i < strengths.Count
-                ? strengths[i]
-                : Constants.DefaultStageRefStrength;
-            WGNodeData raw = ResolveClipRefSourceMedia(spec, refStore, postVideoChain);
+            WGNodeData raw = ResolveClipRefSourceMedia(reference, refStore, postVideoChain);
             if (raw is null)
             {
                 Logs.Warning(
-                    $"VideoStages: Stage {stage.StageId} clip reference {i} ({spec.Source}) could not be resolved; "
+                    $"VideoStages: Stage {stage.StageId} clip reference {i} ({reference.RawSource}) could not be resolved; "
                     + "skipping.");
                 continue;
             }
@@ -72,7 +50,7 @@ internal sealed class LtxClipRefResolver(
             {
                 prepared = stageGuideMediaHelper.PrepareGuideMedia(raw, sourceMedia, scaleToSourceSize: false);
             }
-            resolved.Add(new ResolvedClipRef(prepared, spec, strength));
+            resolved.Add(new ResolvedClipRef(prepared, reference, reference.Strength));
         }
 
         return resolved;
@@ -82,7 +60,8 @@ internal sealed class LtxClipRefResolver(
     {
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
-            if (!clipRef.Spec.FromEnd && clipRef.Spec.Frame == 1)
+            if (clipRef.Reference.FrameOrigin == ImageReferenceFrameOrigin.Start
+                && clipRef.Reference.Frame == 1)
             {
                 return clipRef;
             }
@@ -138,54 +117,33 @@ internal sealed class LtxClipRefResolver(
             && scaleSource.SlotIndex == (int)primaryGuidePath[1];
     }
 
-    private ImageRefSpec ResolveDefaultImageToVideoRef(bool isTextToVideo, StageRefStore refStore)
-    {
-        if (!g.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel _) || isTextToVideo)
-        {
-            return null;
-        }
-
-        if (refStore.Refiner is not null)
-        {
-            return new ImageRefSpec("Refiner", 1, false, null);
-        }
-        if (refStore.Base is not null)
-        {
-            return new ImageRefSpec("Base", 1, false, null);
-        }
-        return null;
-    }
-
     private WGNodeData ResolveClipRefSourceMedia(
-        ImageRefSpec spec,
+        ImageReferencePlan reference,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain)
     {
-        if (StringUtils.Equals(spec.Source, "Upload"))
+        if (reference.SourceKind == ImageReferenceSourceKind.Upload)
         {
-            return MaterializeUploadedRefImage(spec);
+            return MaterializeUploadedRefImage(reference);
         }
 
-        StageRefStore.StageRef stageRef = null;
-        string src = spec.Source?.Trim() ?? "";
-        if (StringUtils.Equals(src, "Base"))
+        StageRefStore.StageRef stageRef = reference.SourceKind switch
         {
-            stageRef = refStore.Base;
-        }
-        else if (StringUtils.Equals(src, "Refiner"))
-        {
-            stageRef = refStore.Refiner;
-        }
-        else if (ImageReference.TryParseBase2EditStageIndex(src, out int editStage))
-        {
-            _ = base2EditPublishedStageRefs.TryGetStageRef(editStage, out stageRef);
-        }
+            ImageReferenceSourceKind.Base => refStore.Base,
+            ImageReferenceSourceKind.Refiner => refStore.Refiner,
+            ImageReferenceSourceKind.Base2Edit
+                when reference.Base2EditStageIndex is int editStage
+                    && base2EditPublishedStageRefs.TryGetStageRef(editStage, out StageRefStore.StageRef editRef)
+                => editRef,
+            _ => null,
+        };
 
         if (stageRef is null)
         {
-            if (!string.IsNullOrWhiteSpace(src))
+            if (!string.IsNullOrWhiteSpace(reference.RawSource))
             {
-                Logs.Warning($"VideoStages: Unsupported or unresolved clip reference source '{spec.Source}'.");
+                Logs.Warning(
+                    $"VideoStages: Unsupported or unresolved clip reference source '{reference.RawSource}'.");
             }
             return null;
         }
@@ -193,9 +151,13 @@ internal sealed class LtxClipRefResolver(
         return stageGuideMediaHelper.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
-    private WGNodeData MaterializeUploadedRefImage(ImageRefSpec spec)
+    private WGNodeData MaterializeUploadedRefImage(ImageReferencePlan reference)
     {
-        ImageFile img = ImageReference.MaterializeUploadedRefImage(g, spec, "clip reference image");
+        ImageFile img = ImageReference.MaterializeUploadedRefImage(
+            g,
+            reference.InlineData,
+            reference.UploadFileName,
+            "clip reference image");
         return img is null ? null : g.LoadImage(img, "${videostagesrefimage}", false);
     }
 }

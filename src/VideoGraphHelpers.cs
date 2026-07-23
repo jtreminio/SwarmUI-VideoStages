@@ -26,9 +26,6 @@ internal static class VideoGraphHelpers
     public static void CachePath(WorkflowGenerator g, string key, JArray path) =>
         g.NodeHelpers[key] = path.ToString(Formatting.None);
 
-    public static bool IsImageDataUri(string data) =>
-        data.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase);
-
     public static string StripDataUriPrefix(string data)
     {
         int comma = data.IndexOf(',');

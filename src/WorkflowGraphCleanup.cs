@@ -80,103 +80,12 @@ internal static class WorkflowGraphCleanup
     }
 
     /// <summary>
-    /// Removes the dead subgraph around <paramref name="startNodeIds"/>: every node connected to
-    /// them (walking BOTH directions) that no save/output depends on. The plain upstream walk
-    /// stops at any node with a residual consumer — but a replaced root generation can be held
-    /// alive by consumers that are themselves dead (an audio-decode sibling, a detached guide
-    /// chain), leaving a dangling sampler no later cleanup can remove. Liveness — the upstream
-    /// closure of <paramref name="liveRootNodeIds"/> — is the boundary: expansion never crosses
-    /// into or removes it, so shared loaders survive, and a root whose latent a stage genuinely
-    /// reuses is itself live.
-    /// </summary>
-    public static void RemoveDeadComponentAround(
-        WorkflowBridge bridge,
-        IEnumerable<string> startNodeIds,
-        IEnumerable<string> liveRootNodeIds,
-        IDictionary<string, string> nodeHelpers = null)
-    {
-        HashSet<string> live = CollectUpstreamClosure(bridge, liveRootNodeIds);
-        HashSet<string> seen = [];
-        List<string> toRemove = [];
-        Queue<string> pending = new(startNodeIds.Where(id => !string.IsNullOrWhiteSpace(id)));
-        while (pending.Count > 0)
-        {
-            string nodeId = pending.Dequeue();
-            if (!seen.Add(nodeId) || live.Contains(nodeId))
-            {
-                continue;
-            }
-            ComfyNode node = bridge.Graph.GetNode(nodeId);
-            if (node is null)
-            {
-                continue;
-            }
-            toRemove.Add(nodeId);
-            foreach (INodeInput input in node.Inputs)
-            {
-                if (input.Connection?.Node?.Id is string upId)
-                {
-                    pending.Enqueue(upId);
-                }
-            }
-            foreach (INodeOutput output in node.Outputs)
-            {
-                foreach (var consumer in bridge.Graph.FindInputsConnectedTo(output))
-                {
-                    pending.Enqueue(consumer.Node.Id);
-                }
-            }
-        }
-
-        HashSet<string> removed = [];
-        foreach (string nodeId in toRemove)
-        {
-            bridge.RemoveNode(nodeId);
-            removed.Add(nodeId);
-        }
-        InvalidateNodeHelperCacheForRemovedIds(nodeHelpers, removed);
-    }
-
-    /// <summary>
     /// Collects the ids of every node connected to <paramref name="startNodeIds"/> (walking BOTH
-    /// directions), removing nothing. For capturing a doomed component BEFORE partial cleanups
-    /// delete the seed nodes — the ids feed a later RemoveDeadComponentAround, whose liveness
-    /// boundary then spares whatever the surviving graph still depends on.
+    /// directions), removing nothing.
     /// </summary>
     public static HashSet<string> CollectComponentIds(
-        WorkflowBridge bridge, IEnumerable<string> startNodeIds)
-    {
-        HashSet<string> seen = [];
-        Queue<string> pending = new(startNodeIds.Where(id => !string.IsNullOrWhiteSpace(id)));
-        while (pending.Count > 0)
-        {
-            string nodeId = pending.Dequeue();
-            if (!seen.Add(nodeId))
-            {
-                continue;
-            }
-            ComfyNode node = bridge.Graph.GetNode(nodeId);
-            if (node is null)
-            {
-                continue;
-            }
-            foreach (INodeInput input in node.Inputs)
-            {
-                if (input.Connection?.Node?.Id is string upId)
-                {
-                    pending.Enqueue(upId);
-                }
-            }
-            foreach (INodeOutput output in node.Outputs)
-            {
-                foreach (var consumer in bridge.Graph.FindInputsConnectedTo(output))
-                {
-                    pending.Enqueue(consumer.Node.Id);
-                }
-            }
-        }
-        return seen;
-    }
+        WorkflowBridge bridge, IEnumerable<string> startNodeIds) =>
+        Traverse(bridge, startNodeIds, includeUpstream: true, includeDownstream: true);
 
     /// <summary>
     /// Captures only the disposable portion of a root-connected component. Any unrelated terminal
@@ -237,10 +146,19 @@ internal static class WorkflowGraphCleanup
     }
 
     internal static HashSet<string> CollectUpstreamClosure(
-        WorkflowBridge bridge, IEnumerable<string> rootNodeIds)
+        WorkflowBridge bridge, IEnumerable<string> rootNodeIds) =>
+        Traverse(bridge, rootNodeIds, includeUpstream: true, includeDownstream: false);
+
+    private static HashSet<string> Traverse(
+        WorkflowBridge bridge,
+        IEnumerable<string> startNodeIds,
+        bool includeUpstream,
+        bool includeDownstream)
     {
+        ArgumentNullException.ThrowIfNull(bridge);
         HashSet<string> seen = [];
-        Queue<string> pending = new(rootNodeIds.Where(id => !string.IsNullOrWhiteSpace(id)));
+        Queue<string> pending = new(
+            (startNodeIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id)));
         while (pending.Count > 0)
         {
             string nodeId = pending.Dequeue();
@@ -253,11 +171,24 @@ internal static class WorkflowGraphCleanup
             {
                 continue;
             }
-            foreach (INodeInput input in node.Inputs)
+            if (includeUpstream)
             {
-                if (input.Connection?.Node?.Id is string upId)
+                foreach (INodeInput input in node.Inputs)
                 {
-                    pending.Enqueue(upId);
+                    if (input.Connection?.Node?.Id is string upstreamId)
+                    {
+                        pending.Enqueue(upstreamId);
+                    }
+                }
+            }
+            if (includeDownstream)
+            {
+                foreach (INodeOutput output in node.Outputs)
+                {
+                    foreach (var consumer in bridge.Graph.FindInputsConnectedTo(output))
+                    {
+                        pending.Enqueue(consumer.Node.Id);
+                    }
                 }
             }
         }

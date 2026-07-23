@@ -7,13 +7,17 @@ timelines are rejected before VideoStages mutates the workflow graph.
 
 Every run follows the same five-part pipeline:
 
-1. `VideoStagesSpecParser` reads the saved timeline.
-2. `VideoExecutionPlanCompiler` turns it into an immutable `VideoExecutionPlan`.
-3. `StageSequenceRunner` walks the planned clips and asks `StageRunner` to execute each
-   planned LTX stage.
-4. `TimelineAssembler` applies the planned cut, continue, and crossfade boundaries.
-5. `RootRuntimeSession` publishes the final artifact and removes only the displaced root
-   nodes it owns.
+1. `VideoStagesSpecParser` coordinates focused JSON, clip, stage, and resource parsers.
+2. `VideoExecutionPlanCompiler` composes pure root, clip, stage-option, boundary, and audio
+   planners into an immutable `VideoExecutionPlan`.
+3. `StageSequenceRunner` walks planned clips; `StageClipExecutor` and `StageRunner`
+   coordinate focused source, prompt, upscale, IC-LoRA, conditioning, latent, sampler, and
+   output services.
+4. `TimelineAssembler` applies the same typed cut, continue, and crossfade windows used by
+   audio planning; runtime mismatches explicitly degrade to cuts.
+5. `GlobalVideoFrameTrimmer` trims the completed single- or multi-clip timeline once and
+   trims decoded attached audio to the same frame-derived time window, then
+   `RootRuntimeSession` publishes it and removes only the displaced root nodes it owns.
 
 The apparent entry points are inputs to that pipeline, not separate executors:
 
@@ -38,9 +42,15 @@ runner. Their differences are expressed in `ClipPlan`, `StagePlan`, `BoundaryPla
   including spans that cross one or more clips. Pending or provisional spans remain atomic
   until their timing can be resolved; they are never partially mixed.
 - `AudioTimelineExecutor` resolves runtime audio sources once and executes the planned
-  per-clip source, length, segment, and conditioning decisions.
+  per-clip source, length, segment, and conditioning decisions, including sourced clips
+  that intentionally have no generation stages.
+- Timeline-wide authored tracks are a planning contract today. The runtime does not
+  partially execute an unresolved or provisional cross-clip span; a future mixer can consume
+  the plan without changing clip or stage execution.
 - `TimelineAssemblySession` owns runtime boundary degradation. For example, a planned
   continue boundary becomes an explicit cut when its continuity artifact cannot be built.
+- Latent upscales may chain. Once a clip has entered a latent-upscaled resolution, a later
+  pixel/model upscale is deliberately skipped to avoid a decode-resize-reencode round trip.
 
 ## Runtime invariants
 
@@ -56,6 +66,7 @@ runner. Their differences are expressed in `ClipPlan`, `StagePlan`, `BoundaryPla
 
 ## Compatibility boundary
 
-`StageSpec` and `ClipSpec` remain parser/input models. They do not select an alternate
-execution engine. There is no StageSpec adapter, native stage fallback, WAN dispatch, or
-distributed save-retarget path.
+`StageSpec` and `ClipSpec` are parser/compiler input models only. Active LTX root, stage,
+source, prompt, reference, IC-LoRA, ControlNet, retake, audio, boundary, trim, HDR, and
+publication execution consumes typed plans. There is no StageSpec adapter, native stage
+fallback, WAN dispatch, or distributed save-retarget path.

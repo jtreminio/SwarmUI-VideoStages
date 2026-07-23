@@ -11,7 +11,8 @@ internal sealed class LtxConditioningPipeline(
         WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
-        LtxStageExecutor executor)
+        LtxStageRuntimeSettings runtimeSettings,
+        LtxGuidePreprocessReuse guidePreprocessReuse)
 {
     private WGNodeData stageLatent;
 
@@ -28,13 +29,15 @@ internal sealed class LtxConditioningPipeline(
     public LtxConditioningPipeline WithLatent(WGNodeData stageLatent, WGNodeData sourceMedia)
     {
         this.stageLatent = stageLatent;
-        executor.ApplyResolvedFpsToWorkflow(genInfo, executor.ResolveFps(genInfo, sourceMedia));
-        genInfo.VideoFPS ??= LtxStageExecutor.DefaultFpsValue;
-        genInfo.Frames ??= LtxStageExecutor.DefaultFrameCountValue;
-        genInfo.DefaultCFG = LtxStageExecutor.DefaultCfgValue;
+        runtimeSettings.ApplyResolvedFpsToWorkflow(
+            genInfo,
+            runtimeSettings.ResolveFps(genInfo, sourceMedia));
+        genInfo.VideoFPS ??= LtxStageRuntimeSettings.DefaultFps;
+        genInfo.Frames ??= LtxStageRuntimeSettings.DefaultFrameCount;
+        genInfo.DefaultCFG = LtxStageRuntimeSettings.DefaultCfg;
         genInfo.HadSpecialCond = true;
-        genInfo.DefaultSampler = LtxStageExecutor.DefaultSamplerValue;
-        genInfo.DefaultScheduler = LtxStageExecutor.DefaultSchedulerValue;
+        genInfo.DefaultSampler = LtxStageRuntimeSettings.DefaultSampler;
+        genInfo.DefaultScheduler = LtxStageRuntimeSettings.DefaultScheduler;
         return this;
     }
 
@@ -48,13 +51,15 @@ internal sealed class LtxConditioningPipeline(
 
         int baseWidth = Math.Max(sourceMedia?.Width ?? g.UserInput.GetImageWidth(), 16);
         int baseHeight = Math.Max(sourceMedia?.Height ?? g.UserInput.GetImageHeight(), 16);
-        (int width, int height) = GetUpscaledDimensions(baseWidth, baseHeight, stage.Upscale.Factor);
+        (int width, int height) =
+            StageDimensionRules.ResolveUpscaled(stage, baseWidth, baseHeight);
 
         stageLatent = stage.Upscale.Mode == StageUpscaleMode.Latent
             ? ApplyLatentUpscale(stage.Upscale.MethodName, stage.Upscale.Factor, width, height)
             : ApplyLatentModelUpscale(stage.Upscale.MethodName, width, height);
         stageFrame.ClipContext.Dimensions.Width = width;
         stageFrame.ClipContext.Dimensions.Height = height;
+        stageFrame.ClipContext.Dimensions.HasLatentUpscale = true;
         return this;
     }
 
@@ -66,13 +71,13 @@ internal sealed class LtxConditioningPipeline(
         }
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
-            if (!UseLtxvInplaceForRef(clipRef.Spec) || clipRef.Strength <= 0)
+            if (!UseLtxvInplaceForRef(clipRef.Reference) || clipRef.Strength <= 0)
             {
                 continue;
             }
 
-            JArray preprocessed = executor.ResolvePreprocessedGuidePath(clipRef.Image.Path, stageLatent);
-            string imgToVideoNode = executor.CreateLtxvImgToVideoInplaceNode(
+            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, stageLatent);
+            string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
                 genInfo.Vae.Path,
                 preprocessed,
                 stageLatent.Path,
@@ -98,8 +103,8 @@ internal sealed class LtxConditioningPipeline(
             return this;
         }
 
-        JArray preprocessedGuidePath = executor.ResolvePreprocessedGuidePath(guideMedia.Path, stageLatent);
-        string imgToVideoNode = executor.CreateLtxvImgToVideoInplaceNode(
+        JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path, stageLatent);
+        string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
             genInfo.Vae.Path,
             preprocessedGuidePath,
             stageLatent.Path,
@@ -130,13 +135,13 @@ internal sealed class LtxConditioningPipeline(
     {
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
-            if (UseLtxvInplaceForRef(clipRef.Spec) || clipRef.Strength <= 0)
+            if (UseLtxvInplaceForRef(clipRef.Reference) || clipRef.Strength <= 0)
             {
                 continue;
             }
 
-            JArray preprocessed = executor.ResolvePreprocessedGuidePath(clipRef.Image.Path, g.CurrentMedia);
-            int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Spec);
+            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, g.CurrentMedia);
+            int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Reference);
 
             using WorkflowBridge bridge = BridgeSync.For(g);
             LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode()).With(
@@ -157,15 +162,6 @@ internal sealed class LtxConditioningPipeline(
 
         return this;
     }
-
-    private static (int Width, int Height) GetUpscaledDimensions(int baseWidth, int baseHeight, double upscale)
-    {
-        int width = AlignTo16((int)Math.Round(baseWidth * upscale));
-        int height = AlignTo16((int)Math.Round(baseHeight * upscale));
-        return (width, height);
-    }
-
-    private static int AlignTo16(int value) => Math.Max(16, Math.Max(value, 16) / 16 * 16);
 
     private WGNodeData ApplyLatentUpscale(string method, double scaleBy, int width, int height)
     {
@@ -198,8 +194,37 @@ internal sealed class LtxConditioningPipeline(
         return upscaled;
     }
 
-    private static bool UseLtxvInplaceForRef(ImageRefSpec spec) => !spec.FromEnd && spec.Frame == 1;
+    private string CreateLtxvImgToVideoInplaceNode(
+        JToken vaePath,
+        JArray preprocessedImagePath,
+        JArray latentPath,
+        double strength,
+        bool bypass)
+    {
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        LTXVImgToVideoInplaceNode node = bridge.AddNode(new LTXVImgToVideoInplaceNode().With(
+            Strength: strength,
+            Bypass: bypass));
+        if (vaePath is JArray vaeArr)
+        {
+            node.Vae.ConnectFromPath(bridge, vaeArr);
+        }
+        node.Image.ConnectFromPath(bridge, preprocessedImagePath);
+        node.LatentInput.ConnectFromPath(bridge, latentPath);
+        return node.Id;
+    }
 
-    private static int ComputeLtxvAddGuideFrameIndex(ImageRefSpec spec)
-        => spec.FromEnd ? -Math.Max(1, spec.Frame) : Math.Max(1, spec.Frame);
+    private JArray ResolvePreprocessedGuidePath(
+        JArray guideImagePath,
+        WGNodeData targetMedia) =>
+        guidePreprocessReuse.ResolvePreprocessedGuidePath(guideImagePath, targetMedia);
+
+    private static bool UseLtxvInplaceForRef(ImageReferencePlan reference) =>
+        reference.FrameOrigin == ImageReferenceFrameOrigin.Start
+        && reference.Frame == 1;
+
+    private static int ComputeLtxvAddGuideFrameIndex(ImageReferencePlan reference) =>
+        reference.FrameOrigin == ImageReferenceFrameOrigin.End
+            ? -Math.Max(1, reference.Frame)
+            : Math.Max(1, reference.Frame);
 }

@@ -57,10 +57,10 @@ public partial class StageFlowTests
         SetVideoStagesConfig(enabled, json);
         enabled.Set(T2IParamTypes.Prompt, prompt);
         enabled.ApplyLateSpecialLogic();
-        (int? onWidth, int? onHeight) = VideoStagesSpecParser.GetRawJsonTopLevelDimensions(
-            new() { UserInput = enabled });
-        Assert.Equal(1024, onWidth);
-        Assert.Equal(1024, onHeight);
+        WorkflowGenerator enabledGenerator = new() { UserInput = enabled };
+        VideoStagesSpec enabledSpec = VideoStagesSpecParser.Parse(enabledGenerator);
+        Assert.Equal(1024, enabledSpec.Width);
+        Assert.Equal(1024, enabledSpec.Height);
 
         // Group OFF: the Enabled gate flag is absent (as SwarmUI sends a toggled-off group). The identical
         // override tags are still stashed in ExtraMeta, but no root dimensions must be resolved.
@@ -69,9 +69,9 @@ public partial class StageFlowTests
         disabled.Set(T2IParamTypes.Prompt, prompt);
         disabled.ApplyLateSpecialLogic();
         disabled.Remove(VideoStagesExtension.Enabled);
-        (int? offWidth, int? offHeight) = VideoStagesSpecParser.GetRawJsonTopLevelDimensions(
+        VideoStagesJsonDocument disabledDocument = VideoStagesJsonReader.ReadDocument(
             new() { UserInput = disabled });
-        Assert.Null(offWidth);
-        Assert.Null(offHeight);
+        Assert.Null(disabledDocument.Width);
+        Assert.Null(disabledDocument.Height);
     }
 }

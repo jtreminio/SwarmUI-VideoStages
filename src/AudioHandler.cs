@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -13,14 +14,17 @@ public sealed class AudioHandler(WorkflowGenerator g)
     public static string MakeAceStepFunDecodeId(int trackIndex) =>
         (AceStepFunDecodeIdBase + trackIndex * AceStepFunTrackIdStride).ToString();
 
-    public WGNodeData DetectAceStepFunAudio(string source) =>
-        DetectAceStepFunAudio(source, WorkflowBridge.Create(g.Workflow));
-
-    /// <summary>Overload for callers resolving several sources in a row — reuse one bridge instead of
-    /// re-parsing the whole workflow graph per lookup.</summary>
-    public WGNodeData DetectAceStepFunAudio(string source, WorkflowBridge bridge)
+    /// <summary>Resolves a compiled AceStepFun track identity without reparsing its legacy source text.</summary>
+    public WGNodeData DetectAceStepFunAudio(int trackIndex)
     {
-        if (!TryParseAceStepFunAudioSource(source, out int trackIndex))
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        return DetectAceStepFunAudio(trackIndex, bridge);
+    }
+
+    /// <summary>Bridge-reusing typed counterpart for LTX execution plans.</summary>
+    public WGNodeData DetectAceStepFunAudio(int trackIndex, WorkflowBridge bridge)
+    {
+        if (trackIndex < 0)
         {
             return null;
         }
@@ -28,22 +32,32 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return decode is null ? null : CreateAudioNode(decode.AUDIO);
     }
 
-    public void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipSpec> clips)
+    /// <summary>
+    /// Prunes only compiled LTX audio tracks. Save intent comes from the terminal stage output
+    /// plan, so this method never needs to rediscover clip audio source strings.
+    /// </summary>
+    internal void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipPlan> clips)
     {
         HashSet<int> usedTracks = [];
         HashSet<int> savedTracks = [];
-        foreach (ClipSpec clip in clips)
+        foreach (ClipPlan clip in clips)
         {
-            if (!TryParseAceStepFunAudioSource(clip.AudioSource, out int trackIndex))
+            if (clip.Audio.Base.Kind != AudioBaseSourceKind.AceStepFun
+                || clip.Audio.Base.AceStepFunTrack is not int trackIndex)
             {
                 continue;
             }
             usedTracks.Add(trackIndex);
-            if (clip.SaveAudioTrack)
+            if (clip.Stages.Any(stage => stage.Output.PreserveConfiguredAudioTrackSave))
             {
                 savedTracks.Add(trackIndex);
             }
         }
+        PruneUnsavedTracks(usedTracks, savedTracks);
+    }
+
+    private void PruneUnsavedTracks(ISet<int> usedTracks, ISet<int> savedTracks)
+    {
         if (usedTracks.Count == 0)
         {
             return;
@@ -56,11 +70,10 @@ public sealed class AudioHandler(WorkflowGenerator g)
                 continue;
             }
             VAEDecodeAudioNode decode = FindAceStepFunDecode(bridge, trackIndex);
-            if (decode is null)
+            if (decode is not null)
             {
-                continue;
+                PruneDownstreamSaveAudio(bridge, decode);
             }
-            PruneDownstreamSaveAudio(bridge, decode);
         }
     }
 

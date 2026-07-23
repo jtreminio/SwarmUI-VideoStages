@@ -48,7 +48,7 @@ internal sealed class LtxAudioInjector(
             SwarmAudioLengthToFramesNode lengthToFrames = CreateLengthToFramesNode(
                 bridge,
                 lengthFramesAudioSource,
-                g.GetVideoStagesSpec().FPS);
+                ResolveFramesPerSecond());
             ApplyFramesConnectionToRemovableAudioSources(bridge, removableSourceIds, lengthToFrames.Frames);
             BridgeSync.SyncLastId(g);
             LtxFrameCountConnector.ApplyToExistingSources(g, WorkflowBridge.ToPath(lengthToFrames.Frames));
@@ -123,6 +123,15 @@ internal sealed class LtxAudioInjector(
         node.AudioInput.TryConnectFromPath(bridge, audioPath as JArray);
         bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 100, 0));
         return node;
+    }
+
+    private int ResolveFramesPerSecond()
+    {
+        int fps = g.GetLtxVideoExecutionPlanContext()?.Plan.FramesPerSecond
+            ?? g.UserInput.Get(
+                SwarmUI.Text2Image.T2IParamTypes.VideoFPS,
+                LtxStageRuntimeSettings.DefaultFps);
+        return fps > 0 ? fps : LtxStageRuntimeSettings.DefaultFps;
     }
 
     private static void ApplyFramesConnectionToRemovableAudioSources(

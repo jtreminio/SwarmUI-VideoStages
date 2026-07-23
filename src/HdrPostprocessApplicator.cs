@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Generated;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -15,13 +16,13 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
     /// SwarmSaveHDRAnimationWS node (PQ-encodes to Rec.2020 and writes a 10-bit HDR10 mp4).
     /// </summary>
     public void ApplyHdrPostprocessToFinalSaves(
-        IReadOnlyList<ClipSpec> clips,
+        VideoExecutionPlan plan,
         IReadOnlySet<string> finalSaveNodeIds)
     {
-        if (clips is null
+        if (plan is null
             || finalSaveNodeIds is null
             || finalSaveNodeIds.Count == 0
-            || !clips.Any(HasActiveHdrIcLora))
+            || !plan.Clips.Any(HdrIcLoraPolicy.IsActive))
         {
             return;
         }
@@ -57,8 +58,4 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
             bridge.RemoveNode(save);
         }
     }
-
-    private static bool HasActiveHdrIcLora(ClipSpec clip) => clip.IcLoras?.Any(entry =>
-        StringUtils.Equals(entry.Preset?.Trim(), "hdr")
-        || (entry.Lora?.Contains("ic-lora-hdr", StringComparison.OrdinalIgnoreCase) ?? false)) == true;
 }

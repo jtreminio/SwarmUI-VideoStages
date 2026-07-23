@@ -31,8 +31,9 @@ internal sealed class LtxStageOrchestrator(
 
         StagePlan stage = stageFrame.Stage;
         List<ResolvedClipRef> clipRefs = clipRefResolver.ResolveStageClipRefs(
-            stageFrame.ClipContext.Clip,
+            stageFrame.ClipContext.PlannedClip,
             stage,
+            stageFrame.ClipContext.Plan.Root.HostKind == HostRootKind.TextToVideoRoot,
             refStore,
             postVideoChain,
             sourceMedia);
@@ -47,7 +48,16 @@ internal sealed class LtxStageOrchestrator(
             // ever displace the implicit image-to-video default ref.
             primaryGuideClipRef = new ResolvedClipRef(
                 continuityFrame,
-                new ImageRefSpec("Continue", Frame: 1, FromEnd: false, UploadFileName: null),
+                new ImageReferencePlan(
+                    Index: -1,
+                    ImageReferenceSourceKind.Unknown,
+                    RawSource: "Continue",
+                    Base2EditStageIndex: null,
+                    Frame: 1,
+                    ImageReferenceFrameOrigin.Start,
+                    Strength: 1.0,
+                    UploadFileName: null,
+                    InlineData: null),
                 Strength: 1.0);
         }
         double guideMergeStrength = primaryGuideClipRef?.Strength ?? 1.0;
@@ -56,12 +66,15 @@ internal sealed class LtxStageOrchestrator(
         // A sourced clip's first stage samples its encoded footage directly (init-video
         // img2img); reinjecting that same footage as an i2v inplace guide would overwrite the
         // noise mask of every frame it spans. The official upscaler/V2V flows are encode-only.
-        bool sourcedFootageIsStageInput = stageFrame.ClipContext.Clip.SourceVideo is not null
+        bool sourcedFootageIsStageInput = stageFrame.ClipContext.PlannedClip.IsSourced
             && stageFrame.ClipContext.IsFirstStage(stage);
+        bool implicitSourcedGuide = sourcedFootageIsStageInput
+            && stage.Guide.Kind == GuideReferenceKind.Generated
+            && !stage.Core.ImageReferenceWasExplicit;
         bool skipGuideReinjection = primaryGuideClipRef is null
             && (replacesTextToVideoRoot
                 || clipRefs is { Count: > 0 }
-                || sourcedFootageIsStageInput
+                || implicitSourcedGuide
                 || ShouldSkipGeneratedGuideReinjection(
                     stage,
                     sourceMedia,
@@ -74,6 +87,9 @@ internal sealed class LtxStageOrchestrator(
             skipGuideReinjection,
             sourceMedia,
             priorOutputPath,
+            guideReference,
+            stage.Guide.Kind,
+            stage.Core.ImageReferenceWasExplicit,
             postVideoChain);
 
         stageExecutor.RunStage(
@@ -92,11 +108,42 @@ internal sealed class LtxStageOrchestrator(
         bool skipGuideReinjection,
         WGNodeData sourceMedia,
         JArray priorOutputPath,
+        StageRefStore.StageRef guideReference,
+        GuideReferenceKind guideKind,
+        bool guideWasExplicit,
         LtxPostVideoChainCapture postVideoChain)
     {
         if (primaryGuideClipRef is null)
         {
-            return ResolveDefaultLocalGuideMedia(skipGuideReinjection, sourceMedia, postVideoChain);
+            if (skipGuideReinjection)
+            {
+                return null;
+            }
+            bool guideIsStageInput = GuideReferenceIsStageInput(
+                guideReference,
+                priorOutputPath,
+                guideKind,
+                guideWasExplicit,
+                postVideoChain);
+            bool guideIsLiveOutput = stageGuideMediaHelper.IsLiveCurrentOutputReference(
+                guideReference?.Media,
+                postVideoChain);
+            WGNodeData authoredGuide = guideIsStageInput && !guideIsLiveOutput
+                ? sourceMedia
+                : stageGuideMediaHelper.ResolveGuideMedia(
+                    guideReference,
+                    postVideoChain);
+            if (guideIsStageInput && authoredGuide is not null)
+            {
+                // A detached decode of the stage-input latent has the same rendered dimensions as
+                // the prepared source even when its marker still carries pre-resize metadata.
+                authoredGuide.Width = sourceMedia.Width;
+                authoredGuide.Height = sourceMedia.Height;
+            }
+            return stageGuideMediaHelper.PrepareGuideMedia(
+                authoredGuide,
+                sourceMedia,
+                scaleToSourceSize: true);
         }
 
         if (primaryGuideClipRef.Image?.Path is JArray guidePath
@@ -112,6 +159,24 @@ internal sealed class LtxStageOrchestrator(
         }
 
         return stageGuideMediaHelper.PrepareGuideMedia(primaryGuideClipRef.Image, sourceMedia, scaleToSourceSize: true);
+    }
+
+    private bool GuideReferenceIsStageInput(
+        StageRefStore.StageRef guideReference,
+        JArray priorOutputPath,
+        GuideReferenceKind guideKind,
+        bool guideWasExplicit,
+        LtxPostVideoChainCapture postVideoChain)
+    {
+        if (guideReference?.Media?.Path is not JArray guidePath)
+        {
+            return false;
+        }
+        return guideKind == GuideReferenceKind.Generated && !guideWasExplicit
+            || priorOutputPath is not null && JToken.DeepEquals(guidePath, priorOutputPath)
+            || stageGuideMediaHelper.IsLiveCurrentOutputReference(
+                guideReference.Media,
+                postVideoChain);
     }
 
     private WGNodeData ResolveDefaultLocalGuideMedia(

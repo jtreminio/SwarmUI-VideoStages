@@ -5,6 +5,7 @@ using ComfyTyped.Types;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Generated;
+using VideoStages.Planning;
 
 namespace VideoStages.LTX2;
 
@@ -33,7 +34,7 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
     internal static int LatentFrameStartPixel(int latentIndex) =>
         latentIndex <= 0 ? 0 : latentIndex * TemporalDownscale - (TemporalDownscale - 1);
 
-    private const int DefaultFrameCount = LtxStageExecutor.DefaultFrameCountValue;
+    private const int DefaultFrameCount = LtxStageRuntimeSettings.DefaultFrameCount;
 
     /// <summary>The three latent-frame block counts of a retake mask, in order.</summary>
     internal readonly record struct LatentWindow(int Prefix, int Window, int Suffix)
@@ -67,7 +68,7 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
     public WGNodeData Apply(
         WGNodeData encodedLatent,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        RetakeWindowSpec window)
+        RetakePlan window)
     {
         if (encodedLatent?.Path is not JArray latentPath
             || window is null

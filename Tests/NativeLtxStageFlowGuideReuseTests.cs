@@ -11,7 +11,7 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     [Fact]
-    public void Native_ltx_stage_uses_current_source_instead_of_downstream_reference_preprocess_when_no_clip_refs_are_defined()
+    public void Native_ltx_stage_uses_the_authored_base_instead_of_a_downstream_generated_reference()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -32,7 +32,7 @@ public partial class StageFlowTests
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
             WorkflowBridge.ToPath(stagePreprocess.Image.Connection!),
-            store.Generated);
+            store.Base);
         Assert.Same(stagePreprocess.OutputImage, imgToVideoNode.Image.Connection);
     }
 }
