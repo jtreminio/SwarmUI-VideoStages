@@ -41,15 +41,27 @@ export const buildStageRail = (
     const addButton = buildAddButton("Add stage", "vst-detail-add-stage", () =>
         context.addStage(clipIdx),
     );
-    addButton.title = "Add a refine stage";
+    const canAdd =
+        clip.stages.length === 0 ||
+        context.capabilities().forClip(clip).decision("multiStage").supported;
+    addButton.disabled = !canAdd;
+    addButton.title = canAdd
+        ? clip.stages.length === 0
+            ? "Add the first stage and choose its architecture"
+            : "Add a refine stage"
+        : context.capabilities().forClip(clip).decision("multiStage").reason;
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className =
         "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
     deleteButton.textContent = "Delete stage";
-    deleteButton.disabled = clip.stages.length <= 1;
+    deleteButton.disabled =
+        clip.stages.length === 0 ||
+        (clip.stages.length === 1 && clip.sourceVideo === null);
     deleteButton.title = deleteButton.disabled
-        ? "A clip always keeps at least one stage"
+        ? clip.stages.length === 0
+            ? "This source-only clip has no generation stage"
+            : "Add a source video before removing the only generation stage"
         : `Delete stage ${stageChipLabel(stageIdx)}`;
     deleteButton.addEventListener("click", (event) => {
         event.preventDefault();

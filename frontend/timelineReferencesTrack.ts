@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "./architectures/policy";
 import { clamp, REF_FRAME_MIN } from "./constants";
 import { documentFps } from "./documentQueries";
 import {
@@ -48,9 +49,14 @@ interface RefDragState {
     sourceJson: string;
 }
 
-export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
+export const createTimelineReferencesTrack = (
+    getCapabilities?: () => CapabilityViewResolver,
+): TimelineReferencesTrack => {
     let boundBody: HTMLElement | null = null;
     let unregister: (() => void) | null = null;
+    const canEditReferences = (clip: ReturnType<typeof getClips>[number]) =>
+        getCapabilities?.().forClip(clip).decision("frameReferences")
+            .supported ?? true;
 
     const findArrow = (clipIdx: number, refIdx: number): HTMLElement | null =>
         boundBody?.querySelector<HTMLElement>(
@@ -89,7 +95,7 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
             "references-track",
             (clips) => {
                 const clip = clips[clipIdx];
-                if (!clip) {
+                if (!clip || !canEditReferences(clip)) {
                     return null;
                 }
                 const frameMax = getReferenceFrameMax(
@@ -220,6 +226,10 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         if (!clip || !ref) {
             return null;
         }
+        if (!canEditReferences(clip)) {
+            me.preventDefault();
+            return claimOnly();
+        }
         const arrow = findArrow(clipIdx, refIdx);
         me.preventDefault();
         return dragSession(body, {
@@ -271,6 +281,9 @@ export const createTimelineReferencesTrack = (): TimelineReferencesTrack => {
         }
         const clip = getClips()[clipIdx];
         if (!clip) {
+            return;
+        }
+        if (!canEditReferences(clip)) {
             return;
         }
         const rect = lane.getBoundingClientRect();

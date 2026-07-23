@@ -12,6 +12,7 @@ import {
 import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { getClips } from "./persistence";
+import { getRootDefaults } from "./rootDefaults";
 import {
     getSelection,
     isSameSelection,
@@ -19,6 +20,7 @@ import {
     subscribeSelection,
 } from "./selection";
 import type { UpdateMeta } from "./store";
+import { getRootGeneratedEntryMode } from "./swarmInputs";
 import type { TimelineSelection } from "./types";
 
 const DETAIL_CLASS = "vst-detail";
@@ -78,6 +80,8 @@ export const createTimelineDetailStrip = (
     });
     const selectionOperations = createDetailSelectionOperations(
         draftQueue.structuralCommit,
+        () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
+        render,
     );
 
     const context: DetailStripContext = {
@@ -88,6 +92,9 @@ export const createTimelineDetailStrip = (
         buildClampedNumber: draftQueue.buildClampedNumber,
         structuralCommit: draftQueue.structuralCommit,
         render,
+        capabilities: () =>
+            createCapabilityViewResolver(getRootDefaults().modelCatalog),
+        generatedEntryMode: getRootGeneratedEntryMode,
         deleteRefEntry: selectionOperations.deleteRefEntry,
         deleteWindowEntry: selectionOperations.deleteWindowEntry,
         createRetake: selectionOperations.createRetake,
@@ -283,3 +290,5 @@ export const createTimelineDetailStrip = (
 
     return { attach, render, dispose };
 };
+
+import { createCapabilityViewResolver } from "./architectures/policy";

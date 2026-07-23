@@ -1,6 +1,6 @@
 /**
  * Narrow adapters for legacy SwarmUI UI services that are not part of the
- * LTX document/carrier bridge. Keeping these reads here makes the host
+ * VideoStages document/carrier bridge. Keeping these reads here makes the host
  * boundary explicit without coupling application modules to Swarm globals.
  */
 

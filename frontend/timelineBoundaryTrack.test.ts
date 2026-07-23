@@ -6,7 +6,9 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { boundaryOverlapConstraints } from "./architectures/boundaryConstraints";
 import { crossfadePlanForClips } from "./boundaryPlan";
 import * as persistence from "./persistence";
 import { getSelection, resetSelectionForTests } from "./selection";
@@ -18,6 +20,14 @@ import { computeRegionLayout, renderBoundarySeams } from "./timelineView";
 import type { BoundaryOut, Clip } from "./types";
 
 const PPS = 44;
+const ltxBoundaryConstraints = (
+    _clip: Clip,
+    _index: number,
+    mode: BoundaryOut,
+) =>
+    boundaryOverlapConstraints(
+        testArchitectureCatalog().architectures[0].boundaryRules[mode],
+    );
 
 interface ClipFixture {
     duration: number;
@@ -40,6 +50,7 @@ describe("crossfadePlanForClips", () => {
         const plan = crossfadePlanForClips(
             [clipFor("cut"), clipFor("cut")],
             24,
+            ltxBoundaryConstraints,
         );
         expect(plan).toEqual({ overlaps: [0], fallback: false });
     });
@@ -49,6 +60,7 @@ describe("crossfadePlanForClips", () => {
         const plan = crossfadePlanForClips(
             [clipFor("continue"), clipFor("cut")],
             24,
+            ltxBoundaryConstraints,
         );
         expect(plan.overlaps[0]).toBe(9);
         expect(plan.fallback).toBe(false);
@@ -59,6 +71,7 @@ describe("crossfadePlanForClips", () => {
         const plan = crossfadePlanForClips(
             [clipFor("crossfade"), clipFor("cut")],
             24,
+            ltxBoundaryConstraints,
         );
         expect(plan.overlaps[0]).toBe(8);
     });
@@ -69,6 +82,7 @@ describe("crossfadePlanForClips", () => {
         const plan = crossfadePlanForClips(
             [clipFor("crossfade", 0), clipFor("cut", 2)],
             24,
+            ltxBoundaryConstraints,
         );
         expect(plan.fallback).toBe(true);
         expect(plan.overlaps).toEqual([0]);

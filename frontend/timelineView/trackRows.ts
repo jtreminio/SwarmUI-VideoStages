@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "../architectures/policy";
 import {
     AUDIO_SOURCE_VOICE_REF,
     isAceStepFunAudioSource,
@@ -56,6 +57,7 @@ export const renderPromptTrackRow = (
     layouts: RegionLayout[],
     pxPerSecond: number,
     globalPrompt: string,
+    capabilities?: CapabilityViewResolver,
 ): string => {
     const globalTrimmed = `${globalPrompt ?? ""}`.trim();
     const parts: string[] = [];
@@ -67,6 +69,11 @@ export const renderPromptTrackRow = (
         }
         const width = clipInnerWidth(layout.widthPx);
         const windows = clip.promptWindows ?? [];
+        const clipCapabilities = capabilities?.forClip(clip);
+        const majorSupported =
+            clipCapabilities?.decision("majorPrompt").supported ?? true;
+        const relaySupported =
+            clipCapabilities?.decision("promptRelay").supported ?? true;
         const ownPrompt = `${clip.prompt ?? ""}`.trim();
         const inherited = ownPrompt === "";
         const major = inherited ? globalTrimmed : ownPrompt;
@@ -91,12 +98,14 @@ export const renderPromptTrackRow = (
             (inherited && major !== ""
                 ? " — inherited from the global prompt; click to set a clip prompt"
                 : " — click to edit");
-        parts.push(
-            `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(majorTitle)}">` +
-                overlays +
-                `<span class="vst-major-text">${escapeHtml(majorText)}</span>` +
-                `</div>`,
-        );
+        if (majorSupported || ownPrompt !== "") {
+            parts.push(
+                `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(majorSupported ? majorTitle : `${majorTitle} — unsupported by this architecture`)}">` +
+                    overlays +
+                    `<span class="vst-major-text">${escapeHtml(majorText)}</span>` +
+                    `</div>`,
+            );
+        }
 
         const minorSegments = windows
             .map((window, windowIdx) => {
@@ -112,9 +121,11 @@ export const renderPromptTrackRow = (
                 );
             })
             .join("");
-        parts.push(
-            `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="Click empty space to add a minor prompt">${minorSegments}</div>`,
-        );
+        if (relaySupported || windows.length > 0) {
+            parts.push(
+                `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be removed"}">${minorSegments}</div>`,
+            );
+        }
     }
     return (
         `<div class="vst-track-row vst-track-prompt">` +
@@ -194,12 +205,15 @@ const renderAudioSegmentLanes = (
     durationSeconds: number,
     startPx: number,
     widthPx: number,
+    canCreate: boolean,
 ): string => {
     const place = (laneIdx: number): string =>
         `left:${startPx}px;width:${widthPx}px;--vst-audio-lane-idx:${laneIdx}`;
     const blankLane = (laneIdx: number): string =>
-        `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" ` +
-        `style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>`;
+        canCreate
+            ? `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" ` +
+              `style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>`
+            : "";
     if (durationSeconds <= 0) {
         return blankLane(0);
     }
@@ -222,6 +236,7 @@ const renderAudioSegmentLanes = (
 export const renderAudioTrackRow = (
     clips: Clip[],
     layouts: RegionLayout[],
+    capabilities?: CapabilityViewResolver,
 ): string => {
     const segments = layouts
         .map((layout) => {
@@ -230,6 +245,17 @@ export const renderAudioTrackRow = (
                 return "";
             }
             const badge = audioSourceBadge(clip.audioSource ?? "");
+            const clipCapabilities = capabilities?.forClip(clip);
+            const clipAudioSupported =
+                clipCapabilities?.decision("clipAudio").supported ?? true;
+            const segmentsSupported =
+                clipCapabilities?.decision("audioSegments").supported ?? true;
+            const persistedAudio =
+                clip.audioSource !== "Native" ||
+                clip.uploadedAudio !== null ||
+                clip.reuseAudio ||
+                clip.clipLengthFromAudio ||
+                clip.saveAudioTrack;
             const native = badge.label === "Native";
             const width = clipInnerWidth(layout.widthPx);
             const kindClass = native
@@ -263,7 +289,7 @@ export const renderAudioTrackRow = (
                 : "";
             const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
             return (
-                `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(title)}" aria-label="Edit audio for clip ${layout.index + 1}">` +
+                `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index + 1}">` +
                 `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +
                 audioFlagChips(clip) +
                 body +
@@ -274,6 +300,7 @@ export const renderAudioTrackRow = (
                     clip.duration || 0,
                     layout.startPx,
                     width,
+                    segmentsSupported,
                 )
             );
         })
@@ -313,6 +340,7 @@ export const renderReferencesTrackRow = (
     layouts: RegionLayout[],
     fps: number,
     unit: TimelineUnit,
+    capabilities?: CapabilityViewResolver,
 ): string => {
     const lanes = layouts
         .map((layout) => {
@@ -321,6 +349,9 @@ export const renderReferencesTrackRow = (
                 return "";
             }
             const width = clipInnerWidth(layout.widthPx);
+            const refsSupported =
+                capabilities?.forClip(clip).decision("frameReferences")
+                    .supported ?? true;
             const marks = (clip.refs ?? [])
                 .map((ref: RefImage, refIdx: number) => {
                     const isEnd = ref.fromEnd === true;
@@ -365,7 +396,7 @@ export const renderReferencesTrackRow = (
                     );
                 })
                 .join("");
-            return `<div class="vst-refs-lane" data-vst-ref-add data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="Click to add a reference image at this frame">${marks}</div>`;
+            return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be removed"}">${marks}</div>`;
         })
         .join("");
     return (

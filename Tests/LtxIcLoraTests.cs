@@ -92,7 +92,7 @@ public sealed class LtxIcLoraTests
         RegisterLora("LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9");
 
         JObject entry = MakeIcLora(
-            Constants.IcLoraAutoModel, videoData: "data:video/mp4;base64,QUJD");
+            IcLoraWeights.AutoModelToken, videoData: "data:video/mp4;base64,QUJD");
         entry["Preset"] = "deblur";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(entry);
@@ -115,7 +115,7 @@ public sealed class LtxIcLoraTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(MakeIcLora(Constants.IcLoraAutoModel));
+        clip["IcLoras"] = new JArray(MakeIcLora(IcLoraWeights.AutoModelToken));
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -130,7 +130,7 @@ public sealed class LtxIcLoraTests
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject entry = MakeIcLora(Constants.IcLoraAutoModel);
+        JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken);
         entry["Preset"] = "deblur";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(entry);
@@ -148,7 +148,7 @@ public sealed class LtxIcLoraTests
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject entry = MakeIcLora(Constants.IcLoraAutoModel);
+        JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken);
         entry["Preset"] = "unit-test-never-downloaded";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["IcLoras"] = new JArray(entry);
@@ -488,7 +488,7 @@ public sealed class LtxIcLoraTests
         using WorkflowBridge _ = bridge;
 
         LoadDA3ModelNode da3Model = Assert.Single(bridge.Graph.NodesOfType<LoadDA3ModelNode>());
-        Assert.Equal(Constants.Da3ModelFileName, da3Model.ModelName.LiteralAsString());
+        Assert.Equal(IcLoraWeights.Da3ModelFileName, da3Model.ModelName.LiteralAsString());
         DA3InferenceNode inference = Assert.Single(bridge.Graph.NodesOfType<DA3InferenceNode>());
         Assert.Equal("mono", inference.Mode.LiteralAsString());
         DA3RenderNode render = Assert.Single(bridge.Graph.NodesOfType<DA3RenderNode>());
@@ -521,7 +521,7 @@ public sealed class LtxIcLoraTests
         using WorkflowBridge _ = bridge;
 
         LoadMoGeModelNode mogeModel = Assert.Single(bridge.Graph.NodesOfType<LoadMoGeModelNode>());
-        Assert.Equal(Constants.MoGeModelFileName, mogeModel.ModelName.LiteralAsString());
+        Assert.Equal(IcLoraWeights.MoGeModelFileName, mogeModel.ModelName.LiteralAsString());
         MoGeRenderNode render = Assert.Single(bridge.Graph.NodesOfType<MoGeRenderNode>());
         Assert.Equal("normal_opengl", render.Output.LiteralAsString());
         LTXAddVideoICLoRAGuideNode guide = Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
@@ -718,7 +718,7 @@ public sealed class LtxIcLoraTests
         IcLoraPlan plan = new(
             EntryIndex: 0,
             ModelName: lora,
-            UsesAutoModel: lora == Constants.IcLoraAutoModel,
+            UsesAutoModel: lora == IcLoraWeights.AutoModelToken,
             Preset: preset,
             ModelStrength: 1,
             AttentionStrength: 1,

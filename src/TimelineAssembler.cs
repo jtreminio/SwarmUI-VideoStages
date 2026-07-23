@@ -19,7 +19,6 @@ internal sealed class TimelineAssembler(
 
 internal sealed class TimelineAssemblySession
 {
-    private readonly WorkflowGenerator _generator;
     private readonly MultiClipParallelMerger _merger;
     private readonly GlobalVideoFrameTrimmer _outputTrimmer;
     private readonly VideoExecutionPlan _plan;
@@ -30,7 +29,6 @@ internal sealed class TimelineAssemblySession
         MultiClipParallelMerger merger,
         VideoExecutionPlan plan)
     {
-        _generator = generator;
         _merger = merger;
         _outputTrimmer = new GlobalVideoFrameTrimmer(generator);
         _plan = plan;
@@ -64,7 +62,7 @@ internal sealed class TimelineAssemblySession
             $"VideoStages: clip {fromClipId} continuity boundary degraded to a cut because {reason}.");
     }
 
-    public void Assemble(IReadOnlyList<RuntimeArtifact> clipOutputs)
+    public void Assemble(IReadOnlyList<DecodedClipArtifact> clipOutputs)
     {
         ArgumentNullException.ThrowIfNull(clipOutputs);
         if (clipOutputs.Count != _plan.Clips.Count)
@@ -73,7 +71,7 @@ internal sealed class TimelineAssemblySession
                 $"VideoStages: timeline assembly expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }
-        if (clipOutputs.Any(output => output?.HasMedia != true))
+        if (clipOutputs.Any(output => output?.HasVideo != true))
         {
             throw new SwarmUserErrorException(
                 "VideoStages: timeline assembly received an invalid clip video artifact.");
@@ -83,8 +81,7 @@ internal sealed class TimelineAssemblySession
             return;
         }
 
-        List<WGNodeData> media = [.. clipOutputs.Select(output => output.Media?.ToWGNodeData(_generator))];
-        BoundaryBudgetResolution resolution = _merger.Apply(media, _effectiveBoundaries);
+        BoundaryBudgetResolution resolution = _merger.Apply(clipOutputs, _effectiveBoundaries);
         _effectiveBoundaries.Clear();
         _effectiveBoundaries.AddRange(resolution.Boundaries);
         _outputTrimmer.Apply();

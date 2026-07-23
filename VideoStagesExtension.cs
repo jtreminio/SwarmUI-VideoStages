@@ -3,7 +3,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
-using VideoStages.Generated;
+using VideoStages.Architectures;
 
 namespace VideoStages;
 
@@ -33,7 +33,7 @@ public class VideoStagesExtension : Extension
         Logs.Info("VideoStages Extension initializing...");
         ComfyTyped.Generated.NodeRegistrations.EnsureRegistered();
         VideoStages.Generated.NodeRegistrations.EnsureRegistered();
-        RegisterComfyDependencies();
+        VideoArchitectureManifest.RegisterProductionDependencies();
         RegisterParameters();
         RegisterComfyNodes();
         VideoStagesApi.Register();
@@ -42,7 +42,7 @@ public class VideoStagesExtension : Extension
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
             step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
         AltImageToVideoScope.RegisterDispatcher();
-        RootVideoStageResizer.RegisterHandlers();
+        VideoArchitectureManifest.RegisterProductionHostHandlers();
 
         WorkflowGenerator.AddStep(
             Runner.CaptureCoreVideoControlNetPreprocessors,
@@ -65,32 +65,6 @@ public class VideoStagesExtension : Extension
         WorkflowGenerator.AddStep(
             Runner.RunConfiguredStages,
             Constants.WorkflowStepPriority.RunConfiguredStages);
-    }
-
-    private static void RegisterComfyDependencies()
-    {
-        InstallableFeatures.RegisterInstallableFeature(new(
-            "LTXVideo",
-            Constants.LtxVideoFeatureFlag,
-            Constants.LtxVideoNodeUrl,
-            "Lightricks",
-            "This will install LTXVideo ComfyUI nodes developed by Lightricks.\n"
-            + "If you already installed ComfyUI-LTXVideo in your ComfyUI custom_nodes folder, you do not need to install it again.\n"
-            + "Do you wish to install?"));
-
-        ComfyUIBackendExtension.NodeToFeatureMap[LTXICLoRALoaderModelOnlyNode.ClassType] =
-            Constants.LtxVideoFeatureFlag;
-        ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideNode.ClassType] =
-            Constants.LtxVideoFeatureFlag;
-        ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideAdvancedNode.ClassType] =
-            Constants.LtxVideoFeatureFlag;
-
-        // Depth/normal IC-LoRA control signals load their estimators from the shared
-        // geometry_estimation model folder; make it visible to self-start ComfyUI backends.
-        if (!ComfyUISelfStartBackend.FoldersToForwardInComfyPath.Contains("geometry_estimation"))
-        {
-            ComfyUISelfStartBackend.FoldersToForwardInComfyPath.Add("geometry_estimation");
-        }
     }
 
     private static void RegisterParameters()

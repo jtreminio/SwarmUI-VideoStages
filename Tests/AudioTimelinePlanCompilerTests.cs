@@ -33,7 +33,7 @@ public class AudioTimelinePlanCompilerTests
             BoundaryOutOverlap: overlap);
 
     private static VideoExecutionPlan Plan(params ClipSpec[] clips) =>
-        VideoExecutionPlanCompiler.Compile(new VideoStagesSpec(512, 512, Fps, false, clips));
+        TestPlanCompiler.Compile(new VideoStagesSpec(512, 512, Fps, false, clips));
 
     private static AudioTrackSpec Track(string id, params AudioTrackSpanSpec[] spans) => new(
         id,

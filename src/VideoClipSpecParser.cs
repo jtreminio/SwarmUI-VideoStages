@@ -1,5 +1,4 @@
 using Newtonsoft.Json.Linq;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -32,7 +31,6 @@ internal static class VideoClipSpecParser
 
         IReadOnlyList<IcLoraSpec> icLoras = VideoStageResourceParser.ParseIcLoras(clipObject);
         List<JObject> rawStages = VideoStagesJsonReader.GetObjectArray(clipObject, "Stages");
-        ValidateIcLoraTargets(icLoras, rawStages.Count, clipIndex);
 
         IReadOnlyList<ImageRefSpec> references =
             VideoStageResourceParser.ParseImageReferences(clipObject, clipIndex);
@@ -66,13 +64,29 @@ internal static class VideoClipSpecParser
             PromptWindows: SortWindows(context.Tags.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(
                 VideoStagesJsonReader.GetString(clipObject, "BoundaryOut")),
-            BoundaryOutOverlap: BoundaryPolicy.NormalizeOverlap(
+            BoundaryOutOverlap: Math.Max(
+                0,
                 VideoStagesJsonReader.GetOptionalInt(
                     clipObject,
                     "BoundaryOutOverlap",
-                    Constants.ContinueOverlapDefaultFrames,
+                    0,
                     location)),
-            SourceVideo: sourceVideo);
+            SourceVideo: sourceVideo)
+        {
+            AuthoredArchitectureId = VideoStagesJsonReader.GetString(
+                clipObject,
+                "Architecture")?.Trim().ToLowerInvariant(),
+            AuthoredModelProfileId = VideoStagesJsonReader.GetString(
+                clipObject,
+                "ModelProfileId")?.Trim().ToLowerInvariant(),
+            // Prompt-tag overrides have already been applied to rawStages by the top-level parser,
+            // so architecture resolution observes exactly the authored state generation would use.
+            AuthoredStages = [.. rawStages.Select((stage, rawIndex) => new AuthoredStageModelSpec(
+                rawIndex,
+                VideoStagesJsonReader.GetString(stage, "Model"),
+                VideoStagesJsonReader.GetString(stage, "ModelProfileId")?.Trim().ToLowerInvariant(),
+                VideoStagesJsonReader.GetOptionalBool(stage, "Skipped", false)))],
+        };
     }
 
     private static List<StageSpec> ParseStages(
@@ -122,23 +136,6 @@ internal static class VideoClipSpecParser
         if (retake is not null)
         {
             stages[^1] = stages[^1] with { RetakeWindow = retake };
-        }
-    }
-
-    private static void ValidateIcLoraTargets(
-        IReadOnlyList<IcLoraSpec> icLoras,
-        int authoredStageCount,
-        int clipIndex)
-    {
-        for (int index = 0; index < icLoras.Count; index++)
-        {
-            if (icLoras[index].Stage >= authoredStageCount)
-            {
-                throw new SwarmUserErrorException(
-                    $"VideoStages: Clip {clipIndex} IC-LoRA {index} is set to apply on stage "
-                    + $"{icLoras[index].Stage}, but the clip only has {authoredStageCount} stage(s). "
-                    + "Set its 'Apply on' to an existing stage or to All stages.");
-            }
         }
     }
 

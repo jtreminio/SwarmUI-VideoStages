@@ -1,0 +1,197 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
+using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Planning;
+
+namespace VideoStages.Architectures.Ltx2;
+
+internal sealed record ResolvedIcLoraDrive(
+    JArray Images,
+    int? ControlNetIndex,
+    bool IsStillImage);
+
+/// <summary>Resolves planned drive identities into graph media and materializes embedded uploads.</summary>
+internal sealed class IcLoraDriveMediaResolver(WorkflowGenerator g)
+{
+    private const string UploadedDriveImagesKeyPrefix = "videostages.iclora.upload.";
+    internal const string UploadedDriveAudioKeyPrefix = "videostages.iclora.uploadaudio.";
+
+    internal bool TryResolve(
+        WorkflowBridge bridge,
+        ClipPlan clip,
+        StagePlan stage,
+        IcLoraPlan entry,
+        WGNodeData stageInput,
+        out ResolvedIcLoraDrive drive)
+    {
+        drive = null;
+        switch (entry.Drive.Kind)
+        {
+            case IcLoraDriveSourceKind.UploadedMedia:
+            {
+                JArray images = GetOrCreateUploadedDriveImages(
+                    bridge,
+                    clip.ClipId,
+                    entry);
+                if (images is null)
+                {
+                    return false;
+                }
+                drive = new(
+                    images,
+                    null,
+                    entry.Drive.UploadedMediaKind == IcLoraUploadedMediaKind.Image);
+                return true;
+            }
+            case IcLoraDriveSourceKind.StageInput:
+                if (stage.ClipStageRawIndex < 1 && !clip.IsSourced)
+                {
+                    throw new SwarmUserErrorException(
+                        "An IC-LoRA uses the Stage Input drive source but is not applied to a refine "
+                        + "stage. Set 'Apply on' to Stage 1 or later, or switch the source to Upload.");
+                }
+                if (stageInput is null || !IsImageStream(stageInput))
+                {
+                    throw new SwarmUserErrorException(
+                        $"VideoStages: planned IC-LoRA Stage Input drive is unavailable for stage "
+                        + $"{stage.ClipStageRawIndex}. Regenerate after updating the timeline or upload drive media.");
+                }
+                drive = new(
+                    new JArray(stageInput.Path[0], stageInput.Path[1]),
+                    null,
+                    false);
+                return true;
+            case IcLoraDriveSourceKind.SourcedClipInput:
+                if (stageInput is null || !IsImageStream(stageInput))
+                {
+                    Logs.Warning(
+                        $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} requires sourced clip input "
+                        + "media, but it is unavailable; applying the model patch without a guide.");
+                    return false;
+                }
+                drive = new(
+                    new JArray(stageInput.Path[0], stageInput.Path[1]),
+                    null,
+                    false);
+                return true;
+            case IcLoraDriveSourceKind.ControlNet:
+                if (entry.Drive.ControlNetIndex is not int index
+                    || !new ControlNetCapture(g).TryGetCapturedCoreControlImage(
+                        index,
+                        out WGNodeData controlImage))
+                {
+                    Logs.Warning(
+                        $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} requires ControlNet "
+                        + $"{(entry.Drive.ControlNetIndex ?? -1) + 1} drive media, but it is unavailable; "
+                        + "applying the model patch without a guide.");
+                    return false;
+                }
+                drive = new(
+                    new JArray(controlImage.Path[0], controlImage.Path[1]),
+                    index,
+                    false);
+                return true;
+            case IcLoraDriveSourceKind.LoaderOnly:
+                return false;
+            default:
+                Logs.Warning(
+                    $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} has no usable drive-media "
+                    + "identity; applying the model patch without a guide.");
+                return false;
+        }
+    }
+
+    internal JArray GetOrCreateUploadedDriveImages(
+        WorkflowBridge bridge,
+        int clipId,
+        IcLoraPlan entry) => GetOrCreateUploadedDriveImages(
+            bridge,
+            clipId,
+            entry.EntryIndex,
+            entry.Drive.UploadedMediaKind,
+            entry.Drive.UploadedData);
+
+    internal JArray GetOrCreateUploadedDriveImages(
+        WorkflowBridge bridge,
+        int clipId,
+        int entryIndex,
+        IcLoraUploadedMediaKind mediaKind,
+        string data)
+    {
+        string key = $"{UploadedDriveImagesKeyPrefix}{clipId}.{entryIndex}";
+        if (VideoGraphHelpers.TryGetCachedPath(g, bridge, key, out JArray cached))
+        {
+            return cached;
+        }
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            Logs.Warning(
+                $"VideoStages: planned IC-LoRA entry {entryIndex} requires uploaded drive media, "
+                + "but the planned media identity is empty; applying the model patch without a guide.");
+            return null;
+        }
+
+        JArray path;
+        if (mediaKind == IcLoraUploadedMediaKind.Image)
+        {
+            SwarmLoadImageB64Node loadImage =
+                bridge.AddNode(new SwarmLoadImageB64Node().With(
+                    ImageBase64: VideoGraphHelpers.StripDataUriPrefix(data)));
+            bridge.SyncNode(loadImage);
+            path = WorkflowBridge.ToPath(loadImage.IMAGE);
+        }
+        else if (mediaKind == IcLoraUploadedMediaKind.Video)
+        {
+            SwarmLoadVideoB64Node load =
+                bridge.AddNode(new SwarmLoadVideoB64Node().With(
+                    VideoBase64: VideoGraphHelpers.StripDataUriPrefix(data)));
+            GetVideoComponentsNode components =
+                bridge.AddNode(new GetVideoComponentsNode());
+            components.Video.ConnectToUntyped(load.VIDEO);
+            bridge.SyncNode(load);
+            bridge.SyncNode(components);
+            path = WorkflowBridge.ToPath(components.Images);
+            VideoGraphHelpers.CachePath(
+                g,
+                $"{UploadedDriveAudioKeyPrefix}{clipId}.{entryIndex}",
+                WorkflowBridge.ToPath(components.Audio));
+        }
+        else
+        {
+            Logs.Warning(
+                $"VideoStages: planned IC-LoRA entry {entryIndex} has unsupported uploaded drive-media "
+                + "kind; applying the model patch without a guide.");
+            return null;
+        }
+        VideoGraphHelpers.CachePath(g, key, path);
+        return path;
+    }
+
+    internal JArray ResizeToStageDimensions(
+        WorkflowBridge bridge,
+        JArray images,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        if (genInfo.Width is null || genInfo.Height is null)
+        {
+            return images;
+        }
+        ResizeImageMaskNodeNode resize =
+            bridge.AddNode(new ResizeImageMaskNodeNode()).With(
+                ResizeType: "scale dimensions",
+                ScaleMethod: "lanczos");
+        resize.Input.TryConnectFromPath(bridge, images);
+        resize.ExtraInputs["resize_type.width"] = genInfo.Width.DeepClone();
+        resize.ExtraInputs["resize_type.height"] = genInfo.Height.DeepClone();
+        resize.ExtraInputs["resize_type.crop"] = "center";
+        bridge.SyncNode(resize);
+        return WorkflowBridge.ToPath(resize.Resized);
+    }
+
+    private static bool IsImageStream(WGNodeData media) =>
+        media.DataType == WGNodeData.DT_IMAGE
+        || media.DataType == WGNodeData.DT_VIDEO;
+}

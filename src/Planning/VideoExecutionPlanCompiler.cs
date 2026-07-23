@@ -1,7 +1,10 @@
 namespace VideoStages.Planning;
 
+using VideoStages.Architectures;
+using VideoStages.Architectures.Abstractions;
+
 /// <summary>
-/// Compiles the parsed VideoStages specification into a deterministic LTX execution plan. This is
+/// Compiles the parsed VideoStages specification into a deterministic architecture execution plan. This is
 /// a pure transformation: it neither inspects nor mutates the host workflow or its graph.
 /// </summary>
 internal static class VideoExecutionPlanCompiler
@@ -13,11 +16,21 @@ internal static class VideoExecutionPlanCompiler
     }
 
     public static VideoExecutionPlan Compile(VideoStagesSpec spec, RootEnvironment rootEnvironment)
+        => Compile(
+            spec,
+            rootEnvironment,
+            ArchitecturePlanResolver.Resolve(spec, VideoArchitectureRegistry.Production));
+
+    internal static VideoExecutionPlan Compile(
+        VideoStagesSpec spec,
+        RootEnvironment rootEnvironment,
+        ArchitecturePlanningResult architecturePlanning)
     {
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(rootEnvironment);
+        ArgumentNullException.ThrowIfNull(architecturePlanning);
 
-        List<VideoPlanDiagnostic> diagnostics = [];
+        List<VideoPlanDiagnostic> diagnostics = [.. architecturePlanning.Diagnostics];
         IReadOnlyList<ClipSpec> executableClips = (spec.Clips ?? []).Where(IsExecutableClip).ToArray();
         if (executableClips.Count != (spec.Clips?.Count ?? 0))
         {
@@ -43,7 +56,64 @@ internal static class VideoExecutionPlanCompiler
         }
 
         RootPlan root = RootPlanCompiler.Compile(rootEnvironment, activeClips);
-        BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(activeClips);
+        List<ClipPlan> clips = [];
+        int totalStageCount = activeClips.Sum(clip => clip.Stages?.Count ?? 0);
+        int firstStageOrdinal = 0;
+        for (int i = 0; i < activeClips.Count; i++)
+        {
+            ClipArchitectureAssignment assignment =
+                architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
+            IArchitectureClipPayload architecturePayload = null;
+            if (assignment is not null)
+            {
+                IReadOnlyList<VideoPlanDiagnostic> capabilityDiagnostics =
+                    ArchitectureCapabilityValidator.Validate(
+                        activeClips[i],
+                        assignment.Architecture,
+                        ResolveEntryMode(spec, rootEnvironment, activeClips[i]),
+                        assignment.StageModels);
+                diagnostics.AddRange(capabilityDiagnostics);
+                if (!capabilityDiagnostics.Any(diagnostic =>
+                    diagnostic.Severity == VideoPlanDiagnosticSeverity.Error))
+                {
+                    ArchitectureClipCompilation architectureCompilation =
+                        assignment.Module.ValidateAndCompileClip(
+                            activeClips[i],
+                            assignment.StageModels,
+                            new(
+                                spec.Width,
+                                spec.Height,
+                                spec.FPS));
+                    diagnostics.AddRange(architectureCompilation.Diagnostics);
+                    if (!architectureCompilation.Diagnostics.Any(diagnostic =>
+                        diagnostic.Severity == VideoPlanDiagnosticSeverity.Error))
+                    {
+                        architecturePayload = architectureCompilation.Payload;
+                    }
+                }
+            }
+            clips.Add(ClipPlanCompiler.Compile(
+                activeClips[i],
+                new ClipPlanCompilationContext(
+                    spec.IsTextToVideo,
+                    spec.Width,
+                    spec.Height,
+                    spec.FPS,
+                    i == activeClips.Count - 1,
+                    activeClips.Count > 1,
+                    totalStageCount,
+                    firstStageOrdinal,
+                    assignment,
+                    architecturePayload)));
+            diagnostics.AddRange(clips[^1].Audio.Diagnostics.Select(audioDiagnostic =>
+                new VideoPlanDiagnostic(
+                    VideoPlanDiagnosticSeverity.Warning,
+                    audioDiagnostic.Code,
+                    audioDiagnostic.Message,
+                    clips[^1].ClipId)));
+            firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
+        }
+        BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(activeClips, clips);
         diagnostics.AddRange(boundaryResult.Diagnostics);
         BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [.. activeClips.Select(clip => clip.Frames)],
@@ -56,31 +126,26 @@ internal static class VideoExecutionPlanCompiler
                 "boundary-frame-budget-reconciled",
                 $"VideoStages: {boundaryBudget.Reason}."));
         }
-        List<ClipPlan> clips = [];
-        int totalStageCount = activeClips.Sum(clip => clip.Stages?.Count ?? 0);
-        int firstStageOrdinal = 0;
-        for (int i = 0; i < activeClips.Count; i++)
+        IVideoArchitectureModule[] modules = [
+            .. activeClips
+                .Select(clip => architecturePlanning.Clips.GetValueOrDefault(clip.Id)?.Module)
+                .Where(module => module is not null)
+                .Distinct()
+        ];
+        foreach (IArchitecturePlanValidator validator in modules.OfType<IArchitecturePlanValidator>())
         {
-            clips.Add(ClipPlanCompiler.Compile(
-                activeClips[i],
-                new ClipPlanCompilationContext(
-                    spec.IsTextToVideo,
-                    spec.Width,
-                    spec.Height,
-                    spec.FPS,
-                    i == activeClips.Count - 1,
-                    activeClips.Count > 1,
-                    totalStageCount,
-                    firstStageOrdinal)));
-            diagnostics.AddRange(clips[^1].Audio.Diagnostics.Select(audioDiagnostic =>
-                new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Warning,
-                    audioDiagnostic.Code,
-                    audioDiagnostic.Message,
-                    clips[^1].ClipId)));
-            firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
+            HashSet<int> architectureClipIds = [
+                .. activeClips
+                    .Where(clip => ReferenceEquals(
+                        architecturePlanning.Clips.GetValueOrDefault(clip.Id)?.Module,
+                        validator))
+                    .Select(clip => clip.Id)
+            ];
+            diagnostics.AddRange(validator.ValidatePlan(
+                [.. clips.Where(clip => architectureClipIds.Contains(clip.ClipId))],
+                clips,
+                root));
         }
-        diagnostics.AddRange(VideoPlanValidationCompiler.Validate(clips));
 
         VideoExecutionPlan plan = new(
             spec.Width,
@@ -115,5 +180,17 @@ internal static class VideoExecutionPlanCompiler
 
     private static bool IsExecutableClip(ClipSpec clip) =>
         clip is not null && (clip.SourceVideo is not null || clip.Stages is { Count: > 0 });
+
+    private static ArchitectureEntryMode ResolveEntryMode(
+        VideoStagesSpec spec,
+        RootEnvironment rootEnvironment,
+        ClipSpec clip) =>
+        clip.SourceVideo is not null
+            ? ArchitectureEntryMode.SourceVideo
+            : rootEnvironment.HostKind == HostRootKind.GlobalRefineSource
+                ? ArchitectureEntryMode.RefineVideo
+                : spec.IsTextToVideo
+                    ? ArchitectureEntryMode.TextToVideo
+                    : ArchitectureEntryMode.ImageToVideo;
 
 }

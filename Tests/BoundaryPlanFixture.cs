@@ -33,10 +33,15 @@ internal static class BoundaryPlanFixture
             boundaries.Add(new(
                 i,
                 mode,
+                mode,
                 mode == BoundaryExecutionMode.Cut ? 0 : overlap,
                 mode == BoundaryExecutionMode.Continue ? continuityWindow : 0,
                 RequiresRuntimeMergeValidation: mode != BoundaryExecutionMode.Cut,
-                known ? BoundaryFallback.None : BoundaryFallback.UnknownBoundaryKind));
+                known ? BoundaryFallback.None : BoundaryFallback.UnknownBoundaryKind)
+            {
+                FrameStep = 8,
+                MinFrames = mode == BoundaryExecutionMode.Cut ? 0 : 8,
+            });
         }
         return BoundaryOverlapPlanner.ResolvePlanBudgets(frames ?? [], boundaries);
     }

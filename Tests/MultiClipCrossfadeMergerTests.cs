@@ -4,6 +4,9 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Ltx2;
+using VideoStages.Execution;
 using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
@@ -73,6 +76,40 @@ public class MultiClipCrossfadeMergerTests
     private static int CountOf<T>(WorkflowBridge bridge) where T : ComfyNode =>
         bridge.Graph.NodesOfType<T>().Count;
 
+    private static MultiClipParallelMerger Merger(WorkflowGenerator generator) =>
+        new(
+            generator,
+            new Dictionary<ArchitectureId, IArchitectureBoundaryAssembler>
+            {
+                [Ltx2ArchitectureModule.ArchitectureId] = new Ltx2BoundaryAssembler(),
+            });
+
+    private static List<DecodedClipArtifact> Artifacts(
+        IReadOnlyList<WGNodeData> clips,
+        IReadOnlyList<ArchitectureId> architectures = null)
+    {
+        List<DecodedClipArtifact> artifacts = [];
+        for (int i = 0; i < clips.Count; i++)
+        {
+            WGNodeData clip = clips[i];
+            JArray video = Assert.IsType<JArray>(clip.Path);
+            JArray audio = clip.AttachedAudio?.Path as JArray;
+            artifacts.Add(new(
+                new(video[0].ToString(), video[1].Value<int>(), DecodedMediaKind.Video),
+                audio is null
+                    ? null
+                    : new(audio[0].ToString(), audio[1].Value<int>(), DecodedMediaKind.Audio),
+                clip.Width!.Value,
+                clip.Height!.Value,
+                clip.GetRawFPS()!.Value,
+                clip.Frames!.Value,
+                architectures?[i] ?? Ltx2ArchitectureModule.ArchitectureId,
+                i,
+                ArtifactOrigin.ClipAssembly));
+        }
+        return artifacts;
+    }
+
     private static IReadOnlyList<BoundaryPlan> PlansFor(
         IReadOnlyList<WGNodeData> clips,
         IReadOnlyList<string> boundaryOuts,
@@ -96,11 +133,11 @@ public class MultiClipCrossfadeMergerTests
         // the regression lock that "cut" (and the new field) never perturbs today's graph.
         (WorkflowGenerator gA, List<WGNodeData> clipsA) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(gA).Apply(clipsA, PlansFor(clipsA, null));
+        Merger(gA).Apply(Artifacts(clipsA), PlansFor(clipsA, null));
 
         (WorkflowGenerator gB, List<WGNodeData> clipsB) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(gB).Apply(clipsB, PlansFor(clipsB, ["cut", "cut", "cut"]));
+        Merger(gB).Apply(Artifacts(clipsB), PlansFor(clipsB, ["cut", "cut", "cut"]));
 
         Assert.True(JToken.DeepEquals(gA.Workflow, gB.Workflow),
             "All-cut boundaryOuts must produce the identical graph to the pre-Stage-D signature.");
@@ -123,7 +160,7 @@ public class MultiClipCrossfadeMergerTests
             BuildClips([24, 48], T2IModelClassSorter.CompatLtxv2);
         clips[1].AttachedAudio = null;
 
-        new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["cut"]));
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         EmptyAudioNode silence = Assert.Single(bridge.Graph.NodesOfType<EmptyAudioNode>());
@@ -135,17 +172,18 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Cut_MixedAudioAndSilentClips_FailsWhenSilentDurationIsUnknown()
+    public void Cut_RejectsDecodedArtifactWithoutLiteralFrameMetadata()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([24, 48], T2IModelClassSorter.CompatLtxv2);
         clips[1].AttachedAudio = null;
-        clips[1].Frames = null;
+        List<DecodedClipArtifact> artifacts = Artifacts(clips);
+        artifacts[1] = artifacts[1] with { Frames = 0 };
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["cut"])));
+            () => Merger(g).Apply(artifacts, PlansFor(clips, ["cut"])));
 
-        Assert.Contains("duration is unavailable", error.Message);
+        Assert.Contains("missing decoded video metadata", error.Message);
     }
 
     [Fact]
@@ -159,9 +197,29 @@ public class MultiClipCrossfadeMergerTests
         }
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["cut"])));
+            () => Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut"])));
 
         Assert.Contains("only 1 of 2 planned clip video outputs", error.Message);
+        Assert.Null(g.CurrentMedia);
+    }
+
+    [Fact]
+    public void Cut_UnresolvedLaterAudio_FailsBeforeAnyTimelineGraphMutation()
+    {
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([24, 24], T2IModelClassSorter.CompatLtxv2);
+        List<DecodedClipArtifact> artifacts = Artifacts(clips);
+        artifacts[1] = artifacts[1] with
+        {
+            Audio = new("missing-audio", 0, DecodedMediaKind.Audio),
+        };
+        JObject before = (JObject)g.Workflow.DeepClone();
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => Merger(g).Apply(artifacts, PlansFor(clips, ["cut"])));
+
+        Assert.Contains("decoded audio could not be resolved", error.Message);
+        Assert.True(JToken.DeepEquals(before, g.Workflow));
         Assert.Null(g.CurrentMedia);
     }
 
@@ -173,7 +231,7 @@ public class MultiClipCrossfadeMergerTests
         // by that frame to stay in sync.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["continue", "cut"]));
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["continue", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
 
@@ -208,7 +266,7 @@ public class MultiClipCrossfadeMergerTests
         BoundaryBudgetResolution boundaries = BoundaryPlanFixture.Resolve(
             [17, 17], ["continue", "cut"], [8, 8], [9]);
         Assert.Equal(9, boundaries.Boundaries[0].ContinuityWindowFrames);
-        new MultiClipParallelMerger(g).Apply(clips, boundaries.Boundaries);
+        Merger(g).Apply(Artifacts(clips), boundaries.Boundaries);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         const int k = 9;
@@ -228,43 +286,86 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void ContinueAndCrossfade_MixedBoundaries_UsePerBoundaryOverlaps()
+    public void ContinueAndCrossfade_MixedBoundaries_CutOnlyTheUnderfundedCrossfade()
     {
-        // Boundary 0 is an armed "continue" (window 9), boundary 1 a crossfade whose K clamps to 7: the
-        // middle clip spends 9 frames on the continue side, leaving 17-1-9=7. Each boundary gets its own
-        // ramp mask.
+        // Boundary 0 is an armed "continue" (window 9). The adjacent crossfade cannot retain its
+        // architecture minimum after that window, so planning cuts only that boundary.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
         BoundaryBudgetResolution boundaries = BoundaryPlanFixture.Resolve(
             [17, 17, 17], ["continue", "crossfade", "cut"], [8, 8, 8], [9, 0]);
         Assert.Equal(9, boundaries.Boundaries[0].ContinuityWindowFrames);
-        new MultiClipParallelMerger(g).Apply(clips, boundaries.Boundaries);
+        Assert.Equal(BoundaryExecutionMode.Cut, boundaries.Boundaries[1].Effective);
+        Merger(g).Apply(Artifacts(clips), boundaries.Boundaries);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         const int contK = 9;
-        const int crossK = 7;
 
-        // One blend per boundary; 3 cores + 2x(tail+head) slices.
-        Assert.Equal(2, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
-        Assert.Equal(7, CountOf<ImageFromBatchNode>(bridge));
+        // Only the funded continue boundary blends; its run hard-cuts to clip 2.
+        Assert.Single(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Equal(4, CountOf<ImageFromBatchNode>(bridge));
 
-        // Two distinct ramp masks: the K=9 continue ramp plus the K=7 crossfade ramp.
-        List<SwarmRampMaskBatchNode> ramps = [.. bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>()];
-        Assert.Equal(2, ramps.Count);
-        Assert.Contains(ramps, r => r.Frames.LiteralAsInt() == contK);
-        Assert.Contains(ramps, r => r.Frames.LiteralAsInt() == crossK);
+        SwarmRampMaskBatchNode ramp =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(contK, ramp.Frames.LiteralAsInt());
 
-        // Audio: clip 0 sheds its 9-frame continue tail, clip 1 its 7-frame crossfade tail.
-        List<TrimAudioDurationNode> trims = [.. bridge.Graph.NodesOfType<TrimAudioDurationNode>()];
-        Assert.Equal(2, trims.Count);
-        Dictionary<string, double> trimBySource = trims.ToDictionary(
-            t => t.Audio.Connection!.Node.Id,
-            t => t.Duration.LiteralAsDouble()!.Value);
-        Assert.Equal((17 - contK) / (double)Fps, trimBySource[AudioId(0)], 6);
-        Assert.Equal((17 - crossK) / (double)Fps, trimBySource[AudioId(1)], 6);
+        TrimAudioDurationNode trim =
+            Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(AudioId(0), trim.Audio.Connection!.Node.Id);
+        Assert.Equal((17 - contK) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
 
-        // 51 total minus 9 (continue) minus 7 (crossfade).
-        Assert.Equal(51 - contK - crossK, g.CurrentMedia.Frames);
+        Assert.Equal(51 - contK, g.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void Crossfade_Run_IsArchitectureOwned_ThenHardCutToAnotherArchitecture()
+    {
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
+        List<DecodedClipArtifact> artifacts = Artifacts(
+            clips,
+            [
+                Ltx2ArchitectureModule.ArchitectureId,
+                Ltx2ArchitectureModule.ArchitectureId,
+                new ArchitectureId("fake"),
+            ]);
+
+        Merger(g).Apply(
+            artifacts,
+            PlansFor(clips, ["crossfade", "cut", "cut"]));
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        Assert.Single(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Equal(2, CountOf<BatchImagesNodeNode>(bridge));
+        Assert.Equal(51 - 8, g.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void Crossfade_MissingLaterRunAssembler_FailsBeforeEarlierRunMutatesGraph()
+    {
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 17, 17, 17], T2IModelClassSorter.CompatLtxv2);
+        ArchitectureId missingArchitecture = new("missing");
+        List<DecodedClipArtifact> artifacts = Artifacts(
+            clips,
+            [
+                Ltx2ArchitectureModule.ArchitectureId,
+                Ltx2ArchitectureModule.ArchitectureId,
+                missingArchitecture,
+                missingArchitecture,
+            ]);
+        JObject before = (JObject)g.Workflow.DeepClone();
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => Merger(g).Apply(
+                artifacts,
+                PlansFor(
+                    clips,
+                    ["crossfade", "cut", "crossfade", "cut"])));
+
+        Assert.Contains("No boundary assembler is registered", error.Message);
+        Assert.True(JToken.DeepEquals(before, g.Workflow));
+        Assert.Null(g.CurrentMedia);
     }
 
     [Fact]
@@ -274,8 +375,8 @@ public class MultiClipCrossfadeMergerTests
         // trimmed on both sides: (17-1)/2 == 8), so 2 boundaries remove 8 frames each.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(g).Apply(
-            clips,
+        Merger(g).Apply(
+            Artifacts(clips),
             PlansFor(clips, ["crossfade", "crossfade", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
@@ -333,7 +434,7 @@ public class MultiClipCrossfadeMergerTests
         // to the unchanged cut concat.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2, widths: [512, 640]);
-        new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["crossfade", "cut"]));
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["crossfade", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
@@ -350,7 +451,7 @@ public class MultiClipCrossfadeMergerTests
         // (K frames) and clip 1 keeps full audio — locking that a 2-clip crossfade doesn't desync A/V.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["crossfade", "cut"]));
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["crossfade", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         const int k = 8;
@@ -372,8 +473,8 @@ public class MultiClipCrossfadeMergerTests
         // boundary dissolves over its requested 24 frames instead of the default 8.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([49, 49], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(g).Apply(
-            clips,
+        Merger(g).Apply(
+            Artifacts(clips),
             PlansFor(clips, ["crossfade", "cut"], boundaryOverlapPrefs: [24, 8]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
@@ -394,7 +495,7 @@ public class MultiClipCrossfadeMergerTests
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
         clips[1].FPS = new JValue(30);
-        new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["crossfade", "cut"]));
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["crossfade", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
@@ -404,18 +505,16 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Crossfade_UnknownFrameCount_FallsBackToCut()
+    public void Crossfade_RejectsDecodedArtifactWithoutLiteralFrameMetadata()
     {
         // If any clip's frame count is unknown, the overlap math is undefined, so crossfade degrades to cut.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
-        clips[1].Frames = null;
-        new MultiClipParallelMerger(g).Apply(clips, PlansFor(clips, ["crossfade", "cut"]));
-
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
-        Assert.Equal(0, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
-        Assert.Equal(0, CountOf<TrimAudioDurationNode>(bridge));
+        List<DecodedClipArtifact> artifacts = Artifacts(clips);
+        artifacts[1] = artifacts[1] with { Frames = 0 };
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => Merger(g).Apply(artifacts, PlansFor(clips, ["crossfade", "cut"])));
+        Assert.Contains("missing decoded video metadata", error.Message);
     }
 
     [Fact]
@@ -425,8 +524,8 @@ public class MultiClipCrossfadeMergerTests
         // middle clip forces the clamp to 0, so the whole run degrades to cut.
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 2, 17], T2IModelClassSorter.CompatLtxv2);
-        new MultiClipParallelMerger(g).Apply(
-            clips,
+        Merger(g).Apply(
+            Artifacts(clips),
             PlansFor(clips, ["crossfade", "crossfade", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);

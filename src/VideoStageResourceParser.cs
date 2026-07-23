@@ -4,7 +4,7 @@ using SwarmUI.Utils;
 namespace VideoStages;
 
 /// <summary>
-/// Parses model-adjacent resources shared by clips and stages: image references, LoRAs, and IC-LoRAs.
+/// Parses model-adjacent persisted values without interpreting architecture-specific semantics.
 /// </summary>
 internal static class VideoStageResourceParser
 {
@@ -67,32 +67,14 @@ internal static class VideoStageResourceParser
                 Preset: VideoStagesJsonReader.GetString(entry, "Preset")?.Trim(),
                 Stage: Math.Max(-1, (int)VideoStagesJsonReader.GetOptionalDouble(
                     entry, "Stage", -1, "Clip IcLora")),
-                Source: NormalizeIcLoraSource(VideoStagesJsonReader.GetString(entry, "Source")),
+                Source: VideoStagesJsonReader.GetString(entry, "Source")?.Trim(),
                 Strength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
                     entry, "Strength", 1, "Clip IcLora"), 0, 5),
                 AttentionStrength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
                     entry, "AttentionStrength", 1, "Clip IcLora"), 0, 1),
-                ControlType: NormalizeIcLoraControlType(
-                    VideoStagesJsonReader.GetString(entry, "ControlType")),
+                ControlType: VideoStagesJsonReader.GetString(entry, "ControlType")?.Trim(),
                 Video: VideoStagesJsonReader.GetEmbeddedUpload(entry, UploadContainers.IcLoraVideo),
                 DriveAudioRef: VideoStagesJsonReader.GetOptionalBool(entry, "DriveAudioRef", false)));
-        }
-
-        if (entries.Count == 0)
-        {
-            string legacyLora = NormalizeLoraName(
-                VideoStagesJsonReader.GetString(clipObject, "ControlNetLora"));
-            if (legacyLora.Length > 0)
-            {
-                entries.Add(new IcLoraSpec(
-                    Lora: legacyLora,
-                    Source: NormalizeControlNetSource(
-                        VideoStagesJsonReader.GetString(clipObject, "ControlNetSource")),
-                    Strength: 1,
-                    AttentionStrength: 1,
-                    ControlType: Constants.IcLoraControlNone,
-                    Video: null));
-            }
         }
         return entries;
     }
@@ -157,52 +139,6 @@ internal static class VideoStageResourceParser
 
         string squeezed = new([.. trimmed.Where(character => !char.IsWhiteSpace(character))]);
         return StringUtils.Equals(squeezed, "(none)") ? "" : trimmed;
-    }
-
-    private static string NormalizeIcLoraSource(string source)
-    {
-        string compact = StringUtils.Compact(source);
-        if (compact.Length == 0 || StringUtils.Equals(compact, Constants.IcLoraSourceUpload))
-        {
-            return Constants.IcLoraSourceUpload;
-        }
-        if (StringUtils.Equals(compact, StringUtils.Compact(Constants.IcLoraSourceStageInput)))
-        {
-            return Constants.IcLoraSourceStageInput;
-        }
-        return NormalizeControlNetSource(source);
-    }
-
-    private static string NormalizeIcLoraControlType(string controlType)
-    {
-        string compact = StringUtils.Compact(controlType);
-        if (StringUtils.Equals(compact, Constants.IcLoraControlCanny))
-        {
-            return Constants.IcLoraControlCanny;
-        }
-        if (StringUtils.Equals(compact, Constants.IcLoraControlDepth))
-        {
-            return Constants.IcLoraControlDepth;
-        }
-        if (StringUtils.Equals(compact, Constants.IcLoraControlNormal))
-        {
-            return Constants.IcLoraControlNormal;
-        }
-        return Constants.IcLoraControlNone;
-    }
-
-    private static string NormalizeControlNetSource(string source)
-    {
-        string compact = StringUtils.Compact(source);
-        if (StringUtils.Equals(compact, "ControlNet3"))
-        {
-            return Constants.ControlNetSourceThree;
-        }
-        if (StringUtils.Equals(compact, "ControlNet2"))
-        {
-            return Constants.ControlNetSourceTwo;
-        }
-        return Constants.ControlNetSourceOne;
     }
 
     private static bool IsFinite(double value) =>

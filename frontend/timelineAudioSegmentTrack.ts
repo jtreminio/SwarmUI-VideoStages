@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "./architectures/policy";
 import {
     AUDIO_SEGMENT_DEFAULT_LENGTH,
     AUDIO_SEGMENT_MIN_LENGTH,
@@ -34,7 +35,9 @@ const segmentOf = (clip: Clip, segIdx: number): AudioSegment | undefined =>
  * once fully un-trimmed, moving further left simply starts the segment
  * earlier.
  */
-export const createTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack =>
+export const createTimelineAudioSegmentTrack = (
+    getCapabilities?: () => CapabilityViewResolver,
+): TimelineAudioSegmentTrack =>
     createWindowTrack({
         routeId: "audio-segment",
         priority: 40,
@@ -61,6 +64,12 @@ export const createTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack =>
                   }
                 : null;
         },
+        canEdit: (clip) =>
+            getCapabilities?.().forClip(clip).decision("audioSegments")
+                .supported ?? true,
+        canCreate: (clip) =>
+            getCapabilities?.().forClip(clip).decision("audioSegments")
+                .supported ?? true,
         moveTargetStart: (clip, _segIdx, press, desiredStart) => {
             const clipDur = clipDurationOf(clip);
             const length = Math.min(press.length, clipDur);

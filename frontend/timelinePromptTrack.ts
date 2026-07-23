@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "./architectures/policy";
 import {
     clamp,
     PROMPT_WINDOW_DEFAULT_DURATION,
@@ -46,7 +47,9 @@ const wallsFor = (
  * windows (`intervals.ts`), and creates only land in a gap wide enough for a
  * minimum-length window.
  */
-export const createTimelinePromptTrack = (): TimelinePromptTrack =>
+export const createTimelinePromptTrack = (
+    getCapabilities?: () => CapabilityViewResolver,
+): TimelinePromptTrack =>
     createWindowTrack({
         routeId: "prompt-track",
         priority: 20,
@@ -67,6 +70,12 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack =>
                 ? { start: window.start, length: window.duration, trim: 0 }
                 : null;
         },
+        canEdit: (clip) =>
+            getCapabilities?.().forClip(clip).decision("promptRelay")
+                .supported ?? true,
+        canCreate: (clip) =>
+            getCapabilities?.().forClip(clip).decision("promptRelay")
+                .supported ?? true,
         moveTargetStart: (clip, windowIdx, press, desiredStart) => {
             const clipDur = clipDurationOf(clip);
             const [lo, hi] = wallsFor(clip, windowIdx, press);
@@ -170,6 +179,15 @@ export const createTimelinePromptTrack = (): TimelinePromptTrack =>
             }
             const clipIdx = parseIntAttr(major, "data-clip-idx");
             if (clipIdx === null || !getClips()[clipIdx]) {
+                return;
+            }
+            if (
+                getCapabilities &&
+                !getCapabilities()
+                    .forClip(getClips()[clipIdx])
+                    .decision("majorPrompt").supported &&
+                !getClips()[clipIdx].prompt.trim()
+            ) {
                 return;
             }
             setSelection({ kind: "prompt-major", clipIdx });

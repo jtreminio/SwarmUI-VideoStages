@@ -4,7 +4,6 @@ import { normalizeUploadedAudio } from "./normalizationMedia";
 import {
     clampWindowInDuration,
     normalizeOptionalEntityId,
-    readProp,
 } from "./normalizationShared";
 import type {
     AudioSegment,
@@ -55,30 +54,22 @@ export const normalizeAudioTrackSpan = (
         return null;
     }
     const sourceStart =
-        normalizeOptionalNonNegative(
-            readProp(value, "sourceStartSeconds", "SourceStartSeconds"),
-        ) ?? 0;
+        normalizeOptionalNonNegative(value.sourceStartSeconds) ?? 0;
     return {
-        id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
-        firstClipId: normalizeClipEntityId(
-            readProp(value, "firstClipId", "FirstClipId"),
-        ),
-        lastClipId: normalizeClipEntityId(
-            readProp(value, "lastClipId", "LastClipId"),
-        ),
+        id: normalizeOptionalEntityId(value.id),
+        firstClipId: normalizeClipEntityId(value.firstClipId),
+        lastClipId: normalizeClipEntityId(value.lastClipId),
         timelineStartSeconds: normalizeOptionalNonNegative(
-            readProp(value, "timelineStartSeconds", "TimelineStartSeconds"),
+            value.timelineStartSeconds,
         ),
         timelineLengthSeconds: normalizeOptionalPositive(
-            readProp(value, "timelineLengthSeconds", "TimelineLengthSeconds"),
+            value.timelineLengthSeconds,
         ),
         sourceStartSeconds: sourceStart,
         clipStartOffsetSeconds: normalizeOptionalNonNegative(
-            readProp(value, "clipStartOffsetSeconds", "ClipStartOffsetSeconds"),
+            value.clipStartOffsetSeconds,
         ),
-        clipLengthSeconds: normalizeOptionalPositive(
-            readProp(value, "clipLengthSeconds", "ClipLengthSeconds"),
-        ),
+        clipLengthSeconds: normalizeOptionalPositive(value.clipLengthSeconds),
     };
 };
 
@@ -91,28 +82,15 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
         if (!isRecord(rawTrack)) {
             continue;
         }
-        const rawSource = readProp(rawTrack, "source", "Source");
+        const rawSource = rawTrack.source;
         const source = isRecord(rawSource) ? rawSource : {};
-        const rawSpans = readProp(rawTrack, "spans", "Spans");
+        const rawSpans = rawTrack.spans;
         tracks.push({
-            id: normalizeOptionalEntityId(
-                readProp(rawTrack, "id", "Id", "trackId", "TrackId"),
-            ),
+            id: normalizeOptionalEntityId(rawTrack.id),
             source: {
-                kind: normalizeAudioTrackSourceKind(
-                    readProp(source, "kind", "Kind"),
-                ),
-                reference:
-                    `${readProp(source, "reference", "Reference") ?? ""}`.trim(),
-                uploadedAudio: normalizeUploadedAudio(
-                    readProp(
-                        source,
-                        "uploadedAudio",
-                        "UploadedAudio",
-                        "upload",
-                        "Upload",
-                    ),
-                ),
+                kind: normalizeAudioTrackSourceKind(source.kind),
+                reference: `${source.reference ?? ""}`.trim(),
+                uploadedAudio: normalizeUploadedAudio(source.uploadedAudio),
             },
             spans: Array.isArray(rawSpans)
                 ? rawSpans
@@ -135,26 +113,17 @@ const normalizeAudioSegment = (
     // flow can create it and then prompt for the upload; the backend parser
     // drops segments with no source at generation time. A string source is an
     // AceStepFun track ref ("audio0", …).
-    const rawSource = readProp(value, "source", "Source");
+    const rawSource = value.source;
     const source =
         typeof rawSource === "string" && isAceStepFunAudioSource(rawSource)
             ? rawSource.trim()
             : normalizeUploadedAudio(rawSource);
-    const startRaw = Math.max(
-        0,
-        toNumber(`${readProp(value, "startSeconds", "StartSeconds") ?? 0}`, 0),
-    );
+    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
     const trimStartRaw = Math.max(
         0,
-        toNumber(
-            `${readProp(value, "trimStartSeconds", "TrimStartSeconds") ?? 0}`,
-            0,
-        ),
+        toNumber(`${value.trimStartSeconds ?? 0}`, 0),
     );
-    const lengthRaw = toNumber(
-        `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
-        0,
-    );
+    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
     const window = clampWindowInDuration(
         startRaw,
         lengthRaw,
@@ -165,7 +134,7 @@ const normalizeAudioSegment = (
         return null;
     }
     return {
-        id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
+        id: normalizeOptionalEntityId(value.id),
         source,
         startSeconds: roundToTenth(window.startSeconds),
         trimStartSeconds: roundToTenth(trimStartRaw),

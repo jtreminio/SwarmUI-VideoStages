@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages;
@@ -27,7 +28,7 @@ internal sealed class AudioRuntimeSourceResolver(
     private Dictionary<int, WGNodeData> ResolveIndexedSources(VideoExecutionPlan plan)
     {
         Dictionary<int, WGNodeData> sources = [];
-        ControlNetCapture controlNet = new(g);
+        ControlNetAudioCapture controlNet = new(g);
         foreach (ClipPlan clip in plan.Clips)
         {
             switch (clip.Audio.Base.Kind)
@@ -49,7 +50,7 @@ internal sealed class AudioRuntimeSourceResolver(
                     int sourceIndex = ResolveControlNetSourceIndex(
                         clip,
                         controlNet);
-                    if (!controlNet.TryGetCapturedControlNetAudio(sourceIndex, out WGNodeData audio))
+                    if (!controlNet.TryGetCapturedAudio(sourceIndex, out WGNodeData audio))
                     {
                         throw new SwarmUserErrorException(
                             $"VideoStages: clip {clip.ClipId} selects ControlNet "
@@ -65,9 +66,10 @@ internal sealed class AudioRuntimeSourceResolver(
 
     private static int ResolveControlNetSourceIndex(
         ClipPlan clip,
-        ControlNetCapture controlNet)
+        ControlNetAudioCapture controlNet)
     {
-        if (clip.Audio.Length.ControlNetSourceIndex is int plannedIndex)
+        if (clip.ArchitecturePayload is IArchitectureControlNetSourcePlan
+                { ControlNetSourceIndex: int plannedIndex })
         {
             return plannedIndex;
         }
@@ -75,7 +77,7 @@ internal sealed class AudioRuntimeSourceResolver(
         List<int> capturedIndices = [];
         for (int index = 0; index <= 2; index++)
         {
-            if (controlNet.TryGetCapturedControlNetAudio(index, out WGNodeData _))
+            if (controlNet.TryGetCapturedAudio(index, out WGNodeData _))
             {
                 capturedIndices.Add(index);
             }

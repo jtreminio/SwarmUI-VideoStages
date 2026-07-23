@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "../architectures/policy";
 import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
 
 export interface ClampedNumberOpts {
@@ -31,6 +32,8 @@ export interface DetailStripContext {
         opts?: { rebuildAfterSelect?: boolean },
     ): void;
     render(): void;
+    capabilities(): CapabilityViewResolver;
+    generatedEntryMode(): "text-to-video" | "image-to-video";
 
     deleteRefEntry(clipIdx: number, refIdx: number): void;
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;

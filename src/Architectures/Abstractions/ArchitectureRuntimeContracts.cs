@@ -1,0 +1,197 @@
+using ComfyTyped.Core;
+using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution;
+using VideoStages.Planning;
+
+namespace VideoStages.Architectures.Abstractions;
+
+/// <summary>An opaque architecture-owned clip compilation attached to the generic clip plan.</summary>
+internal interface IArchitectureClipPayload
+{
+    ArchitectureId ArchitectureId { get; }
+}
+
+/// <summary>
+/// Opaque architecture-owned stage instruction. Common planning and timeline code only carries
+/// this value to the selected architecture runtime.
+/// </summary>
+internal interface IArchitectureStagePayload
+{
+    ArchitectureId ArchitectureId { get; }
+}
+
+internal interface IArchitectureStagePayloadSource
+{
+    IArchitectureStagePayload GetStagePayload(int rawStageIndex);
+}
+
+internal sealed record ArchitectureClipCompilation(
+    IArchitectureClipPayload Payload,
+    IReadOnlyList<VideoPlanDiagnostic> Diagnostics);
+
+/// <summary>One architecture session executes clips from only its own architecture.</summary>
+internal interface IVideoGenerationSession : IDisposable
+{
+    ArchitectureId ArchitectureId { get; }
+
+    ArchitectureClipExecutionRequest CreateExecutionRequest(
+        ArchitectureClipRuntimeContext context);
+
+    DecodedClipArtifact Execute(ArchitectureClipExecutionRequest request);
+}
+
+/// <summary>
+/// Architecture-neutral timeline state supplied by the common runner. Each session projects this
+/// into its own private runtime payload before execution.
+/// </summary>
+internal sealed record ArchitectureClipRuntimeContext(
+    ClipPlan Clip,
+    VideoExecutionPlan Plan,
+    int ClipIndex,
+    bool ParallelMultiClip,
+    bool HasPreviousTimelineClip,
+    ClipPlan PreviousClip,
+    DecodedClipArtifact PreviousClipOutput,
+    AudioRuntimeSources AudioSources,
+    TimelineAssemblySession Assembly,
+    RootExecutionPolicy RootPolicy);
+
+internal sealed record ArchitectureClipExecutionRequest(
+    ClipPlan Clip,
+    int ClipIndex,
+    object RuntimePayload);
+
+/// <summary>Architecture-owned graph construction for non-cut boundaries.</summary>
+internal interface IArchitectureBoundaryAssembler
+{
+    ArchitectureId ArchitectureId { get; }
+
+    INodeOutput MergeOverlaps(
+        WorkflowBridge bridge,
+        IReadOnlyList<WGNodeData> clips,
+        IReadOnlyList<INodeOutput> videoOutputs,
+        BoundaryOverlapPlan plan);
+}
+
+internal sealed record ArchitectureTimelinePreparationContext(
+    VideoExecutionPlan Plan,
+    AudioRuntimeSources AudioSources,
+    RootExecutionPolicy RootPolicy)
+{
+    public bool OwnsGeneratedRoot { get; init; }
+}
+
+internal sealed record ArchitectureTimelinePreflightContext(
+    VideoExecutionPlan Plan);
+
+internal sealed record ArchitectureTimelineSessionContext(
+    VideoExecutionPlan Plan,
+    AudioRuntimeSources AudioSources,
+    RootExecutionPolicy RootPolicy,
+    TimelineAssemblySession Assembly);
+
+internal sealed record ArchitectureTimelineFinalizationContext(
+    VideoExecutionPlan Plan,
+    OutputPublication Publication);
+
+internal enum ArchitectureTimelineFinalizerScope
+{
+    None,
+    WholeTimelineExclusive,
+}
+
+/// <summary>Creates one timeline-scoped session for one architecture.</summary>
+internal interface IArchitectureGenerationSessionFactory
+{
+    ArchitectureId ArchitectureId { get; }
+
+    IArchitectureBoundaryAssembler BoundaryAssembler { get; }
+
+    ArchitectureTimelineFinalizerScope FinalizerScope =>
+        ArchitectureTimelineFinalizerScope.None;
+
+    bool HasFinalizationWork(ArchitectureTimelineFinalizationContext context) => false;
+
+    void PreflightTimeline(ArchitectureTimelinePreflightContext context)
+    {
+    }
+
+    void PrepareTimeline(ArchitectureTimelinePreparationContext context);
+
+    IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);
+
+    void FinalizeTimeline(ArchitectureTimelineFinalizationContext context);
+}
+
+/// <summary>Lazy production registration; architecture dependencies are built only when selected.</summary>
+internal interface IArchitectureGenerationSessionFactoryProvider
+{
+    ArchitectureId ArchitectureId { get; }
+
+    IArchitectureGenerationSessionFactory CreateFactory();
+}
+
+internal enum ArchitectureHostPhase
+{
+    CaptureControlNetPreprocessors,
+    CaptureBaseReference,
+    CaptureRefinerReference,
+    CapturePreCoreMedia,
+    DropCoreOutput,
+    ApplyRootAudioMaskDimensions,
+}
+
+internal enum ArchitectureHostPhaseScope
+{
+    RootOwnerOnly,
+    AllActiveArchitectures,
+}
+
+internal static class ArchitectureHostPhasePolicy
+{
+    internal static ArchitectureHostPhaseScope Scope(ArchitectureHostPhase phase) => phase switch
+    {
+        ArchitectureHostPhase.CaptureControlNetPreprocessors
+            or ArchitectureHostPhase.CaptureBaseReference
+            or ArchitectureHostPhase.CaptureRefinerReference =>
+            ArchitectureHostPhaseScope.AllActiveArchitectures,
+        ArchitectureHostPhase.CapturePreCoreMedia
+            or ArchitectureHostPhase.DropCoreOutput
+            or ArchitectureHostPhase.ApplyRootAudioMaskDimensions =>
+                ArchitectureHostPhaseScope.RootOwnerOnly,
+        _ => throw new ArgumentOutOfRangeException(nameof(phase), phase, null),
+    };
+}
+
+internal sealed record ArchitectureHostPhaseContext(
+    ArchitectureHostPhase Phase,
+    ArchitectureHostPhaseScope Scope,
+    VideoExecutionPlan Plan,
+    ArchitectureId? RootOwnerArchitectureId);
+
+internal interface IArchitectureHostPhaseParticipant
+{
+    void ExecuteHostPhase(ArchitectureHostPhaseContext context);
+}
+
+/// <summary>
+/// Architecture-selected root-media sizing behavior used by host image-to-video callbacks and
+/// architecture runtimes without exposing a concrete implementation through common orchestration.
+/// </summary>
+internal interface IArchitectureRootMediaResizer
+{
+    bool TryGetRootStageResolution(out int width, out int height);
+
+    void ApplyConfiguredRootStageResolutionToCurrentMedia();
+
+    void ApplyConfiguredRootStageResolutionToSurvivingRootMedia();
+
+    void ApplyCurrentMediaResolution(int width, int height);
+
+    void SetCurrentMediaDimensions(int width, int height);
+}
+
+internal interface IArchitectureRootMediaResizerProvider
+{
+    IArchitectureRootMediaResizer CreateRootMediaResizer();
+}

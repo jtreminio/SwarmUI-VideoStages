@@ -1,5 +1,9 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+    fakeArchitectureCatalog,
+    testArchitectureCatalog,
+} from "./__test_helpers__/architectureFixtures";
+import {
     minimalClip,
     minimalRef,
     minimalStage,
@@ -7,15 +11,16 @@ import {
 import {
     activeStageCount,
     deriveAuthoringDiagnostics,
-    isAudioReuseEligible,
 } from "./authoringDiagnostics";
 import type { Clip } from "./types";
 
 const codes = (clips: Clip[]): string[] =>
-    deriveAuthoringDiagnostics(clips).map((item) => item.code);
+    deriveAuthoringDiagnostics(clips, {
+        catalog: testArchitectureCatalog(),
+    }).map((item) => item.code);
 
 describe("backend-aligned authoring diagnostics", () => {
-    it("counts active stages and requires three for captured-stage audio reuse", () => {
+    it("counts only active stages for catalog-driven rules", () => {
         const clip = minimalClip({
             stages: [
                 minimalStage(),
@@ -24,18 +29,20 @@ describe("backend-aligned authoring diagnostics", () => {
             ],
         });
         expect(activeStageCount(clip)).toBe(2);
-        expect(isAudioReuseEligible(clip)).toBe(false);
         clip.stages[1].skipped = false;
-        expect(isAudioReuseEligible(clip)).toBe(true);
+        expect(activeStageCount(clip)).toBe(3);
     });
 
     it("warns when requested audio reuse lacks generate/capture/reuse stages", () => {
-        const diagnostics = deriveAuthoringDiagnostics([
-            minimalClip({
-                reuseAudio: true,
-                stages: [minimalStage(), minimalStage({ skipped: true })],
-            }),
-        ]);
+        const diagnostics = deriveAuthoringDiagnostics(
+            [
+                minimalClip({
+                    reuseAudio: true,
+                    stages: [minimalStage(), minimalStage({ skipped: true })],
+                }),
+            ],
+            { catalog: testArchitectureCatalog() },
+        );
         expect(diagnostics).toContainEqual({
             severity: "warning",
             code: "audio.reuse.requires_three_stages",
@@ -59,7 +66,7 @@ describe("backend-aligned authoring diagnostics", () => {
         ).toContain("prompt-relay-dynamic-length-unsupported");
     });
 
-    it("warns that an ordinary unsourced retake will not execute", () => {
+    it("evaluates the advertised retake source rule", () => {
         expect(
             codes([
                 minimalClip({
@@ -94,6 +101,7 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(
             deriveAuthoringDiagnostics([minimalClip({ retake })], {
                 globalRefineMode: true,
+                catalog: testArchitectureCatalog(),
             }).map((item) => item.code),
         ).not.toContain("retake-source-required");
     });
@@ -171,5 +179,43 @@ describe("backend-aligned authoring diagnostics", () => {
                 minimalClip(),
             ]),
         ).not.toContain("mixed-hdr-timeline-unsupported");
+    });
+
+    it("does not apply LTX combination rules to a future architecture that omits them", () => {
+        const models = fakeArchitectureCatalog();
+        const clip = minimalClip({
+            architecture: "test-video",
+            modelProfileId: "test-profile",
+            reuseAudio: true,
+            clipLengthFromAudio: true,
+            promptWindows: [{ prompt: "relay", start: 0, duration: 1 }],
+            refs: [minimalRef()],
+            retake: {
+                startSeconds: 0,
+                lengthSeconds: 1,
+                strength: 1,
+            },
+            stages: [
+                minimalStage({
+                    model: "test-video.safetensors",
+                    modelProfileId: "test-profile",
+                }),
+            ],
+        });
+
+        const diagnostics = deriveAuthoringDiagnostics([clip], {
+            catalog: models,
+            globalRefineMode: true,
+        }).map((item) => item.code);
+
+        expect(diagnostics).not.toEqual(
+            expect.arrayContaining([
+                "audio.reuse.requires_three_stages",
+                "prompt-relay-dynamic-length-unsupported",
+                "retake-frame-references-unsupported",
+                "retake-source-required",
+                "mixed-hdr-timeline-unsupported",
+            ]),
+        );
     });
 });

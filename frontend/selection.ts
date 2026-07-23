@@ -1,4 +1,4 @@
-import type { TimelineSelection } from "./types";
+import type { TimelineSelection } from "./selectionTypes";
 
 const NO_SELECTION: TimelineSelection = { kind: "none" };
 let selection: TimelineSelection = NO_SELECTION;

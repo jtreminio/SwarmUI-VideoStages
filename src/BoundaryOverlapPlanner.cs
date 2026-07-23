@@ -22,8 +22,8 @@ internal static class BoundaryOverlapPlanner
 
     /// <summary>
     /// Reconciles typed boundary windows against planned clip lengths. Unknown lengths remain
-    /// provisional; known short clips shrink continue windows on the LTX 8n+1 grid and cap
-    /// crossfades so every clip retains at least one core frame.
+    /// provisional; known short clips shrink continue windows on the architecture-projected frame
+    /// grid and cap crossfades so every clip retains at least one core frame.
     /// </summary>
     internal static BoundaryBudgetResolution ResolvePlanBudgets(
         IReadOnlyList<int?> frames,
@@ -42,92 +42,84 @@ internal static class BoundaryOverlapPlanner
             return new(source, Degraded: false, Reason: null);
         }
 
-        bool[] continues = new bool[boundaryCount];
-        bool[] crossfades = new bool[boundaryCount];
-        for (int i = 0; i < boundaryCount; i++)
+        List<BoundaryPlan> resolved = [.. source];
+        bool adjusted = false;
+        while (TryFindOverBudgetClip(
+            frames,
+            resolved,
+            boundaryCount,
+            out int overBudgetClip))
         {
-            continues[i] = source[i].Effective == BoundaryExecutionMode.Continue;
-            crossfades[i] = source[i].Effective == BoundaryExecutionMode.Crossfade;
-        }
-
-        int[] continueWindows = new int[boundaryCount];
-        for (int i = 0; i < boundaryCount; i++)
-        {
-            if (!continues[i])
-            {
-                continue;
-            }
-
-            int requested = Math.Max(1, source[i].ContinuityWindowFrames);
-            int leftReserve = i > 0 && continues[i - 1]
-                ? continueWindows[i - 1]
-                : i > 0 && crossfades[i - 1] ? 1 : 0;
-            int rightReserve = i < boundaryCount - 1 && (continues[i + 1] || crossfades[i + 1])
-                ? 1
-                : 0;
-            int maximum = Math.Min(
-                frames[i]!.Value - 1 - leftReserve,
-                frames[i + 1]!.Value - 1 - rightReserve);
-            while (requested > 1 && requested > maximum)
-            {
-                requested -= 8;
-            }
-            continueWindows[i] = Math.Max(1, requested);
-        }
-
-        int[] crossfadeMaxPerSide = new int[boundaryCount + 1];
-        for (int i = 0; i <= boundaryCount; i++)
-        {
-            int fixedTrim = (i > 0 && continues[i - 1] ? continueWindows[i - 1] : 0)
-                + (i < boundaryCount && continues[i] ? continueWindows[i] : 0);
-            int crossfadeSides = (i > 0 && crossfades[i - 1] ? 1 : 0)
-                + (i < boundaryCount && crossfades[i] ? 1 : 0);
-            int budget = frames[i]!.Value - 1 - fixedTrim;
-            if (budget < 0 || (crossfadeSides > 0 && budget / crossfadeSides < 1))
+            int rightBoundary = overBudgetClip < boundaryCount
+                && IsOverlapped(resolved[overBudgetClip])
+                    ? overBudgetClip
+                    : -1;
+            int leftBoundary = overBudgetClip > 0
+                && IsOverlapped(resolved[overBudgetClip - 1])
+                    ? overBudgetClip - 1
+                    : -1;
+            int candidate = rightBoundary >= 0 ? rightBoundary : leftBoundary;
+            if (candidate < 0)
             {
                 return DegradeAllToCuts(
-                    source,
+                    resolved,
                     "planned clip frame counts cannot fund the requested boundary windows",
                     BoundaryFallback.InsufficientFrameBudget);
             }
-            if (crossfadeSides > 0)
-            {
-                crossfadeMaxPerSide[i] = budget / crossfadeSides;
-            }
-        }
 
-        List<BoundaryPlan> resolved = [.. source];
-        bool adjusted = false;
-        for (int i = 0; i < boundaryCount; i++)
-        {
-            BoundaryPlan boundary = source[i];
-            BoundaryPlan replacement = boundary.Effective switch
-            {
-                BoundaryExecutionMode.Continue => boundary with
-                {
-                    OverlapFrames = Math.Max(0, continueWindows[i] - 1),
-                    ContinuityWindowFrames = continueWindows[i],
-                },
-                BoundaryExecutionMode.Crossfade => boundary with
-                {
-                    OverlapFrames = Math.Min(
-                        Math.Max(1, boundary.OverlapFrames),
-                        Math.Min(crossfadeMaxPerSide[i], crossfadeMaxPerSide[i + 1])),
-                    ContinuityWindowFrames = 0,
-                },
-                _ => boundary with
-                {
-                    OverlapFrames = 0,
-                    ContinuityWindowFrames = 0,
-                },
-            };
-            resolved[i] = replacement;
-            adjusted |= !Equals(boundary, replacement);
+            resolved[candidate] = ReduceOnPolicyGridOrCut(resolved[candidate]);
+            adjusted = true;
         }
         return new(
             resolved.AsReadOnly(),
             Degraded: adjusted,
-            adjusted ? "planned boundary windows were reduced to fit clip frame budgets" : null);
+            adjusted
+                ? "planned boundary windows were reduced on their architecture grid or degraded "
+                    + "to cuts to fit clip frame budgets"
+                : null);
+    }
+
+    private static bool TryFindOverBudgetClip(
+        IReadOnlyList<int?> frames,
+        IReadOnlyList<BoundaryPlan> boundaries,
+        int boundaryCount,
+        out int clipIndex)
+    {
+        for (int i = 0; i <= boundaryCount; i++)
+        {
+            int leftTrim = i > 0 ? EffectiveTrimFrames(boundaries[i - 1]) : 0;
+            int rightTrim = i < boundaryCount ? EffectiveTrimFrames(boundaries[i]) : 0;
+            if (leftTrim + rightTrim > frames[i]!.Value - 1)
+            {
+                clipIndex = i;
+                return true;
+            }
+        }
+        clipIndex = -1;
+        return false;
+    }
+
+    private static BoundaryPlan ReduceOnPolicyGridOrCut(BoundaryPlan boundary)
+    {
+        int minimum = Math.Max(1, boundary.MinFrames);
+        int nextOverlap = boundary.OverlapFrames - Math.Max(1, boundary.FrameStep);
+        if (nextOverlap < minimum)
+        {
+            return DegradeToCut(boundary) with
+            {
+                Fallback = BoundaryFallback.InsufficientFrameBudget,
+            };
+        }
+        int continuityExtra = boundary.Effective == BoundaryExecutionMode.Continue
+            ? Math.Max(0, boundary.ContinuityWindowFrames - boundary.OverlapFrames)
+            : 0;
+        return boundary with
+        {
+            OverlapFrames = nextOverlap,
+            ContinuityWindowFrames = boundary.Effective == BoundaryExecutionMode.Continue
+                ? nextOverlap + continuityExtra
+                : 0,
+        };
     }
 
     /// <summary>
@@ -153,7 +145,7 @@ internal static class BoundaryOverlapPlanner
         {
             return DegradeAllToCuts(
                 source,
-                "runtime overlap needs LTX clips with known lengths and matching dimensions and fps");
+                "runtime overlap needs decoded clips with known lengths and matching dimensions and fps");
         }
 
         BoundaryBudgetResolution runtimeBudget = ResolvePlanBudgets(
@@ -223,8 +215,7 @@ internal static class BoundaryOverlapPlanner
             && clip.Height is int height && height > 0 && height == first.Height
             && SameFps(clip, first);
         return clip?.Frames is > 0
-            && uniform
-            && VideoStageModelCompat.IsLtxV2VideoModel(clip.Compat);
+            && uniform;
     }
 
     private static bool SameEffectiveWindows(

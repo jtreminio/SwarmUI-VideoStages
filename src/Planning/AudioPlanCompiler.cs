@@ -12,18 +12,13 @@ internal static class AudioPlanCompiler
         ArgumentNullException.ThrowIfNull(clip);
 
         AudioPlanComponentResult<AudioBaseSourcePlan> baseSource = AudioBaseSourcePlanCompiler.Compile(clip);
-        AudioPlanComponentResult<AudioVoiceReferencePlan> voiceReference = AudioVoiceReferencePlanCompiler.Compile(clip);
         AudioPlanComponentResult<AudioLengthPlan> length = AudioLengthPlanCompiler.Compile(clip, baseSource.Plan);
         AudioPlanComponentResult<AudioSegmentPlan> segments = AudioSegmentPlanCompiler.Compile(clip, baseSource.Plan);
-        AudioPlanComponentResult<AudioReusePlan> reuse = AudioReusePlanCompiler.Compile(clip);
 
         return new(
             baseSource.Plan,
-            voiceReference.Plan,
             length.Plan,
             segments.Plan,
-            reuse.Plan,
-            [.. baseSource.Diagnostics, .. voiceReference.Diagnostics, .. length.Diagnostics,
-                .. segments.Diagnostics, .. reuse.Diagnostics]);
+            [.. baseSource.Diagnostics, .. length.Diagnostics, .. segments.Diagnostics]);
     }
 }

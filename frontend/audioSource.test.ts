@@ -175,5 +175,13 @@ describe("audioSource", () => {
                 AUDIO_SOURCE_CONTROLNET,
             ]);
         });
+
+        it("maps architecture-neutral Disabled to the ordinary Native authoring choice", () => {
+            const values = buildAudioSourceOptions("", {
+                allowedKinds: ["Disabled", "Upload"],
+            }).map((option) => option.value);
+
+            expect(values).toEqual(["Native", "Upload"]);
+        });
     });
 });

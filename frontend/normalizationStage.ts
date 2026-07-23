@@ -1,15 +1,18 @@
+import { modelProfileForModel } from "./architectures/catalog";
 import {
     clamp,
     REF_FRAME_MIN,
-    STAGE_CONTROLNET_STRENGTH_DEFAULT,
-    STAGE_CONTROLNET_STRENGTH_MAX,
-    STAGE_CONTROLNET_STRENGTH_MIN,
-    STAGE_CONTROLNET_STRENGTH_STEP,
     STAGE_REF_STRENGTH_DEFAULT,
     STAGE_REF_STRENGTH_MAX,
     STAGE_REF_STRENGTH_MIN,
     STAGE_REF_STRENGTH_STEP,
 } from "./constants";
+import {
+    STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_STEP,
+} from "./icLoraAuthoring";
 import { normalizeUploadedAudio } from "./normalizationMedia";
 import {
     normalizeOptionalEntityId,
@@ -66,16 +69,14 @@ export const normalizeStageRefStrengths = (
 
 export const readRawStageProp = (
     raw: Record<string, unknown>,
-    camel: string,
-    pascal: string,
-): unknown => readProp(raw, camel, pascal);
+    key: string,
+): unknown => readProp(raw, key);
 
 export const readRawStageString = (
     raw: Record<string, unknown>,
-    camel: string,
-    pascal: string,
+    key: string,
 ): string | undefined => {
-    const value = readRawStageProp(raw, camel, pascal);
+    const value = readRawStageProp(raw, key);
     if (value == null) {
         return undefined;
     }
@@ -92,11 +93,11 @@ export const normalizeStageLoras = (raw: unknown): StageLora[] => {
         if (!isRecord(entry)) {
             continue;
         }
-        const name = `${readRawStageProp(entry, "name", "Name") ?? ""}`.trim();
+        const name = `${readRawStageProp(entry, "name") ?? ""}`.trim();
         if (!name) {
             continue;
         }
-        const weightRaw = readRawStageProp(entry, "weight", "Weight");
+        const weightRaw = readRawStageProp(entry, "weight");
         const weight = toNumber(`${weightRaw ?? 1}`, 1);
         out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
     }
@@ -113,6 +114,9 @@ export const buildDefaultStage = (
     refCount: number,
 ): Stage => {
     const defaults = getRootDefaults();
+    const model = previousStage
+        ? previousStage.model
+        : getDefaultStageModel(defaults.modelValues);
     return {
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
@@ -124,9 +128,11 @@ export const buildDefaultStage = (
         upscaleMethod: previousStage
             ? previousStage.upscaleMethod
             : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
-        model: previousStage
-            ? previousStage.model
-            : getDefaultStageModel(defaults.modelValues),
+        model,
+        modelProfileId:
+            previousStage?.modelProfileId ??
+            modelProfileForModel(defaults.modelCatalog, model) ??
+            "unsupported",
         steps: previousStage ? previousStage.steps : defaults.steps,
         cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
         sampler: previousStage
@@ -225,7 +231,7 @@ export const normalizeStage = (
             upscale: snapToStep(
                 clamp(
                     toNumber(
-                        `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+                        `${readRawStageProp(rawStage, "upscale") ?? fallback.upscale}`,
                         fallback.upscale,
                     ),
                     defaults.upscaleMin,
@@ -234,12 +240,12 @@ export const normalizeStage = (
                 defaults.upscaleStep,
             ),
             upscaleMethod:
-                `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` ||
+                `${readRawStageString(rawStage, "upscaleMethod") ?? fallback.upscaleMethod}` ||
                 fallback.upscaleMethod,
         };
         control = clamp(
             toNumber(
-                `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+                `${readRawStageProp(rawStage, "control") ?? fallback.control}`,
                 fallback.control,
             ),
             defaults.controlMin,
@@ -247,15 +253,12 @@ export const normalizeStage = (
         );
     }
     const stage: Stage = {
-        id: normalizeOptionalEntityId(readProp(rawStage, "id", "Id")),
+        id: normalizeOptionalEntityId(rawStage.id),
         skipped: !!rawStage.skipped,
         control,
         controlNetStrength: normalizeStageControlNetStrengthValue(
-            readRawStageProp(
-                rawStage,
-                "controlNetStrength",
-                "ControlNetStrength",
-            ) ?? fallback.controlNetStrength,
+            readRawStageProp(rawStage, "controlNetStrength") ??
+                fallback.controlNetStrength,
         ),
         refStrengths: normalizeStageRefStrengths(
             rawStage.refStrengths,
@@ -264,6 +267,7 @@ export const normalizeStage = (
         upscale: firstStageUpscale.upscale,
         upscaleMethod: firstStageUpscale.upscaleMethod,
         model: `${rawStage.model ?? fallback.model}` || fallback.model,
+        modelProfileId: "unsupported",
         steps: Math.max(
             1,
             Math.round(
@@ -288,10 +292,12 @@ export const normalizeStage = (
         sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
         scheduler:
             `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
-        loras: normalizeStageLoras(
-            readRawStageProp(rawStage, "loras", "Loras"),
-        ),
+        loras: normalizeStageLoras(readRawStageProp(rawStage, "loras")),
     };
+    stage.modelProfileId =
+        `${readRawStageProp(rawStage, "modelProfileId") ?? ""}`.trim() ||
+        modelProfileForModel(defaults.modelCatalog, stage.model) ||
+        fallback.modelProfileId;
 
     if (
         !defaults.upscaleMethodValues.includes(stage.upscaleMethod) &&
@@ -311,7 +317,7 @@ export const normalizeRef = (
     const fallback = buildDefaultRef();
     const source = `${rawRef.source ?? fallback.source}` || fallback.source;
     return {
-        id: normalizeOptionalEntityId(readProp(rawRef, "id", "Id")),
+        id: normalizeOptionalEntityId(rawRef.id),
         source,
         uploadFileName:
             rawRef.uploadFileName == null || rawRef.uploadFileName === ""

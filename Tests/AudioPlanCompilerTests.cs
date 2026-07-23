@@ -77,17 +77,19 @@ public class AudioPlanCompilerTests
             Video: Upload(),
             DriveAudioRef: true);
 
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(
+        ClipSpec clip = Clip(
             source: Constants.AudioSourceNative,
-            icLoras: [driveVoice]));
+            icLoras: [driveVoice]);
+        AudioPlan plan = AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(AudioBaseSourceKind.Native, plan.Base.Kind);
-        Assert.Equal(AudioVoiceReferenceKind.IcLoraDriveVideo, plan.VoiceReference.Kind);
-        Assert.True(plan.VoiceReference.IsRequested);
-        Assert.True(plan.VoiceReference.HasConfiguredSample);
-        Assert.Equal(0, plan.VoiceReference.IcLoraEntryIndex);
-        Assert.Equal("data:audio/wav;base64,QUJD", plan.VoiceReference.Media.Data);
-        Assert.Equal("clip.wav", plan.VoiceReference.Media.FileName);
+        Assert.Equal(AudioVoiceReferenceKind.IcLoraDriveVideo, ltx.VoiceReference.Kind);
+        Assert.True(ltx.VoiceReference.IsRequested);
+        Assert.True(ltx.VoiceReference.HasConfiguredSample);
+        Assert.Equal(0, ltx.VoiceReference.IcLoraEntryIndex);
+        Assert.Equal("data:audio/wav;base64,QUJD", ltx.VoiceReference.Media.Data);
+        Assert.Equal("clip.wav", ltx.VoiceReference.Media.FileName);
     }
 
     [Fact]
@@ -102,7 +104,7 @@ public class AudioPlanCompilerTests
             Video: null,
             DriveAudioRef: true);
 
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(icLoras: [missingDrive]));
+        Ltx2AudioPlan plan = Ltx2AudioPlanCompiler.Compile(Clip(icLoras: [missingDrive]));
 
         Assert.Equal(AudioVoiceReferenceKind.IcLoraDriveVideo, plan.VoiceReference.Kind);
         Assert.True(plan.VoiceReference.IsRequested);
@@ -124,7 +126,7 @@ public class AudioPlanCompilerTests
             Video: null,
             DriveAudioRef: true);
 
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(
+        Ltx2AudioPlan plan = Ltx2AudioPlanCompiler.Compile(Clip(
             source: Constants.AudioSourceVoiceRef,
             uploadedAudio: Upload("data:audio/wav;base64,RkFMTEJBQ0s="),
             icLoras: [missingDrive]));
@@ -139,13 +141,15 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_voice_reference_source_has_no_locked_track_and_reports_missing_upload()
     {
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: Constants.AudioSourceVoiceRef));
+        ClipSpec clip = Clip(source: Constants.AudioSourceVoiceRef);
+        AudioPlan plan = AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(AudioBaseSourceKind.None, plan.Base.Kind);
         Assert.False(plan.Base.HasConfiguredTrack);
-        Assert.Equal(AudioVoiceReferenceKind.ClipUpload, plan.VoiceReference.Kind);
-        Assert.False(plan.VoiceReference.HasConfiguredSample);
-        Assert.Contains(plan.Diagnostics, d => d.Code == "audio.voice_reference.missing_sample");
+        Assert.Equal(AudioVoiceReferenceKind.ClipUpload, ltx.VoiceReference.Kind);
+        Assert.False(ltx.VoiceReference.HasConfiguredSample);
+        Assert.Contains(ltx.Diagnostics, d => d.Code == "audio.voice_reference.missing_sample");
     }
 
     [Fact]
@@ -158,15 +162,17 @@ public class AudioPlanCompilerTests
             AttentionStrength: 1,
             ControlType: Constants.IcLoraControlNone,
             Video: null);
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(
+        ClipSpec clip = Clip(
             source: Constants.AudioSourceUpload,
             audioLength: true,
             controlNetLength: true,
             uploadedAudio: Upload(),
-            icLoras: [controlNetDrive]));
+            icLoras: [controlNetDrive]);
+        AudioPlan plan = AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
-        Assert.Equal(1, plan.Length.ControlNetSourceIndex);
+        Assert.Equal(1, ltx.ControlNetSourceIndex);
         Assert.Contains(plan.Diagnostics, d => d.Code == "audio.length.controlnet_overrides_audio");
     }
 
@@ -181,11 +187,15 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_reports_controlnet_length_owner_without_a_typed_source()
     {
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(controlNetLength: true));
+        ClipSpec clip = Clip(controlNetLength: true);
+        AudioPlan plan = AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
-        Assert.Null(plan.Length.ControlNetSourceIndex);
-        Assert.Contains(plan.Diagnostics, diagnostic =>
+        Assert.Null(ltx.ControlNetSourceIndex);
+        Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.length.controlnet_owner_has_no_source");
+        Assert.Contains(ltx.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.length.controlnet_owner_has_no_source");
     }
 
@@ -239,12 +249,14 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_audio_reuse_requires_generate_capture_and_reuse_stages()
     {
-        AudioPlan ineligible = AudioPlanCompiler.Compile(Clip(reuse: true, stages: [Stage(0), Stage(1)]));
-        AudioPlan eligible = AudioPlanCompiler.Compile(Clip(reuse: true, stages: [Stage(0), Stage(1), Stage(2)]));
+        Ltx2AudioPlan ineligible = Ltx2AudioPlanCompiler.Compile(
+            Clip(reuse: true, stages: [Stage(0), Stage(1)]));
+        Ltx2AudioPlan eligible = Ltx2AudioPlanCompiler.Compile(
+            Clip(reuse: true, stages: [Stage(0), Stage(1), Stage(2)]));
 
         Assert.True(ineligible.Reuse.IsRequested);
         Assert.False(ineligible.Reuse.IsEligible);
-        Assert.Contains(ineligible.Diagnostics, d => d.Code == "audio.reuse.requires_three_stages");
+        Assert.Empty(ineligible.Diagnostics);
         Assert.True(eligible.Reuse.IsEligible);
         Assert.Equal(1, eligible.Reuse.CaptureStageIndex);
         Assert.Equal(2, eligible.Reuse.ReuseFromStageIndex);

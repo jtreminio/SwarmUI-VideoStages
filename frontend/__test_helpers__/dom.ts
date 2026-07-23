@@ -68,7 +68,15 @@ const ensureTextarea = (id: string): HTMLTextAreaElement => {
 
 export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
     const el = ensureTextarea("input_videostages");
-    el.value = typeof state === "string" ? state : JSON.stringify(state);
+    const persisted =
+        typeof state === "object" &&
+        state !== null &&
+        !Array.isArray(state) &&
+        !Object.hasOwn(state, "schemaVersion")
+            ? { ...state, schemaVersion: 3 }
+            : state;
+    el.value =
+        typeof persisted === "string" ? persisted : JSON.stringify(persisted);
     return el;
 };
 

@@ -1,5 +1,5 @@
 import { injectTimelineTab } from "./bottomTimelineTab";
-import { getLtxHostBridge } from "./host";
+import { getVideoStagesHostBridge } from "./host";
 import { refineVideoButton } from "./refineVideoButton";
 import { DATA_INPUT_ID } from "./swarmInputs";
 import { videoStagesTimeline } from "./videoStagesTimeline";
@@ -15,7 +15,7 @@ const warnIfDataInputNeverAppears = (): void => {
         return;
     }
     dataInputWatchdog = setTimeout(() => {
-        if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
+        if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
             console.warn(
                 `VideoStages: Data param input (#${DATA_INPUT_ID}) never appeared — ` +
                     "is the VideoStages backend extension loaded?",
@@ -25,7 +25,7 @@ const warnIfDataInputNeverAppears = (): void => {
 };
 
 const registerVideoStagesPromptPrefix = (): void => {
-    getLtxHostBridge().registerPromptPrefix(
+    getVideoStagesHostBridge().registerPromptPrefix(
         "videoclip",
         "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
         () => [
@@ -46,7 +46,7 @@ const initTimeline = (): void => {
     // us. Initializing against a paramless DOM would parse an empty carrier
     // and silently no-op every save, so keep retrying until the input exists;
     // init is re-runnable by design, so a later host-triggered call is fine.
-    if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
+    if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
         warnIfDataInputNeverAppears();
         if (!dataInputRetryTimer) {
             dataInputRetryTimer = setTimeout(() => {
@@ -64,7 +64,7 @@ const initTimeline = (): void => {
 };
 
 const scheduleTimelineInit = (): void => {
-    if (!getLtxHostBridge().addPostParamBuildStep(initTimeline)) {
+    if (!getVideoStagesHostBridge().addPostParamBuildStep(initTimeline)) {
         setTimeout(scheduleTimelineInit, 200);
     }
 };

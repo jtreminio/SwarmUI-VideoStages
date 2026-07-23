@@ -1,15 +1,19 @@
 import { describe, expect, it } from "@jest/globals";
+import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
+import {
+    defaultIcLora,
+    hasSlotSourcedIcLora,
+    normalizeIcLora,
+    reconcileIcLoraStage,
+} from "./architectures/ltx2/icLoraNormalization";
 import {
     appendRefToClip,
     buildDefaultClip,
     buildDefaultRef,
     buildDefaultStage,
-    defaultIcLora,
-    hasSlotSourcedIcLora,
     normalizeAudioSegments,
     normalizeClip,
     normalizeContinueOverlap,
-    normalizeIcLora,
     normalizeRef,
     normalizeRetake,
     normalizeSourceVideo,
@@ -18,7 +22,6 @@ import {
     normalizeStageRefStrengthValue,
     readRawStageProp,
     readRawStageString,
-    reconcileIcLoraStage,
     removeRefAt,
 } from "./normalization";
 import {
@@ -28,6 +31,7 @@ import {
 } from "./types";
 
 const getRootDefaults = (): RootDefaults => ({
+    modelCatalog: testArchitectureCatalog(),
     modelValues: ["ltx"],
     modelLabels: ["LTX"],
     loraValues: ["ltx-ic-lora.safetensors"],
@@ -76,26 +80,16 @@ const minimalStageRaw = {
 } as const;
 
 describe("normalization", () => {
-    it("readRawStageProp prefers camelCase then PascalCase", () => {
+    it("readRawStageProp reads only canonical camelCase", () => {
         expect(
-            readRawStageProp(
-                { control: 0.5, Control: 0.9 },
-                "control",
-                "Control",
-            ),
+            readRawStageProp({ control: 0.5, Control: 0.9 }, "control"),
         ).toBe(0.5);
-        expect(readRawStageProp({ Control: 0.9 }, "control", "Control")).toBe(
-            0.9,
-        );
+        expect(readRawStageProp({ Control: 0.9 }, "control")).toBeUndefined();
     });
 
     it("readRawStageString returns undefined for blank strings", () => {
         expect(
-            readRawStageString(
-                { upscaleMethod: "  " },
-                "upscaleMethod",
-                "UpscaleMethod",
-            ),
+            readRawStageString({ upscaleMethod: "  " }, "upscaleMethod"),
         ).toBeUndefined();
     });
 
@@ -119,6 +113,41 @@ describe("normalization", () => {
         expect(clip.boundaryOut).toBe("cut");
     });
 
+    it("derives none for fresh source-only clips but preserves invalid v3 identity for diagnostics", () => {
+        const sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 2,
+            startSeconds: 0,
+            lengthSeconds: 2,
+        };
+        const fresh = normalizeClip(
+            { sourceVideo, stages: [] },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        const invalid = normalizeClip(
+            {
+                architecture: "removed-architecture",
+                modelProfileId: "removed-profile",
+                sourceVideo,
+                stages: [],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+
+        expect(fresh).toMatchObject({
+            architecture: "none",
+            modelProfileId: "none",
+        });
+        expect(invalid).toMatchObject({
+            architecture: "removed-architecture",
+            modelProfileId: "removed-profile",
+        });
+    });
+
     it.each([
         ["continue", "continue"],
         ["crossfade", "crossfade"],
@@ -134,13 +163,13 @@ describe("normalization", () => {
         expect(clip.boundaryOut).toBe(expected);
     });
 
-    it("normalizeClip reads a PascalCase BoundaryOut key", () => {
+    it("normalizeClip ignores a noncanonical PascalCase boundary key", () => {
         const clip = normalizeClip(
             { stages: [{ model: "ltx" }], BoundaryOut: "continue" },
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.boundaryOut).toBe("continue");
+        expect(clip.boundaryOut).toBe("cut");
     });
 
     it("normalizeClip pads refStrengths for each stage from raw", () => {
@@ -223,7 +252,7 @@ describe("normalization", () => {
         expect(clip.refs).toEqual([]);
     });
 
-    it("normalizeClip defaults to no IC-LoRAs and migrates legacy ControlNet fields", () => {
+    it("normalizeClip ignores removed single-ControlNet IC-LoRA fields", () => {
         const defaultClip = normalizeClip(
             {},
             getRootDefaults,
@@ -240,11 +269,7 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(controlNetClip.icLoras).toHaveLength(1);
-        expect(controlNetClip.icLoras[0].lora).toBe("ltx-ic-lora.safetensors");
-        expect(controlNetClip.icLoras[0].source).toBe("ControlNet 3");
-        expect(controlNetClip.icLoras[0].strength).toBe(1);
-        expect(controlNetClip.icLoras[0].controlType).toBe("none");
+        expect(controlNetClip.icLoras).toEqual([]);
     });
 
     it("normalizeClip maps Swarm (None) legacy ControlNet LoRA token to no entries", () => {
@@ -270,7 +295,7 @@ describe("normalization", () => {
                             data: "data:video/mp4;base64,QUJD",
                             fileName: "d.mp4",
                         },
-                        DriveAudioRef: true,
+                        driveAudioRef: true,
                     },
                     { lora: "" },
                 ],
@@ -464,7 +489,7 @@ describe("normalization", () => {
         expect(clip.audioSource).toBe("ControlNet");
     });
 
-    it("normalizeClip falls back to Native when ControlNet audio source is stored without controlNetLora", () => {
+    it("normalizeClip preserves an unsupported persisted ControlNet audio source", () => {
         const clip = normalizeClip(
             {
                 audioSource: "ControlNet",
@@ -473,7 +498,7 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.audioSource).toBe("Native");
+        expect(clip.audioSource).toBe("ControlNet");
     });
 
     it("normalizeClip allows clipLengthFromAudio when audio source is ControlNet", () => {
@@ -489,7 +514,7 @@ describe("normalization", () => {
         expect(clip.clipLengthFromAudio).toBe(true);
     });
 
-    it("normalizeClip reads camelCase controlNetSource and controlNetLora from stored JSON", () => {
+    it("normalizeClip ignores removed camelCase single-ControlNet fields", () => {
         const clip = normalizeClip(
             {
                 controlNetSource: "ControlNet 2",
@@ -498,12 +523,10 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.icLoras).toHaveLength(1);
-        expect(clip.icLoras[0].source).toBe("ControlNet 2");
-        expect(clip.icLoras[0].lora).toBe("detail-lora.safetensors");
+        expect(clip.icLoras).toEqual([]);
     });
 
-    it("normalizeStage reads PascalCase upscale fields for non-first stage", () => {
+    it("normalizeStage reads canonical upscale fields for non-first stage", () => {
         const stage0 = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
@@ -517,8 +540,8 @@ describe("normalization", () => {
             getDefaultStageModel,
             {
                 ...minimalStageRaw,
-                Upscale: 2,
-                UpscaleMethod: "latentmodel-b.safetensors",
+                upscale: 2,
+                upscaleMethod: "latentmodel-b.safetensors",
             },
             stage0,
             0,
@@ -541,7 +564,7 @@ describe("normalization", () => {
             normalizeStage(
                 getRootDefaults,
                 getDefaultStageModel,
-                { ...minimalStageRaw, Upscale: upscale },
+                { ...minimalStageRaw, upscale },
                 stage0,
                 0,
                 1,
@@ -557,7 +580,7 @@ describe("normalization", () => {
             getDefaultStageModel,
             {
                 ...minimalStageRaw,
-                Control: 0.4,
+                control: 0.4,
             },
             null,
             0,
@@ -573,9 +596,9 @@ describe("normalization", () => {
             getDefaultStageModel,
             {
                 ...minimalStageRaw,
-                Control: 0.4,
-                Upscale: 1.3,
-                UpscaleMethod: "latentmodel-b.safetensors",
+                control: 0.4,
+                upscale: 1.3,
+                upscaleMethod: "latentmodel-b.safetensors",
             },
             null,
             0,
@@ -615,7 +638,7 @@ describe("normalization", () => {
         expect(clip.stages[0].upscaleMethod).toBe("latentmodel-b.safetensors");
     });
 
-    it("normalizeStage reads PascalCase control for non-first stage", () => {
+    it("normalizeStage reads canonical control for non-first stage", () => {
         const stage0 = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
@@ -629,7 +652,7 @@ describe("normalization", () => {
             getDefaultStageModel,
             {
                 ...minimalStageRaw,
-                Control: 0.4,
+                control: 0.4,
             },
             stage0,
             0,
@@ -649,15 +672,15 @@ describe("normalization", () => {
 
 describe("normalizeContinueOverlap", () => {
     it.each([
-        [undefined, 8],
-        [null, 8],
-        [Number.NaN, 8],
-        ["garbage", 8],
-        [7, 8],
+        [undefined, 1],
+        [null, 1],
+        [Number.NaN, 1],
+        ["garbage", 1],
+        [7, 7],
         [16, 16],
-        [20, 16],
+        [20, 20],
         [48, 48],
-        [100, 48],
+        [100, 100],
         ["24", 24],
     ])("normalizes %s -> %s", (raw, expected) => {
         expect(normalizeContinueOverlap(raw)).toBe(expected);
@@ -713,7 +736,7 @@ describe("stage loras", () => {
         expect(
             normalizeStageLoras([
                 { name: "a.safetensors", weight: 0.5 },
-                { Name: "b.safetensors", Weight: "1.25" },
+                { name: "b.safetensors", weight: "1.25" },
                 { name: "  ", weight: 1 },
                 { name: "c.safetensors" },
                 { weight: 2 },
@@ -728,11 +751,11 @@ describe("stage loras", () => {
         expect(normalizeStageLoras("x")).toEqual([]);
     });
 
-    it("normalizeStage reads loras (camel or Pascal) into the stage", () => {
+    it("normalizeStage reads canonical LoRAs into the stage", () => {
         const stage = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
-            { ...minimalStageRaw, Loras: [{ Name: "l.safetensors" }] },
+            { ...minimalStageRaw, loras: [{ name: "l.safetensors" }] },
             null,
             0,
             0,
@@ -798,10 +821,10 @@ describe("stage loras", () => {
             ).toEqual({ startSeconds: 1, lengthSeconds: 2, strength: 1 });
         });
 
-        it("reads PascalCase keys and clamps strength to [0, 1]", () => {
+        it("reads canonical keys and clamps strength to [0, 1]", () => {
             expect(
                 normalizeRetake(
-                    { StartSeconds: 0, LengthSeconds: 1, Strength: 5 },
+                    { startSeconds: 0, lengthSeconds: 1, strength: 5 },
                     10,
                 ),
             ).toEqual({ startSeconds: 0, lengthSeconds: 1, strength: 1 });
@@ -906,15 +929,15 @@ describe("stage loras", () => {
             expect(result[0].source).toBeNull();
         });
 
-        it("reads PascalCase keys and clamps length to fit the clip", () => {
+        it("reads canonical keys and clamps length to fit the clip", () => {
             expect(
                 normalizeAudioSegments(
                     [
                         {
-                            Source: src,
-                            StartSeconds: 8,
-                            TrimStartSeconds: 0,
-                            LengthSeconds: 5,
+                            source: src,
+                            startSeconds: 8,
+                            trimStartSeconds: 0,
+                            lengthSeconds: 5,
                         },
                     ],
                     10,

@@ -1,12 +1,16 @@
+import {
+    type BoundaryOverlapConstraints,
+    boundaryOverlapConstraints,
+    normalizeBoundaryOverlap,
+} from "./architectures/boundaryConstraints";
 import { framesForClip } from "./renderUtils";
-import type { Clip } from "./types";
+import type { BoundaryOut, Clip } from "./types";
 
-// Mirrors MultiClipParallelMerger.DefaultCrossfadeOverlapFrames.
-export const DEFAULT_CROSSFADE_OVERLAP_FRAMES = 8;
-// Mirror Constants.ContinueOverlapDefaultFrames / ContinueOverlapMaxFrames.
-export const DEFAULT_CONTINUE_OVERLAP_FRAMES = 8;
-export const CONTINUE_OVERLAP_MAX_FRAMES = 48;
-export const CONTINUE_OVERLAP_CHOICES = [8, 16, 24, 32, 40, 48] as const;
+export type BoundaryConstraintResolver = (
+    leftClip: Clip,
+    leftClipIdx: number,
+    mode: BoundaryOut,
+) => BoundaryOverlapConstraints;
 
 export interface BoundaryPlan {
     /** Overlap frames removed at each interior boundary i (between clip i and i+1). */
@@ -16,54 +20,24 @@ export interface BoundaryPlan {
 }
 
 /**
- * Frontend mirror of the backend `MultiClipParallelMerger.ResolveContinueWindows`. A "continue"
- * boundary's window is the requested overlap + 1 (an 8n+1 frame count, matching the LTX causal VAE
- * grid), stepped down (… 17, 9, 1) until both adjacent clips keep >=1 core frame — reserving one
- * frame on each neighbour that funds another overlapping boundary of its own.
- */
-const resolveContinueWindows = (
-    frames: number[],
-    cont: boolean[],
-    crossfade: boolean[],
-    requested: number[],
-): number[] => {
-    const windows: number[] = new Array(cont.length).fill(0);
-    for (let i = 0; i < cont.length; i++) {
-        if (!cont[i]) {
-            continue;
-        }
-        let k = (requested[i] ?? DEFAULT_CONTINUE_OVERLAP_FRAMES) + 1;
-        const leftReserve =
-            i > 0 && cont[i - 1]
-                ? windows[i - 1]
-                : i > 0 && crossfade[i - 1]
-                  ? 1
-                  : 0;
-        const rightReserve =
-            i < cont.length - 1 && (cont[i + 1] || crossfade[i + 1]) ? 1 : 0;
-        const kMax = Math.min(
-            frames[i] - 1 - leftReserve,
-            frames[i + 1] - 1 - rightReserve,
-        );
-        while (k > 1 && k > kMax) {
-            k -= 8;
-        }
-        windows[i] = Math.max(1, k);
-    }
-    return windows;
-};
-
-/**
- * Frontend mirror of the backend `ResolveCrossfadePlan` overlap math (a crossfade boundary's
- * requested dissolve clamps to both clips' budgets — a clip funding two crossfades splits its budget
- * evenly; a "continue" boundary takes its resolved overlap+1 window). On this branch dims/fps are
- * timeline-uniform, so the only fallback the frontend can detect is a clip too short to fund its
- * overlaps; the LTX-2 model-family gate is enforced by the backend (authoritative) and is not
- * checked here.
+ * Frontend preview of backend overlap budgeting. A boundary may shrink only
+ * along its architecture's minimum-relative grid; when the minimum still
+ * cannot fit, that boundary becomes a cut.
  */
 export const crossfadePlanForClips = (
     clips: Clip[],
     fps: number,
+    resolveConstraints: BoundaryConstraintResolver = (clip, _index, mode) => {
+        const generic = boundaryOverlapConstraints(null);
+        const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
+        return {
+            ...generic,
+            defaultFrames:
+                mode === "cut" || !Number.isFinite(persisted) || persisted <= 0
+                    ? generic.defaultFrames
+                    : persisted,
+        };
+    },
 ): BoundaryPlan => {
     const count = clips.length;
     const boundaryCount = Math.max(0, count - 1);
@@ -71,14 +45,12 @@ export const crossfadePlanForClips = (
     if (count < 2) {
         return { overlaps: noOverlap(), fallback: false };
     }
-    const crossfade: boolean[] = [];
-    const cont: boolean[] = [];
     let requested = 0;
+    const modes: BoundaryOut[] = [];
     for (let i = 0; i < count - 1; i++) {
         const b = clips[i].boundaryOut ?? "cut";
-        crossfade[i] = b === "crossfade";
-        cont[i] = b === "continue";
-        if (crossfade[i] || cont[i]) {
+        modes[i] = b;
+        if (b === "crossfade" || b === "continue") {
             requested++;
         }
     }
@@ -86,43 +58,53 @@ export const crossfadePlanForClips = (
         return { overlaps: noOverlap(), fallback: false };
     }
     const frames = clips.map((c) => framesForClip(c.duration, fps));
-    const prefs = clips.map(
-        (c) => c.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES,
+    const constraints = clips.map((clip, index) =>
+        resolveConstraints(clip, index, clip.boundaryOut ?? "cut"),
     );
-    const windows = resolveContinueWindows(frames, cont, crossfade, prefs);
-    const crossfadeMaxPerSide: number[] = new Array(count).fill(0);
-    for (let i = 0; i < count; i++) {
-        const fixedTrim =
-            (i > 0 && cont[i - 1] ? windows[i - 1] : 0) +
-            (i < count - 1 && cont[i] ? windows[i] : 0);
-        const crossSides =
-            (i > 0 && crossfade[i - 1] ? 1 : 0) +
-            (i < count - 1 && crossfade[i] ? 1 : 0);
-        if (fixedTrim === 0 && crossSides === 0) {
-            continue;
+    const prefs = clips.map((clip, index) =>
+        normalizeBoundaryOverlap(clip.boundaryOutOverlap, constraints[index]),
+    );
+    const active = (index: number): boolean =>
+        modes[index] === "continue" || modes[index] === "crossfade";
+    const trim = (index: number): number =>
+        modes[index] === "continue"
+            ? prefs[index] + constraints[index].continuityExtraFrames
+            : modes[index] === "crossfade"
+              ? prefs[index]
+              : 0;
+    while (true) {
+        let overBudgetClip = -1;
+        for (let i = 0; i < count; i++) {
+            const left = i > 0 ? trim(i - 1) : 0;
+            const right = i < boundaryCount ? trim(i) : 0;
+            if (left + right > frames[i] - 1) {
+                overBudgetClip = i;
+                break;
+            }
         }
-        const budget = frames[i] - 1 - fixedTrim;
-        if (
-            budget < 0 ||
-            (crossSides > 0 && Math.floor(budget / crossSides) < 1)
-        ) {
+        if (overBudgetClip < 0) break;
+        const candidate =
+            overBudgetClip < boundaryCount && active(overBudgetClip)
+                ? overBudgetClip
+                : overBudgetClip > 0 && active(overBudgetClip - 1)
+                  ? overBudgetClip - 1
+                  : -1;
+        if (candidate < 0) {
             return { overlaps: noOverlap(), fallback: true };
         }
-        if (crossSides > 0) {
-            crossfadeMaxPerSide[i] = Math.floor(budget / crossSides);
+        const reduced = prefs[candidate] - constraints[candidate].frameStep;
+        if (reduced < constraints[candidate].minFrames) {
+            modes[candidate] = "cut";
+            prefs[candidate] = 0;
+        } else {
+            prefs[candidate] = reduced;
         }
     }
-    const overlaps: number[] = [];
-    for (let i = 0; i < count - 1; i++) {
-        overlaps[i] = crossfade[i]
-            ? Math.min(
-                  Math.max(1, prefs[i] ?? DEFAULT_CROSSFADE_OVERLAP_FRAMES),
-                  crossfadeMaxPerSide[i],
-                  crossfadeMaxPerSide[i + 1],
-              )
-            : cont[i]
-              ? windows[i]
-              : 0;
-    }
-    return { overlaps, fallback: false };
+    const overlaps = modes
+        .slice(0, boundaryCount)
+        .map((_mode, index) => trim(index));
+    return {
+        overlaps,
+        fallback: requested > 0 && !modes.some((_mode, index) => active(index)),
+    };
 };

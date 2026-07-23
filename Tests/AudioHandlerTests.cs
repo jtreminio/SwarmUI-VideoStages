@@ -37,7 +37,7 @@ public class AudioHandlerTests
             ImageRefs: [],
             Stages: [stage]);
         VideoStagesSpec spec = new(768, 512, 24, true, [clip]);
-        return Assert.Single(VideoExecutionPlanCompiler.Compile(spec).Clips);
+        return Assert.Single(TestPlanCompiler.Compile(spec).Clips);
     }
 
     private static WorkflowGenerator CreateGenerator(JObject workflow)

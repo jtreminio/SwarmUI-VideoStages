@@ -15,13 +15,6 @@ internal enum AudioBaseSourceKind
     ControlNet
 }
 
-internal enum AudioVoiceReferenceKind
-{
-    None,
-    ClipUpload,
-    IcLoraDriveVideo
-}
-
 /// <summary>
 /// The single configuration source allowed to determine clip duration. ControlNet wins when both
 /// duration flags are present, matching the parser and preventing two frame-count nodes from racing.
@@ -56,22 +49,8 @@ internal sealed record AudioBaseSourcePlan(
     bool HasConfiguredTrack,
     AudioMediaIdentityPlan UploadedMedia);
 
-/// <summary>
-/// A speaker-identity input for LTX audio tokens. It is independent from <see cref="AudioBaseSourcePlan"/>
-/// so a drive-video voice reference can coexist with a native/uploaded locked track.
-/// </summary>
-internal sealed record AudioVoiceReferencePlan(
-    AudioVoiceReferenceKind Kind,
-    bool IsRequested,
-    bool HasConfiguredSample,
-    AudioMediaIdentityPlan Media,
-    int? IcLoraEntryIndex,
-    IcLoraUploadedMediaKind? DriveMediaKind,
-    AudioMediaIdentityPlan FallbackMedia);
-
 internal sealed record AudioLengthPlan(
     AudioLengthOwner Owner,
-    int? ControlNetSourceIndex,
     bool NonHandoffInjectionMatchesAudioLength,
     bool RootHandoffInjectionMatchesAudioLength);
 
@@ -89,20 +68,12 @@ internal sealed record AudioSegmentItemPlan(
 /// </summary>
 internal sealed record AudioSegmentPlan(ImmutableArray<AudioSegmentItemPlan> Items);
 
-internal sealed record AudioReusePlan(
-    bool IsRequested,
-    bool IsEligible,
-    int CaptureStageIndex,
-    int ReuseFromStageIndex);
-
 /// <summary>
 /// Pure projection of one <see cref="ClipSpec"/>'s audio policy. This contains no graph paths and
 /// makes every audio ownership decision before workflow construction begins.
 /// </summary>
 internal sealed record AudioPlan(
     AudioBaseSourcePlan Base,
-    AudioVoiceReferencePlan VoiceReference,
     AudioLengthPlan Length,
     AudioSegmentPlan Segments,
-    AudioReusePlan Reuse,
     ImmutableArray<AudioPlanDiagnostic> Diagnostics);

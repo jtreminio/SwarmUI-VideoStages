@@ -4,7 +4,11 @@ import {
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    mountPromptBox,
+    mountSelect,
+    mountVideoStagesData,
+} from "./__test_helpers__/dom";
 import {
     collectAuthoringEntityIds,
     ensureAuthoringDocumentIdentity,
@@ -40,85 +44,64 @@ const dataJson = (): Record<string, unknown> =>
             .value,
     ) as Record<string, unknown>;
 
+const mountRootDefaults = (): void => {
+    mountSelect("input_videomodel", {
+        value: "ltx-2.3.safetensors",
+        options: ["ltx-2.3.safetensors"],
+    });
+    mountSelect("input_loras", { options: [] });
+    mountSelect("input_sampler", { options: ["euler"] });
+    mountSelect("input_scheduler", { options: ["normal"] });
+    mountSelect("input_refinerupscalemethod", { options: ["pixel-lanczos"] });
+};
+
 describe("versioned authoring document identity", () => {
     beforeEach(() => {
         __resetPersistenceForTests();
         clearUiStateForTests();
         document.body.innerHTML = "";
+        mountRootDefaults();
         mountVideoStagesData({ clips: [] });
         mountPromptBox("");
     });
 
-    it("migrates a legacy array once, serializes all stored entity IDs, and reloads them unchanged", () => {
-        mountVideoStagesData([
+    it.each([
+        ["legacy array", [{ duration: 5, stages: [{ model: "m" }] }]],
+        [
+            "schema v2 document",
             {
-                duration: 5,
-                audioSegments: [
-                    {
-                        source: "audio0",
-                        startSeconds: 0,
-                        trimStartSeconds: 0,
-                        lengthSeconds: 1,
-                    },
-                ],
-                retake: {
-                    startSeconds: 2,
-                    lengthSeconds: 1,
-                    strength: 0.5,
-                },
-                refs: [{ source: "Base", frame: 1 }],
-                stages: [{ model: "m" }],
+                schemaVersion: 2,
+                clips: [{ duration: 5, stages: [{ model: "m" }] }],
             },
-        ]);
-        mountPromptBox("<videoclip[0]>base\n<videoclip[0]:1-2>window");
+        ],
+    ])("rejects a %s instead of silently migrating it", (_label, carrier) => {
+        mountVideoStagesData(carrier);
+        mountPromptBox("<videoclip[0]>must not be attached");
 
-        const migrated = getState();
-        expect(migrated.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);
-        expect(migrated.audioTracks).toEqual([]);
-        const firstIds = collectAuthoringEntityIds(migrated);
-        expect(firstIds).toHaveLength(6);
-        expect(new Set(firstIds).size).toBe(firstIds.length);
+        const state = getState();
 
-        saveState(migrated, { notifyDomChange: false });
-        const stored = dataJson() as {
-            schemaVersion: number;
-            clips: {
-                id: string;
-                audioSegments: { id: string }[];
-                retake: { id: string };
-                refs: { id: string }[];
-                stages: { id: string }[];
-            }[];
-            audioTracks: unknown[];
-        };
-        expect(stored.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);
-        expect(stored.audioTracks).toEqual([]);
-        expect(stored.clips[0].id).toBe(migrated.clips[0].id);
-        expect(stored.clips[0].audioSegments[0].id).toBe(
-            migrated.clips[0].audioSegments[0].id,
-        );
-        expect(stored.clips[0].retake.id).toBe(migrated.clips[0].retake?.id);
-        expect(stored.clips[0].refs[0].id).toBe(migrated.clips[0].refs[0].id);
-        expect(stored.clips[0].stages[0].id).toBe(
-            migrated.clips[0].stages[0].id,
-        );
-
-        __resetPersistenceForTests();
-        const reloaded = getState();
-        expect(collectAuthoringEntityIds(reloaded)).toEqual(firstIds);
-        expect(reloaded.clips[0].promptWindows[0].id).toBe(
-            migrated.clips[0].promptWindows[0].id,
-        );
+        expect(state.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);
+        expect(state.clips).toEqual([]);
+        expect(state.audioTracks).toEqual([]);
+        expect(collectAuthoringEntityIds(state)).toEqual([]);
     });
 
-    it("derives the same legacy IDs across a prompt-only cache invalidation before save", () => {
-        mountVideoStagesData([
-            {
-                duration: 3,
-                refs: [{ source: "Base", frame: 1 }],
-                stages: [{ model: "m" }],
-            },
-        ]);
+    it("derives the same missing v3 IDs across a prompt-only cache invalidation before save", () => {
+        mountVideoStagesData({
+            schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+            clips: [
+                {
+                    duration: 3,
+                    refs: [{ source: "Base", frame: 1 }],
+                    stages: [
+                        {
+                            model: "ltx-2.3.safetensors",
+                            modelProfileId: "ltx-2.3",
+                        },
+                    ],
+                },
+            ],
+        });
         const prompt = mountPromptBox(
             "<videoclip[0]>first\n<videoclip[0]:0-1>detail one",
         );
@@ -136,14 +119,20 @@ describe("versioned authoring document identity", () => {
         ]);
     });
 
-    it("durably canonicalizes whitespace and globally duplicate v2 carrier IDs on a no-op save", () => {
+    it("durably canonicalizes whitespace and globally duplicate v3 carrier IDs on a no-op save", () => {
         mountVideoStagesData({
             schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
             clips: [
                 {
                     id: " clip-a ",
                     duration: 3,
-                    stages: [{ id: "duplicate", model: "m" }],
+                    stages: [
+                        {
+                            id: "duplicate",
+                            model: "ltx-2.3.safetensors",
+                            modelProfileId: "ltx-2.3",
+                        },
+                    ],
                     refs: [{ id: "duplicate", source: "Base", frame: 1 }],
                     audioSegments: [],
                     retake: null,

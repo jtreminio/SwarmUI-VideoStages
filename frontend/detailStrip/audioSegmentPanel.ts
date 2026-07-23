@@ -19,6 +19,7 @@ import {
 } from "../detailWidgets";
 import { setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
+import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 const GROUP_AUDIOSEG = "vstdock_audioseg";
@@ -211,6 +212,13 @@ export const buildAudioSegmentBody = (
                 "How long this segment plays on the clip, in seconds.",
             ),
         );
+        const decision = ctx
+            .capabilities()
+            .forClip(clip)
+            .decision("audioSegments");
+        if (!decision.supported) {
+            disableCapabilityControls(row, decision, [".vst-detail-delete"]);
+        }
         body.appendChild(row);
     });
 

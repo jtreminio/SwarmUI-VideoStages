@@ -1,390 +1,50 @@
-import { collectAuthoringEntityIds } from "./identity";
+import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
+import {
+    planArchitectureConversion,
+    resolveArchitectureRetarget,
+} from "./architectures/conversion/plan";
+import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
+import {
+    ARCHITECTURE_CONVERSION,
+    ARCHITECTURE_CONVERSION_WITH_SELECTION,
+    addBefore,
+    clone,
+    combineImpacts,
+    failure,
+    findClip,
+    findTrack,
+    hasOwn,
+    invalidNewEntity,
+    MOVE_STRUCTURE,
+    moveBefore,
+    patchById,
+    REMOVE_STRUCTURE,
+    removeById,
+    STRUCTURE,
+    success,
+    VALUE,
+    VALUE_CAPABILITIES,
+} from "./documentCommands/helpers";
 import type {
-    CanonicalAudioSegment,
-    CanonicalAudioTrack,
-    CanonicalAudioTrackSpan,
-    CanonicalClip,
-    CanonicalPromptWindow,
-    CanonicalRefImage,
-    CanonicalRetake,
-    CanonicalStage,
-    CanonicalVideoStagesConfig,
-} from "./types";
+    ChangeImpact,
+    CommandFailure,
+    DocumentCommand,
+    DocumentCommandContext,
+    DocumentCommandResult,
+} from "./documentCommands/types";
+import type { CanonicalClip, CanonicalVideoStagesConfig } from "./types";
 
-export type ChangeImpact = "value" | "structure" | "selection" | "capabilities";
-
-export type CommandFailure =
-    | "missing-target"
-    | "duplicate-id"
-    | "invalid-id"
-    | "retake-already-exists";
-
-export interface DocumentCommandResult {
-    document: CanonicalVideoStagesConfig;
-    applied: boolean;
-    impacts: readonly ChangeImpact[];
-    failure?: CommandFailure;
-}
-
-type RootSettingsPatch = Partial<
-    Pick<
-        CanonicalVideoStagesConfig,
-        | "schemaVersion"
-        | "width"
-        | "height"
-        | "fps"
-        | "dimsExplicit"
-        | "fpsExplicit"
-    >
->;
-
-type ClipPatch = Partial<
-    Omit<
-        CanonicalClip,
-        "id" | "audioSegments" | "promptWindows" | "retake" | "refs" | "stages"
-    >
->;
-type StagePatch = Partial<Omit<CanonicalStage, "id">>;
-type RefPatch = Partial<Omit<CanonicalRefImage, "id">>;
-type AudioSegmentPatch = Partial<Omit<CanonicalAudioSegment, "id">>;
-type PromptWindowPatch = Partial<Omit<CanonicalPromptWindow, "id">>;
-type RetakePatch = Partial<Omit<CanonicalRetake, "id">>;
-type AudioTrackPatch = Partial<Omit<CanonicalAudioTrack, "id" | "spans">>;
-type AudioSpanPatch = Partial<Omit<CanonicalAudioTrackSpan, "id">>;
-
-export type DocumentCommand =
-    | { type: "batch"; commands: readonly DocumentCommand[] }
-    | { type: "root.patch"; patch: RootSettingsPatch }
-    | {
-          type: "clip.add";
-          clip: CanonicalClip;
-          beforeClipId?: string | null;
-      }
-    | { type: "clip.remove"; clipId: string }
-    | {
-          type: "clip.move";
-          clipId: string;
-          beforeClipId: string | null;
-      }
-    | { type: "clip.patch"; clipId: string; patch: ClipPatch }
-    | {
-          type: "stage.add";
-          clipId: string;
-          stage: CanonicalStage;
-          beforeStageId?: string | null;
-      }
-    | { type: "stage.remove"; clipId: string; stageId: string }
-    | {
-          type: "stage.move";
-          clipId: string;
-          stageId: string;
-          beforeStageId: string | null;
-      }
-    | {
-          type: "stage.patch";
-          clipId: string;
-          stageId: string;
-          patch: StagePatch;
-      }
-    | {
-          type: "ref.add";
-          clipId: string;
-          ref: CanonicalRefImage;
-          beforeRefId?: string | null;
-      }
-    | { type: "ref.remove"; clipId: string; refId: string }
-    | {
-          type: "ref.move";
-          clipId: string;
-          refId: string;
-          beforeRefId: string | null;
-      }
-    | {
-          type: "ref.patch";
-          clipId: string;
-          refId: string;
-          patch: RefPatch;
-      }
-    | {
-          type: "audio-segment.add";
-          clipId: string;
-          segment: CanonicalAudioSegment;
-          beforeSegmentId?: string | null;
-      }
-    | {
-          type: "audio-segment.remove";
-          clipId: string;
-          segmentId: string;
-      }
-    | {
-          type: "audio-segment.move";
-          clipId: string;
-          segmentId: string;
-          beforeSegmentId: string | null;
-      }
-    | {
-          type: "audio-segment.patch";
-          clipId: string;
-          segmentId: string;
-          patch: AudioSegmentPatch;
-      }
-    | {
-          type: "prompt-window.add";
-          clipId: string;
-          window: CanonicalPromptWindow;
-          beforeWindowId?: string | null;
-      }
-    | {
-          type: "prompt-window.remove";
-          clipId: string;
-          windowId: string;
-      }
-    | {
-          type: "prompt-window.move";
-          clipId: string;
-          windowId: string;
-          beforeWindowId: string | null;
-      }
-    | {
-          type: "prompt-window.patch";
-          clipId: string;
-          windowId: string;
-          patch: PromptWindowPatch;
-      }
-    | { type: "retake.add"; clipId: string; retake: CanonicalRetake }
-    | {
-          type: "retake.remove";
-          clipId: string;
-          retakeId: string;
-      }
-    | {
-          type: "retake.patch";
-          clipId: string;
-          retakeId: string;
-          patch: RetakePatch;
-      }
-    | {
-          type: "audio-track.add";
-          track: CanonicalAudioTrack;
-          beforeTrackId?: string | null;
-      }
-    | { type: "audio-track.remove"; trackId: string }
-    | {
-          type: "audio-track.move";
-          trackId: string;
-          beforeTrackId: string | null;
-      }
-    | {
-          type: "audio-track.patch";
-          trackId: string;
-          patch: AudioTrackPatch;
-      }
-    | {
-          type: "audio-span.add";
-          trackId: string;
-          span: CanonicalAudioTrackSpan;
-          beforeSpanId?: string | null;
-      }
-    | {
-          type: "audio-span.remove";
-          trackId: string;
-          spanId: string;
-      }
-    | {
-          type: "audio-span.move";
-          trackId: string;
-          spanId: string;
-          beforeSpanId: string | null;
-      }
-    | {
-          type: "audio-span.patch";
-          trackId: string;
-          spanId: string;
-          patch: AudioSpanPatch;
-      };
-
-const VALUE: readonly ChangeImpact[] = ["value"];
-const VALUE_CAPABILITIES: readonly ChangeImpact[] = ["value", "capabilities"];
-const STRUCTURE: readonly ChangeImpact[] = ["structure", "capabilities"];
-const REMOVE_STRUCTURE: readonly ChangeImpact[] = [
-    "structure",
-    "selection",
-    "capabilities",
-];
-const MOVE_STRUCTURE: readonly ChangeImpact[] = ["structure"];
-const IMPACT_ORDER: readonly ChangeImpact[] = [
-    "value",
-    "structure",
-    "selection",
-    "capabilities",
-];
-
-const clone = <T>(value: T): T => structuredClone(value);
-
-const normalizedId = (value: unknown): string | null => {
-    if (typeof value !== "string") {
-        return null;
-    }
-    const id = value.trim();
-    return id.length > 0 ? id : null;
-};
-
-const findClip = (
-    document: CanonicalVideoStagesConfig,
-    clipId: string,
-): CanonicalClip | null =>
-    document.clips.find((clip) => clip.id === clipId) ?? null;
-
-const findTrack = (
-    document: CanonicalVideoStagesConfig,
-    trackId: string,
-): CanonicalAudioTrack | null =>
-    document.audioTracks.find((track) => track.id === trackId) ?? null;
-
-const candidateIds = (
-    entity:
-        | CanonicalClip
-        | CanonicalStage
-        | CanonicalRefImage
-        | CanonicalAudioSegment
-        | CanonicalPromptWindow
-        | CanonicalRetake
-        | CanonicalAudioTrack
-        | CanonicalAudioTrackSpan,
-): string[] => {
-    if ("stages" in entity && "refs" in entity) {
-        return [
-            entity.id,
-            ...entity.stages.map((stage) => stage.id),
-            ...entity.refs.map((ref) => ref.id),
-            ...entity.audioSegments.map((segment) => segment.id),
-            ...entity.promptWindows.map((window) => window.id),
-            ...(entity.retake ? [entity.retake.id] : []),
-        ];
-    }
-    if ("spans" in entity) {
-        return [entity.id, ...entity.spans.map((span) => span.id)];
-    }
-    return [entity.id];
-};
-
-const validateNewEntity = (
-    document: CanonicalVideoStagesConfig,
-    entity: Parameters<typeof candidateIds>[0],
-): CommandFailure | null => {
-    const ids = candidateIds(entity);
-    if (ids.some((id) => normalizedId(id) !== id)) {
-        return "invalid-id";
-    }
-    if (new Set(ids).size !== ids.length) {
-        return "duplicate-id";
-    }
-    const existing = new Set(collectAuthoringEntityIds(document));
-    return ids.some((id) => existing.has(id)) ? "duplicate-id" : null;
-};
-
-const addBefore = <T extends { id: string }>(
-    items: T[],
-    item: T,
-    beforeId?: string | null,
-): boolean => {
-    if (beforeId == null) {
-        items.push(item);
-        return true;
-    }
-    const beforeIndex = items.findIndex(
-        (candidate) => candidate.id === beforeId,
-    );
-    if (beforeIndex < 0) {
-        return false;
-    }
-    items.splice(beforeIndex, 0, item);
-    return true;
-};
-
-const removeById = <T extends { id: string }>(
-    items: T[],
-    id: string,
-): boolean => {
-    const index = items.findIndex((item) => item.id === id);
-    if (index < 0) {
-        return false;
-    }
-    items.splice(index, 1);
-    return true;
-};
-
-const moveBefore = <T extends { id: string }>(
-    items: T[],
-    id: string,
-    beforeId: string | null,
-): boolean => {
-    const fromIndex = items.findIndex((item) => item.id === id);
-    if (fromIndex < 0) {
-        return false;
-    }
-    if (beforeId !== null && !items.some((item) => item.id === beforeId)) {
-        return false;
-    }
-    if (id === beforeId) {
-        return true;
-    }
-
-    const [item] = items.splice(fromIndex, 1);
-    if (beforeId === null) {
-        items.push(item);
-        return true;
-    }
-    const toIndex = items.findIndex((candidate) => candidate.id === beforeId);
-    items.splice(toIndex, 0, item);
-    return true;
-};
-
-const patchById = <T extends { id: string }>(
-    items: T[],
-    id: string,
-    patch: Partial<Omit<T, "id">>,
-): boolean => {
-    const entity = items.find((item) => item.id === id);
-    if (!entity) {
-        return false;
-    }
-    Object.assign(entity, clone(patch), { id });
-    return true;
-};
-
-const success = (
-    document: CanonicalVideoStagesConfig,
-    impacts: readonly ChangeImpact[],
-): DocumentCommandResult => ({ document, applied: true, impacts });
-
-const failure = (
-    document: CanonicalVideoStagesConfig,
-    reason: CommandFailure,
-): DocumentCommandResult => ({
-    document,
-    applied: false,
-    impacts: [],
-    failure: reason,
-});
-
-const invalidNewEntity = (
-    document: CanonicalVideoStagesConfig,
-    entity: Parameters<typeof candidateIds>[0],
-): DocumentCommandResult | null => {
-    const reason = validateNewEntity(document, entity);
-    return reason ? failure(document, reason) : null;
-};
+export { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
+export type {
+    ChangeImpact,
+    CommandFailure,
+    DocumentCommand,
+    DocumentCommandContext,
+    DocumentCommandResult,
+} from "./documentCommands/types";
 
 const assertNever = (command: never): never => {
     throw new Error(`Unhandled document command: ${JSON.stringify(command)}`);
-};
-
-const combineImpacts = (
-    impacts: readonly (readonly ChangeImpact[])[],
-): readonly ChangeImpact[] => {
-    const included = new Set(impacts.flat());
-    return IMPACT_ORDER.filter((impact) => included.has(impact));
 };
 
 /**
@@ -396,6 +56,7 @@ const combineImpacts = (
 export const reduceDocumentCommand = (
     source: CanonicalVideoStagesConfig,
     command: DocumentCommand,
+    context: DocumentCommandContext = { architectureCatalog: null },
 ): DocumentCommandResult => {
     const document = clone(source);
 
@@ -404,7 +65,7 @@ export const reduceDocumentCommand = (
             let current = document;
             const impacts: (readonly ChangeImpact[])[] = [];
             for (const child of command.commands) {
-                const result = reduceDocumentCommand(current, child);
+                const result = reduceDocumentCommand(current, child, context);
                 if (!result.applied) {
                     return failure(
                         clone(source),
@@ -423,68 +84,230 @@ export const reduceDocumentCommand = (
         case "clip.add": {
             const invalid = invalidNewEntity(document, command.clip);
             if (invalid) return invalid;
+            const addedClip = clone(command.clip);
             if (
-                !addBefore(
-                    document.clips,
-                    clone(command.clip),
-                    command.beforeClipId,
+                !reconcileClipArchitectureIdentity(
+                    addedClip,
+                    context.architectureCatalog,
                 )
             ) {
+                return failure(document, "architecture-invariant");
+            }
+            if (!addBefore(document.clips, addedClip, command.beforeClipId)) {
                 return failure(clone(source), "missing-target");
             }
             return success(document, STRUCTURE);
         }
-        case "clip.remove":
-            return removeById(document.clips, command.clipId)
-                ? success(document, REMOVE_STRUCTURE)
-                : failure(document, "missing-target");
-        case "clip.move":
-            return moveBefore(
-                document.clips,
-                command.clipId,
-                command.beforeClipId,
-            )
-                ? success(document, MOVE_STRUCTURE)
-                : failure(document, "missing-target");
-        case "clip.patch":
-            return patchById(document.clips, command.clipId, command.patch)
-                ? success(document, VALUE_CAPABILITIES)
-                : failure(document, "missing-target");
+        case "clip.remove": {
+            if (!removeById(document.clips, command.clipId)) {
+                return failure(document, "missing-target");
+            }
+            return success(document, REMOVE_STRUCTURE);
+        }
+        case "clip.move": {
+            if (
+                !moveBefore(
+                    document.clips,
+                    command.clipId,
+                    command.beforeClipId,
+                )
+            ) {
+                return failure(document, "missing-target");
+            }
+            return success(document, MOVE_STRUCTURE);
+        }
+        case "clip.patch": {
+            if (
+                hasOwn(command.patch, "architecture") ||
+                hasOwn(command.patch, "modelProfileId")
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            const clip = findClip(document, command.clipId);
+            if (!clip) {
+                return failure(document, "missing-target");
+            }
+            const candidate = clone(clip);
+            Object.assign(candidate, clone(command.patch), { id: clip.id });
+            if (
+                hasOwn(command.patch, "sourceVideo") &&
+                !reconcileClipArchitectureIdentity(
+                    candidate,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            document.clips[document.clips.indexOf(clip)] = candidate;
+            return success(document, VALUE_CAPABILITIES);
+        }
+        case "clip.convert-architecture": {
+            const clipIndex = document.clips.findIndex(
+                (clip) => clip.id === command.clipId,
+            );
+            const clip = document.clips[clipIndex];
+            const target = command.target;
+            if (!clip) {
+                return failure(document, "missing-target");
+            }
+            const conversion = planArchitectureConversion(
+                clip,
+                target,
+                context.architectureCatalog,
+            );
+            if (!conversion) {
+                return failure(document, "invalid-architecture-conversion");
+            }
+            const converted = conversion.clip as CanonicalClip;
+            if (
+                !reconcileClipArchitectureIdentity(
+                    converted,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(document, "invalid-architecture-conversion");
+            }
+            document.clips[clipIndex] = converted;
+            forceCrossArchitectureCutsForConversion(document.clips);
+            return success(
+                document,
+                conversion.selectionAffected
+                    ? ARCHITECTURE_CONVERSION_WITH_SELECTION
+                    : ARCHITECTURE_CONVERSION,
+            );
+        }
         case "stage.add": {
             const clip = findClip(document, command.clipId);
             if (!clip) return failure(document, "missing-target");
             const invalid = invalidNewEntity(document, command.stage);
             if (invalid) return invalid;
+            const candidate = clone(clip);
             if (
                 !addBefore(
-                    clip.stages,
+                    candidate.stages,
                     clone(command.stage),
                     command.beforeStageId,
                 )
             ) {
                 return failure(clone(source), "missing-target");
             }
+            if (
+                !reconcileClipArchitectureIdentity(
+                    candidate,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            document.clips[document.clips.indexOf(clip)] = candidate;
             return success(document, STRUCTURE);
+        }
+        case "stage.retarget-model": {
+            const clip = findClip(document, command.clipId);
+            const stage = clip?.stages.find(
+                (candidate) => candidate.id === command.stageId,
+            );
+            if (!clip || !stage) {
+                return failure(document, "missing-target");
+            }
+            const target = resolveArchitectureRetarget(
+                command.target,
+                context.architectureCatalog,
+            );
+            if (!target) {
+                return failure(document, "architecture-invariant");
+            }
+            const candidate = clone(clip);
+            const candidateStage = candidate.stages.find(
+                (entry) => entry.id === command.stageId,
+            );
+            if (!candidateStage) {
+                return failure(document, "missing-target");
+            }
+            candidateStage.model = target.model;
+            candidateStage.modelProfileId = target.modelProfileId;
+            if (
+                !reconcileClipArchitectureIdentity(
+                    candidate,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            document.clips[document.clips.indexOf(clip)] = candidate;
+            return success(document, VALUE_CAPABILITIES);
         }
         case "stage.remove": {
             const clip = findClip(document, command.clipId);
-            return clip && removeById(clip.stages, command.stageId)
-                ? success(document, REMOVE_STRUCTURE)
-                : failure(document, "missing-target");
+            if (!clip) {
+                return failure(document, "missing-target");
+            }
+            const candidate = clone(clip);
+            if (!removeById(candidate.stages, command.stageId)) {
+                return failure(document, "missing-target");
+            }
+            if (
+                !reconcileClipArchitectureIdentity(
+                    candidate,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            document.clips[document.clips.indexOf(clip)] = candidate;
+            return success(document, REMOVE_STRUCTURE);
         }
         case "stage.move": {
             const clip = findClip(document, command.clipId);
-            return clip &&
-                moveBefore(clip.stages, command.stageId, command.beforeStageId)
-                ? success(document, MOVE_STRUCTURE)
-                : failure(document, "missing-target");
+            if (!clip) {
+                return failure(document, "missing-target");
+            }
+            const candidate = clone(clip);
+            if (
+                !moveBefore(
+                    candidate.stages,
+                    command.stageId,
+                    command.beforeStageId,
+                )
+            ) {
+                return failure(document, "missing-target");
+            }
+            if (
+                !reconcileClipArchitectureIdentity(
+                    candidate,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            document.clips[document.clips.indexOf(clip)] = candidate;
+            return success(document, MOVE_STRUCTURE);
         }
         case "stage.patch": {
             const clip = findClip(document, command.clipId);
-            return clip &&
-                patchById(clip.stages, command.stageId, command.patch)
-                ? success(document, VALUE_CAPABILITIES)
-                : failure(document, "missing-target");
+            if (
+                hasOwn(command.patch, "model") ||
+                hasOwn(command.patch, "modelProfileId")
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            if (!clip) {
+                return failure(document, "missing-target");
+            }
+            const candidate = clone(clip);
+            if (!patchById(candidate.stages, command.stageId, command.patch)) {
+                return failure(document, "missing-target");
+            }
+            if (
+                !reconcileClipArchitectureIdentity(
+                    candidate,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(document, "architecture-invariant");
+            }
+            document.clips[document.clips.indexOf(clip)] = candidate;
+            return success(document, VALUE_CAPABILITIES);
         }
         case "ref.add": {
             const clip = findClip(document, command.clipId);

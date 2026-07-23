@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "./architectures/policy";
 import {
     clamp,
     RETAKE_DEFAULT_DURATION,
@@ -26,7 +27,9 @@ export interface TimelineRetakeTrack {
  * under the clip region. The degenerate single-span case of the shared
  * window-track machinery — the span index is always 0.
  */
-export const createTimelineRetakeTrack = (): TimelineRetakeTrack =>
+export const createTimelineRetakeTrack = (
+    getCapabilities?: () => CapabilityViewResolver,
+): TimelineRetakeTrack =>
     createWindowTrack({
         routeId: "retake",
         priority: 50,
@@ -51,7 +54,13 @@ export const createTimelineRetakeTrack = (): TimelineRetakeTrack =>
                       trim: 0,
                   }
                 : null,
-        canCreate: (clip) => !clip.retake,
+        canEdit: (clip) =>
+            getCapabilities?.().forClip(clip).decision("retake").supported ??
+            true,
+        canCreate: (clip) =>
+            !clip.retake &&
+            (getCapabilities?.().forClip(clip).decision("retake").supported ??
+                true),
         moveTargetStart: (clip, _itemIdx, press, desiredStart) => {
             const clipDur = clipDurationOf(clip);
             const length = Math.min(press.length, clipDur);

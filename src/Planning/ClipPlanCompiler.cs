@@ -1,5 +1,8 @@
 namespace VideoStages.Planning;
 
+using VideoStages.Architectures;
+using VideoStages.Architectures.Abstractions;
+
 /// <summary>Compiles one executable clip and its ordered stage chain.</summary>
 internal static class ClipPlanCompiler
 {
@@ -10,43 +13,29 @@ internal static class ClipPlanCompiler
         ClipInputKind clipInput = sourced
             ? ClipInputKind.SourceVideo
             : context.IsTextToVideo ? ClipInputKind.EmptyLatent : ClipInputKind.RootMedia;
-        PromptRelayPlan promptRelay = PromptRelayPlanCompiler.Compile(
-            clip,
-            context.FramesPerSecond);
         List<StagePlan> stages = [];
         for (int i = 0; i < (clip.Stages?.Count ?? 0); i++)
         {
             StageSpec stage = clip.Stages[i];
             bool isClipTerminal = i == clip.Stages.Count - 1;
+            ResolvedVideoModel resolvedModel = null;
+            context.Architecture?.StageModels.TryGetValue(stage.ClipStageRawIndex, out resolvedModel);
             stages.Add(new StagePlan(
                 stage.Id,
                 stage.ClipStageIndex,
                 stage.ClipStageRawIndex,
                 ResolveStageInput(clipInput, i),
                 stage.IsPassthrough,
-                new StageCorePlan(
-                    stage.Model,
-                    stage.Control,
-                    stage.Steps,
-                    stage.CfgScale,
-                    stage.Sampler,
-                    stage.Scheduler,
-                    stage.ControlNetStrength,
-                    stage.ImageRefWasExplicit),
-                GuideReferencePlanCompiler.Compile(stage.ImageReference),
-                CompileUpscale(stage),
-                NormalLoraPlanCompiler.Compile(clip, stage),
-                IcLoraPlanCompiler.Compile(clip, stage),
-                CompileRetake(stage.RetakeWindow),
-                promptRelay,
-                ImageReferencePlanCompiler.Compile(clip, stage),
-                CompileAudioAction(audio, stage),
+                RequireStagePayload(context.ArchitecturePayload, stage),
                 new StageOutputPlan(
                     IsTimelineTerminal: isClipTerminal && context.IsLastClip && !context.IsMultiClip,
                     context.FirstStageOrdinal + i < context.TotalStageCount - 1
                         ? IntermediateOutputPolicy.ControlledByHostSetting
                         : IntermediateOutputPolicy.NotEligible,
-                    clip.SaveAudioTrack)));
+                    clip.SaveAudioTrack))
+            {
+                ResolvedModel = resolvedModel,
+            });
         }
 
         return new ClipPlan(
@@ -60,7 +49,11 @@ internal static class ClipPlanCompiler
                 context.Height,
                 context.FramesPerSecond),
             Array.AsReadOnly(stages.ToArray()),
-            audio);
+            audio)
+        {
+            Architecture = context.Architecture?.Architecture,
+            ArchitecturePayload = context.ArchitecturePayload,
+        };
     }
 
     private static SourceVideoPlan CompileSourceVideo(
@@ -91,62 +84,30 @@ internal static class ClipPlanCompiler
         };
     }
 
-    private static StageUpscalePlan CompileUpscale(StageSpec stage)
+    private static IArchitectureStagePayload RequireStagePayload(
+        IArchitectureClipPayload clipPayload,
+        StageSpec stage)
     {
-        StageUpscaleMode mode;
-        if (stage.Upscale == 1)
+        // Invalid plans deliberately remain inspectable with diagnostics. Runtime execution rejects
+        // those plans before it can reach a stage with no architecture compilation.
+        if (clipPayload is null)
         {
-            mode = StageUpscaleMode.None;
+            return null;
         }
-        else if (stage.IsPixelUpscale)
+        if (clipPayload is not IArchitectureStagePayloadSource source)
         {
-            mode = StageUpscaleMode.Pixel;
+            throw new InvalidOperationException(
+                $"Clip stage {stage.ClipStageRawIndex} has no architecture stage payload source.");
         }
-        else if (stage.IsModelUpscale)
+        IArchitectureStagePayload payload = source.GetStagePayload(stage.ClipStageRawIndex);
+        if (payload.ArchitectureId != clipPayload.ArchitectureId)
         {
-            mode = StageUpscaleMode.Model;
+            throw new InvalidOperationException(
+                $"Clip stage {stage.ClipStageRawIndex} payload architecture "
+                    + $"'{payload.ArchitectureId}' does not match clip architecture "
+                    + $"'{clipPayload.ArchitectureId}'.");
         }
-        else if (stage.IsLatentUpscale)
-        {
-            mode = StageUpscaleMode.Latent;
-        }
-        else if (stage.IsLatentModelUpscale)
-        {
-            mode = StageUpscaleMode.LatentModel;
-        }
-        else
-        {
-            mode = StageUpscaleMode.Unsupported;
-        }
-
-        string raw = stage.UpscaleMethod?.Trim() ?? "";
-        int separator = raw.IndexOf('-');
-        string methodName = separator >= 0 && separator < raw.Length - 1
-            ? raw[(separator + 1)..]
-            : raw;
-        return new StageUpscalePlan(mode, stage.Upscale, raw, methodName);
-    }
-
-    private static RetakePlan CompileRetake(RetakeWindowSpec retake) => retake is null
-        ? null
-        : new RetakePlan(
-            retake.StartFrame,
-            retake.LengthFrames,
-            retake.Strength);
-
-    private static StageAudioAction CompileAudioAction(AudioPlan audio, StageSpec stage)
-    {
-        if (!audio.Reuse.IsEligible)
-        {
-            return StageAudioAction.None;
-        }
-        if (stage.ClipStageIndex == audio.Reuse.CaptureStageIndex)
-        {
-            return StageAudioAction.CaptureForReuse;
-        }
-        return stage.ClipStageIndex >= audio.Reuse.ReuseFromStageIndex
-            ? StageAudioAction.ReuseCaptured
-            : StageAudioAction.None;
+        return payload;
     }
 }
 
@@ -158,4 +119,6 @@ internal sealed record ClipPlanCompilationContext(
     bool IsLastClip,
     bool IsMultiClip,
     int TotalStageCount,
-    int FirstStageOrdinal);
+    int FirstStageOrdinal,
+    ClipArchitectureAssignment Architecture = null,
+    IArchitectureClipPayload ArchitecturePayload = null);

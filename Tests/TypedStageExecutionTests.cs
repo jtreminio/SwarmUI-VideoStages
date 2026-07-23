@@ -1,6 +1,6 @@
 using VideoStages.Planning;
 using VideoStages.Execution;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Ltx2;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -66,19 +66,19 @@ public class TypedStageExecutionTests
     {
         Assert.Null(
             typeof(LtxStageExecutor).Assembly.GetType(
-                "VideoStages.LTX2.PromptWindowTiler",
+                "VideoStages.Architectures.Ltx2.PromptWindowTiler",
                 throwOnError: false));
     }
 
     [Fact]
-    public void Ltx_stage_length_resolution_accepts_the_typed_audio_length_plan()
+    public void Ltx_stage_length_resolution_accepts_the_architecture_resolved_clip_plan()
     {
         System.Reflection.MethodInfo resolver = typeof(LtxStageLatentAudioFactory).GetMethod(
             "TryResolveControlNetLengthFrames",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 
         Assert.NotNull(resolver);
-        Assert.Equal(typeof(AudioLengthPlan), Assert.Single(resolver.GetParameters()).ParameterType);
+        Assert.Equal(typeof(ClipPlan), Assert.Single(resolver.GetParameters()).ParameterType);
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class TypedStageExecutionTests
         Assert.NotNull(retake);
         Assert.Equal(typeof(RetakePlan), retake.GetParameters()[2].ParameterType);
         Assert.NotNull(audioLength);
-        Assert.Equal(typeof(AudioLengthPlan), Assert.Single(audioLength.GetParameters()).ParameterType);
+        Assert.Equal(typeof(ClipPlan), Assert.Single(audioLength.GetParameters()).ParameterType);
         Assert.DoesNotContain(
             new[]
             {

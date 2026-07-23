@@ -1,4 +1,4 @@
-using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -8,11 +8,8 @@ namespace VideoStages;
 /// Owns the timeline loop while focused collaborators execute root setup and individual clips.
 /// </summary>
 internal sealed class StageSequenceRunner(
-    WorkflowGenerator g,
     TimelineAssembler timelineAssembler,
-    StageSequenceRootSetup rootSetup,
-    StageGuideReferenceState guideReferences,
-    StageClipExecutor clipExecutor)
+    ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
 {
     public void Run(
         VideoExecutionPlan plan,
@@ -24,34 +21,39 @@ internal sealed class StageSequenceRunner(
         IReadOnlyList<ClipPlan> plannedClips = plan.Clips;
         bool parallelMultiClip = plannedClips.Count > 1;
 
-        guideReferences.Reset();
-        StageSequenceRootSources rootSources = rootSetup.Prepare(
-            preparedAudioSources,
-            rootPolicy);
-        using StageHostExecutionScope hostScope = new(g, plan, parallelMultiClip);
         TimelineAssemblySession assembly = timelineAssembler.Begin(plan);
+        using ArchitectureRuntimeDispatcher runtimeDispatcher =
+            runtimeFactories.CreateDispatcher(new(
+                plan,
+                preparedAudioSources,
+                rootPolicy,
+                assembly));
 
         ClipPlan previousClip = null;
-        WGNodeData previousClipOutput = null;
-        List<RuntimeArtifact> clipOutputs = [];
+        DecodedClipArtifact previousClipOutput = null;
+        List<DecodedClipArtifact> clipOutputs = [];
         for (int clipIndex = 0; clipIndex < plannedClips.Count; clipIndex++)
         {
             ClipPlan plannedClip = plannedClips[clipIndex];
-            RuntimeArtifact output = clipExecutor.Execute(new(
+            bool exposesPrevious = clipIndex > 0
+                && plan.Boundaries[clipIndex - 1].Effective != BoundaryExecutionMode.Cut
+                && previousClip?.Architecture.Id == plannedClip.Architecture.Id;
+            ArchitectureClipRuntimeContext runtimeContext = new(
                 plannedClip,
                 plan,
                 clipIndex,
                 parallelMultiClip,
-                previousClip,
-                previousClipOutput,
-                rootSources,
+                HasPreviousTimelineClip: clipIndex > 0,
+                PreviousClip: exposesPrevious ? previousClip : null,
+                PreviousClipOutput: exposesPrevious ? previousClipOutput : null,
+                preparedAudioSources,
                 assembly,
-                hostScope,
-                rootPolicy));
+                rootPolicy);
+            DecodedClipArtifact output = runtimeDispatcher.Execute(runtimeContext);
             if (parallelMultiClip)
             {
                 clipOutputs.Add(output);
-                previousClipOutput = output.Media.ToWGNodeData(g);
+                previousClipOutput = output;
             }
             previousClip = plannedClip;
         }

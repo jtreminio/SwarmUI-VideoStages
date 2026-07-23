@@ -6,7 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Ltx2;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -23,7 +23,11 @@ public class AudioInjectionTests
         IReadOnlyList<(double Start, double End)> preserveWindows = null) =>
         new LtxAudioInjector(
             generator,
-            Runner.GetRootVideoStageResizer(generator))
+            new RootVideoStageResizer(
+                generator,
+                new RootVideoStageHandoff(
+                    generator,
+                    new StageRefStore(generator))))
         .TryInject(audio, matchVideoLengthToAudio, preserveWindows);
 
     // Local override of Fixtures.MakeStage: pins Steps=10 and ImageReference="Generated" for audio-injection tests.
@@ -366,7 +370,7 @@ public class AudioInjectionTests
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
-        Assert.Contains("supports LTX-Video timelines only", error.Message);
+        Assert.Contains("no executable clips", error.Message);
     }
 
     [Fact]

@@ -1,4 +1,10 @@
-import { appendHelp, buildNumber, buildSelect } from "../detailWidgets";
+import {
+    appendHelp,
+    buildNumber,
+    buildOptionSelect,
+    type OptionSpec,
+} from "../detailWidgets";
+import { preserveSelectedOption } from "../selectOption";
 import { stageChipLabel } from "../timelineDetail";
 import type { RootDefaults, Stage } from "../types";
 import type { DetailStripContext } from "./context";
@@ -27,7 +33,7 @@ export const buildStageLorasSection = (
     );
     section.appendChild(label);
 
-    if (defaults.loraValues.length === 0) {
+    if (defaults.loraValues.length === 0 && stage.loras.length === 0) {
         const empty = document.createElement("small");
         empty.className = "vst-audio-field-hint";
         empty.textContent = "(no LoRAs available)";
@@ -40,20 +46,25 @@ export const buildStageLorasSection = (
     stage.loras.forEach((lora, index) => {
         const row = document.createElement("div");
         row.className = "vst-stage-lora-row";
-        const select = buildSelect(
-            defaults.loraValues,
-            defaults.loraLabels,
-            lora.name,
-            (value) => {
-                context.commit((clips) => {
-                    const entry =
-                        clips[clipIdx]?.stages[stageIdx]?.loras[index];
-                    if (entry) {
-                        entry.name = value;
-                    }
-                });
-            },
+        const loraOptions: OptionSpec[] = defaults.loraValues.map(
+            (value, optionIdx) => ({
+                value,
+                label: defaults.loraLabels[optionIdx] ?? value,
+            }),
         );
+        preserveSelectedOption(loraOptions, lora.name, "start", (value) => ({
+            value,
+            label: `${value} (unsupported persisted value)`,
+            disabled: true,
+        }));
+        const select = buildOptionSelect(loraOptions, lora.name, (value) => {
+            context.commit((clips) => {
+                const entry = clips[clipIdx]?.stages[stageIdx]?.loras[index];
+                if (entry) {
+                    entry.name = value;
+                }
+            });
+        });
         const weight = buildNumber(
             lora.weight,
             -10,
@@ -91,23 +102,25 @@ export const buildStageLorasSection = (
     });
     section.appendChild(list);
 
-    const addButton = document.createElement("button");
-    addButton.type = "button";
-    addButton.className = "basic-button small-button vst-stage-lora-add";
-    addButton.textContent = "+ Add LoRA";
-    addButton.addEventListener("click", () => {
-        context.structuralCommit((clips) => {
-            const target = clips[clipIdx]?.stages[stageIdx];
-            if (!target) {
-                return null;
-            }
-            target.loras.push({
-                name: defaults.loraValues[0] ?? "",
-                weight: LORA_WEIGHT_DEFAULT,
+    if (defaults.loraValues.length > 0) {
+        const addButton = document.createElement("button");
+        addButton.type = "button";
+        addButton.className = "basic-button small-button vst-stage-lora-add";
+        addButton.textContent = "+ Add LoRA";
+        addButton.addEventListener("click", () => {
+            context.structuralCommit((clips) => {
+                const target = clips[clipIdx]?.stages[stageIdx];
+                if (!target) {
+                    return null;
+                }
+                target.loras.push({
+                    name: defaults.loraValues[0],
+                    weight: LORA_WEIGHT_DEFAULT,
+                });
+                return "render";
             });
-            return "render";
         });
-    });
-    section.appendChild(addButton);
+        section.appendChild(addButton);
+    }
     return section;
 };

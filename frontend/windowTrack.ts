@@ -139,6 +139,8 @@ export interface WindowTrackConfig {
      */
     isolateClicks: boolean;
     readSpan(clip: Clip, itemIdx: number): PressSpan | null;
+    /** Existing unsupported persisted spans remain selectable/removable only. */
+    canEdit?(clip: Clip): boolean;
     /** Lane-press guard (retake: only when the clip has none yet). */
     canCreate?(clip: Clip): boolean;
     /** Pure clamped start for a move; drives both preview and commit. */
@@ -241,7 +243,11 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         }
         const clips = getClips();
         const clip = clips[state.clipIdx];
-        if (!clip || !config.readSpan(clip, state.itemIdx)) {
+        if (
+            !clip ||
+            (config.canEdit && !config.canEdit(clip)) ||
+            !config.readSpan(clip, state.itemIdx)
+        ) {
             return;
         }
         const start = config.moveTargetStart(
@@ -267,7 +273,11 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         }
         const clips = getClips();
         const clip = clips[state.clipIdx];
-        if (!clip || !config.readSpan(clip, state.itemIdx)) {
+        if (
+            !clip ||
+            (config.canEdit && !config.canEdit(clip)) ||
+            !config.readSpan(clip, state.itemIdx)
+        ) {
             return;
         }
         const geom = config.resizeTarget(
@@ -468,6 +478,10 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             const press = clip ? config.readSpan(clip, itemIdx) : null;
             if (!clip || !press) {
                 return null;
+            }
+            if (config.canEdit && !config.canEdit(clip)) {
+                me.preventDefault();
+                return claimOnly();
             }
             const base: MoveState = {
                 clipIdx,

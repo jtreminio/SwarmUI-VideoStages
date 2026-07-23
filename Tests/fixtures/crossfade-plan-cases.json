@@ -40,19 +40,19 @@
     "expectedFallback": false
   },
   {
-    "name": "continue degrades to a single frame when the window cannot fit",
+    "name": "continue cuts when its architecture minimum cannot fit",
     "frames": [9, 9],
     "boundaries": ["continue", "cut"],
     "boundaryOverlaps": [8, 8],
-    "expectedOverlaps": [1],
-    "expectedFallback": false
+    "expectedOverlaps": [0],
+    "expectedFallback": true
   },
   {
-    "name": "back-to-back continues reserve for the right window",
+    "name": "back-to-back continues cut the underfunded right window",
     "frames": [17, 17, 17],
     "boundaries": ["continue", "continue", "cut"],
     "boundaryOverlaps": [8, 8, 8],
-    "expectedOverlaps": [9, 1],
+    "expectedOverlaps": [9, 0],
     "expectedFallback": false
   },
   {
@@ -64,11 +64,11 @@
     "expectedFallback": false
   },
   {
-    "name": "mixed continue then crossfade use per-boundary overlaps",
+    "name": "mixed continue then crossfade cuts the underfunded crossfade",
     "frames": [17, 17, 17],
     "boundaries": ["continue", "crossfade", "cut"],
     "boundaryOverlaps": [8, 8, 8],
-    "expectedOverlaps": [9, 7],
+    "expectedOverlaps": [9, 0],
     "expectedFallback": false
   },
   {
@@ -92,7 +92,7 @@
     "frames": [33, 33, 33],
     "boundaries": ["crossfade", "crossfade", "cut"],
     "boundaryOverlaps": [24, 8, 8],
-    "expectedOverlaps": [16, 8],
+    "expectedOverlaps": [24, 8],
     "expectedFallback": false
   },
   {
@@ -104,11 +104,11 @@
     "expectedFallback": false
   },
   {
-    "name": "double crossfade clamps below the default for short clips",
+    "name": "double crossfade cuts one side instead of violating the minimum",
     "frames": [9, 9, 9],
     "boundaries": ["crossfade", "crossfade", "cut"],
     "boundaryOverlaps": [8, 8, 8],
-    "expectedOverlaps": [4, 4],
+    "expectedOverlaps": [8, 0],
     "expectedFallback": false
   },
   {

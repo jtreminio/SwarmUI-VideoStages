@@ -21,7 +21,7 @@ interface MaybeIdentified {
 interface IdentityEntry {
     entity: MaybeIdentified;
     kind: EntityKind;
-    migrationPath: string;
+    repairPath: string;
 }
 
 let fallbackSequence = 0;
@@ -54,7 +54,8 @@ const assignUniqueId = (
         return reservedId;
     }
 
-    const base = `${entry.kind}_legacy_${entry.migrationPath}`;
+    // `_legacy_` is retained in the persisted ID format for stability.
+    const base = `${entry.kind}_legacy_${entry.repairPath}`;
     let id = base;
     let collision = 1;
     while (used.has(id)) {
@@ -75,7 +76,7 @@ const clipIdentityEntries = (
         entries.push({
             entity: clip,
             kind: "clip",
-            migrationPath: `${clipIndex}`,
+            repairPath: `${clipIndex}`,
         });
         for (
             let stageIndex = 0;
@@ -85,14 +86,14 @@ const clipIdentityEntries = (
             entries.push({
                 entity: clip.stages[stageIndex],
                 kind: "stage",
-                migrationPath: `${clipIndex}_${stageIndex}`,
+                repairPath: `${clipIndex}_${stageIndex}`,
             });
         }
         for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
             entries.push({
                 entity: clip.refs[refIndex],
                 kind: "ref",
-                migrationPath: `${clipIndex}_${refIndex}`,
+                repairPath: `${clipIndex}_${refIndex}`,
             });
         }
         for (
@@ -103,7 +104,7 @@ const clipIdentityEntries = (
             entries.push({
                 entity: clip.audioSegments[segmentIndex],
                 kind: "audio_segment",
-                migrationPath: `${clipIndex}_${segmentIndex}`,
+                repairPath: `${clipIndex}_${segmentIndex}`,
             });
         }
         for (
@@ -114,14 +115,14 @@ const clipIdentityEntries = (
             entries.push({
                 entity: clip.promptWindows[windowIndex],
                 kind: "prompt_window",
-                migrationPath: `${clipIndex}_${windowIndex}`,
+                repairPath: `${clipIndex}_${windowIndex}`,
             });
         }
         if (clip.retake) {
             entries.push({
                 entity: clip.retake,
                 kind: "retake",
-                migrationPath: `${clipIndex}`,
+                repairPath: `${clipIndex}`,
             });
         }
     }
@@ -137,13 +138,13 @@ const audioTrackIdentityEntries = (
         entries.push({
             entity: track,
             kind: "audio_track",
-            migrationPath: `${trackIndex}`,
+            repairPath: `${trackIndex}`,
         });
         for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
             entries.push({
                 entity: track.spans[spanIndex],
                 kind: "audio_span",
-                migrationPath: `${trackIndex}_${spanIndex}`,
+                repairPath: `${trackIndex}_${spanIndex}`,
             });
         }
     }
@@ -156,7 +157,7 @@ const assignEntryIdentities = (
 ): void => {
     // Reserve every first valid existing occurrence before filling any gaps.
     // Otherwise an earlier missing positional ID can steal a later entity's
-    // durable legacy ID and silently retarget stable references.
+    // deterministic compatibility ID and silently retarget stable references.
     const reserved = new Map<MaybeIdentified, string>();
     for (const { entity } of entries) {
         const existing = normalizedExistingId(entity.id);
@@ -172,8 +173,8 @@ const assignEntryIdentities = (
 
 /**
  * Adds and de-duplicates every clip-owned identity in place. This is the
- * compatibility seam for legacy UI constructors, which may still create an
- * entity without an id before the next save.
+ * repair seam for UI constructors that may create an entity without an id
+ * before the next save.
  */
 export const ensureClipEntityIdentities = (
     clips: VideoStagesConfig["clips"],
@@ -184,9 +185,9 @@ export const ensureClipEntityIdentities = (
 };
 
 /**
- * Upgrades a raw/legacy working config into the canonical versioned authoring
- * document in place. Existing unique IDs survive; missing, blank, or duplicate
- * IDs are replaced once and then persist through the normal carriers.
+ * Repairs the current-schema working config into the canonical versioned
+ * authoring document in place. Existing unique IDs survive; missing, blank, or
+ * duplicate IDs are replaced once and then persist through normal carriers.
  */
 export function ensureAuthoringDocumentIdentity(
     state: VideoStagesConfig,

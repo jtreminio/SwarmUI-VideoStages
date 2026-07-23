@@ -7,18 +7,4 @@ internal static class AudioMediaIdentityCompiler
         ? null
         : new AudioMediaIdentityPlan(media.Data, media.FileName);
 
-    internal static IcLoraUploadedMediaKind CompileIcLoraMediaKind(string data)
-    {
-        if (data?.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return IcLoraUploadedMediaKind.Image;
-        }
-        if (data?.StartsWith("data:video/", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return IcLoraUploadedMediaKind.Video;
-        }
-        return string.IsNullOrWhiteSpace(data)
-            ? IcLoraUploadedMediaKind.None
-            : IcLoraUploadedMediaKind.Unknown;
-    }
 }

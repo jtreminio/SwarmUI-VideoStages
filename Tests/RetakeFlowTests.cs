@@ -7,7 +7,7 @@ using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Ltx2;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -17,7 +17,7 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     private static readonly string[] RetakeFeatures =
-        [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"];
+        [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
 
     // Retake now lives in the per-clip JSON (seconds-based); refine mode is the enable gate. At fps 24,
     // start/length of 1.0s each resolve to frame windows [24, 24), matching the old param-based tests.

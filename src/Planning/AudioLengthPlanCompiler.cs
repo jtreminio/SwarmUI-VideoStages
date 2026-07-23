@@ -7,27 +7,16 @@ internal static class AudioLengthPlanCompiler
 {
     private const string ControlNetOverridesAudioLength = "audio.length.controlnet_overrides_audio";
     private const string AudioLengthWithoutTrack = "audio.length.audio_owner_has_no_lockable_track";
-    private const string ControlNetLengthWithoutSource = "audio.length.controlnet_owner_has_no_source";
 
     internal static AudioPlanComponentResult<AudioLengthPlan> Compile(
         ClipSpec clip,
         AudioBaseSourcePlan baseSource)
     {
         ImmutableArray<AudioPlanDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<AudioPlanDiagnostic>();
-        int? controlNetSourceIndex =
-            ControlNetSourcePlan.TryParseIndex(clip.PrimarySlotEntry?.Source, out int parsedIndex)
-                ? parsedIndex
-                : null;
         AudioLengthOwner owner;
         if (clip.ClipLengthFromControlNet)
         {
             owner = AudioLengthOwner.ControlNet;
-            if (controlNetSourceIndex is null)
-            {
-                diagnostics.Add(new(
-                    ControlNetLengthWithoutSource,
-                    "ControlNet owns clip length, but no valid ControlNet 1-3 drive source is configured."));
-            }
             if (clip.ClipLengthFromAudio)
             {
                 diagnostics.Add(new(
@@ -61,7 +50,6 @@ internal static class AudioLengthPlanCompiler
         return new(
             new(
                 owner,
-                controlNetSourceIndex,
                 external ? clip.ClipLengthFromAudio : true,
                 external && clip.ClipLengthFromAudio),
             diagnostics.ToImmutable());

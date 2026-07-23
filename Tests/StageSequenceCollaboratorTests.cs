@@ -2,7 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -26,7 +26,7 @@ public class StageSequenceCollaboratorTests
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
         VideoStagesSpec spec = generator.GetVideoStagesSpec();
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(spec);
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
         ClipPlan plannedClip = Assert.Single(plan.Clips);
         StagePlan plannedStage = Assert.Single(plannedClip.Stages);
         ClipContext clipContext = new(
@@ -80,7 +80,7 @@ public class StageSequenceCollaboratorTests
             WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(generator.GetVideoStagesSpec());
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetVideoStagesSpec());
         ClipPlan nextClip = Assert.Single(plan.Clips);
         ClipPlan previousClip = nextClip with { ClipId = 41, Frames = 16 };
         WGNodeData previousOutput = generator.CurrentMedia.Duplicate();
@@ -114,22 +114,21 @@ public class StageSequenceCollaboratorTests
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
         StageRefStore store = new(generator);
-        RootVideoStageHandoff handoff = new(generator, store);
-        RootVideoStageResizer resizer = new(generator, handoff);
-        StageGuideMediaHelper guideMediaHelper = new(generator);
         Base2EditPublishedStageRefs base2Edit = new(generator);
-        LtxManager ltxManager = new(generator, resizer, guideMediaHelper, base2Edit);
-        StageGuideReferenceState state = new(generator, store, base2Edit, ltxManager);
+        StageGuideReferenceState state = new(generator, store, base2Edit);
         StagePlan stage = Assert.Single(
             Assert.Single(
-                VideoExecutionPlanCompiler.Compile(generator.GetVideoStagesSpec()).Clips)
+                TestPlanCompiler.Compile(generator.GetVideoStagesSpec()).Clips)
             .Stages);
         StagePlan explicitStageGuide = stage with
         {
-            Guide = new GuideReferencePlan(
-                GuideReferenceKind.ExplicitStage,
-                $"Stage{stage.StageId}",
-                stage.StageId)
+            ArchitecturePayload = stage.RequireLtx2Payload() with
+            {
+                Guide = new GuideReferencePlan(
+                    GuideReferenceKind.ExplicitStage,
+                    $"Stage{stage.StageId}",
+                    stage.StageId)
+            }
         };
 
         state.CaptureStageOutput(stage);

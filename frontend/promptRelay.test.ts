@@ -6,11 +6,11 @@ import { computeRegionLayout, renderPromptTrackRow } from "./timelineView";
 import type { Clip } from "./types";
 
 describe("normalizePromptWindows", () => {
-    it("parses camelCase and PascalCase, sorts by start, and drops non-positive durations", () => {
+    it("parses canonical camelCase, sorts by start, and drops non-positive durations", () => {
         const windows = normalizePromptWindows({
             promptWindows: [
                 { prompt: "late", start: 3, duration: 1 },
-                { Prompt: "zero", Start: 1, Duration: 0 },
+                { prompt: "zero", start: 1, duration: 0 },
                 { prompt: "early", start: 0, duration: 1 },
             ],
         });

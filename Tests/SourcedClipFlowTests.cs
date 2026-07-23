@@ -21,7 +21,7 @@ public partial class StageFlowTests
     private const double SourcedStartSeconds = 1.0;
 
     private static readonly string[] SourcedClipFeatures =
-        [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"];
+        [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
 
     private static JObject MakeSourcedClip(TestModelBundle models)
     {
@@ -429,7 +429,7 @@ public partial class StageFlowTests
 
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        int windowFrames = Constants.ContinueOverlapDefaultFrames + 1;
+        int windowFrames = Ltx2BoundaryPolicy.DefaultFrames + 1;
         List<ImageFromBatchNode> tailSlices = [.. bridge.Graph.NodesOfType<ImageFromBatchNode>()
             .Where(n => n.BatchIndex.LiteralAsInt() == SourcedClipFrames - windowFrames
                 && n.Length.LiteralAsInt() == windowFrames
@@ -579,7 +579,7 @@ public partial class StageFlowTests
         // The overlap plan survived: seam blend + ramp instead of a plain full concat.
         SwarmRampMaskBatchNode ramp = Assert.Single(
             bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
-        Assert.Equal(Constants.ContinueOverlapDefaultFrames + 1, ramp.Frames.LiteralAsInt());
+        Assert.Equal(Ltx2BoundaryPolicy.DefaultFrames + 1, ramp.Frames.LiteralAsInt());
         Assert.NotEmpty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
         AssertWorkflowHasNoCycles(workflow);
     }

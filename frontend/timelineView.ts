@@ -152,10 +152,23 @@ export const renderTimeline = (
         layouts,
         pxPerSecond,
         `${options?.globalPrompt ?? ""}`,
+        options?.capabilities,
     );
-    const videoRow = renderVideoTrackRow(clips, layouts, fps, unit);
-    const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
-    const audioRow = renderAudioTrackRow(clips, layouts);
+    const videoRow = renderVideoTrackRow(
+        clips,
+        layouts,
+        fps,
+        unit,
+        options?.capabilities,
+    );
+    const referencesRow = renderReferencesTrackRow(
+        clips,
+        layouts,
+        fps,
+        unit,
+        options?.capabilities,
+    );
+    const audioRow = renderAudioTrackRow(clips, layouts, options?.capabilities);
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
     body.innerHTML =
         `${header}${executionSummary}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +

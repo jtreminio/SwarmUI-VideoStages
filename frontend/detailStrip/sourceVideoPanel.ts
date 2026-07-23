@@ -1,3 +1,4 @@
+import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import { CLIP_DURATION_MIN } from "../constants";
 import {
     appendHelp,
@@ -41,7 +42,11 @@ const applyPickedSourceVideo = (
         const state = store.getState();
         const clips = state.clips;
         const target = findClipByStableId(clips, operation.clipId);
-        if (!target) {
+        if (
+            !target ||
+            !context.capabilities().forClip(target).decision("sourceVideo")
+                .supported
+        ) {
             return;
         }
         const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
@@ -55,6 +60,7 @@ const applyPickedSourceVideo = (
             startSeconds: 0,
             lengthSeconds,
         };
+        reconcileSourcedClipIdentity(target, context.capabilities().catalog);
         applyClipDurationResize(
             target,
             Math.max(CLIP_DURATION_MIN, lengthSeconds),
@@ -94,6 +100,10 @@ export const buildSourceVideoSection = (
                 return null;
             }
             target.sourceVideo = null;
+            reconcileSourcedClipIdentity(
+                target,
+                context.capabilities().catalog,
+            );
             return "render";
         });
     };

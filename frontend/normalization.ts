@@ -15,16 +15,6 @@ export {
     normalizeContinueOverlap,
 } from "./normalizationClip";
 export {
-    defaultIcLora,
-    hasSlotSourcedIcLora,
-    normalizeControlNetLora,
-    normalizeControlNetSource,
-    normalizeIcLora,
-    normalizeIcLoraControlType,
-    normalizeIcLoras,
-    reconcileIcLoraStage,
-} from "./normalizationIcLora";
-export {
     normalizePromptWindows,
     normalizeRetake,
     normalizeSourceVideo,

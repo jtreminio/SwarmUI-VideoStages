@@ -3,6 +3,8 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Architectures;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using Xunit;
 
@@ -28,6 +30,14 @@ public class CrossLanguageMirrorTests
     {
         string path = Path.Combine(Path.GetDirectoryName(caller)!, "fixtures", name);
         return JArray.Parse(File.ReadAllText(path));
+    }
+
+    private static JObject LoadObjectFixture(
+        string name,
+        [CallerFilePath] string caller = "")
+    {
+        string path = Path.Combine(Path.GetDirectoryName(caller)!, "fixtures", name);
+        return JObject.Parse(File.ReadAllText(path));
     }
 
     private static WorkflowGenerator BareGenerator() => new()
@@ -116,6 +126,52 @@ public class CrossLanguageMirrorTests
                 $"IcLoraWeights is missing preset '{id}' present in the shared fixture.");
             Assert.Equal(url, actualUrl);
             Assert.Equal(modelName, IcLoraWeights.ModelNameFor(id));
+        }
+    }
+
+    [Fact]
+    public void ArchitectureCatalogRules_MatchSharedWireContract()
+    {
+        JObject fixture = LoadObjectFixture("architecture-catalog-rule-contract.json");
+        JObject expectedDescriptor = (JObject)fixture["descriptor"]!;
+        JObject catalog = ArchitectureCatalogSerializer.Serialize(
+            new CatalogContractRegistry());
+        JObject architecture = Assert.Single(
+            catalog["architectures"]!.Values<JObject>(),
+            item => item.Value<string>("id") == expectedDescriptor.Value<string>("id"));
+
+        JToken normalizedArchitecture = JToken.Parse(architecture.ToString());
+        Assert.True(
+            JToken.DeepEquals(expectedDescriptor, normalizedArchitecture),
+            $"Serialized LTX descriptor drifted from the complete shared contract."
+                + $"\nExpected: {expectedDescriptor}"
+                + $"\nActual: {architecture}");
+        JObject actualProfile = Assert.Single(architecture["profiles"]!.Values<JObject>());
+        Assert.DoesNotContain(
+            fixture["forbiddenProfileCapabilities"]!.Values<string>(),
+            capability => actualProfile["capabilities"]!.Values<string>().Contains(capability));
+    }
+
+    private sealed class CatalogContractRegistry : IVideoArchitectureRegistry
+    {
+        public IReadOnlyList<VideoArchitectureDescriptor> Catalog =>
+            VideoArchitectureRegistry.Production.Catalog;
+
+        public IReadOnlyList<ResolvedVideoModel> ResolvedModels => [];
+
+        public IVideoArchitectureModule GetModule(ArchitectureId architectureId) =>
+            throw new NotSupportedException();
+
+        public bool TryResolveModel(string modelName, out ResolvedVideoModel resolved)
+        {
+            resolved = null;
+            return false;
+        }
+
+        public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
+        {
+            resolved = null;
+            return false;
         }
     }
 }

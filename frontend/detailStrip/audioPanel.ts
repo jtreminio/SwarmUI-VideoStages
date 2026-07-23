@@ -1,12 +1,11 @@
+import { hasArchitectureSlotSourcedIcLora } from "../architectures/behaviorRegistry";
 import {
     AUDIO_SOURCE_UPLOAD,
     AUDIO_SOURCE_VOICE_REF,
     buildAudioSourceOptions,
     canUseClipLengthFromAudio,
     isAceStepFunAudioSource,
-    resolveAudioSourceValue,
 } from "../audioSource";
-import { isAudioReuseEligible } from "../authoringDiagnostics";
 import {
     buildCheckbox,
     buildField,
@@ -14,8 +13,11 @@ import {
     buildOptionSelect,
     wrapForm,
 } from "../detailWidgets";
-import { hasSlotSourcedIcLora } from "../normalization";
 import type { Clip, TimelineSelection } from "../types";
+import {
+    buildCapabilityNotice,
+    disableCapabilityControls,
+} from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 const GROUP_AUDIO = "vstdock_audio";
@@ -27,14 +29,24 @@ export const buildAudioBody = (
 ): HTMLElement => {
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
-    const controlNetEnabled = hasSlotSourcedIcLora(clip.icLoras);
+    const capabilityView = ctx.capabilities().forClip(clip);
+    const audioDecision = capabilityView.decision("clipAudio");
+    const reuseDecision = capabilityView.decision("audioReuse");
+    const segmentDecision = capabilityView.decision("audioSegments");
+    const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
+        clip.architecture,
+        clip.icLoras,
+    );
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
         controlNetEnabled,
+        allowedKinds: capabilityView.audioSourceKinds,
     });
-    const source = resolveAudioSourceValue(clip.audioSource ?? "", options);
+    const source =
+        options.find((option) => option.value === clip.audioSource)?.value ??
+        clip.audioSource ??
+        "";
     const canLength = canUseClipLengthFromAudio(source);
     const isAce = isAceStepFunAudioSource(source);
-    const canReuseStageAudio = isAudioReuseEligible(clip);
 
     const commitAudio = (mutate: (clip: Clip) => void): void => {
         ctx.commit((cs) => {
@@ -43,14 +55,7 @@ export const buildAudioBody = (
                 return;
             }
             mutate(target);
-            const cnEnabled = hasSlotSourcedIcLora(target.icLoras);
-            const nextSource = resolveAudioSourceValue(
-                target.audioSource,
-                buildAudioSourceOptions(target.audioSource, {
-                    controlNetEnabled: cnEnabled,
-                }),
-            );
-            target.audioSource = nextSource;
+            const nextSource = target.audioSource;
             target.clipLengthFromAudio =
                 canUseClipLengthFromAudio(nextSource) &&
                 target.clipLengthFromAudio;
@@ -91,24 +96,38 @@ export const buildAudioBody = (
         ),
     );
 
-    body.appendChild(
-        buildCheckbox(
-            "Reuse Captured Stage Audio",
-            clip.reuseAudio === true,
-            (value) => {
-                commitAudio((c) => {
-                    c.reuseAudio = value;
-                });
-            },
-            {
-                disabled: !canReuseStageAudio,
-                help:
-                    "Capture this clip's audio after its second active stage and " +
-                    "reuse that captured audio from the third active stage onward. " +
-                    "Requires at least three active stages.",
-            },
-        ),
+    const reuseRow = buildCheckbox(
+        "Reuse Captured Stage Audio",
+        clip.reuseAudio === true,
+        (value) => {
+            commitAudio((c) => {
+                c.reuseAudio = value;
+            });
+        },
+        {
+            disabled: !reuseDecision.supported,
+            help:
+                "Capture this clip's audio after its second active stage and " +
+                "reuse that captured audio from the third active stage onward. " +
+                "Requires at least three active stages." +
+                (reuseDecision.reason ? ` ${reuseDecision.reason}` : ""),
+        },
     );
+    body.appendChild(reuseRow);
+    if (clip.reuseAudio && !reuseDecision.supported) {
+        reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "basic-button small-button vst-detail-delete";
+        remove.textContent = "Remove unsupported reuse";
+        remove.addEventListener("click", () => {
+            commitAudio((target) => {
+                target.reuseAudio = false;
+            });
+            ctx.render();
+        });
+        reuseRow.appendChild(remove);
+    }
 
     const lengthRow = buildCheckbox(
         "Clip Length from Audio",
@@ -179,17 +198,22 @@ export const buildAudioBody = (
     }
 
     const segCount = clip.audioSegments?.length ?? 0;
-    const addSegment = document.createElement("button");
-    addSegment.type = "button";
-    addSegment.className = "basic-button small-button vst-detail-add-segment";
-    addSegment.textContent = "+ Add segment";
-    addSegment.title =
-        "Overlay an extra uploaded audio piece on this clip's audio lane";
-    addSegment.addEventListener("click", (event) => {
-        event.preventDefault();
-        ctx.addAudioSegment(clipIdx);
-    });
-    body.appendChild(addSegment);
+    if (segmentDecision.supported) {
+        const addSegment = document.createElement("button");
+        addSegment.type = "button";
+        addSegment.className =
+            "basic-button small-button vst-detail-add-segment";
+        addSegment.textContent = "+ Add segment";
+        addSegment.title =
+            "Overlay an extra uploaded audio piece on this clip's audio lane";
+        addSegment.addEventListener("click", (event) => {
+            event.preventDefault();
+            ctx.addAudioSegment(clipIdx);
+        });
+        body.appendChild(addSegment);
+    } else if (segCount > 0) {
+        body.appendChild(buildCapabilityNotice(segmentDecision));
+    }
     if (segCount > 0) {
         const note = document.createElement("p");
         note.className = "vst-detail-note";
@@ -198,6 +222,32 @@ export const buildAudioBody = (
                 ? "1 overlay segment · mixed additively over the base audio."
                 : `${segCount} overlay segments · mixed additively over the base audio.`;
         body.appendChild(note);
+    }
+    if (!audioDecision.supported) {
+        disableCapabilityControls(body, audioDecision, [
+            ".vst-remove-unsupported-audio",
+            ".vst-detail-add-segment",
+        ]);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className =
+            "basic-button small-button vst-remove-unsupported-audio";
+        remove.textContent = "Remove unsupported clip audio";
+        remove.addEventListener("click", () => {
+            ctx.structuralCommit((items) => {
+                const target = items[clipIdx];
+                if (!target) {
+                    return null;
+                }
+                target.audioSource = "Native";
+                target.uploadedAudio = null;
+                target.reuseAudio = false;
+                target.clipLengthFromAudio = false;
+                target.saveAudioTrack = false;
+                return "render";
+            });
+        });
+        body.appendChild(remove);
     }
     return wrapForm(GROUP_AUDIO, body);
 };

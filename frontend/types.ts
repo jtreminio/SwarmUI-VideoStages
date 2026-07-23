@@ -1,6 +1,13 @@
+import type {
+    ArchitectureModelCatalog,
+    ModelProfileId,
+    VideoArchitectureId,
+} from "./architectures/types";
+
 export interface RootDefaults {
     modelValues: string[];
     modelLabels: string[];
+    modelCatalog: ArchitectureModelCatalog;
     loraValues: string[];
     loraLabels: string[];
     samplerValues: string[];
@@ -33,8 +40,8 @@ export interface RootDefaults {
 
 export interface VideoStagesConfig {
     /**
-     * Version of the frontend authoring document. Legacy array/object payloads
-     * omit this; persistence upgrades them to CURRENT_AUTHORING_SCHEMA_VERSION.
+     * Version of the frontend authoring document. Only the current schema is
+     * accepted; older and unversioned carriers are intentionally rejected.
      */
     schemaVersion?: number;
     width: number;
@@ -50,7 +57,7 @@ export interface VideoStagesConfig {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 2;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 3;
 
 export interface UploadedAudio {
     data: string;
@@ -83,11 +90,16 @@ export interface Stage {
     id?: string;
     skipped: boolean;
     control: number;
+    /**
+     * Architecture-neutral per-stage guide strength. The persisted field name
+     * is retained for v3 schema stability; LTX maps it to IC-LoRA conditioning.
+     */
     controlNetStrength: number;
     refStrengths: number[];
     upscale: number;
     upscaleMethod: string;
     model: string;
+    modelProfileId: ModelProfileId;
     steps: number;
     cfgScale: number;
     sampler: string;
@@ -163,9 +175,10 @@ export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
  * (data URI + name). An entry with no video still applies the LoRA to the
  * model (loader-only — e.g. HDR). `source` is "Upload" for per-entry uploads
  * or "Stage Input" for the frames entering the target stage (requires
- * `stage` >= 1); legacy JSON may carry "ControlNet N" captured-branch sources,
- * preserved but not authorable in the UI. `stage` restricts the entry to one
- * stage index (-1 = every stage).
+ * `stage` >= 1). Persisted current-v3 documents can also contain a
+ * "ControlNet N" captured-branch source; it remains readable/removable but is
+ * not authorable in the UI. `stage` restricts the entry to one stage index
+ * (-1 = every stage).
  */
 export interface IcLora {
     lora: string;
@@ -186,6 +199,8 @@ export interface IcLora {
 
 export interface Clip {
     id?: string;
+    architecture: VideoArchitectureId;
+    modelProfileId: ModelProfileId;
     skipped: boolean;
     hue: number;
     boundaryOut: BoundaryOut;
@@ -284,128 +299,17 @@ export type CanonicalVideoStagesConfig = Omit<
     audioTracks: CanonicalAudioTrack[];
 };
 
-/**
- * Canonical lists of the fields each `Stored*` type persists. These are the
- * single source of truth: the `Stored*` types below are derived from them, and
- * `serializeStorageGuard.test.ts` round-trips them field-by-field. The
- * `satisfies` clause rejects any listed key that is not a real field, and the
- * `AssertClassified` aliases below reject any real field that is not listed —
- * so adding a persisted field to `Clip`/`Stage`/`RefImage` fails to compile
- * until it is classified as either stored here or intentionally carried
- * elsewhere (`UNSTORED_CLIP_KEYS`).
- */
-export const STORED_REF_KEYS = [
-    "id",
-    "source",
-    "uploadFileName",
-    "uploadedImage",
-    "frame",
-    "fromEnd",
-] as const satisfies readonly (keyof RefImage)[];
-
-export const STORED_STAGE_KEYS = [
-    "id",
-    "skipped",
-    "control",
-    "controlNetStrength",
-    "refStrengths",
-    "upscale",
-    "upscaleMethod",
-    "model",
-    "steps",
-    "cfgScale",
-    "sampler",
-    "scheduler",
-    "loras",
-] as const satisfies readonly (keyof Stage)[];
-
-export const STORED_CLIP_KEYS = [
-    "id",
-    "skipped",
-    "boundaryOut",
-    "boundaryOutOverlap",
-    "duration",
-    "audioSource",
-    "icLoras",
-    "saveAudioTrack",
-    "clipLengthFromAudio",
-    "clipLengthFromControlNet",
-    "reuseAudio",
-    "uploadedAudio",
-    "audioSegments",
-    "retake",
-    "sourceVideo",
-    "refs",
-    "stages",
-] as const satisfies readonly (keyof Clip)[];
-
-/**
- * Clip fields deliberately NOT in the Data param: `prompt`/`promptWindows` ride
- * the prompt carrier, while prompt-window IDs and `hue` ride the versioned,
- * browser-local UI-state sidecar keyed by the Data-carried clip ID. Without
- * that sidecar, prompt-window IDs are deterministically re-derived from their
- * clip/window paths. Listing them here keeps them out of the exhaustiveness
- * error while still forcing a new Clip field to be a conscious choice between
- * stored and carried-elsewhere.
- */
-export const UNSTORED_CLIP_KEYS = [
-    "hue",
-    "prompt",
-    "promptWindows",
-] as const satisfies readonly (keyof Clip)[];
-
-/** never when U covers every key of T, else the offending keys (a compile error). */
-type AssertClassified<T, U extends keyof T> = [Exclude<keyof T, U>] extends [
-    never,
-]
-    ? true
-    : Exclude<keyof T, U>;
-
-/**
- * Every field of these three interfaces must be accounted for. A new field
- * that is neither stored nor (for Clip) explicitly unstored turns the matching
- * alias into a non-`true` type, and the `true` assignment below stops the build.
- */
-const _refKeysExhaustive: AssertClassified<
-    RefImage,
-    (typeof STORED_REF_KEYS)[number]
-> = true;
-const _stageKeysExhaustive: AssertClassified<
-    Stage,
-    (typeof STORED_STAGE_KEYS)[number]
-> = true;
-const _clipKeysExhaustive: AssertClassified<
-    Clip,
-    (typeof STORED_CLIP_KEYS)[number] | (typeof UNSTORED_CLIP_KEYS)[number]
-> = true;
-void [_refKeysExhaustive, _stageKeysExhaustive, _clipKeysExhaustive];
-
-type RequireEntityId<T extends { id?: string }> = Omit<T, "id"> & {
-    id: string;
-};
-
-export type StoredRefImage = RequireEntityId<
-    Pick<RefImage, (typeof STORED_REF_KEYS)[number]>
->;
-
-export type StoredStage = RequireEntityId<
-    Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>
->;
-
-export type StoredClip = RequireEntityId<
-    Pick<
-        Clip,
-        Exclude<
-            (typeof STORED_CLIP_KEYS)[number],
-            "audioSegments" | "retake" | "refs" | "stages"
-        >
-    >
-> & {
-    audioSegments: CanonicalAudioSegment[];
-    retake: CanonicalRetake | null;
-    refs: StoredRefImage[];
-    stages: StoredStage[];
-};
+export type {
+    StoredClip,
+    StoredRefImage,
+    StoredStage,
+} from "./storageTypes";
+export {
+    STORED_CLIP_KEYS,
+    STORED_REF_KEYS,
+    STORED_STAGE_KEYS,
+    UNSTORED_CLIP_KEYS,
+} from "./storageTypes";
 
 export const REF_SOURCE_BASE = "Base";
 export const REF_SOURCE_REFINER = "Refiner";
@@ -417,13 +321,4 @@ export interface ImageSourceOption {
     disabled?: boolean;
 }
 
-export type TimelineSelection =
-    | { kind: "none" }
-    | { kind: "clip"; clipIdx: number; stageIdx: number }
-    | { kind: "ref"; clipIdx: number; refIdx: number }
-    | { kind: "audio"; clipIdx: number }
-    | { kind: "audio-segment"; clipIdx: number; segIdx: number }
-    | { kind: "prompt-major"; clipIdx: number }
-    | { kind: "prompt-minor"; clipIdx: number; windowIdx: number }
-    | { kind: "retake"; clipIdx: number }
-    | { kind: "boundary"; leftClipIdx: number };
+export type { TimelineSelection } from "./selectionTypes";

@@ -1,4 +1,14 @@
 import { describe, expect, it } from "@jest/globals";
+import {
+    fakeArchitectureCatalog,
+    testArchitectureCatalog,
+} from "./__test_helpers__/architectureFixtures";
+import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
+import { planArchitectureConversion } from "./architectures/conversion/plan";
+import type {
+    ArchitectureModelCatalog,
+    ArchitectureRetargetPlan,
+} from "./architectures/types";
 import { reduceDocumentCommand } from "./documentCommands";
 import { DocumentDiffError, diffDocuments } from "./documentDiff";
 import type {
@@ -22,6 +32,7 @@ const stage = (id: string): CanonicalStage => ({
     upscale: 1,
     upscaleMethod: "pixel-lanczos",
     model: "ltx",
+    modelProfileId: "ltx-2.3",
     steps: 8,
     cfgScale: 1,
     sampler: "euler",
@@ -62,6 +73,8 @@ const retake = (id: string): CanonicalRetake => ({
 
 const clip = (id: string): CanonicalClip => ({
     id,
+    architecture: "ltx2",
+    modelProfileId: "ltx-2.3",
     skipped: false,
     hue: 20,
     boundaryOut: "cut",
@@ -122,7 +135,7 @@ const document = (): CanonicalVideoStagesConfig => {
     const trackA = track("track-a");
     trackA.spans = [span("span-a"), span("span-b"), span("span-c")];
     return {
-        schemaVersion: 2,
+        schemaVersion: 3,
         width: 1024,
         height: 576,
         fps: 24,
@@ -133,12 +146,48 @@ const document = (): CanonicalVideoStagesConfig => {
     };
 };
 
+const crossArchitectureCatalog = (): {
+    catalog: ArchitectureModelCatalog;
+    target: ArchitectureRetargetPlan;
+} => {
+    const ltx = testArchitectureCatalog();
+    const fake = fakeArchitectureCatalog();
+    fake.architectures[0].profiles.push({
+        id: "test-alt",
+        label: "Test Alt",
+        capabilities: [],
+        rules: [],
+    });
+    fake.entries.push({
+        ...fake.entries[0],
+        value: "test-video-alt.safetensors",
+        label: "Test Video Alt",
+        modelProfileId: "test-alt",
+    });
+    const catalog: ArchitectureModelCatalog = {
+        source: "backend",
+        architectures: [...ltx.architectures, ...fake.architectures],
+        entries: [...ltx.entries, ...fake.entries],
+    };
+    return {
+        catalog,
+        target: {
+            architectureId: "test-video",
+            modelProfileId: "test-profile",
+            model: "test-video.safetensors",
+            capabilities: structuredClone(fake.architectures[0].capabilities),
+        },
+    };
+};
+
 const applyDiff = (
     before: CanonicalVideoStagesConfig,
     after: CanonicalVideoStagesConfig,
 ): ReturnType<typeof diffDocuments> => {
     const command = diffDocuments(before, after);
-    const result = reduceDocumentCommand(before, command);
+    const result = reduceDocumentCommand(before, command, {
+        architectureCatalog: testArchitectureCatalog(),
+    });
     expect(result.applied).toBe(true);
     expect(result.document).toEqual(after);
     expect(before).toEqual(document());
@@ -155,6 +204,279 @@ describe("diffDocuments", () => {
         expect(result).toMatchObject({ applied: true, impacts: [] });
         expect(result.document).toEqual(before);
         expect(result.document).not.toBe(before);
+    });
+
+    it("fails closed instead of diffing raw clip architecture identities", () => {
+        const before = document();
+        const after = structuredClone(before);
+        after.clips[0].architecture = "test-video";
+        after.clips[0].modelProfileId = "test-profile";
+
+        expect(() => diffDocuments(before, after)).toThrow(
+            new DocumentDiffError("architecture-invariant"),
+        );
+        expect(() =>
+            diffDocuments(before, after, {
+                architectureCatalog: testArchitectureCatalog(),
+            }),
+        ).toThrow(new DocumentDiffError("architecture-invariant"));
+    });
+
+    it("accepts only catalog-derived source/skipped identity transitions", () => {
+        const before = document();
+        const after = structuredClone(before);
+        after.clips[0].sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        after.clips[0].stages.forEach((entry) => {
+            entry.skipped = true;
+        });
+        after.clips[0].architecture = "none";
+        after.clips[0].modelProfileId = "none";
+        const catalog = testArchitectureCatalog();
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+        expect(command.commands).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ type: "clip.patch" }),
+                expect.objectContaining({ type: "stage.patch" }),
+            ]),
+        );
+    });
+
+    it("emits an invariant-aware model retarget instead of a generic stage patch", () => {
+        const before = document();
+        const after = structuredClone(before);
+        after.clips[0].stages[1].model = "ltx-alt";
+        const catalog = testArchitectureCatalog();
+        catalog.entries.push({
+            ...catalog.entries[0],
+            value: "ltx-alt",
+            label: "LTX Alt",
+        });
+
+        const command = diffDocuments(before, after);
+        expect(command.commands).toContainEqual({
+            type: "stage.retarget-model",
+            clipId: "clip-a",
+            stageId: "stage-b",
+            target: {
+                architectureId: "ltx2",
+                modelProfileId: "ltx-2.3",
+                model: "ltx-alt",
+            },
+        });
+        expect(
+            command.commands.some(
+                (entry) =>
+                    entry.type === "stage.patch" &&
+                    ("model" in entry.patch || "modelProfileId" in entry.patch),
+            ),
+        ).toBe(false);
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+    });
+
+    it("emits one cleanup-aware conversion before same-architecture stage retargets", () => {
+        const before = document();
+        before.clips[0].stages[0].loras = [
+            { name: "detail.safetensors", weight: 1 },
+        ];
+        before.clips[0].stages[0].upscale = 2;
+        before.clips[0].refs = [ref("conversion-ref")];
+        const { catalog, target } = crossArchitectureCatalog();
+        const planned = planArchitectureConversion(
+            before.clips[0],
+            target,
+            catalog,
+        );
+        if (!planned) throw new Error("expected valid conversion plan");
+        const after = structuredClone(before);
+        after.clips[0] = planned.clip as CanonicalClip;
+        after.clips[0].stages[1].model = "test-video-alt.safetensors";
+        after.clips[0].stages[1].modelProfileId = "test-alt";
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        const conversionIndexes = command.commands.flatMap((entry, index) =>
+            entry.type === "clip.convert-architecture" ? [index] : [],
+        );
+        const retargetIndexes = command.commands.flatMap((entry, index) =>
+            entry.type === "stage.retarget-model" ? [index] : [],
+        );
+        expect(conversionIndexes).toHaveLength(1);
+        expect(retargetIndexes).toHaveLength(1);
+        expect(conversionIndexes[0]).toBeLessThan(retargetIndexes[0]);
+        expect(command.commands[retargetIndexes[0]]).toMatchObject({
+            type: "stage.retarget-model",
+            target: {
+                architectureId: "test-video",
+                modelProfileId: "test-alt",
+                model: "test-video-alt.safetensors",
+            },
+        });
+
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+    });
+
+    it("rejects cross-architecture saves without a catalog or with incompatible restored data", () => {
+        const before = document();
+        const { catalog, target } = crossArchitectureCatalog();
+        const planned = planArchitectureConversion(
+            before.clips[0],
+            target,
+            catalog,
+        );
+        if (!planned) throw new Error("expected valid conversion plan");
+        const after = structuredClone(before);
+        after.clips[0] = planned.clip as CanonicalClip;
+
+        expect(() => diffDocuments(before, after)).toThrow(
+            new DocumentDiffError("architecture-invariant"),
+        );
+
+        after.clips[0].refs = [ref("unsupported-restored-ref")];
+        expect(() =>
+            diffDocuments(before, after, { architectureCatalog: catalog }),
+        ).toThrow(new DocumentDiffError("architecture-invariant"));
+    });
+
+    it("detects architecture conversion in dormant source-only authored stages", () => {
+        const before = document();
+        before.clips[0].sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        before.clips[0].stages.forEach((entry) => {
+            entry.skipped = true;
+        });
+        before.clips[0].architecture = "none";
+        before.clips[0].modelProfileId = "none";
+        const { catalog, target } = crossArchitectureCatalog();
+        const fake = catalog.architectures.find(
+            (entry) => entry.id === "test-video",
+        );
+        if (!fake) throw new Error("missing fake descriptor");
+        fake.capabilities.clip = [...fake.capabilities.clip, "source-video"];
+        const planned = planArchitectureConversion(
+            before.clips[0],
+            target,
+            catalog,
+        );
+        if (!planned) throw new Error("expected valid conversion plan");
+        const after = structuredClone(before);
+        after.clips[0] = planned.clip as CanonicalClip;
+        expect(reconcileClipArchitectureIdentity(after.clips[0], catalog)).toBe(
+            true,
+        );
+        expect(after.clips[0]).toMatchObject({
+            architecture: "none",
+            modelProfileId: "none",
+        });
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        expect(
+            command.commands.filter(
+                (entry) => entry.type === "clip.convert-architecture",
+            ),
+        ).toHaveLength(1);
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+    });
+
+    it("rejects a cross-architecture conversion that does not persist the forced cut", () => {
+        const before = document();
+        before.clips[0].boundaryOut = "continue";
+        before.clips[1].stages = [stage("neighbor-stage")];
+        const { catalog, target } = crossArchitectureCatalog();
+        const planned = planArchitectureConversion(
+            before.clips[0],
+            target,
+            catalog,
+        );
+        if (!planned) throw new Error("expected valid conversion plan");
+        const after = structuredClone(before);
+        after.clips[0] = planned.clip as CanonicalClip;
+
+        expect(() =>
+            diffDocuments(before, after, { architectureCatalog: catalog }),
+        ).toThrow(new DocumentDiffError("architecture-invariant"));
+    });
+
+    it("round-trips adjacent conversions by their final boundary adjacency", () => {
+        const before = document();
+        before.clips[0].boundaryOut = "continue";
+        before.clips[1].boundaryOut = "continue";
+        before.clips[1].stages = [stage("second-conversion-stage")];
+        const { catalog, target } = crossArchitectureCatalog();
+        const after = structuredClone(before);
+        for (const index of [0, 1]) {
+            const planned = planArchitectureConversion(
+                before.clips[index],
+                target,
+                catalog,
+            );
+            if (!planned) throw new Error("expected valid conversion plan");
+            after.clips[index] = planned.clip as CanonicalClip;
+        }
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        expect(
+            command.commands.filter(
+                (entry) => entry.type === "clip.convert-architecture",
+            ),
+        ).toHaveLength(2);
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+        expect(result.document.clips[0].boundaryOut).toBe("continue");
+    });
+
+    it("rejects empty-clip identity changes that have no model target", () => {
+        const before = document();
+        before.clips[1].stages = [];
+        const after = structuredClone(before);
+        after.clips[1].architecture = "test-video";
+        after.clips[1].modelProfileId = "test-profile";
+        const { catalog } = crossArchitectureCatalog();
+
+        expect(() =>
+            diffDocuments(before, after, { architectureCatalog: catalog }),
+        ).toThrow(new DocumentDiffError("architecture-invariant"));
     });
 
     it.each([

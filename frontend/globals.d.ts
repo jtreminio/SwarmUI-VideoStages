@@ -133,6 +133,14 @@ interface Window {
     acestepfunTrackRegistry?: AceStepFunTrackRegistry;
 }
 
+declare function genericRequest(
+    url: string,
+    data: Record<string, unknown>,
+    callback: (data: unknown) => void,
+    depth?: number,
+    errorHandle?: (error: unknown) => void,
+): void;
+
 declare const browserUtil: {
     makeVisible(elem: Element | Document): void;
 };

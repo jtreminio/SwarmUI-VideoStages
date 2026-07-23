@@ -17,7 +17,7 @@ public partial class StageFlowTests
     // stages themselves carry the native source's 16 frames through, so each RENDERED clip is 16 frames
     // — the window's tail slice and the merge trims index off that actual output count.
     private const int ContinueClipFrames = 16;
-    private const int ContinueWindowFrames = Constants.ContinueOverlapDefaultFrames + 1;
+    private const int ContinueWindowFrames = Ltx2BoundaryPolicy.DefaultFrames + 1;
 
     private static string TwoClipContinueStagesJson(TestModelBundle models, JObject secondClip = null)
     {

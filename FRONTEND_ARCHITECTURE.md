@@ -1,102 +1,165 @@
 # VideoStages frontend architecture
 
-The frontend authors one LTX Video timeline. Entry points and options are data
-on that timeline, not separate editors or execution engines.
+The frontend authors one timeline. Each generated clip is locked to one video
+architecture, while different clips may use different architectures.
+Production currently offers LTX Video 2.3 models; the editor itself is driven
+by the backend architecture catalog rather than LTX checks in generic UI code.
 
 ## User-facing path model
 
-The starting material is one of:
+For each clip, the user makes three kinds of decisions:
 
-- text-to-video;
-- a host-generated image used as clip-zero guidance;
-- a user-provided init image used as guidance;
-- a user-provided source video;
-- a source-video-only clip; or
-- the separate global Refine Video action.
+1. Choose starting material: generated from text, guided by an image, sourced
+   from a video, or source-video-only.
+2. Run zero, one, or several stages, all from the same architecture.
+3. Add options supported by that architecture and profile.
 
-Every authored timeline then has only two structural choices:
+Finished clips are joined on one timeline. A boundary between different
+architectures is always a cut. Same-architecture continue and crossfade are
+offered only when the owning architecture supports them.
 
-- one or many clips; and
-- one or many active stages per clip.
-
-Boundaries, upscaling, LoRAs, IC-LoRAs, major/relay prompts, retakes, frame
-references, and audio policies decorate that structure. They do not create new
+Upscaling, LoRAs, IC-LoRAs, major/relay prompts, retakes, frame references, and
+audio policies decorate this path. They do not create separate editors or
 execution engines.
-
-`executionPath.ts` is the pure, nontechnical projection of those decisions. It
-must describe user intent and diagnostics without reproducing backend graph
-construction.
 
 ## Ownership
 
 ```text
 VideoStagesApp
-├── LtxHostBridge
-│   ├── lifecycle and carrier events
-│   ├── LTX-only model capabilities
-│   ├── host defaults and starting media
-│   └── media selection and metadata probing
+├── VideoStagesHostBridge
+│   ├── host lifecycle and carrier events
+│   ├── model metadata
+│   ├── root defaults and starting media
+│   └── media selection and probing
 ├── AuthoringRepository
-│   ├── versioned JSON decode and migration
-│   ├── prompt-carrier codec
-│   ├── UI-state codec
+│   ├── strict schema-v3 decode
+│   ├── prompt/UI sidecar codecs
 │   └── backend-compatible encode
 ├── DocumentStore
-│   ├── canonical authoring document
-│   ├── monotonic revision
-│   ├── commands and pure reducers
+│   ├── canonical document and revision
+│   ├── named commands
+│   ├── undo/redo
 │   └── typed change impact
+├── ArchitectureCatalog
+│   ├── backend DTO codec
+│   ├── model/profile resolution
+│   ├── clip/stage/boundary capability views
+│   └── stable rule diagnostics
+├── ArchitectureAuthoringAdapters
+│   └── architecture-owned panels, presets, defaults, and normalizers
 ├── Domain
-│   ├── defaults and normalization
+│   ├── current-schema normalization
 │   ├── stable entity identity
-│   ├── selectors and invariants
-│   ├── authoring diagnostics
+│   ├── architecture-neutral selectors
 │   └── execution-path projection
 └── UI
-    ├── timeline renderers
+    ├── timeline renderers and gestures
     ├── detail panels
-    ├── gesture controllers
-    └── draft and focus sessions
+    └── draft/focus sessions
 ```
 
-The boundaries are strict:
+Only the host bridge reads SwarmUI globals or host DOM. Only the repository
+reads or writes carriers. Only document commands commit canonical state.
+Panels and timeline gestures consult capability views before creating values.
 
-- only the host bridge may read SwarmUI globals or host DOM;
-- only the repository may read or write the Data, prompt, and UI-state
-  carriers;
-- only the document store may commit authored state;
-- UI code reads cloned document snapshots and submits changes to the
-  repository;
-- the repository reduces compatibility snapshot submissions to one atomic
-  batch of stable-ID commands before committing them;
-- async work commits by stable entity ID and expected document revision;
-- renderers are pure apart from wiring DOM callbacks supplied by the
-  orchestrator.
+Generic patch commands cannot write clip architecture/profile or stage
+model/profile identity. Named retarget and conversion commands resolve their
+targets through the catalog, and whole-document diffs are accepted only when
+identity changes can be re-derived from structural or source edits.
 
-## Canonical document
+## Catalog and capability views
 
-The canonical document is versioned and gives durable IDs to clips, stages,
-references, prompt windows, retakes, audio segments, audio tracks, and audio
-spans. Array indexes remain a rendering concern, never entity identity.
+The backend catalog retains architecture/profile identities, scoped capability
+sets, boundary decisions, conditional rules, and constraints. The frontend may
+use an LTX bootstrap descriptor while the catalog request is pending, but the
+backend response becomes authoritative when available.
 
-Legacy array and unversioned object JSON are accepted only by the decoder. The
-encoder emits the current document while retaining the existing backend field
-shape. Prompt text remains compatible with existing `<videoclip>` tags.
+Catalog decoding is all-or-nothing: duplicate architecture/profile/model IDs,
+dangling references, unknown capability values, or malformed rule constraints
+reject the response instead of creating a partial capability view. A shared
+C#/TypeScript fixture keeps entry modes, boundary constraint keys, conditional
+rules, and model-profile gates aligned.
 
-Effective width, height, and FPS are resolved before clips are normalized.
-Every frame/duration selector receives the resolved document FPS; UI code must
-not independently re-read host FPS.
+Every option is resolved through the same view:
 
-Undo and redo snapshot this canonical document, including prompt and UI
-sidecars, and restore it through the same revision-checked command boundary as
-ordinary edits.
+```text
+decision(feature)
+authoringState(feature, hasPersistedValue)
+├── visible
+├── can create/edit
+├── can remove
+└── reason
+```
+
+Supported values are authorable. Unsupported values that are absent are
+hidden or disabled. Persisted unsupported values stay visible, read-only, and
+removable with an inline reason; normalization must not silently erase them.
+The same resolver supplies diagnostics so panels and the error summary cannot
+disagree.
+
+This policy applies to:
+
+- source video and entry modes;
+- major and relay prompts;
+- frame references and retakes;
+- clip audio, source kinds, clip-length ownership, reuse, and segments;
+- normal LoRAs, IC-LoRAs, and HDR;
+- each supported upscale mode; and
+- boundary choices.
+
+## Clip architecture conversion
+
+Changing stage 0 to another architecture is an explicit destructive but
+undoable conversion. The command:
+
+1. previews incompatible settings that will be removed;
+2. retargets every authored stage, including skipped stages;
+3. updates architecture and profile identities;
+4. removes only unsupported architecture-owned settings;
+5. preserves every supported prompt/media setting plus duration, stable IDs,
+   ordering, and architecture-neutral audio placement;
+6. repairs affected executable-neighbor boundaries to cuts; and
+7. commits as one history entry.
+
+Direct edits to later stage models cannot change the clip architecture.
+Persisted mixed-stage data is retained and diagnosed rather than normalized
+away.
+
+Stages may retarget to another profile inside the locked architecture. Authored
+stage 0 remains the source of the clip profile; later stages retain their own
+model profiles.
+
+## Source-only clips
+
+A sourced clip with no active generation stage uses architecture/profile
+`none`. It remains selectable and editable: its source can be changed or
+removed and a stage can be added. Re-enabling a skipped authored stage restores
+the architecture/profile resolved from stage 0.
+
+Adding the first active generation stage is one named batch and therefore one
+revision, notification, and undo/redo point.
+
+The `none` capability view is cut-only and exposes only neutral source/audio
+features supported by the backend.
+
+## Boundaries and structural edits
+
+Boundary policy uses executable neighbors, not raw array adjacency. Adding,
+deleting, skipping, re-enabling, reordering, or converting clips re-evaluates
+the affected executable boundaries. This handles active clips separated by
+skipped or otherwise non-executable clips.
+
+Invalid persisted joins keep their requested value for repair while the
+execution projection shows the effective cut and generation remains blocked.
+Overlap choices and previews use the owning boundary rule's frame step,
+minimum, maximum, default, and continuity-window offset rather than a global
+LTX frame grid.
 
 ## Planned multi-clip audio
 
-Clip-local base audio and clip-local audio segments remain compatible. The
-root document also supports logical audio tracks whose spans can cover one
-clip, several adjacent clips, a timeline-time window, or several discontiguous
-windows.
+Clip-local audio and segments remain supported according to the clip
+architecture. The root document separately stores architecture-neutral logical
+audio tracks:
 
 ```text
 AudioTrack
@@ -110,38 +173,38 @@ AudioTrack
     └── optional clip-relative start/length
 ```
 
-This mirrors the backend planning contract. Until a runtime mixer consumes
-authored cross-clip tracks, the UI must label them as planned/non-executing and
-must not partially execute an unresolved span.
+A track may span one clip or several clips. Until a runtime mixer consumes
+cross-clip tracks, the UI labels them as planned/non-executing and never
+partially executes an unresolved span.
 
-## Validation and failure behavior
+## Execution-path projection
 
-The frontend mirrors stable, graph-independent backend diagnostics:
+`executionPath.ts` is a nontechnical projection for the toolbar and interactive
+architecture map. It reports:
 
-- captured-stage audio reuse needs at least three active stages;
-- prompt relay cannot use audio- or ControlNet-owned duration;
-- executable retakes cannot combine with frame references;
-- ordinary generated clips cannot execute retakes without source/refine media;
-- a multi-clip timeline cannot mix HDR and non-HDR IC-LoRA policy.
+- entry material;
+- single/multi-clip and single/multi-stage shape;
+- architecture/profile per executable clip;
+- requested and effective joins;
+- option summaries; and
+- planned audio-track coverage.
 
-Persisted invalid state is preserved and explained. New invalid activation is
-disabled where doing so does not hide existing authored data.
+It does not reproduce backend nodes, latents, or graph construction and never
+hardcodes one global engine label.
 
-Async media probing is fail-closed: reorder, deletion, replacement, a newer
-pick, or a revision mismatch discards the stale result instead of targeting a
-different clip.
+The implementation is split by responsibility: boundary projection, audio
+projection, and display formatting are separate from the main orchestration.
+Architecture policy similarly separates identity, feature values, clip/stage
+views, and boundary policy. LTX IC-LoRA normalization, HDR recognition, presets,
+and editor sections live behind the LTX authoring adapter.
 
-## Refactor completion criteria
+## Completion rules
 
-- Every state write is reduced to named document commands before commit.
-- No renderer, panel, or gesture controller writes a carrier or canonical
-  store object directly.
-- No production UI controller mixes host access, carrier encoding, domain
-  mutation, rendering, and async effects.
-- Legacy decoding is isolated behind a versioned repository boundary.
-- LTX is the only authorable model family.
-- The execution-path projection and diagnostics cover every supported entry,
-  clip/stage shape, and option family.
-- Planned audio tracks can represent spans across one or more clips.
-- Frontend Jest, TypeScript, Biome, bundle build, and the extension C# suite
-  all pass.
+- The current schema is v3 only; no v2/unversioned/PascalCase migration path.
+- Every clip/stage model choice is catalog-resolved.
+- Every option panel and timeline creation gesture uses capability views.
+- Unsupported persisted values survive with actionable diagnostics.
+- Architecture conversion is atomic and exactly undoable/redoable.
+- Generic frontend modules contain no LTX architecture branches.
+- Planned audio tracks may span one or more clips.
+- Jest, TypeScript, Biome, bundle build, and the extension C# suite pass.

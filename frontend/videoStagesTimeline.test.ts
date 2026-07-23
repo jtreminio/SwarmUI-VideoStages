@@ -6,12 +6,22 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { minimalClip, minimalStage } from "./__test_helpers__/clipFixtures";
 import {
     mountPromptBox,
     mountSelect,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
+import {
+    __resetArchitectureCatalogForTests,
+    ARCHITECTURE_CATALOG_API,
+} from "./architectures/catalog";
+import {
+    setVideoStagesHostBridgeForTests,
+    type VideoStagesHostBridge,
+} from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import {
     __resetPersistenceForTests,
     getClips,
@@ -49,11 +59,31 @@ const setupBottomBar = (): void => {
     document.body.appendChild(content);
 };
 
+/** Every authored test clip is LTX 2.3; production rejects generic models. */
+const mountRootDefaults = (): void => {
+    mountSelect("input_videomodel", {
+        value: "ltx-2.3.safetensors",
+        options: ["ltx-2.3.safetensors"],
+    });
+    mountSelect("input_loras", { options: ["lora-x.safetensors"] });
+    mountSelect("input_sampler", { options: ["euler"] });
+    mountSelect("input_scheduler", { options: ["normal"] });
+    mountSelect("input_refinerupscalemethod", { options: ["pixel-lanczos"] });
+};
+
 const makeClipsJson = (count: number, duration = 2): string =>
     JSON.stringify({
+        schemaVersion: 3,
         clips: Array.from({ length: count }, () => ({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
             duration,
-            stages: [{}] as unknown[],
+            stages: [
+                {
+                    model: "ltx-2.3.safetensors",
+                    modelProfileId: "ltx-2.3",
+                },
+            ] as unknown[],
             refs: [] as unknown[],
         })),
     });
@@ -76,7 +106,11 @@ const notify = (): void => triggerChangeFor(promptInput);
 
 const regionCount = (): number =>
     document.querySelectorAll(`#${TIMELINE_BODY_ID} .vst-region`).length;
-
+const flushMicrotasks = async (): Promise<void> => {
+    for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+    }
+};
 describe("videoStagesTimeline", () => {
     let timeline: VideoStagesTimeline | null = null;
 
@@ -86,6 +120,11 @@ describe("videoStagesTimeline", () => {
                 modelClass: { compatClass: { id: "ltxv2" } },
             }),
         };
+        __resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => null,
+        });
         jest.useFakeTimers();
         __resetPersistenceForTests();
         clearUiStateForTests();
@@ -93,11 +132,14 @@ describe("videoStagesTimeline", () => {
         // Zoom/unit persist to localStorage; clear so one test's zoom never leaks into the next.
         localStorage.clear();
         setupBottomBar();
+        mountRootDefaults();
     });
 
     afterEach(() => {
         timeline?.dispose();
         timeline = null;
+        __resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests(null);
         jest.useRealTimers();
         resetSelectionForTests();
         document.body.innerHTML = "";
@@ -186,6 +228,7 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountState(
             JSON.stringify({
+                schemaVersion: 3,
                 clips: [
                     { duration: 2, stages: [{}], refs: [] },
                     { duration: 4, stages: [{}], refs: [] },
@@ -257,9 +300,10 @@ describe("videoStagesTimeline", () => {
         expect(regionCount()).toBe(2);
     });
 
-    it("+ Clip copies the previous clip's base settings and mirrors the prior join", () => {
+    it("+ Clip copies the previous clip's base settings and mirrors the prior join", async () => {
         mountState(
             JSON.stringify({
+                schemaVersion: 3,
                 clips: [
                     {
                         duration: 2,
@@ -274,7 +318,8 @@ describe("videoStagesTimeline", () => {
                             {
                                 sampler: "res_multistep",
                                 scheduler: "sgm_uniform",
-                                model: "ltx-big",
+                                model: "ltx-2.3.safetensors",
+                                modelProfileId: "ltx-2.3",
                                 steps: 20,
                                 cfgScale: 4,
                                 loras: [{ name: "look", weight: 0.6 }],
@@ -293,6 +338,7 @@ describe("videoStagesTimeline", () => {
                 ".vst-topbar-tools [data-vst-add-clip]",
             )
             ?.click();
+        await flushMicrotasks();
 
         const clips = getClips();
         expect(clips).toHaveLength(3);
@@ -304,10 +350,70 @@ describe("videoStagesTimeline", () => {
         const stage = clips[2].stages[0];
         expect(stage.sampler).toBe("res_multistep");
         expect(stage.scheduler).toBe("sgm_uniform");
-        expect(stage.model).toBe("ltx-big");
+        expect(stage.model).toBe("ltx-2.3.safetensors");
         expect(stage.steps).toBe(20);
         expect(stage.cfgScale).toBe(4);
         expect(stage.loras).toEqual([{ name: "look", weight: 0.6 }]);
+    });
+
+    it("adds the first clip after the backend catalog resolves even when the video-model dropdown is absent", async () => {
+        document.getElementById("input_videomodel")?.remove();
+        mountState(JSON.stringify({ schemaVersion: 3, clips: [] }));
+        __resetArchitectureCatalogForTests();
+
+        const architecture = testArchitectureCatalog().architectures[0];
+        const dto = {
+            architectures: [architecture],
+            models: [
+                {
+                    modelName: "server-ltx-model.safetensors",
+                    architectureId: "ltx2",
+                    modelProfileId: "ltx-2.3",
+                    compatId: "ltxv2",
+                },
+            ],
+        };
+        let resolveCatalog!: (value: unknown) => void;
+        const requestJson = jest.fn<VideoStagesHostBridge["requestJson"]>(
+            () =>
+                new Promise((resolve) => {
+                    resolveCatalog = resolve;
+                }),
+        );
+        const showError = jest.fn();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+            showError,
+        });
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+        document
+            .querySelector<HTMLButtonElement>(
+                ".vst-topbar-tools [data-vst-add-clip]",
+            )
+            ?.click();
+
+        expect(requestJson).toHaveBeenCalledTimes(1);
+        expect(requestJson).toHaveBeenCalledWith(ARCHITECTURE_CATALOG_API);
+        expect(getClips()).toHaveLength(0);
+
+        resolveCatalog(dto);
+        await flushMicrotasks();
+
+        expect(showError).not.toHaveBeenCalled();
+        expect(getClips()).toHaveLength(1);
+        expect(getClips()[0]).toMatchObject({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            stages: [
+                {
+                    model: "server-ltx-model.safetensors",
+                    modelProfileId: "ltx-2.3",
+                },
+            ],
+        });
     });
 
     it("keeps the region count stable when only surrounding prompt prose changes", () => {
@@ -435,7 +541,7 @@ describe("videoStagesTimeline", () => {
 
     it("undoes and redoes hues and prompt-window IDs through the repository", () => {
         mountEnabledToggle();
-        mountState(JSON.stringify({ clips: [] }));
+        mountState(JSON.stringify({ schemaVersion: 3, clips: [] }));
         saveClips(
             [
                 minimalClip({
@@ -599,6 +705,7 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountVideoStagesData(
             JSON.stringify({
+                schemaVersion: 3,
                 clips: [{ duration: 10, stages: [{}], refs: [] }],
             }),
         );
@@ -643,16 +750,13 @@ describe("videoStagesTimeline", () => {
     it("repaints stage dropdowns when the host refreshes models/loras", () => {
         mountState(makeClipsJson(1));
         mountEnabledToggle();
-        mountSelect("input_videomodel", {
-            value: "model-a.safetensors",
-            options: ["model-a.safetensors", "model-b.safetensors"],
-        });
-        mountSelect("input_loras", { options: ["lora-x.safetensors"] });
-        mountSelect("input_sampler", { options: ["euler"] });
-        mountSelect("input_scheduler", { options: ["normal"] });
-        mountSelect("input_refinerupscalemethod", {
-            options: ["pixel-lanczos"],
-        });
+        const hostModel = document.getElementById(
+            "input_videomodel",
+        ) as HTMLSelectElement;
+        const alternate = document.createElement("option");
+        alternate.value = "ltx-2.3-alt.safetensors";
+        alternate.text = alternate.value;
+        hostModel.appendChild(alternate);
 
         timeline = videoStagesTimeline();
         timeline.init();
@@ -666,25 +770,22 @@ describe("videoStagesTimeline", () => {
             );
             const model = selects.find((s) =>
                 Array.from(s.options).some(
-                    (o) => o.value === "model-a.safetensors",
+                    (o) => o.value === "ltx-2.3.safetensors",
                 ),
             );
             return Array.from(model?.options ?? []).map((o) => o.value);
         };
 
         expect(modelOptions()).toEqual([
-            "model-a.safetensors",
-            "model-b.safetensors",
+            "ltx-2.3.safetensors",
+            "ltx-2.3-alt.safetensors",
         ]);
 
         // Host refresh button repopulates the core dropdown, then runs the
         // refreshParamsExtra callbacks. Our hook defers a repaint one tick.
-        const hostModel = document.getElementById(
-            "input_videomodel",
-        ) as HTMLSelectElement;
         const newOption = document.createElement("option");
-        newOption.value = "model-c.safetensors";
-        newOption.text = "model-c.safetensors";
+        newOption.value = "ltx-2.3-refreshed.safetensors";
+        newOption.text = newOption.value;
         hostModel.appendChild(newOption);
 
         const extras = refreshParamsExtra as (() => unknown)[];
@@ -694,7 +795,7 @@ describe("videoStagesTimeline", () => {
         }
         jest.advanceTimersByTime(1);
 
-        expect(modelOptions()).toContain("model-c.safetensors");
+        expect(modelOptions()).toContain("ltx-2.3-refreshed.safetensors");
     });
 
     it("removes its host-refresh hook on dispose", () => {

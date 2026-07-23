@@ -11,7 +11,11 @@ import {
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    mountPromptBox,
+    mountSelect,
+    mountVideoStagesData,
+} from "./__test_helpers__/dom";
 import {
     __resetPersistenceForTests,
     dispatchDocumentCommand,
@@ -23,11 +27,9 @@ import {
     serializeClipsForStorage,
     serializeStateForStorage,
 } from "./persistence";
-import {
-    REF_SOURCE_BASE,
-    type StoredClip,
-    type VideoStagesConfig,
-} from "./types";
+import { decodeStoredDocument } from "./persistence/documentCodec";
+import type { StoredClip } from "./storageTypes";
+import { REF_SOURCE_BASE, type VideoStagesConfig } from "./types";
 import { clearUiStateForTests } from "./uiState";
 
 const dataInput = (): HTMLTextAreaElement =>
@@ -38,6 +40,75 @@ const promptEl = (): HTMLTextAreaElement =>
 describe("persistence", () => {
     afterEach(() => {
         jest.restoreAllMocks();
+    });
+
+    describe("strict v3 collection decoding", () => {
+        const decode = (document: unknown) =>
+            decodeStoredDocument(JSON.stringify(document), {
+                width: 1024,
+                height: 1024,
+                fps: 24,
+            });
+
+        it.each([
+            ["missing clips", { schemaVersion: 3 }],
+            ["non-array clips", { schemaVersion: 3, clips: {} }],
+            ["null clip item", { schemaVersion: 3, clips: [null] }],
+            ["scalar clip item", { schemaVersion: 3, clips: ["clip"] }],
+        ])("rejects %s", (_label, document) => {
+            expect(decode(document)).toBeNull();
+        });
+
+        it.each([
+            ["root audioTracks", { audioTracks: {} }],
+            ["root audioTracks item", { audioTracks: [null] }],
+            ["clip stages", { clips: [{ stages: {} }] }],
+            ["clip stage item", { clips: [{ stages: [null] }] }],
+            ["clip refs", { clips: [{ refs: {} }] }],
+            ["clip ref item", { clips: [{ refs: [1] }] }],
+            ["clip audioSegments", { clips: [{ audioSegments: {} }] }],
+            [
+                "clip audio-segment item",
+                { clips: [{ audioSegments: ["segment"] }] },
+            ],
+            ["clip icLoras", { clips: [{ icLoras: {} }] }],
+            ["clip IC-LoRA item", { clips: [{ icLoras: [false] }] }],
+            ["stage LoRAs", { clips: [{ stages: [{ loras: {} }] }] }],
+            ["stage LoRA item", { clips: [{ stages: [{ loras: [null] }] }] }],
+            [
+                "stage ref strengths",
+                { clips: [{ stages: [{ refStrengths: {} }] }] },
+            ],
+            [
+                "stage ref-strength item",
+                { clips: [{ stages: [{ refStrengths: [null] }] }] },
+            ],
+            ["audio-track spans", { audioTracks: [{ spans: {} }] }],
+            ["audio-track span item", { audioTracks: [{ spans: [null] }] }],
+            ["audio-track source", { audioTracks: [{ source: "upload" }] }],
+        ])("rejects a malformed present %s collection", (_label, partial) => {
+            expect(
+                decode({
+                    schemaVersion: 3,
+                    clips: [],
+                    ...partial,
+                }),
+            ).toBeNull();
+        });
+
+        it("accepts omitted optional collections without inventing stored items", () => {
+            const decoded = decode({ schemaVersion: 3, clips: [{}] });
+
+            expect(decoded).not.toBeNull();
+            expect(decoded?.clips).toHaveLength(1);
+            expect(decoded?.clips[0]).toMatchObject({
+                stages: [],
+                refs: [],
+                audioSegments: [],
+                icLoras: [],
+            });
+            expect(decoded?.audioTracks).toEqual([]);
+        });
     });
 
     describe("serializeClipsForStorage", () => {
@@ -76,6 +147,8 @@ describe("persistence", () => {
             const expected: StoredClip[] = [
                 {
                     id: clips[0].id as string,
+                    architecture: "ltx2",
+                    modelProfileId: "ltx-2.3",
                     skipped: false,
                     boundaryOut: "cut",
                     boundaryOutOverlap: 8,
@@ -121,7 +194,8 @@ describe("persistence", () => {
                             refStrengths: [0.8],
                             upscale: 1,
                             upscaleMethod: "latentmodel-test.safetensors",
-                            model: "m",
+                            model: "ltx-2.3.safetensors",
+                            modelProfileId: "ltx-2.3",
                             steps: 8,
                             cfgScale: 1,
                             sampler: "euler",
@@ -146,6 +220,10 @@ describe("persistence", () => {
             document.body.innerHTML = "";
             mountVideoStagesData({ clips: [] });
             mountPromptBox("a cinematic shot");
+            mountSelect("input_videomodel", {
+                value: "ltx-2.3.safetensors",
+                options: ["ltx-2.3.safetensors"],
+            });
         });
 
         it("writes structure to the Data param and prompt text to the prompt box", () => {
@@ -208,7 +286,76 @@ describe("persistence", () => {
             ).toBe(clipId);
         });
 
-        it("reduces a legacy saveClips mutation to one atomic batch and one notification", () => {
+        it("rejects whole-document attempts to bypass named architecture conversion", () => {
+            saveClips([minimalClip()], { notifyDomChange: false });
+            const clips = getClips();
+            clips[0].architecture = "forged-architecture";
+            clips[0].modelProfileId = "forged-profile";
+            const error = jest
+                .spyOn(console, "error")
+                .mockImplementation(() => {});
+
+            expect(() => saveClips(clips, { notifyDomChange: false })).toThrow(
+                "architecture-invariant",
+            );
+            expect(error).toHaveBeenCalled();
+            expect(getClips()[0]).toMatchObject({
+                architecture: "ltx2",
+                modelProfileId: "ltx-2.3",
+            });
+        });
+
+        it("routes same-profile model edits through invariant-aware retargeting", () => {
+            saveClips([minimalClip()], { notifyDomChange: false });
+            const model = document.createElement("option");
+            model.value = "ltx-2.3-alt.safetensors";
+            model.text = "LTX Alt";
+            (
+                document.getElementById("input_videomodel") as HTMLSelectElement
+            ).appendChild(model);
+            const clips = getClips();
+            clips[0].stages[0].model = model.value;
+
+            expect(() =>
+                saveClips(clips, { notifyDomChange: false }),
+            ).not.toThrow();
+            expect(getClips()[0].stages[0].model).toBe(model.value);
+        });
+
+        it("preserves unknown v3 architecture identities for diagnostics and repair", () => {
+            mountVideoStagesData({
+                schemaVersion: 3,
+                clips: [
+                    {
+                        architecture: "removed-architecture",
+                        modelProfileId: "removed-profile",
+                        duration: 3,
+                        stages: [
+                            {
+                                model: "removed-model.safetensors",
+                                modelProfileId: "removed-stage-profile",
+                            },
+                        ],
+                    },
+                ],
+            });
+            __resetPersistenceForTests();
+
+            const clip = getState().clips[0];
+
+            expect(clip).toMatchObject({
+                architecture: "removed-architecture",
+                modelProfileId: "removed-profile",
+                stages: [
+                    {
+                        model: "removed-model.safetensors",
+                        modelProfileId: "removed-stage-profile",
+                    },
+                ],
+            });
+        });
+
+        it("reduces a clip-array save to one atomic batch and one notification", () => {
             const clips = [minimalClip({ duration: 3, prompt: "a red fox" })];
             const callerSnapshot = structuredClone(clips);
             const store = getTimelineStore();
@@ -244,7 +391,7 @@ describe("persistence", () => {
             expect(clips[0].stages[0].id).toBeUndefined();
         });
 
-        it("preserves structural order and prompt/UI sidecars through compatibility saves", () => {
+        it("preserves structural order and prompt/UI sidecars through clip-array saves", () => {
             saveClips(
                 [
                     minimalClip({
@@ -525,6 +672,10 @@ describe("persistence", () => {
             document.body.innerHTML = "";
             mountVideoStagesData({ clips: [] });
             mountPromptBox("");
+            mountSelect("input_videomodel", {
+                value: "ltx-2.3.safetensors",
+                options: ["ltx-2.3.safetensors"],
+            });
         });
 
         it("omits width/height/fps when they are inherited", () => {

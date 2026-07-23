@@ -17,6 +17,7 @@ import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
 import { setSelection } from "../selection";
 import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
+import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 const GROUP_REF = "vstdock_ref";
@@ -177,6 +178,13 @@ export const buildRefBody = (
                     },
                 ),
             );
+        }
+        const decision = ctx
+            .capabilities()
+            .forClip(clip)
+            .decision("frameReferences");
+        if (!decision.supported) {
+            disableCapabilityControls(row, decision, [".vst-detail-delete"]);
         }
         body.appendChild(row);
     });

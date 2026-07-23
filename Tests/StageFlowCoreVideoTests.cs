@@ -257,7 +257,7 @@ public partial class StageFlowTests
             () => WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("supports LTX-Video timelines only", error.Message);
+        Assert.Contains("does not resolve to a registered video architecture", error.Message);
     }
 
     [Fact]
@@ -329,7 +329,7 @@ public partial class StageFlowTests
             () => WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildNativeSteps(attachAudioToCurrentMedia: false),
-                features: [Constants.LtxVideoFeatureFlag, "variation_seed"]));
+                features: [Ltx2HostIntegration.FeatureFlag, "variation_seed"]));
 
         Assert.Contains(
             "ControlNet 1 owns clip 0 length",
@@ -621,7 +621,7 @@ public partial class StageFlowTests
                 input,
                 BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel),
                 ComfyUIBackendExtension.FeaturesSupported
-                    .Where(feature => feature != Constants.LtxVideoFeatureFlag)));
+                    .Where(feature => feature != Ltx2HostIntegration.FeatureFlag)));
         Assert.Contains("ComfyUI-LTXVideo", ex.Message);
     }
 
@@ -1364,7 +1364,7 @@ public partial class StageFlowTests
             () => WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("supports LTX-Video timelines only", error.Message);
+        Assert.Contains("no executable clips", error.Message);
     }
 
     [Fact]

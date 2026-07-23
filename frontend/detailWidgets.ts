@@ -1,5 +1,5 @@
 import { clamp } from "./constants";
-import { getLtxHostBridge } from "./host";
+import { getVideoStagesHostBridge } from "./host";
 import {
     enhanceHostPromptEditor,
     hasHostInputBrowser,
@@ -334,7 +334,7 @@ export const buildMediaPickRow = (
             onFile(picked, pickedName);
             return;
         }
-        void getLtxHostBridge()
+        void getVideoStagesHostBridge()
             .toDataUrl(picked)
             .then((data) => onFile(data, pickedName));
     });

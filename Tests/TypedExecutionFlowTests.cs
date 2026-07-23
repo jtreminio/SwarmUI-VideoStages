@@ -31,7 +31,7 @@ public partial class StageFlowTests
                 input,
                 BuildNativeSteps(attachAudioToCurrentMedia: true)));
 
-        Assert.Contains("supports LTX-Video timelines only", error.Message);
+        Assert.Contains("does not resolve to a registered video architecture", error.Message);
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public partial class StageFlowTests
                 input,
                 BuildNativeSteps(attachAudioToCurrentMedia: true)));
 
-        Assert.Contains("mixed-model", error.Message);
+        Assert.Contains("does not resolve to a registered video architecture", error.Message);
     }
 
     [Fact]

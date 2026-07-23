@@ -1,4 +1,4 @@
-import { getLtxHostBridge } from "./host";
+import { getVideoStagesHostBridge } from "./host";
 import {
     preserveSelectedOption,
     resolveSelectValue,
@@ -9,16 +9,43 @@ export type AudioSourceOption = Pick<SelectOption, "value" | "label">;
 
 export interface AudioSourceContext {
     controlNetEnabled?: boolean;
+    allowedKinds?: readonly string[];
 }
 
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
 export const AUDIO_SOURCE_CONTROLNET = "ControlNet";
 export const AUDIO_SOURCE_VOICE_REF = "Voice Reference";
+export const AUDIO_SOURCE_DISABLED_KIND = "Disabled";
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
 export const isAceStepFunAudioSource = (source: string): boolean =>
     ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+
+export const audioSourceKind = (source: string): string => {
+    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
+    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
+};
+
+export const isAllowedAudioSource = (
+    allowedKinds: readonly string[],
+    source: string,
+): boolean => {
+    const kind = audioSourceKind(source);
+    return (
+        allowedKinds.includes(kind) ||
+        (kind === AUDIO_SOURCE_NATIVE &&
+            allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND))
+    );
+};
+
+export const defaultAuthoringAudioSource = (
+    allowedKinds: readonly string[],
+): string =>
+    allowedKinds.includes(AUDIO_SOURCE_NATIVE) ||
+    allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND)
+        ? AUDIO_SOURCE_NATIVE
+        : (allowedKinds[0] ?? AUDIO_SOURCE_NATIVE);
 
 export const isControlNetAudioSource = (source: string): boolean =>
     `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
@@ -33,7 +60,7 @@ export const canUseClipLengthFromAudio = (source: string): boolean => {
 };
 
 const getAceStepFunRefs = (): string[] => {
-    const snapshot = getLtxHostBridge().getAceStepFunRegistry();
+    const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
         return [];
     }
@@ -101,7 +128,24 @@ export const buildAudioSourceOptions = (
             label: AUDIO_SOURCE_CONTROLNET,
         });
     }
+    if (context.allowedKinds) {
+        const allowed = new Set(context.allowedKinds);
+        const filtered = options.filter((option) => {
+            const kind = audioSourceKind(option.value);
+            return (
+                allowed.has(kind) ||
+                (kind === AUDIO_SOURCE_NATIVE &&
+                    allowed.has(AUDIO_SOURCE_DISABLED_KIND))
+            );
+        });
+        options.length = 0;
+        options.push(...filtered);
+    }
     appendMissingSelectedRef(options, currentValue);
+    preserveSelectedOption(options, currentValue, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+    }));
     return options;
 };
 

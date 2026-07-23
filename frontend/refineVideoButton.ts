@@ -1,4 +1,4 @@
-import { getLtxHostBridge } from "./host";
+import { getVideoStagesHostBridge } from "./host";
 import { readProp } from "./normalization";
 import { getState } from "./persistence";
 import { isVideoStagesEnabled } from "./swarmInputs";
@@ -53,64 +53,67 @@ export const refineVideoButton = (): void => {
     const description =
         "Re-runs VideoStages using this video as the source for Clip 1 (skips the first N stage samplers, " +
         "where N is read from the source video's metadata). Requires an extra stage beyond those.";
-    getLtxHostBridge().registerRefineVideoButton((src: string): void => {
-        const host = getLtxHostBridge();
-        const run = async (): Promise<void> => {
-            let parsedMetadata: unknown = null;
-            const currentMetadata = host.getCurrentMediaMetadata();
-            if (currentMetadata) {
-                try {
-                    const readable =
-                        host.interpretMediaMetadata(currentMetadata);
-                    parsedMetadata = readable ? JSON.parse(readable) : null;
-                } catch (error) {
-                    console.warn(
-                        "VideoStages: failed to parse source video metadata",
-                        error,
-                    );
+    getVideoStagesHostBridge().registerRefineVideoButton(
+        (src: string): void => {
+            const host = getVideoStagesHostBridge();
+            const run = async (): Promise<void> => {
+                let parsedMetadata: unknown = null;
+                const currentMetadata = host.getCurrentMediaMetadata();
+                if (currentMetadata) {
+                    try {
+                        const readable =
+                            host.interpretMediaMetadata(currentMetadata);
+                        parsedMetadata = readable ? JSON.parse(readable) : null;
+                    } catch (error) {
+                        console.warn(
+                            "VideoStages: failed to parse source video metadata",
+                            error,
+                        );
+                    }
                 }
-            }
 
-            const params = isRecord(parsedMetadata)
-                ? readProp(parsedMetadata, "sui_image_params")
-                : null;
-            const sourceVideostages = isRecord(params)
-                ? readProp(params, "videostages")
-                : undefined;
-            const skipCount = Math.max(
-                1,
-                typeof sourceVideostages === "string"
-                    ? countActiveStagesInMetadataClip0(sourceVideostages)
-                    : 0,
-            );
+                const params = isRecord(parsedMetadata)
+                    ? readProp(parsedMetadata, "sui_image_params")
+                    : null;
+                const sourceVideostages = isRecord(params)
+                    ? readProp(params, "videostages")
+                    : undefined;
+                const skipCount = Math.max(
+                    1,
+                    typeof sourceVideostages === "string"
+                        ? countActiveStagesInMetadataClip0(sourceVideostages)
+                        : 0,
+                );
 
-            if (
-                !hasRefinementWorkToDo(
-                    getState(),
-                    isVideoStagesEnabled(),
-                    skipCount,
-                )
-            ) {
-                host.showError(refineNeedsExtraStageMessage(skipCount));
-                return;
-            }
+                if (
+                    !hasRefinementWorkToDo(
+                        getState(),
+                        isVideoStagesEnabled(),
+                        skipCount,
+                    )
+                ) {
+                    host.showError(refineNeedsExtraStageMessage(skipCount));
+                    return;
+                }
 
-            const videoDataUrl = await host.toDataUrl(src);
-            const inputOverrides: Record<string, unknown> = {
-                videostagesrefinesourcevideo: videoDataUrl,
-                videostagesrefineskipstages: skipCount,
-                images: 1,
+                const videoDataUrl = await host.toDataUrl(src);
+                const inputOverrides: Record<string, unknown> = {
+                    videostagesrefinesourcevideo: videoDataUrl,
+                    videostagesrefineskipstages: skipCount,
+                    images: 1,
+                };
+
+                const seed = isRecord(params)
+                    ? readProp(params, "seed")
+                    : undefined;
+                if (typeof seed === "number") {
+                    inputOverrides.seed = seed;
+                }
+
+                host.generate(inputOverrides);
             };
-
-            const seed = isRecord(params)
-                ? readProp(params, "seed")
-                : undefined;
-            if (typeof seed === "number") {
-                inputOverrides.seed = seed;
-            }
-
-            host.generate(inputOverrides);
-        };
-        void run();
-    }, description);
+            void run();
+        },
+        description,
+    );
 };

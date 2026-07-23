@@ -4,7 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Ltx2;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -76,7 +76,7 @@ public class LtxPostVideoChainComponentsTests
         {
             UseReusedAudioLatent = true
         };
-        ClipAudioState audioReuse = new();
+        Ltx2ClipAudioReuseState audioReuse = new();
         audioReuse.Remember(new JArray("remembered", 1));
         LtxAudioReferenceResolver resolver = new(generator, audioReuse, state);
 
@@ -120,6 +120,128 @@ public class LtxPostVideoChainComponentsTests
             },
             vae,
             new LtxDecodeConfig(UseTiledDecode: false));
+
+        Assert.Null(result);
+        Assert.True(JToken.DeepEquals(before, workflow));
+    }
+
+    [Fact]
+    public void RebuilderMissingVaeFailsClosedWithoutCreatingAnOrphanSeparate()
+    {
+        JObject workflow = BuildLtxWorkflow();
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        MediaRef current = new()
+        {
+            Output = bridge.ResolvePath(new JArray("5", 0)),
+            DataType = WGNodeData.DT_VIDEO
+        };
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
+            bridge,
+            current,
+            currentAudioVae: null,
+            useReusedAudio: false);
+        KSamplerNode sampler = bridge.AddNode(new KSamplerNode());
+        MediaRef stageOutput = new()
+        {
+            Output = sampler.LATENT,
+            DataType = WGNodeData.DT_LATENT_AUDIOVIDEO
+        };
+        JObject before = (JObject)workflow.DeepClone();
+
+        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
+            bridge,
+            capture,
+            stageOutput,
+            new MediaRef { Output = null, DataType = WGNodeData.DT_VAE },
+            new LtxDecodeConfig(UseTiledDecode: false));
+
+        Assert.Null(result);
+        Assert.True(JToken.DeepEquals(before, workflow));
+    }
+
+    [Fact]
+    public void RebuilderMissingCapturedDecodeFailsClosedWithoutCreatingAnOrphanSeparate()
+    {
+        JObject workflow = BuildLtxWorkflow();
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        MediaRef current = new()
+        {
+            Output = bridge.ResolvePath(new JArray("5", 0)),
+            DataType = WGNodeData.DT_VIDEO
+        };
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
+            bridge,
+            current,
+            currentAudioVae: null,
+            useReusedAudio: false) with
+        {
+            DecodeId = "missing-decode"
+        };
+        KSamplerNode sampler = bridge.AddNode(new KSamplerNode());
+        MediaRef stageOutput = new()
+        {
+            Output = sampler.LATENT,
+            DataType = WGNodeData.DT_LATENT_AUDIOVIDEO
+        };
+        MediaRef vae = new()
+        {
+            Output = bridge.ResolvePath(new JArray("1", 2)),
+            DataType = WGNodeData.DT_VAE
+        };
+        JObject before = (JObject)workflow.DeepClone();
+
+        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
+            bridge,
+            capture,
+            stageOutput,
+            vae,
+            new LtxDecodeConfig(UseTiledDecode: false));
+
+        Assert.Null(result);
+        Assert.True(JToken.DeepEquals(before, workflow));
+    }
+
+    [Fact]
+    public void DedicatedRebuilderMissingAudioVaeFailsClosedWithoutGraphMutation()
+    {
+        JObject workflow = BuildLtxWorkflow();
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        MediaRef current = new()
+        {
+            Output = bridge.ResolvePath(new JArray("5", 0)),
+            DataType = WGNodeData.DT_VIDEO
+        };
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
+            bridge,
+            current,
+            currentAudioVae: null,
+            useReusedAudio: false) with
+        {
+            AudioVaeSource = null
+        };
+        KSamplerNode sampler = bridge.AddNode(new KSamplerNode());
+        MediaRef stageOutput = new()
+        {
+            Output = sampler.LATENT,
+            DataType = WGNodeData.DT_LATENT_AUDIOVIDEO
+        };
+        MediaRef vae = new()
+        {
+            Output = bridge.ResolvePath(new JArray("1", 2)),
+            DataType = WGNodeData.DT_VAE
+        };
+        JObject before = (JObject)workflow.DeepClone();
+
+        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutputToDedicatedBranch(
+            bridge,
+            capture,
+            stageOutput,
+            vae,
+            new LtxDecodeConfig(UseTiledDecode: false),
+            512,
+            512,
+            25,
+            24);
 
         Assert.Null(result);
         Assert.True(JToken.DeepEquals(before, workflow));

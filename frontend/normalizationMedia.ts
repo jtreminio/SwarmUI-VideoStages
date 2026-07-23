@@ -10,7 +10,6 @@ import {
 import {
     clampWindowInDuration,
     normalizeOptionalEntityId,
-    readProp,
 } from "./normalizationShared";
 import type { PromptWindow, Retake, SourceVideo, UploadedAudio } from "./types";
 import { isRecord, roundToTenth, toNumber } from "./utils";
@@ -18,20 +17,14 @@ import { isRecord, roundToTenth, toNumber } from "./utils";
 const normalizePromptWindow = (
     raw: Record<string, unknown>,
 ): PromptWindow | null => {
-    const duration = toNumber(
-        `${readProp(raw, "duration", "Duration") ?? 0}`,
-        0,
-    );
+    const duration = toNumber(`${raw.duration ?? 0}`, 0);
     if (!(duration > 0)) {
         return null;
     }
-    const start = Math.max(
-        0,
-        toNumber(`${readProp(raw, "start", "Start") ?? 0}`, 0),
-    );
+    const start = Math.max(0, toNumber(`${raw.start ?? 0}`, 0));
     return {
-        id: normalizeOptionalEntityId(readProp(raw, "id", "Id")),
-        prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
+        id: normalizeOptionalEntityId(raw.id),
+        prompt: `${raw.prompt ?? ""}`,
         start,
         duration,
     };
@@ -40,7 +33,7 @@ const normalizePromptWindow = (
 export const normalizePromptWindows = (
     rawClip: Record<string, unknown>,
 ): PromptWindow[] => {
-    const rawList = readProp(rawClip, "promptWindows", "PromptWindows");
+    const rawList = rawClip.promptWindows;
     if (!Array.isArray(rawList)) {
         return [];
     }
@@ -57,14 +50,8 @@ export const normalizeRetake = (
     if (!isRecord(value)) {
         return null;
     }
-    const startRaw = Math.max(
-        0,
-        toNumber(`${readProp(value, "startSeconds", "StartSeconds") ?? 0}`, 0),
-    );
-    const lengthRaw = toNumber(
-        `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
-        0,
-    );
+    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
+    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
     const window = clampWindowInDuration(
         startRaw,
         lengthRaw,
@@ -74,7 +61,7 @@ export const normalizeRetake = (
     if (!window) {
         return null;
     }
-    const strengthRaw = readProp(value, "strength", "Strength");
+    const strengthRaw = value.strength;
     const strength =
         strengthRaw == null
             ? RETAKE_STRENGTH_DEFAULT
@@ -84,7 +71,7 @@ export const normalizeRetake = (
                   RETAKE_STRENGTH_MAX,
               );
     return {
-        id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
+        id: normalizeOptionalEntityId(value.id),
         startSeconds: roundToTenth(window.startSeconds),
         lengthSeconds: roundToTenth(window.lengthSeconds),
         strength,
@@ -107,15 +94,9 @@ export const normalizeSourceVideo = (value: unknown): SourceVideo | null => {
     }
     const nonNegative = (raw: unknown): number =>
         Math.max(0, toNumber(`${raw ?? 0}`, 0));
-    const durationSeconds = nonNegative(
-        readProp(value, "durationSeconds", "DurationSeconds"),
-    );
-    let startSeconds = nonNegative(
-        readProp(value, "startSeconds", "StartSeconds"),
-    );
-    let lengthSeconds = nonNegative(
-        readProp(value, "lengthSeconds", "LengthSeconds"),
-    );
+    const durationSeconds = nonNegative(value.durationSeconds);
+    let startSeconds = nonNegative(value.startSeconds);
+    let lengthSeconds = nonNegative(value.lengthSeconds);
     if (durationSeconds > 0) {
         startSeconds = Math.min(
             startSeconds,
@@ -134,7 +115,7 @@ export const normalizeSourceVideo = (value: unknown): SourceVideo | null => {
         fileName: normalizeUploadFileName(
             value.fileName == null ? null : `${value.fileName}`,
         ),
-        fps: nonNegative(readProp(value, "fps", "Fps")),
+        fps: nonNegative(value.fps),
         durationSeconds: roundToTenth(durationSeconds),
         startSeconds: roundToTenth(startSeconds),
         lengthSeconds: roundToTenth(lengthSeconds),

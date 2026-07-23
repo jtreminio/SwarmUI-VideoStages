@@ -9,7 +9,7 @@ using VideoStages.Planning;
 namespace VideoStages.Execution;
 
 /// <summary>
-/// Owns the host-root artifact for one LTX execution. The session is captured before any
+/// Owns the host-root artifact for one video-timeline execution. The session is captured before any
 /// coordinator-level media replacement, then publishes the completed timeline before removing a
 /// root component that the immutable plan says is displaced.
 /// </summary>
@@ -37,7 +37,7 @@ internal sealed class RootRuntimeSession
 
     public static RootRuntimeSession Capture(
         WorkflowGenerator generator,
-        LtxVideoExecutionPlanContext planContext)
+        VideoExecutionPlanContext planContext)
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(planContext);
@@ -74,7 +74,7 @@ internal sealed class RootRuntimeSession
         if (!timeline.HasMedia)
         {
             throw new SwarmUserErrorException(
-                "VideoStages: the completed LTX timeline did not produce a publishable video artifact.");
+                "VideoStages: the completed timeline did not produce a publishable video artifact.");
         }
 
         bool rootIsDisplaced = _rootPlan.Use is RootUse.Discard
@@ -89,7 +89,7 @@ internal sealed class RootRuntimeSession
         if (publication.Result == OutputPublicationResult.Failed)
         {
             throw new SwarmUserErrorException(
-                "VideoStages: the completed LTX timeline could not be connected to the final output.");
+                "VideoStages: the completed timeline could not be connected to the final output.");
         }
 
         if (rootIsDisplaced)
@@ -132,7 +132,7 @@ internal sealed class RootRuntimeSession
 }
 
 /// <summary>
-/// The exact host animation publications that existed when the LTX coordinator took ownership.
+/// The exact host animation publications that existed when the timeline coordinator took ownership.
 /// Saves authored later by individual stages are intentionally not part of this registry.
 /// </summary>
 internal sealed record OutputRegistry(IReadOnlySet<string> HostAnimationSaveIds)

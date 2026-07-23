@@ -334,7 +334,6 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(0.7, entry.Strength);
         Assert.Equal(0.4, entry.AttentionStrength);
         Assert.Equal(Constants.IcLoraControlCanny, entry.ControlType);
-        Assert.Equal(Constants.ControlNetSourceTwo, clips[0].PrimarySlotEntry?.Source);
         Assert.True(clips[0].SaveAudioTrack);
         Assert.False(clips[0].ClipLengthFromAudio);
         Assert.True(clips[0].ClipLengthFromControlNet);
@@ -354,11 +353,8 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(2, clips[1].Stages.Count);
     }
 
-    // The ONE legacy-shape test: old saved configs carry ControlNetLora + ControlNetSource on the
-    // clip itself; the parser maps them to a single default-strength IC-LoRA entry. Every other
-    // fixture authors the shipping IcLoras[] shape.
     [Fact]
-    public void ParseClips_LegacyControlNetFields_MapToSingleIcLoraEntry()
+    public void ParseClips_LegacyControlNetFields_AreIgnored()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["ControlNetLora"] = "legacy-lora";
@@ -366,14 +362,22 @@ public class VideoStagesSpecParserClipsTests
 
         ClipSpec parsed = ParseSingleClip(clip);
 
-        IcLoraSpec entry = Assert.Single(parsed.IcLoras);
-        Assert.Equal("legacy-lora", entry.Lora);
-        Assert.Equal(Constants.ControlNetSourceTwo, entry.Source);
-        Assert.Equal(1, entry.Strength);
-        Assert.Equal(1, entry.AttentionStrength);
-        Assert.Equal(Constants.IcLoraControlNone, entry.ControlType);
-        Assert.Null(entry.Video);
-        Assert.Equal(Constants.ControlNetSourceTwo, parsed.PrimarySlotEntry?.Source);
+        Assert.Empty(parsed.IcLoras);
+    }
+
+    [Fact]
+    public void ParseClips_LegacyControlNetPromptOverrides_AreIgnored()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(
+            BuildParser(
+                json,
+                "<videoclip[0,controlnetlora]:legacy-lora> "
+                + "<videoclip[0,controlnetsource]:ControlNet 2>")).Clips);
+
+        Assert.Empty(parsed.IcLoras);
     }
 
     [Fact]
@@ -515,6 +519,21 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(2, stages.Count);
         Assert.Equal("model-a", stages[0].Model);
         Assert.Equal("model-c", stages[1].Model);
+        ClipSpec firstClip = parser.GetVideoStagesSpec().Clips[0];
+        Assert.Collection(
+            firstClip.AuthoredStages,
+            stage =>
+            {
+                Assert.Equal(0, stage.RawIndex);
+                Assert.Equal("model-a", stage.Model);
+                Assert.False(stage.Skipped);
+            },
+            stage =>
+            {
+                Assert.Equal(1, stage.RawIndex);
+                Assert.Equal("model-skip", stage.Model);
+                Assert.True(stage.Skipped);
+            });
     }
 
     [Fact]
@@ -638,7 +657,7 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_IcLoraStageBeyondStageList_ThrowsUserError()
+    public void ParseClips_IcLoraStageBeyondStageList_RemainsRawForArchitectureValidation()
     {
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
@@ -652,10 +671,9 @@ public class VideoStagesSpecParserClipsTests
         ));
         WorkflowGenerator parser = BuildParser(json);
 
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
-            () => VideoStagesSpecParser.Parse(parser));
-        Assert.Contains("apply on stage 2", ex.Message);
-        Assert.Contains("All stages", ex.Message);
+        ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(parser).Clips);
+
+        Assert.Equal(2, Assert.Single(clip.IcLoras).Stage);
     }
 
     [Fact]

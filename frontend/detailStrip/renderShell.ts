@@ -1,4 +1,4 @@
-import { getLtxHostBridge } from "../host";
+import { getVideoStagesHostBridge } from "../host";
 import { isSameSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import type { DetailStripContext } from "./context";
@@ -43,7 +43,7 @@ export const renderDetailShell = (options: {
             options.selection.kind === "clip" ||
             options.selection.kind === "retake"
         ) {
-            getLtxHostBridge().enableSliders(body);
+            getVideoStagesHostBridge().enableSliders(body);
         }
     }
     options.focus.restore(options.detail);

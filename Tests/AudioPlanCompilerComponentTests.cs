@@ -11,19 +11,14 @@ public class AudioPlanCompilerComponentTests
     public void Facade_matches_focused_component_outputs_for_each_base_source(ClipSpec clip)
     {
         AudioPlanComponentResult<AudioBaseSourcePlan> baseSource = AudioBaseSourcePlanCompiler.Compile(clip);
-        AudioPlanComponentResult<AudioVoiceReferencePlan> voiceReference = AudioVoiceReferencePlanCompiler.Compile(clip);
         AudioPlanComponentResult<AudioLengthPlan> length = AudioLengthPlanCompiler.Compile(clip, baseSource.Plan);
         AudioPlanComponentResult<AudioSegmentPlan> segments = AudioSegmentPlanCompiler.Compile(clip, baseSource.Plan);
-        AudioPlanComponentResult<AudioReusePlan> reuse = AudioReusePlanCompiler.Compile(clip);
 
         AudioPlan assembled = new(
             baseSource.Plan,
-            voiceReference.Plan,
             length.Plan,
             segments.Plan,
-            reuse.Plan,
-            [.. baseSource.Diagnostics, .. voiceReference.Diagnostics, .. length.Diagnostics,
-                .. segments.Diagnostics, .. reuse.Diagnostics]);
+            [.. baseSource.Diagnostics, .. length.Diagnostics, .. segments.Diagnostics]);
 
         Assert.Equal(Serialize(assembled), Serialize(AudioPlanCompiler.Compile(clip)));
     }
@@ -53,7 +48,7 @@ public class AudioPlanCompilerComponentTests
 
         AudioPlanComponentResult<AudioVoiceReferencePlan> component =
             AudioVoiceReferencePlanCompiler.Compile(clip);
-        AudioPlan facade = AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan facade = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(component.Plan, facade.VoiceReference);
         Assert.Equal(["audio.voice_reference.drive_media_missing"],
@@ -88,12 +83,11 @@ public class AudioPlanCompilerComponentTests
         ClipSpec clip = Clip(reuse: true, stages: [Stage(0), Stage(1)]);
 
         AudioPlanComponentResult<AudioReusePlan> component = AudioReusePlanCompiler.Compile(clip);
-        AudioPlan facade = AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan facade = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(component.Plan, facade.Reuse);
         Assert.False(component.Plan.IsEligible);
-        Assert.Equal(["audio.reuse.requires_three_stages"],
-            component.Diagnostics.Select(diagnostic => diagnostic.Code));
+        Assert.Empty(component.Diagnostics);
     }
 
     [Fact]
@@ -122,18 +116,22 @@ public class AudioPlanCompilerComponentTests
             ]);
 
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(
         [
             "audio.source.unknown_defaults_to_native",
-            "audio.voice_reference.drive_media_missing",
-            "audio.length.controlnet_owner_has_no_source",
             "audio.length.controlnet_overrides_audio",
             "audio.segment.ignored_invalid_window",
             "audio.segment.ignored_no_source",
-            "audio.reuse.requires_three_stages",
         ],
             plan.Diagnostics.Select(diagnostic => diagnostic.Code));
+        Assert.Equal(
+        [
+            "audio.voice_reference.drive_media_missing",
+            "audio.length.controlnet_owner_has_no_source",
+        ],
+            ltx.Diagnostics.Select(diagnostic => diagnostic.Code));
     }
 
     private static string Serialize<T>(T plan) =>

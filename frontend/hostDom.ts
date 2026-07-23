@@ -1,16 +1,16 @@
-import { getLtxHostBridge } from "./host";
+import { getVideoStagesHostBridge } from "./host";
 
 /** Accessors for SwarmUI's host form elements (by id) and their values. */
 export const utils = {
     getInputElement: (id: string): HTMLInputElement | null =>
-        getLtxHostBridge().getInput(id),
+        getVideoStagesHostBridge().getInput(id),
 
     getSelectElement: (id: string): HTMLSelectElement | null =>
-        getLtxHostBridge().getSelect(id),
+        getVideoStagesHostBridge().getSelect(id),
 
     getSelectValues: (select: HTMLSelectElement | null): string[] =>
-        getLtxHostBridge().getSelectOptions(select).values,
+        getVideoStagesHostBridge().getSelectOptions(select).values,
 
     getSelectLabels: (select: HTMLSelectElement | null): string[] =>
-        getLtxHostBridge().getSelectOptions(select).labels,
+        getVideoStagesHostBridge().getSelectOptions(select).labels,
 };

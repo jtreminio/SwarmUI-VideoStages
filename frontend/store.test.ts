@@ -68,17 +68,17 @@ const makeHarness = (): Harness => {
             }
         },
         parseEmpty: emptyConfig,
-        writeQuiet: (state: VideoStagesConfig): string => {
-            writeQuietCalls.push(structuredClone(state));
-            const serialized = JSON.stringify({
+        serialize: (state: VideoStagesConfig): string =>
+            JSON.stringify({
                 width: state.width,
                 clips: state.clips.map((clip) => ({
                     duration: clip.duration,
                 })),
-            });
+            }),
+        writeQuiet: (state: VideoStagesConfig, serialized: string): void => {
+            writeQuietCalls.push(structuredClone(state));
             carrier.data = serialized;
             carrier.prompt = state.clips.map((clip) => clip.prompt).join("|");
-            return serialized;
         },
         notifyHost: (): void => {
             notifyHostCalls.push(notifyHostCalls.length + 1);
@@ -94,12 +94,6 @@ const makeHarness = (): Harness => {
     harness.onNotifyHost = null;
     return harness;
 };
-
-const clipStub = (
-    duration: number,
-    prompt = "",
-): VideoStagesConfig["clips"][number] =>
-    ({ duration, prompt }) as VideoStagesConfig["clips"][number];
 
 describe("createTimelineStore", () => {
     let h: Harness;
@@ -194,66 +188,6 @@ describe("createTimelineStore", () => {
         });
     });
 
-    describe("save", () => {
-        it("writes carriers, adopts the re-parsed model, and notifies host", () => {
-            const before = h.store.revision();
-            const state = emptyConfig();
-            state.clips = [clipStub(3, "a fox")];
-            const serialized = h.store.save(state, "linking", true);
-            expect(h.carrier.data).toBe(serialized);
-            expect(h.notifyHostCalls).toHaveLength(1);
-            // Adopted model is the re-parsed post-write one (prompt overlay
-            // re-derived from the carrier), served from cache with no parse.
-            const parseCountAfterSave = h.parseCalls.length;
-            expect(h.store.getState().clips[0].prompt).toBe("a fox");
-            expect(h.parseCalls).toHaveLength(parseCountAfterSave);
-            expect(h.store.revision()).toBe(before + 1);
-        });
-
-        it("skips the host notification when notifyDomChange is false", () => {
-            h.store.save(emptyConfig(), "linking", false);
-            expect(h.notifyHostCalls).toHaveLength(0);
-        });
-
-        it("notifies subscribers with commit meta after the host dispatch", () => {
-            const seen: UpdateMeta[] = [];
-            h.store.subscribe((_state, meta) => {
-                seen.push(meta);
-            });
-            h.store.save(emptyConfig(), "detail-strip", true);
-            expect(seen).toEqual([{ origin: "detail-strip" }]);
-            // Host dispatch happened before subscriber notification.
-            expect(h.notifyHostCalls).toEqual([1]);
-        });
-
-        it("absorbs its own synchronous host-dispatch echo as a no-op", () => {
-            // The host change event dispatches synchronously into our own
-            // carrier listener, which calls syncFromCarrier. That reentrant
-            // call must see an up-to-date token and do nothing.
-            const externalNotifications: UpdateMeta[] = [];
-            h.store.subscribe((_state, meta) => {
-                if (meta.origin === "external") {
-                    externalNotifications.push(meta);
-                }
-            });
-            let reentrantResult: boolean | null = null;
-            h.onNotifyHost = () => {
-                reentrantResult = h.store.syncFromCarrier();
-            };
-            h.store.save(emptyConfig(), "detail-strip", true);
-            expect(reentrantResult).toBe(false);
-            expect(externalNotifications).toEqual([]);
-        });
-
-        it("does not let caller mutations after save leak into the store", () => {
-            const state = emptyConfig();
-            state.clips = [clipStub(3)];
-            h.store.save(state, "linking", false);
-            state.clips[0].duration = 99;
-            expect(h.store.getState().clips[0].duration).toBe(3);
-        });
-    });
-
     describe("dispatch", () => {
         it("atomically applies a command with one write and one host notification", () => {
             const snapshot = h.store.getSnapshot();
@@ -275,6 +209,32 @@ describe("createTimelineStore", () => {
             expect(h.writeQuietCalls).toHaveLength(1);
             expect(h.notifyHostCalls).toHaveLength(1);
             expect(h.store.getState().width).toBe(640);
+        });
+
+        it("rejects an unparseable serialized candidate before mutating carriers", () => {
+            const before = h.store.getSnapshot();
+            jest.spyOn(h.deps, "serialize").mockReturnValue("{malformed");
+
+            const result = h.store.dispatch(
+                {
+                    type: "root.patch",
+                    patch: { width: 640, dimsExplicit: true },
+                },
+                "timeline",
+                true,
+                before.revision,
+            );
+
+            expect(result).toEqual({
+                applied: false,
+                failure: "invalid-serialized-state",
+                revision: before.revision,
+                impacts: [],
+            });
+            expect(h.writeQuietCalls).toHaveLength(0);
+            expect(h.notifyHostCalls).toHaveLength(0);
+            expect(h.carrier.data).toBe("");
+            expect(h.store.getSnapshot()).toEqual(before);
         });
 
         it("fails closed on a missing target without writing or notifying", () => {
@@ -435,6 +395,10 @@ describe("createTimelineStore", () => {
         });
 
         it("keeps notifying later subscribers when an earlier one throws", () => {
+            window.__VIDEO_STAGES_DEBUG__ = true;
+            const debug = jest
+                .spyOn(console, "debug")
+                .mockImplementation(() => {});
             h.carrier.data = '{"width":640,"clips":[]}';
             h.store.getState();
             const seen: string[] = [];
@@ -448,6 +412,15 @@ describe("createTimelineStore", () => {
             h.carrier.data = '{"width":512,"clips":[]}';
             h.store.syncFromCarrier();
             expect(seen).toEqual(["first", "second"]);
+            expect(debug).toHaveBeenCalledWith(
+                "[VideoStages debug store]",
+                "subscriber notification failed",
+                expect.objectContaining({
+                    error: expect.any(Error),
+                    origin: "external",
+                }),
+            );
+            delete window.__VIDEO_STAGES_DEBUG__;
         });
 
         it("stops notifying after unsubscribe", () => {

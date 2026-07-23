@@ -1,7 +1,12 @@
+import {
+    architectureForModel,
+    buildArchitectureModelCatalog,
+    supportedArchitectureCatalog,
+} from "./architectures/catalog";
+import type { VideoArchitectureId } from "./architectures/types";
 import { ROOT_DIMENSION_MIN } from "./constants";
-import { getLtxHostBridge } from "./host";
+import { getVideoStagesHostBridge } from "./host";
 import { utils } from "./hostDom";
-import { filterLtxModelOptions, isLtxVideoModelValue } from "./ltxCapabilities";
 import {
     getDropdownOptions,
     getRootModelInput,
@@ -17,7 +22,7 @@ const trimDomValue = (el: { value: string } | null | undefined): string =>
 const WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
 const HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
 const rootVideoFpsInput = (): HTMLInputElement | null =>
-    getLtxHostBridge().getRootVideoFpsInput();
+    getVideoStagesHostBridge().getRootVideoFpsInput();
 
 const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
     for (let i = 0; i < ids.length; i++) {
@@ -29,18 +34,33 @@ const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
     return null;
 };
 
-export const getDefaultStageModel = (modelValues: string[]): string => {
+export const getDefaultStageModel = (
+    modelValues: string[],
+    architectureId?: VideoArchitectureId,
+): string => {
+    const catalog = buildArchitectureModelCatalog(modelValues, modelValues);
+    const supports = (modelName: string): boolean => {
+        const resolved = architectureForModel(catalog, modelName);
+        return (
+            resolved !== null &&
+            (architectureId === undefined || resolved === architectureId)
+        );
+    };
     if (isRootTextToVideoModel()) {
         const modelName = trimDomValue(getRootModelInput());
-        if (modelName && isLtxVideoModelValue(modelName)) {
+        if (modelName && supports(modelName)) {
             return modelName;
         }
     }
     const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
-    if (videoModel && isLtxVideoModelValue(videoModel)) {
+    if (videoModel && supports(videoModel)) {
         return videoModel;
     }
-    return modelValues[0] ?? "";
+    return (
+        modelValues.find((modelName) => supports(modelName)) ??
+        modelValues[0] ??
+        ""
+    );
 };
 
 export const readInheritedDimsSignature = (): string => {
@@ -71,10 +91,16 @@ export const getRootDefaults = (): RootDefaults => {
     const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
     const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
     const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const models = filterLtxModelOptions(
-        utils.getSelectValues(model),
-        utils.getSelectLabels(model),
+    const modelCatalog = supportedArchitectureCatalog(
+        buildArchitectureModelCatalog(
+            utils.getSelectValues(model),
+            utils.getSelectLabels(model),
+        ),
     );
+    const models = {
+        values: modelCatalog.entries.map((entry) => entry.value),
+        labels: modelCatalog.entries.map((entry) => entry.label),
+    };
 
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
@@ -92,6 +118,7 @@ export const getRootDefaults = (): RootDefaults => {
     return {
         modelValues: models.values,
         modelLabels: models.labels,
+        modelCatalog,
         loraValues: loras.values,
         loraLabels: loras.labels,
         samplerValues: sampler.values,

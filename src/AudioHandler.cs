@@ -21,7 +21,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return DetectAceStepFunAudio(trackIndex, bridge);
     }
 
-    /// <summary>Bridge-reusing typed counterpart for LTX execution plans.</summary>
+    /// <summary>Bridge-reusing typed counterpart for compiled execution plans.</summary>
     public WGNodeData DetectAceStepFunAudio(int trackIndex, WorkflowBridge bridge)
     {
         if (trackIndex < 0)
@@ -33,7 +33,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// Prunes only compiled LTX audio tracks. Save intent comes from the terminal stage output
+    /// Prunes only compiled AceStepFun audio tracks. Save intent comes from the terminal stage output
     /// plan, so this method never needs to rediscover clip audio source strings.
     /// </summary>
     internal void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipPlan> clips)

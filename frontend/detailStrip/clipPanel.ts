@@ -1,9 +1,10 @@
+import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { buildGroup, sectionLabel } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
 import type { Clip, TimelineSelection } from "../types";
+import { disableCapabilityControls } from "./capabilityUi";
 import { buildClipColumn } from "./clipBasics";
 import type { DetailStripContext } from "./context";
-import { buildIcLorasSection } from "./icLoraPanel";
 import { buildRetakeSection } from "./retakePanel";
 import { buildSourceVideoSection } from "./sourceVideoPanel";
 import { buildStageParamsColumn } from "./stagePanel";
@@ -28,6 +29,7 @@ export const buildClipBody = (
     const clip = clips[selection.clipIdx];
     const stage = clip.stages[selection.stageIdx];
     const defaults = getRootDefaults();
+    const capabilityView = context.capabilities().forClip(clip);
 
     body.appendChild(buildClipColumn(context, clip, selection.clipIdx));
     const stages = document.createElement("div");
@@ -35,33 +37,69 @@ export const buildClipBody = (
     stages.append(
         sectionLabel("Stages"),
         buildStageRail(context, clip, selection.clipIdx, selection.stageIdx),
-        buildStageParamsColumn(
-            context,
-            clip,
-            selection.clipIdx,
-            selection.stageIdx,
-            stage,
-            defaults,
-        ),
     );
+    if (stage) {
+        stages.appendChild(
+            buildStageParamsColumn(
+                context,
+                clip,
+                selection.clipIdx,
+                selection.stageIdx,
+                stage,
+                defaults,
+            ),
+        );
+    } else {
+        const note = document.createElement("p");
+        note.className = "vst-detail-note vst-source-only-note";
+        note.textContent =
+            "Source-only clip. Add a stage to choose an architecture and refine this footage.";
+        stages.appendChild(note);
+    }
     body.appendChild(buildGroup(GROUP_STAGES, stages));
-    body.appendChild(
-        buildGroup(
-            GROUP_ICLORA,
-            buildIcLorasSection(context, clip, selection.clipIdx, defaults),
-        ),
+    const appendCapabilityGroup = (
+        groupId: string,
+        feature: "icLora" | "sourceVideo" | "retake",
+        persisted: boolean,
+        content: () => HTMLElement,
+        removableSelectors: readonly string[],
+    ): void => {
+        const state = capabilityView.authoringState(feature, persisted);
+        if (!state.visible) {
+            return;
+        }
+        const section = content();
+        if (!state.enabled) {
+            disableCapabilityControls(section, state, removableSelectors);
+        }
+        body.appendChild(buildGroup(groupId, section));
+    };
+    appendCapabilityGroup(
+        GROUP_ICLORA,
+        "icLora",
+        clip.icLoras.length > 0,
+        () =>
+            buildArchitectureIcLorasSection(
+                context,
+                clip,
+                selection.clipIdx,
+                defaults,
+            ),
+        [".vst-detail-delete"],
     );
-    body.appendChild(
-        buildGroup(
-            GROUP_SOURCE,
-            buildSourceVideoSection(context, clip, selection.clipIdx),
-        ),
+    appendCapabilityGroup(
+        GROUP_SOURCE,
+        "sourceVideo",
+        clip.sourceVideo !== null,
+        () => buildSourceVideoSection(context, clip, selection.clipIdx),
+        [".vst-detail-delete"],
     );
-    body.appendChild(
-        buildGroup(
-            GROUP_RETAKE,
-            buildRetakeSection(context, clip, selection.clipIdx),
-        ),
+    appendCapabilityGroup(
+        GROUP_RETAKE,
+        "retake",
+        clip.retake !== null,
+        () => buildRetakeSection(context, clip, selection.clipIdx),
+        [".vst-detail-delete"],
     );
     return body;
 };

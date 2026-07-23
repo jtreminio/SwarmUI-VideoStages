@@ -12,7 +12,8 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     refStrengths: [],
     upscale: 1,
     upscaleMethod: "latentmodel-test.safetensors",
-    model: "m",
+    model: "ltx-2.3.safetensors",
+    modelProfileId: "ltx-2.3",
     steps: 8,
     cfgScale: 1,
     sampler: "euler",
@@ -31,6 +32,8 @@ export const minimalRef = (overrides: Partial<RefImage> = {}): RefImage => ({
 });
 
 export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
+    architecture: "ltx2",
+    modelProfileId: "ltx-2.3",
     skipped: false,
     hue: 210,
     boundaryOut: "cut",

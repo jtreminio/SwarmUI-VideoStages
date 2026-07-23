@@ -1,9 +1,9 @@
-using System.Collections.Immutable;
+using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Planning;
 
 /// <summary>
-/// An immutable, graph-independent description of the LTX timeline that VideoStages will run.
+/// An immutable, graph-independent description of the timeline that VideoStages will run.
 /// It deliberately contains no <c>WorkflowGenerator</c>, node, or media references: compiling a
 /// plan must be safe to do before the workflow graph is built.
 /// </summary>
@@ -102,7 +102,13 @@ internal sealed record ClipPlan(
     bool IsSourced,
     SourceVideoPlan SourceVideo,
     IReadOnlyList<StagePlan> Stages,
-    AudioPlan Audio);
+    AudioPlan Audio)
+{
+    /// <summary>The one architecture established for this clip before graph mutation begins.</summary>
+    public VideoArchitectureDescriptor Architecture { get; init; }
+
+    public IArchitectureClipPayload ArchitecturePayload { get; init; }
+}
 
 internal sealed record SourceVideoPlan(
     string Data,
@@ -112,36 +118,19 @@ internal sealed record SourceVideoPlan(
     int TargetHeight,
     int TargetFramesPerSecond);
 
-/// <summary>
-/// A complete, graph-free LTX stage instruction.
-/// </summary>
+/// <summary>An architecture-neutral stage dispatch instruction.</summary>
 internal sealed record StagePlan(
     int StageId,
     int ClipStageIndex,
     int ClipStageRawIndex,
     StageInputKind Input,
     bool IsPassthrough,
-    StageCorePlan Core,
-    GuideReferencePlan Guide,
-    StageUpscalePlan Upscale,
-    ImmutableArray<NormalLoraPlan> Loras,
-    ImmutableArray<IcLoraPlan> IcLoras,
-    RetakePlan Retake,
-    PromptRelayPlan PromptRelay,
-    ImmutableArray<ImageReferencePlan> FrameReferences,
-    StageAudioAction AudioAction,
+    IArchitectureStagePayload ArchitecturePayload,
     StageOutputPlan Output)
-{ }
-
-internal sealed record StageCorePlan(
-    string Model,
-    double Control,
-    int Steps,
-    double CfgScale,
-    string Sampler,
-    string Scheduler,
-    double? ControlNetStrength,
-    bool ImageReferenceWasExplicit);
+{
+    /// <summary>Resolved independently for every authored active stage.</summary>
+    public ResolvedVideoModel ResolvedModel { get; init; }
+}
 
 internal enum StageInputKind
 {
@@ -151,149 +140,6 @@ internal enum StageInputKind
     PreviousStage,
 }
 
-internal enum StageUpscaleMode
-{
-    None,
-    Pixel,
-    Model,
-    Latent,
-    LatentModel,
-    Unsupported,
-}
-
-internal sealed record StageUpscalePlan(
-    StageUpscaleMode Mode,
-    double Factor,
-    string RawMethod,
-    string MethodName);
-
-internal enum GuideReferenceKind
-{
-    Base,
-    Refiner,
-    Generated,
-    PreviousStage,
-    ExplicitStage,
-    Base2Edit,
-    Unknown,
-}
-
-internal sealed record GuideReferencePlan(
-    GuideReferenceKind Kind,
-    string RawValue,
-    int? ReferencedStageIndex);
-
-internal sealed record NormalLoraPlan(
-    string Name,
-    double ModelWeight,
-    double TextEncoderWeight);
-
-internal enum IcLoraDriveSourceKind
-{
-    UploadedMedia,
-    StageInput,
-    SourcedClipInput,
-    ControlNet,
-    LoaderOnly,
-    Unknown,
-}
-
-internal enum IcLoraControlMode
-{
-    None,
-    Canny,
-    Depth,
-    Normal,
-    Unknown,
-}
-
-internal enum IcLoraUploadedMediaKind
-{
-    None,
-    Image,
-    Video,
-    Unknown,
-}
-
-internal sealed record IcLoraDrivePlan(
-    IcLoraDriveSourceKind Kind,
-    string RawSource,
-    int? ControlNetIndex,
-    IcLoraUploadedMediaKind UploadedMediaKind,
-    string UploadedData,
-    bool HasDriveMedia);
-
-internal sealed record IcLoraPlan(
-    int EntryIndex,
-    string ModelName,
-    bool UsesAutoModel,
-    string Preset,
-    double ModelStrength,
-    double AttentionStrength,
-    IcLoraControlMode ControlMode,
-    IcLoraDrivePlan Drive,
-    double? GuideStrength);
-
-internal sealed record RetakePlan(
-    int StartFrame,
-    int LengthFrames,
-    double Strength);
-
-internal enum PromptRelayMode
-{
-    None,
-    SinglePromptOverride,
-    Relay,
-    RequiresRuntimeLength,
-}
-
-internal sealed record PromptWindowPlan(
-    string Prompt,
-    double StartSeconds,
-    double DurationSeconds,
-    double EndSeconds);
-
-internal sealed record PromptRelaySegmentPlan(
-    string Prompt,
-    double Seconds);
-
-internal sealed record PromptRelayPlan(
-    PromptRelayMode Mode,
-    ImmutableArray<PromptWindowPlan> AuthoredWindows,
-    ImmutableArray<PromptRelaySegmentPlan> Segments);
-
-internal enum ImageReferenceSourceKind
-{
-    Upload,
-    Base,
-    Refiner,
-    Base2Edit,
-    Unknown,
-}
-
-internal enum ImageReferenceFrameOrigin
-{
-    Start,
-    End,
-}
-
-internal sealed record ImageReferencePlan(
-    int Index,
-    ImageReferenceSourceKind SourceKind,
-    string RawSource,
-    int? Base2EditStageIndex,
-    int Frame,
-    ImageReferenceFrameOrigin FrameOrigin,
-    double Strength,
-    string UploadFileName,
-    string InlineData);
-
-internal enum StageAudioAction
-{
-    None,
-    CaptureForReuse,
-    ReuseCaptured,
-}
 
 internal enum IntermediateOutputPolicy
 {
@@ -309,11 +155,17 @@ internal sealed record StageOutputPlan(
 /// <summary>A normalized outgoing boundary from clip N to clip N + 1.</summary>
 internal sealed record BoundaryPlan(
     int FromClipId,
+    BoundaryExecutionMode Requested,
     BoundaryExecutionMode Effective,
     int OverlapFrames,
     int ContinuityWindowFrames,
     bool RequiresRuntimeMergeValidation,
-    BoundaryFallback Fallback);
+    BoundaryFallback Fallback)
+{
+    public int FrameStep { get; init; } = 1;
+
+    public int MinFrames { get; init; } = 1;
+}
 
 internal enum BoundaryExecutionMode
 {
@@ -330,6 +182,7 @@ internal enum BoundaryFallback
     TargetHasFirstFrameReference,
     UnknownBoundaryKind,
     InsufficientFrameBudget,
+    ArchitectureRuleUnsupported,
 }
 
 internal sealed record VideoPlanDiagnostic(
@@ -337,7 +190,8 @@ internal sealed record VideoPlanDiagnostic(
     string Code,
     string Message,
     int? ClipId = null,
-    int? StageId = null);
+    int? StageId = null,
+    int? RawStageIndex = null);
 
 internal enum VideoPlanDiagnosticSeverity
 {

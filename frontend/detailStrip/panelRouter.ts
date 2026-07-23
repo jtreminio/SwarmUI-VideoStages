@@ -30,7 +30,7 @@ export const clampDetailSelection = (
     const clip = clips[selection.clipIdx];
     if (selection.kind === "clip") {
         if (clip.stages.length === 0) {
-            return { kind: "none" };
+            return { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
         }
         const stageIdx = clamp(selection.stageIdx, 0, clip.stages.length - 1);
         return stageIdx === selection.stageIdx
@@ -66,7 +66,9 @@ export const detailBreadcrumb = (
 ): string => {
     switch (selection.kind) {
         case "clip":
-            return `Clip ${selection.clipIdx + 1} · ${stageChipLabel(selection.stageIdx)}`;
+            return clips[selection.clipIdx]?.stages.length === 0
+                ? `Clip ${selection.clipIdx + 1} · Source only`
+                : `Clip ${selection.clipIdx + 1} · ${stageChipLabel(selection.stageIdx)}`;
         case "ref":
             return `Ref ${selection.refIdx + 1} · Clip ${selection.clipIdx + 1}`;
         case "audio":

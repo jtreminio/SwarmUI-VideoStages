@@ -191,7 +191,16 @@ internal static class TestModelFactory
 
     public static TestModelBundle CreateBaseAndLtxv2VideoModels()
     {
-        return CreateBaseAndVideoModels(T2IModelClassSorter.CompatLtxv2, "unit-video-ltxv2", "Unit Video LTXV2");
+        TestModelBundle models = CreateBaseAndVideoModels(
+            T2IModelClassSorter.CompatLtxv2,
+            "unit-video-ltxv2",
+            "Unit Video LTXV2");
+        models.VideoModel.ModelClass = models.VideoModel.ModelClass with
+        {
+            ID = "lightricks-ltx-video-2-3",
+            Name = "LTX Video 2.3",
+        };
+        return models;
     }
 
     private static TestModelBundle CreateBaseAndVideoModelsWithClass(T2IModelClass videoClass)

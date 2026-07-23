@@ -1,7 +1,7 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 
@@ -34,7 +34,8 @@ public class LtxAudioReuseStateTests
         Sampler: "euler",
         Scheduler: "normal",
         ImageReference: "Generated",
-        ClipStageIndex: clipStageIndex);
+        ClipStageIndex: clipStageIndex,
+        ClipStageRawIndex: clipStageIndex);
 
     private static ClipSpec MakeReusableAudioClip() => new(
         Id: 0,
@@ -50,7 +51,7 @@ public class LtxAudioReuseStateTests
         Stages: [MakeStage(0), MakeStage(1), MakeStage(2)]);
 
     private static VideoExecutionPlan Plan(ClipSpec clip) =>
-        VideoExecutionPlanCompiler.Compile(new VideoStagesSpec(512, 512, 24, false, [clip]));
+        TestPlanCompiler.Compile(new VideoStagesSpec(512, 512, 24, false, [clip]));
 
     private static WGNodeData MakeVideoMedia(WorkflowGenerator g, JArray attachedAudioPath = null)
     {
@@ -127,5 +128,35 @@ public class LtxAudioReuseStateTests
         Assert.Equal("200", $"{applied[0]}");
         Assert.Equal(0L, (long)applied[1]);
         Assert.Equal(WGNodeData.DT_LATENT_AUDIO, g.CurrentMedia.AttachedAudio.DataType);
+    }
+
+    [Fact]
+    public void Stage1_CompletesCaptureFromPostVideoChainThroughSingleStateOwner()
+    {
+        using SwarmUiTestContext _ = new();
+        ClipSpec clip = MakeReusableAudioClip();
+        VideoExecutionPlan plan = Plan(clip);
+        ClipPlan plannedClip = plan.Clips[0];
+        Ltx2ClipAudioReuseState audioReuse = new();
+        LtxPostVideoChainState captured = new(
+            CurrentOutputMedia: null,
+            AvLatentPath: null,
+            AudioLatentPath: new JArray("captured", 1),
+            VideoVaePath: null,
+            AudioVaePath: null,
+            VideoDecodeNodeId: null,
+            AudioDecodeNodeId: null,
+            DecodeOutputPath: null,
+            HasPostDecodeWrappers: false,
+            UseReusedAudioLatent: false);
+
+        LtxAudioReuseState.CompletePostVideoChainCapture(
+            audioReuse,
+            plannedClip.Stages[1],
+            captured);
+
+        Assert.True(audioReuse.TryGetPath(out JArray remembered));
+        Assert.Equal(new JArray("captured", 1), remembered);
+        Assert.NotSame(captured.AudioLatentPath, remembered);
     }
 }

@@ -1,11 +1,17 @@
+import {
+    architectureForModel,
+    loadAuthoritativeArchitectureCatalog,
+} from "./architectures/catalog";
+import { currentCapabilityViewResolver } from "./architectures/currentPolicy";
 import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
 import {
     injectTimelineTab,
     TIMELINE_BODY_ID,
     updateTimelineTabIndicator,
 } from "./bottomTimelineTab";
-import { projectLtxExecutionPath } from "./executionPath";
+import { projectVideoExecutionPath } from "./executionPath";
 import { createGestureRouter } from "./gestureRouter";
+import { getVideoStagesHostBridge } from "./host";
 import { buildDefaultClip } from "./normalization";
 import {
     getClips,
@@ -18,6 +24,7 @@ import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { setSelection, subscribeSelection } from "./selection";
 import type { UpdateMeta } from "./store";
 import {
+    getRootGeneratedEntryMode,
     getRootModelInput,
     isRootTextToVideoModel,
     isVideoStagesEnabled,
@@ -66,14 +73,16 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         isCollapsed: viewport.stripCollapsed,
         setCollapsed: viewport.setStripCollapsed,
     });
+    const capabilities = currentCapabilityViewResolver;
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
-    const retakeTrack = createTimelineRetakeTrack();
-    const promptTrack = createTimelinePromptTrack();
+    const retakeTrack = createTimelineRetakeTrack(capabilities);
+    const promptTrack = createTimelinePromptTrack(capabilities);
     const audioTrack = createTimelineAudioTrack();
-    const audioSegmentTrack = createTimelineAudioSegmentTrack();
+    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
     const boundaryTrack = createTimelineBoundaryTrack();
-    const referencesTrack = createTimelineReferencesTrack();
+    const referencesTrack = createTimelineReferencesTrack(capabilities);
+    let addClipInFlight = false;
 
     // Open the timeline settings panel (docked in the detail strip) from the
     // topbar dims/fps chip: select "nothing" and force the strip open.
@@ -143,25 +152,59 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         });
     };
 
-    const addClip = (): void => {
-        const clips = getClips();
-        const prev = clips[clips.length - 1] ?? null;
-        // The new join (prev → new clip) mirrors the join between the
-        // previous two clips, when one exists.
-        if (prev && clips.length >= 2) {
-            const prevJoin = clips[clips.length - 2];
-            prev.boundaryOut = prevJoin.boundaryOut;
-            prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
+    const addClipAfterCatalog = async (): Promise<void> => {
+        try {
+            // init starts this same coalesced request in the background. An
+            // immediate empty-state click must wait for it before choosing the
+            // first clip's model and architecture identity.
+            await loadAuthoritativeArchitectureCatalog();
+            const defaults = getRootDefaults();
+            const defaultModel = getDefaultStageModel(defaults.modelValues);
+            if (
+                !defaultModel ||
+                architectureForModel(defaults.modelCatalog, defaultModel) ===
+                    null
+            ) {
+                getVideoStagesHostBridge().showError(
+                    "VideoStages cannot add a clip because no supported video model is available.",
+                );
+                return;
+            }
+
+            const clips = getClips();
+            const prev = clips[clips.length - 1] ?? null;
+            // The new join (prev → new clip) mirrors the join between the
+            // previous two clips, when one exists.
+            if (prev && clips.length >= 2) {
+                const prevJoin = clips[clips.length - 2];
+                prev.boundaryOut = prevJoin.boundaryOut;
+                prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
+            }
+            clips.push(
+                buildDefaultClip(
+                    () => defaults,
+                    getDefaultStageModel,
+                    false,
+                    prev,
+                ),
+            );
+            saveClips(clips, { origin: "timeline" });
+        } catch (error) {
+            console.warn("VideoStages: failed to add clip", error);
+            getVideoStagesHostBridge().showError(
+                "VideoStages could not add the clip. See the browser console for details.",
+            );
+        } finally {
+            addClipInFlight = false;
         }
-        clips.push(
-            buildDefaultClip(
-                getRootDefaults,
-                getDefaultStageModel,
-                false,
-                prev,
-            ),
-        );
-        saveClips(clips, { origin: "timeline" });
+    };
+
+    const addClip = (): void => {
+        if (addClipInFlight) {
+            return;
+        }
+        addClipInFlight = true;
+        void addClipAfterCatalog();
     };
 
     /**
@@ -188,6 +231,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             const state = getState();
             const clips = state.clips;
             const globalPrompt = readGlobalPrompt();
+            const architectureCatalog = getRootDefaults().modelCatalog;
             renderTimeline(body, clips, {
                 fps: safeFps(state.fps),
                 width: state.width,
@@ -210,8 +254,13 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 onUndo: () => history.undo(),
                 onRedo: () => history.redo(),
                 globalPrompt,
-                diagnostics: deriveAuthoringDiagnostics(clips),
-                executionSummary: projectLtxExecutionPath(state, {
+                diagnostics: deriveAuthoringDiagnostics(clips, {
+                    catalog: architectureCatalog,
+                    generatedEntryMode: getRootGeneratedEntryMode(),
+                }),
+                capabilities: capabilities(),
+                executionSummary: projectVideoExecutionPath(state, {
+                    catalog: architectureCatalog,
                     generatedEntry:
                         !`${getRootModelInput()?.value ?? ""}`.trim() ||
                         isRootTextToVideoModel()
@@ -277,6 +326,13 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         history.syncBaseline();
         hostLifecycle.bind();
         refresh();
+        void loadAuthoritativeArchitectureCatalog().then((catalog) => {
+            if (!catalog) {
+                return;
+            }
+            getTimelineStore().invalidate();
+            refresh();
+        });
     };
 
     const dispose = (): void => {

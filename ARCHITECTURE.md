@@ -1,72 +1,175 @@
-# VideoStages architecture
+# VideoStages backend architecture
 
-VideoStages supports one execution family: an LTX-Video timeline. WAN and mixed-model
-timelines are rejected before VideoStages mutates the workflow graph.
+VideoStages owns one architecture-neutral timeline. A generated clip owns one
+video architecture; all authored stages in that clip, including skipped
+stages, must resolve to the same architecture. Different executable clips may
+use different architectures.
+
+Production currently registers source-only `none` and LTX Video 2.3 only. The
+registry, planning contracts, runtime dispatch, and timeline assembly are
+intentionally capable of hosting more modules without adding architecture
+branches to common code.
 
 ## The execution model
 
-Every run follows the same five-part pipeline:
+Every run follows the same simple path:
 
-1. `VideoStagesSpecParser` coordinates focused JSON, clip, stage, and resource parsers.
-2. `VideoExecutionPlanCompiler` composes pure root, clip, stage-option, boundary, and audio
-   planners into an immutable `VideoExecutionPlan`.
-3. `StageSequenceRunner` walks planned clips; `StageClipExecutor` and `StageRunner`
-   coordinate focused source, prompt, upscale, IC-LoRA, conditioning, latent, sampler, and
-   output services.
-4. `TimelineAssembler` applies the same typed cut, continue, and crossfade windows used by
-   audio planning; runtime mismatches explicitly degrade to cuts.
-5. `GlobalVideoFrameTrimmer` trims the completed single- or multi-clip timeline once and
-   trims decoded attached audio to the same frame-derived time window, then
-   `RootRuntimeSession` publishes it and removes only the displaced root nodes it owns.
+1. Parse one versioned timeline document.
+2. Resolve every authored stage model to an architecture and model profile.
+3. Compile each executable clip through its owning architecture module.
+4. Execute clips through per-architecture runtime sessions.
+5. Return one decoded, neutral video/audio artifact per clip.
+6. Assemble same-architecture non-cut runs, then hard-cut those runs together.
+7. Trim and publish one final timeline.
 
-The apparent entry points are inputs to that pipeline, not separate executors:
+The apparent entry points are inputs to this path, not separate executors:
 
-- Text to image to video starts with the host image as clip-zero media.
-- Text to video starts the generated clip from an empty LTX latent and replaces the host
-  text-to-video root.
-- An init image starts clip zero from the supplied image.
-- An init video or sourced clip starts from installed footage.
-- A global refine video replaces the host root before clip execution.
+- text-to-video;
+- host image or user init image to video;
+- source video followed by zero, one, or several generation stages;
+- source-video-only clips; and
+- the separate global Refine Video action.
 
-Single-clip and multi-clip, single-stage and multi-stage combinations all use the same
-runner. Their differences are expressed in `ClipPlan`, `StagePlan`, `BoundaryPlan`, and
-`StageExecutionOptions`.
+Single-clip/multi-clip and single-stage/multi-stage combinations use the same
+coordinator. Options decorate a clip or stage; they do not create parallel
+execution engines.
 
-## Option ownership
+## Identity and lock
 
-- `StagePlan` owns model settings, prompt relay, LoRAs, IC-LoRAs, retakes, frame
-  references, upscaling, and stage-output policy.
-- `AudioPlan` owns the base source, duration owner, segments, voice reference, and reuse
-  policy for one clip.
-- `AudioTimelinePlan` projects clip audio and authored track spans onto the final timeline,
-  including spans that cross one or more clips. Pending or provisional spans remain atomic
-  until their timing can be resolved; they are never partially mixed.
-- `AudioTimelineExecutor` resolves runtime audio sources once and executes the planned
-  per-clip source, length, segment, and conditioning decisions, including sourced clips
-  that intentionally have no generation stages.
-- Timeline-wide authored tracks are a planning contract today. The runtime does not
-  partially execute an unresolved or provisional cross-clip span; a future mixer can consume
-  the plan without changing clip or stage execution.
-- `TimelineAssemblySession` owns runtime boundary degradation. For example, a planned
-  continue boundary becomes an explicit cut when its continuity artifact cannot be built.
-- Latent upscales may chain. Once a clip has entered a latent-upscaled resolution, a later
-  pixel/model upscale is deliberately skipped to avoid a decode-resize-reencode round trip.
+`ArchitectureId` identifies a video family such as `ltx2`, `wan`, or `none`.
+`ModelProfileId` identifies a more specific model generation such as
+`ltx-2.3`.
+
+Authored stage 0 establishes the clip architecture and clip model profile.
+Every later authored stage is validated against that architecture, even when a
+stage is skipped. Later stages may resolve to different profiles inside the
+same architecture; each stage keeps its own resolved profile. A sourced clip
+with no active generation stages executes through the neutral `none` runtime
+while its dormant authored stage chain is still checked for architecture and
+per-stage profile consistency.
+
+Unknown models, unknown profiles, mixed stage architectures, unsupported
+options, and invalid joins produce blocking diagnostics before the extension
+mutates the workflow graph.
+
+## Architecture module boundary
+
+Common code knows only:
+
+- architecture and profile identifiers;
+- generic clip ordering, timing, source, and boundary plans;
+- capability and rule decisions;
+- opaque architecture-owned clip payloads;
+- runtime-session and boundary-assembler contracts; and
+- decoded clip artifacts.
+
+An architecture module owns:
+
+- model recognition and profile resolution;
+- its catalog descriptor and conditional rules;
+- validation and compilation of architecture-specific stage options;
+- creation of its runtime session;
+- latent/VAE/conditioning/stage transitions;
+- non-cut joins it supports; and
+- decoding its final clip.
+
+LTX implementations live under `VideoStages.Architectures.Ltx2`. Common
+planning, coordination, and assembly must not instantiate LTX managers, inspect
+LTX compatibility IDs, or create LTX nodes.
+
+`VideoArchitectureManifest` is the production composition root. Each
+registration supplies its module, runtime factory, host integration, API
+routes, and dependency registration together. The rest of the application does
+not maintain parallel architecture lists.
+
+## Capability catalog
+
+The backend catalog is authoritative. It publishes stable capabilities by
+scope:
+
+- architecture: entry modes, multi-stage, native audio, decoded output;
+- model profile: samplers, schedulers, dimensions, frames, and normal LoRA;
+- clip: source video, prompts, relay, references, retakes, audio;
+- stage: input modes, each upscale mode, LoRA, IC-LoRA, HDR, frame references;
+- boundary: cut, continue, and crossfade rules; and
+- output: decoded video, attached audio, standalone audio.
+
+A rule decision includes support state, a stable code, a user-facing reason,
+scope, optional entity identity, and typed constraints. The frontend mirrors
+these decisions for authoring, but the backend revalidates them before graph
+mutation.
+
+Typed boundary and conditional-rule policies are also the publication source:
+the evaluator that accepts or rejects a plan consumes the same policy object
+serialized into the catalog. A shared C#/TypeScript contract fixture guards the
+wire keys, constraints, and profile gates.
+
+## Neutral artifact and joins
+
+An architecture runtime returns a `DecodedClipArtifact` containing only:
+
+- decoded video output identity;
+- optional decoded audio output identity;
+- literal width, height, FPS, and frame count;
+- architecture provenance; and
+- clip provenance.
+
+It cannot carry a latent, VAE, model compatibility object, or a nested media
+wrapper that carries those values transitively.
+
+Cross-architecture boundaries are cut-only. A persisted invalid continue or
+crossfade keeps its requested value for repair, compiles to an effective cut,
+and blocks generation. Within one architecture, its boundary rules determine
+whether continue or crossfade is valid.
+
+Timeline assembly partitions clips into maximal runs connected by effective
+non-cut boundaries. Each run is assembled by its architecture; the decoded run
+outputs are then concatenated with architecture-neutral cuts. Final output
+metadata never inherits the first clip's model compatibility.
+
+## Audio ownership
+
+Clip-local source selection, clip-length ownership, segments, voice reference,
+and stage-latent reuse are separate decisions. Architecture modules own any
+model-latent audio behavior.
+
+For LTX multi-stage clips, separated audio latents remain architecture-owned
+and flow directly between stages. They are not decoded to audio and encoded
+again merely to construct the next stage.
+
+`AudioTimelinePlan` also represents architecture-neutral authored tracks whose
+spans may cover one clip, several adjacent clips, a timeline window, or
+discontiguous windows. Planned/provisional spans remain atomic until their
+timing and runtime mixer are available; VideoStages must not partially execute
+an unresolved span.
 
 ## Runtime invariants
 
-- An active run must have a valid LTX `VideoExecutionPlan`.
-- Every requested stage returns a valid `RuntimeArtifact` or the run fails.
-- A multi-clip assembly receives exactly one valid artifact per planned clip.
-- Source installation, model resolution, stage execution, assembly, and final publication
-  fail closed; prior host media is never silently presented as a successful result.
-- Intermediate publications stay attached to their stage artifacts.
-- Only the final publisher may advance the captured host save nodes.
-- HDR conversion receives the exact final save IDs and cannot rewrite unrelated or
-  intermediate publications.
+- A plan is fully architecture-resolved before any extension graph mutation.
+- One runtime session handles only its declared architecture.
+- A session result must match the requested clip and architecture.
+- Every clip returns a decoded video artifact with positive literal metadata.
+- Multi-clip assembly receives exactly one valid artifact per planned clip.
+- Source installation, execution, assembly, and publication fail closed.
+- Only the final publisher advances captured host save nodes.
+- Intermediate artifacts and architecture compatibility never leak into the
+  final mixed timeline.
 
-## Compatibility boundary
+## Adding another architecture
 
-`StageSpec` and `ClipSpec` are parser/compiler input models only. Active LTX root, stage,
-source, prompt, reference, IC-LoRA, ControlNet, retake, audio, boundary, trim, HDR, and
-publication execution consumes typed plans. There is no StageSpec adapter, native stage
-fallback, WAN dispatch, or distributed save-retarget path.
+Adding WAN or another family should require:
+
+1. a model resolver and profile descriptors;
+2. scoped capabilities and rules;
+3. an architecture-owned clip compiler and opaque payload;
+4. a runtime-session factory;
+5. optional same-architecture boundary assembly; and
+6. contract tests using the common dispatcher and timeline assembler.
+
+It must not require changes to generic document parsing, clip ordering,
+history, cut assembly, output publication, or the frontend's generic panel
+routing.
+
+The fake architectures used by tests are deliberately not production
+registrations. They prove different frame grids, capability sets, profiles,
+runtime sessions, and mixed-timeline cut assembly without implementing WAN.

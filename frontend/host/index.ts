@@ -1,20 +1,20 @@
-import { createDefaultLtxHostBridge } from "./defaultLtxHostBridge";
-import type { LtxHostBridge } from "./LtxHostBridge";
+import { createDefaultVideoStagesHostBridge } from "./defaultVideoStagesHostBridge";
+import type { VideoStagesHostBridge } from "./VideoStagesHostBridge";
 
-let bridge: LtxHostBridge = createDefaultLtxHostBridge();
+let bridge: VideoStagesHostBridge = createDefaultVideoStagesHostBridge();
 
-export const getLtxHostBridge = (): LtxHostBridge => bridge;
+export const getVideoStagesHostBridge = (): VideoStagesHostBridge => bridge;
 
 /** Test injection seam; pass null to restore the production bridge. */
-export const setLtxHostBridgeForTests = (
-    replacement: LtxHostBridge | null,
+export const setVideoStagesHostBridgeForTests = (
+    replacement: VideoStagesHostBridge | null,
 ): void => {
-    bridge = replacement ?? createDefaultLtxHostBridge();
+    bridge = replacement ?? createDefaultVideoStagesHostBridge();
 };
 
 export type {
     HostOptionList,
     HostRegistrySnapshot,
-    LtxHostBridge,
     PromptPrefixExamples,
-} from "./LtxHostBridge";
+    VideoStagesHostBridge,
+} from "./VideoStagesHostBridge";

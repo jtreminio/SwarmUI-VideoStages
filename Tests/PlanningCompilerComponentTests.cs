@@ -1,5 +1,8 @@
 using System.Text.Json;
 using VideoStages.Planning;
+using VideoStages.Architectures;
+using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Ltx2;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -22,15 +25,18 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void BoundaryPlanCompiler_ReportsContinueFallbackAsImmutableResult()
     {
-        BoundaryPlanningResult result = BoundaryPlanCompiler.Compile(
+        VideoStagesSpec spec = new(640, 360, 24, false,
         [
             GeneratedClip(0, Stage(10)) with
             {
                 BoundaryOut = Constants.BoundaryOutContinue,
                 BoundaryOutOverlap = 16,
             },
-            SourcedClip(1),
+            SourcedClip(1, Stage(11)),
         ]);
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        BoundaryPlanningResult result = BoundaryPlanCompiler.Compile(spec.Clips, plan.Clips);
 
         BoundaryPlan boundary = Assert.Single(result.Boundaries);
         Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
@@ -38,6 +44,41 @@ public class PlanningCompilerComponentTests
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "boundary-targetissourcedvideo");
+    }
+
+    [Fact]
+    public void BoundaryPlanCompiler_UsesArchitecturePolicyForRequirementsAndFrameGrid()
+    {
+        VideoStagesSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)) with
+            {
+                BoundaryOut = Constants.BoundaryOutContinue,
+                BoundaryOutOverlap = 18,
+            },
+            SourcedClip(1, Stage(11)) with
+            {
+                ImageRefs = [new ImageRefSpec("Upload", 1, false, "first.png")],
+            },
+        ]);
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+        FakeBoundaryPolicy policy = new();
+        ClipPlan[] planned =
+        [
+            plan.Clips[0] with
+            {
+                ArchitecturePayload = new FakeBoundaryPayload(policy),
+            },
+            plan.Clips[1],
+        ];
+
+        BoundaryPlan boundary = Assert.Single(
+            BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
+
+        Assert.Equal(BoundaryExecutionMode.Continue, boundary.Effective);
+        Assert.Equal(15, boundary.OverlapFrames);
+        Assert.Equal(18, boundary.ContinuityWindowFrames);
+        Assert.Equal(5, boundary.FrameStep);
     }
 
     [Fact]
@@ -58,7 +99,7 @@ public class PlanningCompilerComponentTests
             IcLoras =
             [
                 new IcLoraSpec(
-                    Constants.IcLoraAutoModel,
+                    IcLoraWeights.AutoModelToken,
                     Constants.ControlNetSourceTwo,
                     1,
                     1,
@@ -85,6 +126,84 @@ public class PlanningCompilerComponentTests
         Assert.Equal(ImageReferenceSourceKind.Upload, Assert.Single(references).SourceKind);
     }
 
+    [Theory]
+    [InlineData(2, "Upload", "none", null, "ltx2.ic-lora.stage-target-invalid")]
+    [InlineData(-1, "future-source", "none", null, "ltx2.ic-lora.source-unsupported")]
+    [InlineData(-1, "Stage Input", "none", null, "ltx2.ic-lora.stage-input-unavailable")]
+    [InlineData(-1, "Upload", "future-control", null, "ltx2.ic-lora.control-mode-unsupported")]
+    [InlineData(
+        -1,
+        "Upload",
+        "none",
+        "data:application/octet-stream;base64,QQ==",
+        "ltx2.ic-lora.upload-kind-unsupported")]
+    public void LtxIcLoraStructuralErrors_AreBlockingPlanningDiagnostics(
+        int targetStage,
+        string source,
+        string control,
+        string uploadedData,
+        string expectedCode)
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10)) with
+        {
+            AuthoredStages = [new(0, "ltx-2", "ltx-2.3", false)],
+            IcLoras =
+            [
+                new(
+                    "adapter.safetensors",
+                    source,
+                    1,
+                    1,
+                    control,
+                    uploadedData is null ? null : new(uploadedData, "drive.bin"),
+                    Stage: targetStage),
+            ],
+        };
+
+        Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(
+            clip,
+            new(640, 360, 24));
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == expectedCode
+                && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void LtxIcLoraStructuralError_PreventsArchitecturePayloadPublication()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10)) with
+        {
+            AuthoredStages = [new(0, "ltx-2", "ltx-2.3", false)],
+            IcLoras =
+            [
+                new(
+                    "adapter.safetensors",
+                    "future-source",
+                    1,
+                    1,
+                    Constants.IcLoraControlNone,
+                    null),
+            ],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(new(
+            640,
+            360,
+            24,
+            false,
+            [clip]));
+        ClipPlan plannedClip = Assert.Single(plan.Clips);
+
+        Assert.Null(plannedClip.ArchitecturePayload);
+        Assert.Null(Assert.Single(plannedClip.Stages).ArchitecturePayload);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.source-unsupported"
+                && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+    }
+
     [Fact]
     public void ClipPlanCompiler_PlansSourcedStageChainAndOutputOwnership()
     {
@@ -100,7 +219,10 @@ public class PlanningCompilerComponentTests
                 IsLastClip: true,
                 IsMultiClip: false,
                 TotalStageCount: 2,
-                FirstStageOrdinal: 0));
+                FirstStageOrdinal: 0,
+                ArchitecturePayload: Ltx2ClipPlanCompiler.Compile(
+                    clip,
+                    new(640, 360, 30)).Payload));
 
         Assert.Equal(ClipInputKind.SourceVideo, plan.Input);
         Assert.True(plan.Stages[0].IsPassthrough);
@@ -117,7 +239,7 @@ public class PlanningCompilerComponentTests
         object environmentValue)
     {
         RootEnvironment environment = Assert.IsType<RootEnvironment>(environmentValue);
-        VideoExecutionPlan facade = VideoExecutionPlanCompiler.Compile(spec, environment);
+        VideoExecutionPlan facade = TestPlanCompiler.Compile(spec, environment);
         VideoExecutionPlan assembled = CompileFromComponents(spec, environment);
 
         Assert.Equal(Serialize(assembled), Serialize(facade));
@@ -160,12 +282,13 @@ public class PlanningCompilerComponentTests
                     IcLoras =
                     [
                         new IcLoraSpec(
-                            Constants.IcLoraAutoModel,
+                            IcLoraWeights.AutoModelToken,
                             Constants.IcLoraSourceUpload,
                             0.7,
                             1,
                             Constants.IcLoraControlNone,
                             new UploadedAudioSpec("data:image/png;base64,Qg==", "drive.png"),
+                            Preset: "deblur",
                             Stage: 1),
                     ],
                 },
@@ -176,6 +299,7 @@ public class PlanningCompilerComponentTests
 
     private static VideoExecutionPlan CompileFromComponents(VideoStagesSpec spec, RootEnvironment environment)
     {
+        ArchitecturePlanningResult architecture = TestPlanCompiler.ResolveLtx(spec);
         List<VideoPlanDiagnostic> diagnostics = [];
         List<ClipSpec> clips = [];
         HashSet<int> seenClipIds = [];
@@ -201,7 +325,40 @@ public class PlanningCompilerComponentTests
                 "Clips without a source video or active stages were ignored by the execution plan."));
         }
 
-        BoundaryPlanningResult boundaries = BoundaryPlanCompiler.Compile(clips);
+        int totalStages = clips.Sum(clip => clip.Stages?.Count ?? 0);
+        int firstStageOrdinal = 0;
+        List<ClipPlan> plans = [];
+        for (int i = 0; i < clips.Count; i++)
+        {
+            ClipArchitectureAssignment assignment =
+                architecture.Clips.GetValueOrDefault(clips[i].Id);
+            IArchitectureClipPayload payload = assignment?.Module
+                .ValidateAndCompileClip(
+                    clips[i],
+                    assignment.StageModels,
+                    new(spec.Width, spec.Height, spec.FPS))
+                .Payload;
+            plans.Add(ClipPlanCompiler.Compile(clips[i], new ClipPlanCompilationContext(
+                spec.IsTextToVideo,
+                spec.Width,
+                spec.Height,
+                spec.FPS,
+                i == clips.Count - 1,
+                clips.Count > 1,
+                totalStages,
+                firstStageOrdinal,
+                assignment,
+                payload)));
+            diagnostics.AddRange(plans[^1].Audio.Diagnostics.Select(audioDiagnostic =>
+                new VideoPlanDiagnostic(
+                    VideoPlanDiagnosticSeverity.Warning,
+                    audioDiagnostic.Code,
+                    audioDiagnostic.Message,
+                    plans[^1].ClipId)));
+            firstStageOrdinal += clips[i].Stages?.Count ?? 0;
+        }
+
+        BoundaryPlanningResult boundaries = BoundaryPlanCompiler.Compile(clips, plans);
         diagnostics.AddRange(boundaries.Diagnostics);
         BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [.. clips.Select(clip => clip.Frames)],
@@ -213,34 +370,15 @@ public class PlanningCompilerComponentTests
                 "boundary-frame-budget-reconciled",
                 $"VideoStages: {boundaryBudget.Reason}."));
         }
-        int totalStages = clips.Sum(clip => clip.Stages?.Count ?? 0);
-        int firstStageOrdinal = 0;
-        List<ClipPlan> plans = [];
-        for (int i = 0; i < clips.Count; i++)
-        {
-            plans.Add(ClipPlanCompiler.Compile(clips[i], new ClipPlanCompilationContext(
-                spec.IsTextToVideo,
-                spec.Width,
-                spec.Height,
-                spec.FPS,
-                i == clips.Count - 1,
-                clips.Count > 1,
-                totalStages,
-                firstStageOrdinal)));
-            diagnostics.AddRange(plans[^1].Audio.Diagnostics.Select(audioDiagnostic =>
-                new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Warning,
-                    audioDiagnostic.Code,
-                    audioDiagnostic.Message,
-                    plans[^1].ClipId)));
-            firstStageOrdinal += clips[i].Stages?.Count ?? 0;
-        }
+        RootPlan root = RootPlanCompiler.Compile(environment, clips);
+        diagnostics.AddRange(
+            Ltx2ArchitectureModule.Instance.ValidatePlan(plans, plans, root));
 
         VideoExecutionPlan plan = new(
             spec.Width,
             spec.Height,
             spec.FPS,
-            RootPlanCompiler.Compile(environment, clips),
+            root,
             Array.AsReadOnly(plans.ToArray()),
             Array.AsReadOnly(boundaryBudget.Boundaries.ToArray()),
             Array.AsReadOnly(diagnostics.ToArray()));
@@ -276,4 +414,34 @@ public class PlanningCompilerComponentTests
         new(id, control, 1, "pixel-lanczos", "ltx-2", 12, 4.5, "euler", "normal", "Generated",
             ClipStageIndex: id - 10,
             ClipStageRawIndex: rawIndex ?? id - 10);
+
+    private sealed record FakeBoundaryPayload(IArchitectureBoundaryPolicy BoundaryPolicy) :
+        IArchitectureClipPayload,
+        IArchitectureBoundaryPolicySource
+    {
+        public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
+    }
+
+    private sealed class FakeBoundaryPolicy : IArchitectureBoundaryPolicy
+    {
+        public IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes
+            { get; } = new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+            {
+                [BoundaryExecutionMode.Continue] = new(
+                    RuleSupport.Conditional,
+                    "fake.continue",
+                    "Fake policy with a different grid and permissive target.",
+                    FrameStep: 5,
+                    MinFrames: 10,
+                    MaxFrames: 30,
+                    DefaultFrames: 15,
+                    ContinuityExtraFrames: 3,
+                    TargetRequiresGeneratedEntry: false,
+                    TargetRequiresStage: false,
+                    TargetDisallowsInitialReference: false),
+            };
+
+        public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules =>
+            Modes.ToDictionary(pair => pair.Key, pair => pair.Value.ToRuleDecision());
+    }
 }

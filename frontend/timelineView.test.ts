@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
-import { projectLtxExecutionPath } from "./executionPath";
+import { projectVideoExecutionPath } from "./executionPath";
 import {
     clampPxPerSecond,
     computeFitPxPerSecond,
@@ -986,7 +986,7 @@ describe("authoring diagnostics", () => {
 describe("execution path summary", () => {
     it("renders the compact nontechnical projection above the tracks", () => {
         const clip = minimalClip();
-        const summary = projectLtxExecutionPath({
+        const summary = projectVideoExecutionPath({
             width: 1280,
             height: 720,
             fps: 24,
@@ -1002,7 +1002,7 @@ describe("execution path summary", () => {
         );
         expect(panel?.textContent).toContain("Execution path");
         expect(panel?.textContent).toContain(
-            "LTX Video → Text-to-video → Single clip · single stage",
+            "VideoStages → LTX Video 2.3 → Text-to-video · Single clip · single stage",
         );
     });
 });

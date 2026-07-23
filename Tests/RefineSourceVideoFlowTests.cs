@@ -35,7 +35,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -60,7 +60,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -86,7 +86,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -120,7 +120,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(
@@ -168,7 +168,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -212,7 +212,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false).Append(SeedAceStepFunAudioTrackStep(0)),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -241,7 +241,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -249,7 +249,7 @@ public partial class StageFlowTests
         Assert.NotEqual(0, stage.Control);
         StagePlan plannedStage = Assert.Single(
             Assert.Single(
-                generator.RequireLtxVideoExecutionPlanContext().Plan.Clips)
+                generator.RequireVideoExecutionPlanContext().Plan.Clips)
             .Stages);
         Assert.False(plannedStage.IsPassthrough);
     }

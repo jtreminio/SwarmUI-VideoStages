@@ -8,9 +8,8 @@ public sealed record LoraRef(
 
 /// <summary>
 /// Retake window: regenerate only frames <c>[StartFrame, StartFrame + LengthFrames)</c> of the base
-/// video, preserving the rest; <c>Strength</c> is the per-frame noise-mask value inside it (1.0 = full
-/// regen). Presence on a stage enables retake: the stage encodes the whole base to latent, attaches a
-/// noise mask windowed to this span, and samples from step 0 so the mask (not <c>StartStep</c>) governs.
+/// video, preserving the rest. <c>Strength</c> is the requested regeneration strength inside the
+/// window (1.0 = full regeneration); the selected architecture owns how that request is executed.
 /// Frame counts are converted from the per-clip seconds window at parse time using the timeline fps.
 /// </summary>
 public sealed record RetakeWindowSpec(
@@ -60,10 +59,8 @@ public sealed record StageSpec(
     public bool IsModelUpscale => HasUpscaleMethodPrefix("model-");
 
     /// <summary>
-    /// True when the stage performs no generation: Control 0 means nothing denoises, and no retake
-    /// window is present (a retake samples from step 0 behind its frame mask even at Control 0).
-    /// A configured latent scale (up or down) is excluded — it transforms the latent and needs the
-    /// encode/decode pipeline even without sampling.
+    /// True when the authored stage requests no generation or architecture-owned latent transform.
+    /// Retakes and latent scaling remain active work even when Control is zero.
     /// </summary>
     public bool IsPassthrough => Control <= 0
         && RetakeWindow is null
@@ -90,9 +87,8 @@ public sealed record UploadedAudioSpec(
 /// Pre-existing footage used as the clip's starting point instead of a from-scratch generation.
 /// <c>Data</c> is the uploaded video; <c>StartSeconds</c> is how far into the file the
 /// used range begins — its length is the clip's own duration. The backend conforms the range to
-/// the timeline (fps resample, frame window, resize) and feeds it to the clip's stage chain as
-/// per-clip refine input: stage 0 passes it through (Control 0), later stages refine/upscale it,
-/// and a retake window regenerates part of it.
+/// the timeline (fps resample, frame window, resize) and supplies it as the clip's architecture-owned
+/// source input. The architecture decides how each stage consumes or transforms that source.
 /// </summary>
 public sealed record SourceVideoSpec(
     string Data,
@@ -102,19 +98,13 @@ public sealed record SourceVideoSpec(
 
 /// <summary>
 /// One in-context LoRA on a clip. <c>Lora</c> is the LoRA model name, or "[AUTO]" to resolve the
-/// preset's conventional download path (IcLoraWeights.ModelNameFor(<c>Preset</c>)); <c>Preset</c> is
-/// the frontend catalog id — otherwise editor guidance only; <c>Strength</c> is the LoRA model
-/// strength (loader <c>strength_model</c>); <c>AttentionStrength</c> below 1.0 selects the Advanced guide
-/// node for per-guide self-attention influence; <c>ControlType</c> optionally renders the drive video
-/// into a control signal (canny/depth/normal) before guiding; <c>Source</c> is where the drive video
-/// comes from — "Upload" (embedded <c>Video</c> blob), "Stage Input" (the frames entering the target
-/// stage), or a captured core "ControlNet N" branch. <c>Stage</c> restricts the entry to one stage
-/// (-1 = every stage), indexed by the clip's authored stage list (StageSpec.ClipStageRawIndex).
-/// An entry with no drive video still applies the LoRA to the model (loader-only; e.g. HDR,
-/// text-driven use).
-/// The guide's latent_downscale_factor is wired from the loader's safetensors-metadata output.
+/// selected architecture preset's conventional download path; <c>Preset</c> is the frontend
+/// catalog id and otherwise editor guidance only. <c>Strength</c>, <c>AttentionStrength</c>, and
+/// <c>ControlType</c> are architecture-interpreted settings. <c>Source</c> identifies the drive
+/// video's authored source; <c>Stage</c> scopes the entry to one authored stage (-1 = every stage).
+/// An entry without drive media is a model-only adapter request when the architecture supports it.
 /// <c>DriveAudioRef</c> uses the uploaded drive video's own audio track as the clip's
-/// voice-reference sample (LTXVSetAudioRefTokens) — the official LipDub one-file flow.
+/// architecture-owned voice-reference sample rather than a timeline audio track.
 /// </summary>
 public sealed record IcLoraSpec(
     string Lora,
@@ -132,8 +122,8 @@ public sealed record IcLoraSpec(
 /// One overlay audio piece on a clip, in addition to its base audio source.
 /// <c>Source</c> is an uploaded audio blob; <c>StartSeconds</c> is where the piece begins inside the
 /// clip; <c>TrimStartSeconds</c> is how far into the source file playback starts; <c>LengthSeconds</c> is
-/// how long it plays. All seconds, clamped inside the clip at parse time. The backend mixes each segment
-/// additively over the base audio (AudioMerge, merge_method="add").
+/// how long it plays. All seconds are clamped inside the clip at parse time. The runtime mixes each
+/// segment additively over the base audio.
 /// </summary>
 public sealed record AudioSegmentSpec(
     UploadedAudioSpec Source,
@@ -147,6 +137,18 @@ public sealed record PromptWindowSpec(
     string Prompt,
     double Start,
     double Duration
+);
+
+/// <summary>
+/// Architecture-relevant identity from the authored stage list. Unlike <see cref="StageSpec"/>,
+/// this projection intentionally retains skipped stages so a persisted mixed-architecture clip
+/// cannot evade validation by hiding one of its models.
+/// </summary>
+public sealed record AuthoredStageModelSpec(
+    int RawIndex,
+    string Model,
+    string ModelProfileId,
+    bool Skipped
 );
 
 public sealed record ClipSpec(
@@ -165,23 +167,22 @@ public sealed record ClipSpec(
     IReadOnlyList<LoraRef> Loras = null,
     IReadOnlyList<PromptWindowSpec> PromptWindows = null,
     // Cross-clip continuity at THIS clip's outgoing boundary (clip N -> N+1): "cut" (hard concat),
-    // "continue" (generation-time continuity: the next clip generates with this clip's last
-    // BoundaryOutOverlap+1 frames as frozen latent context, and the merge collapses the duplicated
-    // frames), or "crossfade" (pixel dissolve over an overlap window). Only meaningful for non-final
-    // clips in a parallel multi-clip run.
+    // "continue" (architecture-owned generation-time continuity), or "crossfade" (pixel dissolve
+    // over an overlap window). Only meaningful for non-final clips in a parallel multi-clip run.
     string BoundaryOut = Constants.BoundaryOutCut,
-    // Boundary overlap in frames (multiple of 8, ContinueOverlapDefaultFrames..ContinueOverlapMaxFrames):
+    // Authored boundary overlap in frames; the selected architecture normalizes its own grid:
     // for "continue" the frozen-context length (window = overlap+1), for "crossfade" the requested
     // dissolve length; ignored for "cut".
-    int BoundaryOutOverlap = Constants.ContinueOverlapDefaultFrames,
+    int BoundaryOutOverlap = 0,
     SourceVideoSpec SourceVideo = null
 )
 {
-    /// <summary>First IC-LoRA entry driven by a captured core "ControlNet N" branch, or null. That
-    /// entry's slot doubles as the clip's audio-capture and clip-length-from-controlnet source.</summary>
-    public IcLoraSpec PrimarySlotEntry => IcLoras?.FirstOrDefault(
-        entry => !StringUtils.Equals(entry.Source, Constants.IcLoraSourceUpload)
-            && !StringUtils.Equals(entry.Source, Constants.IcLoraSourceStageInput));
+    public string AuthoredArchitectureId { get; init; }
+
+    public string AuthoredModelProfileId { get; init; }
+
+    public IReadOnlyList<AuthoredStageModelSpec> AuthoredStages { get; init; } = [];
+
 }
 
 public sealed record VideoStagesSpec(

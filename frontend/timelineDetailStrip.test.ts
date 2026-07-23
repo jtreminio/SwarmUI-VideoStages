@@ -14,8 +14,10 @@ import {
     mountSelect,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
-import { IC_LORA_AUTO } from "./constants";
-import { resetIcLoraAutoDownloads } from "./icLoraAutoDownload";
+import {
+    IC_LORA_AUTO,
+    resetIcLoraAutoDownloads,
+} from "./architectures/ltx2/icLoraAutoDownload";
 import * as persistence from "./persistence";
 import {
     getSelection,
@@ -86,7 +88,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     reuseAudio: clip.reuseAudio ?? false,
     clipLengthFromAudio: clip.clipLengthFromAudio ?? false,
     stages: clip.stages.map((s) => ({
-        model: s.model ?? "model-a.safetensors",
+        model: s.model ?? "ltx-2.3.safetensors",
         skipped: s.skipped ?? false,
         loras: s.loras ?? [],
         upscale: s.upscale,
@@ -117,8 +119,8 @@ const promptText = (fixtures: ClipFixture[]): string => {
 
 const mountRootDefaults = (loras: string[] = ["lora-x.safetensors"]): void => {
     mountSelect("input_videomodel", {
-        value: "model-a.safetensors",
-        options: ["model-a.safetensors", "model-b.safetensors"],
+        value: "ltx-2.3.safetensors",
+        options: ["ltx-2.3.safetensors", "ltx-2.3-alt.safetensors"],
     });
     mountSelect("input_loras", { options: loras });
     mountSelect("input_sampler", { options: ["euler", "dpm"] });
@@ -426,9 +428,18 @@ describe("createTimelineDetailStrip", () => {
         expect(controlNetLabels()).not.toContain("IC-LoRA Guide Strength");
     });
 
-    it("shows IC-LoRA Guide Strength when the clip has an IC-LoRA (legacy field)", () => {
+    it("shows IC-LoRA Guide Strength when the clip has an IC-LoRA", () => {
         setup([
-            { duration: 4, stages: [{}], controlNetLora: "some-cnet-lora" },
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [
+                    {
+                        lora: "some-cnet-lora",
+                        source: "ControlNet 1",
+                    },
+                ],
+            },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(controlNetLabels()).toContain("IC-LoRA Guide Strength");
@@ -855,7 +866,7 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].icLoras).toHaveLength(0);
     });
 
-    it("live-applies a discrete select change through saveClips", () => {
+    it("live-applies a discrete model command through the document store", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const select =
@@ -863,11 +874,10 @@ describe("createTimelineDetailStrip", () => {
         if (!select) {
             throw new Error("model select missing");
         }
-        select.value = "model-b.safetensors";
+        select.value = "ltx-2.3-alt.safetensors";
         select.dispatchEvent(new Event("change", { bubbles: true }));
-        expect(saveSpy).toHaveBeenCalled();
-        expect(savedClips(saveSpy)[0].stages[0].model).toBe(
-            "model-b.safetensors",
+        expect(persistence.getClips()[0].stages[0].model).toBe(
+            "ltx-2.3-alt.safetensors",
         );
     });
 
@@ -894,7 +904,7 @@ describe("createTimelineDetailStrip", () => {
         }
         // Something else mutates the carrier: the token is now stale.
         mountPromptBox("changed by someone else");
-        select.value = "model-b.safetensors";
+        select.value = "ltx-2.3-alt.safetensors";
         select.dispatchEvent(new Event("change", { bubbles: true }));
         expect(saveSpy).not.toHaveBeenCalled();
     });
@@ -974,6 +984,34 @@ describe("createTimelineDetailStrip", () => {
                 ".vst-detail-delete-stage",
             )?.disabled,
         ).toBe(false);
+    });
+
+    it("adds the first architecture stage to a zero-stage source-only clip", () => {
+        setup([
+            {
+                duration: 4,
+                sourceVideo: {
+                    data: "data:video/mp4;base64,AA==",
+                    fileName: "source.mp4",
+                    fps: 24,
+                    durationSeconds: 4,
+                    startSeconds: 0,
+                    lengthSeconds: 4,
+                },
+                stages: [],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const add = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-stage",
+        );
+
+        expect(add?.disabled).toBe(false);
+        add?.click();
+
+        expect(persistence.getClips()[0].stages).toHaveLength(1);
+        expect(persistence.getClips()[0].architecture).not.toBe("none");
+        expect(activeRailLabel()).toBe("S0");
     });
 
     it("mutes the stage params and persists Skip this stage", () => {
@@ -1512,7 +1550,7 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 5,
                 stages: [{}, {}, {}],
-                controlNetLora: "some-lora",
+                icLoras: [{ lora: "some-lora", source: "ControlNet 1" }],
             },
         ]);
         setSelection({ kind: "audio", clipIdx: 0 });

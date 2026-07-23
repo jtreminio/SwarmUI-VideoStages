@@ -4,10 +4,18 @@ import * as path from "node:path";
 
 import { describe, expect, it } from "@jest/globals";
 
+import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
+import { boundaryOverlapConstraints } from "./architectures/boundaryConstraints";
+import { parseVideoArchitectureCatalog } from "./architectures/catalog";
+import { ltx2Architecture } from "./architectures/ltx2/definition";
+import {
+    IC_LORA_PRESETS,
+    icLoraAutoModelName,
+} from "./architectures/ltx2/icLoraPresets";
+import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { crossfadePlanForClips } from "./boundaryPlan";
-import { IC_LORA_PRESETS, icLoraAutoModelName } from "./icLoraPresets";
 import { framesForClip } from "./renderUtils";
-import type { Clip } from "./types";
+import type { BoundaryOut, Clip } from "./types";
 
 // Frontend halves of the cross-language drift tests. Each asserts against the same JSON fixture in
 // Tests/fixtures/ that the C# CrossLanguageMirrorTests reads, so a deliberate constant change on
@@ -15,6 +23,14 @@ import type { Clip } from "./types";
 const fixturesDir = path.resolve(__dirname, "..", "Tests", "fixtures");
 const loadFixture = <T>(name: string): T =>
     JSON.parse(fs.readFileSync(path.join(fixturesDir, name), "utf8")) as T;
+const ltxBoundaryConstraints = (
+    _clip: Clip,
+    _index: number,
+    mode: BoundaryOut,
+) =>
+    boundaryOverlapConstraints(
+        testArchitectureCatalog().architectures[0].boundaryRules[mode],
+    );
 
 describe("cross-language mirror: M2 frame alignment (renderUtils.framesForClip)", () => {
     interface FrameCase {
@@ -74,7 +90,7 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
         const clips = frames.map((f, i) =>
             clipFor(f, boundaries[i], boundaryOverlaps[i]),
         );
-        const plan = crossfadePlanForClips(clips, 1);
+        const plan = crossfadePlanForClips(clips, 1, ltxBoundaryConstraints);
         expect(plan.overlaps).toEqual(expectedOverlaps);
         expect(plan.fallback).toBe(expectedFallback);
     });
@@ -105,5 +121,43 @@ describe("cross-language mirror: M4 IC-LoRA auto-model naming (icLoraPresets)", 
         }
         expect(preset.weightsUrl).toBe(weightsUrl);
         expect(icLoraAutoModelName(preset)).toBe(autoModelName);
+    });
+});
+
+describe("cross-language mirror: architecture catalog rule contract", () => {
+    interface ArchitectureDescriptorContract {
+        descriptor: ArchitectureCatalogEntryDto;
+        forbiddenProfileCapabilities: string[];
+    }
+
+    const contract = loadFixture<ArchitectureDescriptorContract>(
+        "architecture-catalog-rule-contract.json",
+    );
+    const wireArchitecture = {
+        id: ltx2Architecture.id,
+        label: ltx2Architecture.label,
+        defaultProfileId: ltx2Architecture.defaultProfileId,
+        capabilities: ltx2Architecture.capabilities,
+        profiles: ltx2Architecture.profiles,
+        boundaryRules: ltx2Architecture.boundaryRules,
+        rules: ltx2Architecture.rules,
+    };
+    const parsed = parseVideoArchitectureCatalog({
+        architectures: [wireArchitecture],
+        models: [],
+    });
+
+    it("matches the complete backend descriptor through the strict wire parser", () => {
+        expect(parsed).not.toBeNull();
+        const architecture = parsed?.architectures[0];
+        if (!architecture) {
+            throw new Error("LTX architecture did not parse");
+        }
+        expect(architecture).toEqual(contract.descriptor);
+        for (const forbidden of contract.forbiddenProfileCapabilities) {
+            expect(architecture.profiles[0]?.capabilities).not.toContain(
+                forbidden,
+            );
+        }
     });
 });

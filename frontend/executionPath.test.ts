@@ -1,14 +1,16 @@
 import { describe, expect, it } from "@jest/globals";
+import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import {
     minimalClip,
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
+import { CONDITIONAL_RULE_CODES } from "./architectures/conditionalRules";
 import {
-    type LtxExecutionContext,
-    type LtxHostEntryHint,
-    type LtxTimelineShape,
-    projectLtxExecutionPath,
+    projectVideoExecutionPath,
+    type VideoExecutionContext,
+    type VideoHostEntryHint,
+    type VideoTimelineShape,
 } from "./executionPath";
 import {
     type Clip,
@@ -37,13 +39,13 @@ const sourceVideo = () => ({
     lengthSeconds: 5,
 });
 
-describe("projectLtxExecutionPath", () => {
+describe("projectVideoExecutionPath", () => {
     it.each<{
         name: string;
         clips: Clip[];
-        context?: LtxExecutionContext;
-        entry: LtxHostEntryHint;
-        shape: LtxTimelineShape;
+        context?: VideoExecutionContext;
+        entry: VideoHostEntryHint;
+        shape: VideoTimelineShape;
         labels: string[];
     }>([
         {
@@ -52,7 +54,8 @@ describe("projectLtxExecutionPath", () => {
             entry: "text-to-video",
             shape: "single-clip-single-stage",
             labels: [
-                "LTX Video",
+                "VideoStages",
+                "LTX Video 2.3",
                 "Text-to-video",
                 "Single clip · single stage",
             ],
@@ -67,7 +70,7 @@ describe("projectLtxExecutionPath", () => {
             context: { entryPoint: "host-image-guidance" },
             entry: "host-image-guidance",
             shape: "single-clip-single-stage",
-            labels: ["Host image guidance", "1 frame reference"],
+            labels: ["Text → image → video", "1 frame reference"],
         },
         {
             name: "uploaded init image is inferred when no host hint is supplied",
@@ -151,7 +154,7 @@ describe("projectLtxExecutionPath", () => {
             labels: ["1 source-video-only clip"],
         },
     ])("summarizes $name", ({ clips, context, entry, shape, labels }) => {
-        const summary = projectLtxExecutionPath(config(clips), context);
+        const summary = projectVideoExecutionPath(config(clips), context);
 
         expect(summary.hostEntry.kind).toBe(entry);
         expect(summary.shape.kind).toBe(shape);
@@ -161,7 +164,7 @@ describe("projectLtxExecutionPath", () => {
     });
 
     it("infers only clip-zero initial guidance and ignores later frame references", () => {
-        const initial = projectLtxExecutionPath(
+        const initial = projectVideoExecutionPath(
             config([
                 minimalClip({
                     refs: [
@@ -176,7 +179,7 @@ describe("projectLtxExecutionPath", () => {
         );
         expect(initial.hostEntry.kind).toBe("init-image-guidance");
 
-        const later = projectLtxExecutionPath(
+        const later = projectVideoExecutionPath(
             config([
                 minimalClip(),
                 minimalClip({
@@ -194,7 +197,7 @@ describe("projectLtxExecutionPath", () => {
     });
 
     it("represents the separate global Refine Video entry explicitly", () => {
-        const summary = projectLtxExecutionPath(config([minimalClip()]), {
+        const summary = projectVideoExecutionPath(config([minimalClip()]), {
             entryPoint: "global-refine-video",
         });
 
@@ -206,7 +209,7 @@ describe("projectLtxExecutionPath", () => {
     });
 
     it("summarizes every optional LTX path feature without graph details", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     sourceVideo: sourceVideo(),
@@ -314,7 +317,7 @@ describe("projectLtxExecutionPath", () => {
     });
 
     it("keeps skipped clips visible without counting their paths or options", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     skipped: true,
@@ -332,7 +335,7 @@ describe("projectLtxExecutionPath", () => {
         });
         expect(summary.clips[0]).toMatchObject({
             kind: "skipped",
-            label: "Clip 1: skipped",
+            label: "Clip 1: skipped · LTX Video 2.3",
         });
         expect(summary.features.upscaledStageCount).toBe(0);
     });
@@ -343,7 +346,7 @@ describe("projectLtxExecutionPath", () => {
             minimalClip({ id: "clip-b" }),
             minimalClip({ id: "clip-c" }),
         ];
-        const summary = projectLtxExecutionPath({
+        const summary = projectVideoExecutionPath({
             ...config(clips),
             audioTracks: [
                 {
@@ -426,7 +429,7 @@ describe("projectLtxExecutionPath", () => {
             minimalClip({ id: "clip-b" }),
             minimalClip({ id: "clip-c" }),
         ];
-        const summary = projectLtxExecutionPath({
+        const summary = projectVideoExecutionPath({
             ...config(clips),
             audioTracks: [
                 {
@@ -520,7 +523,7 @@ describe("projectLtxExecutionPath", () => {
             video: null,
             driveAudioRef: false,
         };
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     stages: [minimalStage(), minimalStage({ skipped: true })],
@@ -535,7 +538,7 @@ describe("projectLtxExecutionPath", () => {
     it.each<{
         name: string;
         clips: Clip[];
-        kind: LtxTimelineShape;
+        kind: VideoTimelineShape;
         label: string;
     }>([
         {
@@ -576,7 +579,7 @@ describe("projectLtxExecutionPath", () => {
             label: "Multiple clips · multi-stage",
         },
     ])("describes $name truthfully", ({ clips, kind, label }) => {
-        expect(projectLtxExecutionPath(config(clips)).shape).toEqual({
+        expect(projectVideoExecutionPath(config(clips)).shape).toEqual({
             kind,
             label,
         });
@@ -585,7 +588,7 @@ describe("projectLtxExecutionPath", () => {
     it.each<{
         name: string;
         clips: Clip[];
-        context?: LtxExecutionContext;
+        context?: VideoExecutionContext;
         count: number;
     }>([
         {
@@ -647,13 +650,13 @@ describe("projectLtxExecutionPath", () => {
         },
     ])("counts effective upscaling when $name", ({ clips, context, count }) => {
         expect(
-            projectLtxExecutionPath(config(clips), context).features
+            projectVideoExecutionPath(config(clips), context).features
                 .upscaledStageCount,
         ).toBe(count);
     });
 
     it("projects only post-skip clip-zero stages and their features during global refine", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     stages: [
@@ -716,7 +719,7 @@ describe("projectLtxExecutionPath", () => {
     it.each<{
         name: string;
         clip: Clip;
-        context?: LtxExecutionContext;
+        context?: VideoExecutionContext;
         expected: number[];
     }>([
         {
@@ -774,13 +777,13 @@ describe("projectLtxExecutionPath", () => {
         expected,
     }) => {
         expect(
-            projectLtxExecutionPath(config([clip]), context).features
+            projectVideoExecutionPath(config([clip]), context).features
                 .retakeClipNumbers,
         ).toEqual(expected);
     });
 
     it("projects boundaries over compacted executable clips using the left executable boundary", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     boundaryOut: "continue",
@@ -829,7 +832,7 @@ describe("projectLtxExecutionPath", () => {
         target,
         fallback,
     }) => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     boundaryOut: "continue",
@@ -837,6 +840,7 @@ describe("projectLtxExecutionPath", () => {
                 }),
                 target,
             ]),
+            { catalog: testArchitectureCatalog() },
         );
 
         expect(summary.boundaries[0]).toMatchObject({
@@ -850,8 +854,8 @@ describe("projectLtxExecutionPath", () => {
 
     it.each<{
         name: string;
-        context: LtxExecutionContext;
-        expected: LtxHostEntryHint;
+        context: VideoExecutionContext;
+        expected: VideoHostEntryHint;
     }>([
         {
             name: "text-to-video ignores a Base first-frame reference",
@@ -869,13 +873,13 @@ describe("projectLtxExecutionPath", () => {
                 ? [minimalRef({ source: REF_SOURCE_BASE, frame: 1 })]
                 : [];
         expect(
-            projectLtxExecutionPath(config([minimalClip({ refs })]), context)
+            projectVideoExecutionPath(config([minimalClip({ refs })]), context)
                 .hostEntry.kind,
         ).toBe(expected);
     });
 
     it("keeps uploaded frame-one guidance as init-image even for text-to-video", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     refs: [
@@ -893,7 +897,7 @@ describe("projectLtxExecutionPath", () => {
     });
 
     it("shows only uploaded references that LTX can execute on a text-to-video root", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     refs: [
@@ -919,7 +923,7 @@ describe("projectLtxExecutionPath", () => {
     });
 
     it("distinguishes clip prompt overrides from inherited global prompts", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({ prompt: "" }),
                 minimalClip({ prompt: "clip override" }),
@@ -939,7 +943,7 @@ describe("projectLtxExecutionPath", () => {
     });
 
     it("surfaces clip-local audio source, eligible reuse, save, length, and segments", () => {
-        const summary = projectLtxExecutionPath(
+        const summary = projectVideoExecutionPath(
             config([
                 minimalClip({
                     audioSource: "audio2",
@@ -991,15 +995,45 @@ describe("projectLtxExecutionPath", () => {
         );
     });
 
+    it("uses the catalog-advertised stage minimum for audio-reuse projection", () => {
+        const catalog = testArchitectureCatalog();
+        const reuseRule = catalog.architectures[0].rules.find(
+            (rule) =>
+                rule.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages,
+        );
+        if (!reuseRule) throw new Error("missing audio-reuse rule");
+        reuseRule.constraints = {
+            ...(reuseRule.constraints ?? {}),
+            minimumActiveStages: 4,
+        };
+        const clips = [
+            minimalClip({
+                reuseAudio: true,
+                stages: [minimalStage(), minimalStage(), minimalStage()],
+            }),
+        ];
+
+        expect(
+            projectVideoExecutionPath(config(clips), { catalog }).features.audio
+                .clips[0].reusesStageAudio,
+        ).toBe(false);
+        clips[0].stages.push(minimalStage());
+        expect(
+            projectVideoExecutionPath(config(clips), { catalog }).features.audio
+                .clips[0].reusesStageAudio,
+        ).toBe(true);
+    });
+
     it("reports an empty timeline plainly", () => {
-        const summary = projectLtxExecutionPath(config([]));
+        const summary = projectVideoExecutionPath(config([]));
 
         expect(summary.shape).toEqual({
             kind: "no-executable-clips",
             label: "No executable clips",
         });
         expect(summary.labels).toEqual([
-            "LTX Video",
+            "VideoStages",
+            "No active architecture",
             "Text-to-video",
             "No executable clips",
         ]);

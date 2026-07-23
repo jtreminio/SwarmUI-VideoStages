@@ -23,13 +23,6 @@ internal static class BoundaryPolicy
         return Constants.BoundaryOutCut;
     }
 
-    public static int NormalizeOverlap(int overlap) => Math.Clamp(
-        overlap < Constants.ContinueOverlapDefaultFrames
-            ? Constants.ContinueOverlapDefaultFrames
-            : overlap - (overlap % 8),
-        Constants.ContinueOverlapDefaultFrames,
-        Constants.ContinueOverlapMaxFrames);
-
     public static BoundaryExecutionMode ParsePlanMode(string value, out bool isKnown)
     {
         if (string.Equals(value, Constants.BoundaryOutContinue, StringComparison.OrdinalIgnoreCase))

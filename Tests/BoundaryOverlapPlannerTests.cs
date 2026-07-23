@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using Xunit;
 
@@ -13,14 +14,21 @@ public class BoundaryOverlapPlannerTests
         int from,
         BoundaryExecutionMode mode,
         int overlap = 8,
-        int continuityWindow = 0) =>
+        int continuityWindow = 0,
+        int frameStep = 8,
+        int minFrames = 8) =>
         new(
             from,
+            mode,
             mode,
             mode == BoundaryExecutionMode.Cut ? 0 : overlap,
             mode == BoundaryExecutionMode.Continue ? continuityWindow : 0,
             RequiresRuntimeMergeValidation: mode != BoundaryExecutionMode.Cut,
-            BoundaryFallback.None);
+            BoundaryFallback.None)
+        {
+            FrameStep = frameStep,
+            MinFrames = mode == BoundaryExecutionMode.Cut ? 0 : minFrames,
+        };
 
     [Fact]
     public void ResolvePlanBudgets_UsesTypedModesAndReservesNeighborBudget()
@@ -33,22 +41,69 @@ public class BoundaryOverlapPlannerTests
             ]);
 
         Assert.Equal(9, resolution.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(7, resolution.Boundaries[1].OverlapFrames);
+        Assert.Equal(BoundaryExecutionMode.Cut, resolution.Boundaries[1].Effective);
+        Assert.Equal(0, resolution.Boundaries[1].OverlapFrames);
+        Assert.Equal(
+            BoundaryFallback.InsufficientFrameBudget,
+            resolution.Boundaries[1].Fallback);
     }
 
     [Fact]
-    public void ResolvePlanBudgets_ShrinksShortContinueOnceForAllConsumers()
+    public void ResolvePlanBudgets_CutsWhenShortContinueCannotPreserveArchitectureMinimum()
     {
         BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [5, 5],
             [Boundary(0, BoundaryExecutionMode.Continue, continuityWindow: 9)]);
         BoundaryPlan boundary = Assert.Single(resolution.Boundaries);
 
-        Assert.Equal(BoundaryExecutionMode.Continue, boundary.Effective);
-        Assert.Equal(1, boundary.ContinuityWindowFrames);
+        Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
+        Assert.Equal(0, boundary.ContinuityWindowFrames);
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.True(resolution.Degraded);
-        Assert.Equal([1], BoundaryOverlapPlanner.ToOverlapPlan(resolution.Boundaries).BoundaryOverlap);
+        Assert.Null(BoundaryOverlapPlanner.ToOverlapPlan(resolution.Boundaries));
+    }
+
+    [Fact]
+    public void ResolvePlanBudgets_ReducesOnlyOnTheArchitectureMinimumRelativeGrid()
+    {
+        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ResolvePlanBudgets(
+            [10, 10],
+            [
+                Boundary(
+                    0,
+                    BoundaryExecutionMode.Crossfade,
+                    overlap: 13,
+                    frameStep: 4,
+                    minFrames: 5),
+            ]);
+        BoundaryPlan boundary = Assert.Single(resolution.Boundaries);
+
+        Assert.Equal(BoundaryExecutionMode.Crossfade, boundary.Effective);
+        Assert.Equal(9, boundary.OverlapFrames);
+        Assert.Equal(0, (boundary.OverlapFrames - boundary.MinFrames) % boundary.FrameStep);
+    }
+
+    [Fact]
+    public void BoundaryPolicy_NormalizesRelativeToItsMinimumInsteadOfZero()
+    {
+        ArchitectureBoundaryModePolicy policy = new(
+            RuleSupport.Conditional,
+            "fake.crossfade",
+            "test",
+            FrameStep: 4,
+            MinFrames: 5,
+            MaxFrames: 21,
+            DefaultFrames: 9,
+            ContinuityExtraFrames: 0,
+            TargetRequiresGeneratedEntry: false,
+            TargetRequiresStage: false,
+            TargetDisallowsInitialReference: false);
+
+        Assert.Equal(9, policy.NormalizeOverlap(0));
+        Assert.Equal(5, policy.NormalizeOverlap(4));
+        Assert.Equal(5, policy.NormalizeOverlap(8));
+        Assert.Equal(9, policy.NormalizeOverlap(10));
+        Assert.Equal(21, policy.NormalizeOverlap(999));
     }
 
     [Fact]

@@ -1,17 +1,18 @@
 import { describe, expect, it } from "@jest/globals";
+import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
 import { normalizeClip } from "./normalization";
 import { serializeClipsForStorage } from "./persistence";
 import {
-    type Clip,
-    type RootDefaults,
     STORED_CLIP_KEYS,
     STORED_REF_KEYS,
     STORED_STAGE_KEYS,
     type StoredClip,
-} from "./types";
+} from "./storageTypes";
+import type { Clip, RootDefaults } from "./types";
 
 const getRootDefaults = (): RootDefaults => ({
+    modelCatalog: testArchitectureCatalog(),
     modelValues: ["ltx"],
     modelLabels: ["LTX"],
     loraValues: ["detail.safetensors"],
@@ -134,6 +135,7 @@ const maximalClip = (): Clip =>
                 upscale: 1,
                 upscaleMethod: "latentmodel-a.safetensors",
                 model: "ltx",
+                modelProfileId: "ltx-2.3",
                 steps: 8,
                 cfgScale: 1,
                 sampler: "euler",

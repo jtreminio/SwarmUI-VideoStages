@@ -102,7 +102,7 @@ public class RootExecutionPolicyTests
         bool isTextToVideo,
         RootEnvironment root,
         params ClipSpec[] clips) =>
-        VideoExecutionPlanCompiler.Compile(
+        TestPlanCompiler.Compile(
             new VideoStagesSpec(512, 512, 24, isTextToVideo, clips),
             root);
 

@@ -6,7 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Execution;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 
@@ -160,7 +160,14 @@ public class StageRunnerCollaboratorTests
     [Fact]
     public void Stage_dimension_rules_leave_unconstrained_stage_dimensions_unchanged()
     {
-        StagePlan stage = MakePlan().Stage with { IcLoras = ImmutableArray<IcLoraPlan>.Empty };
+        StagePlan stage = MakePlan().Stage;
+        stage = stage with
+        {
+            ArchitecturePayload = stage.RequireLtx2Payload() with
+            {
+                IcLoras = ImmutableArray<IcLoraPlan>.Empty
+            }
+        };
 
         Assert.Equal((638, 359), StageDimensionRules.SnapForIcLora(stage, 638, 359));
     }
@@ -170,12 +177,15 @@ public class StageRunnerCollaboratorTests
     {
         StagePlan stage = MakePlan().Stage with
         {
-            IcLoras = ImmutableArray<IcLoraPlan>.Empty,
-            Upscale = new(
-                StageUpscaleMode.Latent,
-                Factor: 2,
-                RawMethod: "latent-bilinear",
-                MethodName: "bilinear"),
+            ArchitecturePayload = MakePlan().Stage.RequireLtx2Payload() with
+            {
+                IcLoras = ImmutableArray<IcLoraPlan>.Empty,
+                Upscale = new(
+                    StageUpscaleMode.Latent,
+                    Factor: 2,
+                    RawMethod: "latent-bilinear",
+                    MethodName: "bilinear"),
+            }
         };
 
         Assert.Equal((1264, 704), StageDimensionRules.ResolveUpscaled(stage, 638, 359));
@@ -204,7 +214,7 @@ public class StageRunnerCollaboratorTests
         ClipSpec clip = new(
             Id: 7,
             Frames: 25,
-            AudioSource: "",
+            AudioSource: Constants.AudioSourceNative,
             IcLoras: [],
             SaveAudioTrack: false,
             ClipLengthFromAudio: false,
@@ -214,7 +224,7 @@ public class StageRunnerCollaboratorTests
             ImageRefs: [],
             Stages: [stage]);
         ClipPlan plannedClip = Assert.Single(
-            VideoExecutionPlanCompiler.Compile(
+            TestPlanCompiler.Compile(
                 new VideoStagesSpec(512, 512, 24, false, [clip]))
             .Clips);
         return (plannedClip, Assert.Single(plannedClip.Stages));

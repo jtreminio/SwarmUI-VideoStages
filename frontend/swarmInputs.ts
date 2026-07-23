@@ -1,6 +1,9 @@
+import {
+    architectureForModel,
+    buildArchitectureModelCatalog,
+} from "./architectures/catalog";
 import { parseBase2EditStageIndex } from "./constants";
-import { getLtxHostBridge } from "./host";
-import { isCurrentRootLtxVideoModel } from "./ltxCapabilities";
+import { getVideoStagesHostBridge } from "./host";
 import {
     type ClipTextInput,
     extractGlobalPrompt,
@@ -13,13 +16,13 @@ let warnedMissingDataInput = false;
 export const getPromptInput = ():
     | HTMLInputElement
     | HTMLTextAreaElement
-    | null => getLtxHostBridge().getTextInput("input_prompt");
+    | null => getVideoStagesHostBridge().getTextInput("input_prompt");
 
 export const getDataInput = ():
     | HTMLInputElement
     | HTMLTextAreaElement
     | null => {
-    const el = getLtxHostBridge().getTextInput(DATA_INPUT_ID);
+    const el = getVideoStagesHostBridge().getTextInput(DATA_INPUT_ID);
     if (el) {
         return el;
     }
@@ -63,11 +66,11 @@ export const writeClipPrompts = (clips: ClipTextInput[]): void => {
 export const notifyCarrierChanged = (): void => {
     const dataEl = getDataInput();
     if (dataEl) {
-        getLtxHostBridge().notifyChanged(dataEl);
+        getVideoStagesHostBridge().notifyChanged(dataEl);
     }
     const promptEl = getPromptInput();
     if (promptEl) {
-        getLtxHostBridge().notifyChanged(promptEl, true);
+        getVideoStagesHostBridge().notifyChanged(promptEl, true);
     }
 };
 
@@ -75,13 +78,15 @@ export const readGlobalPrompt = (): string =>
     extractGlobalPrompt(getPromptInput()?.value ?? "");
 
 export const getGroupToggle = (): HTMLInputElement | null =>
-    getLtxHostBridge().getInput("input_group_content_videostages_toggle");
+    getVideoStagesHostBridge().getInput(
+        "input_group_content_videostages_toggle",
+    );
 
 export const getRootModelInput = (): HTMLInputElement | null =>
-    getLtxHostBridge().getInput("input_model");
+    getVideoStagesHostBridge().getInput("input_model");
 
 export const getBase2EditStageRefs = (): string[] => {
-    const snapshot = getLtxHostBridge().getBase2EditRegistry();
+    const snapshot = getVideoStagesHostBridge().getBase2EditRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
         return [];
     }
@@ -104,19 +109,33 @@ export const isRootTextToVideoModel = (): boolean => {
     if (!modelName) {
         return false;
     }
-    return isCurrentRootLtxVideoModel(modelName);
+    const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
+    const architectureId = architectureForModel(catalog, modelName);
+    const architecture = catalog.architectures.find(
+        (entry) => entry.id === architectureId,
+    );
+    return (
+        architecture?.capabilities.entryModes.includes("text-to-video") ?? false
+    );
 };
+
+export const getRootGeneratedEntryMode = ():
+    | "text-to-video"
+    | "image-to-video" =>
+    !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel()
+        ? "text-to-video"
+        : "image-to-video";
 
 export const getDropdownOptions = (
     paramId: string,
     fallbackSelectId: string,
 ): { values: string[]; labels: string[] } => {
-    const registered = getLtxHostBridge().getParamOptions(paramId);
+    const registered = getVideoStagesHostBridge().getParamOptions(paramId);
     if (registered) {
         return registered;
     }
 
-    const bridge = getLtxHostBridge();
+    const bridge = getVideoStagesHostBridge();
     return bridge.getSelectOptions(bridge.getSelect(fallbackSelectId));
 };
 
@@ -131,5 +150,5 @@ export const setVideoStagesEnabled = (enabled: boolean): void => {
         return;
     }
     toggler.checked = enabled;
-    getLtxHostBridge().notifyChanged(toggler);
+    getVideoStagesHostBridge().notifyChanged(toggler);
 };

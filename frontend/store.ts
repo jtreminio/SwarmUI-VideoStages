@@ -1,3 +1,5 @@
+import type { ArchitectureModelCatalog } from "./architectures/types";
+import { videoStagesDebugLog } from "./debugLog";
 import {
     type ChangeImpact,
     type CommandFailure,
@@ -42,7 +44,10 @@ export interface TimelineStoreSnapshot {
     revision: number;
 }
 
-export type DispatchFailure = CommandFailure | "stale-revision";
+export type DispatchFailure =
+    | CommandFailure
+    | "stale-revision"
+    | "invalid-serialized-state";
 
 export interface TimelineDispatchResult {
     applied: boolean;
@@ -57,6 +62,11 @@ export interface TimelineDispatchResult {
  */
 export interface StoreDeps {
     /**
+     * Current backend-owned architecture catalog. Architecture-sensitive
+     * commands fail closed when it is unavailable.
+     */
+    architectureCatalog?(): ArchitectureModelCatalog | null;
+    /**
      * Change token covering everything a cached parse depends on: both
      * carrier values plus the inherited-dims signature (inherited width/
      * height/fps resolve from live core inputs at parse time).
@@ -68,11 +78,10 @@ export interface StoreDeps {
     parse(serialized: string): VideoStagesConfig | null;
     /** Config for an empty/absent carrier: inherited dims, zero clips. */
     parseEmpty(): VideoStagesConfig;
-    /**
-     * Serialize + write BOTH carriers without dispatching host change events.
-     * Returns the serialized data-param JSON.
-     */
-    writeQuiet(state: VideoStagesConfig): string;
+    /** Produce the exact data-param JSON without mutating either carrier. */
+    serialize(state: VideoStagesConfig): string;
+    /** Write BOTH carriers without dispatching host change events. */
+    writeQuiet(state: VideoStagesConfig, serialized: string): void;
     /** Dispatch the deferred host change events for both carriers. */
     notifyHost(): void;
 }
@@ -84,17 +93,6 @@ export interface TimelineStore {
     getSnapshot(): TimelineStoreSnapshot;
     /** Current document revision, revalidating the live carriers first. */
     revision(): number;
-    /**
-     * Commit `state`: write carriers, adopt the re-parsed post-write model as
-     * canonical, then (optionally) notify the host and always notify
-     * subscribers. Returns the serialized data-param JSON.
-     */
-    save(
-        state: VideoStagesConfig,
-        origin: UpdateOrigin,
-        notifyDomChange: boolean,
-        hint?: UpdateMeta["hint"],
-    ): string;
     /**
      * Atomically revalidate, optionally compare-and-swap by revision, reduce
      * one stable-ID command, and commit it through the normal carrier path.
@@ -110,7 +108,7 @@ export interface TimelineStore {
     /**
      * Absorb a carrier change made by someone else (host undo, paste, prompt
      * typing). No-ops and returns false when the live token matches the
-     * canonical model — including the reentrant calls our own save's host
+     * canonical model — including the reentrant calls our own commit's host
      * notification triggers.
      */
     syncFromCarrier(): boolean;
@@ -123,7 +121,7 @@ export interface TimelineStore {
 export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
     let canonical: VideoStagesConfig | null = null;
     let cachedToken: string | null = null;
-    // The last token subscribers were brought up to date with (via save's
+    // The last token subscribers were brought up to date with (via commit's
     // commit notification or syncFromCarrier's external notification). Kept
     // SEPARATE from cachedToken: a plain getState() may re-parse a changed
     // carrier (advancing cachedToken) without anyone having rendered it — the
@@ -179,7 +177,12 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         for (const cb of [...subscribers]) {
             try {
                 cb(snapshot, meta);
-            } catch {}
+            } catch (error) {
+                videoStagesDebugLog("store", "subscriber notification failed", {
+                    error,
+                    origin: meta.origin,
+                });
+            }
         }
     };
 
@@ -189,15 +192,33 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         notifyDomChange: boolean,
         hint?: UpdateMeta["hint"],
         impacts?: readonly ChangeImpact[],
-    ): string => {
+    ): string | null => {
         // Ordering is load-bearing: the host change events dispatched by
         // notifyHost() run our own carrier listeners SYNCHRONOUSLY, and those
         // listeners call syncFromCarrier(). The canonical model and token must
         // already reflect this write by then, or the store would misread its
-        // own save as an external change (full dock rebuild, focus loss).
-        const serialized = deps.writeQuiet(state);
+        // own commit as an external change (full dock rebuild, focus loss).
+        let serialized: string;
+        try {
+            serialized = deps.serialize(state);
+        } catch {
+            return null;
+        }
+        // Mutation boundary: prove the exact candidate carrier can be decoded
+        // before either carrier is touched.
+        if (!deps.parse(serialized)) {
+            return null;
+        }
+        deps.writeQuiet(state, serialized);
         lastGoodSerialized = serialized;
-        canonical = deps.parse(serialized) ?? structuredClone(state);
+        canonical = deps.parse(serialized);
+        if (!canonical) {
+            // The exact bytes passed preflight. A post-write failure would
+            // indicate an inconsistent carrier adapter, not user data.
+            throw new Error(
+                "VideoStages carrier adapter rejected a preflighted commit.",
+            );
+        }
         cachedToken = deps.readToken();
         syncedToken = cachedToken;
         documentRevision++;
@@ -211,13 +232,6 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         });
         return serialized;
     };
-
-    const save = (
-        state: VideoStagesConfig,
-        origin: UpdateOrigin,
-        notifyDomChange: boolean,
-        hint?: UpdateMeta["hint"],
-    ): string => commit(state, origin, notifyDomChange, hint);
 
     const dispatch = (
         command: DocumentCommand,
@@ -241,7 +255,9 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         }
 
         ensureAuthoringDocumentIdentity(source);
-        const reduced = reduceDocumentCommand(source, command);
+        const reduced = reduceDocumentCommand(source, command, {
+            architectureCatalog: deps.architectureCatalog?.() ?? null,
+        });
         if (!reduced.applied) {
             return {
                 applied: false,
@@ -260,13 +276,21 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
             };
         }
 
-        commit(
+        const serialized = commit(
             reduced.document,
             origin,
             notifyDomChange,
             hint,
             reduced.impacts,
         );
+        if (serialized === null) {
+            return {
+                applied: false,
+                failure: "invalid-serialized-state",
+                revision: documentRevision,
+                impacts: [],
+            };
+        }
         return {
             applied: true,
             revision: documentRevision,
@@ -297,7 +321,6 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
             revalidate();
             return documentRevision;
         },
-        save,
         dispatch,
         syncFromCarrier,
         subscribe: (cb: StoreSubscriber): (() => void) => {

@@ -1,4 +1,4 @@
-import { getLtxHostBridge } from "./host";
+import { getVideoStagesHostBridge } from "./host";
 import {
     getGroupToggle,
     getPromptInput,
@@ -71,9 +71,10 @@ export const createTimelineHostLifecycle = (options: {
             );
         }
         if (!paramRefreshCleanup) {
-            paramRefreshCleanup = getLtxHostBridge().addParamRefreshHook(() => {
-                setTimeout(options.refresh, 0);
-            });
+            paramRefreshCleanup =
+                getVideoStagesHostBridge().addParamRefreshHook(() => {
+                    setTimeout(options.refresh, 0);
+                });
         }
     };
 

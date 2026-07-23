@@ -8,6 +8,7 @@ import {
 import { setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import { gridCeil, gridFloor, roundToTenth } from "../utils";
+import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 const GROUP_PROMPTMAJOR = "vstdock_promptmajor";
@@ -36,6 +37,30 @@ export const buildPromptMajorBody = (
             },
         ),
     );
+    const decision = ctx
+        .capabilities()
+        .forClip(clips[clipIdx])
+        .decision("majorPrompt");
+    if (!decision.supported) {
+        disableCapabilityControls(body, decision);
+        if (clips[clipIdx].prompt.trim()) {
+            const clear = document.createElement("button");
+            clear.type = "button";
+            clear.className =
+                "basic-button small-button vst-remove-unsupported-prompt";
+            clear.textContent = "Remove unsupported clip prompt";
+            clear.addEventListener("click", () => {
+                ctx.commit((items) => {
+                    const clip = items[clipIdx];
+                    if (clip) {
+                        clip.prompt = "";
+                    }
+                });
+                ctx.render();
+            });
+            body.appendChild(clear);
+        }
+    }
     return wrapForm(GROUP_PROMPTMAJOR, body);
 };
 
@@ -183,6 +208,15 @@ export const buildPromptMinorBody = (
             setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
         });
         row.appendChild(editor);
+        const decision = ctx
+            .capabilities()
+            .forClip(clip)
+            .decision("promptRelay");
+        if (!decision.supported) {
+            disableCapabilityControls(row, decision, [
+                ".vst-detail-minor-delete",
+            ]);
+        }
         body.appendChild(row);
     });
 

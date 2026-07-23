@@ -2,19 +2,27 @@ using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
-using VideoStages.Planning;
 
 namespace VideoStages;
 
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
     StageSequenceRunner stageSequenceRunner,
-    AudioTimelineExecutor audioTimelineExecutor)
+    ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
 {
-    public void RunConfiguredStages()
+    public void RunConfiguredStages() =>
+        RunConfiguredStages(g.RequireVideoExecutionPlanContext());
+
+    internal void RunConfiguredStages(VideoExecutionPlanContext planContext)
     {
-        LtxVideoExecutionPlanContext planContext = g.RequireLtxVideoExecutionPlanContext();
+        ArgumentNullException.ThrowIfNull(planContext);
+        if (planContext.Plan.Clips.Count == 0)
+        {
+            return;
+        }
+        runtimeFactories.PreflightTimeline(new(planContext.Plan));
 
         // Every active execution is plan-backed and owns the host root before any coordinator
         // transform. Unsupported model families fail above.
@@ -25,36 +33,40 @@ internal sealed class VideoStagesCoordinator(
         RootExecutionPolicy rootPolicy = new(
             planContext.Plan.Root,
             RootExecutionFacts.FromPlan(planContext.Plan, refineSourceVideo));
-        if (planContext.Plan.Clips.Count > 0)
-        {
-            EnsureComfyDependencies(planContext.Plan);
-        }
-        AudioRuntimeSources preparedAudioSources =
-            audioTimelineExecutor.PrepareRuntimeSources(planContext.Plan);
-        audioTimelineExecutor.PrepareRootAudio(
-            planContext.Plan,
-            preparedAudioSources,
-            rootPolicy);
-        if (planContext.Plan.Clips.Count == 0)
-        {
-            return;
-        }
+        AudioRuntimeSources preparedAudioSources = new AudioRuntimeSourceResolver(
+            g,
+            new AudioHandler(g)).Resolve(planContext.Plan);
 
         g.LastID = Math.Max(g.LastID, Constants.StagedNodeIdReservationFloor);
+        runtimeFactories.PrepareTimeline(new(
+            planContext.Plan,
+            preparedAudioSources,
+            rootPolicy));
 
         stageSequenceRunner.Run(
             planContext.Plan,
             preparedAudioSources,
             rootPolicy);
+        // Publication metadata describes decoded timeline media, not the model family that
+        // happened to produce one clip. VAE ownership remains on RuntimeArtifact for the host save
+        // adapter and never enters DecodedClipArtifact or cross-clip assembly.
+        if (g.CurrentMedia is not null)
+        {
+            g.CurrentMedia.Compat = null;
+            if (g.CurrentMedia.AttachedAudio is not null)
+            {
+                g.CurrentMedia.AttachedAudio.Compat = null;
+            }
+        }
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         RuntimeArtifact finalArtifact = RuntimeArtifact.Capture(
             g,
             bridge,
             ArtifactOrigin.ClipAssembly);
         OutputPublication publication = rootSession.PublishTimeline(finalArtifact);
-        new HdrPostprocessApplicator(g).ApplyHdrPostprocessToFinalSaves(
+        runtimeFactories.FinalizeTimeline(new(
             planContext.Plan,
-            publication.SaveNodeIds);
+            publication));
     }
 
     private bool TryInstallRefineSourceVideo(bool hasClips)
@@ -76,19 +88,6 @@ internal sealed class VideoStagesCoordinator(
         WGNodeData loadedVideo = g.LoadImage(refineSource, "${vsrefinesource}", resize: false);
         g.CurrentMedia = loadedVideo;
         return true;
-    }
-
-    private void EnsureComfyDependencies(VideoExecutionPlan plan)
-    {
-        if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
-            || !plan.Clips.Any(clip => clip.Stages.Any(stage => !stage.IcLoras.IsDefaultOrEmpty)))
-        {
-            return;
-        }
-
-        throw new SwarmUserErrorException(
-            "VideoStages IC-LoRAs require the ComfyUI-LTXVideo custom nodes. "
-            + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
     }
 
 }

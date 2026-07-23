@@ -1,13 +1,18 @@
 import {
-    AUDIO_SOURCE_NATIVE,
-    buildAudioSourceOptions,
-    canUseClipLengthFromAudio,
-    resolveAudioSourceValue,
-} from "./audioSource";
+    hasArchitectureSlotSourcedIcLora,
+    normalizeArchitectureIcLoras,
+} from "./architectures/behaviorRegistry";
 import {
-    CONTINUE_OVERLAP_MAX_FRAMES,
-    DEFAULT_CONTINUE_OVERLAP_FRAMES,
-} from "./boundaryPlan";
+    type BoundaryOverlapConstraints,
+    boundaryOverlapConstraints,
+    normalizeBoundaryOverlap,
+} from "./architectures/boundaryConstraints";
+import {
+    architectureForModel,
+    modelProfileForModel,
+} from "./architectures/catalog";
+import { normalizeClipArchitecture } from "./architectures/identity";
+import { AUDIO_SOURCE_NATIVE, canUseClipLengthFromAudio } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import {
     CLIP_DURATION_MIN,
@@ -16,14 +21,13 @@ import {
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
 import { normalizeAudioSegments } from "./normalizationAudio";
-import { hasSlotSourcedIcLora, normalizeIcLoras } from "./normalizationIcLora";
 import {
     normalizePromptWindows,
     normalizeRetake,
     normalizeSourceVideo,
     normalizeUploadedAudio,
 } from "./normalizationMedia";
-import { normalizeOptionalEntityId, readProp } from "./normalizationShared";
+import { normalizeOptionalEntityId } from "./normalizationShared";
 import {
     buildDefaultRef,
     buildDefaultStage,
@@ -41,14 +45,19 @@ export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
     return raw === "continue" || raw === "crossfade" ? raw : "cut";
 };
 
-// Mirrors the backend NormalizeBoundaryOutOverlap: multiple of 8 in
-// [DEFAULT_CONTINUE_OVERLAP_FRAMES, CONTINUE_OVERLAP_MAX_FRAMES], snapped down.
-export const normalizeContinueOverlap = (value: unknown): number => {
-    const num = Math.trunc(Number(value));
-    if (!Number.isFinite(num) || num < DEFAULT_CONTINUE_OVERLAP_FRAMES) {
-        return DEFAULT_CONTINUE_OVERLAP_FRAMES;
-    }
-    return Math.min(CONTINUE_OVERLAP_MAX_FRAMES, num - (num % 8));
+/**
+ * Preserves positive authored values exactly so a catalog update cannot
+ * silently rewrite an overlap before the user repairs it. New UI selections
+ * are normalized against the active boundary rule.
+ */
+export const normalizeContinueOverlap = (
+    value: unknown,
+    constraints: BoundaryOverlapConstraints = boundaryOverlapConstraints(null),
+): number => {
+    const numeric = Math.trunc(Number(value));
+    return Number.isFinite(numeric) && numeric > 0
+        ? numeric
+        : normalizeBoundaryOverlap(value, constraints);
 };
 
 export const buildDefaultClip = (
@@ -59,11 +68,42 @@ export const buildDefaultClip = (
 ): Clip => {
     const defaults = getRootDefaults();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const firstStage = {
+        ...buildDefaultStage(
+            getRootDefaults,
+            getDefaultStageModel,
+            previousClip?.stages[0] ?? null,
+            refs.length,
+        ),
+        refStrengths: buildDefaultStageRefStrengths(
+            refs.length,
+            includeDefaultRef
+                ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH
+                : STAGE_REF_STRENGTH_DEFAULT,
+        ),
+    };
+    const architecture =
+        (previousClip?.architecture !== "none"
+            ? previousClip?.architecture
+            : null) ??
+        architectureForModel(defaults.modelCatalog, firstStage.model) ??
+        "unsupported";
+    const continueRule = defaults.modelCatalog.architectures.find(
+        (entry) => entry.id === architecture,
+    )?.boundaryRules.continue;
     return {
+        architecture,
+        modelProfileId:
+            (previousClip?.architecture !== "none"
+                ? previousClip?.modelProfileId
+                : null) ??
+            modelProfileForModel(defaults.modelCatalog, firstStage.model) ??
+            firstStage.modelProfileId,
         skipped: false,
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
-        boundaryOutOverlap: DEFAULT_CONTINUE_OVERLAP_FRAMES,
+        boundaryOutOverlap:
+            boundaryOverlapConstraints(continueRule).defaultFrames,
         duration: previousClip
             ? previousClip.duration
             : snapDurationToFps(
@@ -83,22 +123,7 @@ export const buildDefaultClip = (
         retake: null,
         sourceVideo: null,
         refs,
-        stages: [
-            {
-                ...buildDefaultStage(
-                    getRootDefaults,
-                    getDefaultStageModel,
-                    previousClip?.stages[0] ?? null,
-                    refs.length,
-                ),
-                refStrengths: buildDefaultStageRefStrengths(
-                    refs.length,
-                    includeDefaultRef
-                        ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH
-                        : STAGE_REF_STRENGTH_DEFAULT,
-                ),
-            },
-        ],
+        stages: [firstStage],
     };
 };
 
@@ -111,17 +136,7 @@ export const normalizeClip = (
     const defaults = getRootDefaults();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const sourceVideo = normalizeSourceVideo(
-        readProp(rawClip, "sourceVideo", "SourceVideo"),
-    );
-    const icLoras = normalizeIcLoras(
-        rawClip,
-        stagesRaw.length,
-        sourceVideo !== null,
-    );
-    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
-        controlNetEnabled: hasSlotSourcedIcLora(icLoras),
-    });
+    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
     const fps = Math.max(
         1,
         typeof effectiveFps === "number" &&
@@ -163,27 +178,51 @@ export const normalizeClip = (
             ),
         );
     }
-    const audioSource = resolveAudioSourceValue(
-        rawAudioSource,
-        audioSourceOptions,
+    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
+    const stageZero = stages[0] ?? null;
+    const persistedArchitecture = `${rawClip.architecture ?? ""}`.trim();
+    const persistedProfile = `${rawClip.modelProfileId ?? ""}`.trim();
+    const isSourceOnly =
+        sourceVideo !== null && stages.every((stage) => stage.skipped);
+    const architecture = isSourceOnly
+        ? persistedArchitecture || "none"
+        : normalizeClipArchitecture(
+              persistedArchitecture,
+              stageZero?.model ?? null,
+              defaults.modelCatalog,
+          );
+    const modelProfileId = isSourceOnly
+        ? persistedProfile || (architecture === "none" ? "none" : "unsupported")
+        : persistedProfile || stageZero?.modelProfileId || "unsupported";
+    const icLoras = normalizeArchitectureIcLoras(
+        architecture,
+        rawClip,
+        stagesRaw.length,
+        sourceVideo !== null,
+        !defaults.modelCatalog.architectures.some(
+            (entry) => entry.id === architecture,
+        ) || architecture === "none",
     );
     const clipLengthFromAudio =
         canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet =
-        hasSlotSourcedIcLora(icLoras) &&
+        hasArchitectureSlotSourcedIcLora(architecture, icLoras) &&
         !clipLengthFromAudio &&
-        !!(
-            rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet
-        );
+        !!rawClip.clipLengthFromControlNet;
+    const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
+    const boundaryRule = defaults.modelCatalog.architectures.find(
+        (entry) => entry.id === architecture,
+    )?.boundaryRules[boundaryOut];
     return {
-        id: normalizeOptionalEntityId(readProp(rawClip, "id", "Id")),
+        id: normalizeOptionalEntityId(rawClip.id),
+        architecture,
+        modelProfileId,
         skipped: !!rawClip.skipped,
         hue: normalizeStoredHue(rawClip.hue),
-        boundaryOut: normalizeBoundaryOut(
-            rawClip.boundaryOut ?? rawClip.BoundaryOut,
-        ),
+        boundaryOut,
         boundaryOutOverlap: normalizeContinueOverlap(
-            rawClip.boundaryOutOverlap ?? rawClip.BoundaryOutOverlap,
+            rawClip.boundaryOutOverlap,
+            boundaryOverlapConstraints(boundaryRule),
         ),
         duration,
         audioSource,
@@ -193,16 +232,10 @@ export const normalizeClip = (
         clipLengthFromControlNet,
         reuseAudio: !!rawClip.reuseAudio,
         uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
-        audioSegments: normalizeAudioSegments(
-            readProp(rawClip, "audioSegments", "AudioSegments"),
-            duration,
-        ),
-        prompt: `${readProp(rawClip, "prompt", "Prompt") ?? ""}`,
+        audioSegments: normalizeAudioSegments(rawClip.audioSegments, duration),
+        prompt: `${rawClip.prompt ?? ""}`,
         promptWindows: normalizePromptWindows(rawClip),
-        retake: normalizeRetake(
-            readProp(rawClip, "retake", "Retake"),
-            duration,
-        ),
+        retake: normalizeRetake(rawClip.retake, duration),
         sourceVideo,
         refs,
         stages,

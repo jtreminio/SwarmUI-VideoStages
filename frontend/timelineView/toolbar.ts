@@ -1,6 +1,7 @@
+import type { CapabilityViewResolver } from "../architectures/policy";
 import type { AuthoringDiagnostic } from "../authoringDiagnostics";
 import { matchPresetKey } from "../dimensionPresets";
-import type { LtxExecutionPathSummary } from "../executionPath";
+import type { VideoExecutionPathSummary } from "../executionPath";
 import {
     escapeHtml,
     formatTimeLabel,
@@ -36,11 +37,12 @@ export interface RenderTimelineOptions {
     onRedo?: () => void;
     globalPrompt?: string;
     diagnostics?: readonly AuthoringDiagnostic[];
-    executionSummary?: LtxExecutionPathSummary;
+    executionSummary?: VideoExecutionPathSummary;
+    capabilities?: CapabilityViewResolver;
 }
 
 export const renderExecutionSummary = (
-    summary: LtxExecutionPathSummary | undefined,
+    summary: VideoExecutionPathSummary | undefined,
 ): string => {
     if (!summary) {
         return "";

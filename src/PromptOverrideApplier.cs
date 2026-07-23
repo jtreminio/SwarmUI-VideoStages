@@ -14,8 +14,6 @@ internal static class PromptOverrideApplier
         {
             ["duration"] = ("Duration", OverrideKind.Double),
             ["audiosource"] = ("AudioSource", OverrideKind.String),
-            ["controlnetsource"] = ("ControlNetSource", OverrideKind.String),
-            ["controlnetlora"] = ("ControlNetLora", OverrideKind.String),
             ["saveaudiotrack"] = ("SaveAudioTrack", OverrideKind.Bool),
             ["cliplengthfromaudio"] = ("ClipLengthFromAudio", OverrideKind.Bool),
             ["cliplengthfromcontrolnet"] = ("ClipLengthFromControlNet", OverrideKind.Bool),

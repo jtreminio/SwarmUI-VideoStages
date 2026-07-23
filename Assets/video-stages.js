@@ -138,7 +138,7 @@
     return body;
   };
 
-  // frontend/host/defaultLtxHostBridge.ts
+  // frontend/host/defaultVideoStagesHostBridge.ts
   var textInput = (id) => {
     const element = document.getElementById(id);
     return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
@@ -170,7 +170,7 @@
       completion.blockInput = previous;
     }
   };
-  var createDefaultLtxHostBridge = () => ({
+  var createDefaultVideoStagesHostBridge = () => ({
     hasElement: (id) => document.getElementById(id) !== null,
     getTextInput: textInput,
     getInput: input,
@@ -205,6 +205,13 @@
       const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)?.modelClass?.compatClass?.id;
       return typeof id === "string" && id.trim() ? id : null;
     },
+    getModelClassId: (modelName) => {
+      if (typeof modelsHelpers === "undefined" || !modelsHelpers || typeof modelsHelpers.getDataFor !== "function") {
+        return null;
+      }
+      const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)?.modelClass?.id;
+      return typeof id === "string" && id.trim() ? id : null;
+    },
     getCurrentModelCompatId: () => {
       if (typeof currentModelHelper === "undefined" || !currentModelHelper?.curCompatClass || typeof modelsHelpers === "undefined" || !modelsHelpers?.compatClasses) {
         return null;
@@ -214,6 +221,19 @@
       const id = compat?.id ?? key;
       return typeof id === "string" && id.trim() ? id : null;
     },
+    requestJson: (url, data = {}) => new Promise((resolve, reject) => {
+      if (typeof genericRequest !== "function") {
+        reject(new Error("Swarm genericRequest is unavailable."));
+        return;
+      }
+      genericRequest(
+        url,
+        data,
+        (response) => resolve(response),
+        0,
+        (error) => reject(error)
+      );
+    }),
     registerPromptPrefix: (prefix, description, examples, isMulti) => {
       if (typeof promptTabComplete === "undefined") {
         return false;
@@ -290,8 +310,8 @@
   });
 
   // frontend/host/index.ts
-  var bridge = createDefaultLtxHostBridge();
-  var getLtxHostBridge = () => bridge;
+  var bridge = createDefaultVideoStagesHostBridge();
+  var getVideoStagesHostBridge = () => bridge;
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -319,15 +339,25 @@
   var AUDIO_SOURCE_UPLOAD = "Upload";
   var AUDIO_SOURCE_CONTROLNET = "ControlNet";
   var AUDIO_SOURCE_VOICE_REF = "Voice Reference";
+  var AUDIO_SOURCE_DISABLED_KIND = "Disabled";
   var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
   var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+  var audioSourceKind = (source) => {
+    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
+    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
+  };
+  var isAllowedAudioSource = (allowedKinds, source) => {
+    const kind = audioSourceKind(source);
+    return allowedKinds.includes(kind) || kind === AUDIO_SOURCE_NATIVE && allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND);
+  };
+  var defaultAuthoringAudioSource = (allowedKinds) => allowedKinds.includes(AUDIO_SOURCE_NATIVE) || allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND) ? AUDIO_SOURCE_NATIVE : allowedKinds[0] ?? AUDIO_SOURCE_NATIVE;
   var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
   var canUseClipLengthFromAudio = (source) => {
     const normalized = `${source ?? ""}`.trim();
     return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
   };
   var getAceStepFunRefs = () => {
-    const snapshot = getLtxHostBridge().getAceStepFunRegistry();
+    const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
       return [];
     }
@@ -382,10 +412,22 @@
         label: AUDIO_SOURCE_CONTROLNET
       });
     }
+    if (context.allowedKinds) {
+      const allowed = new Set(context.allowedKinds);
+      const filtered = options.filter((option) => {
+        const kind = audioSourceKind(option.value);
+        return allowed.has(kind) || kind === AUDIO_SOURCE_NATIVE && allowed.has(AUDIO_SOURCE_DISABLED_KIND);
+      });
+      options.length = 0;
+      options.push(...filtered);
+    }
     appendMissingSelectedRef(options, currentValue);
+    preserveSelectedOption(options, currentValue, "start", (value) => ({
+      value,
+      label: `${value} (unsupported persisted value)`
+    }));
     return options;
   };
-  var resolveAudioSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, AUDIO_SOURCE_NATIVE);
 
   // frontend/constants.ts
   var REF_FRAME_MIN = 1;
@@ -409,33 +451,11 @@
   var ROOT_DIMENSION_STEP = 32;
   var ROOT_FPS_MIN = 1;
   var ROOT_FPS_MAX = 120;
-  var CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3"
-  ];
   var STAGE_REF_STRENGTH_MIN = 0;
   var STAGE_REF_STRENGTH_MAX = 1;
   var STAGE_REF_STRENGTH_STEP = 0.1;
   var STAGE_REF_STRENGTH_DEFAULT = 0.8;
   var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
-  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
-  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
-  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-  var IC_LORA_SOURCE_UPLOAD = "Upload";
-  var IC_LORA_SOURCE_STAGE_INPUT = "Stage Input";
-  var IC_LORA_STAGE_ALL = -1;
-  var IC_LORA_STRENGTH_MIN = 0;
-  var IC_LORA_STRENGTH_MAX = 2;
-  var IC_LORA_STRENGTH_STEP = 0.05;
-  var IC_LORA_STRENGTH_DEFAULT = 1;
-  var IC_LORA_ATTENTION_MIN = 0;
-  var IC_LORA_ATTENTION_MAX = 1;
-  var IC_LORA_ATTENTION_STEP = 0.05;
-  var IC_LORA_ATTENTION_DEFAULT = 1;
-  var IC_LORA_AUTO = "[AUTO]";
-  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
   var parseBase2EditStageIndex = (value) => {
     const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
     if (!match) {
@@ -456,7 +476,7 @@
     if (`${value ?? ""}`.startsWith("data:")) {
       return value;
     }
-    const prefix = getLtxHostBridge().getMediaOutputPrefix();
+    const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
     return `${prefix}/${value}`;
   };
 
@@ -525,26 +545,20 @@
 
   // frontend/normalizationMedia.ts
   var normalizePromptWindow = (raw) => {
-    const duration = toNumber(
-      `${readProp(raw, "duration", "Duration") ?? 0}`,
-      0
-    );
+    const duration = toNumber(`${raw.duration ?? 0}`, 0);
     if (!(duration > 0)) {
       return null;
     }
-    const start = Math.max(
-      0,
-      toNumber(`${readProp(raw, "start", "Start") ?? 0}`, 0)
-    );
+    const start = Math.max(0, toNumber(`${raw.start ?? 0}`, 0));
     return {
-      id: normalizeOptionalEntityId(readProp(raw, "id", "Id")),
-      prompt: `${readProp(raw, "prompt", "Prompt", "text", "Text") ?? ""}`,
+      id: normalizeOptionalEntityId(raw.id),
+      prompt: `${raw.prompt ?? ""}`,
       start,
       duration
     };
   };
   var normalizePromptWindows = (rawClip) => {
-    const rawList = readProp(rawClip, "promptWindows", "PromptWindows");
+    const rawList = rawClip.promptWindows;
     if (!Array.isArray(rawList)) {
       return [];
     }
@@ -554,14 +568,8 @@
     if (!isRecord(value)) {
       return null;
     }
-    const startRaw = Math.max(
-      0,
-      toNumber(`${readProp(value, "startSeconds", "StartSeconds") ?? 0}`, 0)
-    );
-    const lengthRaw = toNumber(
-      `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
-      0
-    );
+    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
+    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
     const window2 = clampWindowInDuration(
       startRaw,
       lengthRaw,
@@ -571,14 +579,14 @@
     if (!window2) {
       return null;
     }
-    const strengthRaw = readProp(value, "strength", "Strength");
+    const strengthRaw = value.strength;
     const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clamp(
       toNumber(`${strengthRaw}`, RETAKE_STRENGTH_DEFAULT),
       RETAKE_STRENGTH_MIN,
       RETAKE_STRENGTH_MAX
     );
     return {
-      id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
+      id: normalizeOptionalEntityId(value.id),
       startSeconds: roundToTenth(window2.startSeconds),
       lengthSeconds: roundToTenth(window2.lengthSeconds),
       strength
@@ -593,15 +601,9 @@
       return null;
     }
     const nonNegative = (raw) => Math.max(0, toNumber(`${raw ?? 0}`, 0));
-    const durationSeconds = nonNegative(
-      readProp(value, "durationSeconds", "DurationSeconds")
-    );
-    let startSeconds = nonNegative(
-      readProp(value, "startSeconds", "StartSeconds")
-    );
-    let lengthSeconds = nonNegative(
-      readProp(value, "lengthSeconds", "LengthSeconds")
-    );
+    const durationSeconds = nonNegative(value.durationSeconds);
+    let startSeconds = nonNegative(value.startSeconds);
+    let lengthSeconds = nonNegative(value.lengthSeconds);
     if (durationSeconds > 0) {
       startSeconds = Math.min(
         startSeconds,
@@ -620,7 +622,7 @@
       fileName: normalizeUploadFileName(
         value.fileName == null ? null : `${value.fileName}`
       ),
-      fps: nonNegative(readProp(value, "fps", "Fps")),
+      fps: nonNegative(value.fps),
       durationSeconds: roundToTenth(durationSeconds),
       startSeconds: roundToTenth(startSeconds),
       lengthSeconds: roundToTenth(lengthSeconds)
@@ -674,30 +676,22 @@
     if (!isRecord(value)) {
       return null;
     }
-    const sourceStart = normalizeOptionalNonNegative(
-      readProp(value, "sourceStartSeconds", "SourceStartSeconds")
-    ) ?? 0;
+    const sourceStart = normalizeOptionalNonNegative(value.sourceStartSeconds) ?? 0;
     return {
-      id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
-      firstClipId: normalizeClipEntityId(
-        readProp(value, "firstClipId", "FirstClipId")
-      ),
-      lastClipId: normalizeClipEntityId(
-        readProp(value, "lastClipId", "LastClipId")
-      ),
+      id: normalizeOptionalEntityId(value.id),
+      firstClipId: normalizeClipEntityId(value.firstClipId),
+      lastClipId: normalizeClipEntityId(value.lastClipId),
       timelineStartSeconds: normalizeOptionalNonNegative(
-        readProp(value, "timelineStartSeconds", "TimelineStartSeconds")
+        value.timelineStartSeconds
       ),
       timelineLengthSeconds: normalizeOptionalPositive(
-        readProp(value, "timelineLengthSeconds", "TimelineLengthSeconds")
+        value.timelineLengthSeconds
       ),
       sourceStartSeconds: sourceStart,
       clipStartOffsetSeconds: normalizeOptionalNonNegative(
-        readProp(value, "clipStartOffsetSeconds", "ClipStartOffsetSeconds")
+        value.clipStartOffsetSeconds
       ),
-      clipLengthSeconds: normalizeOptionalPositive(
-        readProp(value, "clipLengthSeconds", "ClipLengthSeconds")
-      )
+      clipLengthSeconds: normalizeOptionalPositive(value.clipLengthSeconds)
     };
   };
   var normalizeAudioTracks = (value) => {
@@ -709,27 +703,15 @@
       if (!isRecord(rawTrack)) {
         continue;
       }
-      const rawSource = readProp(rawTrack, "source", "Source");
+      const rawSource = rawTrack.source;
       const source = isRecord(rawSource) ? rawSource : {};
-      const rawSpans = readProp(rawTrack, "spans", "Spans");
+      const rawSpans = rawTrack.spans;
       tracks.push({
-        id: normalizeOptionalEntityId(
-          readProp(rawTrack, "id", "Id", "trackId", "TrackId")
-        ),
+        id: normalizeOptionalEntityId(rawTrack.id),
         source: {
-          kind: normalizeAudioTrackSourceKind(
-            readProp(source, "kind", "Kind")
-          ),
-          reference: `${readProp(source, "reference", "Reference") ?? ""}`.trim(),
-          uploadedAudio: normalizeUploadedAudio(
-            readProp(
-              source,
-              "uploadedAudio",
-              "UploadedAudio",
-              "upload",
-              "Upload"
-            )
-          )
+          kind: normalizeAudioTrackSourceKind(source.kind),
+          reference: `${source.reference ?? ""}`.trim(),
+          uploadedAudio: normalizeUploadedAudio(source.uploadedAudio)
         },
         spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter((span) => span !== null) : []
       });
@@ -740,23 +722,14 @@
     if (!isRecord(value)) {
       return null;
     }
-    const rawSource = readProp(value, "source", "Source");
+    const rawSource = value.source;
     const source = typeof rawSource === "string" && isAceStepFunAudioSource(rawSource) ? rawSource.trim() : normalizeUploadedAudio(rawSource);
-    const startRaw = Math.max(
-      0,
-      toNumber(`${readProp(value, "startSeconds", "StartSeconds") ?? 0}`, 0)
-    );
+    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
     const trimStartRaw = Math.max(
       0,
-      toNumber(
-        `${readProp(value, "trimStartSeconds", "TrimStartSeconds") ?? 0}`,
-        0
-      )
+      toNumber(`${value.trimStartSeconds ?? 0}`, 0)
     );
-    const lengthRaw = toNumber(
-      `${readProp(value, "lengthSeconds", "LengthSeconds") ?? 0}`,
-      0
-    );
+    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
     const window2 = clampWindowInDuration(
       startRaw,
       lengthRaw,
@@ -767,7 +740,7 @@
       return null;
     }
     return {
-      id: normalizeOptionalEntityId(readProp(value, "id", "Id")),
+      id: normalizeOptionalEntityId(value.id),
       source,
       startSeconds: roundToTenth(window2.startSeconds),
       trimStartSeconds: roundToTenth(trimStartRaw),
@@ -781,168 +754,25 @@
     return value.map((raw) => normalizeAudioSegment(raw, clipDuration)).filter((seg) => seg !== null);
   };
 
-  // frontend/renderUtils.ts
-  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var FRAME_ALIGNMENT = 8;
-  var framesForClip = (durationSeconds, fps) => Math.max(
-    1,
-    Math.ceil(
-      Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / FRAME_ALIGNMENT
-    ) * FRAME_ALIGNMENT + 1
-  );
-  var snapDurationToFps = (seconds, fps) => {
-    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
-      return seconds;
-    }
-    const frames = Math.max(1, Math.ceil(seconds * fps));
-    const aligned = frames / fps;
-    return Math.max(0.1, Math.floor(aligned * 10) / 10);
-  };
+  // frontend/icLoraAuthoring.ts
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_SOURCE_UPLOAD = "Upload";
+  var IC_LORA_SOURCE_STAGE_INPUT = "Stage Input";
+  var IC_LORA_STAGE_ALL = -1;
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 2;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
 
-  // frontend/boundaryPlan.ts
-  var DEFAULT_CROSSFADE_OVERLAP_FRAMES = 8;
-  var DEFAULT_CONTINUE_OVERLAP_FRAMES = 8;
-  var CONTINUE_OVERLAP_MAX_FRAMES = 48;
-  var CONTINUE_OVERLAP_CHOICES = [8, 16, 24, 32, 40, 48];
-  var resolveContinueWindows = (frames, cont, crossfade, requested) => {
-    const windows = new Array(cont.length).fill(0);
-    for (let i = 0; i < cont.length; i++) {
-      if (!cont[i]) {
-        continue;
-      }
-      let k = (requested[i] ?? DEFAULT_CONTINUE_OVERLAP_FRAMES) + 1;
-      const leftReserve = i > 0 && cont[i - 1] ? windows[i - 1] : i > 0 && crossfade[i - 1] ? 1 : 0;
-      const rightReserve = i < cont.length - 1 && (cont[i + 1] || crossfade[i + 1]) ? 1 : 0;
-      const kMax = Math.min(
-        frames[i] - 1 - leftReserve,
-        frames[i + 1] - 1 - rightReserve
-      );
-      while (k > 1 && k > kMax) {
-        k -= 8;
-      }
-      windows[i] = Math.max(1, k);
-    }
-    return windows;
-  };
-  var crossfadePlanForClips = (clips, fps) => {
-    const count = clips.length;
-    const boundaryCount = Math.max(0, count - 1);
-    const noOverlap = () => new Array(boundaryCount).fill(0);
-    if (count < 2) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    const crossfade = [];
-    const cont = [];
-    let requested = 0;
-    for (let i = 0; i < count - 1; i++) {
-      const b = clips[i].boundaryOut ?? "cut";
-      crossfade[i] = b === "crossfade";
-      cont[i] = b === "continue";
-      if (crossfade[i] || cont[i]) {
-        requested++;
-      }
-    }
-    if (requested === 0) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    const frames = clips.map((c) => framesForClip(c.duration, fps));
-    const prefs = clips.map(
-      (c) => c.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES
-    );
-    const windows = resolveContinueWindows(frames, cont, crossfade, prefs);
-    const crossfadeMaxPerSide = new Array(count).fill(0);
-    for (let i = 0; i < count; i++) {
-      const fixedTrim = (i > 0 && cont[i - 1] ? windows[i - 1] : 0) + (i < count - 1 && cont[i] ? windows[i] : 0);
-      const crossSides = (i > 0 && crossfade[i - 1] ? 1 : 0) + (i < count - 1 && crossfade[i] ? 1 : 0);
-      if (fixedTrim === 0 && crossSides === 0) {
-        continue;
-      }
-      const budget = frames[i] - 1 - fixedTrim;
-      if (budget < 0 || crossSides > 0 && Math.floor(budget / crossSides) < 1) {
-        return { overlaps: noOverlap(), fallback: true };
-      }
-      if (crossSides > 0) {
-        crossfadeMaxPerSide[i] = Math.floor(budget / crossSides);
-      }
-    }
-    const overlaps = [];
-    for (let i = 0; i < count - 1; i++) {
-      overlaps[i] = crossfade[i] ? Math.min(
-        Math.max(1, prefs[i] ?? DEFAULT_CROSSFADE_OVERLAP_FRAMES),
-        crossfadeMaxPerSide[i],
-        crossfadeMaxPerSide[i + 1]
-      ) : cont[i] ? windows[i] : 0;
-    }
-    return { overlaps, fallback: false };
-  };
-
-  // frontend/clipColor.ts
-  var HUE_MIN = 0;
-  var HUE_MAX = 359;
-  var HUE_RANGE = 360;
-  var BASE_HUE = 210;
-  var UNASSIGNED_HUE = -1;
-  var HUE_SATURATION = 65;
-  var HUE_LIGHTNESS = 55;
-  var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
-  var normalizeStoredHue = (value) => {
-    if (value == null || value === "") {
-      return UNASSIGNED_HUE;
-    }
-    const num = typeof value === "number" ? value : Number(value);
-    if (!Number.isFinite(num)) {
-      return UNASSIGNED_HUE;
-    }
-    return (Math.round(num) % HUE_RANGE + HUE_RANGE) % HUE_RANGE;
-  };
-  var hueDistance = (a, b) => {
-    const d = Math.abs(a - b) % HUE_RANGE;
-    return d > 180 ? HUE_RANGE - d : d;
-  };
-  var pickDistinctHue = (existing) => {
-    const inUse = existing.filter(isAssignedHue);
-    if (inUse.length === 0) {
-      return BASE_HUE;
-    }
-    let best = 0;
-    let bestScore = -1;
-    for (let hue = HUE_MIN; hue <= HUE_MAX; hue++) {
-      let minDist = 180;
-      for (const used of inUse) {
-        const d = hueDistance(hue, used);
-        if (d < minDist) {
-          minDist = d;
-        }
-      }
-      if (minDist > bestScore) {
-        bestScore = minDist;
-        best = hue;
-      }
-    }
-    return best;
-  };
-  var assignMissingHues = (clips) => {
-    const assigned = [];
-    for (const clip of clips) {
-      if (isAssignedHue(clip.hue)) {
-        assigned.push(clip.hue);
-      }
-    }
-    for (const clip of clips) {
-      if (isAssignedHue(clip.hue)) {
-        continue;
-      }
-      const hue = pickDistinctHue(assigned);
-      clip.hue = hue;
-      assigned.push(hue);
-    }
-  };
-  var clipHueCss = (hue) => {
-    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
-    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
-  };
-
-  // frontend/icLoraPresets.ts
+  // frontend/architectures/ltx2/icLoraPresets.ts
+  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
   var IC_LORA_PRESET_CUSTOM_ID = "custom";
   var IC_LORA_PRESET_UNION_CONTROL_ID = "union-control";
   var HF = "https://huggingface.co";
@@ -1159,7 +989,12 @@
     return `Prepend "${preset.triggerPhrase}" to your prompt`;
   };
 
-  // frontend/normalizationIcLora.ts
+  // frontend/architectures/ltx2/icLoraNormalization.ts
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
   var normalizeControlNetSource = (value) => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
     for (const option of CONTROLNET_SOURCE_OPTIONS) {
@@ -1220,16 +1055,13 @@
     if (!isRecord(raw)) {
       return null;
     }
-    const lora = normalizeControlNetLora(readProp(raw, "lora", "Lora"));
+    const lora = normalizeControlNetLora(raw.lora);
     if (!lora) {
       return null;
     }
-    const preset = `${readProp(raw, "preset", "Preset") ?? ""}`.trim();
-    const stage = normalizeIcLoraStage(
-      readProp(raw, "stage", "Stage"),
-      stageCount
-    );
-    let source = normalizeIcLoraSource(readProp(raw, "source", "Source"));
+    const preset = `${raw.preset ?? ""}`.trim();
+    const stage = normalizeIcLoraStage(raw.stage, stageCount);
+    let source = normalizeIcLoraSource(raw.source);
     if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1 && !sourcedClip) {
       source = IC_LORA_SOURCE_UPLOAD;
     }
@@ -1239,60 +1071,750 @@
       source,
       stage,
       strength: snapStrengthToStep(
-        readProp(raw, "strength", "Strength"),
+        raw.strength,
         IC_LORA_STRENGTH_DEFAULT,
         IC_LORA_STRENGTH_MIN,
         IC_LORA_STRENGTH_MAX,
         IC_LORA_STRENGTH_STEP
       ),
       attentionStrength: snapStrengthToStep(
-        readProp(raw, "attentionStrength", "AttentionStrength"),
+        raw.attentionStrength,
         IC_LORA_ATTENTION_DEFAULT,
         IC_LORA_ATTENTION_MIN,
         IC_LORA_ATTENTION_MAX,
         IC_LORA_ATTENTION_STEP
       ),
-      controlType: normalizeIcLoraControlType(
-        readProp(raw, "controlType", "ControlType")
-      ),
-      video: normalizeUploadedAudio(readProp(raw, "video", "Video")),
-      driveAudioRef: readProp(raw, "driveAudioRef", "DriveAudioRef") === true
+      controlType: normalizeIcLoraControlType(raw.controlType),
+      video: normalizeUploadedAudio(raw.video),
+      driveAudioRef: raw.driveAudioRef === true
     };
   };
   var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
-    const raw = readProp(rawClip, "icLoras", "IcLoras");
-    if (Array.isArray(raw)) {
-      const entries = raw.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
-      if (entries.length > 0) {
-        return entries;
-      }
-    }
-    const legacyLora = normalizeControlNetLora(
-      readProp(rawClip, "controlNetLora", "ControlNetLora")
-    );
-    if (!legacyLora) {
+    if (!Array.isArray(rawClip.icLoras)) {
       return [];
     }
-    return [
-      defaultIcLora({
-        lora: legacyLora,
-        source: normalizeControlNetSource(
-          readProp(rawClip, "controlNetSource", "ControlNetSource")
-        )
-      })
-    ];
+    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
   };
   var reconcileIcLoraStage = (entry, sourcedClip = false) => {
     if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT && !sourcedClip) {
       entry.source = IC_LORA_SOURCE_UPLOAD;
     }
   };
+  var isHdrFeature = (entry) => `${entry.preset ?? ""}`.trim().toLowerCase() === "hdr" || `${entry.lora ?? ""}`.toLowerCase().includes("hdr");
   var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
     (entry) => entry.source !== IC_LORA_SOURCE_UPLOAD && entry.source !== IC_LORA_SOURCE_STAGE_INPUT
   );
 
+  // frontend/architectures/behaviorRegistry.ts
+  var ltx2Behavior = {
+    normalizeIcLoras,
+    reconcileIcLoraStage,
+    hasSlotSourcedIcLora,
+    isHdrFeature
+  };
+  var behaviors = /* @__PURE__ */ new Map([
+    ["ltx2", ltx2Behavior]
+  ]);
+  var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
+  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, allowPersistedLtxFallback = false) => {
+    const behavior = architectureBehavior(architectureId);
+    if (behavior) {
+      return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
+    }
+    return allowPersistedLtxFallback && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
+  };
+  var reconcileArchitectureIcLoraStage = (architectureId, entry, sourcedClip) => {
+    architectureBehavior(architectureId)?.reconcileIcLoraStage(
+      entry,
+      sourcedClip
+    );
+  };
+  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
+  var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
+
+  // frontend/architectures/boundaryConstraints.ts
+  var GENERIC_BOUNDARY_CONSTRAINTS = {
+    frameStep: 1,
+    minFrames: 1,
+    maxFrames: Number.MAX_SAFE_INTEGER,
+    defaultFrames: 1,
+    continuityExtraFrames: 0
+  };
+  var finitePositive = (value, fallback, allowZero = false) => {
+    const numeric = Math.trunc(Number(value));
+    return Number.isFinite(numeric) && (allowZero ? numeric >= 0 : numeric > 0) ? numeric : fallback;
+  };
+  var boundaryOverlapConstraints = (rule) => {
+    const raw = rule?.constraints;
+    const frameStep = finitePositive(
+      raw?.frameStep,
+      GENERIC_BOUNDARY_CONSTRAINTS.frameStep
+    );
+    const minFrames = finitePositive(
+      raw?.minFrames,
+      GENERIC_BOUNDARY_CONSTRAINTS.minFrames
+    );
+    const maxFrames = Math.max(
+      minFrames,
+      finitePositive(raw?.maxFrames, GENERIC_BOUNDARY_CONSTRAINTS.maxFrames)
+    );
+    const authoredDefault = finitePositive(raw?.defaultFrames, minFrames);
+    return {
+      frameStep,
+      minFrames,
+      maxFrames,
+      defaultFrames: Math.max(
+        minFrames,
+        Math.min(maxFrames, authoredDefault)
+      ),
+      continuityExtraFrames: finitePositive(
+        raw?.continuityExtraFrames,
+        GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
+        true
+      )
+    };
+  };
+  var normalizeBoundaryOverlap = (value, constraints) => {
+    const numeric = Math.trunc(Number(value));
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return constraints.defaultFrames;
+    }
+    const snapped = numeric < constraints.minFrames ? constraints.minFrames : constraints.minFrames + Math.floor(
+      (numeric - constraints.minFrames) / constraints.frameStep
+    ) * constraints.frameStep;
+    return Math.max(
+      constraints.minFrames,
+      Math.min(constraints.maxFrames, snapped)
+    );
+  };
+  var boundaryOverlapChoices = (constraints) => {
+    const choices = [];
+    for (let value = constraints.minFrames; value <= constraints.maxFrames; value += constraints.frameStep) {
+      choices.push(value);
+      if (choices.length >= 100) break;
+    }
+    return choices;
+  };
+
+  // frontend/architectures/ltx2/definition.ts
+  var LTX2_ARCHITECTURE_ID = "ltx2";
+  var LTX23_MODEL_NAME = /(^|[/\\_. -])ltx(?:[/\\_. -]*v?2)?[/\\_. -]*3($|[/\\_. -])/i;
+  var ltx2Architecture = {
+    id: LTX2_ARCHITECTURE_ID,
+    label: "LTX Video 2.3",
+    defaultProfileId: "ltx-2.3",
+    capabilities: {
+      architecture: [
+        "generated-entry",
+        "sourced-entry",
+        "multi-stage",
+        "native-audio",
+        "decoded-output"
+      ],
+      clip: [
+        "source-video",
+        "prompts",
+        "prompt-relay",
+        "references",
+        "retake",
+        "audio-sources",
+        "audio-segments"
+      ],
+      stage: [
+        "image-input",
+        "video-input",
+        "pixel-upscale",
+        "model-upscale",
+        "latent-upscale",
+        "latent-model-upscale",
+        "lora",
+        "ic-lora",
+        "hdr",
+        "frame-references"
+      ],
+      output: ["video", "attached-audio", "standalone-audio"],
+      upscaleModes: ["pixel", "model", "latent", "latent-model"],
+      entryModes: [
+        "text-to-video",
+        "image-to-video",
+        "source-video",
+        "refine-video"
+      ],
+      audioSourceKinds: [
+        "Native",
+        "Upload",
+        "Voice Reference",
+        "ControlNet",
+        "AceStepFun"
+      ]
+    },
+    profiles: [
+      {
+        id: "ltx-2.3",
+        label: "LTX Video 2.3",
+        capabilities: [
+          "sampler-selection",
+          "scheduler-selection",
+          "dimension-rules",
+          "frame-rules",
+          "normal-lora"
+        ],
+        rules: []
+      }
+    ],
+    boundaryRules: {
+      cut: {
+        support: "supported",
+        code: "ltx2.boundary.cut",
+        reason: "Decoded LTX clips can be joined with a hard cut.",
+        scope: "boundary",
+        entityId: null,
+        constraints: null
+      },
+      continue: {
+        support: "conditional",
+        code: "ltx2.boundary.continue",
+        reason: "Continue requires adjacent LTX clips and a compatible generated target.",
+        scope: "boundary",
+        entityId: null,
+        constraints: {
+          sameArchitecture: true,
+          targetRequiresGeneratedEntry: true,
+          targetRequiresStage: true,
+          targetDisallowsInitialReference: true,
+          frameStep: 8,
+          minFrames: 8,
+          maxFrames: 48,
+          defaultFrames: 8,
+          continuityExtraFrames: 1
+        }
+      },
+      crossfade: {
+        support: "conditional",
+        code: "ltx2.boundary.crossfade",
+        reason: "Crossfade currently uses the LTX-owned decoded transition path.",
+        scope: "boundary",
+        entityId: null,
+        constraints: {
+          sameArchitecture: true,
+          targetRequiresGeneratedEntry: false,
+          targetRequiresStage: false,
+          targetDisallowsInitialReference: false,
+          frameStep: 8,
+          minFrames: 8,
+          maxFrames: 48,
+          defaultFrames: 8,
+          continuityExtraFrames: 0
+        }
+      }
+    },
+    rules: [
+      {
+        support: "conditional",
+        code: "audio.reuse.requires_three_stages",
+        reason: "Audio reuse needs at least three active stages: generate, capture, then reuse.",
+        scope: "clip",
+        entityId: null,
+        constraints: {
+          minimumActiveStages: 3,
+          failureSeverity: "warning",
+          failureEffect: "disable-feature"
+        }
+      },
+      {
+        support: "conditional",
+        code: "prompt-relay-dynamic-length-unsupported",
+        reason: "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
+        scope: "clip",
+        entityId: null,
+        constraints: { requiresFixedFrameCount: true }
+      },
+      {
+        support: "conditional",
+        code: "retake-frame-references-unsupported",
+        reason: "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
+        scope: "stage",
+        entityId: null,
+        constraints: {
+          mutuallyExclusive: ["retake", "frameReferences"]
+        }
+      },
+      {
+        support: "conditional",
+        code: "retake-source-required",
+        reason: "Retake requires a sourced clip or a global Refine Video source.",
+        scope: "clip",
+        entityId: null,
+        constraints: {
+          requiresAnyEntryMode: ["source-video", "refine-video"]
+        }
+      },
+      {
+        support: "conditional",
+        code: "mixed-hdr-timeline-unsupported",
+        reason: "HDR IC-LoRA activation must be uniform across the complete timeline.",
+        scope: "architecture",
+        entityId: null,
+        constraints: {
+          uniformTimelineFeature: "hdr",
+          minimumTimelineClips: 2
+        }
+      }
+    ],
+    resolveModelProfile: (model) => {
+      const classId = `${model.modelClassId ?? ""}`.trim().toLowerCase();
+      if (classId === "lightricks-ltx-video-2-3") {
+        return "ltx-2.3";
+      }
+      return LTX23_MODEL_NAME.test(model.value) ? "ltx-2.3" : null;
+    }
+  };
+
+  // frontend/architectures/none/definition.ts
+  var NONE_ARCHITECTURE_ID = "none";
+  var noneArchitecture = {
+    id: NONE_ARCHITECTURE_ID,
+    label: "Decoded source only",
+    defaultProfileId: NONE_ARCHITECTURE_ID,
+    capabilities: {
+      architecture: ["sourced-entry", "decoded-output"],
+      clip: ["source-video", "audio-sources", "audio-segments"],
+      stage: [],
+      output: ["video", "attached-audio"],
+      upscaleModes: [],
+      entryModes: ["source-video"],
+      audioSourceKinds: ["Disabled", "Upload"]
+    },
+    profiles: [
+      {
+        id: NONE_ARCHITECTURE_ID,
+        label: "Decoded source only",
+        capabilities: [],
+        rules: []
+      }
+    ],
+    boundaryRules: {
+      cut: {
+        support: "supported",
+        code: "none.boundary.cut",
+        reason: "Decoded sourced clips can be joined with a hard cut.",
+        scope: "boundary",
+        entityId: null,
+        constraints: null
+      },
+      continue: {
+        support: "unsupported",
+        code: "none.boundary.continue.unsupported",
+        reason: "A sourced-only clip has no architecture stage that can consume continuity.",
+        scope: "boundary",
+        entityId: null,
+        constraints: null
+      },
+      crossfade: {
+        support: "unsupported",
+        code: "none.boundary.crossfade.unsupported",
+        reason: "Architecture-neutral sourced clips currently support cut joins only.",
+        scope: "boundary",
+        entityId: null,
+        constraints: null
+      }
+    },
+    rules: [],
+    resolveModelProfile: () => null
+  };
+
+  // frontend/architectures/registry.ts
+  var createArchitectureRegistry = (initial = []) => {
+    const byId = /* @__PURE__ */ new Map();
+    for (const definition of initial) {
+      if (byId.has(definition.id)) {
+        throw new Error(`Duplicate video architecture '${definition.id}'.`);
+      }
+      byId.set(definition.id, definition);
+    }
+    return {
+      definitions: () => [...byId.values()],
+      get: (id) => byId.get(id) ?? null,
+      resolveModel: (model) => {
+        for (const definition of byId.values()) {
+          const profileId = definition.resolveModelProfile(model);
+          if (profileId) {
+            return { definition, profileId };
+          }
+        }
+        return null;
+      }
+    };
+  };
+  var videoArchitectureRegistry = createArchitectureRegistry([
+    ltx2Architecture,
+    noneArchitecture
+  ]);
+
+  // frontend/architectures/catalogQueries.ts
+  var architectureCatalogView = (catalog, architectureId, registry = videoArchitectureRegistry) => {
+    const definition = registry.get(architectureId);
+    const catalogArchitecture = catalog.architectures.find(
+      (entry) => entry.id === architectureId
+    );
+    const entries = catalog.entries.filter(
+      (entry) => entry.architectureId === architectureId
+    );
+    return {
+      architectureId,
+      architectureLabel: catalogArchitecture?.label ?? definition?.label ?? architectureId,
+      values: entries.map((entry) => entry.value),
+      labels: entries.map((entry) => entry.label)
+    };
+  };
+  var supportedArchitectureCatalog = (catalog) => ({
+    architectures: structuredClone(catalog.architectures),
+    source: catalog.source,
+    entries: catalog.entries.filter((entry) => entry.architectureId !== null)
+  });
+  var architectureForModel = (catalog, model) => catalog.entries.find((entry) => entry.value === model)?.architectureId ?? null;
+  var modelProfileForModel = (catalog, model) => catalog.entries.find((entry) => entry.value === model)?.modelProfileId ?? null;
+  var buildArchitectureRetargetPlan = (catalog, model, registry = videoArchitectureRegistry) => {
+    const entry = catalog.entries.find(
+      (candidate) => candidate.value === model
+    );
+    const architectureId = entry?.architectureId ?? null;
+    const descriptor = architectureId ? catalog.architectures.find(
+      (candidate) => candidate.id === architectureId
+    ) : null;
+    const fallback = architectureId ? registry.get(architectureId) : null;
+    const profileId = entry?.modelProfileId ?? null;
+    const capabilities = descriptor?.capabilities ?? fallback?.capabilities;
+    return architectureId && profileId && capabilities ? {
+      architectureId,
+      modelProfileId: profileId,
+      model,
+      capabilities: structuredClone(capabilities)
+    } : null;
+  };
+
+  // frontend/architectures/catalogWire.ts
+  var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
+  var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
+  var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
+  var isRuleDecision = (value, allowedScopes) => {
+    if (!isRecord2(value) || !["supported", "unsupported", "conditional"].includes(
+      `${value.support}`
+    ) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || ![
+      "architecture",
+      "model-profile",
+      "clip",
+      "stage",
+      "boundary",
+      "output"
+    ].includes(`${value.scope}`) || value.entityId !== null && !isTrimmedNonEmpty(value.entityId) || value.constraints !== null && !isRecord2(value.constraints)) {
+      return false;
+    }
+    const scope = value.scope;
+    if (allowedScopes && !allowedScopes.includes(scope)) {
+      return false;
+    }
+    if (value.support === "conditional" && !isRecord2(value.constraints)) {
+      return false;
+    }
+    if (value.support === "unsupported" && value.constraints !== null) {
+      return false;
+    }
+    return true;
+  };
+  var isBoundaryRule = (value) => {
+    if (!isRuleDecision(value, ["boundary"]) || value.entityId !== null) {
+      return false;
+    }
+    if (value.support !== "conditional") {
+      return value.constraints === null;
+    }
+    if (!isRecord2(value.constraints)) {
+      return false;
+    }
+    const constraints = value.constraints;
+    const integers = [
+      constraints.frameStep,
+      constraints.minFrames,
+      constraints.maxFrames,
+      constraints.defaultFrames,
+      constraints.continuityExtraFrames
+    ];
+    if (constraints.sameArchitecture !== true || typeof constraints.targetRequiresGeneratedEntry !== "boolean" || typeof constraints.targetRequiresStage !== "boolean" || typeof constraints.targetDisallowsInitialReference !== "boolean" || !integers.every(Number.isInteger)) {
+      return false;
+    }
+    const frameStep = constraints.frameStep;
+    const minFrames = constraints.minFrames;
+    const maxFrames = constraints.maxFrames;
+    const defaultFrames = constraints.defaultFrames;
+    const continuityExtraFrames = constraints.continuityExtraFrames;
+    return frameStep > 0 && minFrames >= 0 && maxFrames >= minFrames && defaultFrames >= minFrames && defaultFrames <= maxFrames && continuityExtraFrames >= 0 && (defaultFrames - minFrames) % frameStep === 0;
+  };
+  var isRuleArray = (value, allowedScopes) => Array.isArray(value) && value.every((rule) => isRuleDecision(rule, allowedScopes)) && new Set(value.map((rule) => rule.code)).size === value.length;
+  var isProfile = (value) => isRecord2(value) && isTrimmedNonEmpty(value.id) && isTrimmedNonEmpty(value.label) && isUniqueStringArray(value.capabilities) && isRuleArray(value.rules, ["model-profile"]);
+  var isCapabilities = (value) => {
+    if (!isRecord2(value)) {
+      return false;
+    }
+    return [
+      value.architecture,
+      value.clip,
+      value.stage,
+      value.output,
+      value.upscaleModes,
+      value.entryModes,
+      value.audioSourceKinds
+    ].every(isUniqueStringArray);
+  };
+  var hasCompleteBoundaryRules = (value) => {
+    if (!isRecord2(value)) {
+      return false;
+    }
+    const keys = Object.keys(value);
+    return keys.length === BOUNDARY_MODES.length && BOUNDARY_MODES.every((mode) => isBoundaryRule(value[mode]));
+  };
+  var parseVideoArchitectureCatalog = (value) => {
+    if (!isRecord2(value) || !Array.isArray(value.architectures) || !Array.isArray(value.models)) {
+      return null;
+    }
+    const architectures = [];
+    const architectureIds = /* @__PURE__ */ new Set();
+    for (const raw of value.architectures) {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
+        return null;
+      }
+      const profileIds = raw.profiles.map((profile) => profile.id);
+      const allCodes = [
+        ...Object.values(raw.boundaryRules).map((rule) => rule.code),
+        ...raw.rules.map((rule) => rule.code),
+        ...raw.profiles.flatMap(
+          (profile) => profile.rules.map((rule) => rule.code)
+        )
+      ];
+      if (architectureIds.has(raw.id) || new Set(profileIds).size !== profileIds.length || !profileIds.includes(raw.defaultProfileId) || new Set(allCodes).size !== allCodes.length) {
+        return null;
+      }
+      architectureIds.add(raw.id);
+      architectures.push({
+        id: raw.id,
+        label: raw.label,
+        defaultProfileId: raw.defaultProfileId,
+        capabilities: structuredClone(raw.capabilities),
+        profiles: structuredClone(raw.profiles),
+        boundaryRules: structuredClone(raw.boundaryRules),
+        rules: structuredClone(raw.rules)
+      });
+    }
+    if (architectures.length === 0) {
+      return null;
+    }
+    const modelNames = /* @__PURE__ */ new Set();
+    const models = [];
+    for (const raw of value.models) {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || raw.compatId !== void 0 && raw.compatId !== null && typeof raw.compatId !== "string") {
+        return null;
+      }
+      const descriptor = architectures.find(
+        (architecture) => architecture.id === raw.architectureId
+      );
+      if (modelNames.has(raw.modelName) || !descriptor?.profiles.some(
+        (profile) => profile.id === raw.modelProfileId
+      )) {
+        return null;
+      }
+      modelNames.add(raw.modelName);
+      models.push({
+        modelName: raw.modelName,
+        architectureId: raw.architectureId,
+        modelProfileId: raw.modelProfileId,
+        compatId: raw.compatId ?? null
+      });
+    }
+    return { architectures, models };
+  };
+
+  // frontend/architectures/catalogRepository.ts
+  var ARCHITECTURE_CATALOG_API = "VideoStagesGetArchitectureCatalog";
+  var authoritativeCatalog = null;
+  var catalogRequest = null;
+  var loadAuthoritativeArchitectureCatalog = () => {
+    if (authoritativeCatalog) {
+      return Promise.resolve(structuredClone(authoritativeCatalog));
+    }
+    if (catalogRequest) {
+      return catalogRequest;
+    }
+    catalogRequest = getVideoStagesHostBridge().requestJson(ARCHITECTURE_CATALOG_API).then((response) => {
+      const parsed = parseVideoArchitectureCatalog(response);
+      if (parsed) {
+        authoritativeCatalog = parsed;
+      }
+      return parsed ? structuredClone(parsed) : null;
+    }).catch((error) => {
+      console.warn(
+        "VideoStages: architecture catalog unavailable; using registered frontend bootstrap",
+        error
+      );
+      return null;
+    }).finally(() => {
+      catalogRequest = null;
+    });
+    return catalogRequest;
+  };
+  var bootstrapArchitectures = (registry) => registry.definitions().map(
+    ({
+      id,
+      label,
+      defaultProfileId,
+      capabilities,
+      profiles,
+      boundaryRules,
+      rules
+    }) => ({
+      id,
+      label,
+      defaultProfileId,
+      capabilities: structuredClone(capabilities),
+      profiles: structuredClone(profiles),
+      boundaryRules: structuredClone(boundaryRules),
+      rules: structuredClone(rules)
+    })
+  );
+  var buildArchitectureModelCatalog = (values, labels, registry = videoArchitectureRegistry) => {
+    const backend = authoritativeCatalog;
+    const modelNames = [...values];
+    if (backend) {
+      const seen = new Set(modelNames);
+      for (const model of backend.models) {
+        if (!seen.has(model.modelName)) {
+          seen.add(model.modelName);
+          modelNames.push(model.modelName);
+        }
+      }
+    }
+    return {
+      architectures: backend?.architectures ?? bootstrapArchitectures(registry),
+      source: backend ? "backend" : "bootstrap",
+      entries: modelNames.map((value, index) => {
+        const backendModel = backend?.models.find(
+          (model) => model.modelName === value
+        );
+        const descriptor = {
+          value,
+          label: labels[index] ?? value,
+          compatId: backendModel?.compatId ?? getVideoStagesHostBridge().getModelCompatId(value),
+          modelClassId: getVideoStagesHostBridge().getModelClassId(value)
+        };
+        const bootstrap = backend ? null : registry.resolveModel(descriptor);
+        return {
+          ...descriptor,
+          architectureId: backendModel?.architectureId ?? bootstrap?.definition.id ?? null,
+          modelProfileId: backendModel?.modelProfileId ?? bootstrap?.profileId ?? null
+        };
+      })
+    };
+  };
+
+  // frontend/architectures/identity.ts
+  var normalizeClipArchitecture = (rawArchitecture, stageZeroModel, catalog) => {
+    const persisted = `${rawArchitecture ?? ""}`.trim();
+    if (persisted) {
+      return persisted;
+    }
+    const fromCatalog = catalog && stageZeroModel ? architectureForModel(catalog, stageZeroModel) : null;
+    if (fromCatalog) {
+      return fromCatalog;
+    }
+    return videoArchitectureRegistry.definitions()[0]?.id ?? "unsupported";
+  };
+
+  // frontend/clipColor.ts
+  var HUE_MIN = 0;
+  var HUE_MAX = 359;
+  var HUE_RANGE = 360;
+  var BASE_HUE = 210;
+  var UNASSIGNED_HUE = -1;
+  var HUE_SATURATION = 65;
+  var HUE_LIGHTNESS = 55;
+  var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
+  var normalizeStoredHue = (value) => {
+    if (value == null || value === "") {
+      return UNASSIGNED_HUE;
+    }
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) {
+      return UNASSIGNED_HUE;
+    }
+    return (Math.round(num) % HUE_RANGE + HUE_RANGE) % HUE_RANGE;
+  };
+  var hueDistance = (a, b) => {
+    const d = Math.abs(a - b) % HUE_RANGE;
+    return d > 180 ? HUE_RANGE - d : d;
+  };
+  var pickDistinctHue = (existing) => {
+    const inUse = existing.filter(isAssignedHue);
+    if (inUse.length === 0) {
+      return BASE_HUE;
+    }
+    let best = 0;
+    let bestScore = -1;
+    for (let hue = HUE_MIN; hue <= HUE_MAX; hue++) {
+      let minDist = 180;
+      for (const used of inUse) {
+        const d = hueDistance(hue, used);
+        if (d < minDist) {
+          minDist = d;
+        }
+      }
+      if (minDist > bestScore) {
+        bestScore = minDist;
+        best = hue;
+      }
+    }
+    return best;
+  };
+  var assignMissingHues = (clips) => {
+    const assigned = [];
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        assigned.push(clip.hue);
+      }
+    }
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        continue;
+      }
+      const hue = pickDistinctHue(assigned);
+      clip.hue = hue;
+      assigned.push(hue);
+    }
+  };
+  var clipHueCss = (hue) => {
+    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
+    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
+  };
+
+  // frontend/renderUtils.ts
+  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  var FRAME_ALIGNMENT = 8;
+  var framesForClip = (durationSeconds, fps) => Math.max(
+    1,
+    Math.ceil(
+      Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / FRAME_ALIGNMENT
+    ) * FRAME_ALIGNMENT + 1
+  );
+  var snapDurationToFps = (seconds, fps) => {
+    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
+      return seconds;
+    }
+    const frames = Math.max(1, Math.ceil(seconds * fps));
+    const aligned = frames / fps;
+    return Math.max(0.1, Math.floor(aligned * 10) / 10);
+  };
+
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 2;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 3;
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
@@ -1321,9 +1843,9 @@
     }
     return strengths;
   };
-  var readRawStageProp = (raw, camel, pascal) => readProp(raw, camel, pascal);
-  var readRawStageString = (raw, camel, pascal) => {
-    const value = readRawStageProp(raw, camel, pascal);
+  var readRawStageProp = (raw, key) => readProp(raw, key);
+  var readRawStageString = (raw, key) => {
+    const value = readRawStageProp(raw, key);
     if (value == null) {
       return void 0;
     }
@@ -1339,11 +1861,11 @@
       if (!isRecord(entry)) {
         continue;
       }
-      const name = `${readRawStageProp(entry, "name", "Name") ?? ""}`.trim();
+      const name = `${readRawStageProp(entry, "name") ?? ""}`.trim();
       if (!name) {
         continue;
       }
-      const weightRaw = readRawStageProp(entry, "weight", "Weight");
+      const weightRaw = readRawStageProp(entry, "weight");
       const weight = toNumber(`${weightRaw ?? 1}`, 1);
       out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
     }
@@ -1352,6 +1874,7 @@
   var cloneStageLoras = (loras) => loras.map((lora) => ({ name: lora.name, weight: lora.weight }));
   var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount) => {
     const defaults = getRootDefaults2();
+    const model = previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues);
     return {
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
@@ -1359,7 +1882,8 @@
       refStrengths: buildDefaultStageRefStrengths(refCount),
       upscale: previousStage ? previousStage.upscale : defaults.upscale,
       upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
-      model: previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues),
+      model,
+      modelProfileId: previousStage?.modelProfileId ?? modelProfileForModel(defaults.modelCatalog, model) ?? "unsupported",
       steps: previousStage ? previousStage.steps : defaults.steps,
       cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
       sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
@@ -1428,7 +1952,7 @@
         upscale: snapToStep(
           clamp(
             toNumber(
-              `${readRawStageProp(rawStage, "upscale", "Upscale") ?? fallback.upscale}`,
+              `${readRawStageProp(rawStage, "upscale") ?? fallback.upscale}`,
               fallback.upscale
             ),
             defaults.upscaleMin,
@@ -1436,11 +1960,11 @@
           ),
           defaults.upscaleStep
         ),
-        upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod", "UpscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
+        upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
       };
       control = clamp(
         toNumber(
-          `${readRawStageProp(rawStage, "control", "Control") ?? fallback.control}`,
+          `${readRawStageProp(rawStage, "control") ?? fallback.control}`,
           fallback.control
         ),
         defaults.controlMin,
@@ -1448,15 +1972,11 @@
       );
     }
     const stage = {
-      id: normalizeOptionalEntityId(readProp(rawStage, "id", "Id")),
+      id: normalizeOptionalEntityId(rawStage.id),
       skipped: !!rawStage.skipped,
       control,
       controlNetStrength: normalizeStageControlNetStrengthValue(
-        readRawStageProp(
-          rawStage,
-          "controlNetStrength",
-          "ControlNetStrength"
-        ) ?? fallback.controlNetStrength
+        readRawStageProp(rawStage, "controlNetStrength") ?? fallback.controlNetStrength
       ),
       refStrengths: normalizeStageRefStrengths(
         rawStage.refStrengths,
@@ -1465,6 +1985,7 @@
       upscale: firstStageUpscale.upscale,
       upscaleMethod: firstStageUpscale.upscaleMethod,
       model: `${rawStage.model ?? fallback.model}` || fallback.model,
+      modelProfileId: "unsupported",
       steps: Math.max(
         1,
         Math.round(
@@ -1488,10 +2009,9 @@
       ),
       sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
       scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
-      loras: normalizeStageLoras(
-        readRawStageProp(rawStage, "loras", "Loras")
-      )
+      loras: normalizeStageLoras(readRawStageProp(rawStage, "loras"))
     };
+    stage.modelProfileId = `${readRawStageProp(rawStage, "modelProfileId") ?? ""}`.trim() || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
       stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
     }
@@ -1501,7 +2021,7 @@
     const fallback = buildDefaultRef();
     const source = `${rawRef.source ?? fallback.source}` || fallback.source;
     return {
-      id: normalizeOptionalEntityId(readProp(rawRef, "id", "Id")),
+      id: normalizeOptionalEntityId(rawRef.id),
       source,
       uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
       uploadedImage: normalizeUploadedAudio(rawRef.uploadedImage),
@@ -1527,21 +2047,36 @@
     const raw = `${value ?? ""}`.trim().toLowerCase();
     return raw === "continue" || raw === "crossfade" ? raw : "cut";
   };
-  var normalizeContinueOverlap = (value) => {
-    const num = Math.trunc(Number(value));
-    if (!Number.isFinite(num) || num < DEFAULT_CONTINUE_OVERLAP_FRAMES) {
-      return DEFAULT_CONTINUE_OVERLAP_FRAMES;
-    }
-    return Math.min(CONTINUE_OVERLAP_MAX_FRAMES, num - num % 8);
+  var normalizeContinueOverlap = (value, constraints = boundaryOverlapConstraints(null)) => {
+    const numeric = Math.trunc(Number(value));
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
   };
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const firstStage = {
+      ...buildDefaultStage(
+        getRootDefaults2,
+        getDefaultStageModel2,
+        previousClip?.stages[0] ?? null,
+        refs.length
+      ),
+      refStrengths: buildDefaultStageRefStrengths(
+        refs.length,
+        includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
+      )
+    };
+    const architecture = (previousClip?.architecture !== "none" ? previousClip?.architecture : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
+    const continueRule = defaults.modelCatalog.architectures.find(
+      (entry) => entry.id === architecture
+    )?.boundaryRules.continue;
     return {
+      architecture,
+      modelProfileId: (previousClip?.architecture !== "none" ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
       skipped: false,
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
-      boundaryOutOverlap: DEFAULT_CONTINUE_OVERLAP_FRAMES,
+      boundaryOutOverlap: boundaryOverlapConstraints(continueRule).defaultFrames,
       duration: previousClip ? previousClip.duration : snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
@@ -1559,37 +2094,14 @@
       retake: null,
       sourceVideo: null,
       refs,
-      stages: [
-        {
-          ...buildDefaultStage(
-            getRootDefaults2,
-            getDefaultStageModel2,
-            previousClip?.stages[0] ?? null,
-            refs.length
-          ),
-          refStrengths: buildDefaultStageRefStrengths(
-            refs.length,
-            includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
-          )
-        }
-      ]
+      stages: [firstStage]
     };
   };
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
     const defaults = getRootDefaults2();
     const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const sourceVideo = normalizeSourceVideo(
-      readProp(rawClip, "sourceVideo", "SourceVideo")
-    );
-    const icLoras = normalizeIcLoras(
-      rawClip,
-      stagesRaw.length,
-      sourceVideo !== null
-    );
-    const audioSourceOptions = buildAudioSourceOptions(rawAudioSource, {
-      controlNetEnabled: hasSlotSourcedIcLora(icLoras)
-    });
+    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
     const fps = Math.max(
       1,
       typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
@@ -1623,21 +2135,42 @@
         )
       );
     }
-    const audioSource = resolveAudioSourceValue(
-      rawAudioSource,
-      audioSourceOptions
+    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
+    const stageZero = stages[0] ?? null;
+    const persistedArchitecture = `${rawClip.architecture ?? ""}`.trim();
+    const persistedProfile = `${rawClip.modelProfileId ?? ""}`.trim();
+    const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
+    const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
+      persistedArchitecture,
+      stageZero?.model ?? null,
+      defaults.modelCatalog
+    );
+    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === "none" ? "none" : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
+    const icLoras = normalizeArchitectureIcLoras(
+      architecture,
+      rawClip,
+      stagesRaw.length,
+      sourceVideo !== null,
+      !defaults.modelCatalog.architectures.some(
+        (entry) => entry.id === architecture
+      ) || architecture === "none"
     );
     const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
-    const clipLengthFromControlNet = hasSlotSourcedIcLora(icLoras) && !clipLengthFromAudio && !!(rawClip.clipLengthFromControlNet ?? rawClip.ClipLengthFromControlNet);
+    const clipLengthFromControlNet = hasArchitectureSlotSourcedIcLora(architecture, icLoras) && !clipLengthFromAudio && !!rawClip.clipLengthFromControlNet;
+    const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
+    const boundaryRule = defaults.modelCatalog.architectures.find(
+      (entry) => entry.id === architecture
+    )?.boundaryRules[boundaryOut];
     return {
-      id: normalizeOptionalEntityId(readProp(rawClip, "id", "Id")),
+      id: normalizeOptionalEntityId(rawClip.id),
+      architecture,
+      modelProfileId,
       skipped: !!rawClip.skipped,
       hue: normalizeStoredHue(rawClip.hue),
-      boundaryOut: normalizeBoundaryOut(
-        rawClip.boundaryOut ?? rawClip.BoundaryOut
-      ),
+      boundaryOut,
       boundaryOutOverlap: normalizeContinueOverlap(
-        rawClip.boundaryOutOverlap ?? rawClip.BoundaryOutOverlap
+        rawClip.boundaryOutOverlap,
+        boundaryOverlapConstraints(boundaryRule)
       ),
       duration,
       audioSource,
@@ -1647,20 +2180,789 @@
       clipLengthFromControlNet,
       reuseAudio: !!rawClip.reuseAudio,
       uploadedAudio: normalizeUploadedAudio(rawClip.uploadedAudio),
-      audioSegments: normalizeAudioSegments(
-        readProp(rawClip, "audioSegments", "AudioSegments"),
-        duration
-      ),
-      prompt: `${readProp(rawClip, "prompt", "Prompt") ?? ""}`,
+      audioSegments: normalizeAudioSegments(rawClip.audioSegments, duration),
+      prompt: `${rawClip.prompt ?? ""}`,
       promptWindows: normalizePromptWindows(rawClip),
-      retake: normalizeRetake(
-        readProp(rawClip, "retake", "Retake"),
-        duration
-      ),
+      retake: normalizeRetake(rawClip.retake, duration),
       sourceVideo,
       refs,
       stages
     };
+  };
+
+  // frontend/identity.ts
+  var fallbackSequence = 0;
+  var normalizedExistingId = (value) => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const id = value.trim();
+    return id.length > 0 ? id : null;
+  };
+  var createEntityId = (kind) => {
+    const randomUuid = globalThis.crypto?.randomUUID?.();
+    if (randomUuid) {
+      return `${kind}_${randomUuid}`;
+    }
+    fallbackSequence += 1;
+    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
+  };
+  var assignUniqueId = (entry, reserved, used) => {
+    const reservedId = reserved.get(entry.entity);
+    if (reservedId) {
+      entry.entity.id = reservedId;
+      return reservedId;
+    }
+    const base = `${entry.kind}_legacy_${entry.repairPath}`;
+    let id = base;
+    let collision = 1;
+    while (used.has(id)) {
+      collision += 1;
+      id = `${base}_${collision}`;
+    }
+    entry.entity.id = id;
+    used.add(id);
+    return id;
+  };
+  var clipIdentityEntries = (clips) => {
+    const entries = [];
+    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
+      const clip = clips[clipIndex];
+      entries.push({
+        entity: clip,
+        kind: "clip",
+        repairPath: `${clipIndex}`
+      });
+      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
+        entries.push({
+          entity: clip.stages[stageIndex],
+          kind: "stage",
+          repairPath: `${clipIndex}_${stageIndex}`
+        });
+      }
+      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
+        entries.push({
+          entity: clip.refs[refIndex],
+          kind: "ref",
+          repairPath: `${clipIndex}_${refIndex}`
+        });
+      }
+      for (let segmentIndex = 0; segmentIndex < clip.audioSegments.length; segmentIndex++) {
+        entries.push({
+          entity: clip.audioSegments[segmentIndex],
+          kind: "audio_segment",
+          repairPath: `${clipIndex}_${segmentIndex}`
+        });
+      }
+      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
+        entries.push({
+          entity: clip.promptWindows[windowIndex],
+          kind: "prompt_window",
+          repairPath: `${clipIndex}_${windowIndex}`
+        });
+      }
+      if (clip.retake) {
+        entries.push({
+          entity: clip.retake,
+          kind: "retake",
+          repairPath: `${clipIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var audioTrackIdentityEntries = (tracks) => {
+    const entries = [];
+    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+      const track = tracks[trackIndex];
+      entries.push({
+        entity: track,
+        kind: "audio_track",
+        repairPath: `${trackIndex}`
+      });
+      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
+        entries.push({
+          entity: track.spans[spanIndex],
+          kind: "audio_span",
+          repairPath: `${trackIndex}_${spanIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var assignEntryIdentities = (entries, used) => {
+    const reserved = /* @__PURE__ */ new Map();
+    for (const { entity } of entries) {
+      const existing = normalizedExistingId(entity.id);
+      if (existing && !used.has(existing)) {
+        reserved.set(entity, existing);
+        used.add(existing);
+      }
+    }
+    for (const entry of entries) {
+      assignUniqueId(entry, reserved, used);
+    }
+  };
+  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
+    assignEntryIdentities(clipIdentityEntries(clips), seen);
+    return seen;
+  };
+  function ensureAuthoringDocumentIdentity(state) {
+    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    state.audioTracks ??= [];
+    assignEntryIdentities(
+      [
+        ...clipIdentityEntries(state.clips),
+        ...audioTrackIdentityEntries(state.audioTracks)
+      ],
+      /* @__PURE__ */ new Set()
+    );
+  }
+  var collectAuthoringEntityIds = (state) => {
+    const ids = [];
+    for (const clip of state.clips) {
+      if (clip.id) ids.push(clip.id);
+      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
+      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+      for (const segment of clip.audioSegments) {
+        if (segment.id) ids.push(segment.id);
+      }
+      for (const window2 of clip.promptWindows) {
+        if (window2.id) ids.push(window2.id);
+      }
+      if (clip.retake?.id) ids.push(clip.retake.id);
+    }
+    for (const track of state.audioTracks ?? []) {
+      if (track.id) ids.push(track.id);
+      for (const span of track.spans) if (span.id) ids.push(span.id);
+    }
+    return ids;
+  };
+
+  // frontend/hostDom.ts
+  var utils = {
+    getInputElement: (id) => getVideoStagesHostBridge().getInput(id),
+    getSelectElement: (id) => getVideoStagesHostBridge().getSelect(id),
+    getSelectValues: (select2) => getVideoStagesHostBridge().getSelectOptions(select2).values,
+    getSelectLabels: (select2) => getVideoStagesHostBridge().getSelectOptions(select2).labels
+  };
+
+  // frontend/promptSegments.ts
+  var BOUNDARY_RE = /<videoclip(?=[>[])|<videostages\[/gi;
+  var TAG_RE = /^<videoclip(?:\[([^\]]*)\])?(?::([^>]*))?>$/i;
+  var INDEX_RE = /^\d+$/;
+  var FLOAT_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+  var preserved = {
+    owned: null,
+    clip: null,
+    window: null
+  };
+  var parseWindowValue = (value) => {
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.includes(",")) {
+      return null;
+    }
+    const dash = trimmed.indexOf("-");
+    if (dash <= 0 || dash >= trimmed.length - 1) {
+      return null;
+    }
+    const left = trimmed.slice(0, dash).trim();
+    const right = trimmed.slice(dash + 1).trim();
+    if (!FLOAT_RE.test(left) || !FLOAT_RE.test(right)) {
+      return null;
+    }
+    const start = Math.max(0, Number.parseFloat(left));
+    const end = Number.parseFloat(right);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      return null;
+    }
+    return { start, end };
+  };
+  var classify = (tagRaw) => {
+    const match = TAG_RE.exec(tagRaw);
+    if (!match) {
+      return preserved;
+    }
+    const bracket = match[1];
+    const value = match[2];
+    if (bracket === void 0) {
+      return preserved;
+    }
+    const tokens = bracket.split(",").map((token) => token.trim());
+    if (tokens.length !== 1 || !INDEX_RE.test(tokens[0])) {
+      return preserved;
+    }
+    const clip = Number.parseInt(tokens[0], 10);
+    if (value === void 0) {
+      return { owned: "section", clip, window: null };
+    }
+    const window2 = parseWindowValue(value);
+    if (window2) {
+      return { owned: "window", clip, window: window2 };
+    }
+    return preserved;
+  };
+  var tokenizePrompt = (prompt) => {
+    const text = prompt ?? "";
+    BOUNDARY_RE.lastIndex = 0;
+    const starts = [];
+    for (let match = BOUNDARY_RE.exec(text); match !== null; match = BOUNDARY_RE.exec(text)) {
+      starts.push(match.index);
+    }
+    if (starts.length === 0) {
+      return { leading: text, tags: [] };
+    }
+    const leading = text.slice(0, starts[0]);
+    const tags = [];
+    for (let i = 0; i < starts.length; i++) {
+      const start = starts[i];
+      const nextStart = i + 1 < starts.length ? starts[i + 1] : text.length;
+      const span = text.slice(start, nextStart);
+      const close = span.indexOf(">");
+      const tagRaw = close < 0 ? span : span.slice(0, close + 1);
+      const body = close < 0 ? "" : span.slice(close + 1);
+      tags.push({ tagRaw, body, ...classify(tagRaw) });
+    }
+    return { leading, tags };
+  };
+  var formatSeconds = (value) => Number.parseFloat(value.toFixed(3)).toString();
+  var authorClip = (index, clip) => {
+    if (!clip) {
+      return "";
+    }
+    const pieces = [];
+    const mainPrompt = (clip.prompt ?? "").trim();
+    if (mainPrompt) {
+      pieces.push(`<videoclip[${index}]>${mainPrompt}`);
+    }
+    const windows = [...clip.windows ?? []].filter((w) => w.duration > 0).sort((a, b) => a.start - b.start);
+    for (const win of windows) {
+      const start = Math.max(0, win.start);
+      const startText = formatSeconds(start);
+      const endText = formatSeconds(start + win.duration);
+      const winPrompt = (win.prompt ?? "").trim();
+      pieces.push(
+        `<videoclip[${index}]:${startText}-${endText}>${winPrompt}`
+      );
+    }
+    return pieces.join("\n");
+  };
+  var serializeClipPrompts = (prompt, clips) => {
+    const { leading, tags } = tokenizePrompt(prompt);
+    const blocks = [];
+    const leadTrimmed = leading.trimEnd();
+    if (leadTrimmed) {
+      blocks.push(leadTrimmed);
+    }
+    const emitted = /* @__PURE__ */ new Set();
+    const emitClip = (index) => {
+      if (emitted.has(index)) {
+        return;
+      }
+      emitted.add(index);
+      const block = authorClip(index, clips[index]);
+      if (block) {
+        blocks.push(block);
+      }
+    };
+    for (const tag of tags) {
+      if (tag.owned !== null) {
+        const index = tag.clip ?? -1;
+        if (index >= 0 && index < clips.length) {
+          emitClip(index);
+        }
+        continue;
+      }
+      const raw = (tag.tagRaw + tag.body).trimEnd();
+      if (raw) {
+        blocks.push(raw);
+      }
+    }
+    for (let index = 0; index < clips.length; index++) {
+      emitClip(index);
+    }
+    return blocks.join("\n");
+  };
+  var parseClipPrompts = (prompt) => {
+    const { tags } = tokenizePrompt(prompt);
+    const sections = /* @__PURE__ */ new Map();
+    const windows = /* @__PURE__ */ new Map();
+    for (const tag of tags) {
+      if (tag.owned === "section" && tag.clip !== null) {
+        if (!sections.has(tag.clip)) {
+          sections.set(tag.clip, tag.body.trim());
+        }
+      } else if (tag.owned === "window" && tag.clip !== null && tag.window) {
+        const list = windows.get(tag.clip) ?? [];
+        list.push({
+          start: Math.max(0, tag.window.start),
+          duration: tag.window.end - tag.window.start,
+          prompt: tag.body.trim()
+        });
+        windows.set(tag.clip, list);
+      }
+    }
+    for (const list of windows.values()) {
+      list.sort((a, b) => a.start - b.start);
+    }
+    return { sections, windows };
+  };
+  var extractGlobalPrompt = (prompt) => tokenizePrompt(prompt).leading.trim();
+
+  // frontend/swarmInputs.ts
+  var DATA_INPUT_ID = "input_videostages";
+  var warnedMissingDataInput = false;
+  var getPromptInput = () => getVideoStagesHostBridge().getTextInput("input_prompt");
+  var getDataInput = () => {
+    const el = getVideoStagesHostBridge().getTextInput(DATA_INPUT_ID);
+    if (el) {
+      return el;
+    }
+    if (!warnedMissingDataInput) {
+      warnedMissingDataInput = true;
+      console.warn(
+        `VideoStages: Data param input not found (#${DATA_INPUT_ID}).`
+      );
+    }
+    return null;
+  };
+  var readDataParam = () => getDataInput()?.value ?? "";
+  var writeDataParam = (json) => {
+    const el = getDataInput();
+    if (!el) {
+      return;
+    }
+    el.value = json;
+  };
+  var readStateToken = () => `${readDataParam()}\0${getPromptInput()?.value ?? ""}`;
+  var writeClipPrompts = (clips) => {
+    const el = getPromptInput();
+    if (!el) {
+      return;
+    }
+    el.value = serializeClipPrompts(el.value ?? "", clips);
+  };
+  var notifyCarrierChanged = () => {
+    const dataEl = getDataInput();
+    if (dataEl) {
+      getVideoStagesHostBridge().notifyChanged(dataEl);
+    }
+    const promptEl = getPromptInput();
+    if (promptEl) {
+      getVideoStagesHostBridge().notifyChanged(promptEl, true);
+    }
+  };
+  var readGlobalPrompt = () => extractGlobalPrompt(getPromptInput()?.value ?? "");
+  var getGroupToggle = () => getVideoStagesHostBridge().getInput(
+    "input_group_content_videostages_toggle"
+  );
+  var getRootModelInput = () => getVideoStagesHostBridge().getInput("input_model");
+  var getBase2EditStageRefs = () => {
+    const snapshot = getVideoStagesHostBridge().getBase2EditRegistry();
+    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+      return [];
+    }
+    const refs = snapshot.refs.map((value) => {
+      const stageIndex = parseBase2EditStageIndex(`${value ?? ""}`);
+      return stageIndex == null ? null : `edit${stageIndex}`;
+    }).filter((value) => !!value);
+    return [...new Set(refs)].sort(
+      (left, right) => (parseBase2EditStageIndex(left) ?? 0) - (parseBase2EditStageIndex(right) ?? 0)
+    );
+  };
+  var isRootTextToVideoModel = () => {
+    const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
+    if (!modelName) {
+      return false;
+    }
+    const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
+    const architectureId = architectureForModel(catalog, modelName);
+    const architecture = catalog.architectures.find(
+      (entry) => entry.id === architectureId
+    );
+    return architecture?.capabilities.entryModes.includes("text-to-video") ?? false;
+  };
+  var getRootGeneratedEntryMode = () => !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel() ? "text-to-video" : "image-to-video";
+  var getDropdownOptions = (paramId, fallbackSelectId) => {
+    const registered = getVideoStagesHostBridge().getParamOptions(paramId);
+    if (registered) {
+      return registered;
+    }
+    const bridge2 = getVideoStagesHostBridge();
+    return bridge2.getSelectOptions(bridge2.getSelect(fallbackSelectId));
+  };
+  var isVideoStagesEnabled = () => {
+    const toggler = getGroupToggle();
+    return toggler ? toggler.checked : false;
+  };
+  var setVideoStagesEnabled = (enabled) => {
+    const toggler = getGroupToggle();
+    if (!toggler || toggler.checked === enabled) {
+      return;
+    }
+    toggler.checked = enabled;
+    getVideoStagesHostBridge().notifyChanged(toggler);
+  };
+
+  // frontend/rootDefaults.ts
+  var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
+  var WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
+  var HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
+  var rootVideoFpsInput = () => getVideoStagesHostBridge().getRootVideoFpsInput();
+  var firstPresentInput = (...ids) => {
+    for (let i = 0; i < ids.length; i++) {
+      const el = utils.getInputElement(ids[i]);
+      if (el) {
+        return el;
+      }
+    }
+    return null;
+  };
+  var getDefaultStageModel = (modelValues, architectureId) => {
+    const catalog = buildArchitectureModelCatalog(modelValues, modelValues);
+    const supports = (modelName) => {
+      const resolved = architectureForModel(catalog, modelName);
+      return resolved !== null && (architectureId === void 0 || resolved === architectureId);
+    };
+    if (isRootTextToVideoModel()) {
+      const modelName = trimDomValue(getRootModelInput());
+      if (modelName && supports(modelName)) {
+        return modelName;
+      }
+    }
+    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
+    if (videoModel && supports(videoModel)) {
+      return videoModel;
+    }
+    return modelValues.find((modelName) => supports(modelName)) ?? modelValues[0] ?? "";
+  };
+  var readInheritedDimsSignature = () => {
+    const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
+    const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
+    const fps = trimDomValue(rootVideoFpsInput());
+    return `${width}|${height}|${fps}`;
+  };
+  var getRootDefaults = () => {
+    let model = utils.getSelectElement("input_videomodel");
+    if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
+      model = utils.getSelectElement("input_model");
+    }
+    const rawLoras = getDropdownOptions("loras", "input_loras");
+    const loras = { values: [], labels: [] };
+    rawLoras.values.forEach((value, i) => {
+      if (`${value}`.replace(/\s+/g, "").toLowerCase() !== "(none)") {
+        loras.values.push(value);
+        loras.labels.push(rawLoras.labels[i] ?? value);
+      }
+    });
+    const sampler = getDropdownOptions("sampler", "input_sampler");
+    const scheduler = getDropdownOptions("scheduler", "input_scheduler");
+    const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
+    const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
+    const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
+    const modelCatalog = supportedArchitectureCatalog(
+      buildArchitectureModelCatalog(
+        utils.getSelectValues(model),
+        utils.getSelectLabels(model)
+      )
+    );
+    const models = {
+      values: modelCatalog.entries.map((entry) => entry.value),
+      labels: modelCatalog.entries.map((entry) => entry.label)
+    };
+    const steps = firstPresentInput("input_videosteps", "input_steps");
+    const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
+    const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
+    const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
+    const fpsInput = rootVideoFpsInput();
+    const framesInput = firstPresentInput(
+      "input_videoframes",
+      "input_text2videoframes"
+    );
+    const fps = Math.max(1, Math.round(toNumber(fpsInput?.value, 24)));
+    const frames = Math.max(1, Math.round(toNumber(framesInput?.value, 24)));
+    return {
+      modelValues: models.values,
+      modelLabels: models.labels,
+      modelCatalog,
+      loraValues: loras.values,
+      loraLabels: loras.labels,
+      samplerValues: sampler.values,
+      samplerLabels: sampler.labels,
+      schedulerValues: scheduler.values,
+      schedulerLabels: scheduler.labels,
+      upscaleMethodValues,
+      upscaleMethodLabels,
+      width: Math.max(
+        ROOT_DIMENSION_MIN,
+        Math.round(toNumber(widthInput?.value, 1024))
+      ),
+      height: Math.max(
+        ROOT_DIMENSION_MIN,
+        Math.round(toNumber(heightInput?.value, 1024))
+      ),
+      fps,
+      frames,
+      control: 0.5,
+      controlMin: 0,
+      controlMax: 1,
+      controlStep: 0.05,
+      upscale: 1,
+      upscaleMin: 0.25,
+      upscaleMax: 4,
+      upscaleStep: 0.25,
+      steps: 8,
+      stepsMin: Math.max(1, Math.round(toNumber(steps?.min, 1))),
+      stepsMax: Math.min(
+        50,
+        Math.max(1, Math.round(toNumber(steps?.max, 200)))
+      ),
+      stepsStep: Math.max(1, Math.round(toNumber(steps?.step, 1))),
+      cfgScale: 1,
+      cfgScaleMin: toNumber(cfgScale?.min, 0),
+      cfgScaleMax: Math.min(10, toNumber(cfgScale?.max, 10)),
+      cfgScaleStep: toNumber(cfgScale?.step, 0.5)
+    };
+  };
+
+  // frontend/persistence/documentCodec.ts
+  var toIntOrNull = (value) => {
+    if (value == null || value === "") return null;
+    const num = toNumber(`${value}`, Number.NaN);
+    return Number.isFinite(num) ? Math.round(num) : null;
+  };
+  var resolveRootDims = (inherited, stored) => {
+    const width = toIntOrNull(stored.width);
+    const height = toIntOrNull(stored.height);
+    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
+    const fps = toIntOrNull(stored.fps);
+    const fpsExplicit = fps !== null && fps >= ROOT_FPS_MIN;
+    return {
+      width: dimsExplicit ? width : inherited.width,
+      height: dimsExplicit ? height : inherited.height,
+      fps: fpsExplicit ? fps : inherited.fps,
+      dimsExplicit,
+      fpsExplicit
+    };
+  };
+  var createRootConfig = (dims, clips, audioTracks = []) => {
+    const config = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+      ...dims,
+      clips,
+      audioTracks
+    };
+    ensureAuthoringDocumentIdentity(config);
+    return config;
+  };
+  var serializeClipsForStorage = (clips) => {
+    ensureClipEntityIdentities(clips);
+    return clips.map(
+      (clip) => ({
+        id: clip.id,
+        architecture: clip.architecture,
+        modelProfileId: clip.modelProfileId,
+        skipped: clip.skipped,
+        boundaryOut: clip.boundaryOut,
+        boundaryOutOverlap: clip.boundaryOutOverlap,
+        duration: clip.duration,
+        audioSource: clip.audioSource,
+        icLoras: clip.icLoras.map((entry) => ({
+          lora: entry.lora,
+          preset: entry.preset,
+          source: entry.source,
+          stage: entry.stage,
+          strength: entry.strength,
+          attentionStrength: entry.attentionStrength,
+          controlType: entry.controlType,
+          video: entry.video,
+          driveAudioRef: entry.driveAudioRef
+        })),
+        saveAudioTrack: clip.saveAudioTrack,
+        clipLengthFromAudio: clip.clipLengthFromAudio,
+        clipLengthFromControlNet: clip.clipLengthFromControlNet,
+        reuseAudio: clip.reuseAudio,
+        uploadedAudio: clip.uploadedAudio,
+        sourceVideo: clip.sourceVideo ? {
+          data: clip.sourceVideo.data,
+          fileName: clip.sourceVideo.fileName,
+          fps: clip.sourceVideo.fps,
+          durationSeconds: clip.sourceVideo.durationSeconds,
+          startSeconds: clip.sourceVideo.startSeconds,
+          lengthSeconds: clip.sourceVideo.lengthSeconds
+        } : null,
+        audioSegments: clip.audioSegments.map((segment) => ({
+          id: segment.id,
+          source: segment.source,
+          startSeconds: segment.startSeconds,
+          trimStartSeconds: segment.trimStartSeconds,
+          lengthSeconds: segment.lengthSeconds
+        })),
+        retake: clip.retake ? {
+          id: clip.retake.id,
+          startSeconds: clip.retake.startSeconds,
+          lengthSeconds: clip.retake.lengthSeconds,
+          strength: clip.retake.strength
+        } : null,
+        refs: clip.refs.map((ref) => ({
+          id: ref.id,
+          source: ref.source,
+          uploadFileName: ref.uploadFileName,
+          uploadedImage: ref.uploadedImage,
+          frame: ref.frame,
+          fromEnd: ref.fromEnd
+        })),
+        stages: clip.stages.map((stage) => ({
+          id: stage.id,
+          skipped: stage.skipped,
+          control: stage.control,
+          controlNetStrength: stage.controlNetStrength,
+          refStrengths: stage.refStrengths,
+          upscale: stage.upscale,
+          upscaleMethod: stage.upscaleMethod,
+          model: stage.model,
+          modelProfileId: stage.modelProfileId,
+          steps: stage.steps,
+          cfgScale: stage.cfgScale,
+          sampler: stage.sampler,
+          scheduler: stage.scheduler,
+          loras: stage.loras.map((lora) => ({
+            name: lora.name,
+            weight: lora.weight
+          }))
+        }))
+      })
+    );
+  };
+  var serializeStateForStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const out = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
+    };
+    if (state.dimsExplicit) {
+      out.width = Math.round(state.width);
+      out.height = Math.round(state.height);
+    }
+    if (state.fpsExplicit) out.fps = Math.round(state.fps);
+    out.clips = serializeClipsForStorage(state.clips);
+    out.audioTracks = state.audioTracks.map((track) => ({
+      id: track.id,
+      source: {
+        kind: track.source.kind,
+        reference: track.source.reference,
+        uploadedAudio: track.source.uploadedAudio
+      },
+      spans: track.spans.map((span) => ({
+        id: span.id,
+        firstClipId: span.firstClipId,
+        lastClipId: span.lastClipId,
+        timelineStartSeconds: span.timelineStartSeconds,
+        timelineLengthSeconds: span.timelineLengthSeconds,
+        sourceStartSeconds: span.sourceStartSeconds,
+        clipStartOffsetSeconds: span.clipStartOffsetSeconds,
+        clipLengthSeconds: span.clipLengthSeconds
+      }))
+    }));
+    return JSON.stringify(out);
+  };
+  var hasArrayOfRecords = (owner, key) => {
+    if (!Object.hasOwn(owner, key)) {
+      return true;
+    }
+    const value = owner[key];
+    return Array.isArray(value) && value.every(isRecord);
+  };
+  var hasValidStoredCollections = (parsed) => {
+    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord)) {
+      return false;
+    }
+    if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
+      return false;
+    }
+    for (const clip of parsed.clips) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "audioSegments") || !hasArrayOfRecords(clip, "icLoras")) {
+        return false;
+      }
+      const stages = Array.isArray(clip.stages) ? clip.stages : [];
+      for (const stage of stages) {
+        if (!hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        ))) {
+          return false;
+        }
+      }
+    }
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    return tracks.every(
+      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
+    );
+  };
+  var decodeStoredDocument = (serialized, inherited) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !hasValidStoredCollections(parsed)) {
+        return null;
+      }
+      const dims = resolveRootDims(inherited, {
+        width: parsed.width,
+        height: parsed.height,
+        fps: parsed.fps
+      });
+      return {
+        dims,
+        clips: parsed.clips.map(
+          (entry) => normalizeClip(
+            entry,
+            getRootDefaults,
+            getDefaultStageModel,
+            dims.fps
+          )
+        ),
+        audioTracks: normalizeAudioTracks(parsed.audioTracks)
+      };
+    } catch {
+      return null;
+    }
+  };
+  var hasCanonicalStoredId = (value, seen) => {
+    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
+      return false;
+    }
+    seen.add(value.id);
+    return true;
+  };
+  var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
+        return true;
+      }
+      const seenIds = /* @__PURE__ */ new Set();
+      for (const rawClip of parsed.clips) {
+        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
+        for (const key of ["stages", "refs", "audioSegments"]) {
+          const children = rawClip[key];
+          if (!Array.isArray(children) || children.some(
+            (child) => !hasCanonicalStoredId(child, seenIds)
+          )) {
+            return true;
+          }
+        }
+        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
+          return true;
+        }
+      }
+      for (const rawTrack of parsed.audioTracks) {
+        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
+          (span) => !hasCanonicalStoredId(span, seenIds)
+        )) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return true;
+    }
   };
 
   // frontend/debugLog.ts
@@ -1670,6 +2972,549 @@
       return;
     }
     console.debug(`[VideoStages debug ${area}]`, message, ...details);
+  };
+
+  // frontend/architectures/clipIdentity.ts
+  var modelIdentityFromCatalog = (catalog, model) => {
+    if (!catalog) return null;
+    const entry = catalog.entries.find(
+      (candidate) => candidate.value === model
+    );
+    if (!entry?.architectureId || !entry.modelProfileId || !catalog.architectures.some(
+      (architecture) => architecture.id === entry.architectureId && architecture.profiles.some(
+        (profile) => profile.id === entry.modelProfileId
+      )
+    )) {
+      return null;
+    }
+    return {
+      architectureId: entry.architectureId,
+      modelProfileId: entry.modelProfileId
+    };
+  };
+  var deriveClipArchitectureIdentity = (clip, catalog) => {
+    if (!catalog) return null;
+    const identities = clip.stages.map((stage) => ({
+      stage,
+      identity: modelIdentityFromCatalog(catalog, stage.model)
+    }));
+    if (identities.some(
+      ({ stage, identity }) => !identity || stage.modelProfileId !== identity.modelProfileId
+    )) {
+      return null;
+    }
+    const authored = identities[0]?.identity ?? null;
+    if (authored && identities.some(
+      ({ identity }) => identity?.architectureId !== authored.architectureId
+    )) {
+      return null;
+    }
+    const descriptor = authored ? catalog.architectures.find(
+      (candidate) => candidate.id === authored.architectureId
+    ) : null;
+    if (clip.stages.length > 1 && !descriptor?.capabilities.architecture.includes("multi-stage")) {
+      return null;
+    }
+    const authoredIdentity = {
+      authoredArchitectureId: authored?.architectureId ?? null,
+      authoredModelProfileId: authored?.modelProfileId ?? null
+    };
+    if (clip.sourceVideo !== null && clip.stages.every((stage) => stage.skipped)) {
+      return {
+        architectureId: "none",
+        modelProfileId: "none",
+        ...authoredIdentity
+      };
+    }
+    if (authored) {
+      return {
+        architectureId: authored.architectureId,
+        modelProfileId: authored.modelProfileId,
+        ...authoredIdentity
+      };
+    }
+    if (clip.architecture === "none" && clip.modelProfileId === "none") {
+      return {
+        architectureId: "none",
+        modelProfileId: "none",
+        ...authoredIdentity
+      };
+    }
+    const validEmptyIdentity = catalog.architectures.find((architecture) => architecture.id === clip.architecture)?.profiles.some((profile) => profile.id === clip.modelProfileId) ?? false;
+    return validEmptyIdentity ? {
+      architectureId: clip.architecture,
+      modelProfileId: clip.modelProfileId,
+      ...authoredIdentity
+    } : null;
+  };
+  var reconcileClipArchitectureIdentity = (clip, catalog) => {
+    const identity = deriveClipArchitectureIdentity(clip, catalog);
+    if (!identity) return false;
+    clip.architecture = identity.architectureId;
+    clip.modelProfileId = identity.modelProfileId;
+    return true;
+  };
+
+  // frontend/clipSemantics.ts
+  var activeStageCount = (clip) => clip.stages.filter((stage) => !stage.skipped).length;
+  var isExecutableClip = (clip) => !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
+  var executableClipIndexes = (clips) => clips.flatMap((clip, index) => isExecutableClip(clip) ? [index] : []);
+
+  // frontend/architectures/policy/boundaryPolicy.ts
+  var forceCrossArchitectureCutsForConversion = (clips) => {
+    const indexes = executableClipIndexes(clips);
+    for (let position = 0; position < indexes.length - 1; position++) {
+      const left = clips[indexes[position]];
+      const right = clips[indexes[position + 1]];
+      if (left.architecture !== right.architecture) {
+        left.boundaryOut = "cut";
+      }
+    }
+  };
+  var createBoundaryCapabilityViews = (architectureById, forClip) => {
+    const forBoundary = (left, right, leftClipIdx = -1, rightClipIdx = null) => {
+      const leftView = forClip(left);
+      const leftDescriptor = architectureById.get(left.architecture);
+      const crossArchitecture = right !== null && left.architecture !== right.architecture;
+      const hasInitialReference = right?.refs.some(
+        (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
+      ) ?? false;
+      const rightHasActiveStage = right?.stages.some((stage) => !stage.skipped) ?? false;
+      const supportsMode = (mode) => {
+        const rule = leftDescriptor?.boundaryRules[mode];
+        if (!rule || rule.support === "unsupported") {
+          return mode === "cut" && !leftDescriptor;
+        }
+        const constraints = rule.constraints;
+        if (constraints?.sameArchitecture === true && crossArchitecture) {
+          return false;
+        }
+        if (constraints?.targetRequiresGeneratedEntry === true && right?.sourceVideo !== null) {
+          return false;
+        }
+        if (constraints?.targetRequiresStage === true && right !== null && !rightHasActiveStage) {
+          return false;
+        }
+        if (constraints?.targetDisallowsInitialReference === true && hasInitialReference) {
+          return false;
+        }
+        return true;
+      };
+      const ruleModes = ["cut", "continue", "crossfade"].filter(
+        supportsMode
+      );
+      const modes = ruleModes.length > 0 ? ruleModes : ["cut"];
+      const requestedRule = leftDescriptor?.boundaryRules[left.boundaryOut] ?? null;
+      const reason = crossArchitecture ? "Executable clips from different architectures can only use a cut." : modes.length === 1 && modes[0] === "cut" ? requestedRule?.reason ?? `${leftView.architectureLabel} only supports cut boundaries.` : "";
+      return {
+        leftClipIdx,
+        rightClipIdx,
+        modes,
+        crossArchitecture,
+        reason,
+        overlapConstraints: (mode) => boundaryOverlapConstraints(
+          leftDescriptor?.boundaryRules[mode] ?? null
+        ),
+        effective: (requested) => supportsMode(requested) ? requested : "cut"
+      };
+    };
+    const forBoundaryIndex = (clips, leftClipIdx) => {
+      const left = clips[leftClipIdx];
+      if (!left) {
+        throw new Error(`Missing left clip at index ${leftClipIdx}.`);
+      }
+      const executable = executableClipIndexes(clips);
+      const executablePosition = executable.indexOf(leftClipIdx);
+      const rightClipIdx = executablePosition >= 0 ? executable[executablePosition + 1] ?? null : null;
+      return forBoundary(
+        left,
+        rightClipIdx === null ? null : clips[rightClipIdx],
+        leftClipIdx,
+        rightClipIdx
+      );
+    };
+    return {
+      forBoundary,
+      forBoundaryIndex
+    };
+  };
+
+  // frontend/architectures/conditionalRules.ts
+  var CONDITIONAL_RULE_CODES = {
+    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
+    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
+    retakeExcludesReferences: "retake-frame-references-unsupported",
+    retakeRequiresSource: "retake-source-required",
+    uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
+  };
+  var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
+  var finiteConstraint = (rule, key, fallback) => {
+    const value = Number(rule.constraints?.[key]);
+    return Number.isFinite(value) ? value : fallback;
+  };
+  var DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
+  var audioReuseMinimumActiveStages = (rule) => rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages ? finiteConstraint(
+    rule,
+    "minimumActiveStages",
+    DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES
+  ) : DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES;
+  var evaluateConditionalRule = (rule, context) => {
+    const clip = context.clip;
+    switch (rule.code) {
+      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
+        return clip !== void 0 && activeStageCount(clip) < audioReuseMinimumActiveStages(rule);
+      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
+        return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
+      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
+        return clip !== void 0 && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode === true);
+      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
+        return clip !== void 0 && clip.sourceVideo === null && context.globalRefineMode !== true;
+      case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
+        const clips = context.timelineClips;
+        const hasActiveHdr = context.hasActiveHdr;
+        if (!clips || !hasActiveHdr) return false;
+        if (clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)) {
+          return false;
+        }
+        const hdr = clips.map(hasActiveHdr);
+        return hdr.some(Boolean) && hdr.some((value) => !value);
+      }
+      default:
+        return false;
+    }
+  };
+
+  // frontend/architectures/policy/featureValues.ts
+  var FEATURE_LABEL = {
+    multiStage: "Multiple stages",
+    sourceVideo: "Source video",
+    frameReferences: "Frame references",
+    retake: "Retakes",
+    majorPrompt: "Major prompts",
+    promptRelay: "Relay prompts",
+    clipAudio: "Clip audio",
+    audioReuse: "Captured stage audio reuse",
+    audioSegments: "Audio segments",
+    stageLoras: "Stage LoRAs",
+    icLora: "IC-LoRA",
+    hdr: "HDR",
+    upscale: "Stage upscaling"
+  };
+  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
+  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
+  var upscaleModeForMethod = (method) => {
+    const normalized = method.trim().toLowerCase();
+    if (normalized.startsWith("latentmodel-")) return "latent-model";
+    if (normalized.startsWith("latent-")) return "latent";
+    if (normalized.startsWith("pixel-")) return "pixel";
+    return "model";
+  };
+
+  // frontend/architectures/policy/clipStageViews.ts
+  var conditionalRuleFor = (clip, feature, descriptor) => {
+    const code = feature === "promptRelay" ? CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength : feature === "audioReuse" ? CONDITIONAL_RULE_CODES.audioReuseRequiresStages : null;
+    if (!code) return void 0;
+    const rule = conditionalRule(descriptor.rules, code);
+    return rule && evaluateConditionalRule(rule, { clip }) ? rule : void 0;
+  };
+  var scopedFeatureSupport = (feature, descriptor, profileId) => {
+    const capability = descriptor.capabilities;
+    const profile = descriptor.profiles.find((entry) => entry.id === profileId);
+    switch (feature) {
+      case "multiStage":
+        return capability.architecture.includes("multi-stage");
+      case "sourceVideo":
+        return capability.clip.includes("source-video");
+      case "frameReferences":
+        return capability.clip.includes("references") && capability.stage.includes("frame-references");
+      case "retake":
+        return capability.clip.includes("retake");
+      case "majorPrompt":
+        return capability.clip.includes("prompts");
+      case "promptRelay":
+        return capability.clip.includes("prompt-relay");
+      case "clipAudio":
+      case "audioReuse":
+        return capability.clip.includes("audio-sources");
+      case "audioSegments":
+        return capability.clip.includes("audio-segments");
+      case "stageLoras":
+        return capability.stage.includes("lora") && (profile === void 0 || profile.capabilities.includes("normal-lora"));
+      case "icLora":
+        return capability.stage.includes("ic-lora");
+      case "hdr":
+        return capability.stage.includes("hdr");
+      case "upscale":
+        return capability.upscaleModes.length > 0;
+    }
+  };
+  var createClipStageCapabilityViews = (architectureById) => {
+    const forClip = (clip) => {
+      const descriptor = architectureById.get(clip.architecture);
+      const label = descriptor?.label ?? (clip.architecture === "none" ? "source-only clips" : `unknown architecture '${clip.architecture}'`);
+      const decision = (feature) => {
+        if (!descriptor) {
+          return {
+            supported: false,
+            reason: noArchitectureReason(feature),
+            rule: null
+          };
+        }
+        const conditionalRule2 = conditionalRuleFor(
+          clip,
+          feature,
+          descriptor
+        );
+        const supported = scopedFeatureSupport(
+          feature,
+          descriptor,
+          clip.modelProfileId
+        ) && !conditionalRule2;
+        return {
+          supported,
+          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
+          rule: conditionalRule2 ?? null
+        };
+      };
+      return {
+        architectureId: clip.architecture,
+        architectureLabel: label,
+        known: descriptor !== void 0,
+        audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+    };
+    const forStage = (clip, stage) => {
+      const view = forClip(clip);
+      const descriptor = architectureById.get(clip.architecture);
+      const profile = descriptor?.profiles.find(
+        (entry) => entry.id === stage.modelProfileId
+      );
+      const decision = (feature) => {
+        if (feature === "stageLoras" && descriptor) {
+          const supported = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
+          return {
+            supported,
+            reason: supported ? "" : `Stage LoRAs require normal-LoRA support in ${descriptor.label}.`,
+            rule: null
+          };
+        }
+        if (feature === "sampler" || feature === "scheduler") {
+          const required = feature === "sampler" ? "sampler-selection" : "scheduler-selection";
+          const supported = profile?.capabilities.includes(required) === true;
+          return {
+            supported,
+            reason: supported ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
+            rule: null
+          };
+        }
+        return view.decision(feature);
+      };
+      return {
+        upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+    };
+    return { forClip, forStage };
+  };
+
+  // frontend/architectures/policy/identity.ts
+  var reconcileSourcedClipIdentity = (clip, catalog) => {
+    reconcileClipArchitectureIdentity(clip, catalog);
+  };
+
+  // frontend/architectures/policy.ts
+  var createCapabilityViewResolver = (catalog) => {
+    const architectureById = new Map(
+      catalog.architectures.map((entry) => [entry.id, entry])
+    );
+    const clipStage = createClipStageCapabilityViews(architectureById);
+    const boundaries = createBoundaryCapabilityViews(
+      architectureById,
+      clipStage.forClip
+    );
+    return {
+      catalog,
+      ...clipStage,
+      ...boundaries,
+      executableClipIndexes
+    };
+  };
+
+  // frontend/architectures/conversion/plan.ts
+  var countLabel = (count, singular) => `${count} ${singular}${count === 1 ? "" : "s"}`;
+  var ownId = (value) => typeof value === "object" && value !== null && "id" in value && typeof value.id === "string" ? value.id : null;
+  var collectIds = (values) => values.map(ownId).filter((id) => id !== null);
+  var resolveArchitectureRetarget = (requested, catalog) => {
+    if (!catalog) {
+      return null;
+    }
+    const model = catalog.entries.find(
+      (entry) => entry.value === requested.model
+    );
+    if (!model?.architectureId || !model.modelProfileId || model.architectureId !== requested.architectureId || model.modelProfileId !== requested.modelProfileId) {
+      return null;
+    }
+    const descriptor = catalog.architectures.find(
+      (entry) => entry.id === model.architectureId
+    );
+    const profile = descriptor?.profiles.find(
+      (entry) => entry.id === model.modelProfileId
+    );
+    if (!descriptor || !profile) {
+      return null;
+    }
+    return {
+      architectureId: descriptor.id,
+      modelProfileId: profile.id,
+      model: model.value,
+      capabilities: structuredClone(descriptor.capabilities),
+      profileCapabilities: [...profile.capabilities]
+    };
+  };
+  var planArchitectureConversion = (source, requested, catalog) => {
+    const target = resolveArchitectureRetarget(requested, catalog);
+    if (!target) {
+      return null;
+    }
+    const clip = structuredClone(source);
+    const removals = [];
+    const removedEntityIds = [];
+    const clipCapabilities = target.capabilities.clip;
+    const stageCapabilities = target.capabilities.stage;
+    const supportsMultipleStages = target.capabilities.architecture.includes("multi-stage");
+    const supportsReferences = clipCapabilities.includes("references") && stageCapabilities.includes("frame-references");
+    const supportsNormalLoras = stageCapabilities.includes("lora") && target.profileCapabilities.includes("normal-lora");
+    clip.architecture = target.architectureId;
+    clip.modelProfileId = target.modelProfileId;
+    if (!supportsMultipleStages && clip.stages.length > 1) {
+      const removedStages = clip.stages.slice(1);
+      removals.push(countLabel(removedStages.length, "later authored stage"));
+      removedEntityIds.push(...collectIds(removedStages));
+      clip.stages = clip.stages.slice(0, 1);
+    }
+    if (!supportsReferences && clip.refs.length > 0) {
+      removals.push(countLabel(clip.refs.length, "frame reference"));
+      removedEntityIds.push(...collectIds(clip.refs));
+      clip.refs = [];
+    }
+    let removedStageLoras = 0;
+    let removedUpscaleSettings = 0;
+    for (const stage of clip.stages) {
+      stage.model = target.model;
+      stage.modelProfileId = target.modelProfileId;
+      if (!supportsReferences) {
+        stage.refStrengths = [];
+      }
+      if (!supportsNormalLoras && stage.loras.length > 0) {
+        removedStageLoras += stage.loras.length;
+        stage.loras = [];
+      }
+      if (stage.upscale !== 1 && !target.capabilities.upscaleModes.includes(
+        upscaleModeForMethod(stage.upscaleMethod)
+      )) {
+        removedUpscaleSettings++;
+        stage.upscale = 1;
+      }
+    }
+    if (removedStageLoras > 0) {
+      removals.push(countLabel(removedStageLoras, "stage LoRA"));
+    }
+    if (removedUpscaleSettings > 0) {
+      removals.push("stage upscale settings");
+    }
+    if (!stageCapabilities.includes("ic-lora") && clip.icLoras.length > 0) {
+      removals.push(countLabel(clip.icLoras.length, "IC-LoRA"));
+      clip.icLoras = [];
+      clip.clipLengthFromControlNet = false;
+    } else if (stageCapabilities.includes("ic-lora")) {
+      if (!stageCapabilities.includes("hdr")) {
+        const hdrCount = clip.icLoras.filter(
+          (entry) => isArchitectureHdrFeature(source.architecture, entry)
+        ).length;
+        if (hdrCount > 0) {
+          removals.push(countLabel(hdrCount, "HDR IC-LoRA"));
+          clip.icLoras = clip.icLoras.filter(
+            (entry) => !isArchitectureHdrFeature(source.architecture, entry)
+          );
+        }
+      }
+      let repairedTargets = false;
+      for (const entry of clip.icLoras) {
+        if (entry.stage >= clip.stages.length) {
+          entry.stage = IC_LORA_STAGE_ALL;
+          repairedTargets = true;
+        }
+        if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT && clip.sourceVideo === null) {
+          entry.source = IC_LORA_SOURCE_UPLOAD;
+        }
+      }
+      if (repairedTargets) {
+        removals.push("IC-LoRA targets on removed stages");
+      }
+    }
+    if (!clipCapabilities.includes("retake") && clip.retake !== null) {
+      removals.push("retake");
+      const id = ownId(clip.retake);
+      if (id) removedEntityIds.push(id);
+      clip.retake = null;
+    }
+    if (!clipCapabilities.includes("prompts") && clip.prompt.trim()) {
+      removals.push("major prompt");
+      clip.prompt = "";
+    }
+    if (!clipCapabilities.includes("prompt-relay") && clip.promptWindows.length > 0) {
+      removals.push(countLabel(clip.promptWindows.length, "relay prompt"));
+      removedEntityIds.push(...collectIds(clip.promptWindows));
+      clip.promptWindows = [];
+    }
+    if (!clipCapabilities.includes("audio-segments") && clip.audioSegments.length > 0) {
+      removals.push(countLabel(clip.audioSegments.length, "audio segment"));
+      removedEntityIds.push(...collectIds(clip.audioSegments));
+      clip.audioSegments = [];
+    }
+    if (!clipCapabilities.includes("source-video") && clip.sourceVideo) {
+      removals.push("source video");
+      clip.sourceVideo = null;
+    }
+    if (!clipCapabilities.includes("audio-sources") || !isAllowedAudioSource(
+      target.capabilities.audioSourceKinds,
+      clip.audioSource
+    )) {
+      const hasAudioSettings = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.clipLengthFromAudio || clip.reuseAudio;
+      if (hasAudioSettings) {
+        removals.push("clip audio source settings");
+      }
+      clip.audioSource = defaultAuthoringAudioSource(
+        target.capabilities.audioSourceKinds
+      );
+      clip.uploadedAudio = null;
+      clip.saveAudioTrack = false;
+      clip.clipLengthFromAudio = false;
+      clip.reuseAudio = false;
+    }
+    return {
+      clip,
+      removals,
+      removedEntityIds,
+      selectionAffected: removedEntityIds.length > 0
+    };
   };
 
   // frontend/documentDiff.ts
@@ -1712,7 +3557,6 @@
     "refStrengths",
     "upscale",
     "upscaleMethod",
-    "model",
     "steps",
     "cfgScale",
     "sampler",
@@ -1755,7 +3599,7 @@
     "clipLengthSeconds"
   ];
   var clone = (value) => structuredClone(value);
-  var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var deepEqual = (left, right) => {
     if (Object.is(left, right)) {
       return true;
@@ -1763,7 +3607,7 @@
     if (Array.isArray(left) || Array.isArray(right)) {
       return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((value, index) => deepEqual(value, right[index]));
     }
-    if (!isRecord2(left) || !isRecord2(right)) {
+    if (!isRecord3(left) || !isRecord3(right)) {
       return false;
     }
     const leftKeys = Object.keys(left).sort();
@@ -1873,6 +3717,18 @@
       beforeStageId
     }),
     patch: (previous, next) => {
+      if (previous.model !== next.model || previous.modelProfileId !== next.modelProfileId) {
+        phases.patches.push({
+          type: "stage.retarget-model",
+          clipId: after.id,
+          stageId: next.id,
+          target: {
+            architectureId: after.architecture,
+            modelProfileId: next.modelProfileId,
+            model: next.model
+          }
+        });
+      }
       const patch = changedPatch(previous, next, STAGE_PATCH_KEYS);
       if (hasPatch(patch)) {
         phases.patches.push({
@@ -2050,7 +3906,7 @@
       }
     }
   });
-  var diffClips = (before, after, phases) => diffEntityList(before.clips, after.clips, phases, {
+  var diffClips = (before, after, phases, context) => diffEntityList(before.clips, after.clips, phases, {
     remove: (clipId) => ({ type: "clip.remove", clipId }),
     add: (clip, beforeClipId) => ({
       type: "clip.add",
@@ -2063,7 +3919,84 @@
       beforeClipId
     }),
     patch: (previous, next) => {
-      const patch = changedPatch(previous, next, CLIP_PATCH_KEYS);
+      const changesEffectiveIdentity = previous.architecture !== next.architecture || previous.modelProfileId !== next.modelProfileId;
+      const previousIdentity = deriveClipArchitectureIdentity(
+        previous,
+        context.architectureCatalog
+      );
+      const nextIdentity = deriveClipArchitectureIdentity(
+        next,
+        context.architectureCatalog
+      );
+      if (changesEffectiveIdentity) {
+        if (!nextIdentity || nextIdentity.architectureId !== next.architecture || nextIdentity.modelProfileId !== next.modelProfileId) {
+          throw new DocumentDiffError("architecture-invariant");
+        }
+      }
+      const changesAuthoredArchitecture = previousIdentity?.authoredArchitectureId !== null && previousIdentity?.authoredArchitectureId !== void 0 && nextIdentity?.authoredArchitectureId !== null && nextIdentity?.authoredArchitectureId !== void 0 && previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId;
+      if (changesEffectiveIdentity && !changesAuthoredArchitecture && (previousIdentity?.authoredArchitectureId == null || nextIdentity?.authoredArchitectureId == null || previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId)) {
+        throw new DocumentDiffError("architecture-invariant");
+      }
+      let diffBase = previous;
+      if (changesAuthoredArchitecture) {
+        const catalog = context.architectureCatalog;
+        const sourceArchitectureId = previousIdentity?.authoredArchitectureId;
+        const targetStage = next.stages[0];
+        const targetEntry = catalog?.entries.find(
+          (entry) => entry.value === targetStage?.model
+        );
+        const targetDescriptor = catalog?.architectures.find(
+          (entry) => entry.id === targetEntry?.architectureId
+        );
+        if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId || targetEntry.modelProfileId !== targetStage.modelProfileId) {
+          throw new DocumentDiffError("architecture-invariant");
+        }
+        const target = {
+          architectureId: targetEntry.architectureId,
+          modelProfileId: targetEntry.modelProfileId,
+          model: targetEntry.value,
+          capabilities: clone(targetDescriptor.capabilities)
+        };
+        const requestedForCleanup = clone(next);
+        requestedForCleanup.architecture = sourceArchitectureId;
+        const requestedPlan = planArchitectureConversion(
+          requestedForCleanup,
+          target,
+          catalog
+        );
+        const baselinePlan = planArchitectureConversion(
+          previous,
+          target,
+          catalog
+        );
+        if (!requestedPlan || !baselinePlan) {
+          throw new DocumentDiffError("architecture-invariant");
+        }
+        const cleanedRequested = requestedPlan.clip;
+        if (cleanedRequested.stages.length === next.stages.length) {
+          for (let index = 0; index < next.stages.length; index++) {
+            cleanedRequested.stages[index].model = next.stages[index].model;
+            cleanedRequested.stages[index].modelProfileId = next.stages[index].modelProfileId;
+          }
+        }
+        if (!reconcileClipArchitectureIdentity(
+          cleanedRequested,
+          catalog
+        ) || !deepEqual(cleanedRequested, next)) {
+          throw new DocumentDiffError("architecture-invariant");
+        }
+        const convertedBase = baselinePlan.clip;
+        if (!reconcileClipArchitectureIdentity(convertedBase, catalog)) {
+          throw new DocumentDiffError("architecture-invariant");
+        }
+        phases.conversions.push({
+          type: "clip.convert-architecture",
+          clipId: next.id,
+          target
+        });
+        diffBase = convertedBase;
+      }
+      const patch = changedPatch(diffBase, next, CLIP_PATCH_KEYS);
       if (hasPatch(patch)) {
         phases.patches.push({
           type: "clip.patch",
@@ -2071,7 +4004,7 @@
           patch
         });
       }
-      diffClipChildren(previous, next, phases);
+      diffClipChildren(diffBase, next, phases);
     }
   });
   var diffAudioTracks = (before, after, phases) => diffEntityList(before.audioTracks, after.audioTracks, phases, {
@@ -2098,22 +4031,40 @@
       diffSpans(previous, next, phases);
     }
   });
-  var diffDocuments = (before, after) => {
+  var diffDocuments = (before, after, context = { architectureCatalog: null }) => {
     validateDocumentIds(before);
     validateDocumentIds(after);
     const phases = {
+      conversions: [],
       removes: [],
       adds: [],
       moves: [],
       patches: []
     };
     const rootPatch = changedPatch(before, after, ROOT_PATCH_KEYS);
-    diffClips(before, after, phases);
+    diffClips(before, after, phases, context);
+    if (phases.conversions.length > 0) {
+      const forcedFinalClips = clone(after.clips);
+      forceCrossArchitectureCutsForConversion(forcedFinalClips);
+      if (forcedFinalClips.some(
+        (clip, index) => clip.boundaryOut !== after.clips[index]?.boundaryOut
+      )) {
+        throw new DocumentDiffError("architecture-invariant");
+      }
+      for (const clip of after.clips) {
+        phases.patches.push({
+          type: "clip.patch",
+          clipId: clip.id,
+          patch: { boundaryOut: clip.boundaryOut }
+        });
+      }
+    }
     diffAudioTracks(before, after, phases);
     return {
       type: "batch",
       commands: [
         ...hasPatch(rootPatch) ? [{ type: "root.patch", patch: rootPatch }] : [],
+        ...phases.conversions,
         ...phases.removes,
         ...phases.adds,
         ...phases.moves,
@@ -2122,570 +4073,24 @@
     };
   };
 
-  // frontend/identity.ts
-  var fallbackSequence = 0;
-  var normalizedExistingId = (value) => {
-    if (typeof value !== "string") {
-      return null;
-    }
-    const id = value.trim();
-    return id.length > 0 ? id : null;
-  };
-  var createEntityId = (kind) => {
-    const randomUuid = globalThis.crypto?.randomUUID?.();
-    if (randomUuid) {
-      return `${kind}_${randomUuid}`;
-    }
-    fallbackSequence += 1;
-    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
-  };
-  var assignUniqueId = (entry, reserved, used) => {
-    const reservedId = reserved.get(entry.entity);
-    if (reservedId) {
-      entry.entity.id = reservedId;
-      return reservedId;
-    }
-    const base = `${entry.kind}_legacy_${entry.migrationPath}`;
-    let id = base;
-    let collision = 1;
-    while (used.has(id)) {
-      collision += 1;
-      id = `${base}_${collision}`;
-    }
-    entry.entity.id = id;
-    used.add(id);
-    return id;
-  };
-  var clipIdentityEntries = (clips) => {
-    const entries = [];
-    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
-      const clip = clips[clipIndex];
-      entries.push({
-        entity: clip,
-        kind: "clip",
-        migrationPath: `${clipIndex}`
-      });
-      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
-        entries.push({
-          entity: clip.stages[stageIndex],
-          kind: "stage",
-          migrationPath: `${clipIndex}_${stageIndex}`
-        });
-      }
-      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
-        entries.push({
-          entity: clip.refs[refIndex],
-          kind: "ref",
-          migrationPath: `${clipIndex}_${refIndex}`
-        });
-      }
-      for (let segmentIndex = 0; segmentIndex < clip.audioSegments.length; segmentIndex++) {
-        entries.push({
-          entity: clip.audioSegments[segmentIndex],
-          kind: "audio_segment",
-          migrationPath: `${clipIndex}_${segmentIndex}`
-        });
-      }
-      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
-        entries.push({
-          entity: clip.promptWindows[windowIndex],
-          kind: "prompt_window",
-          migrationPath: `${clipIndex}_${windowIndex}`
-        });
-      }
-      if (clip.retake) {
-        entries.push({
-          entity: clip.retake,
-          kind: "retake",
-          migrationPath: `${clipIndex}`
-        });
-      }
-    }
-    return entries;
-  };
-  var audioTrackIdentityEntries = (tracks) => {
-    const entries = [];
-    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
-      const track = tracks[trackIndex];
-      entries.push({
-        entity: track,
-        kind: "audio_track",
-        migrationPath: `${trackIndex}`
-      });
-      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
-        entries.push({
-          entity: track.spans[spanIndex],
-          kind: "audio_span",
-          migrationPath: `${trackIndex}_${spanIndex}`
-        });
-      }
-    }
-    return entries;
-  };
-  var assignEntryIdentities = (entries, used) => {
-    const reserved = /* @__PURE__ */ new Map();
-    for (const { entity } of entries) {
-      const existing = normalizedExistingId(entity.id);
-      if (existing && !used.has(existing)) {
-        reserved.set(entity, existing);
-        used.add(existing);
-      }
-    }
-    for (const entry of entries) {
-      assignUniqueId(entry, reserved, used);
-    }
-  };
-  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
-    assignEntryIdentities(clipIdentityEntries(clips), seen);
-    return seen;
-  };
-  function ensureAuthoringDocumentIdentity(state) {
-    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    state.audioTracks ??= [];
-    assignEntryIdentities(
-      [
-        ...clipIdentityEntries(state.clips),
-        ...audioTrackIdentityEntries(state.audioTracks)
-      ],
-      /* @__PURE__ */ new Set()
-    );
-  }
-  var collectAuthoringEntityIds = (state) => {
-    const ids = [];
-    for (const clip of state.clips) {
-      if (clip.id) ids.push(clip.id);
-      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
-      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
-      for (const segment of clip.audioSegments) {
-        if (segment.id) ids.push(segment.id);
-      }
-      for (const window2 of clip.promptWindows) {
-        if (window2.id) ids.push(window2.id);
-      }
-      if (clip.retake?.id) ids.push(clip.retake.id);
-    }
-    for (const track of state.audioTracks ?? []) {
-      if (track.id) ids.push(track.id);
-      for (const span of track.spans) if (span.id) ids.push(span.id);
-    }
-    return ids;
-  };
-
-  // frontend/promptSegments.ts
-  var BOUNDARY_RE = /<videoclip(?=[>[])|<videostages\[/gi;
-  var TAG_RE = /^<videoclip(?:\[([^\]]*)\])?(?::([^>]*))?>$/i;
-  var INDEX_RE = /^\d+$/;
-  var FLOAT_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
-  var preserved = {
-    owned: null,
-    clip: null,
-    window: null
-  };
-  var parseWindowValue = (value) => {
-    const trimmed = value.trim();
-    if (trimmed.length === 0 || trimmed.includes(",")) {
-      return null;
-    }
-    const dash = trimmed.indexOf("-");
-    if (dash <= 0 || dash >= trimmed.length - 1) {
-      return null;
-    }
-    const left = trimmed.slice(0, dash).trim();
-    const right = trimmed.slice(dash + 1).trim();
-    if (!FLOAT_RE.test(left) || !FLOAT_RE.test(right)) {
-      return null;
-    }
-    const start = Math.max(0, Number.parseFloat(left));
-    const end = Number.parseFloat(right);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-      return null;
-    }
-    return { start, end };
-  };
-  var classify = (tagRaw) => {
-    const match = TAG_RE.exec(tagRaw);
-    if (!match) {
-      return preserved;
-    }
-    const bracket = match[1];
-    const value = match[2];
-    if (bracket === void 0) {
-      return preserved;
-    }
-    const tokens = bracket.split(",").map((token) => token.trim());
-    if (tokens.length !== 1 || !INDEX_RE.test(tokens[0])) {
-      return preserved;
-    }
-    const clip = Number.parseInt(tokens[0], 10);
-    if (value === void 0) {
-      return { owned: "section", clip, window: null };
-    }
-    const window2 = parseWindowValue(value);
-    if (window2) {
-      return { owned: "window", clip, window: window2 };
-    }
-    return preserved;
-  };
-  var tokenizePrompt = (prompt) => {
-    const text = prompt ?? "";
-    BOUNDARY_RE.lastIndex = 0;
-    const starts = [];
-    for (let match = BOUNDARY_RE.exec(text); match !== null; match = BOUNDARY_RE.exec(text)) {
-      starts.push(match.index);
-    }
-    if (starts.length === 0) {
-      return { leading: text, tags: [] };
-    }
-    const leading = text.slice(0, starts[0]);
-    const tags = [];
-    for (let i = 0; i < starts.length; i++) {
-      const start = starts[i];
-      const nextStart = i + 1 < starts.length ? starts[i + 1] : text.length;
-      const span = text.slice(start, nextStart);
-      const close = span.indexOf(">");
-      const tagRaw = close < 0 ? span : span.slice(0, close + 1);
-      const body = close < 0 ? "" : span.slice(close + 1);
-      tags.push({ tagRaw, body, ...classify(tagRaw) });
-    }
-    return { leading, tags };
-  };
-  var formatSeconds = (value) => Number.parseFloat(value.toFixed(3)).toString();
-  var authorClip = (index, clip) => {
-    if (!clip) {
-      return "";
-    }
-    const pieces = [];
-    const mainPrompt = (clip.prompt ?? "").trim();
-    if (mainPrompt) {
-      pieces.push(`<videoclip[${index}]>${mainPrompt}`);
-    }
-    const windows = [...clip.windows ?? []].filter((w) => w.duration > 0).sort((a, b) => a.start - b.start);
-    for (const win of windows) {
-      const start = Math.max(0, win.start);
-      const startText = formatSeconds(start);
-      const endText = formatSeconds(start + win.duration);
-      const winPrompt = (win.prompt ?? "").trim();
-      pieces.push(
-        `<videoclip[${index}]:${startText}-${endText}>${winPrompt}`
-      );
-    }
-    return pieces.join("\n");
-  };
-  var serializeClipPrompts = (prompt, clips) => {
-    const { leading, tags } = tokenizePrompt(prompt);
-    const blocks = [];
-    const leadTrimmed = leading.trimEnd();
-    if (leadTrimmed) {
-      blocks.push(leadTrimmed);
-    }
-    const emitted = /* @__PURE__ */ new Set();
-    const emitClip = (index) => {
-      if (emitted.has(index)) {
-        return;
-      }
-      emitted.add(index);
-      const block = authorClip(index, clips[index]);
-      if (block) {
-        blocks.push(block);
-      }
-    };
-    for (const tag of tags) {
-      if (tag.owned !== null) {
-        const index = tag.clip ?? -1;
-        if (index >= 0 && index < clips.length) {
-          emitClip(index);
-        }
-        continue;
-      }
-      const raw = (tag.tagRaw + tag.body).trimEnd();
-      if (raw) {
-        blocks.push(raw);
-      }
-    }
-    for (let index = 0; index < clips.length; index++) {
-      emitClip(index);
-    }
-    return blocks.join("\n");
-  };
-  var parseClipPrompts = (prompt) => {
-    const { tags } = tokenizePrompt(prompt);
-    const sections = /* @__PURE__ */ new Map();
-    const windows = /* @__PURE__ */ new Map();
-    for (const tag of tags) {
-      if (tag.owned === "section" && tag.clip !== null) {
-        if (!sections.has(tag.clip)) {
-          sections.set(tag.clip, tag.body.trim());
-        }
-      } else if (tag.owned === "window" && tag.clip !== null && tag.window) {
-        const list = windows.get(tag.clip) ?? [];
-        list.push({
-          start: Math.max(0, tag.window.start),
-          duration: tag.window.end - tag.window.start,
-          prompt: tag.body.trim()
-        });
-        windows.set(tag.clip, list);
-      }
-    }
-    for (const list of windows.values()) {
-      list.sort((a, b) => a.start - b.start);
-    }
-    return { sections, windows };
-  };
-  var extractGlobalPrompt = (prompt) => tokenizePrompt(prompt).leading.trim();
-
-  // frontend/hostDom.ts
-  var utils = {
-    getInputElement: (id) => getLtxHostBridge().getInput(id),
-    getSelectElement: (id) => getLtxHostBridge().getSelect(id),
-    getSelectValues: (select2) => getLtxHostBridge().getSelectOptions(select2).values,
-    getSelectLabels: (select2) => getLtxHostBridge().getSelectOptions(select2).labels
-  };
-
-  // frontend/ltxCapabilities.ts
-  var LTX_V2_COMPAT_ID = "ltxv2";
-  var LTX_NAME_PATTERN = /(^|[/\\_. -])ltx(?:v?2(?:[_. -]\d+)?)?($|[/\\_. -])/i;
-  var compactCompatId = (value) => `${value ?? ""}`.trim().replace(/[^a-z0-9]/gi, "").toLowerCase();
-  var isLtxV2CompatId = (value) => compactCompatId(value) === LTX_V2_COMPAT_ID;
-  var modelCompatId = (modelName) => {
-    return getLtxHostBridge().getModelCompatId(modelName);
-  };
-  var isLtxVideoModelValue = (modelName) => {
-    const value = `${modelName ?? ""}`.trim();
-    if (!value) {
-      return false;
-    }
-    const compatId = modelCompatId(value);
-    if (compatId !== null) {
-      return isLtxV2CompatId(compatId);
-    }
-    return LTX_NAME_PATTERN.test(value);
-  };
-  var filterLtxModelOptions = (values, labels) => {
-    const filtered = { values: [], labels: [] };
-    values.forEach((value, index) => {
-      if (!isLtxVideoModelValue(value)) {
-        return;
-      }
-      filtered.values.push(value);
-      filtered.labels.push(labels[index] ?? value);
-    });
-    return filtered;
-  };
-  var isCurrentRootLtxVideoModel = (modelName) => {
-    const value = `${modelName ?? ""}`.trim();
-    if (!value) {
-      return false;
-    }
-    const compatId = modelCompatId(value);
-    if (compatId !== null) {
-      return isLtxV2CompatId(compatId);
-    }
-    if (LTX_NAME_PATTERN.test(value)) {
-      return true;
-    }
-    return isLtxV2CompatId(getLtxHostBridge().getCurrentModelCompatId());
-  };
-
-  // frontend/swarmInputs.ts
-  var DATA_INPUT_ID = "input_videostages";
-  var warnedMissingDataInput = false;
-  var getPromptInput = () => getLtxHostBridge().getTextInput("input_prompt");
-  var getDataInput = () => {
-    const el = getLtxHostBridge().getTextInput(DATA_INPUT_ID);
-    if (el) {
-      return el;
-    }
-    if (!warnedMissingDataInput) {
-      warnedMissingDataInput = true;
-      console.warn(
-        `VideoStages: Data param input not found (#${DATA_INPUT_ID}).`
-      );
-    }
-    return null;
-  };
-  var readDataParam = () => getDataInput()?.value ?? "";
-  var writeDataParam = (json) => {
-    const el = getDataInput();
-    if (!el) {
-      return;
-    }
-    el.value = json;
-  };
-  var readStateToken = () => `${readDataParam()}\0${getPromptInput()?.value ?? ""}`;
-  var writeClipPrompts = (clips) => {
-    const el = getPromptInput();
-    if (!el) {
-      return;
-    }
-    el.value = serializeClipPrompts(el.value ?? "", clips);
-  };
-  var notifyCarrierChanged = () => {
-    const dataEl = getDataInput();
-    if (dataEl) {
-      getLtxHostBridge().notifyChanged(dataEl);
-    }
-    const promptEl = getPromptInput();
-    if (promptEl) {
-      getLtxHostBridge().notifyChanged(promptEl, true);
-    }
-  };
-  var readGlobalPrompt = () => extractGlobalPrompt(getPromptInput()?.value ?? "");
-  var getGroupToggle = () => getLtxHostBridge().getInput("input_group_content_videostages_toggle");
-  var getRootModelInput = () => getLtxHostBridge().getInput("input_model");
-  var getBase2EditStageRefs = () => {
-    const snapshot = getLtxHostBridge().getBase2EditRegistry();
-    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
-      return [];
-    }
-    const refs = snapshot.refs.map((value) => {
-      const stageIndex = parseBase2EditStageIndex(`${value ?? ""}`);
-      return stageIndex == null ? null : `edit${stageIndex}`;
-    }).filter((value) => !!value);
-    return [...new Set(refs)].sort(
-      (left, right) => (parseBase2EditStageIndex(left) ?? 0) - (parseBase2EditStageIndex(right) ?? 0)
-    );
-  };
-  var isRootTextToVideoModel = () => {
-    const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
-    if (!modelName) {
-      return false;
-    }
-    return isCurrentRootLtxVideoModel(modelName);
-  };
-  var getDropdownOptions = (paramId, fallbackSelectId) => {
-    const registered = getLtxHostBridge().getParamOptions(paramId);
-    if (registered) {
-      return registered;
-    }
-    const bridge2 = getLtxHostBridge();
-    return bridge2.getSelectOptions(bridge2.getSelect(fallbackSelectId));
-  };
-  var isVideoStagesEnabled = () => {
-    const toggler = getGroupToggle();
-    return toggler ? toggler.checked : false;
-  };
-  var setVideoStagesEnabled = (enabled) => {
-    const toggler = getGroupToggle();
-    if (!toggler || toggler.checked === enabled) {
-      return;
-    }
-    toggler.checked = enabled;
-    getLtxHostBridge().notifyChanged(toggler);
-  };
-
-  // frontend/rootDefaults.ts
-  var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
-  var WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
-  var HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
-  var rootVideoFpsInput = () => getLtxHostBridge().getRootVideoFpsInput();
-  var firstPresentInput = (...ids) => {
-    for (let i = 0; i < ids.length; i++) {
-      const el = utils.getInputElement(ids[i]);
-      if (el) {
-        return el;
-      }
-    }
-    return null;
-  };
-  var getDefaultStageModel = (modelValues) => {
-    if (isRootTextToVideoModel()) {
-      const modelName = trimDomValue(getRootModelInput());
-      if (modelName && isLtxVideoModelValue(modelName)) {
-        return modelName;
-      }
-    }
-    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
-    if (videoModel && isLtxVideoModelValue(videoModel)) {
-      return videoModel;
-    }
-    return modelValues[0] ?? "";
-  };
-  var readInheritedDimsSignature = () => {
-    const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
-    const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
-    const fps = trimDomValue(rootVideoFpsInput());
-    return `${width}|${height}|${fps}`;
-  };
-  var getRootDefaults = () => {
-    let model = utils.getSelectElement("input_videomodel");
-    if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
-      model = utils.getSelectElement("input_model");
-    }
-    const rawLoras = getDropdownOptions("loras", "input_loras");
-    const loras = { values: [], labels: [] };
-    rawLoras.values.forEach((value, i) => {
-      if (`${value}`.replace(/\s+/g, "").toLowerCase() !== "(none)") {
-        loras.values.push(value);
-        loras.labels.push(rawLoras.labels[i] ?? value);
-      }
-    });
-    const sampler = getDropdownOptions("sampler", "input_sampler");
-    const scheduler = getDropdownOptions("scheduler", "input_scheduler");
-    const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
-    const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
-    const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
-    const models = filterLtxModelOptions(
-      utils.getSelectValues(model),
-      utils.getSelectLabels(model)
-    );
-    const steps = firstPresentInput("input_videosteps", "input_steps");
-    const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
-    const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
-    const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
-    const fpsInput = rootVideoFpsInput();
-    const framesInput = firstPresentInput(
-      "input_videoframes",
-      "input_text2videoframes"
-    );
-    const fps = Math.max(1, Math.round(toNumber(fpsInput?.value, 24)));
-    const frames = Math.max(1, Math.round(toNumber(framesInput?.value, 24)));
-    return {
-      modelValues: models.values,
-      modelLabels: models.labels,
-      loraValues: loras.values,
-      loraLabels: loras.labels,
-      samplerValues: sampler.values,
-      samplerLabels: sampler.labels,
-      schedulerValues: scheduler.values,
-      schedulerLabels: scheduler.labels,
-      upscaleMethodValues,
-      upscaleMethodLabels,
-      width: Math.max(
-        ROOT_DIMENSION_MIN,
-        Math.round(toNumber(widthInput?.value, 1024))
-      ),
-      height: Math.max(
-        ROOT_DIMENSION_MIN,
-        Math.round(toNumber(heightInput?.value, 1024))
-      ),
-      fps,
-      frames,
-      control: 0.5,
-      controlMin: 0,
-      controlMax: 1,
-      controlStep: 0.05,
-      upscale: 1,
-      upscaleMin: 0.25,
-      upscaleMax: 4,
-      upscaleStep: 0.25,
-      steps: 8,
-      stepsMin: Math.max(1, Math.round(toNumber(steps?.min, 1))),
-      stepsMax: Math.min(
-        50,
-        Math.max(1, Math.round(toNumber(steps?.max, 200)))
-      ),
-      stepsStep: Math.max(1, Math.round(toNumber(steps?.step, 1))),
-      cfgScale: 1,
-      cfgScaleMin: toNumber(cfgScale?.min, 0),
-      cfgScaleMax: Math.min(10, toNumber(cfgScale?.max, 10)),
-      cfgScaleStep: toNumber(cfgScale?.step, 0.5)
-    };
-  };
-
-  // frontend/documentCommands.ts
+  // frontend/documentCommands/helpers.ts
   var VALUE = ["value"];
-  var VALUE_CAPABILITIES = ["value", "capabilities"];
+  var VALUE_CAPABILITIES = [
+    "value",
+    "capabilities"
+  ];
   var STRUCTURE = ["structure", "capabilities"];
+  var ARCHITECTURE_CONVERSION = [
+    "value",
+    "structure",
+    "capabilities"
+  ];
+  var ARCHITECTURE_CONVERSION_WITH_SELECTION = [
+    "value",
+    "structure",
+    "selection",
+    "capabilities"
+  ];
   var REMOVE_STRUCTURE = [
     "structure",
     "selection",
@@ -2699,13 +4104,6 @@
     "capabilities"
   ];
   var clone2 = (value) => structuredClone(value);
-  var normalizedId = (value) => {
-    if (typeof value !== "string") {
-      return null;
-    }
-    const id = value.trim();
-    return id.length > 0 ? id : null;
-  };
   var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
   var findTrack = (document2, trackId) => document2.audioTracks.find((track) => track.id === trackId) ?? null;
   var candidateIds = (entity) => {
@@ -2724,16 +4122,17 @@
     }
     return [entity.id];
   };
-  var validateNewEntity = (document2, entity) => {
+  var invalidNewEntity = (document2, entity) => {
     const ids = candidateIds(entity);
-    if (ids.some((id) => normalizedId(id) !== id)) {
-      return "invalid-id";
-    }
+    const invalidId = ids.some(
+      (id) => typeof id !== "string" || id.trim().length === 0 || id.trim() !== id
+    );
+    if (invalidId) return failure(document2, "invalid-id");
     if (new Set(ids).size !== ids.length) {
-      return "duplicate-id";
+      return failure(document2, "duplicate-id");
     }
     const existing = new Set(collectAuthoringEntityIds(document2));
-    return ids.some((id) => existing.has(id)) ? "duplicate-id" : null;
+    return ids.some((id) => existing.has(id)) ? failure(document2, "duplicate-id") : null;
   };
   var addBefore = (items, item, beforeId) => {
     if (beforeId == null) {
@@ -2743,31 +4142,23 @@
     const beforeIndex = items.findIndex(
       (candidate) => candidate.id === beforeId
     );
-    if (beforeIndex < 0) {
-      return false;
-    }
+    if (beforeIndex < 0) return false;
     items.splice(beforeIndex, 0, item);
     return true;
   };
   var removeById = (items, id) => {
     const index = items.findIndex((item) => item.id === id);
-    if (index < 0) {
-      return false;
-    }
+    if (index < 0) return false;
     items.splice(index, 1);
     return true;
   };
   var moveBefore = (items, id, beforeId) => {
     const fromIndex = items.findIndex((item2) => item2.id === id);
-    if (fromIndex < 0) {
-      return false;
-    }
+    if (fromIndex < 0) return false;
     if (beforeId !== null && !items.some((item2) => item2.id === beforeId)) {
       return false;
     }
-    if (id === beforeId) {
-      return true;
-    }
+    if (id === beforeId) return true;
     const [item] = items.splice(fromIndex, 1);
     if (beforeId === null) {
       items.push(item);
@@ -2779,9 +4170,7 @@
   };
   var patchById = (items, id, patch) => {
     const entity = items.find((item) => item.id === id);
-    if (!entity) {
-      return false;
-    }
+    if (!entity) return false;
     Object.assign(entity, clone2(patch), { id });
     return true;
   };
@@ -2792,25 +4181,24 @@
     impacts: [],
     failure: reason
   });
-  var invalidNewEntity = (document2, entity) => {
-    const reason = validateNewEntity(document2, entity);
-    return reason ? failure(document2, reason) : null;
-  };
-  var assertNever = (command) => {
-    throw new Error(`Unhandled document command: ${JSON.stringify(command)}`);
-  };
   var combineImpacts = (impacts) => {
     const included = new Set(impacts.flat());
     return IMPACT_ORDER.filter((impact) => included.has(impact));
   };
-  var reduceDocumentCommand = (source, command) => {
+  var hasOwn = (value, key) => Object.hasOwn(value, key);
+
+  // frontend/documentCommands.ts
+  var assertNever = (command) => {
+    throw new Error(`Unhandled document command: ${JSON.stringify(command)}`);
+  };
+  var reduceDocumentCommand = (source, command, context = { architectureCatalog: null }) => {
     const document2 = clone2(source);
     switch (command.type) {
       case "batch": {
         let current = document2;
         const impacts = [];
         for (const child of command.commands) {
-          const result = reduceDocumentCommand(current, child);
+          const result = reduceDocumentCommand(current, child, context);
           if (!result.applied) {
             return failure(
               clone2(source),
@@ -2829,50 +4217,199 @@
       case "clip.add": {
         const invalid = invalidNewEntity(document2, command.clip);
         if (invalid) return invalid;
-        if (!addBefore(
-          document2.clips,
-          clone2(command.clip),
-          command.beforeClipId
+        const addedClip = clone2(command.clip);
+        if (!reconcileClipArchitectureIdentity(
+          addedClip,
+          context.architectureCatalog
         )) {
+          return failure(document2, "architecture-invariant");
+        }
+        if (!addBefore(document2.clips, addedClip, command.beforeClipId)) {
           return failure(clone2(source), "missing-target");
         }
         return success(document2, STRUCTURE);
       }
-      case "clip.remove":
-        return removeById(document2.clips, command.clipId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
-      case "clip.move":
-        return moveBefore(
+      case "clip.remove": {
+        if (!removeById(document2.clips, command.clipId)) {
+          return failure(document2, "missing-target");
+        }
+        return success(document2, REMOVE_STRUCTURE);
+      }
+      case "clip.move": {
+        if (!moveBefore(
           document2.clips,
           command.clipId,
           command.beforeClipId
-        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
-      case "clip.patch":
-        return patchById(document2.clips, command.clipId, command.patch) ? success(document2, VALUE_CAPABILITIES) : failure(document2, "missing-target");
+        )) {
+          return failure(document2, "missing-target");
+        }
+        return success(document2, MOVE_STRUCTURE);
+      }
+      case "clip.patch": {
+        if (hasOwn(command.patch, "architecture") || hasOwn(command.patch, "modelProfileId")) {
+          return failure(document2, "architecture-invariant");
+        }
+        const clip = findClip(document2, command.clipId);
+        if (!clip) {
+          return failure(document2, "missing-target");
+        }
+        const candidate = clone2(clip);
+        Object.assign(candidate, clone2(command.patch), { id: clip.id });
+        if (hasOwn(command.patch, "sourceVideo") && !reconcileClipArchitectureIdentity(
+          candidate,
+          context.architectureCatalog
+        )) {
+          return failure(document2, "architecture-invariant");
+        }
+        document2.clips[document2.clips.indexOf(clip)] = candidate;
+        return success(document2, VALUE_CAPABILITIES);
+      }
+      case "clip.convert-architecture": {
+        const clipIndex = document2.clips.findIndex(
+          (clip2) => clip2.id === command.clipId
+        );
+        const clip = document2.clips[clipIndex];
+        const target = command.target;
+        if (!clip) {
+          return failure(document2, "missing-target");
+        }
+        const conversion = planArchitectureConversion(
+          clip,
+          target,
+          context.architectureCatalog
+        );
+        if (!conversion) {
+          return failure(document2, "invalid-architecture-conversion");
+        }
+        const converted = conversion.clip;
+        if (!reconcileClipArchitectureIdentity(
+          converted,
+          context.architectureCatalog
+        )) {
+          return failure(document2, "invalid-architecture-conversion");
+        }
+        document2.clips[clipIndex] = converted;
+        forceCrossArchitectureCutsForConversion(document2.clips);
+        return success(
+          document2,
+          conversion.selectionAffected ? ARCHITECTURE_CONVERSION_WITH_SELECTION : ARCHITECTURE_CONVERSION
+        );
+      }
       case "stage.add": {
         const clip = findClip(document2, command.clipId);
         if (!clip) return failure(document2, "missing-target");
         const invalid = invalidNewEntity(document2, command.stage);
         if (invalid) return invalid;
+        const candidate = clone2(clip);
         if (!addBefore(
-          clip.stages,
+          candidate.stages,
           clone2(command.stage),
           command.beforeStageId
         )) {
           return failure(clone2(source), "missing-target");
         }
+        if (!reconcileClipArchitectureIdentity(
+          candidate,
+          context.architectureCatalog
+        )) {
+          return failure(document2, "architecture-invariant");
+        }
+        document2.clips[document2.clips.indexOf(clip)] = candidate;
         return success(document2, STRUCTURE);
+      }
+      case "stage.retarget-model": {
+        const clip = findClip(document2, command.clipId);
+        const stage = clip?.stages.find(
+          (candidate2) => candidate2.id === command.stageId
+        );
+        if (!clip || !stage) {
+          return failure(document2, "missing-target");
+        }
+        const target = resolveArchitectureRetarget(
+          command.target,
+          context.architectureCatalog
+        );
+        if (!target) {
+          return failure(document2, "architecture-invariant");
+        }
+        const candidate = clone2(clip);
+        const candidateStage = candidate.stages.find(
+          (entry) => entry.id === command.stageId
+        );
+        if (!candidateStage) {
+          return failure(document2, "missing-target");
+        }
+        candidateStage.model = target.model;
+        candidateStage.modelProfileId = target.modelProfileId;
+        if (!reconcileClipArchitectureIdentity(
+          candidate,
+          context.architectureCatalog
+        )) {
+          return failure(document2, "architecture-invariant");
+        }
+        document2.clips[document2.clips.indexOf(clip)] = candidate;
+        return success(document2, VALUE_CAPABILITIES);
       }
       case "stage.remove": {
         const clip = findClip(document2, command.clipId);
-        return clip && removeById(clip.stages, command.stageId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+        if (!clip) {
+          return failure(document2, "missing-target");
+        }
+        const candidate = clone2(clip);
+        if (!removeById(candidate.stages, command.stageId)) {
+          return failure(document2, "missing-target");
+        }
+        if (!reconcileClipArchitectureIdentity(
+          candidate,
+          context.architectureCatalog
+        )) {
+          return failure(document2, "architecture-invariant");
+        }
+        document2.clips[document2.clips.indexOf(clip)] = candidate;
+        return success(document2, REMOVE_STRUCTURE);
       }
       case "stage.move": {
         const clip = findClip(document2, command.clipId);
-        return clip && moveBefore(clip.stages, command.stageId, command.beforeStageId) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+        if (!clip) {
+          return failure(document2, "missing-target");
+        }
+        const candidate = clone2(clip);
+        if (!moveBefore(
+          candidate.stages,
+          command.stageId,
+          command.beforeStageId
+        )) {
+          return failure(document2, "missing-target");
+        }
+        if (!reconcileClipArchitectureIdentity(
+          candidate,
+          context.architectureCatalog
+        )) {
+          return failure(document2, "architecture-invariant");
+        }
+        document2.clips[document2.clips.indexOf(clip)] = candidate;
+        return success(document2, MOVE_STRUCTURE);
       }
       case "stage.patch": {
         const clip = findClip(document2, command.clipId);
-        return clip && patchById(clip.stages, command.stageId, command.patch) ? success(document2, VALUE_CAPABILITIES) : failure(document2, "missing-target");
+        if (hasOwn(command.patch, "model") || hasOwn(command.patch, "modelProfileId")) {
+          return failure(document2, "architecture-invariant");
+        }
+        if (!clip) {
+          return failure(document2, "missing-target");
+        }
+        const candidate = clone2(clip);
+        if (!patchById(candidate.stages, command.stageId, command.patch)) {
+          return failure(document2, "missing-target");
+        }
+        if (!reconcileClipArchitectureIdentity(
+          candidate,
+          context.architectureCatalog
+        )) {
+          return failure(document2, "architecture-invariant");
+        }
+        document2.clips[document2.clips.indexOf(clip)] = candidate;
+        return success(document2, VALUE_CAPABILITIES);
       }
       case "ref.add": {
         const clip = findClip(document2, command.clipId);
@@ -3090,14 +4627,32 @@
       for (const cb of [...subscribers]) {
         try {
           cb(snapshot, meta);
-        } catch {
+        } catch (error) {
+          videoStagesDebugLog("store", "subscriber notification failed", {
+            error,
+            origin: meta.origin
+          });
         }
       }
     };
     const commit = (state, origin, notifyDomChange, hint, impacts) => {
-      const serialized = deps.writeQuiet(state);
+      let serialized;
+      try {
+        serialized = deps.serialize(state);
+      } catch {
+        return null;
+      }
+      if (!deps.parse(serialized)) {
+        return null;
+      }
+      deps.writeQuiet(state, serialized);
       lastGoodSerialized = serialized;
-      canonical = deps.parse(serialized) ?? structuredClone(state);
+      canonical = deps.parse(serialized);
+      if (!canonical) {
+        throw new Error(
+          "VideoStages carrier adapter rejected a preflighted commit."
+        );
+      }
       cachedToken = deps.readToken();
       syncedToken = cachedToken;
       documentRevision++;
@@ -3111,7 +4666,6 @@
       });
       return serialized;
     };
-    const save = (state, origin, notifyDomChange, hint) => commit(state, origin, notifyDomChange, hint);
     const dispatch = (command, origin, notifyDomChange, expectedRevision, hint) => {
       const source = structuredClone(revalidate());
       if (expectedRevision !== void 0 && expectedRevision !== documentRevision) {
@@ -3123,7 +4677,9 @@
         };
       }
       ensureAuthoringDocumentIdentity(source);
-      const reduced = reduceDocumentCommand(source, command);
+      const reduced = reduceDocumentCommand(source, command, {
+        architectureCatalog: deps.architectureCatalog?.() ?? null
+      });
       if (!reduced.applied) {
         return {
           applied: false,
@@ -3139,13 +4695,21 @@
           impacts: []
         };
       }
-      commit(
+      const serialized = commit(
         reduced.document,
         origin,
         notifyDomChange,
         hint,
         reduced.impacts
       );
+      if (serialized === null) {
+        return {
+          applied: false,
+          failure: "invalid-serialized-state",
+          revision: documentRevision,
+          impacts: []
+        };
+      }
       return {
         applied: true,
         revision: documentRevision,
@@ -3172,7 +4736,6 @@
         revalidate();
         return documentRevision;
       },
-      save,
       dispatch,
       syncFromCarrier,
       subscribe: (cb) => {
@@ -3278,200 +4841,25 @@
     }
   };
 
-  // frontend/persistence.ts
-  var toIntOrNull = (value) => {
-    if (value == null || value === "") {
-      return null;
-    }
-    const num = toNumber(`${value}`, Number.NaN);
-    return Number.isFinite(num) ? Math.round(num) : null;
-  };
-  var resolveRootDims = (inherited, stored) => {
-    const width = toIntOrNull(stored.width);
-    const height = toIntOrNull(stored.height);
-    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
-    const fps = toIntOrNull(stored.fps);
-    const fpsExplicit = fps !== null && fps >= ROOT_FPS_MIN;
-    return {
-      width: dimsExplicit ? width : inherited.width,
-      height: dimsExplicit ? height : inherited.height,
-      fps: fpsExplicit ? fps : inherited.fps,
-      dimsExplicit,
-      fpsExplicit
-    };
-  };
-  var rootConfig = (dims, clips, audioTracks = []) => {
-    const config = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
-      ...dims,
-      clips,
-      audioTracks
-    };
-    ensureAuthoringDocumentIdentity(config);
-    return config;
-  };
-  var serializeClipsForStorage = (clips) => {
-    ensureClipEntityIdentities(clips);
-    return clips.map(
-      (clip) => ({
-        id: clip.id,
-        skipped: clip.skipped,
-        boundaryOut: clip.boundaryOut,
-        boundaryOutOverlap: clip.boundaryOutOverlap,
-        duration: clip.duration,
-        audioSource: clip.audioSource,
-        icLoras: clip.icLoras.map((entry) => ({
-          lora: entry.lora,
-          preset: entry.preset,
-          source: entry.source,
-          stage: entry.stage,
-          strength: entry.strength,
-          attentionStrength: entry.attentionStrength,
-          controlType: entry.controlType,
-          video: entry.video,
-          driveAudioRef: entry.driveAudioRef
-        })),
-        saveAudioTrack: clip.saveAudioTrack,
-        clipLengthFromAudio: clip.clipLengthFromAudio,
-        clipLengthFromControlNet: clip.clipLengthFromControlNet,
-        reuseAudio: clip.reuseAudio,
-        uploadedAudio: clip.uploadedAudio,
-        sourceVideo: clip.sourceVideo ? {
-          data: clip.sourceVideo.data,
-          fileName: clip.sourceVideo.fileName,
-          fps: clip.sourceVideo.fps,
-          durationSeconds: clip.sourceVideo.durationSeconds,
-          startSeconds: clip.sourceVideo.startSeconds,
-          lengthSeconds: clip.sourceVideo.lengthSeconds
-        } : null,
-        audioSegments: clip.audioSegments.map((seg) => ({
-          id: seg.id,
-          source: seg.source,
-          startSeconds: seg.startSeconds,
-          trimStartSeconds: seg.trimStartSeconds,
-          lengthSeconds: seg.lengthSeconds
-        })),
-        retake: clip.retake ? {
-          id: clip.retake.id,
-          startSeconds: clip.retake.startSeconds,
-          lengthSeconds: clip.retake.lengthSeconds,
-          strength: clip.retake.strength
-        } : null,
-        refs: clip.refs.map((ref) => ({
-          id: ref.id,
-          source: ref.source,
-          uploadFileName: ref.uploadFileName,
-          uploadedImage: ref.uploadedImage,
-          frame: ref.frame,
-          fromEnd: ref.fromEnd
-        })),
-        stages: clip.stages.map((stage) => ({
-          id: stage.id,
-          skipped: stage.skipped,
-          control: stage.control,
-          controlNetStrength: stage.controlNetStrength,
-          refStrengths: stage.refStrengths,
-          upscale: stage.upscale,
-          upscaleMethod: stage.upscaleMethod,
-          model: stage.model,
-          steps: stage.steps,
-          cfgScale: stage.cfgScale,
-          sampler: stage.sampler,
-          scheduler: stage.scheduler,
-          loras: stage.loras.map((lora) => ({
-            name: lora.name,
-            weight: lora.weight
-          }))
-        }))
-      })
-    );
-  };
-  var serializeStateForStorage = (state) => {
-    ensureAuthoringDocumentIdentity(state);
-    const out = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
-    };
-    if (state.dimsExplicit) {
-      out.width = Math.round(state.width);
-      out.height = Math.round(state.height);
-    }
-    if (state.fpsExplicit) {
-      out.fps = Math.round(state.fps);
-    }
-    out.clips = serializeClipsForStorage(state.clips);
-    out.audioTracks = state.audioTracks.map((track) => ({
-      id: track.id,
-      source: {
-        kind: track.source.kind,
-        reference: track.source.reference,
-        uploadedAudio: track.source.uploadedAudio
-      },
-      spans: track.spans.map((span) => ({
-        id: span.id,
-        firstClipId: span.firstClipId,
-        lastClipId: span.lastClipId,
-        timelineStartSeconds: span.timelineStartSeconds,
-        timelineLengthSeconds: span.timelineLengthSeconds,
-        sourceStartSeconds: span.sourceStartSeconds,
-        clipStartOffsetSeconds: span.clipStartOffsetSeconds,
-        clipLengthSeconds: span.clipLengthSeconds
-      }))
-    }));
-    return JSON.stringify(out);
-  };
+  // frontend/persistence/carrierAdapter.ts
   var overlayPromptAndUiState = (clips) => {
     ensureClipEntityIdentities(clips);
     const { sections, windows } = parseClipPrompts(
       getPromptInput()?.value ?? ""
     );
-    for (let i = 0; i < clips.length; i++) {
-      clips[i].prompt = sections.get(i) ?? "";
-      clips[i].promptWindows = (windows.get(i) ?? []).map((window2) => ({
-        prompt: window2.prompt,
-        start: window2.start,
-        duration: window2.duration
-      }));
+    for (let index = 0; index < clips.length; index++) {
+      clips[index].prompt = sections.get(index) ?? "";
+      clips[index].promptWindows = (windows.get(index) ?? []).map(
+        (window2) => ({
+          prompt: window2.prompt,
+          start: window2.start,
+          duration: window2.duration
+        })
+      );
     }
     applyUiState(clips);
     ensureClipEntityIdentities(clips);
     assignMissingHues(clips);
-  };
-  var parseSerializedState = (serialized, inherited) => {
-    try {
-      const parsed = JSON.parse(serialized);
-      let clipsRaw;
-      let stored = {};
-      if (Array.isArray(parsed)) {
-        clipsRaw = parsed;
-      } else if (isRecord(parsed)) {
-        clipsRaw = Array.isArray(parsed.clips) ? parsed.clips : [];
-        stored = {
-          width: parsed.width,
-          height: parsed.height,
-          fps: parsed.fps,
-          audioTracks: parsed.audioTracks
-        };
-      } else {
-        clipsRaw = [];
-      }
-      const dims = resolveRootDims(inherited, stored);
-      const clips = clipsRaw.map(
-        (el) => normalizeClip(
-          isRecord(el) ? el : {},
-          getRootDefaults,
-          getDefaultStageModel,
-          dims.fps
-        )
-      );
-      overlayPromptAndUiState(clips);
-      return rootConfig(
-        dims,
-        clips,
-        normalizeAudioTracks(stored.audioTracks)
-      );
-    } catch {
-      return null;
-    }
   };
   var inheritedDims = () => {
     const defaults = getRootDefaults();
@@ -3481,15 +4869,20 @@
       fps: defaults.fps
     };
   };
-  var parseEmptyConfig = () => {
+  var parse = (serialized) => {
+    const decoded = decodeStoredDocument(serialized, inheritedDims());
+    if (!decoded) return null;
+    overlayPromptAndUiState(decoded.clips);
+    return createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks);
+  };
+  var parseEmpty = () => {
     const clips = [];
     overlayPromptAndUiState(clips);
-    return rootConfig(resolveRootDims(inheritedDims(), {}), clips);
+    return createRootConfig(resolveRootDims(inheritedDims(), {}), clips);
   };
-  var writeQuietly = (state) => {
+  var writeQuiet = (state, serialized) => {
     ensureAuthoringDocumentIdentity(state);
     assignMissingHues(state.clips);
-    const serialized = serializeStateForStorage(state);
     writeDataParam(serialized);
     writeClipPrompts(
       state.clips.map((clip) => ({
@@ -3498,15 +4891,22 @@
       }))
     );
     saveUiState(state.clips);
-    return serialized;
   };
-  var store = createTimelineStore({
+  var timelineCarrierAdapter = {
     readToken: () => `${readStateToken()}\0${readInheritedDimsSignature()}`,
     readDataParam,
-    parse: (serialized) => parseSerializedState(serialized, inheritedDims()),
-    parseEmpty: parseEmptyConfig,
-    writeQuiet: writeQuietly,
+    parse,
+    parseEmpty,
+    serialize: serializeStateForStorage,
+    writeQuiet,
     notifyHost: notifyCarrierChanged
+  };
+  var dataCarrierNeedsCanonicalIdRepair = () => storedDocumentNeedsCanonicalIdRepair(readDataParam());
+
+  // frontend/persistence/repository.ts
+  var store = createTimelineStore({
+    architectureCatalog: () => getRootDefaults().modelCatalog,
+    ...timelineCarrierAdapter
   });
   var getTimelineStore = () => store;
   var getState = () => store.getState();
@@ -3520,46 +4920,6 @@
       cause: error
     });
   };
-  var hasCanonicalStoredId = (value, seen) => {
-    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
-      return false;
-    }
-    seen.add(value.id);
-    return true;
-  };
-  var dataCarrierNeedsCanonicalMigration = () => {
-    try {
-      const parsed = JSON.parse(readDataParam());
-      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
-        return true;
-      }
-      const seenIds = /* @__PURE__ */ new Set();
-      for (const rawClip of parsed.clips) {
-        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "refs", "audioSegments"]) {
-          const children = rawClip[key];
-          if (!Array.isArray(children) || children.some(
-            (child) => !hasCanonicalStoredId(child, seenIds)
-          )) {
-            return true;
-          }
-        }
-        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
-          return true;
-        }
-      }
-      for (const rawTrack of parsed.audioTracks) {
-        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
-          (span) => !hasCanonicalStoredId(span, seenIds)
-        )) {
-          return true;
-        }
-      }
-      return false;
-    } catch {
-      return true;
-    }
-  };
   var saveRequestedState = (requestedInput, options, snapshot = store.getSnapshot()) => {
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
@@ -3569,12 +4929,14 @@
     assignMissingHues(before.clips);
     const diffCommand = (() => {
       try {
-        return diffDocuments(before, requested);
+        return diffDocuments(before, requested, {
+          architectureCatalog: getRootDefaults().modelCatalog
+        });
       } catch (error) {
         return throwSaveFailure("diff", error);
       }
     })();
-    const command = diffCommand.commands.length === 0 && dataCarrierNeedsCanonicalMigration() ? {
+    const command = diffCommand.commands.length === 0 && dataCarrierNeedsCanonicalIdRepair() ? {
       type: "batch",
       commands: [
         {
@@ -3603,6 +4965,25 @@
     });
   };
   var saveState = (state, options) => saveRequestedState(state, options);
+  var dispatchDocumentCommand = (command, options) => {
+    const willNotifyDom = options?.notifyDomChange !== false;
+    const result = store.dispatch(
+      command,
+      options?.origin ?? "timeline",
+      willNotifyDom,
+      options?.expectedRevision,
+      options?.valueOnly ? "value-only" : void 0
+    );
+    videoStagesDebugLog("persistence", "dispatchDocumentCommand", {
+      command: command.type,
+      applied: result.applied,
+      failure: result.failure,
+      revision: result.revision,
+      impacts: result.impacts,
+      willNotifyDom
+    });
+    return result;
+  };
   var getClips = () => getState().clips;
   var saveClips = (clips, options) => {
     videoStagesDebugLog("persistence", "saveClips", {
@@ -3651,116 +5032,281 @@
   };
   var refineVideoButton = () => {
     const description = "Re-runs VideoStages using this video as the source for Clip 1 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.";
-    getLtxHostBridge().registerRefineVideoButton((src) => {
-      const host = getLtxHostBridge();
-      const run = async () => {
-        let parsedMetadata = null;
-        const currentMetadata = host.getCurrentMediaMetadata();
-        if (currentMetadata) {
-          try {
-            const readable = host.interpretMediaMetadata(currentMetadata);
-            parsedMetadata = readable ? JSON.parse(readable) : null;
-          } catch (error) {
-            console.warn(
-              "VideoStages: failed to parse source video metadata",
-              error
-            );
+    getVideoStagesHostBridge().registerRefineVideoButton(
+      (src) => {
+        const host = getVideoStagesHostBridge();
+        const run = async () => {
+          let parsedMetadata = null;
+          const currentMetadata = host.getCurrentMediaMetadata();
+          if (currentMetadata) {
+            try {
+              const readable = host.interpretMediaMetadata(currentMetadata);
+              parsedMetadata = readable ? JSON.parse(readable) : null;
+            } catch (error) {
+              console.warn(
+                "VideoStages: failed to parse source video metadata",
+                error
+              );
+            }
           }
-        }
-        const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
-        const sourceVideostages = isRecord(params) ? readProp(params, "videostages") : void 0;
-        const skipCount = Math.max(
-          1,
-          typeof sourceVideostages === "string" ? countActiveStagesInMetadataClip0(sourceVideostages) : 0
-        );
-        if (!hasRefinementWorkToDo(
-          getState(),
-          isVideoStagesEnabled(),
-          skipCount
-        )) {
-          host.showError(refineNeedsExtraStageMessage(skipCount));
-          return;
-        }
-        const videoDataUrl = await host.toDataUrl(src);
-        const inputOverrides = {
-          videostagesrefinesourcevideo: videoDataUrl,
-          videostagesrefineskipstages: skipCount,
-          images: 1
+          const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
+          const sourceVideostages = isRecord(params) ? readProp(params, "videostages") : void 0;
+          const skipCount = Math.max(
+            1,
+            typeof sourceVideostages === "string" ? countActiveStagesInMetadataClip0(sourceVideostages) : 0
+          );
+          if (!hasRefinementWorkToDo(
+            getState(),
+            isVideoStagesEnabled(),
+            skipCount
+          )) {
+            host.showError(refineNeedsExtraStageMessage(skipCount));
+            return;
+          }
+          const videoDataUrl = await host.toDataUrl(src);
+          const inputOverrides = {
+            videostagesrefinesourcevideo: videoDataUrl,
+            videostagesrefineskipstages: skipCount,
+            images: 1
+          };
+          const seed = isRecord(params) ? readProp(params, "seed") : void 0;
+          if (typeof seed === "number") {
+            inputOverrides.seed = seed;
+          }
+          host.generate(inputOverrides);
         };
-        const seed = isRecord(params) ? readProp(params, "seed") : void 0;
-        if (typeof seed === "number") {
-          inputOverrides.seed = seed;
-        }
-        host.generate(inputOverrides);
-      };
-      void run();
-    }, description);
+        void run();
+      },
+      description
+    );
   };
 
-  // frontend/authoringDiagnostics.ts
-  var activeStageCount = (clip) => clip.stages.filter((stage) => stage.skipped !== true).length;
-  var isAudioReuseEligible = (clip) => activeStageCount(clip) >= 3;
-  var isExecutableClip = (clip) => clip.skipped !== true && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
-  var isHdrIcLora = (entry) => `${entry.preset ?? ""}`.trim().toLowerCase() === "hdr" || `${entry.lora ?? ""}`.toLowerCase().includes("ic-lora-hdr");
-  var clipHasActiveHdr = (clip) => clip.icLoras.some(
-    (entry) => isHdrIcLora(entry) && clip.stages.some(
-      (stage, rawStageIdx) => stage.skipped !== true && (entry.stage < 0 || entry.stage === rawStageIdx)
-    )
-  );
-  var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
-  var deriveAuthoringDiagnostics = (clips, context = {}) => {
-    const diagnostics = [];
-    const executable = clips.map((clip, clipIdx) => ({ clip, clipIdx })).filter(({ clip }) => isExecutableClip(clip));
-    for (const { clip, clipIdx } of executable) {
-      if (clip.reuseAudio && !isAudioReuseEligible(clip)) {
-        diagnostics.push(
-          diagnostic(
-            "warning",
-            "audio.reuse.requires_three_stages",
-            "Audio reuse needs at least three active stages: generate, capture, then reuse.",
-            clipIdx
-          )
-        );
-      }
-      if (clip.promptWindows.length > 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet)) {
-        diagnostics.push(
-          diagnostic(
-            "error",
-            "prompt-relay-dynamic-length-unsupported",
-            "Prompt relay cannot be combined with audio-owned or ControlNet-owned clip length because the relay schedule requires a fixed frame count.",
-            clipIdx
-          )
-        );
-      }
-      if (clip.retake && !clip.sourceVideo && !context.globalRefineMode) {
-        diagnostics.push(
-          diagnostic(
-            "warning",
-            "retake-source-required",
-            "Retake requires a source video on this clip or the Refine Video flow; normal generation will ignore it.",
-            clipIdx
-          )
-        );
-      }
-      if (clip.retake && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode)) {
-        diagnostics.push(
-          diagnostic(
-            "error",
-            "retake-frame-references-unsupported",
-            "A retake cannot run with frame references because guide merges would overwrite the retake mask.",
-            clipIdx
-          )
-        );
-      }
+  // frontend/architectures/currentPolicy.ts
+  var currentCapabilityViewResolver = () => createCapabilityViewResolver(getRootDefaults().modelCatalog);
+
+  // frontend/architectures/conversion/entryModePolicy.ts
+  var architectureSupportsClipStart = (capabilities, clip, generatedEntryMode) => {
+    const modes = capabilities.entryModes;
+    if (clip.sourceVideo !== null) {
+      return modes.includes("source-video") || modes.includes("refine-video");
     }
-    if (executable.length > 1) {
-      const hdr = executable.map(({ clip }) => clipHasActiveHdr(clip));
-      if (hdr.some(Boolean) && hdr.some((value) => !value)) {
+    const hasInitialReference = clip.refs.some(
+      (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
+    );
+    return hasInitialReference ? modes.includes("image-to-video") : modes.includes(generatedEntryMode);
+  };
+
+  // frontend/architectures/diagnostics.ts
+  var issue = (code, message, clipIdx) => ({ severity: "error", code, message, clipIdx });
+  var persistedCapabilityIssues = (clip, clipIdx, capabilities) => {
+    const diagnostics = [];
+    const clipCapabilities = capabilities.clip;
+    const stageCapabilities = capabilities.stage;
+    const unsupported = (active, key, label) => {
+      if (active) {
         diagnostics.push(
-          diagnostic(
-            "error",
-            "mixed-hdr-timeline-unsupported",
-            "A multi-clip timeline cannot mix HDR IC-LoRA clips with non-HDR clips because final HDR conversion applies to the complete timeline."
+          issue(
+            `architecture.unsupported.${key}`,
+            `${label} is persisted on Clip ${clipIdx + 1}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+            clipIdx
+          )
+        );
+      }
+    };
+    unsupported(
+      !capabilities.architecture.includes("multi-stage") && activeStageCount(clip) > 1,
+      "multi-stage",
+      "Multiple active stages"
+    );
+    unsupported(
+      (!clipCapabilities.includes("references") || !stageCapabilities.includes("frame-references")) && clip.refs.length > 0,
+      "frame-references",
+      "Frame references"
+    );
+    unsupported(
+      !stageCapabilities.includes("ic-lora") && clip.icLoras.length > 0,
+      "ic-lora",
+      "IC-LoRA"
+    );
+    unsupported(
+      !stageCapabilities.includes("hdr") && clip.icLoras.some(
+        (entry) => isArchitectureHdrFeature(clip.architecture, entry)
+      ),
+      "hdr",
+      "HDR"
+    );
+    unsupported(
+      !clipCapabilities.includes("retake") && clip.retake !== null,
+      "retake",
+      "Retake"
+    );
+    unsupported(
+      !clipCapabilities.includes("prompts") && clip.prompt.trim().length > 0,
+      "major-prompt",
+      "Major prompt"
+    );
+    unsupported(
+      !clipCapabilities.includes("source-video") && clip.sourceVideo !== null,
+      "source-video",
+      "Source video"
+    );
+    unsupported(
+      !clipCapabilities.includes("audio-segments") && clip.audioSegments.length > 0,
+      "audio-segments",
+      "Audio segments"
+    );
+    unsupported(
+      !clipCapabilities.includes("prompt-relay") && clip.promptWindows.length > 0,
+      "prompt-relay",
+      "Prompt relay"
+    );
+    unsupported(
+      !stageCapabilities.includes("lora") && clip.stages.some((stage) => stage.loras.length > 0),
+      "stage-loras",
+      "Stage LoRAs"
+    );
+    unsupported(
+      clip.stages.some(
+        (stage) => stage.upscale !== 1 && !capabilities.upscaleModes.includes(
+          upscaleModeForMethod(stage.upscaleMethod)
+        )
+      ),
+      "upscale",
+      "Stage upscaling"
+    );
+    const sourceKind = audioSourceKind(clip.audioSource);
+    unsupported(
+      (!clipCapabilities.includes("audio-sources") || !isAllowedAudioSource(
+        capabilities.audioSourceKinds,
+        clip.audioSource
+      )) && (sourceKind !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.reuseAudio || clip.clipLengthFromAudio || clip.clipLengthFromControlNet),
+      "audio-source",
+      `Audio source '${sourceKind}'`
+    );
+    return diagnostics;
+  };
+  var deriveArchitectureDiagnostics = (clips, catalog, generatedEntryMode = "text-to-video") => {
+    const diagnostics = [];
+    const architectureById = new Map(
+      catalog.architectures.map((entry) => [entry.id, entry])
+    );
+    const modelByName = new Map(
+      catalog.entries.map((entry) => [entry.value, entry])
+    );
+    clips.forEach((clip, clipIdx) => {
+      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      if (sourceOnly) {
+        if (clip.architecture !== "none" || clip.modelProfileId !== "none") {
+          diagnostics.push(
+            issue(
+              "architecture.source-only-requires-none",
+              `Source-only Clip ${clipIdx + 1} must use architecture and profile 'none'.`,
+              clipIdx
+            )
+          );
+        }
+      }
+      const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(clip.architecture);
+      if (!architecture && !sourceOnly) {
+        diagnostics.push(
+          issue(
+            "architecture.unknown",
+            `Clip ${clipIdx + 1} uses unknown architecture '${clip.architecture}'. Its persisted settings were preserved, but generation is blocked.`,
+            clipIdx
+          )
+        );
+      } else if (architecture) {
+        diagnostics.push(
+          ...persistedCapabilityIssues(
+            clip,
+            clipIdx,
+            architecture.capabilities
+          )
+        );
+        if (!sourceOnly && activeStageCount(clip) > 0 && !architectureSupportsClipStart(
+          architecture.capabilities,
+          clip,
+          generatedEntryMode
+        )) {
+          diagnostics.push(
+            issue(
+              "architecture.entry-mode-unsupported",
+              `Clip ${clipIdx + 1} cannot start from the current ${generatedEntryMode} host entry with architecture '${architecture.id}'.`,
+              clipIdx
+            )
+          );
+        }
+      }
+      let dormantArchitecture = null;
+      clip.stages.forEach((stage, stageIdx) => {
+        const resolved = modelByName.get(stage.model);
+        if (!resolved?.architectureId || !resolved.modelProfileId) {
+          diagnostics.push(
+            issue(
+              "architecture.model-unknown",
+              `Clip ${clipIdx + 1} Stage ${stageIdx + 1} model '${stage.model}' is not in the architecture catalog.`,
+              clipIdx
+            )
+          );
+          return;
+        }
+        if (sourceOnly && dormantArchitecture === null) {
+          dormantArchitecture = resolved.architectureId;
+        }
+        const mixedDormant = sourceOnly && dormantArchitecture !== null && resolved.architectureId !== dormantArchitecture;
+        if (mixedDormant || !sourceOnly && resolved.architectureId !== clip.architecture) {
+          diagnostics.push(
+            issue(
+              "architecture.mixed-stage",
+              sourceOnly ? `Source-only Clip ${clipIdx + 1} has dormant stages from multiple architectures; Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.` : `Clip ${clipIdx + 1} is locked to '${clip.architecture}', but Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
+              clipIdx
+            )
+          );
+        }
+        if (stage.modelProfileId !== resolved.modelProfileId || !sourceOnly && stageIdx === 0 && clip.modelProfileId !== resolved.modelProfileId) {
+          diagnostics.push(
+            issue(
+              "architecture.profile-mismatch",
+              `Clip ${clipIdx + 1} Stage ${stageIdx + 1} profile identity does not match model '${stage.model}'.`,
+              clipIdx
+            )
+          );
+        }
+        const resolvedProfile = architectureById.get(resolved.architectureId)?.profiles.find(
+          (profile) => profile.id === resolved.modelProfileId
+        );
+        if (stage.loras.length > 0 && resolvedProfile && !resolvedProfile.capabilities.includes("normal-lora")) {
+          diagnostics.push(
+            issue(
+              "architecture.unsupported.stage-loras-profile",
+              `Clip ${clipIdx + 1} Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
+              clipIdx
+            )
+          );
+        }
+      });
+    });
+    const executable = clips.map((clip, clipIdx) => ({ clip, clipIdx })).filter(({ clip }) => isExecutableClip(clip));
+    for (let index = 0; index < executable.length - 1; index++) {
+      const left = executable[index];
+      const right = executable[index + 1];
+      if (left.clip.architecture !== right.clip.architecture && left.clip.boundaryOut !== "cut") {
+        diagnostics.push(
+          issue(
+            "architecture.cross-boundary-cut-only",
+            `Clip ${left.clipIdx + 1} → ${right.clipIdx + 1} crosses architectures; '${left.clip.boundaryOut}' is preserved for repair, but only cut can execute.`,
+            left.clipIdx
+          )
+        );
+        continue;
+      }
+      const descriptor = architectureById.get(left.clip.architecture);
+      if (descriptor && descriptor.boundaryRules[left.clip.boundaryOut]?.support === "unsupported") {
+        diagnostics.push(
+          issue(
+            "architecture.boundary-unsupported",
+            `Clip ${left.clipIdx + 1} architecture '${left.clip.architecture}' does not support '${left.clip.boundaryOut}' boundaries.`,
+            left.clipIdx
           )
         );
       }
@@ -3768,66 +5314,116 @@
     return diagnostics;
   };
 
-  // frontend/executionPath.ts
-  var hostEntryLabel = {
+  // frontend/authoringDiagnostics.ts
+  var clipHasActiveHdr = (clip) => clip.icLoras.some(
+    (entry) => isArchitectureHdrFeature(clip.architecture, entry) && clip.stages.some(
+      (stage, rawStageIdx) => stage.skipped !== true && (entry.stage < 0 || entry.stage === rawStageIdx)
+    )
+  );
+  var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
+  var deriveAuthoringDiagnostics = (clips, context = {}) => {
+    const diagnostics = [];
+    if (context.catalog) {
+      diagnostics.push(
+        ...deriveArchitectureDiagnostics(
+          clips,
+          context.catalog,
+          context.generatedEntryMode
+        )
+      );
+    }
+    const executable = clips.map((clip, clipIdx) => ({ clip, clipIdx })).filter(({ clip }) => isExecutableClip(clip));
+    for (const { clip, clipIdx } of executable) {
+      const descriptor = context.catalog?.architectures.find(
+        (entry) => entry.id === clip.architecture
+      );
+      const rule = (code) => descriptor ? conditionalRule(descriptor.rules, code) : null;
+      const reuseRule = rule(CONDITIONAL_RULE_CODES.audioReuseRequiresStages);
+      if (reuseRule && clip.reuseAudio && evaluateConditionalRule(reuseRule, { clip })) {
+        diagnostics.push(
+          diagnostic(
+            "warning",
+            reuseRule.code,
+            reuseRule.reason,
+            clipIdx
+          )
+        );
+      }
+      const relayRule = rule(
+        CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength
+      );
+      if (relayRule && clip.promptWindows.length > 0 && evaluateConditionalRule(relayRule, { clip })) {
+        diagnostics.push(
+          diagnostic("error", relayRule.code, relayRule.reason, clipIdx)
+        );
+      }
+      const retakeReferenceRule = rule(
+        CONDITIONAL_RULE_CODES.retakeExcludesReferences
+      );
+      const retakeSourceRule = rule(
+        CONDITIONAL_RULE_CODES.retakeRequiresSource
+      );
+      if (retakeSourceRule && clip.retake && evaluateConditionalRule(retakeSourceRule, {
+        clip,
+        globalRefineMode: context.globalRefineMode
+      })) {
+        diagnostics.push(
+          diagnostic(
+            "warning",
+            retakeSourceRule.code,
+            retakeSourceRule.reason,
+            clipIdx
+          )
+        );
+      }
+      if (retakeReferenceRule && clip.retake && evaluateConditionalRule(retakeReferenceRule, {
+        clip,
+        globalRefineMode: context.globalRefineMode
+      })) {
+        diagnostics.push(
+          diagnostic(
+            "error",
+            retakeReferenceRule.code,
+            retakeReferenceRule.reason,
+            clipIdx
+          )
+        );
+      }
+    }
+    const hdrRule = executable.map(
+      ({ clip }) => context.catalog?.architectures.find((entry) => entry.id === clip.architecture)?.rules.find(
+        (rule) => rule.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr
+      )
+    ).find((rule) => rule !== void 0);
+    if (hdrRule && evaluateConditionalRule(hdrRule, {
+      timelineClips: executable.map(({ clip }) => clip),
+      hasActiveHdr: clipHasActiveHdr
+    })) {
+      diagnostics.push(diagnostic("error", hdrRule.code, hdrRule.reason));
+    }
+    return diagnostics;
+  };
+
+  // frontend/executionPath/formatters.ts
+  var HOST_ENTRY_LABEL = {
     "text-to-video": "Text-to-video",
-    "host-image-guidance": "Host image guidance",
+    "host-image-guidance": "Text → image → video",
     "init-image-guidance": "User-provided init image guidance",
     "source-video": "User-provided source video",
     "source-video-only": "Source video without generation stages",
     "global-refine-video": "Refine an existing video"
   };
   var plural = (count, singular, pluralWord = `${singular}s`) => `${count} ${count === 1 ? singular : pluralWord}`;
-  var projectedStages = (clip, clipIndex, context) => {
-    const refineSkip = context.entryPoint === "global-refine-video" && clipIndex === 0 ? Math.max(0, context.refineSkipStages ?? 1) : 0;
-    return clip.stages.flatMap(
-      (stage, rawIndex) => stage.skipped !== true && rawIndex >= refineSkip ? [{ stage, rawIndex }] : []
-    );
-  };
-  var activeStages = (clip) => clip.stages.filter((stage) => stage.skipped !== true);
-  var isExecutable = (clip, stages) => clip.skipped !== true && (clip.sourceVideo !== null || stages.length > 0);
   var referenceSourceLabel = (reference) => {
-    if (reference.source === REF_SOURCE_UPLOAD) {
-      return "uploaded image";
-    }
-    if (reference.source === REF_SOURCE_BASE) {
-      return "host image";
-    }
-    if (reference.source === REF_SOURCE_REFINER) {
-      return "refiner image";
-    }
+    if (reference.source === REF_SOURCE_UPLOAD) return "uploaded image";
+    if (reference.source === REF_SOURCE_BASE) return "host image";
+    if (reference.source === REF_SOURCE_REFINER) return "refiner image";
     return reference.source || "image";
   };
   var audioSourceLabel = (source) => {
     const trimmed = `${source ?? ""}`.trim();
     const aceMatch = /^audio(\d+)$/i.exec(trimmed);
-    if (aceMatch) {
-      return `AceStepFun track ${aceMatch[1]}`;
-    }
-    return trimmed || "Native";
-  };
-  var isInitialGuidance = (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1;
-  var inferHostEntry = (clips, context) => {
-    if (context.entryPoint) {
-      return context.entryPoint;
-    }
-    const firstClip = clips[0];
-    if (firstClip?.sourceVideo) {
-      return activeStages(firstClip).length === 0 ? "source-video-only" : "source-video";
-    }
-    const initialReferences = firstClip?.refs.filter(isInitialGuidance) ?? [];
-    if (initialReferences.some(
-      (reference) => reference.source === REF_SOURCE_UPLOAD
-    )) {
-      return "init-image-guidance";
-    }
-    if (context.generatedEntry) {
-      return context.generatedEntry;
-    }
-    if (initialReferences.length > 0) {
-      return "host-image-guidance";
-    }
-    return "text-to-video";
+    return aceMatch ? `AceStepFun track ${aceMatch[1]}` : trimmed || "Native";
   };
   var describeShape = (stageCounts) => {
     if (stageCounts.length === 0) {
@@ -3873,44 +5469,48 @@
       label: "Multiple clips · multi-stage"
     };
   };
-  var describeClip = (clip, clipNumber, effectiveStages) => {
+  var describeClip = (clip, clipNumber, effectiveStages, context) => {
     const activeStageCount2 = effectiveStages.length;
-    const stageCount = clip.stages.length;
+    const architectureLabel = context.catalog?.architectures.find(
+      (entry) => entry.id === clip.architecture
+    )?.label ?? videoArchitectureRegistry.get(clip.architecture)?.label ?? (clip.architecture === "none" ? "Source only" : clip.architecture || "Unknown architecture");
+    const shared = {
+      clipNumber,
+      architectureId: clip.architecture,
+      architectureLabel,
+      modelProfileId: clip.modelProfileId,
+      stageCount: clip.stages.length,
+      activeStageCount: activeStageCount2
+    };
     if (clip.skipped) {
       return {
-        clipNumber,
+        ...shared,
         kind: "skipped",
-        stageCount,
-        activeStageCount: activeStageCount2,
-        label: `Clip ${clipNumber}: skipped`
+        label: `Clip ${clipNumber}: skipped · ${architectureLabel}`
       };
     }
     if (clip.sourceVideo && activeStageCount2 === 0) {
       return {
-        clipNumber,
+        ...shared,
         kind: "source-video-only",
-        stageCount,
-        activeStageCount: activeStageCount2,
         label: `Clip ${clipNumber}: source video only`
       };
     }
     if (clip.sourceVideo) {
       return {
-        clipNumber,
+        ...shared,
         kind: "source-video",
-        stageCount,
-        activeStageCount: activeStageCount2,
-        label: `Clip ${clipNumber}: source video + ${plural(activeStageCount2, "active stage")}`
+        label: `Clip ${clipNumber}: source video + ${plural(activeStageCount2, "active stage")} · ${architectureLabel}`
       };
     }
     return {
-      clipNumber,
+      ...shared,
       kind: "generated",
-      stageCount,
-      activeStageCount: activeStageCount2,
-      label: `Clip ${clipNumber}: generated + ${plural(activeStageCount2, "active stage")}`
+      label: `Clip ${clipNumber}: generated + ${plural(activeStageCount2, "active stage")} · ${architectureLabel}`
     };
   };
+
+  // frontend/executionPath/audioProjection.ts
   var describeAuthoredAudioSpan = (track, span, spanIndex, clipIndexById, clipCount) => {
     const firstIndex = span.firstClipId ? clipIndexById.get(span.firstClipId) : void 0;
     const lastIndex = span.lastClipId ? clipIndexById.get(span.lastClipId) : void 0;
@@ -3953,7 +5553,7 @@
       label: `Span ${spanIndex + 1}: ${coverage}${timeline2}${clipRelative}${source}${pending ? " · pending" : ""}`
     };
   };
-  var describeAuthoredAudioTracks = (config) => {
+  var projectAuthoredAudioTracks = (config) => {
     const clipIndexById = /* @__PURE__ */ new Map();
     config.clips.forEach((clip, index) => {
       if (clip.id) {
@@ -3990,39 +5590,50 @@
       };
     });
   };
-  var projectLtxExecutionPath = (config, context = {}) => {
-    const activeEntries = config.clips.map((clip, index) => ({
-      clip,
-      index,
-      stages: projectedStages(clip, index, context)
-    })).filter(({ clip, stages }) => isExecutable(clip, stages));
-    const executable = activeEntries.map(({ clip }) => clip);
-    const clips = config.clips.map(
-      (clip, index) => describeClip(clip, index + 1, projectedStages(clip, index, context))
+  var projectClipAudio = (activeEntries, catalog) => activeEntries.map(({ clip, index, stages }) => {
+    const descriptor = catalog?.architectures.find(
+      (entry) => entry.id === clip.architecture
     );
-    const shape = describeShape(
-      activeEntries.map(({ stages }) => stages.length)
-    );
-    const hostEntry = inferHostEntry(config.clips, context);
-    const isTextToVideoRoot = context.generatedEntry !== void 0 ? context.generatedEntry === "text-to-video" : context.entryPoint === "text-to-video" || hostEntry === "text-to-video";
-    const boundaries = activeEntries.slice(0, -1).map((left, index) => {
+    const reuseRule = descriptor ? conditionalRule(
+      descriptor.rules,
+      CONDITIONAL_RULE_CODES.audioReuseRequiresStages
+    ) : null;
+    return {
+      clipNumber: index + 1,
+      source: clip.audioSource,
+      label: `Clip ${index + 1}: ${audioSourceLabel(clip.audioSource)} audio`,
+      lengthFromAudio: clip.clipLengthFromAudio === true,
+      lengthFromControlNet: clip.clipLengthFromControlNet === true,
+      reusesStageAudio: clip.reuseAudio === true && stages.length >= audioReuseMinimumActiveStages(reuseRule),
+      savesTrack: clip.saveAudioTrack === true,
+      segmentCount: clip.audioSegments.length
+    };
+  });
+
+  // frontend/executionPath/boundaryProjection.ts
+  var isInitialGuidance = (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1;
+  var projectBoundaries = (activeEntries, context) => {
+    const capabilityResolver = context.catalog ? createCapabilityViewResolver(context.catalog) : null;
+    return activeEntries.slice(0, -1).map((left, index) => {
       const right = activeEntries[index + 1];
       const requested = left.clip.boundaryOut;
       let effective = requested;
       let fallback = "none";
-      if (requested === "continue" && right.clip.sourceVideo !== null) {
+      const descriptor = context.catalog?.architectures.find(
+        (entry) => entry.id === left.clip.architecture
+      );
+      const constraints = descriptor?.boundaryRules[requested]?.constraints;
+      if (capabilityResolver) {
+        effective = capabilityResolver.forBoundary(left.clip, right.clip, left.index, right.index).effective(requested);
+      } else if (left.clip.architecture !== right.clip.architecture) {
         effective = "cut";
-        fallback = "target-is-sourced-video";
-      } else if (requested === "continue" && right.stages.length === 0) {
-        effective = "cut";
-        fallback = "target-has-no-stage";
-      } else if (requested === "continue" && right.clip.refs.some(isInitialGuidance)) {
-        effective = "cut";
-        fallback = "target-has-first-frame-reference";
+      }
+      if (effective === "cut" && requested !== "cut") {
+        fallback = left.clip.architecture !== right.clip.architecture ? "cross-architecture" : constraints?.targetRequiresGeneratedEntry === true && right.clip.sourceVideo !== null ? "target-is-sourced-video" : constraints?.targetRequiresStage === true && right.stages.length === 0 ? "target-has-no-stage" : constraints?.targetDisallowsInitialReference === true && right.clip.refs.some(isInitialGuidance) ? "target-has-first-frame-reference" : "architecture-rule";
       }
       const overlapFrames = effective === "cut" ? 0 : left.clip.boundaryOutOverlap;
       const title = effective === "continue" && overlapFrames > 0 ? `Continue (${plural(overlapFrames, "frame")} overlap)` : effective[0].toUpperCase() + effective.slice(1);
-      const fallbackDescription = fallback === "target-is-sourced-video" ? "next clip is sourced footage" : fallback === "target-has-no-stage" ? "next clip has no generation stage" : fallback === "target-has-first-frame-reference" ? "next clip has a first-frame reference" : "";
+      const fallbackDescription = fallback === "target-is-sourced-video" ? "next clip is sourced footage" : fallback === "target-has-no-stage" ? "next clip has no generation stage" : fallback === "target-has-first-frame-reference" ? "next clip has a first-frame reference" : fallback === "cross-architecture" ? "clips use different video architectures" : fallback === "architecture-rule" ? "the selected architecture rule does not allow this join" : "";
       const result = fallback === "none" ? title : `${requested} → cut (${fallbackDescription})`;
       return {
         leftClipNumber: left.index + 1,
@@ -4035,6 +5646,53 @@
         label: `Clip ${left.index + 1} → ${right.index + 1}: ${result}`
       };
     });
+  };
+
+  // frontend/executionPath.ts
+  var projectedStages = (clip, clipIndex, context) => {
+    const refineSkip = context.entryPoint === "global-refine-video" && clipIndex === 0 ? Math.max(0, context.refineSkipStages ?? 1) : 0;
+    return clip.stages.flatMap(
+      (stage, rawIndex) => stage.skipped !== true && rawIndex >= refineSkip ? [{ stage, rawIndex }] : []
+    );
+  };
+  var activeStages = (clip) => clip.stages.filter((stage) => stage.skipped !== true);
+  var isExecutable = (entry) => entry.clip.skipped !== true && (entry.clip.sourceVideo !== null || entry.stages.length > 0);
+  var isInitialGuidance2 = (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1;
+  var inferHostEntry = (clips, context) => {
+    if (context.entryPoint) {
+      return context.entryPoint;
+    }
+    const firstClip = clips[0];
+    if (firstClip?.sourceVideo) {
+      return activeStages(firstClip).length === 0 ? "source-video-only" : "source-video";
+    }
+    const initialReferences = firstClip?.refs.filter(isInitialGuidance2) ?? [];
+    if (initialReferences.some(
+      (reference) => reference.source === REF_SOURCE_UPLOAD
+    )) {
+      return "init-image-guidance";
+    }
+    if (context.generatedEntry) {
+      return context.generatedEntry;
+    }
+    return initialReferences.length > 0 ? "host-image-guidance" : "text-to-video";
+  };
+  var projectVideoExecutionPath = (config, context = {}) => {
+    const entries = config.clips.map((clip, index) => ({
+      clip,
+      index,
+      stages: projectedStages(clip, index, context)
+    }));
+    const activeEntries = entries.filter(isExecutable);
+    const clips = entries.map(
+      ({ clip, index, stages }) => describeClip(clip, index + 1, stages, context)
+    );
+    const shape = describeShape(
+      activeEntries.map(({ stages }) => stages.length)
+    );
+    const hostEntry = inferHostEntry(config.clips, context);
+    const isTextToVideoRoot = context.generatedEntry !== void 0 ? context.generatedEntry === "text-to-video" : context.entryPoint === "text-to-video" || hostEntry === "text-to-video";
+    const boundaries = projectBoundaries(activeEntries, context);
     const references = activeEntries.flatMap(
       ({ clip, index }) => clip.refs.filter(
         (reference) => !isTextToVideoRoot || reference.source === REF_SOURCE_UPLOAD
@@ -4050,16 +5708,7 @@
         };
       })
     );
-    const audioClips = activeEntries.map(({ clip, index, stages }) => ({
-      clipNumber: index + 1,
-      source: clip.audioSource,
-      label: `Clip ${index + 1}: ${audioSourceLabel(clip.audioSource)} audio`,
-      lengthFromAudio: clip.clipLengthFromAudio === true,
-      lengthFromControlNet: clip.clipLengthFromControlNet === true,
-      reusesStageAudio: clip.reuseAudio === true && stages.length >= 3,
-      savesTrack: clip.saveAudioTrack === true,
-      segmentCount: clip.audioSegments.length
-    }));
+    const audioClips = projectClipAudio(activeEntries, context.catalog);
     const sourceVideoClipNumbers = activeEntries.filter(({ clip }) => clip.sourceVideo !== null).map(({ index }) => index + 1);
     const sourceVideoOnlyClipNumbers = activeEntries.filter(
       ({ clip, stages }) => clip.sourceVideo !== null && stages.length === 0
@@ -4107,7 +5756,7 @@
       (total, clip) => total + clip.segmentCount,
       0
     );
-    const authoredTracks = describeAuthoredAudioTracks(config);
+    const authoredTracks = projectAuthoredAudioTracks(config);
     const authoredSpanCount = authoredTracks.reduce(
       (total, track) => total + track.spanCount,
       0
@@ -4116,15 +5765,24 @@
       (total, track) => total + track.pendingSpanCount,
       0
     );
-    const labels = ["LTX Video", hostEntryLabel[hostEntry], shape.label];
+    const architectureLabels = [
+      ...new Set(
+        clips.filter((clip) => clip.kind !== "skipped").map((clip) => clip.architectureLabel)
+      )
+    ];
+    const architectureSummary = architectureLabels.length === 0 ? "No active architecture" : architectureLabels.length === 1 ? architectureLabels[0] : `Mixed architectures: ${architectureLabels.join(", ")}`;
+    const labels = [
+      "VideoStages",
+      architectureSummary,
+      HOST_ENTRY_LABEL[hostEntry],
+      shape.label
+    ];
     if (sourceVideoClipNumbers.length > 0) {
-      labels.push(
-        `${plural(sourceVideoClipNumbers.length, "source-video clip")}`
-      );
+      labels.push(plural(sourceVideoClipNumbers.length, "source-video clip"));
     }
     if (sourceVideoOnlyClipNumbers.length > 0) {
       labels.push(
-        `${plural(sourceVideoOnlyClipNumbers.length, "source-video-only clip")}`
+        plural(sourceVideoOnlyClipNumbers.length, "source-video-only clip")
       );
     }
     if (boundaries.length > 0) {
@@ -4135,12 +5793,8 @@
     if (upscaledStageCount > 0) {
       labels.push(`Upscaling in ${plural(upscaledStageCount, "stage")}`);
     }
-    if (icLoraCount > 0) {
-      labels.push(`${plural(icLoraCount, "IC-LoRA")}`);
-    }
-    if (loraCount > 0) {
-      labels.push(`${plural(loraCount, "LoRA")}`);
-    }
+    if (icLoraCount > 0) labels.push(plural(icLoraCount, "IC-LoRA"));
+    if (loraCount > 0) labels.push(plural(loraCount, "LoRA"));
     if (majorPromptOverrideClipNumbers.length > 0 || majorPromptInheritedClipNumbers.length > 0) {
       const promptSources = [
         ...majorPromptOverrideClipNumbers.length > 0 ? [
@@ -4156,13 +5810,13 @@
       labels.push(`Major prompts: ${promptSources.join(", ")}`);
     }
     if (relayPromptCount > 0) {
-      labels.push(`${plural(relayPromptCount, "relay prompt")}`);
+      labels.push(plural(relayPromptCount, "relay prompt"));
     }
     if (retakeClipNumbers.length > 0) {
-      labels.push(`${plural(retakeClipNumbers.length, "retake")}`);
+      labels.push(plural(retakeClipNumbers.length, "retake"));
     }
     if (references.length > 0) {
-      labels.push(`${plural(references.length, "frame reference")}`);
+      labels.push(plural(references.length, "frame reference"));
     }
     if (lengthFromAudioClipNumbers.length > 0) {
       labels.push(
@@ -4174,9 +5828,7 @@
         `ControlNet sets ${plural(lengthFromControlNetClipNumbers.length, "clip length")}`
       );
     }
-    if (segmentCount > 0) {
-      labels.push(`${plural(segmentCount, "audio segment")}`);
-    }
+    if (segmentCount > 0) labels.push(plural(segmentCount, "audio segment"));
     if (audioClips.length > 0) {
       labels.push(
         `Audio sources: ${[
@@ -4196,7 +5848,7 @@
     }
     const savedTrackCount = audioClips.filter((clip) => clip.savesTrack).length;
     if (savedTrackCount > 0) {
-      labels.push(`${plural(savedTrackCount, "saved audio output")}`);
+      labels.push(plural(savedTrackCount, "saved audio output"));
     }
     if (authoredTracks.length > 0) {
       labels.push(
@@ -4204,12 +5856,12 @@
       );
     }
     return {
-      engine: "LTX Video",
-      hostEntry: { kind: hostEntry, label: hostEntryLabel[hostEntry] },
+      engine: "VideoStages",
+      hostEntry: { kind: hostEntry, label: HOST_ENTRY_LABEL[hostEntry] },
       shape,
       counts: {
         clips: config.clips.length,
-        executableClips: executable.length,
+        executableClips: activeEntries.length,
         stages: config.clips.reduce(
           (total, clip) => total + clip.stages.length,
           0
@@ -4793,7 +6445,7 @@
     continue: "Continue",
     crossfade: "Crossfade"
   };
-  var renderBoundarySeams = (clips, layouts) => {
+  var renderBoundarySeams = (clips, layouts, capabilities) => {
     const seams = [];
     for (let i = 1; i < layouts.length; i++) {
       const leftClipIdx = i - 1;
@@ -4802,17 +6454,22 @@
         continue;
       }
       const value = clip.boundaryOut ?? "cut";
-      const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
+      const capability = capabilities?.forBoundaryIndex(clips, leftClipIdx);
+      const effective = capability?.effective(value) ?? value;
+      const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
       const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-      const title = `Boundary clip ${leftClipIdx + 1} → ${i + 1}: ${label}. Click to edit.`;
-      const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}. Click to edit.`;
+      const effectiveLabel = BOUNDARY_LABEL[effective];
+      const targetNumber = capability?.rightClipIdx === null || capability?.rightClipIdx === void 0 ? i + 1 : capability.rightClipIdx + 1;
+      const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
+      const title = `Boundary clip ${leftClipIdx + 1} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
+      const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}.${fallback} Click to edit.`;
       seams.push(
-        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
+        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
       );
     }
     return seams.join("");
   };
-  var renderRegions = (clips, layouts, fps, unit) => layouts.map((layout) => {
+  var renderRegions = (clips, layouts, fps, unit, capabilities) => layouts.map((layout) => {
     const clip = clips[layout.index];
     const skippedClass = layout.skipped ? " vst-region-skipped" : "";
     const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
@@ -4825,19 +6482,21 @@
     const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button></div>`;
     const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
     const width = clipInnerWidth(layout.widthPx);
+    const retakeSupported = capabilities?.forClip(clip).decision("retake").supported ?? true;
+    const retakeLaneAttrs = retakeSupported ? " data-vst-retake-add" : ' data-vst-capability-disabled="retake"';
     return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
       clip,
       layout.index,
       layout.durationSeconds,
       fps,
       unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index + 1}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="Click empty space to add a retake window">` + renderRetakeOverlay(
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index + 1}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeSupported ? "Click empty space to add a retake window" : "Retakes are not supported by this clip architecture"}">` + renderRetakeOverlay(
       clip,
       layout.index,
       layout.durationSeconds
     ) + `</div>`;
   }).join("");
-  var renderVideoTrackRow = (clips, layouts, fps, unit) => {
+  var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities) => {
     const head = renderTrackHead(
       "vst-track-icon-video",
       "▶",
@@ -4846,7 +6505,7 @@
         active: clips.some((clip) => clip.retake != null)
       })
     );
-    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit) + renderBoundarySeams(clips, layouts) + `</div></div>`;
+    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundarySeams(clips, layouts, capabilities) + `</div></div>`;
   };
 
   // frontend/dimensionPresets.ts
@@ -5099,7 +6758,7 @@
     };
   };
   var PROMPT_PLACEHOLDER = "(no prompt)";
-  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt) => {
+  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt, capabilities) => {
     const globalTrimmed = `${globalPrompt ?? ""}`.trim();
     const parts = [];
     for (let i = 0; i < layouts.length; i++) {
@@ -5110,6 +6769,9 @@
       }
       const width = clipInnerWidth(layout.widthPx);
       const windows = clip.promptWindows ?? [];
+      const clipCapabilities = capabilities?.forClip(clip);
+      const majorSupported = clipCapabilities?.decision("majorPrompt").supported ?? true;
+      const relaySupported = clipCapabilities?.decision("promptRelay").supported ?? true;
       const ownPrompt = `${clip.prompt ?? ""}`.trim();
       const inherited = ownPrompt === "";
       const major = inherited ? globalTrimmed : ownPrompt;
@@ -5121,18 +6783,22 @@
       const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
       const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
       const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
-      parts.push(
-        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
-      );
+      if (majorSupported || ownPrompt !== "") {
+        parts.push(
+          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorSupported ? majorTitle : `${majorTitle} — unsupported by this architecture`)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+        );
+      }
       const minorSegments = windows.map((window2, windowIdx) => {
         const geometry = promptWindowGeom(layout, window2, pxPerSecond);
         const text = `${window2.prompt ?? ""}`.trim();
         const label = text === "" ? "(empty)" : truncate(text, 60);
         return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(`${text || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
       }).join("");
-      parts.push(
-        `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="Click empty space to add a minor prompt">${minorSegments}</div>`
-      );
+      if (relaySupported || windows.length > 0) {
+        parts.push(
+          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be removed"}">${minorSegments}</div>`
+        );
+      }
     }
     return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
       "vst-track-icon-prompt",
@@ -5187,9 +6853,9 @@
       durationSeconds
     });
   };
-  var renderAudioSegmentLanes = (clip, clipIdx, durationSeconds, startPx, widthPx) => {
+  var renderAudioSegmentLanes = (clip, clipIdx, durationSeconds, startPx, widthPx, canCreate) => {
     const place = (laneIdx) => `left:${startPx}px;width:${widthPx}px;--vst-audio-lane-idx:${laneIdx}`;
-    const blankLane = (laneIdx) => `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>`;
+    const blankLane = (laneIdx) => canCreate ? `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>` : "";
     if (durationSeconds <= 0) {
       return blankLane(0);
     }
@@ -5205,13 +6871,17 @@
     lanes.push(blankLane(segments.length));
     return lanes.join("");
   };
-  var renderAudioTrackRow = (clips, layouts) => {
+  var renderAudioTrackRow = (clips, layouts, capabilities) => {
     const segments = layouts.map((layout) => {
       const clip = clips[layout.index];
       if (!clip) {
         return "";
       }
       const badge = audioSourceBadge(clip.audioSource ?? "");
+      const clipCapabilities = capabilities?.forClip(clip);
+      const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
+      const segmentsSupported = clipCapabilities?.decision("audioSegments").supported ?? true;
+      const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
       const native = badge.label === "Native";
       const width = clipInnerWidth(layout.widthPx);
       const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : clip.audioSource === AUDIO_SOURCE_VOICE_REF ? " vst-audio-kind-voiceref" : " vst-audio-kind-upload";
@@ -5225,12 +6895,13 @@
       const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
       const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      return `<div class="vst-audio-clip${kindClass}" data-vst-audio="clip" data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(title)}" aria-label="Edit audio for clip ${layout.index + 1}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
+      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index + 1}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
         clip,
         layout.index,
         clip.duration || 0,
         layout.startPx,
-        width
+        width,
+        segmentsSupported
       );
     }).join("");
     const laneCount = Math.max(
@@ -5256,13 +6927,14 @@
     ) + `<div class="vst-track-cell vst-audio-cell">${segments}</div></div>`;
   };
   var REF_EDGE_ALIGN_FRAMES = 3;
-  var renderReferencesTrackRow = (clips, layouts, fps, unit) => {
+  var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {
     const lanes = layouts.map((layout) => {
       const clip = clips[layout.index];
       if (!clip) {
         return "";
       }
       const width = clipInnerWidth(layout.widthPx);
+      const refsSupported = capabilities?.forClip(clip).decision("frameReferences").supported ?? true;
       const marks = (clip.refs ?? []).map((ref, refIdx) => {
         const isEnd = ref.fromEnd === true;
         const frame = Math.max(0, ref.frame ?? 0);
@@ -5288,7 +6960,7 @@
         const label = `Edit reference ${refIdx + 1} (${source}${isEnd ? ", from end" : ""})`;
         return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
       }).join("");
-      return `<div class="vst-refs-lane" data-vst-ref-add data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="Click to add a reference image at this frame">${marks}</div>`;
+      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be removed"}">${marks}</div>`;
     }).join("");
     return `<div class="vst-track-row vst-track-refs">` + renderTrackHead(
       "vst-track-icon-refs",
@@ -5365,11 +7037,24 @@
       clips,
       layouts,
       pxPerSecond,
-      `${options?.globalPrompt ?? ""}`
+      `${options?.globalPrompt ?? ""}`,
+      options?.capabilities
     );
-    const videoRow = renderVideoTrackRow(clips, layouts, fps, unit);
-    const referencesRow = renderReferencesTrackRow(clips, layouts, fps, unit);
-    const audioRow = renderAudioTrackRow(clips, layouts);
+    const videoRow = renderVideoTrackRow(
+      clips,
+      layouts,
+      fps,
+      unit,
+      options?.capabilities
+    );
+    const referencesRow = renderReferencesTrackRow(
+      clips,
+      layouts,
+      fps,
+      unit,
+      options?.capabilities
+    );
+    const audioRow = renderAudioTrackRow(clips, layouts, options?.capabilities);
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
     body.innerHTML = `${header}${executionSummary}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div></div>` + promptRow + videoRow + referencesRow + audioRow + `</div></div>`;
     applyBackgroundImages(body);
@@ -5487,7 +7172,7 @@
       }
       const clips = getClips();
       const clip = clips[state.clipIdx];
-      if (!clip || !config.readSpan(clip, state.itemIdx)) {
+      if (!clip || config.canEdit && !config.canEdit(clip) || !config.readSpan(clip, state.itemIdx)) {
         return;
       }
       const start = config.moveTargetStart(
@@ -5506,7 +7191,7 @@
       }
       const clips = getClips();
       const clip = clips[state.clipIdx];
-      if (!clip || !config.readSpan(clip, state.itemIdx)) {
+      if (!clip || config.canEdit && !config.canEdit(clip) || !config.readSpan(clip, state.itemIdx)) {
         return;
       }
       const geom = config.resizeTarget(
@@ -5679,6 +7364,10 @@
         if (!clip || !press) {
           return null;
         }
+        if (config.canEdit && !config.canEdit(clip)) {
+          me.preventDefault();
+          return claimOnly();
+        }
         const base = {
           clipIdx,
           itemIdx,
@@ -5818,7 +7507,7 @@
 
   // frontend/timelineAudioSegmentTrack.ts
   var segmentOf = (clip, segIdx) => clip.audioSegments?.[segIdx];
-  var createTimelineAudioSegmentTrack = () => createWindowTrack({
+  var createTimelineAudioSegmentTrack = (getCapabilities) => createWindowTrack({
     routeId: "audio-segment",
     priority: 40,
     origin: "audio-segment-track",
@@ -5842,6 +7531,8 @@
         trim: segment.trimStartSeconds
       } : null;
     },
+    canEdit: (clip) => getCapabilities?.().forClip(clip).decision("audioSegments").supported ?? true,
+    canCreate: (clip) => getCapabilities?.().forClip(clip).decision("audioSegments").supported ?? true,
     moveTargetStart: (clip, _segIdx, press, desiredStart) => {
       const clipDur = clipDurationOf(clip);
       const length = Math.min(press.length, clipDur);
@@ -6097,11 +7788,6 @@
     select2.addEventListener("change", () => onChange(select2.value));
     return select2;
   };
-  var buildSelect = (values, labels, selected, onChange) => buildOptionSelect(
-    values.map((value, i) => ({ value, label: labels[i] ?? value })),
-    selected,
-    onChange
-  );
   var buildNumber = (value, min, max, step, onChange) => {
     const input2 = document.createElement("input");
     input2.type = "number";
@@ -6229,7 +7915,7 @@
         onFile(picked, pickedName);
         return;
       }
-      void getLtxHostBridge().toDataUrl(picked).then((data) => onFile(data, pickedName));
+      void getVideoStagesHostBridge().toDataUrl(picked).then((data) => onFile(data, pickedName));
     });
     clearBtn.addEventListener("click", () => onClear());
     row.append(pickLabel, fileInput, fileName, clearBtn, preview, previewName);
@@ -6694,19 +8380,51 @@
     };
   };
 
+  // frontend/detailStrip/capabilityUi.ts
+  var buildCapabilityNotice = (decision) => {
+    const notice = document.createElement("p");
+    notice.className = "vst-detail-note vst-capability-notice";
+    notice.textContent = decision.reason;
+    notice.dataset.vstCapabilityUnsupported = "true";
+    return notice;
+  };
+  var disableCapabilityControls = (root, decision, removableSelectors = []) => {
+    const removable = new Set(
+      removableSelectors.flatMap(
+        (selector) => Array.from(root.querySelectorAll(selector))
+      )
+    );
+    for (const control of root.querySelectorAll("input, select, textarea, button")) {
+      if (removable.has(control) || [...removable].some((element) => element.contains(control))) {
+        continue;
+      }
+      control.disabled = true;
+      control.title = decision.reason;
+    }
+    root.classList.add("vst-capability-readonly");
+    root.prepend(buildCapabilityNotice(decision));
+  };
+
   // frontend/detailStrip/audioPanel.ts
   var GROUP_AUDIO = "vstdock_audio";
   var buildAudioBody = (ctx, sel, clips) => {
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
-    const controlNetEnabled = hasSlotSourcedIcLora(clip.icLoras);
+    const capabilityView = ctx.capabilities().forClip(clip);
+    const audioDecision = capabilityView.decision("clipAudio");
+    const reuseDecision = capabilityView.decision("audioReuse");
+    const segmentDecision = capabilityView.decision("audioSegments");
+    const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
+      clip.architecture,
+      clip.icLoras
+    );
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-      controlNetEnabled
+      controlNetEnabled,
+      allowedKinds: capabilityView.audioSourceKinds
     });
-    const source = resolveAudioSourceValue(clip.audioSource ?? "", options);
+    const source = options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";
     const canLength = canUseClipLengthFromAudio(source);
     const isAce = isAceStepFunAudioSource(source);
-    const canReuseStageAudio = isAudioReuseEligible(clip);
     const commitAudio = (mutate) => {
       ctx.commit((cs) => {
         const target = cs[clipIdx];
@@ -6714,14 +8432,7 @@
           return;
         }
         mutate(target);
-        const cnEnabled = hasSlotSourcedIcLora(target.icLoras);
-        const nextSource = resolveAudioSourceValue(
-          target.audioSource,
-          buildAudioSourceOptions(target.audioSource, {
-            controlNetEnabled: cnEnabled
-          })
-        );
-        target.audioSource = nextSource;
+        const nextSource = target.audioSource;
         target.clipLengthFromAudio = canUseClipLengthFromAudio(nextSource) && target.clipLengthFromAudio;
         if (target.clipLengthFromAudio) {
           target.clipLengthFromControlNet = false;
@@ -6750,21 +8461,34 @@
         "Where this clip's audio comes from: generated from the prompt, an uploaded file, a Voice Reference (clone a speaker sample), or none."
       )
     );
-    body.appendChild(
-      buildCheckbox(
-        "Reuse Captured Stage Audio",
-        clip.reuseAudio === true,
-        (value) => {
-          commitAudio((c) => {
-            c.reuseAudio = value;
-          });
-        },
-        {
-          disabled: !canReuseStageAudio,
-          help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages."
-        }
-      )
+    const reuseRow = buildCheckbox(
+      "Reuse Captured Stage Audio",
+      clip.reuseAudio === true,
+      (value) => {
+        commitAudio((c) => {
+          c.reuseAudio = value;
+        });
+      },
+      {
+        disabled: !reuseDecision.supported,
+        help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages." + (reuseDecision.reason ? ` ${reuseDecision.reason}` : "")
+      }
     );
+    body.appendChild(reuseRow);
+    if (clip.reuseAudio && !reuseDecision.supported) {
+      reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "basic-button small-button vst-detail-delete";
+      remove.textContent = "Remove unsupported reuse";
+      remove.addEventListener("click", () => {
+        commitAudio((target) => {
+          target.reuseAudio = false;
+        });
+        ctx.render();
+      });
+      reuseRow.appendChild(remove);
+    }
     const lengthRow = buildCheckbox(
       "Clip Length from Audio",
       clip.clipLengthFromAudio === true && canLength,
@@ -6822,21 +8546,50 @@
       body.appendChild(hint);
     }
     const segCount = clip.audioSegments?.length ?? 0;
-    const addSegment = document.createElement("button");
-    addSegment.type = "button";
-    addSegment.className = "basic-button small-button vst-detail-add-segment";
-    addSegment.textContent = "+ Add segment";
-    addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
-    addSegment.addEventListener("click", (event) => {
-      event.preventDefault();
-      ctx.addAudioSegment(clipIdx);
-    });
-    body.appendChild(addSegment);
+    if (segmentDecision.supported) {
+      const addSegment = document.createElement("button");
+      addSegment.type = "button";
+      addSegment.className = "basic-button small-button vst-detail-add-segment";
+      addSegment.textContent = "+ Add segment";
+      addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
+      addSegment.addEventListener("click", (event) => {
+        event.preventDefault();
+        ctx.addAudioSegment(clipIdx);
+      });
+      body.appendChild(addSegment);
+    } else if (segCount > 0) {
+      body.appendChild(buildCapabilityNotice(segmentDecision));
+    }
     if (segCount > 0) {
       const note = document.createElement("p");
       note.className = "vst-detail-note";
       note.textContent = segCount === 1 ? "1 overlay segment · mixed additively over the base audio." : `${segCount} overlay segments · mixed additively over the base audio.`;
       body.appendChild(note);
+    }
+    if (!audioDecision.supported) {
+      disableCapabilityControls(body, audioDecision, [
+        ".vst-remove-unsupported-audio",
+        ".vst-detail-add-segment"
+      ]);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "basic-button small-button vst-remove-unsupported-audio";
+      remove.textContent = "Remove unsupported clip audio";
+      remove.addEventListener("click", () => {
+        ctx.structuralCommit((items) => {
+          const target = items[clipIdx];
+          if (!target) {
+            return null;
+          }
+          target.audioSource = "Native";
+          target.uploadedAudio = null;
+          target.reuseAudio = false;
+          target.clipLengthFromAudio = false;
+          target.saveAudioTrack = false;
+          return "render";
+        });
+      });
+      body.appendChild(remove);
     }
     return wrapForm(GROUP_AUDIO, body);
   };
@@ -6992,6 +8745,10 @@
           "How long this segment plays on the clip, in seconds."
         )
       );
+      const decision = ctx.capabilities().forClip(clip).decision("audioSegments");
+      if (!decision.supported) {
+        disableCapabilityControls(row, decision, [".vst-detail-delete"]);
+      }
       body.appendChild(row);
     });
     const note = document.createElement("p");
@@ -6999,6 +8756,72 @@
     note.textContent = "Overlaid additively over the base audio; overlapping segments mix together.";
     body.appendChild(note);
     return wrapForm(GROUP_AUDIOSEG, body);
+  };
+
+  // frontend/boundaryPlan.ts
+  var crossfadePlanForClips = (clips, fps, resolveConstraints = (clip, _index, mode) => {
+    const generic = boundaryOverlapConstraints(null);
+    const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
+    return {
+      ...generic,
+      defaultFrames: mode === "cut" || !Number.isFinite(persisted) || persisted <= 0 ? generic.defaultFrames : persisted
+    };
+  }) => {
+    const count = clips.length;
+    const boundaryCount = Math.max(0, count - 1);
+    const noOverlap = () => new Array(boundaryCount).fill(0);
+    if (count < 2) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    let requested = 0;
+    const modes = [];
+    for (let i = 0; i < count - 1; i++) {
+      const b = clips[i].boundaryOut ?? "cut";
+      modes[i] = b;
+      if (b === "crossfade" || b === "continue") {
+        requested++;
+      }
+    }
+    if (requested === 0) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    const frames = clips.map((c) => framesForClip(c.duration, fps));
+    const constraints = clips.map(
+      (clip, index) => resolveConstraints(clip, index, clip.boundaryOut ?? "cut")
+    );
+    const prefs = clips.map(
+      (clip, index) => normalizeBoundaryOverlap(clip.boundaryOutOverlap, constraints[index])
+    );
+    const active = (index) => modes[index] === "continue" || modes[index] === "crossfade";
+    const trim = (index) => modes[index] === "continue" ? prefs[index] + constraints[index].continuityExtraFrames : modes[index] === "crossfade" ? prefs[index] : 0;
+    while (true) {
+      let overBudgetClip = -1;
+      for (let i = 0; i < count; i++) {
+        const left = i > 0 ? trim(i - 1) : 0;
+        const right = i < boundaryCount ? trim(i) : 0;
+        if (left + right > frames[i] - 1) {
+          overBudgetClip = i;
+          break;
+        }
+      }
+      if (overBudgetClip < 0) break;
+      const candidate = overBudgetClip < boundaryCount && active(overBudgetClip) ? overBudgetClip : overBudgetClip > 0 && active(overBudgetClip - 1) ? overBudgetClip - 1 : -1;
+      if (candidate < 0) {
+        return { overlaps: noOverlap(), fallback: true };
+      }
+      const reduced = prefs[candidate] - constraints[candidate].frameStep;
+      if (reduced < constraints[candidate].minFrames) {
+        modes[candidate] = "cut";
+        prefs[candidate] = 0;
+      } else {
+        prefs[candidate] = reduced;
+      }
+    }
+    const overlaps = modes.slice(0, boundaryCount).map((_mode, index) => trim(index));
+    return {
+      overlaps,
+      fallback: requested > 0 && !modes.some((_mode, index) => active(index))
+    };
   };
 
   // frontend/detailStrip/boundaryPanel.ts
@@ -7009,12 +8832,20 @@
     body.className = "vst-detail-form-body vst-detail-boundary";
     const clip = clips[leftClipIdx];
     const value = clip?.boundaryOut ?? "cut";
+    const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
     const state = getState();
     const fps = Math.round(safeFps(state.fps));
-    const joinSpecs = ["cut", "continue", "crossfade"].map((mode) => ({
+    const joinSpecs = capability.modes.map((mode) => ({
       value: mode,
       label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
     }));
+    if (!capability.modes.includes(value)) {
+      joinSpecs.unshift({
+        value,
+        label: `${BOUNDARY_LABEL[value]} ${BOUNDARY_GLYPH[value]} (unsupported persisted value)`,
+        disabled: true
+      });
+    }
     const select2 = buildOptionSelect(joinSpecs, value, (next) => {
       ctx.commit((cs) => {
         const c = cs[leftClipIdx];
@@ -7026,20 +8857,37 @@
     });
     body.appendChild(
       buildField(
-        `Join · Clip ${leftClipIdx + 1} → ${leftClipIdx + 2}`,
+        `Join · Clip ${leftClipIdx + 1} → ${capability.rightClipIdx === null ? leftClipIdx + 2 : capability.rightClipIdx + 1}`,
         select2,
         void 0,
         "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
       )
     );
-    if (value !== "cut") {
-      const overlapValue = clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES;
-      const overlapSpecs = CONTINUE_OVERLAP_CHOICES.map(
-        (frames) => ({
-          value: `${frames}`,
-          label: `${frames} frames (~${formatOverlapSeconds(frames, fps)})`
+    if (!capability.modes.includes(value) && capability.reason) {
+      body.appendChild(
+        buildCapabilityNotice({
+          supported: false,
+          reason: capability.reason,
+          rule: null
         })
       );
+    }
+    const overlapPolicy = capability.overlapConstraints(value);
+    if (value !== "cut" && capability.modes.includes(value)) {
+      const overlapValue = clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames;
+      const overlapSpecs = boundaryOverlapChoices(
+        overlapPolicy
+      ).map((frames) => ({
+        value: `${frames}`,
+        label: `${frames} frames (~${formatOverlapSeconds(frames, fps)})`
+      }));
+      if (overlapValue > 0 && !overlapSpecs.some((option) => option.value === `${overlapValue}`)) {
+        overlapSpecs.unshift({
+          value: `${overlapValue}`,
+          label: `${overlapValue} frames (unsupported persisted value)`,
+          disabled: true
+        });
+      }
       const overlapSelect = buildOptionSelect(
         overlapSpecs,
         `${overlapValue}`,
@@ -7047,7 +8895,10 @@
           ctx.commit((cs) => {
             const c = cs[leftClipIdx];
             if (c) {
-              c.boundaryOutOverlap = normalizeContinueOverlap(next);
+              c.boundaryOutOverlap = normalizeBoundaryOverlap(
+                next,
+                overlapPolicy
+              );
             }
           });
           ctx.render();
@@ -7064,16 +8915,24 @@
     }
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
-    if (value === "cut") {
+    const effective = capability.effective(value);
+    if (effective !== value) {
+      info.classList.add("vst-boundary-warn");
+      info.textContent = `${BOUNDARY_LABEL[value]} is preserved for repair, but this join executes as ${BOUNDARY_LABEL[effective].toLowerCase()}. ${capability.reason}`;
+    } else if (value === "cut") {
       info.textContent = "Hard cut — clips are concatenated with no overlap.";
     } else if (value === "continue") {
-      const plan = crossfadePlanForClips(clips, fps);
+      const plan = crossfadePlanForClips(
+        clips,
+        fps,
+        (_left, index, mode) => ctx.capabilities().forBoundaryIndex(clips, index).overlapConstraints(mode)
+      );
       const window2 = plan.overlaps[leftClipIdx] ?? 0;
       if (plan.fallback || window2 <= 0) {
         info.classList.add("vst-boundary-warn");
         info.textContent = "This continue will fall back to a cut — a clip is too short for the overlap.";
       } else {
-        const requested = (clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES) + 1;
+        const requested = (clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames) + overlapPolicy.continuityExtraFrames;
         let text = `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
         if (window2 < requested) {
           text += " The window was reduced because a clip is too short.";
@@ -7081,13 +8940,17 @@
         info.textContent = text;
       }
     } else {
-      const plan = crossfadePlanForClips(clips, fps);
+      const plan = crossfadePlanForClips(
+        clips,
+        fps,
+        (_left, index, mode) => ctx.capabilities().forBoundaryIndex(clips, index).overlapConstraints(mode)
+      );
       const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
       if (plan.fallback || overlapFrames <= 0) {
         info.classList.add("vst-boundary-warn");
         info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
       } else {
-        const requested = clip?.boundaryOutOverlap ?? DEFAULT_CONTINUE_OVERLAP_FRAMES;
+        const requested = clip?.boundaryOutOverlap ?? capability.overlapConstraints(value).defaultFrames;
         let text = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
         if (overlapFrames < requested) {
           text += " The window was reduced because a clip is too short.";
@@ -7099,87 +8962,8 @@
     return wrapForm(GROUP_BOUNDARY, body);
   };
 
-  // frontend/timelineEdit.ts
-  var pxToDuration = (px, pxPerSecond, fps) => {
-    if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
-      return CLIP_DURATION_MIN;
-    }
-    const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
-    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
-  };
-  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd) => {
-    const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
-    const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
-    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps2));
-    if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
-      return REF_FRAME_MIN;
-    }
-    const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
-    const time = fraction * duration;
-    const rawFrame = fromEnd ? (duration - time) * safeFps2 : time * safeFps2;
-    return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
-  };
-  var clampClipRefsToDuration = (clip, getRootDefaults2, effectiveFps) => {
-    const frameMax = getReferenceFrameMax(getRootDefaults2, clip, effectiveFps);
-    for (const ref of clip.refs) {
-      ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
-    }
-  };
-  var applyClipDurationResize = (clip, newDuration, getRootDefaults2, effectiveFps) => {
-    if (clip.duration === newDuration) {
-      return false;
-    }
-    clip.duration = newDuration;
-    clampClipRefsToDuration(clip, getRootDefaults2, effectiveFps);
-    return true;
-  };
-
-  // frontend/detailStrip/clipBasics.ts
-  var DURATION_STEP = 0.1;
-  var buildClipColumn = (context, clip, clipIdx) => {
-    const column = document.createElement("div");
-    column.className = "vst-detail-col vst-detail-clip";
-    const sourced = !!clip.sourceVideo;
-    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || sourced;
-    const durationInput = buildNumber(
-      clip.duration,
-      CLIP_DURATION_MIN,
-      CLIP_DURATION_MAX,
-      DURATION_STEP,
-      (value) => {
-        context.debouncedCommit("duration", (clips) => {
-          const target = clips[clipIdx];
-          if (target && !lengthDerived2) {
-            applyClipDurationResize(target, value, getRootDefaults);
-          }
-        });
-      }
-    );
-    durationInput.setAttribute("data-vst-focus-key", "duration");
-    const durationField = buildField(
-      "Duration (s)",
-      durationInput,
-      lengthDerived2 ? sourced ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
-    );
-    if (lengthDerived2) {
-      durationInput.disabled = true;
-      durationField.classList.add("vst-field-disabled");
-    }
-    column.appendChild(durationField);
-    column.appendChild(
-      buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
-        context.commit((clips) => {
-          const target = clips[clipIdx];
-          if (target) {
-            target.skipped = value;
-          }
-        });
-      })
-    );
-    return column;
-  };
-
-  // frontend/icLoraAutoDownload.ts
+  // frontend/architectures/ltx2/icLoraAutoDownload.ts
+  var IC_LORA_AUTO = "[AUTO]";
   var IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
   var statuses = /* @__PURE__ */ new Map();
   var clearIcLoraAutoFailure = (presetId) => {
@@ -7267,7 +9051,7 @@
     return status ? statusTextFor(preset, status) : "Preparing preset weights download…";
   };
 
-  // frontend/detailStrip/icLoraPanel.ts
+  // frontend/architectures/ltx2/icLoraPanel.ts
   var buildIcLorasSection = (context, clip, clipIdx, defaults) => {
     const { wrap, col } = buildStackSection(
       "IC-LoRAs",
@@ -7283,6 +9067,8 @@
       );
     }
     const entryAt = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
+    const clipCapabilities = context.capabilities().forClip(clip);
+    const hdrDecision = clipCapabilities.decision("hdr");
     clip.icLoras.forEach((entry, entryIdx) => {
       const { row, fields } = buildInstanceRow({
         rowClass: "vst-detail-iclora",
@@ -7304,14 +9090,24 @@
         repoint: () => {
         }
       });
+      const persistedHdr = isHdrFeature(entry);
+      const presetOptions = IC_LORA_PRESETS.filter(
+        (preset2) => hdrDecision.supported || !`${preset2.id} ${preset2.displayName}`.toLowerCase().includes("hdr")
+      );
+      const presetSpecs = [
+        { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+        ...presetOptions.map((preset2) => ({
+          value: preset2.id,
+          label: preset2.displayName
+        }))
+      ];
+      preserveSelectedOption(presetSpecs, entry.preset, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
       const presetSelect = buildOptionSelect(
-        [
-          { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
-          ...IC_LORA_PRESETS.map((preset2) => ({
-            value: preset2.id,
-            label: preset2.displayName
-          }))
-        ],
+        presetSpecs,
         entry.preset,
         (value) => {
           context.commit((clips) => {
@@ -7338,23 +9134,30 @@
           "A curated IC-LoRA setup — picking one fills in the LoRA, strength, and control type for a known effect (pose, depth, style, etc.). Choose Custom to set everything yourself."
         )
       );
-      const loraSelect = buildSelect(
-        [IC_LORA_AUTO, ...defaults.loraValues],
-        [IC_LORA_AUTO, ...defaults.loraLabels],
-        entry.lora,
-        (value) => {
-          context.commit((clips) => {
-            const target = entryAt(clips, entryIdx);
-            if (target) {
-              target.lora = value;
-            }
-          });
-          if (value === IC_LORA_AUTO) {
-            clearIcLoraAutoFailure(entry.preset);
+      const loraSpecs = [
+        { value: IC_LORA_AUTO, label: IC_LORA_AUTO },
+        ...defaults.loraValues.map((value, optionIdx) => ({
+          value,
+          label: defaults.loraLabels[optionIdx] ?? value
+        }))
+      ];
+      preserveSelectedOption(loraSpecs, entry.lora, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
+      const loraSelect = buildOptionSelect(loraSpecs, entry.lora, (value) => {
+        context.commit((clips) => {
+          const target = entryAt(clips, entryIdx);
+          if (target) {
+            target.lora = value;
           }
-          context.render();
+        });
+        if (value === IC_LORA_AUTO) {
+          clearIcLoraAutoFailure(entry.preset);
         }
-      );
+        context.render();
+      });
       fields.appendChild(
         buildField(
           "LoRA",
@@ -7572,7 +9375,9 @@
         }
         fields.appendChild(hint);
       }
-      ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
+      if (!persistedHdr || hdrDecision.supported) {
+        ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
+      }
       const autoText = icLoraAutoHint(entry, defaults.loraValues);
       if (autoText) {
         const autoHint = document.createElement("small");
@@ -7583,13 +9388,16 @@
         autoHint.textContent = autoText;
         fields.appendChild(autoHint);
       }
+      if (persistedHdr && !hdrDecision.supported) {
+        disableCapabilityControls(row, hdrDecision, [".vst-detail-delete"]);
+      }
       col.appendChild(row);
     });
     col.appendChild(
       buildAddButton("+ Add IC-LoRA", "vst-detail-add-iclora", () => {
         context.structuralCommit((clips) => {
           const target = clips[clipIdx];
-          if (!target) {
+          if (!target || !context.capabilities().forClip(target).decision("icLora").supported) {
             return null;
           }
           target.icLoras.push(
@@ -7602,6 +9410,124 @@
       })
     );
     return wrap;
+  };
+
+  // frontend/architectures/authoringPanels.ts
+  var panels = /* @__PURE__ */ new Map([
+    ["ltx2", { buildIcLorasSection }]
+  ]);
+  var persistedIcLoraRemovalPanel = (context, clip, clipIdx) => {
+    const section = document.createElement("section");
+    section.className = "vst-detail-col vst-detail-iclora-col";
+    const heading = document.createElement("div");
+    heading.className = "vst-detail-sec";
+    heading.textContent = "Persisted IC-LoRAs";
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "This architecture has no IC-LoRA editor. Existing entries remain available for removal.";
+    section.append(heading, note);
+    clip.icLoras.forEach((entry, entryIdx) => {
+      const row = document.createElement("div");
+      row.className = "vst-detail-instance vst-detail-iclora";
+      const label = document.createElement("span");
+      label.textContent = entry.lora || `IC-LoRA ${entryIdx + 1}`;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "basic-button small-button vst-detail-delete";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        context.structuralCommit((clips) => {
+          const target = clips[clipIdx];
+          if (!target?.icLoras[entryIdx]) return null;
+          target.icLoras.splice(entryIdx, 1);
+          return "render";
+        });
+      });
+      row.append(label, remove);
+      section.appendChild(row);
+    });
+    return section;
+  };
+  var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults) => panels.get(clip.architecture)?.buildIcLorasSection(context, clip, clipIdx, defaults) ?? persistedIcLoraRemovalPanel(context, clip, clipIdx);
+
+  // frontend/timelineEdit.ts
+  var pxToDuration = (px, pxPerSecond, fps) => {
+    if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
+      return CLIP_DURATION_MIN;
+    }
+    const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
+    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
+  };
+  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd) => {
+    const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
+    const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps2));
+    if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
+      return REF_FRAME_MIN;
+    }
+    const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
+    const time = fraction * duration;
+    const rawFrame = fromEnd ? (duration - time) * safeFps2 : time * safeFps2;
+    return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
+  };
+  var clampClipRefsToDuration = (clip, getRootDefaults2, effectiveFps) => {
+    const frameMax = getReferenceFrameMax(getRootDefaults2, clip, effectiveFps);
+    for (const ref of clip.refs) {
+      ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
+    }
+  };
+  var applyClipDurationResize = (clip, newDuration, getRootDefaults2, effectiveFps) => {
+    if (clip.duration === newDuration) {
+      return false;
+    }
+    clip.duration = newDuration;
+    clampClipRefsToDuration(clip, getRootDefaults2, effectiveFps);
+    return true;
+  };
+
+  // frontend/detailStrip/clipBasics.ts
+  var DURATION_STEP = 0.1;
+  var buildClipColumn = (context, clip, clipIdx) => {
+    const column = document.createElement("div");
+    column.className = "vst-detail-col vst-detail-clip";
+    const sourced = !!clip.sourceVideo;
+    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || sourced;
+    const durationInput = buildNumber(
+      clip.duration,
+      CLIP_DURATION_MIN,
+      CLIP_DURATION_MAX,
+      DURATION_STEP,
+      (value) => {
+        context.debouncedCommit("duration", (clips) => {
+          const target = clips[clipIdx];
+          if (target && !lengthDerived2) {
+            applyClipDurationResize(target, value, getRootDefaults);
+          }
+        });
+      }
+    );
+    durationInput.setAttribute("data-vst-focus-key", "duration");
+    const durationField = buildField(
+      "Duration (s)",
+      durationInput,
+      lengthDerived2 ? sourced ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
+    );
+    if (lengthDerived2) {
+      durationInput.disabled = true;
+      durationField.classList.add("vst-field-disabled");
+    }
+    column.appendChild(durationField);
+    column.appendChild(
+      buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
+        context.commit((clips) => {
+          const target = clips[clipIdx];
+          if (target) {
+            target.skipped = value;
+          }
+        });
+      })
+    );
+    return column;
   };
 
   // frontend/detailStrip/retakePanel.ts
@@ -7742,7 +9668,7 @@
     return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
   };
   var probeSourceVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
-    const video = getLtxHostBridge().createSourceVideoElement();
+    const video = getVideoStagesHostBridge().createSourceVideoElement();
     video.muted = true;
     video.preload = "auto";
     let settled = false;
@@ -7824,7 +9750,7 @@
       const state = store2.getState();
       const clips = state.clips;
       const target = findClipByStableId(clips, operation.clipId);
-      if (!target) {
+      if (!target || !context.capabilities().forClip(target).decision("sourceVideo").supported) {
         return;
       }
       const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
@@ -7837,6 +9763,7 @@
         startSeconds: 0,
         lengthSeconds
       };
+      reconcileSourcedClipIdentity(target, context.capabilities().catalog);
       applyClipDurationResize(
         target,
         Math.max(CLIP_DURATION_MIN, lengthSeconds),
@@ -7869,6 +9796,10 @@
           return null;
         }
         target.sourceVideo = null;
+        reconcileSourcedClipIdentity(
+          target,
+          context.capabilities().catalog
+        );
         return "render";
       });
     };
@@ -7994,7 +9925,7 @@
       "LoRAs applied to this stage only, on top of the model. Each row picks a LoRA and its weight (negative weights invert its effect)."
     );
     section.appendChild(label);
-    if (defaults.loraValues.length === 0) {
+    if (defaults.loraValues.length === 0 && stage.loras.length === 0) {
       const empty = document.createElement("small");
       empty.className = "vst-audio-field-hint";
       empty.textContent = "(no LoRAs available)";
@@ -8006,19 +9937,25 @@
     stage.loras.forEach((lora, index) => {
       const row = document.createElement("div");
       row.className = "vst-stage-lora-row";
-      const select2 = buildSelect(
-        defaults.loraValues,
-        defaults.loraLabels,
-        lora.name,
-        (value) => {
-          context.commit((clips) => {
-            const entry = clips[clipIdx]?.stages[stageIdx]?.loras[index];
-            if (entry) {
-              entry.name = value;
-            }
-          });
-        }
+      const loraOptions = defaults.loraValues.map(
+        (value, optionIdx) => ({
+          value,
+          label: defaults.loraLabels[optionIdx] ?? value
+        })
       );
+      preserveSelectedOption(loraOptions, lora.name, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
+      const select2 = buildOptionSelect(loraOptions, lora.name, (value) => {
+        context.commit((clips) => {
+          const entry = clips[clipIdx]?.stages[stageIdx]?.loras[index];
+          if (entry) {
+            entry.name = value;
+          }
+        });
+      });
       const weight = buildNumber(
         lora.weight,
         -10,
@@ -8054,114 +9991,262 @@
       list.appendChild(row);
     });
     section.appendChild(list);
-    const addButton = document.createElement("button");
-    addButton.type = "button";
-    addButton.className = "basic-button small-button vst-stage-lora-add";
-    addButton.textContent = "+ Add LoRA";
-    addButton.addEventListener("click", () => {
-      context.structuralCommit((clips) => {
-        const target = clips[clipIdx]?.stages[stageIdx];
-        if (!target) {
-          return null;
-        }
-        target.loras.push({
-          name: defaults.loraValues[0] ?? "",
-          weight: LORA_WEIGHT_DEFAULT
+    if (defaults.loraValues.length > 0) {
+      const addButton = document.createElement("button");
+      addButton.type = "button";
+      addButton.className = "basic-button small-button vst-stage-lora-add";
+      addButton.textContent = "+ Add LoRA";
+      addButton.addEventListener("click", () => {
+        context.structuralCommit((clips) => {
+          const target = clips[clipIdx]?.stages[stageIdx];
+          if (!target) {
+            return null;
+          }
+          target.loras.push({
+            name: defaults.loraValues[0],
+            weight: LORA_WEIGHT_DEFAULT
+          });
+          return "render";
         });
-        return "render";
       });
-    });
-    section.appendChild(addButton);
+      section.appendChild(addButton);
+    }
     return section;
   };
 
-  // frontend/detailStrip/stagePanel.ts
-  var UPSCALE_EPSILON = 1e-6;
-  var buildStageParamsColumn = (context, clip, clipIdx, stageIdx, stage, defaults) => {
-    const column = document.createElement("div");
-    column.className = "vst-detail-col vst-detail-params";
-    const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
-    const isRefine = stageIdx >= 1 || sourcedStage0;
-    const commit = (mutate) => {
-      context.commit((clips) => {
-        const target = clips[clipIdx]?.stages[stageIdx];
-        if (target) {
-          mutate(target);
-        }
-      });
-    };
-    const debouncedCommit = (key, mutate) => {
-      context.debouncedCommit(key, (clips) => {
-        const target = clips[clipIdx]?.stages[stageIdx];
-        if (target) {
-          mutate(target);
-        }
-      });
-    };
-    const slider = (label, focusKey, value, min, max, step, assign, options) => tagFocus(
-      buildSlider(
-        label,
-        value,
-        min,
-        max,
-        step,
-        (nextValue) => {
-          options?.onValue?.(nextValue);
-          debouncedCommit(
-            focusKey,
-            (target) => assign(target, nextValue)
+  // frontend/architectures/conversion/presentation.ts
+  var architectureConversionMessage = (fromLabel, toLabel, removals) => {
+    const impact = removals.length === 0 ? "Architecture-owned stage settings will be retargeted." : `This removes: ${removals.join(", ")}.`;
+    return `Convert this clip from ${fromLabel} to ${toLabel}?
+
+${impact}
+
+The conversion is one undoable change.`;
+  };
+  var confirmArchitectureConversion = (message, apply, confirm = (value) => window.confirm(value)) => confirm(message) && apply();
+
+  // frontend/detailStrip/stagePanel/modelSection.ts
+  var appendStageModelSection = ({
+    context,
+    clip,
+    clipIdx,
+    stageIdx,
+    stage,
+    defaults,
+    fields
+  }) => {
+    const modelView = stageIdx === 0 ? {
+      values: defaults.modelCatalog.entries.flatMap((entry) => {
+        const architecture = defaults.modelCatalog.architectures.find(
+          (candidate) => candidate.id === entry.architectureId
+        );
+        return architecture && architectureSupportsClipStart(
+          architecture.capabilities,
+          clip,
+          context.generatedEntryMode()
+        ) ? [entry.value] : [];
+      }),
+      labels: defaults.modelCatalog.entries.flatMap(
+        (entry) => {
+          const architecture = defaults.modelCatalog.architectures.find(
+            (candidate) => candidate.id === entry.architectureId
           );
-        },
-        options?.title || options?.help ? { title: options.title, help: options.help } : void 0
-      ),
-      focusKey
+          return architecture && architectureSupportsClipStart(
+            architecture.capabilities,
+            clip,
+            context.generatedEntryMode()
+          ) ? [entry.label] : [];
+        }
+      )
+    } : architectureCatalogView(defaults.modelCatalog, clip.architecture);
+    const modelOptions = modelView.values.map((value, index) => ({
+      value,
+      label: modelView.labels[index] ?? value
+    }));
+    if (stage.model && !modelOptions.some((option) => option.value === stage.model)) {
+      modelOptions.unshift({
+        value: stage.model,
+        label: `${stage.model} (unsupported persisted value)`,
+        disabled: true
+      });
+    }
+    const modelSelect = buildOptionSelect(
+      modelOptions,
+      `${stage.model ?? ""}`,
+      (value) => {
+        const plan = buildArchitectureRetargetPlan(
+          defaults.modelCatalog,
+          value
+        );
+        if (!plan) {
+          modelSelect.value = stage.model;
+          return;
+        }
+        if (stageIdx === 0 && plan.architectureId !== clip.architecture) {
+          const conversion = planArchitectureConversion(
+            clip,
+            plan,
+            defaults.modelCatalog
+          );
+          if (!conversion) {
+            modelSelect.value = stage.model;
+            return;
+          }
+          const fromLabel = defaults.modelCatalog.architectures.find(
+            (entry) => entry.id === clip.architecture
+          )?.label ?? clip.architecture;
+          const toLabel = defaults.modelCatalog.architectures.find(
+            (entry) => entry.id === plan.architectureId
+          )?.label ?? plan.architectureId;
+          const confirmedAndApplied = confirmArchitectureConversion(
+            architectureConversionMessage(
+              fromLabel,
+              toLabel,
+              conversion.removals
+            ),
+            () => {
+              const snapshot2 = getTimelineStore().getSnapshot();
+              const clipId2 = snapshot2.state.clips[clipIdx]?.id;
+              if (!clipId2) return false;
+              const result2 = dispatchDocumentCommand(
+                {
+                  type: "clip.convert-architecture",
+                  clipId: clipId2,
+                  target: plan
+                },
+                {
+                  expectedRevision: snapshot2.revision,
+                  origin: "detail-strip"
+                }
+              );
+              if (result2.applied) context.render();
+              return result2.applied;
+            }
+          );
+          if (!confirmedAndApplied) modelSelect.value = stage.model;
+          return;
+        }
+        const snapshot = getTimelineStore().getSnapshot();
+        const clipId = snapshot.state.clips[clipIdx]?.id;
+        const stageId = snapshot.state.clips[clipIdx]?.stages[stageIdx]?.id;
+        if (!clipId || !stageId) {
+          modelSelect.value = stage.model;
+          return;
+        }
+        const result = dispatchDocumentCommand(
+          {
+            type: "stage.retarget-model",
+            clipId,
+            stageId,
+            target: plan
+          },
+          {
+            expectedRevision: snapshot.revision,
+            origin: "detail-strip"
+          }
+        );
+        if (!result.applied) {
+          modelSelect.value = stage.model;
+          return;
+        }
+        context.render();
+      }
     );
-    const select2 = (values, labels, selected, assign) => buildSelect(
-      values,
-      labels,
-      selected,
-      (value) => commit((target) => assign(target, value))
-    );
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-fields";
-    const applyMutedStyle = () => {
-      fields.classList.toggle(
-        "vst-stage-fields-muted",
-        stage.skipped === true
-      );
-    };
-    const syncRailChip = (skipped) => {
-      context.getDockEl()?.querySelector(
-        `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
-      )?.classList.toggle("vst-stage-tab-skipped", skipped);
-    };
-    column.appendChild(
-      buildCheckbox("Skip this stage", stage.skipped === true, (value) => {
-        stage.skipped = value;
-        applyMutedStyle();
-        syncRailChip(value);
-        commit((target) => {
-          target.skipped = value;
-        });
-      })
-    );
-    column.appendChild(fields);
-    applyMutedStyle();
     const modelField = buildField(
       "Model",
-      select2(
-        defaults.modelValues,
-        defaults.modelLabels,
-        `${stage.model ?? ""}`,
-        (target, value) => {
-          target.model = value;
-        }
-      ),
+      modelSelect,
       void 0,
-      "The video model this stage runs. Later stages can switch to a different model to refine or upscale the previous stage's output."
+      stageIdx === 0 ? "Stage 0 establishes the clip architecture. Choosing a model from another architecture converts the whole clip in one undoable change." : "Later stages are locked to the architecture established by Stage 0."
     );
     modelField.classList.add("vst-detail-span-2");
     fields.appendChild(modelField);
+  };
+
+  // frontend/detailStrip/stagePanel/referenceGuideSection.ts
+  var appendStageReferenceGuideSection = ({
+    context,
+    clip,
+    clipIdx,
+    stage,
+    fields,
+    debouncedCommit
+  }) => {
+    if (clip.refs.length > 0) {
+      const refDecision = context.capabilities().forClip(clip).decision("frameReferences");
+      const refsHeader = document.createElement("div");
+      refsHeader.className = "vst-detail-sec vst-detail-span-full";
+      refsHeader.textContent = "Reference Strengths";
+      fields.appendChild(refsHeader);
+      const setRefHover = (refIdx, on) => {
+        context.getBoundBody()?.querySelector(
+          `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
+        )?.classList.toggle("vst-ref-hover", on);
+      };
+      clip.refs.forEach((ref, refIdx) => {
+        const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
+        const refSlider = buildSlider(
+          `R${refIdx}`,
+          current,
+          STAGE_REF_STRENGTH_MIN,
+          STAGE_REF_STRENGTH_MAX,
+          STAGE_REF_STRENGTH_STEP,
+          (value) => {
+            debouncedCommit(`refstrength-${refIdx}`, (target) => {
+              if (refIdx < target.refStrengths.length) {
+                target.refStrengths[refIdx] = value;
+              }
+            });
+          },
+          {
+            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
+          }
+        );
+        refSlider.classList.add("vst-stage-ref-slider");
+        tagFocus(refSlider, `ref-${refIdx}`);
+        refSlider.addEventListener(
+          "mouseenter",
+          () => setRefHover(refIdx, true)
+        );
+        refSlider.addEventListener(
+          "mouseleave",
+          () => setRefHover(refIdx, false)
+        );
+        fields.appendChild(refSlider);
+        if (!refDecision.supported) {
+          disableCapabilityControls(refSlider, refDecision);
+        }
+      });
+      if (!refDecision.supported) {
+        fields.appendChild(buildCapabilityNotice(refDecision));
+      }
+    }
+    if (clip.icLoras.length === 0) return;
+    const icDecision = context.capabilities().forClip(clip).decision("icLora");
+    const guideStrength = buildSlider(
+      "IC-LoRA Guide Strength",
+      stage.controlNetStrength,
+      STAGE_CONTROLNET_STRENGTH_MIN,
+      STAGE_CONTROLNET_STRENGTH_MAX,
+      STAGE_CONTROLNET_STRENGTH_STEP,
+      (value) => {
+        debouncedCommit("controlnet", (target) => {
+          target.controlNetStrength = value;
+        });
+      },
+      {
+        help: "How strongly this stage is conditioned by the clip's IC-LoRA drive video/guides. Higher follows the guide more closely; lower gives the model more freedom."
+      }
+    );
+    tagFocus(guideStrength, "controlnet");
+    fields.appendChild(guideStrength);
+    if (!icDecision.supported) {
+      disableCapabilityControls(guideStrength, icDecision);
+    }
+  };
+
+  // frontend/detailStrip/stagePanel/samplingSection.ts
+  var appendStageDenoisingSection = (bindings, isRefine) => {
+    const { stage, defaults, fields, slider } = bindings;
     fields.appendChild(
       slider(
         "Steps",
@@ -8212,141 +10297,241 @@
           }
         )
       );
-      const methodSelect = select2(
-        defaults.upscaleMethodValues,
-        defaults.upscaleMethodLabels,
-        `${stage.upscaleMethod ?? ""}`,
-        (target, value) => {
-          target.upscaleMethod = value;
-        }
-      );
-      const methodField = buildField(
-        "Upscale Method",
-        methodSelect,
-        void 0,
-        "How frames are enlarged before this stage refines them. Only applies when Upscale is above 1×."
-      );
-      methodField.classList.add("vst-detail-span-2");
-      const syncMethod = (upscale) => {
-        const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
-        methodSelect.disabled = disabled;
-        methodField.classList.toggle("vst-field-disabled", disabled);
-        methodField.title = disabled ? "Set Upscale above 1× to choose a method" : "";
-      };
-      fields.appendChild(
-        slider(
-          "Upscale",
-          "upscale",
-          stage.upscale,
-          defaults.upscaleMin,
-          defaults.upscaleMax,
-          defaults.upscaleStep,
-          (target, value) => {
-            target.upscale = value;
-          },
-          {
-            onValue: syncMethod,
-            help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
-          }
-        )
-      );
-      fields.appendChild(methodField);
-      syncMethod(stage.upscale);
     }
-    fields.appendChild(
-      buildField(
-        "Sampler",
-        select2(
-          defaults.samplerValues,
-          defaults.samplerLabels,
-          `${stage.sampler ?? ""}`,
-          (target, value) => {
-            target.sampler = value;
-          }
-        ),
-        void 0,
-        "The sampling algorithm used to denoise each step. Leave at the model default unless you have a reason to change it."
-      )
+  };
+  var appendStageSamplerSchedulerSection = ({
+    stage,
+    defaults,
+    fields,
+    stageCapabilities,
+    commit
+  }) => {
+    const persistedSelect = (values, labels, selected, assign) => {
+      const options = values.map((value, index) => ({
+        value,
+        label: labels[index] ?? value
+      }));
+      preserveSelectedOption(options, selected, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
+      return buildOptionSelect(options, selected, assign);
+    };
+    const samplerField = buildField(
+      "Sampler",
+      persistedSelect(
+        defaults.samplerValues,
+        defaults.samplerLabels,
+        `${stage.sampler ?? ""}`,
+        (value) => commit((target) => {
+          target.sampler = value;
+        })
+      ),
+      void 0,
+      "The sampling algorithm used to denoise each step. Leave at the model default unless you have a reason to change it."
     );
-    fields.appendChild(
-      buildField(
-        "Scheduler",
-        select2(
-          defaults.schedulerValues,
-          defaults.schedulerLabels,
-          `${stage.scheduler ?? ""}`,
-          (target, value) => {
-            target.scheduler = value;
-          }
-        ),
-        void 0,
-        "Controls how the noise level is spaced across the steps. Leave at the model default unless you have a reason to change it."
-      )
+    const samplerState = stageCapabilities.authoringState("sampler", true);
+    if (!samplerState.enabled) {
+      disableCapabilityControls(samplerField, samplerState);
+    }
+    fields.appendChild(samplerField);
+    const schedulerField = buildField(
+      "Scheduler",
+      persistedSelect(
+        defaults.schedulerValues,
+        defaults.schedulerLabels,
+        `${stage.scheduler ?? ""}`,
+        (value) => commit((target) => {
+          target.scheduler = value;
+        })
+      ),
+      void 0,
+      "Controls how the noise level is spaced across the steps. Leave at the model default unless you have a reason to change it."
     );
-    if (clip.refs.length > 0) {
-      const refsHeader = document.createElement("div");
-      refsHeader.className = "vst-detail-sec vst-detail-span-full";
-      refsHeader.textContent = "Reference Strengths";
-      fields.appendChild(refsHeader);
-      const setRefHover = (refIdx, on) => {
-        context.getBoundBody()?.querySelector(
-          `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
-        )?.classList.toggle("vst-ref-hover", on);
-      };
-      clip.refs.forEach((ref, refIdx) => {
-        const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
-        const refSlider = buildSlider(
-          `R${refIdx}`,
-          current,
-          STAGE_REF_STRENGTH_MIN,
-          STAGE_REF_STRENGTH_MAX,
-          STAGE_REF_STRENGTH_STEP,
-          (value) => {
-            debouncedCommit(`refstrength-${refIdx}`, (target) => {
-              if (refIdx < target.refStrengths.length) {
-                target.refStrengths[refIdx] = value;
-              }
-            });
-          },
-          {
-            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
-          }
-        );
-        refSlider.classList.add("vst-stage-ref-slider");
-        tagFocus(refSlider, `ref-${refIdx}`);
-        refSlider.addEventListener(
-          "mouseenter",
-          () => setRefHover(refIdx, true)
-        );
-        refSlider.addEventListener(
-          "mouseleave",
-          () => setRefHover(refIdx, false)
-        );
-        fields.appendChild(refSlider);
+    const schedulerState = stageCapabilities.authoringState("scheduler", true);
+    if (!schedulerState.enabled) {
+      disableCapabilityControls(schedulerField, schedulerState);
+    }
+    fields.appendChild(schedulerField);
+  };
+
+  // frontend/detailStrip/stagePanel/upscaleSection.ts
+  var UPSCALE_EPSILON = 1e-6;
+  var appendStageUpscaleSection = (bindings, isRefine) => {
+    if (!isRefine) return;
+    const { stage, defaults, fields, stageCapabilities, slider, commit } = bindings;
+    const upscaleState = stageCapabilities.authoringState(
+      "upscale",
+      stage.upscale !== 1
+    );
+    if (!upscaleState.visible) return;
+    const supportedMethods = defaults.upscaleMethodValues.flatMap(
+      (value, index) => stageCapabilities.upscaleModes.includes(upscaleModeForMethod(value)) ? [
+        {
+          value,
+          label: defaults.upscaleMethodLabels[index] ?? value
+        }
+      ] : []
+    );
+    if (stage.upscaleMethod && !supportedMethods.some((option) => option.value === stage.upscaleMethod)) {
+      supportedMethods.unshift({
+        value: stage.upscaleMethod,
+        label: `${stage.upscaleMethod} (unsupported persisted value)`,
+        disabled: true
       });
     }
-    if (clip.icLoras.length > 0) {
-      const controlNetSlider = buildSlider(
-        "IC-LoRA Guide Strength",
-        stage.controlNetStrength,
-        STAGE_CONTROLNET_STRENGTH_MIN,
-        STAGE_CONTROLNET_STRENGTH_MAX,
-        STAGE_CONTROLNET_STRENGTH_STEP,
-        (value) => {
-          debouncedCommit("controlnet", (target) => {
-            target.controlNetStrength = value;
-          });
-        },
-        {
-          help: "How strongly this stage is conditioned by the clip's IC-LoRA drive video/guides. Higher follows the guide more closely; lower gives the model more freedom."
-        }
-      );
-      tagFocus(controlNetSlider, "controlnet");
-      fields.appendChild(controlNetSlider);
-    }
-    fields.appendChild(
-      buildStageLorasSection(context, clipIdx, stageIdx, stage, defaults)
+    const methodSelect = buildOptionSelect(
+      supportedMethods,
+      `${stage.upscaleMethod ?? ""}`,
+      (value) => {
+        commit((target) => {
+          target.upscaleMethod = value;
+        });
+      }
     );
+    const methodField = buildField(
+      "Upscale Method",
+      methodSelect,
+      void 0,
+      "How frames are enlarged before this stage refines them. Only applies when Upscale is above 1×."
+    );
+    methodField.classList.add("vst-detail-span-2");
+    const syncMethod = (upscale) => {
+      const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
+      methodSelect.disabled = disabled;
+      methodField.classList.toggle("vst-field-disabled", disabled);
+      methodField.title = disabled ? "Set Upscale above 1× to choose a method" : "";
+    };
+    const upscaleSlider = slider(
+      "Upscale",
+      "upscale",
+      stage.upscale,
+      defaults.upscaleMin,
+      defaults.upscaleMax,
+      defaults.upscaleStep,
+      (target, value) => {
+        target.upscale = value;
+      },
+      {
+        onValue: syncMethod,
+        help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
+      }
+    );
+    fields.append(upscaleSlider, methodField);
+    syncMethod(stage.upscale);
+    if (!upscaleState.enabled) {
+      disableCapabilityControls(upscaleSlider, upscaleState);
+      disableCapabilityControls(methodField, upscaleState);
+    }
+  };
+
+  // frontend/detailStrip/stagePanel.ts
+  var buildStageParamsColumn = (context, clip, clipIdx, stageIdx, stage, defaults) => {
+    const column = document.createElement("div");
+    column.className = "vst-detail-col vst-detail-params";
+    const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
+    const isRefine = stageIdx >= 1 || sourcedStage0;
+    const stageCapabilities = context.capabilities().forStage(clip, stage);
+    const commit = (mutate) => {
+      context.commit((clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) mutate(target);
+      });
+    };
+    const debouncedCommit = (key, mutate) => {
+      context.debouncedCommit(key, (clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) mutate(target);
+      });
+    };
+    const slider = (label, focusKey, value, min, max, step, assign, options) => tagFocus(
+      buildSlider(
+        label,
+        value,
+        min,
+        max,
+        step,
+        (nextValue) => {
+          options?.onValue?.(nextValue);
+          debouncedCommit(
+            focusKey,
+            (target) => assign(target, nextValue)
+          );
+        },
+        options?.title || options?.help ? { title: options.title, help: options.help } : void 0
+      ),
+      focusKey
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-fields";
+    const applyMutedStyle = () => {
+      fields.classList.toggle(
+        "vst-stage-fields-muted",
+        stage.skipped === true
+      );
+    };
+    const syncRailChip = (skipped) => {
+      context.getDockEl()?.querySelector(
+        `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`
+      )?.classList.toggle("vst-stage-tab-skipped", skipped);
+    };
+    column.appendChild(
+      buildCheckbox("Skip this stage", stage.skipped === true, (value) => {
+        stage.skipped = value;
+        applyMutedStyle();
+        syncRailChip(value);
+        context.commit((clips) => {
+          const targetClip = clips[clipIdx];
+          const target = targetClip?.stages[stageIdx];
+          if (!targetClip || !target) return;
+          target.skipped = value;
+          reconcileSourcedClipIdentity(
+            targetClip,
+            context.capabilities().catalog
+          );
+        });
+      })
+    );
+    column.appendChild(fields);
+    applyMutedStyle();
+    const bindings = {
+      context,
+      clip,
+      clipIdx,
+      stageIdx,
+      stage,
+      defaults,
+      fields,
+      stageCapabilities,
+      commit,
+      debouncedCommit,
+      slider
+    };
+    appendStageModelSection(bindings);
+    appendStageDenoisingSection(bindings, isRefine);
+    appendStageUpscaleSection(bindings, isRefine);
+    appendStageSamplerSchedulerSection(bindings);
+    appendStageReferenceGuideSection(bindings);
+    const loraState = stageCapabilities.authoringState(
+      "stageLoras",
+      stage.loras.length > 0
+    );
+    if (loraState.visible) {
+      const loras = buildStageLorasSection(
+        context,
+        clipIdx,
+        stageIdx,
+        stage,
+        defaults
+      );
+      if (!loraState.enabled) {
+        disableCapabilityControls(loras, loraState, [
+          ".vst-stage-lora-remove"
+        ]);
+      }
+      fields.appendChild(loras);
+    }
     if (sourcedStage0) {
       const note = document.createElement("p");
       note.className = "vst-detail-note vst-stage-passthrough-note";
@@ -8391,13 +10576,15 @@
       "vst-detail-add-stage",
       () => context.addStage(clipIdx)
     );
-    addButton.title = "Add a refine stage";
+    const canAdd = clip.stages.length === 0 || context.capabilities().forClip(clip).decision("multiStage").supported;
+    addButton.disabled = !canAdd;
+    addButton.title = canAdd ? clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage" : context.capabilities().forClip(clip).decision("multiStage").reason;
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
     deleteButton.textContent = "Delete stage";
-    deleteButton.disabled = clip.stages.length <= 1;
-    deleteButton.title = deleteButton.disabled ? "A clip always keeps at least one stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
+    deleteButton.disabled = clip.stages.length === 0 || clip.stages.length === 1 && clip.sourceVideo === null;
+    deleteButton.title = deleteButton.disabled ? clip.stages.length === 0 ? "This source-only clip has no generation stage" : "Add a source video before removing the only generation stage" : `Delete stage ${stageChipLabel(stageIdx)}`;
     deleteButton.addEventListener("click", (event) => {
       event.preventDefault();
       context.deleteStage(clipIdx, stageIdx);
@@ -8418,39 +10605,68 @@
     const clip = clips[selection2.clipIdx];
     const stage = clip.stages[selection2.stageIdx];
     const defaults = getRootDefaults();
+    const capabilityView = context.capabilities().forClip(clip);
     body.appendChild(buildClipColumn(context, clip, selection2.clipIdx));
     const stages = document.createElement("div");
     stages.className = "vst-detail-stages-wrap";
     stages.append(
       sectionLabel("Stages"),
-      buildStageRail(context, clip, selection2.clipIdx, selection2.stageIdx),
-      buildStageParamsColumn(
+      buildStageRail(context, clip, selection2.clipIdx, selection2.stageIdx)
+    );
+    if (stage) {
+      stages.appendChild(
+        buildStageParamsColumn(
+          context,
+          clip,
+          selection2.clipIdx,
+          selection2.stageIdx,
+          stage,
+          defaults
+        )
+      );
+    } else {
+      const note = document.createElement("p");
+      note.className = "vst-detail-note vst-source-only-note";
+      note.textContent = "Source-only clip. Add a stage to choose an architecture and refine this footage.";
+      stages.appendChild(note);
+    }
+    body.appendChild(buildGroup(GROUP_STAGES, stages));
+    const appendCapabilityGroup = (groupId, feature, persisted, content, removableSelectors) => {
+      const state = capabilityView.authoringState(feature, persisted);
+      if (!state.visible) {
+        return;
+      }
+      const section = content();
+      if (!state.enabled) {
+        disableCapabilityControls(section, state, removableSelectors);
+      }
+      body.appendChild(buildGroup(groupId, section));
+    };
+    appendCapabilityGroup(
+      GROUP_ICLORA,
+      "icLora",
+      clip.icLoras.length > 0,
+      () => buildArchitectureIcLorasSection(
         context,
         clip,
         selection2.clipIdx,
-        selection2.stageIdx,
-        stage,
         defaults
-      )
+      ),
+      [".vst-detail-delete"]
     );
-    body.appendChild(buildGroup(GROUP_STAGES, stages));
-    body.appendChild(
-      buildGroup(
-        GROUP_ICLORA,
-        buildIcLorasSection(context, clip, selection2.clipIdx, defaults)
-      )
+    appendCapabilityGroup(
+      GROUP_SOURCE,
+      "sourceVideo",
+      clip.sourceVideo !== null,
+      () => buildSourceVideoSection(context, clip, selection2.clipIdx),
+      [".vst-detail-delete"]
     );
-    body.appendChild(
-      buildGroup(
-        GROUP_SOURCE,
-        buildSourceVideoSection(context, clip, selection2.clipIdx)
-      )
-    );
-    body.appendChild(
-      buildGroup(
-        GROUP_RETAKE,
-        buildRetakeSection(context, clip, selection2.clipIdx)
-      )
+    appendCapabilityGroup(
+      GROUP_RETAKE,
+      "retake",
+      clip.retake !== null,
+      () => buildRetakeSection(context, clip, selection2.clipIdx),
+      [".vst-detail-delete"]
     );
     return body;
   };
@@ -8545,6 +10761,26 @@
         }
       )
     );
+    const decision = ctx.capabilities().forClip(clips[clipIdx]).decision("majorPrompt");
+    if (!decision.supported) {
+      disableCapabilityControls(body, decision);
+      if (clips[clipIdx].prompt.trim()) {
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.className = "basic-button small-button vst-remove-unsupported-prompt";
+        clear.textContent = "Remove unsupported clip prompt";
+        clear.addEventListener("click", () => {
+          ctx.commit((items) => {
+            const clip = items[clipIdx];
+            if (clip) {
+              clip.prompt = "";
+            }
+          });
+          ctx.render();
+        });
+        body.appendChild(clear);
+      }
+    }
     return wrapForm(GROUP_PROMPTMAJOR, body);
   };
   var buildPromptMinorBody = (ctx, sel, clips) => {
@@ -8648,6 +10884,12 @@
         setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
       });
       row.appendChild(editor);
+      const decision = ctx.capabilities().forClip(clip).decision("promptRelay");
+      if (!decision.supported) {
+        disableCapabilityControls(row, decision, [
+          ".vst-detail-minor-delete"
+        ]);
+      }
       body.appendChild(row);
     });
     return wrapForm(GROUP_PROMPTMINOR, body);
@@ -8814,6 +11056,10 @@
             }
           )
         );
+      }
+      const decision = ctx.capabilities().forClip(clip).decision("frameReferences");
+      if (!decision.supported) {
+        disableCapabilityControls(row, decision, [".vst-detail-delete"]);
       }
       body.appendChild(row);
     });
@@ -9285,7 +11531,7 @@
     const clip = clips[selection2.clipIdx];
     if (selection2.kind === "clip") {
       if (clip.stages.length === 0) {
-        return { kind: "none" };
+        return { kind: "clip", clipIdx: selection2.clipIdx, stageIdx: 0 };
       }
       const stageIdx = clamp(selection2.stageIdx, 0, clip.stages.length - 1);
       return stageIdx === selection2.stageIdx ? selection2 : { kind: "clip", clipIdx: selection2.clipIdx, stageIdx };
@@ -9309,7 +11555,7 @@
   var detailBreadcrumb = (selection2, clips) => {
     switch (selection2.kind) {
       case "clip":
-        return `Clip ${selection2.clipIdx + 1} · ${stageChipLabel(selection2.stageIdx)}`;
+        return clips[selection2.clipIdx]?.stages.length === 0 ? `Clip ${selection2.clipIdx + 1} · Source only` : `Clip ${selection2.clipIdx + 1} · ${stageChipLabel(selection2.stageIdx)}`;
       case "ref":
         return `Ref ${selection2.refIdx + 1} · Clip ${selection2.clipIdx + 1}`;
       case "audio":
@@ -9523,7 +11769,7 @@
       );
       options.detail.appendChild(body);
       if (options.selection.kind === "clip" || options.selection.kind === "retake") {
-        getLtxHostBridge().enableSliders(body);
+        getVideoStagesHostBridge().enableSliders(body);
       }
     }
     options.focus.restore(options.detail);
@@ -9545,11 +11791,9 @@
     }
   };
 
-  // frontend/detailStrip/selectionOperations.ts
-  var STAGE_SELECTOR = "[data-vst-stage]";
-  var MODEL_SELECTOR = "[data-vst-model]";
-  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
-  var createDetailSelectionOperations = (structuralCommit) => {
+  // frontend/detailStrip/selectionDomainOperations.ts
+  var createDetailSelectionDomainOperations = (structuralCommit, getCapabilities, renderAfterExternalCommand = () => {
+  }) => {
     const commitRemoval = (remove, index, neighbour, fallback) => structuralCommit((clips) => {
       const remaining = remove(clips);
       if (remaining === null) {
@@ -9590,7 +11834,7 @@
     const createRetake = (clipIdx) => {
       structuralCommit((clips) => {
         const clip = clips[clipIdx];
-        if (!clip || clip.retake) {
+        if (!clip || clip.retake || !getCapabilities().forClip(clip).decision("retake").supported) {
           return null;
         }
         const clipDuration = Math.max(0, clip.duration || 0);
@@ -9621,7 +11865,7 @@
     const addAudioSegment = (clipIdx) => {
       structuralCommit((clips) => {
         const clip = clips[clipIdx];
-        if (!clip) {
+        if (!clip || !getCapabilities().forClip(clip).decision("audioSegments").supported) {
           return null;
         }
         const clipDuration = Math.max(0, clip.duration || 0);
@@ -9675,15 +11919,71 @@
           if (!clip) {
             return null;
           }
+          if (clip.stages.length > 0 && !getCapabilities().forClip(clip).decision("multiStage").supported) {
+            return null;
+          }
           const last = clip.stages[clip.stages.length - 1] ?? null;
-          clip.stages.push(
-            buildDefaultStage(
-              getRootDefaults,
-              getDefaultStageModel,
-              last,
-              clip.refs.length
-            )
+          const defaults = getRootDefaults();
+          const lockedArchitecture = clip.architecture === "none" ? void 0 : clip.architecture;
+          const stage = buildDefaultStage(
+            getRootDefaults,
+            (values) => getDefaultStageModel(values, lockedArchitecture),
+            last,
+            clip.refs.length
           );
+          if (clip.architecture === "none" && clip.stages.length === 0) {
+            const target = buildArchitectureRetargetPlan(
+              defaults.modelCatalog,
+              stage.model
+            );
+            const snapshot = getTimelineStore().getSnapshot();
+            const clipId = snapshot.state.clips[clipIdx]?.id;
+            if (!target || !clipId) {
+              return null;
+            }
+            const canonicalStage = {
+              ...stage,
+              id: createEntityId("stage"),
+              modelProfileId: target.modelProfileId
+            };
+            const result = dispatchDocumentCommand(
+              {
+                type: "batch",
+                commands: [
+                  {
+                    type: "clip.convert-architecture",
+                    clipId,
+                    target
+                  },
+                  {
+                    type: "stage.add",
+                    clipId,
+                    stage: canonicalStage
+                  }
+                ]
+              },
+              {
+                expectedRevision: snapshot.revision,
+                origin: "detail-strip"
+              }
+            );
+            if (result.applied) {
+              setSelection({
+                kind: "clip",
+                clipIdx,
+                stageIdx: 0
+              });
+              renderAfterExternalCommand();
+            }
+            return null;
+          }
+          clip.stages.push(stage);
+          if (!reconcileClipArchitectureIdentity(
+            clip,
+            defaults.modelCatalog
+          )) {
+            return null;
+          }
           return {
             kind: "clip",
             clipIdx,
@@ -9697,7 +11997,7 @@
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip || clip.stages.length <= 1 || stageIdx < 0 || stageIdx >= clip.stages.length) {
+          if (!clip || clip.stages.length === 0 || clip.stages.length === 1 && clip.sourceVideo === null || stageIdx < 0 || stageIdx >= clip.stages.length) {
             return null;
           }
           clip.stages.splice(stageIdx, 1);
@@ -9707,39 +12007,21 @@
             } else if (entry.stage > stageIdx) {
               entry.stage -= 1;
             }
-            reconcileIcLoraStage(entry, !!clip.sourceVideo);
+            reconcileArchitectureIcLoraStage(
+              clip.architecture,
+              entry,
+              !!clip.sourceVideo
+            );
           }
+          reconcileSourcedClipIdentity(clip, getCapabilities().catalog);
           return {
             kind: "clip",
             clipIdx,
-            stageIdx: clamp(stageIdx, 0, clip.stages.length - 1)
+            stageIdx: clip.stages.length === 0 ? 0 : clamp(stageIdx, 0, clip.stages.length - 1)
           };
         },
         { rebuildAfterSelect: true }
       );
-    };
-    const handleActivation = (target, shiftKey) => {
-      const stageChip = target.closest(STAGE_SELECTOR);
-      if (stageChip instanceof HTMLElement) {
-        const clipIdx = parseIntAttr(stageChip, "data-clip-idx");
-        const stageIdx = parseIntAttr(stageChip, "data-stage-idx");
-        if (clipIdx === null || stageIdx === null) {
-          return;
-        }
-        if (shiftKey) {
-          deleteStage(clipIdx, stageIdx);
-        } else {
-          selectStage(clipIdx, stageIdx);
-        }
-        return;
-      }
-      const modelBadge = target.closest(MODEL_SELECTOR);
-      if (modelBadge instanceof HTMLElement) {
-        const clipIdx = parseIntAttr(modelBadge, "data-clip-idx");
-        if (clipIdx !== null) {
-          selectStage(clipIdx, 0);
-        }
-      }
     };
     return {
       deleteRefEntry,
@@ -9750,7 +12032,42 @@
       removeAudioSegment,
       addStage,
       deleteStage,
-      selectStage,
+      selectStage
+    };
+  };
+
+  // frontend/detailStrip/selectionOperations.ts
+  var STAGE_SELECTOR = "[data-vst-stage]";
+  var MODEL_SELECTOR = "[data-vst-model]";
+  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
+  var createDetailSelectionOperations = (structuralCommit, getCapabilities, renderAfterExternalCommand = () => {
+  }) => {
+    const domain = createDetailSelectionDomainOperations(
+      structuralCommit,
+      getCapabilities,
+      renderAfterExternalCommand
+    );
+    const handleActivation = (target, shiftKey) => {
+      const stageChip = target.closest(STAGE_SELECTOR);
+      if (stageChip instanceof HTMLElement) {
+        const clipIdx = parseIntAttr(stageChip, "data-clip-idx");
+        const stageIdx = parseIntAttr(stageChip, "data-stage-idx");
+        if (clipIdx === null || stageIdx === null) return;
+        if (shiftKey) {
+          domain.deleteStage(clipIdx, stageIdx);
+        } else {
+          domain.selectStage(clipIdx, stageIdx);
+        }
+        return;
+      }
+      const modelBadge = target.closest(MODEL_SELECTOR);
+      if (modelBadge instanceof HTMLElement) {
+        const clipIdx = parseIntAttr(modelBadge, "data-clip-idx");
+        if (clipIdx !== null) domain.selectStage(clipIdx, 0);
+      }
+    };
+    return {
+      ...domain,
       onMouseDownCapture: (event) => {
         if (event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR)) {
           event.stopPropagation();
@@ -9764,9 +12081,7 @@
         handleActivation(event.target, event.shiftKey);
       },
       onKeyDownCapture: (event) => {
-        if (event.key !== "Enter" && event.key !== " ") {
-          return;
-        }
+        if (event.key !== "Enter" && event.key !== " ") return;
         if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
           return;
         }
@@ -9824,7 +12139,9 @@
       }
     });
     const selectionOperations = createDetailSelectionOperations(
-      draftQueue.structuralCommit
+      draftQueue.structuralCommit,
+      () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
+      render
     );
     const context = {
       commit: draftQueue.commit,
@@ -9834,6 +12151,8 @@
       buildClampedNumber: draftQueue.buildClampedNumber,
       structuralCommit: draftQueue.structuralCommit,
       render,
+      capabilities: () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
+      generatedEntryMode: getRootGeneratedEntryMode,
       deleteRefEntry: selectionOperations.deleteRefEntry,
       deleteWindowEntry: selectionOperations.deleteWindowEntry,
       createRetake: selectionOperations.createRetake,
@@ -10116,7 +12435,7 @@
         );
       }
       if (!paramRefreshCleanup) {
-        paramRefreshCleanup = getLtxHostBridge().addParamRefreshHook(() => {
+        paramRefreshCleanup = getVideoStagesHostBridge().addParamRefreshHook(() => {
           setTimeout(options.refresh, 0);
         });
       }
@@ -10498,7 +12817,7 @@
       press.start
     );
   };
-  var createTimelinePromptTrack = () => createWindowTrack({
+  var createTimelinePromptTrack = (getCapabilities) => createWindowTrack({
     routeId: "prompt-track",
     priority: 20,
     origin: "prompt-track",
@@ -10516,6 +12835,8 @@
       const window2 = clip.promptWindows?.[windowIdx];
       return window2 ? { start: window2.start, length: window2.duration, trim: 0 } : null;
     },
+    canEdit: (clip) => getCapabilities?.().forClip(clip).decision("promptRelay").supported ?? true,
+    canCreate: (clip) => getCapabilities?.().forClip(clip).decision("promptRelay").supported ?? true,
     moveTargetStart: (clip, windowIdx, press, desiredStart) => {
       const clipDur = clipDurationOf(clip);
       const [lo, hi] = wallsFor(clip, windowIdx, press);
@@ -10616,6 +12937,9 @@
       if (clipIdx === null || !getClips()[clipIdx]) {
         return;
       }
+      if (getCapabilities && !getCapabilities().forClip(getClips()[clipIdx]).decision("majorPrompt").supported && !getClips()[clipIdx].prompt.trim()) {
+        return;
+      }
       setSelection({ kind: "prompt-major", clipIdx });
     }
   });
@@ -10625,9 +12949,10 @@
   var LANE_SELECTOR = ".vst-refs-lane[data-vst-ref-add]";
   var DRAGGING_CLASS2 = "vst-refs-dragging";
   var DRAG_THRESHOLD_PX3 = 5;
-  var createTimelineReferencesTrack = () => {
+  var createTimelineReferencesTrack = (getCapabilities) => {
     let boundBody = null;
     let unregister = null;
+    const canEditReferences = (clip) => getCapabilities?.().forClip(clip).decision("frameReferences").supported ?? true;
     const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(
       `.vst-region[data-clip-idx="${clipIdx}"] .vst-key[data-ref-idx="${refIdx}"]`
     ) ?? null;
@@ -10651,7 +12976,7 @@
         "references-track",
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip) {
+          if (!clip || !canEditReferences(clip)) {
             return null;
           }
           const frameMax = getReferenceFrameMax(
@@ -10758,6 +13083,10 @@
       if (!clip || !ref) {
         return null;
       }
+      if (!canEditReferences(clip)) {
+        me.preventDefault();
+        return claimOnly();
+      }
       const arrow = findArrow(clipIdx, refIdx);
       me.preventDefault();
       return dragSession(body, {
@@ -10805,6 +13134,9 @@
       }
       const clip = getClips()[clipIdx];
       if (!clip) {
+        return;
+      }
+      if (!canEditReferences(clip)) {
         return;
       }
       const rect = lane.getBoundingClientRect();
@@ -10864,7 +13196,7 @@
   };
 
   // frontend/timelineRetakeTrack.ts
-  var createTimelineRetakeTrack = () => createWindowTrack({
+  var createTimelineRetakeTrack = (getCapabilities) => createWindowTrack({
     routeId: "retake",
     priority: 50,
     origin: "retake-track",
@@ -10885,7 +13217,8 @@
       length: clip.retake.lengthSeconds,
       trim: 0
     } : null,
-    canCreate: (clip) => !clip.retake,
+    canEdit: (clip) => getCapabilities?.().forClip(clip).decision("retake").supported ?? true,
+    canCreate: (clip) => !clip.retake && (getCapabilities?.().forClip(clip).decision("retake").supported ?? true),
     moveTargetStart: (clip, _itemIdx, press, desiredStart) => {
       const clipDur = clipDurationOf(clip);
       const length = Math.min(press.length, clipDur);
@@ -11141,14 +13474,16 @@
       isCollapsed: viewport.stripCollapsed,
       setCollapsed: viewport.setStripCollapsed
     });
+    const capabilities = currentCapabilityViewResolver;
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
-    const retakeTrack = createTimelineRetakeTrack();
-    const promptTrack = createTimelinePromptTrack();
+    const retakeTrack = createTimelineRetakeTrack(capabilities);
+    const promptTrack = createTimelinePromptTrack(capabilities);
     const audioTrack = createTimelineAudioTrack();
-    const audioSegmentTrack = createTimelineAudioSegmentTrack();
+    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
     const boundaryTrack = createTimelineBoundaryTrack();
-    const referencesTrack = createTimelineReferencesTrack();
+    const referencesTrack = createTimelineReferencesTrack(capabilities);
+    let addClipInFlight = false;
     const openSettings = () => {
       viewport.setStripCollapsed(false);
       setSelection({ kind: "none" });
@@ -11209,23 +13544,48 @@
         selEl.textContent = sel === null ? "" : `clip ${sel + 1}`;
       });
     };
-    const addClip = () => {
-      const clips = getClips();
-      const prev = clips[clips.length - 1] ?? null;
-      if (prev && clips.length >= 2) {
-        const prevJoin = clips[clips.length - 2];
-        prev.boundaryOut = prevJoin.boundaryOut;
-        prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
+    const addClipAfterCatalog = async () => {
+      try {
+        await loadAuthoritativeArchitectureCatalog();
+        const defaults = getRootDefaults();
+        const defaultModel = getDefaultStageModel(defaults.modelValues);
+        if (!defaultModel || architectureForModel(defaults.modelCatalog, defaultModel) === null) {
+          getVideoStagesHostBridge().showError(
+            "VideoStages cannot add a clip because no supported video model is available."
+          );
+          return;
+        }
+        const clips = getClips();
+        const prev = clips[clips.length - 1] ?? null;
+        if (prev && clips.length >= 2) {
+          const prevJoin = clips[clips.length - 2];
+          prev.boundaryOut = prevJoin.boundaryOut;
+          prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
+        }
+        clips.push(
+          buildDefaultClip(
+            () => defaults,
+            getDefaultStageModel,
+            false,
+            prev
+          )
+        );
+        saveClips(clips, { origin: "timeline" });
+      } catch (error) {
+        console.warn("VideoStages: failed to add clip", error);
+        getVideoStagesHostBridge().showError(
+          "VideoStages could not add the clip. See the browser console for details."
+        );
+      } finally {
+        addClipInFlight = false;
       }
-      clips.push(
-        buildDefaultClip(
-          getRootDefaults,
-          getDefaultStageModel,
-          false,
-          prev
-        )
-      );
-      saveClips(clips, { origin: "timeline" });
+    };
+    const addClip = () => {
+      if (addClipInFlight) {
+        return;
+      }
+      addClipInFlight = true;
+      void addClipAfterCatalog();
     };
     const renderAll = (meta) => {
       const enabled = isVideoStagesEnabled();
@@ -11239,6 +13599,7 @@
         const state = getState();
         const clips = state.clips;
         const globalPrompt = readGlobalPrompt();
+        const architectureCatalog = getRootDefaults().modelCatalog;
         renderTimeline(body, clips, {
           fps: safeFps(state.fps),
           width: state.width,
@@ -11261,8 +13622,13 @@
           onUndo: () => history.undo(),
           onRedo: () => history.redo(),
           globalPrompt,
-          diagnostics: deriveAuthoringDiagnostics(clips),
-          executionSummary: projectLtxExecutionPath(state, {
+          diagnostics: deriveAuthoringDiagnostics(clips, {
+            catalog: architectureCatalog,
+            generatedEntryMode: getRootGeneratedEntryMode()
+          }),
+          capabilities: capabilities(),
+          executionSummary: projectVideoExecutionPath(state, {
+            catalog: architectureCatalog,
             generatedEntry: !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel() ? "text-to-video" : "host-image-guidance",
             globalPrompt
           })
@@ -11310,6 +13676,13 @@
       history.syncBaseline();
       hostLifecycle.bind();
       refresh();
+      void loadAuthoritativeArchitectureCatalog().then((catalog) => {
+        if (!catalog) {
+          return;
+        }
+        getTimelineStore().invalidate();
+        refresh();
+      });
     };
     const dispose = () => {
       hostLifecycle.dispose();
@@ -11340,7 +13713,7 @@
       return;
     }
     dataInputWatchdog = setTimeout(() => {
-      if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
+      if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
         console.warn(
           `VideoStages: Data param input (#${DATA_INPUT_ID}) never appeared — is the VideoStages backend extension loaded?`
         );
@@ -11348,7 +13721,7 @@
     }, 1e4);
   };
   var registerVideoStagesPromptPrefix = () => {
-    getLtxHostBridge().registerPromptPrefix(
+    getVideoStagesHostBridge().registerPromptPrefix(
       "videoclip",
       "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
       () => [
@@ -11362,7 +13735,7 @@
   var DATA_INPUT_RETRY_MS = 250;
   var dataInputRetryTimer = null;
   var initTimeline = () => {
-    if (!getLtxHostBridge().hasElement(DATA_INPUT_ID)) {
+    if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
       warnIfDataInputNeverAppears();
       if (!dataInputRetryTimer) {
         dataInputRetryTimer = setTimeout(() => {
@@ -11379,7 +13752,7 @@
     }
   };
   var scheduleTimelineInit = () => {
-    if (!getLtxHostBridge().addPostParamBuildStep(initTimeline)) {
+    if (!getVideoStagesHostBridge().addPostParamBuildStep(initTimeline)) {
       setTimeout(scheduleTimelineInit, 200);
     }
   };

@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "../architectures/policy";
 import { clipHueCss } from "../clipColor";
 import { clamp, mediaPreviewSrc } from "../constants";
 import {
@@ -193,6 +194,7 @@ export const BOUNDARY_LABEL: Record<BoundaryOut, string> = {
 export const renderBoundarySeams = (
     clips: Clip[],
     layouts: RegionLayout[],
+    capabilities?: CapabilityViewResolver,
 ): string => {
     const seams: string[] = [];
     for (let i = 1; i < layouts.length; i++) {
@@ -202,12 +204,24 @@ export const renderBoundarySeams = (
             continue;
         }
         const value: BoundaryOut = clip.boundaryOut ?? "cut";
-        const glyph = BOUNDARY_GLYPH[value] ?? BOUNDARY_GLYPH.cut;
+        const capability = capabilities?.forBoundaryIndex(clips, leftClipIdx);
+        const effective = capability?.effective(value) ?? value;
+        const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
         const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-        const title = `Boundary clip ${leftClipIdx + 1} → ${i + 1}: ${label}. Click to edit.`;
-        const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}. Click to edit.`;
+        const effectiveLabel = BOUNDARY_LABEL[effective];
+        const targetNumber =
+            capability?.rightClipIdx === null ||
+            capability?.rightClipIdx === undefined
+                ? i + 1
+                : capability.rightClipIdx + 1;
+        const fallback =
+            value === effective
+                ? ""
+                : ` Requested ${label}; effective ${effectiveLabel}.`;
+        const title = `Boundary clip ${leftClipIdx + 1} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
+        const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}.${fallback} Click to edit.`;
         seams.push(
-            `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${value}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
+            `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
                 `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
                 `</button>`,
         );
@@ -220,6 +234,7 @@ const renderRegions = (
     layouts: RegionLayout[],
     fps: number,
     unit: TimelineUnit,
+    capabilities?: CapabilityViewResolver,
 ): string =>
     layouts
         .map((layout) => {
@@ -242,6 +257,12 @@ const renderRegions = (
                 ? ""
                 : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
             const width = clipInnerWidth(layout.widthPx);
+            const retakeSupported =
+                capabilities?.forClip(clip).decision("retake").supported ??
+                true;
+            const retakeLaneAttrs = retakeSupported
+                ? " data-vst-retake-add"
+                : ' data-vst-capability-disabled="retake"';
             return (
                 `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +
@@ -264,7 +285,7 @@ const renderRegions = (
                 controls +
                 resizeGrip +
                 `</div>` +
-                `<div class="vst-retake-lane" data-vst-retake-add data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="Click empty space to add a retake window">` +
+                `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeSupported ? "Click empty space to add a retake window" : "Retakes are not supported by this clip architecture"}">` +
                 renderRetakeOverlay(
                     clip,
                     layout.index,
@@ -280,6 +301,7 @@ export const renderVideoTrackRow = (
     layouts: RegionLayout[],
     fps: number,
     unit: TimelineUnit,
+    capabilities?: CapabilityViewResolver,
 ): string => {
     const head = renderTrackHead(
         "vst-track-icon-video",
@@ -292,8 +314,8 @@ export const renderVideoTrackRow = (
     );
     return (
         `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` +
-        renderRegions(clips, layouts, fps, unit) +
-        renderBoundarySeams(clips, layouts) +
+        renderRegions(clips, layouts, fps, unit, capabilities) +
+        renderBoundarySeams(clips, layouts, capabilities) +
         `</div></div>`
     );
 };

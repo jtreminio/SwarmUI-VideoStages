@@ -25,7 +25,7 @@ internal static class VideoStagesSpecParser
         int width = ResolveWidth(g, rawWidth);
         int height = ResolveHeight(g, rawHeight);
         int fps = ResolveFps(g, rawFps);
-        bool isTextToVideo = RootVideoStageHandoff.IsTextToVideoRootWorkflow(g);
+        bool isTextToVideo = RootHostWorkflowFacts.IsTextToVideoRootWorkflow(g);
         bool refineMode = VideoStagesGate.IsRefineSourceVideoMode(g);
         int refineSkipStages = VideoStagesGate.ResolveRefineSkipStages(g, refineMode);
         bool hasConfiguredResolution = rawWidth is > 0 && rawHeight is > 0;
@@ -61,7 +61,9 @@ internal static class VideoStagesSpecParser
             }
 
             ClipSpec clip = VideoClipSpecParser.Parse(clipObject, clipIndex, context);
-            if (clip.Stages.Count == 0 && clip.SourceVideo is null)
+            if (clip.Stages.Count == 0
+                && clip.SourceVideo is null
+                && clip.AuthoredStages.Count == 0)
             {
                 continue;
             }

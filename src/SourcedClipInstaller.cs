@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Text2Image;
 using VideoStages.Generated;
 using VideoStages.Planning;
 
@@ -21,7 +20,7 @@ namespace VideoStages;
 internal sealed class SourcedClipInstaller(WorkflowGenerator g)
 {
     /// <summary>
-    /// Installs a sourced clip from its immutable execution plan. LTX execution intentionally does
+    /// Installs a sourced clip from its immutable execution plan. Architecture execution intentionally does
     /// not return to <see cref="ClipSpec"/> for embedded-media identity or timeline dimensions.
     /// </summary>
     public WGNodeData TryInstall(ClipPlan plan)
@@ -65,7 +64,7 @@ internal sealed class SourcedClipInstaller(WorkflowGenerator g)
             crop: "center");
 
         WGNodeData output = new(
-            new JArray(scale.Id, 0), g, WGNodeData.DT_VIDEO, T2IModelClassSorter.CompatLtxv2)
+            new JArray(scale.Id, 0), g, WGNodeData.DT_VIDEO, null)
         {
             Width = source.TargetWidth,
             Height = source.TargetHeight,
@@ -81,7 +80,7 @@ internal sealed class SourcedClipInstaller(WorkflowGenerator g)
             new JArray(trim.Id, 0),
             g,
             WGNodeData.DT_AUDIO,
-            g.CurrentAudioVae?.Compat ?? T2IModelClassSorter.CompatLtxv2);
+            null);
 
         return output;
     }

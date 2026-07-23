@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
 import { mountPromptBox, mountVideoStagesData } from "../__test_helpers__/dom";
+import { createCapabilityViewResolver } from "../architectures/policy";
 import { __resetPersistenceForTests, getClips } from "../persistence";
 import type { DetailStripContext } from "./context";
 import { buildRefBody } from "./refPanel";
@@ -28,7 +30,11 @@ describe("buildRefBody", () => {
         });
 
         const body = buildRefBody(
-            {} as DetailStripContext,
+            {
+                capabilities: () =>
+                    createCapabilityViewResolver(testArchitectureCatalog()),
+                buildClampedNumber: () => document.createElement("input"),
+            } as unknown as DetailStripContext,
             { kind: "ref", clipIdx: 0, refIdx: 0 },
             getClips(),
         );
