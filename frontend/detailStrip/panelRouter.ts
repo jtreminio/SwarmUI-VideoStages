@@ -52,9 +52,17 @@ export const clampDetailSelection = (
     }
     if (selection.kind === "audio-segment") {
         const segments = clip.audioSegments ?? [];
-        return selection.segIdx >= 0 && selection.segIdx < segments.length
+        if (segments.length === 0) {
+            return { kind: "audio", clipIdx: selection.clipIdx };
+        }
+        const segIdx = clamp(selection.segIdx, 0, segments.length - 1);
+        return segIdx === selection.segIdx
             ? selection
-            : { kind: "none" };
+            : {
+                  kind: "audio-segment",
+                  clipIdx: selection.clipIdx,
+                  segIdx,
+              };
     }
     return selection;
 };

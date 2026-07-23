@@ -135,7 +135,9 @@ describe("backend-aligned authoring diagnostics", () => {
                 {
                     lora: "ltx-ic-lora-hdr.safetensors",
                     preset: "hdr",
-                    source: "Upload",
+                    driveSource: "Upload",
+                    driveData: "visual",
+                    driveMediaKinds: ["image", "video"],
                     stage: -1,
                     strength: 1,
                     attentionStrength: 1,
@@ -158,7 +160,9 @@ describe("backend-aligned authoring diagnostics", () => {
                 {
                     lora: "ltx-ic-lora-hdr.safetensors",
                     preset: "hdr",
-                    source: "Upload",
+                    driveSource: "Upload",
+                    driveData: "visual",
+                    driveMediaKinds: ["image", "video"],
                     stage: 1,
                     strength: 1,
                     attentionStrength: 1,

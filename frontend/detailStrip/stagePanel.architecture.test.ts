@@ -120,7 +120,9 @@ describe("stage architecture model filtering", () => {
                 {
                     lora: "removed-ic-lora.safetensors",
                     preset: "custom",
-                    source: "Upload",
+                    driveSource: "Upload",
+                    driveData: "visual",
+                    driveMediaKinds: ["image", "video"],
                     stage: -1,
                     strength: 1,
                     attentionStrength: 1,

@@ -4,25 +4,34 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Detaches stage-input IC-LoRA guide media from a mutable post-video chain.</summary>
+/// <summary>Resolves contextual Incoming IC-LoRA media without changing the stage's sampler input.</summary>
 internal sealed class IcLoraStageInputResolver(WorkflowGenerator g)
 {
     public WGNodeData Resolve(StageFrame stageFrame)
     {
         ArgumentNullException.ThrowIfNull(stageFrame);
-        WGNodeData source = stageFrame.SourceMedia;
+        bool wantsIncoming = stageFrame.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
+            entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming);
+        if (!wantsIncoming)
+        {
+            return null;
+        }
+        WGNodeData source = stageFrame.ClipContext.IsFirstStage(stageFrame.Stage)
+            ? stageFrame.ClipContext.IcLoraEntryIncomingMedia
+            : stageFrame.SourceMedia;
         LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
-        bool wantsStageInput = stageFrame.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
-            entry.VisualGuide.Kind
-                is IcLoraVisualGuideSourceKind.StageInput
-                or IcLoraVisualGuideSourceKind.SourcedClipInput);
-        if (!wantsStageInput
-            || postVideoChain is null
+        if (postVideoChain is null
             || !StagePostVideoChainMedia.ReferencesOutput(source, postVideoChain))
         {
             return source;
         }
-        return postVideoChain.CreateDetachedGuideMedia(g.CurrentVae) ?? source;
+        WGNodeData detached = postVideoChain.CreateDetachedGuideMedia(g.CurrentVae);
+        if (detached is null)
+        {
+            return source;
+        }
+        detached.AttachedAudio = source?.AttachedAudio;
+        return detached;
     }
 }
 

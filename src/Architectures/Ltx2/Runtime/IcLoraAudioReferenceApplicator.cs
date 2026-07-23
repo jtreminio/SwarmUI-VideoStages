@@ -23,12 +23,11 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
     internal void ApplyAudioReferenceTokens(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         ClipPlan clip,
-        StageFrame stageFrame)
+        StageFrame stageFrame,
+        WGNodeData incomingMedia)
     {
         IcLoraPlan audioReference = stageFrame.Stage.RequireLtx2Payload().IcLoras
-            .SingleOrDefault(entry =>
-                entry.MediaContract.Consumption
-                    == IcLoraDriveMediaConsumption.AudioReference);
+            .SingleOrDefault(entry => entry.HasAudioReference);
         if (audioReference is null
             || genInfo.Model is null
             || genInfo.VideoModel?.ModelClass?.CompatClass?.ID != T2IModelClassSorter.CompatLtxv2.ID
@@ -38,7 +37,11 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
             return;
         }
 
-        JArray audioLatentPath = ResolveAudioReferenceLatent(clip, audioReference);
+        JArray audioLatentPath = ResolveAudioReferenceLatent(
+            clip,
+            audioReference,
+            incomingMedia,
+            stageFrame.Stage.ClipStageRawIndex);
         if (audioLatentPath is null)
         {
             return;
@@ -59,12 +62,39 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 
     private JArray ResolveAudioReferenceLatent(
         ClipPlan clip,
-        IcLoraPlan entry)
+        IcLoraPlan entry,
+        WGNodeData incomingMedia,
+        int rawStageIndex)
     {
-        string sampleKey = $"{SampleKeyPrefix}{clip.ClipId}.{entry.EntryIndex}";
+        string sampleKey = entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming
+            ? $"{SampleKeyPrefix}{clip.ClipId}.{entry.EntryIndex}.{rawStageIndex}"
+            : $"{SampleKeyPrefix}{clip.ClipId}.{entry.EntryIndex}";
         if (VideoGraphHelpers.TryGetCachedPath(g, null, sampleKey, out JArray cached))
         {
             return cached;
+        }
+        WGNodeData sample;
+        using (WorkflowBridge bridge = BridgeSync.For(g))
+        {
+            sample = ResolveDriveAudio(bridge, entry, incomingMedia);
+        }
+        if (sample is null)
+        {
+            return null;
+        }
+        JArray encoded = EnsureAudioReferenceLatent(sample);
+        VideoGraphHelpers.CachePath(g, sampleKey, encoded);
+        return encoded;
+    }
+
+    internal JArray EnsureAudioReferenceLatent(WGNodeData sample)
+    {
+        ArgumentNullException.ThrowIfNull(sample);
+        if (sample.DataType == WGNodeData.DT_LATENT_AUDIO)
+        {
+            return sample.Path is JArray latentPath
+                ? new JArray(latentPath[0], latentPath[1])
+                : null;
         }
         if (g.CurrentAudioVae is null)
         {
@@ -72,26 +102,29 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
                 "VideoStages: this audio-consuming IC-LoRA requires an LTX audio VAE, "
                 + "but none is available for the selected model.");
         }
-
-        JArray samplePath;
-        using (WorkflowBridge bridge = BridgeSync.For(g))
-        {
-            samplePath = ResolveDriveAudio(bridge, entry);
-        }
-        if (samplePath is null)
-        {
-            return null;
-        }
-        WGNodeData sample = new(samplePath, g, WGNodeData.DT_AUDIO, g.CurrentAudioVae.Compat);
-        JArray encoded = sample.EncodeToLatent(g.CurrentAudioVae).Path;
-        VideoGraphHelpers.CachePath(g, sampleKey, encoded);
-        return encoded;
+        return sample.EncodeToLatent(g.CurrentAudioVae).Path;
     }
 
-    private JArray ResolveDriveAudio(
+    private WGNodeData ResolveDriveAudio(
         WorkflowBridge bridge,
-        IcLoraPlan entry)
+        IcLoraPlan entry,
+        WGNodeData incomingMedia)
     {
+        if (entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming)
+        {
+            if (incomingMedia?.AttachedAudio is not WGNodeData incomingAudio)
+            {
+                throw new SwarmUserErrorException(
+                    $"VideoStages: IC-LoRA entry {entry.EntryIndex} requests Incoming Audio, "
+                    + "but the incoming media has no attached audio.");
+            }
+            return incomingAudio;
+        }
+        if (entry.MediaInput.Source != IcLoraMediaSourceKind.Upload)
+        {
+            throw new SwarmUserErrorException(
+                $"VideoStages: IC-LoRA entry {entry.EntryIndex} has no supported audio drive source.");
+        }
         IcLoraDriveMediaPlan media = entry.DriveMedia;
         if (!media.IsConfigured)
         {
@@ -100,7 +133,11 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (media.Kind == IcLoraDriveMediaKind.Audio)
         {
-            return LoadUploadedAudio(media);
+            return new(
+                LoadUploadedAudio(media),
+                g,
+                WGNodeData.DT_AUDIO,
+                g.CurrentAudioVae?.Compat);
         }
         if (media.Kind != IcLoraDriveMediaKind.Video)
         {
@@ -114,7 +151,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         components.Video.ConnectToUntyped(load.VIDEO);
         bridge.SyncNode(load);
         bridge.SyncNode(components);
-        return WorkflowBridge.ToPath(components.Audio);
+        return components.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO);
     }
 
     private JArray LoadUploadedAudio(IcLoraDriveMediaPlan media)

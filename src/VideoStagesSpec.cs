@@ -85,6 +85,18 @@ public sealed record UploadedMediaSpec(
 );
 
 /// <summary>
+/// The one data stream an IC-LoRA consumes from its selected drive source. <c>Visual</c> extracts
+/// image/video frames, <c>Audio</c> extracts audio from an audio/video source, and <c>None</c>
+/// applies only the model patch.
+/// </summary>
+public enum IcLoraDriveData
+{
+    None,
+    Visual,
+    Audio,
+}
+
+/// <summary>
 /// Pre-existing footage used as the clip's starting point instead of a from-scratch generation.
 /// <c>Data</c> is the uploaded video; <c>StartSeconds</c> is how far into the file the
 /// used range begins — its length is the clip's own duration. The backend conforms the range to
@@ -99,23 +111,27 @@ public sealed record SourceVideoSpec(
 
 /// <summary>
 /// One in-context LoRA on a clip. <c>Lora</c> is the LoRA model name, or "[AUTO]" to resolve the
-/// selected architecture preset's conventional download path; <c>Preset</c> is the frontend
-/// catalog id and may select an architecture-owned media contract. <c>Strength</c>,
+/// selected architecture preset's conventional download path; <c>Preset</c> selects catalog
+/// weights and any genuinely preset-specific graph behavior, never the media contract. <c>Strength</c>,
 /// <c>AttentionStrength</c>, and <c>ControlType</c> are architecture-interpreted settings.
-/// <c>Source</c> identifies an authored visual-guide source where the selected contract uses one;
-/// <c>Stage</c> scopes the entry to one authored stage (-1 = every stage). <c>DriveMedia</c> is a
-/// single upload whose usable streams are selected by the architecture contract. It is independent
-/// from the clip's base audio track.
+/// <c>DriveSource</c> selects either the per-entry upload or contextual media entering the stage;
+/// <c>DriveData</c> declares the single stream consumed from that source, while
+/// <c>DriveMediaKinds</c> optionally narrows the accepted source containers using <c>image</c>,
+/// <c>video</c>, and/or <c>audio</c>. <c>Stage</c> scopes the entry to one authored stage
+/// (-1 = every stage). <c>DriveMedia</c> is the upload used only by the Upload source and is
+/// independent from the clip's base audio track.
 /// </summary>
 public sealed record IcLoraSpec(
     string Lora,
-    string Source,
+    string DriveSource,
     double Strength,
     double AttentionStrength,
     string ControlType,
     UploadedMediaSpec DriveMedia,
+    IcLoraDriveData DriveData = IcLoraDriveData.None,
     string Preset = null,
-    int Stage = -1
+    int Stage = -1,
+    IReadOnlyList<string> DriveMediaKinds = null
 );
 
 /// <summary>

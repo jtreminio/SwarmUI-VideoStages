@@ -3,7 +3,7 @@ import {
     IC_LORA_ATTENTION_MAX,
     IC_LORA_ATTENTION_MIN,
     IC_LORA_ATTENTION_STEP,
-    IC_LORA_SOURCE_STAGE_INPUT,
+    IC_LORA_SOURCE_INCOMING,
     IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
     IC_LORA_STRENGTH_DEFAULT,
@@ -13,12 +13,16 @@ import {
 } from "../../icLoraAuthoring";
 import { normalizeUploadedMedia } from "../../normalizationMedia";
 import { snapValueToStep } from "../../normalizationShared";
-import type { IcLora, IcLoraControlType } from "../../types";
+import type {
+    IcLora,
+    IcLoraControlType,
+    IcLoraDriveData,
+    IcLoraDriveMediaKind,
+} from "../../types";
 import { isRecord } from "../../utils";
 import {
-    findIcLoraPreset,
     IC_LORA_PRESET_CUSTOM_ID,
-    icLoraDriveMediaContract,
+    icLoraDriveMediaContractForData,
 } from "./icLoraPresets";
 
 const CONTROLNET_SOURCE_OPTIONS = [
@@ -40,7 +44,9 @@ export const normalizeControlNetSource = (value: unknown): string => {
 export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
-    source: IC_LORA_SOURCE_UPLOAD,
+    driveSource: IC_LORA_SOURCE_UPLOAD,
+    driveData: "visual",
+    driveMediaKinds: ["image", "video"],
     stage: IC_LORA_STAGE_ALL,
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
@@ -70,15 +76,48 @@ export const normalizeIcLoraControlType = (
         : "none";
 };
 
-const normalizeIcLoraSource = (value: unknown): string => {
+const normalizeIcLoraDriveSource = (value: unknown): string => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
     if (!compact || compact === "upload") {
         return IC_LORA_SOURCE_UPLOAD;
     }
-    if (compact === "stageinput") {
-        return IC_LORA_SOURCE_STAGE_INPUT;
+    if (compact === "incoming" || compact === "stageinput") {
+        return IC_LORA_SOURCE_INCOMING;
     }
     return normalizeControlNetSource(value);
+};
+
+const normalizeIcLoraDriveData = (value: unknown): IcLoraDriveData => {
+    const compact = `${value ?? ""}`.trim().toLowerCase();
+    return compact === "none" || compact === "audio" ? compact : "visual";
+};
+
+const mediaKindsForData = (
+    driveData: IcLoraDriveData,
+): readonly IcLoraDriveMediaKind[] =>
+    icLoraDriveMediaContractForData(driveData).acceptedKinds;
+
+/** Preserves an explicit declarative contract while dropping incompatible kinds. */
+export const normalizeIcLoraDriveMediaKinds = (
+    value: unknown,
+    driveData: IcLoraDriveData,
+): IcLoraDriveMediaKind[] => {
+    const allowed = mediaKindsForData(driveData);
+    if (!Array.isArray(value)) {
+        return [...allowed];
+    }
+    const kinds: IcLoraDriveMediaKind[] = [];
+    for (const rawKind of value) {
+        const kind = `${rawKind ?? ""}`.trim().toLowerCase();
+        if (
+            (kind === "image" || kind === "video" || kind === "audio") &&
+            allowed.includes(kind) &&
+            !kinds.includes(kind)
+        ) {
+            kinds.push(kind);
+        }
+    }
+    return kinds;
 };
 
 const normalizeIcLoraStage = (value: unknown, stageCount: number): number => {
@@ -97,7 +136,7 @@ const normalizeIcLoraStage = (value: unknown, stageCount: number): number => {
 export const normalizeIcLora = (
     raw: unknown,
     stageCount: number = 0,
-    sourcedClip = false,
+    _sourcedClip = false,
 ): IcLora | null => {
     if (!isRecord(raw)) {
         return null;
@@ -108,35 +147,32 @@ export const normalizeIcLora = (
     }
     const preset = `${raw.preset ?? ""}`.trim();
     const normalizedPreset = preset || IC_LORA_PRESET_CUSTOM_ID;
-    const driveContract = icLoraDriveMediaContract(
-        findIcLoraPreset(normalizedPreset),
+    const driveData = normalizeIcLoraDriveData(raw.driveData);
+    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+        raw.driveMediaKinds,
+        driveData,
     );
-    const consumesAudio = driveContract.consumes === "audio";
     const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
+    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
     const driveMedia =
+        driveSource === IC_LORA_SOURCE_UPLOAD &&
+        driveData !== "none" &&
         normalizedDriveMedia &&
-        driveContract.acceptedKinds.some((kind) =>
+        driveMediaKinds.some((kind) =>
             normalizedDriveMedia.data.startsWith(`data:${kind}/`),
         )
             ? normalizedDriveMedia
             : null;
     const stage = normalizeIcLoraStage(raw.stage, stageCount);
-    let source = normalizeIcLoraSource(raw.source);
-    // Stage Input means "this stage's incoming frames" — meaningless below a
-    // refine-stage target UNLESS a sourced clip provides the stage-0 input.
-    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1 && !sourcedClip) {
-        source = IC_LORA_SOURCE_UPLOAD;
-    }
-    // LipDub's Drive Media is audio-only conditioning. Its visuals come from
-    // the ordinary stage input, so its legacy visual-source setting is never
-    // meaningful or authorable.
-    if (consumesAudio) {
-        source = IC_LORA_SOURCE_UPLOAD;
+    if (driveData === "none") {
+        driveSource = IC_LORA_SOURCE_UPLOAD;
     }
     return {
         lora,
         preset: normalizedPreset,
-        source,
+        driveSource,
+        driveData,
+        driveMediaKinds,
         stage,
         strength: snapValueToStep(
             raw.strength,
@@ -152,9 +188,10 @@ export const normalizeIcLora = (
             IC_LORA_ATTENTION_MAX,
             IC_LORA_ATTENTION_STEP,
         ),
-        controlType: consumesAudio
-            ? "none"
-            : normalizeIcLoraControlType(raw.controlType),
+        controlType:
+            driveData !== "visual"
+                ? "none"
+                : normalizeIcLoraControlType(raw.controlType),
         driveMedia,
     };
 };
@@ -173,17 +210,15 @@ export const normalizeIcLoras = (
         .filter((entry): entry is IcLora => entry !== null);
 };
 
-export const reconcileIcLoraStage = (
-    entry: IcLora,
-    sourcedClip = false,
-): void => {
-    if (
-        entry.stage < 1 &&
-        entry.source === IC_LORA_SOURCE_STAGE_INPUT &&
-        !sourcedClip
-    ) {
-        entry.source = IC_LORA_SOURCE_UPLOAD;
+export const canonicalizeIcLoraFields = (entry: IcLora): void => {
+    if (entry.driveData === "none") {
+        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+        entry.driveMedia = null;
     }
+    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+        entry.driveMediaKinds,
+        entry.driveData,
+    );
 };
 
 /** LTX-specific recognition of its HDR preset and weight naming convention. */
@@ -195,6 +230,6 @@ export const isHdrFeature = (entry: IcLora): boolean =>
 export const hasSlotSourcedIcLora = (icLoras: IcLora[]): boolean =>
     icLoras.some(
         (entry) =>
-            entry.source !== IC_LORA_SOURCE_UPLOAD &&
-            entry.source !== IC_LORA_SOURCE_STAGE_INPUT,
+            entry.driveSource !== IC_LORA_SOURCE_UPLOAD &&
+            entry.driveSource !== IC_LORA_SOURCE_INCOMING,
     );

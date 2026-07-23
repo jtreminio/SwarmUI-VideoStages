@@ -1,10 +1,11 @@
 import { describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import {
+    canonicalizeIcLoraFields,
     defaultIcLora,
     hasSlotSourcedIcLora,
     normalizeIcLora,
-    reconcileIcLoraStage,
+    normalizeIcLoraDriveMediaKinds,
 } from "./architectures/ltx2/icLoraNormalization";
 import {
     appendRefToClip,
@@ -307,7 +308,8 @@ describe("normalization", () => {
         const entry = clip.icLoras[0];
         expect(entry.lora).toBe("detail-lora.safetensors");
         expect(entry.preset).toBe("water-simulation");
-        expect(entry.source).toBe("Upload");
+        expect(entry.driveSource).toBe("Upload");
+        expect(entry.driveData).toBe("visual");
         expect(entry.strength).toBe(2);
         expect(entry.attentionStrength).toBe(0);
         expect(entry.controlType).toBe("depth");
@@ -321,6 +323,7 @@ describe("normalization", () => {
         const entry = normalizeIcLora({
             lora: "lipdub.safetensors",
             preset: "lipdub",
+            driveData: "audio",
             driveMedia: {
                 data: "data:audio/wav;base64,QUJD",
                 fileName: "voice.wav",
@@ -335,6 +338,7 @@ describe("normalization", () => {
             normalizeIcLora({
                 lora: "lipdub.safetensors",
                 preset: "lipdub",
+                driveData: "audio",
                 driveMedia: {
                     data: "data:image/png;base64,QUJD",
                     fileName: "not-a-speaker.png",
@@ -343,33 +347,81 @@ describe("normalization", () => {
         ).toBeNull();
     });
 
-    it("normalizes LipDub source to its required Upload contract", () => {
+    it("preserves explicit LipDub audio data and Incoming source", () => {
         expect(
             normalizeIcLora(
                 {
                     lora: "lipdub.safetensors",
                     preset: "lipdub",
-                    source: "Stage Input",
+                    driveData: "audio",
+                    driveSource: "Incoming",
                     controlType: "canny",
                 },
                 2,
                 true,
-            )?.source,
-        ).toBe("Upload");
+            )?.driveSource,
+        ).toBe("Incoming");
         expect(
             normalizeIcLora({
                 lora: "lipdub.safetensors",
                 preset: "lipdub",
+                driveData: "audio",
                 controlType: "canny",
-            })?.controlType,
-        ).toBe("none");
+            }),
+        ).toMatchObject({ controlType: "none", driveData: "audio" });
     });
 
-    it("normalizeClip reads the IC-LoRA stage and Stage Input source", () => {
+    it("does not let a recognized preset override its persisted DriveData", () => {
+        expect(
+            normalizeIcLora({
+                lora: "lipdub.safetensors",
+                preset: "lipdub",
+                driveData: "visual",
+            }),
+        ).toMatchObject({ driveData: "visual" });
+    });
+
+    it("preserves an explicit image-only visual contract independently of its preset", () => {
+        const entry = normalizeIcLora({
+            lora: "lipdub.safetensors",
+            preset: "lipdub",
+            driveData: "visual",
+            driveMediaKinds: ["image"],
+            driveMedia: {
+                data: "data:image/png;base64,QUJD",
+                fileName: "guide.png",
+            },
+        });
+
+        expect(entry).toMatchObject({
+            driveData: "visual",
+            driveMediaKinds: ["image"],
+        });
+        expect(entry?.driveMedia).not.toBeNull();
+        expect(
+            normalizeIcLora({
+                lora: "guide.safetensors",
+                driveData: "visual",
+                driveMediaKinds: ["image"],
+                driveMedia: {
+                    data: "data:video/mp4;base64,QUJD",
+                    fileName: "not-accepted.mp4",
+                },
+            })?.driveMedia,
+        ).toBeNull();
+        expect(
+            normalizeIcLoraDriveMediaKinds(
+                ["image", "audio", "image"],
+                "visual",
+            ),
+        ).toEqual(["image"]);
+    });
+
+    it("normalizeClip reads the IC-LoRA stage and Incoming source", () => {
         const clip = normalizeClip(
             {
                 icLoras: [
-                    { lora: "a", stage: 1, source: "Stage Input" },
+                    { lora: "a", stage: 1, driveSource: "Incoming" },
                     { lora: "b", stage: 2.7 },
                     { lora: "c", stage: -5 },
                     { lora: "d", stage: null },
@@ -379,19 +431,19 @@ describe("normalization", () => {
             getDefaultStageModel,
         );
         expect(clip.icLoras.map((e) => e.stage)).toEqual([1, 2, -1, -1]);
-        expect(clip.icLoras[0].source).toBe("Stage Input");
-        expect(clip.icLoras[1].source).toBe("Upload");
-        // Stage Input is not a captured "ControlNet N" slot source.
+        expect(clip.icLoras[0].driveSource).toBe("Incoming");
+        expect(clip.icLoras[1].driveSource).toBe("Upload");
+        // Incoming is not a captured "ControlNet N" slot source.
         expect(hasSlotSourcedIcLora(clip.icLoras)).toBe(false);
     });
 
-    it("normalizeClip resets a Stage Input source without a refine-stage target", () => {
+    it("normalizeClip preserves Incoming for availability diagnostics", () => {
         const clip = normalizeClip(
-            { icLoras: [{ lora: "a", source: "Stage Input" }] },
+            { icLoras: [{ lora: "a", driveSource: "Incoming" }] },
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.icLoras[0].source).toBe("Upload");
+        expect(clip.icLoras[0].driveSource).toBe("Incoming");
         expect(clip.icLoras[0].stage).toBe(-1);
     });
 
@@ -413,7 +465,7 @@ describe("normalization", () => {
         expect(clip.stages[1].control).toBe(0);
     });
 
-    it("normalizeClip keeps a Stage Input source at stage 0 on a sourced clip", () => {
+    it("normalizeClip keeps an Incoming source at stage 0 on a sourced clip", () => {
         const clip = normalizeClip(
             {
                 stages: [{ model: "ltx" }],
@@ -421,43 +473,47 @@ describe("normalization", () => {
                     data: "data:video/mp4;base64,QUJD",
                     lengthSeconds: 3,
                 },
-                icLoras: [{ lora: "a", stage: 0, source: "Stage Input" }],
+                icLoras: [{ lora: "a", stage: 0, driveSource: "Incoming" }],
             },
             getRootDefaults,
             getDefaultStageModel,
         );
-        // Stage 0's incoming frames ARE the footage on a sourced clip, so Stage Input survives there.
+        // Stage 0's incoming frames ARE the footage on a sourced clip.
         expect(clip.sourceVideo).not.toBeNull();
-        expect(clip.icLoras[0].source).toBe("Stage Input");
+        expect(clip.icLoras[0].driveSource).toBe("Incoming");
         expect(clip.icLoras[0].stage).toBe(0);
     });
 
-    it("normalizeClip downgrades a Stage Input source at stage 0 on an unsourced clip", () => {
+    it("normalizeClip does not silently rewrite unavailable Incoming media", () => {
         const clip = normalizeClip(
             {
                 stages: [{ model: "ltx" }],
-                icLoras: [{ lora: "a", stage: 0, source: "Stage Input" }],
+                icLoras: [{ lora: "a", stage: 0, driveSource: "Incoming" }],
             },
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.icLoras[0].source).toBe("Upload");
+        expect(clip.icLoras[0].driveSource).toBe("Incoming");
     });
 
-    it("normalizeIcLora keeps Stage Input at stage < 1 only when sourced", () => {
-        const raw = { lora: "a", stage: 0, source: "Stage Input" };
-        expect(normalizeIcLora(raw, 0, false)?.source).toBe("Upload");
-        expect(normalizeIcLora(raw, 0, true)?.source).toBe("Stage Input");
+    it("normalizeIcLora keeps Incoming independent of clip placement", () => {
+        const raw = { lora: "a", stage: 0, driveSource: "Incoming" };
+        expect(normalizeIcLora(raw, 0, false)?.driveSource).toBe("Incoming");
+        expect(normalizeIcLora(raw, 0, true)?.driveSource).toBe("Incoming");
     });
 
-    it("reconcileIcLoraStage keeps Stage Input for a sourced clip and downgrades otherwise", () => {
-        const sourced = defaultIcLora({ source: "Stage Input", stage: 0 });
-        reconcileIcLoraStage(sourced, true);
-        expect(sourced.source).toBe("Stage Input");
-
-        const unsourced = defaultIcLora({ source: "Stage Input", stage: 0 });
-        reconcileIcLoraStage(unsourced, false);
-        expect(unsourced.source).toBe("Upload");
+    it("canonicalizeIcLoraFields clears hidden model-only media", () => {
+        const modelOnly = defaultIcLora({
+            driveSource: "Incoming",
+            driveData: "none",
+            driveMedia: {
+                data: "data:video/mp4;base64,QUJD",
+                fileName: "stale.mp4",
+            },
+        });
+        canonicalizeIcLoraFields(modelOnly);
+        expect(modelOnly.driveSource).toBe("Upload");
+        expect(modelOnly.driveMedia).toBeNull();
     });
 
     it("normalizeClip heals an IC-LoRA stage target beyond the clip's stage list", () => {
@@ -465,7 +521,7 @@ describe("normalization", () => {
             {
                 icLoras: [
                     { lora: "a", stage: 2 },
-                    { lora: "b", stage: 1, source: "Stage Input" },
+                    { lora: "b", stage: 1, driveSource: "Incoming" },
                     { lora: "c", stage: 0 },
                 ],
                 stages: [{}],
@@ -474,8 +530,7 @@ describe("normalization", () => {
             getDefaultStageModel,
         );
         expect(clip.icLoras.map((e) => e.stage)).toEqual([-1, -1, 0]);
-        // The healed target is no longer a refine stage, so Stage Input resets.
-        expect(clip.icLoras[1].source).toBe("Upload");
+        expect(clip.icLoras[1].driveSource).toBe("Incoming");
     });
 
     it("normalizeClip prefers the icLoras array over legacy fields", () => {
@@ -490,7 +545,7 @@ describe("normalization", () => {
         );
         expect(clip.icLoras).toHaveLength(1);
         expect(clip.icLoras[0].lora).toBe("new-lora");
-        expect(clip.icLoras[0].source).toBe("Upload");
+        expect(clip.icLoras[0].driveSource).toBe("Upload");
     });
 
     it("normalizeClip lets audio length override stored ControlNet length", () => {

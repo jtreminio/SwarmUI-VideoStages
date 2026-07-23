@@ -26,8 +26,11 @@ internal static class StageDimensionRules
     public static (int Width, int Height) SnapForIcLora(StagePlan stage, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(stage);
-        int multiple = 32 * IcLoraApplicator.MaxKnownIcLoraDownscaleFactor(
-            stage.RequireLtx2Payload().IcLoras);
+        int factor = stage.RequireLtx2Payload().IcLoras
+            .Select(plan => plan.DimensionDownscaleFactor)
+            .DefaultIfEmpty(1)
+            .Max();
+        int multiple = 32 * factor;
         if (multiple <= 32 || (width % multiple == 0 && height % multiple == 0))
         {
             return (width, height);

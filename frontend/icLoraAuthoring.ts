@@ -9,7 +9,7 @@ export const STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
 export const STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
 
 export const IC_LORA_SOURCE_UPLOAD = "Upload";
-export const IC_LORA_SOURCE_STAGE_INPUT = "Stage Input";
+export const IC_LORA_SOURCE_INCOMING = "Incoming";
 export const IC_LORA_STAGE_ALL = -1;
 export const IC_LORA_STRENGTH_MIN = 0;
 export const IC_LORA_STRENGTH_MAX = 2;

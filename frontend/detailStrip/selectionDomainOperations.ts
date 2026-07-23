@@ -1,4 +1,7 @@
-import { reconcileArchitectureIcLoraStage } from "../architectures/behaviorRegistry";
+import {
+    canonicalizeArchitectureIcLoraFields,
+    reconcileArchitectureIncomingIcLoraDrives,
+} from "../architectures/behaviorRegistry";
 import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
 import type { CapabilityViewResolver } from "../architectures/policy";
@@ -42,6 +45,8 @@ export const createDetailSelectionDomainOperations = (
     structuralCommit: StructuralCommit,
     getCapabilities: () => CapabilityViewResolver,
     renderAfterExternalCommand: () => void = () => {},
+    getGeneratedEntryMode: () => "text-to-video" | "image-to-video" = () =>
+        "text-to-video",
 ): DetailSelectionDomainOperations => {
     const commitRemoval = (
         remove: (clips: Clip[]) => number | null,
@@ -301,13 +306,16 @@ export const createDetailSelectionDomainOperations = (
                     } else if (entry.stage > stageIdx) {
                         entry.stage -= 1;
                     }
-                    reconcileArchitectureIcLoraStage(
+                    canonicalizeArchitectureIcLoraFields(
                         clip.architecture,
                         entry,
-                        !!clip.sourceVideo,
                     );
                 }
                 reconcileSourcedClipIdentity(clip, getCapabilities().catalog);
+                reconcileArchitectureIncomingIcLoraDrives(
+                    clips,
+                    getGeneratedEntryMode(),
+                );
                 return {
                     kind: "clip",
                     clipIdx,

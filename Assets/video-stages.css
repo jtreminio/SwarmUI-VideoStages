@@ -1109,10 +1109,14 @@
     right: -1px;
 }
 .vst-detail-add-retake,
-.vst-detail-add-iclora,
-.vst-detail-add-segment {
+.vst-detail-add-iclora {
     align-self: flex-start;
     margin-top: 2px;
+}
+.vst-detail-add-segment {
+    align-self: flex-end;
+    margin-top: 2px;
+    margin-left: auto;
 }
 .vst-detail-note {
     margin: 2px 0 0;
@@ -1159,6 +1163,8 @@
     z-index: 4;
 }
 .vst-audio-seg {
+    --vst-audio-seg-tint: hsl(198 72% 51%);
+    --vst-audio-tint: var(--vst-audio-seg-tint);
     position: absolute;
     top: 2px;
     bottom: 2px;
@@ -1170,23 +1176,63 @@
     overflow: hidden;
     min-width: 8px;
     border-radius: var(--vst-radius-sm);
-    border: 1px solid color-mix(in srgb, var(--emphasis) 70%, var(--light-border));
-    background-color: color-mix(in srgb, var(--emphasis) 34%, var(--vst-panel));
+    border: 1px solid
+        color-mix(in srgb, var(--vst-audio-seg-tint) 70%, var(--light-border));
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--vst-audio-seg-tint) 17%, var(--vst-panel)) 0%,
+        color-mix(in srgb, var(--vst-audio-seg-tint) 38%, var(--vst-panel)) 50%,
+        color-mix(in srgb, var(--vst-audio-seg-tint) 17%, var(--vst-panel)) 100%
+    );
 }
-.vst-audio-seg-dragging .vst-audio-seg {
-    cursor: grabbing;
+.vst-audio-seg-tone-0 {
+    --vst-audio-seg-tint: hsl(198 72% 51%);
 }
-.vst-audio-seg-label {
-    flex: 1;
+.vst-audio-seg-tone-1 {
+    --vst-audio-seg-tint: hsl(278 62% 60%);
+}
+.vst-audio-seg-tone-2 {
+    --vst-audio-seg-tint: hsl(24 78% 55%);
+}
+.vst-audio-seg-tone-3 {
+    --vst-audio-seg-tint: hsl(146 55% 44%);
+}
+.vst-audio-seg-tone-4 {
+    --vst-audio-seg-tint: hsl(342 70% 59%);
+}
+.vst-audio-seg-wave {
+    position: absolute;
+    inset: 3px 5px;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0.72;
+}
+.vst-audio-seg-wave span {
+    flex: 1 1 1px;
+    min-width: 1px;
+    min-height: 2px;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--vst-audio-seg-tint) 46%, var(--text));
+}
+.vst-audio-seg .vst-audio-label {
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    max-width: calc(100% - 12px);
+    padding-block: 0;
     font-size: var(--vst-font-3xs);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: color-mix(in srgb, var(--emphasis) 20%, var(--text));
+    line-height: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    pointer-events: none;
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--vst-panel) 70%, transparent);
+}
+.vst-audio-seg-dragging .vst-audio-seg {
+    cursor: grabbing;
 }
 .vst-audio-seg-resize-l {
     left: 0;
@@ -1996,6 +2042,41 @@
     transition: border-color var(--vst-ease), background var(--vst-ease),
         filter var(--vst-ease);
 }
+.vst-detail-segment-rail {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 0 2px;
+}
+.vst-detail-segment-rail-label {
+    flex: none;
+    font-size: var(--vst-font-3xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    font-weight: 600;
+}
+.vst-detail-segment-rail-list {
+    display: flex;
+    flex: 1 1 auto;
+    flex-flow: row wrap;
+    gap: 4px;
+    min-width: 0;
+}
+.vst-segment-tab {
+    cursor: pointer;
+    min-width: 30px;
+    padding: 2px 8px;
+    text-align: center;
+    background: color-mix(in srgb, var(--background) 40%, transparent);
+    transition: border-color var(--vst-ease), background var(--vst-ease),
+        filter var(--vst-ease);
+}
+.vst-segment-tab-active {
+    color: var(--emphasis-text, var(--button-text));
+    border-color: var(--emphasis);
+    background: var(--emphasis);
+}
 .vst-detail-fields {
     display: grid;
     grid-template-columns: 1fr;
@@ -2060,9 +2141,13 @@
     color: var(--emphasis-text, var(--button-text));
     background: var(--emphasis);
     border-color: var(--emphasis);
+    box-shadow: var(--button-shadow);
 }
 .vst-boundary-glyph {
     pointer-events: none;
+    font-weight: 800;
+    color: currentColor;
+    text-shadow: 0 1px 1px color-mix(in srgb, var(--background) 72%, transparent);
 }
 
 /* --- boundary detail-strip editor ---------------------------------------- */

@@ -87,7 +87,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             }
 
             double strength = entry.Plan.GuideStrength
-                ?? ResolveControlNetGuideStrength(entry.Plan.VisualGuide.ControlNetIndex);
+                ?? ResolveControlNetGuideStrength(entry.Plan.MediaInput.ControlNetIndex);
             if (strength <= 0)
             {
                 continue;
@@ -119,27 +119,6 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             anyGuide = true;
         }
         return anyGuide;
-    }
-
-    internal static int MaxKnownIcLoraDownscaleFactor(IEnumerable<IcLoraPlan> plans)
-    {
-        int max = 1;
-        foreach (IcLoraPlan plan in plans ?? [])
-        {
-            string name = $"{plan.Preset} {plan.ModelName}".ToLowerInvariant();
-            if (name.Contains("upscaler-x4"))
-            {
-                max = Math.Max(max, 4);
-            }
-            else if (name.Contains("ref0.5")
-                || name.Contains("union-control")
-                || name.Contains("motion-track")
-                || name.Contains("upscaler-x2"))
-            {
-                max = Math.Max(max, 2);
-            }
-        }
-        return max;
     }
 
     private JToken ResolveGuideFrameCount(

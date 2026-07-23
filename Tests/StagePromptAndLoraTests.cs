@@ -170,7 +170,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         string stagesJson = new JArray(clip).ToString();
 

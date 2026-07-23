@@ -109,6 +109,33 @@ describe("persistence", () => {
             });
             expect(decoded?.audioTracks).toEqual([]);
         });
+
+        it("round-trips an explicit IC-LoRA Drive Media kind contract", () => {
+            const decoded = decode({
+                schemaVersion: 3,
+                clips: [
+                    {
+                        icLoras: [
+                            {
+                                lora: "guide.safetensors",
+                                preset: "custom",
+                                driveSource: "Upload",
+                                driveData: "visual",
+                                driveMediaKinds: ["image"],
+                            },
+                        ],
+                    },
+                ],
+            });
+
+            expect(decoded?.clips[0]?.icLoras[0]?.driveMediaKinds).toEqual([
+                "image",
+            ]);
+            expect(
+                serializeClipsForStorage(decoded?.clips ?? [])[0]?.icLoras[0]
+                    ?.driveMediaKinds,
+            ).toEqual(["image"]);
+        });
     });
 
     describe("serializeClipsForStorage", () => {
@@ -120,7 +147,9 @@ describe("persistence", () => {
                         {
                             lora: "ltx-ic-lora.safetensors",
                             preset: "custom",
-                            source: "ControlNet 2",
+                            driveSource: "ControlNet 2",
+                            driveData: "visual",
+                            driveMediaKinds: ["image", "video"],
                             stage: -1,
                             strength: 1,
                             attentionStrength: 1,
@@ -158,7 +187,9 @@ describe("persistence", () => {
                         {
                             lora: "ltx-ic-lora.safetensors",
                             preset: "custom",
-                            source: "ControlNet 2",
+                            driveSource: "ControlNet 2",
+                            driveData: "visual",
+                            driveMediaKinds: ["image", "video"],
                             stage: -1,
                             strength: 1,
                             attentionStrength: 1,

@@ -166,6 +166,8 @@ export interface RefImage {
 export type BoundaryOut = "cut" | "continue" | "crossfade";
 
 export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
+export type IcLoraDriveData = "none" | "visual" | "audio";
+export type IcLoraDriveMediaKind = "image" | "video" | "audio";
 
 /**
  * One in-context LoRA on a clip. `lora` is the LoRA model name; `preset` is a
@@ -175,20 +177,22 @@ export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
  * `attentionStrength` below 1 switches the backend to the Advanced guide node
  * (per-guide self-attention influence); `controlType` renders the drive video
  * into a control signal before guiding; `driveMedia` is the uploaded drive
- * media (data URI + name). Its accepted types and consumed data are owned by
- * the LTX IC-LoRA preset contract. An entry with no drive media still applies
- * the LoRA to the model when its contract permits loader-only use (e.g. HDR).
- * `source` is "Upload" for per-entry uploads
- * or "Stage Input" for the frames entering the target stage (requires
- * `stage` >= 1). Persisted current-v3 documents can also contain a
- * "ControlNet N" captured-branch source; it remains readable/removable but is
- * not authorable in the UI. `stage` restricts the entry to one stage index
+ * media (data URI + name). `driveData` explicitly selects which stream is
+ * extracted: visual frames, audio, or none for a model-only patch.
+ * `driveMediaKinds` declares the media containers that may supply that stream.
+ * Curated presets seed both values; Custom exposes the stream choice directly.
+ * `driveSource` is
+ * "Upload" for per-entry media or "Incoming" for media already entering the
+ * target generation point (init/source media, prior-stage output, or available
+ * previous-clip context). `stage` restricts the entry to one stage index
  * (-1 = every stage).
  */
 export interface IcLora {
     lora: string;
     preset: string;
-    source: string;
+    driveSource: string;
+    driveData: IcLoraDriveData;
+    driveMediaKinds: IcLoraDriveMediaKind[];
     stage: number;
     strength: number;
     attentionStrength: number;

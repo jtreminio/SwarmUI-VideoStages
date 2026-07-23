@@ -134,10 +134,17 @@ public class CrossLanguageMirrorTests
     public void IcLoraDriveMediaContracts_MatchSharedFixture()
     {
         JObject fixture = LoadObjectFixture("ic-lora-drive-media-contract.json");
-        AssertContract(fixture["default"] as JObject, IcLoraDriveMediaContracts.Resolve("custom"));
-        AssertContract(
-            fixture[IcLoraDriveMediaContracts.LipDubPreset] as JObject,
-            IcLoraDriveMediaContracts.Resolve(IcLoraDriveMediaContracts.LipDubPreset));
+        foreach (JObject expected in fixture.Properties().Select(property => property.Value))
+        {
+            IcLoraDriveData driveData = Enum.Parse<IcLoraDriveData>(
+                expected.Value<string>("driveData"),
+                ignoreCase: true);
+            string[] driveMediaKinds =
+                [.. expected["driveMediaKinds"]!.Values<string>()];
+            AssertContract(
+                expected,
+                IcLoraDriveMediaContracts.Resolve(driveData, driveMediaKinds));
+        }
     }
 
     private static void AssertContract(
@@ -151,16 +158,8 @@ public class CrossLanguageMirrorTests
             expected["acceptedKinds"]!.Values<string>().OrderBy(value => value),
             accepted.OrderBy(value => value));
         Assert.Equal(
-            expected.Value<string>("consumes"),
-            actual.Consumption == IcLoraDriveMediaConsumption.AudioReference
-                ? "audio"
-                : "visual");
-        Assert.Equal(
-            expected.Value<string>("visualSource"),
-            actual.Consumption == IcLoraDriveMediaConsumption.AudioReference
-                ? "clip-entry"
-                : "drive-media");
-        Assert.Equal(expected.Value<bool>("requiresUpload"), actual.RequiresUpload);
+            expected.Value<string>("driveData"),
+            actual.DriveData.ToString().ToLowerInvariant());
     }
 
     [Fact]

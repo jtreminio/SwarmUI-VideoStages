@@ -678,7 +678,9 @@ describe("reduceDocumentCommand", () => {
             {
                 lora: "hdr.safetensors",
                 preset: "hdr",
-                source: "Upload",
+                driveSource: "Upload",
+                driveData: "visual",
+                driveMediaKinds: ["image", "video"],
                 stage: -1,
                 strength: 1,
                 attentionStrength: 1,
@@ -805,7 +807,9 @@ describe("reduceDocumentCommand", () => {
             {
                 lora: "guide.safetensors",
                 preset: "custom",
-                source: "Stage Input",
+                driveSource: "Incoming",
+                driveData: "visual",
+                driveMediaKinds: ["image", "video"],
                 stage: 1,
                 strength: 1,
                 attentionStrength: 1,
@@ -849,7 +853,11 @@ describe("reduceDocumentCommand", () => {
         ]);
         expect(result.document.clips[1].stages).toHaveLength(1);
         expect(result.document.clips[1].icLoras).toEqual([
-            expect.objectContaining({ stage: -1, source: "Upload" }),
+            expect.objectContaining({
+                stage: -1,
+                driveSource: "Incoming",
+                driveData: "visual",
+            }),
         ]);
         expect(source).toEqual(before);
         expect(source.clips[1].stages.map(({ id }) => id)).toEqual([

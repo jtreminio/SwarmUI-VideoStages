@@ -13,7 +13,11 @@ import {
 } from "../timelineDetail";
 import type { AudioSegment, Clip, PromptWindow, RefImage } from "../types";
 import { roundToTenth } from "../utils";
-import { type RegionLayout, waveBarHeights } from "./layout";
+import {
+    audioSegmentWaveBarHeights,
+    type RegionLayout,
+    waveBarHeights,
+} from "./layout";
 import {
     backgroundImageDataAttr,
     clipInnerWidth,
@@ -182,17 +186,22 @@ const renderAudioSegmentBlock = (
             : segment.source?.fileName;
     const labelText = name || "audio segment";
     const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
+    const waveform = audioSegmentWaveBarHeights(clipIdx, segmentIdx, 28)
+        .map((height) => `<span style="height:${height}%"></span>`)
+        .join("");
     return renderWindowSpan({
         className: "vst-audio-seg",
+        extraClassName: `vst-audio-seg-tone-${segmentIdx % 5}`,
         dataAttrs: `data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segmentIdx}"`,
         edgeAttr: "data-vst-audio-seg-edge",
-        labelClass: "vst-audio-seg-label",
+        labelClass: "vst-audio-label",
         label: labelText,
         title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
         ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx + 1}`,
         startSeconds: segment.startSeconds,
         lengthSeconds: segment.lengthSeconds,
         durationSeconds,
+        decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`,
     });
 };
 

@@ -1,4 +1,8 @@
-import type { IcLora } from "../types";
+import type { Clip, IcLora } from "../types";
+import {
+    type GeneratedEntryMode,
+    reconcileIncomingIcLoraDrives,
+} from "./ltx2/icLoraDriveAvailability";
 import * as ltx2IcLoraBehavior from "./ltx2/icLoraNormalization";
 
 /** Pure architecture-owned authoring behavior with no DOM dependencies. */
@@ -8,14 +12,20 @@ export interface ArchitectureBehavior {
         stageCount: number,
         sourcedClip: boolean,
     ): IcLora[];
-    reconcileIcLoraStage(entry: IcLora, sourcedClip: boolean): void;
+    canonicalizeIcLoraFields(entry: IcLora): void;
+    reconcileIncomingIcLoraDrives(
+        clips: Clip[],
+        clipIdx: number,
+        generatedEntryMode: GeneratedEntryMode,
+    ): boolean;
     hasSlotSourcedIcLora(entries: IcLora[]): boolean;
     isHdrFeature(entry: IcLora): boolean;
 }
 
 const ltx2Behavior: ArchitectureBehavior = {
     normalizeIcLoras: ltx2IcLoraBehavior.normalizeIcLoras,
-    reconcileIcLoraStage: ltx2IcLoraBehavior.reconcileIcLoraStage,
+    canonicalizeIcLoraFields: ltx2IcLoraBehavior.canonicalizeIcLoraFields,
+    reconcileIncomingIcLoraDrives,
     hasSlotSourcedIcLora: ltx2IcLoraBehavior.hasSlotSourcedIcLora,
     isHdrFeature: ltx2IcLoraBehavior.isHdrFeature,
 };
@@ -50,15 +60,30 @@ export const normalizeArchitectureIcLoras = (
         : [];
 };
 
-export const reconcileArchitectureIcLoraStage = (
+export const canonicalizeArchitectureIcLoraFields = (
     architectureId: string,
     entry: IcLora,
-    sourcedClip: boolean,
 ): void => {
-    architectureBehavior(architectureId)?.reconcileIcLoraStage(
-        entry,
-        sourcedClip,
-    );
+    architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
+};
+
+/** Lets each architecture repair graph-relative IC-LoRA state after graph edits. */
+export const reconcileArchitectureIncomingIcLoraDrives = (
+    clips: Clip[],
+    generatedEntryMode: GeneratedEntryMode,
+): boolean => {
+    let changed = false;
+    clips.forEach((clip, clipIdx) => {
+        changed =
+            architectureBehavior(
+                clip.architecture,
+            )?.reconcileIncomingIcLoraDrives(
+                clips,
+                clipIdx,
+                generatedEntryMode,
+            ) || changed;
+    });
+    return changed;
 };
 
 export const hasArchitectureSlotSourcedIcLora = (

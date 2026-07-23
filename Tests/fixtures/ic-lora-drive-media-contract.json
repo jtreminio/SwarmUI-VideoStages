@@ -1,14 +1,22 @@
 {
-  "default": {
-    "acceptedKinds": ["image", "video"],
-    "consumes": "visual",
-    "visualSource": "drive-media",
-    "requiresUpload": false
+  "none": {
+    "driveMediaKinds": [],
+    "acceptedKinds": [],
+    "driveData": "none"
   },
-  "lipdub": {
+  "visual": {
+    "driveMediaKinds": ["image", "video"],
+    "acceptedKinds": ["image", "video"],
+    "driveData": "visual"
+  },
+  "audio": {
+    "driveMediaKinds": ["audio", "video"],
     "acceptedKinds": ["audio", "video"],
-    "consumes": "audio",
-    "visualSource": "clip-entry",
-    "requiresUpload": true
+    "driveData": "audio"
+  },
+  "visual-image-only": {
+    "driveMediaKinds": ["image"],
+    "acceptedKinds": ["image"],
+    "driveData": "visual"
   }
 }

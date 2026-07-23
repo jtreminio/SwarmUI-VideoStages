@@ -225,7 +225,9 @@ describe("projectVideoExecutionPath", () => {
                         {
                             lora: "guide.safetensors",
                             preset: "custom",
-                            source: "Upload",
+                            driveSource: "Upload",
+                            driveData: "visual",
+                            driveMediaKinds: ["image", "video"],
                             stage: -1,
                             strength: 1,
                             attentionStrength: 1,
@@ -515,7 +517,9 @@ describe("projectVideoExecutionPath", () => {
         const icLora: IcLora = {
             lora: "guide.safetensors",
             preset: "custom",
-            source: "Upload",
+            driveSource: "Upload",
+            driveData: "visual",
+            driveMediaKinds: ["image", "video"],
             stage: 1,
             strength: 1,
             attentionStrength: 1,
@@ -678,7 +682,9 @@ describe("projectVideoExecutionPath", () => {
                         {
                             lora: "old-guide.safetensors",
                             preset: "custom",
-                            source: "Upload",
+                            driveSource: "Upload",
+                            driveData: "visual",
+                            driveMediaKinds: ["image", "video"],
                             stage: 1,
                             strength: 1,
                             attentionStrength: 1,
@@ -688,7 +694,9 @@ describe("projectVideoExecutionPath", () => {
                         {
                             lora: "new-guide.safetensors",
                             preset: "custom",
-                            source: "Upload",
+                            driveSource: "Upload",
+                            driveData: "visual",
+                            driveMediaKinds: ["image", "video"],
                             stage: 2,
                             strength: 1,
                             attentionStrength: 1,

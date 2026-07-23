@@ -62,22 +62,70 @@ internal static class VideoStageResourceParser
                 continue;
             }
 
+            UploadedMediaSpec driveMedia = VideoStagesJsonReader.GetEmbeddedUpload(
+                entry,
+                UploadContainers.IcLoraDriveMedia);
+            string driveSource = VideoStagesJsonReader.GetString(entry, "DriveSource")?.Trim();
+            string rawDriveData = VideoStagesJsonReader.GetString(entry, "DriveData");
             entries.Add(new IcLoraSpec(
                 Lora: lora,
                 Preset: VideoStagesJsonReader.GetString(entry, "Preset")?.Trim(),
                 Stage: Math.Max(-1, (int)VideoStagesJsonReader.GetOptionalDouble(
                     entry, "Stage", -1, "Clip IcLora")),
-                Source: VideoStagesJsonReader.GetString(entry, "Source")?.Trim(),
+                DriveSource: driveSource,
                 Strength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
                     entry, "Strength", 1, "Clip IcLora"), 0, 5),
                 AttentionStrength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
                     entry, "AttentionStrength", 1, "Clip IcLora"), 0, 1),
                 ControlType: VideoStagesJsonReader.GetString(entry, "ControlType")?.Trim(),
-                DriveMedia: VideoStagesJsonReader.GetEmbeddedUpload(
-                    entry,
-                    UploadContainers.IcLoraDriveMedia)));
+                DriveMedia: driveMedia,
+                DriveData: ParseDriveData(rawDriveData),
+                DriveMediaKinds: ParseDriveMediaKinds(entry)));
         }
         return entries;
+    }
+
+    private static IcLoraDriveData ParseDriveData(string rawValue)
+    {
+        string raw = StringUtils.Compact(rawValue);
+        if (raw.Length == 0)
+        {
+            return IcLoraDriveData.None;
+        }
+        if (StringUtils.Equals(raw, nameof(IcLoraDriveData.Visual)))
+        {
+            return IcLoraDriveData.Visual;
+        }
+        if (StringUtils.Equals(raw, nameof(IcLoraDriveData.Audio)))
+        {
+            return IcLoraDriveData.Audio;
+        }
+        if (StringUtils.Equals(raw, nameof(IcLoraDriveData.None)))
+        {
+            return IcLoraDriveData.None;
+        }
+        return (IcLoraDriveData)(-1);
+    }
+
+    private static IReadOnlyList<string> ParseDriveMediaKinds(JObject entry)
+    {
+        JToken token = entry.GetValue(
+            "DriveMediaKinds",
+            StringComparison.OrdinalIgnoreCase);
+        if (token is null || token.Type == JTokenType.Null)
+        {
+            return null;
+        }
+        if (token is not JArray array)
+        {
+            return [$"[invalid-list:{token.Type}]"];
+        }
+        return
+        [
+            .. array.Select(item => item.Type == JTokenType.String
+                ? item.Value<string>()
+                : $"[invalid-kind:{item.Type}]"),
+        ];
     }
 
     private static ImageRefSpec ParseImageReference(JObject obj, int clipIndex, int refIndex)

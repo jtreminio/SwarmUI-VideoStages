@@ -73,14 +73,10 @@ export const createPanelSelectionSession = (): PanelSelectionSession => {
         const selectionIsAudio =
             selection.kind === "audio" || selection.kind === "audio-segment";
         if (previousIsAudio && selectionIsAudio) {
-            if (selection.clipIdx !== previous.clipIdx) {
-                return false;
-            }
-            return swap(
-                ".vst-detail-seg-row",
-                "vst-detail-instance-active",
-                selection.kind === "audio-segment" ? selection.segIdx : -1,
-            );
+            // Audio segments now render one editor at a time, so swapping a
+            // class cannot update the form's bound segment. Rebuild as stage
+            // selection does instead.
+            return false;
         }
         if (rendered.kind !== selection.kind) {
             return false;
@@ -118,19 +114,6 @@ export const createPanelSelectionSession = (): PanelSelectionSession => {
                     ".vst-detail-ref-row",
                     "vst-detail-instance-active",
                     selection.refIdx,
-                )
-            );
-        }
-        if (
-            selection.kind === "audio-segment" &&
-            previous.kind === "audio-segment"
-        ) {
-            return (
-                selection.clipIdx === previous.clipIdx &&
-                swap(
-                    ".vst-detail-seg-row",
-                    "vst-detail-instance-active",
-                    selection.segIdx,
                 )
             );
         }

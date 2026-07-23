@@ -75,7 +75,9 @@ const maximalClip = (): Clip =>
             {
                 lora: "detail.safetensors",
                 preset: "custom",
-                source: "Upload",
+                driveSource: "Upload",
+                driveData: "visual",
+                driveMediaKinds: ["image", "video"],
                 stage: -1,
                 strength: 0.75,
                 attentionStrength: 0.5,

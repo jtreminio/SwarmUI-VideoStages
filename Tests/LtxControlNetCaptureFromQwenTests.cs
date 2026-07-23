@@ -163,7 +163,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -215,7 +216,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);

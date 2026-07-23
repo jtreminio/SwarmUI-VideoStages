@@ -16,6 +16,7 @@ internal sealed record StageClipExecutionContext(
     bool HasPreviousTimelineClip,
     ClipPlan PreviousClip,
     WGNodeData PreviousClipOutput,
+    WGNodeData PreviousTimelineClipOutput,
     StageSequenceRootSources RootSources,
     TimelineAssemblySession Assembly,
     StageHostExecutionScope HostScope,
@@ -45,6 +46,10 @@ internal sealed class StageClipExecutor(
             context.RootSources.SourceVae);
 
         WGNodeData sourcedMedia = InstallSourceIfPlanned(plannedClip);
+        clipContext.IcLoraEntryIncomingMedia =
+            sourcedMedia
+            ?? context.PreviousTimelineClipOutput
+            ?? context.RootSources.SourceMedia;
         LtxBoundaryAudioCarry boundaryAudioCarry =
             PrepareCrossClipInput(context, sourcedMedia, clipContext);
         if (sourcedMedia is not null)

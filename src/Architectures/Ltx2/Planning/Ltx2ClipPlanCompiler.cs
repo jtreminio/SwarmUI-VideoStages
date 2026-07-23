@@ -24,7 +24,7 @@ internal static class Ltx2ClipPlanCompiler
                 diagnostic.Code,
                 diagnostic.Message,
                 clip.Id)),
-            .. IcLoraPlanCompiler.ValidateClip(clip),
+            .. IcLoraPlanCompiler.ValidateClip(clip, context),
         ];
         Dictionary<int, Ltx2StagePayload> stages = [];
         foreach (StageSpec stage in clip.Stages ?? [])
@@ -42,7 +42,7 @@ internal static class Ltx2ClipPlanCompiler
                 GuideReferencePlanCompiler.Compile(stage.ImageReference),
                 CompileUpscale(stage),
                 NormalLoraPlanCompiler.Compile(clip, stage),
-                IcLoraPlanCompiler.Compile(clip, stage),
+                IcLoraPlanCompiler.Compile(clip, stage, context),
                 CompileRetake(stage.RetakeWindow),
                 relay,
                 ImageReferencePlanCompiler.Compile(clip, stage),

@@ -111,7 +111,8 @@ public sealed class LtxControlNetLoraDedupTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -187,7 +188,8 @@ public sealed class LtxControlNetLoraDedupTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         string stagesJson = new JArray(clip).ToString();
 

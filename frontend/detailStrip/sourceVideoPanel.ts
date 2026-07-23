@@ -1,3 +1,4 @@
+import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
 import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import { CLIP_DURATION_MIN } from "../constants";
 import {
@@ -103,6 +104,10 @@ export const buildSourceVideoSection = (
             reconcileSourcedClipIdentity(
                 target,
                 context.capabilities().catalog,
+            );
+            reconcileArchitectureIncomingIcLoraDrives(
+                clips,
+                context.generatedEntryMode(),
             );
             return "render";
         });

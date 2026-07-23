@@ -138,6 +138,14 @@ For LTX multi-stage clips, separated audio latents remain architecture-owned
 and flow directly between stages. They are not decoded to audio and encoded
 again merely to construct the next stage.
 
+LTX IC-LoRAs carry explicit, preset-independent drive intent. `DriveSource`
+chooses an authored upload or Incoming media already available at that
+generation point; `DriveData` chooses Visual, Audio, or None (model-only); and
+`DriveMediaKinds` narrows which containers (image, video, or audio) may supply
+that stream. Curated presets seed all three fields in the frontend, but backend
+planning and runtime dispatch use the persisted typed contract rather than
+matching preset names.
+
 `AudioTimelinePlan` also represents architecture-neutral authored tracks whose
 spans may cover one clip, several adjacent clips, a timeline window, or
 discontiguous windows. Planned/provisional spans remain atomic until their

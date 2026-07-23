@@ -317,7 +317,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "unused-before-length-validation.safetensors",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         clip["ClipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(
@@ -363,7 +364,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         clip["ClipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -440,7 +442,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         clip["ClipLengthFromControlNet"] = true;
         T2IParamInput input = BuildInput(models.BaseModel, new JArray(clip).ToString());
@@ -483,7 +486,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -546,7 +550,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         clip["ClipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -609,7 +614,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -654,7 +660,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -701,7 +708,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_ControlNetLora",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);

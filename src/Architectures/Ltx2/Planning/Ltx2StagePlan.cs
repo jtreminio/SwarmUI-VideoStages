@@ -82,11 +82,10 @@ internal sealed record NormalLoraPlan(
     double ModelWeight,
     double TextEncoderWeight);
 
-internal enum IcLoraVisualGuideSourceKind
+internal enum IcLoraMediaSourceKind
 {
-    UploadedMedia,
-    StageInput,
-    SourcedClipInput,
+    Upload,
+    Incoming,
     ControlNet,
     LoaderOnly,
     Unknown,
@@ -118,11 +117,12 @@ internal sealed record IcLoraDriveMediaPlan(
     internal bool IsConfigured => !string.IsNullOrWhiteSpace(Data);
 }
 
-internal sealed record IcLoraVisualGuidePlan(
-    IcLoraVisualGuideSourceKind Kind,
+internal sealed record IcLoraMediaInputPlan(
+    IcLoraMediaSourceKind Source,
     string RawSource,
+    IcLoraDriveMediaKind Kind,
     int? ControlNetIndex,
-    bool HasGuide);
+    bool HasInput);
 
 internal sealed record IcLoraPlan(
     int EntryIndex,
@@ -134,8 +134,14 @@ internal sealed record IcLoraPlan(
     IcLoraControlMode ControlMode,
     IcLoraDriveMediaContract MediaContract,
     IcLoraDriveMediaPlan DriveMedia,
-    IcLoraVisualGuidePlan VisualGuide,
-    double? GuideStrength);
+    IcLoraMediaInputPlan MediaInput,
+    int DimensionDownscaleFactor,
+    double? GuideStrength)
+{
+    internal bool HasVisualGuide => MediaContract.ConsumesVisual && MediaInput.HasInput;
+
+    internal bool HasAudioReference => MediaContract.ConsumesAudio && MediaInput.HasInput;
+}
 
 internal sealed record RetakePlan(
     int StartFrame,

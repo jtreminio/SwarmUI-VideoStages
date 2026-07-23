@@ -35,6 +35,7 @@ export type {
     RegionLayoutOptions,
 } from "./timelineView/layout";
 export {
+    audioSegmentWaveBarHeights,
     clampPxPerSecond,
     computeFitPxPerSecond,
     computeRegionLayout,

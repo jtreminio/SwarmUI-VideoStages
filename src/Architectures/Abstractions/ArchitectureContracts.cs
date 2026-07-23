@@ -319,7 +319,9 @@ internal interface IVideoArchitectureModule
 internal sealed record ArchitectureClipCompileContext(
     int Width,
     int Height,
-    int FramesPerSecond);
+    int FramesPerSecond,
+    ArchitectureEntryMode EntryMode = ArchitectureEntryMode.ImageToVideo,
+    bool HasPreviousClipOutput = false);
 
 internal interface IArchitecturePlanValidator
 {

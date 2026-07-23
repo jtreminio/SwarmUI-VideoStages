@@ -23,6 +23,7 @@ import {
     getSelection,
     resetSelectionForTests,
     setSelection,
+    subscribeSelection,
 } from "./selection";
 import {
     createTimelineDetailStrip,
@@ -48,6 +49,7 @@ interface WindowFixture {
 
 interface ClipFixture {
     duration: number;
+    skipped?: boolean;
     stages: StageFixture[];
     refs?: { source: string; frame: number }[];
     audioSource?: string;
@@ -84,6 +86,7 @@ interface ClipFixture {
 
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
+    skipped: clip.skipped ?? false,
     boundaryOut: clip.boundaryOut ?? "cut",
     boundaryOutCarryAudio: clip.boundaryOutCarryAudio ?? false,
     audioSource: clip.audioSource ?? "Native",
@@ -441,7 +444,8 @@ describe("createTimelineDetailStrip", () => {
                 icLoras: [
                     {
                         lora: "some-cnet-lora",
-                        source: "ControlNet 1",
+                        driveSource: "ControlNet 1",
+                        driveData: "visual",
                     },
                 ],
             },
@@ -465,7 +469,9 @@ describe("createTimelineDetailStrip", () => {
         expect(clips[0].icLoras[0]).toEqual({
             lora: IC_LORA_AUTO,
             preset: "custom",
-            source: "Upload",
+            driveSource: "Upload",
+            driveData: "visual",
+            driveMediaKinds: ["image", "video"],
             stage: -1,
             strength: 1,
             attentionStrength: 1,
@@ -517,6 +523,7 @@ describe("createTimelineDetailStrip", () => {
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
         expect(clips[0].icLoras[0].controlType).toBe("depth");
         expect(clips[0].icLoras[0].strength).toBe(1);
+        expect(clips[0].icLoras[0].driveMediaKinds).toEqual(["image", "video"]);
     });
 
     it("shows the Control select only for Custom and Union Control presets", () => {
@@ -553,7 +560,7 @@ describe("createTimelineDetailStrip", () => {
         expect(labels()).toContain("Control");
     });
 
-    it("gives LipDub one audio/video Drive Media picker without visual-guide controls", () => {
+    it("gives LipDub Upload or Incoming audio without visual-guide controls", () => {
         setup([
             {
                 duration: 4,
@@ -562,6 +569,7 @@ describe("createTimelineDetailStrip", () => {
                     {
                         lora: "lora-x.safetensors",
                         preset: "lipdub",
+                        driveData: "audio",
                         stage: 1,
                     },
                 ],
@@ -581,22 +589,140 @@ describe("createTimelineDetailStrip", () => {
             driveMedia?.querySelector<HTMLInputElement>('input[type="file"]');
 
         expect(input?.accept).toBe("audio/*,video/*");
-        expect(
-            Array.from(
-                row?.querySelectorAll(".vst-audio-field-label") ?? [],
-            ).map((label) => label.textContent),
-        ).toEqual(
-            expect.not.arrayContaining(["Attention", "Control", "Source"]),
+        const labels = Array.from(
+            row?.querySelectorAll(".vst-audio-field-label") ?? [],
+        ).map((label) => label.textContent);
+        expect(labels).not.toEqual(
+            expect.arrayContaining(["Attention", "Control", "Drive data"]),
         );
-        expect(row?.textContent).toContain("only this media's audio");
+        expect(labels).toContain("Source");
+        const source =
+            fieldByLabel("Source").querySelector<HTMLSelectElement>("select");
+        expect(
+            Array.from(source?.options ?? []).map((option) => option.value),
+        ).toEqual(["Upload", "Incoming"]);
+        expect(source?.options[1].disabled).toBe(false);
+        expect(row?.textContent).toContain("Only this media's audio");
         expect(row?.textContent).toContain("frames are ignored");
+    });
+
+    it("lets Custom choose Audio and uses the same generic audio contract", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 1,
+                        driveData: "visual",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const select =
+            fieldByLabel("Drive data").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!select) {
+            throw new Error("Drive data select missing");
+        }
+        select.value = "audio";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        const entry = savedClips(saveSpy)[0].icLoras[0];
+        expect(entry.driveData).toBe("audio");
+        expect(entry.driveMediaKinds).toEqual(["audio", "video"]);
+        expect(entry.controlType).toBe("none");
+        expect(controlNetLabels()).not.toEqual(
+            expect.arrayContaining(["Attention", "Control"]),
+        );
+        expect(
+            fieldByLabel("Drive Media").querySelector<HTMLInputElement>(
+                'input[type="file"]',
+            )?.accept,
+        ).toBe("audio/*,video/*");
+    });
+
+    it("lets Custom choose a model-only patch and clears hidden drive media", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        driveData: "visual",
+                        driveMedia: {
+                            data: "data:image/png;base64,AA==",
+                            fileName: "guide.png",
+                        },
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const select =
+            fieldByLabel("Drive data").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!select) {
+            throw new Error("Drive data select missing");
+        }
+        select.value = "none";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(savedClips(saveSpy)[0].icLoras[0]).toMatchObject({
+            driveData: "none",
+            driveSource: "Upload",
+            driveMedia: null,
+        });
+        expect(controlNetLabels()).not.toEqual(
+            expect.arrayContaining(["Source", "Drive Media"]),
+        );
+    });
+
+    it("uses persisted image-only Drive Media kinds for Upload and Incoming gating", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        driveData: "visual",
+                        driveMediaKinds: ["image"],
+                        stage: 1,
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        expect(
+            fieldByLabel("Drive Media").querySelector<HTMLInputElement>(
+                'input[type="file"]',
+            )?.accept,
+        ).toBe("image/*");
+        expect(
+            fieldByLabel("Source").querySelector<HTMLSelectElement>("select")
+                ?.options[1].disabled,
+        ).toBe(true);
     });
 
     // The per-entry selects render in a fixed order: Preset, LoRA, Control
     // (Custom / Union Control presets only), Apply on, then Source
     // (refine-stage placements only).
-    const IC_LORA_SELECTS = ["preset", "lora", "control", "apply", "source"];
-    type IcLoraSelectName = "preset" | "lora" | "apply" | "source";
+    const IC_LORA_SELECTS = [
+        "preset",
+        "lora",
+        "control",
+        "apply",
+        "data",
+        "source",
+    ];
+    type IcLoraSelectName = "preset" | "lora" | "apply" | "data" | "source";
     const icLoraSelect = (which: IcLoraSelectName): HTMLSelectElement => {
         const row = document.querySelector<HTMLElement>(".vst-detail-iclora");
         const select =
@@ -634,13 +760,15 @@ describe("createTimelineDetailStrip", () => {
             ["0", "Stage 0"],
             ["1", "Stage 1"],
         ]);
-        // Source select only exists on refine-stage placements.
+        // Custom exposes Drive data and Source; Incoming is disabled because
+        // the all-stages target includes a generated stage 0.
         expect(
             document.querySelectorAll(".vst-detail-iclora select"),
-        ).toHaveLength(4);
+        ).toHaveLength(6);
+        expect(icLoraSelect("source").options[1].disabled).toBe(true);
     });
 
-    it("refine-stage placement offers Stage input and swaps the upload row for a hint", () => {
+    it("refine-stage placement offers Incoming and swaps the upload row for a hint", () => {
         setup([
             {
                 duration: 4,
@@ -652,14 +780,16 @@ describe("createTimelineDetailStrip", () => {
         changeIcLoraSelect("apply", "1");
         expect(savedClips(saveSpy)[0].icLoras[0].stage).toBe(1);
 
-        changeIcLoraSelect("source", "Stage Input");
+        changeIcLoraSelect("source", "Incoming");
         const entry = savedClips(saveSpy)[0].icLoras[0];
-        expect(entry.source).toBe("Stage Input");
+        expect(entry.driveSource).toBe("Incoming");
         expect(controlNetLabels()).not.toContain("Drive Media");
-        expect(detail()?.textContent).toContain("Driven by stage 1's input");
+        expect(detail()?.textContent).toContain(
+            "Uses visual from stage 1's incoming media.",
+        );
     });
 
-    it("moving a Stage input entry off refine stages resets its source to Upload", () => {
+    it("moving an Incoming entry to an unavailable scope resets it to Upload", () => {
         setup([
             {
                 duration: 4,
@@ -668,7 +798,8 @@ describe("createTimelineDetailStrip", () => {
                     {
                         lora: "lora-x.safetensors",
                         stage: 1,
-                        source: "Stage Input",
+                        driveSource: "Incoming",
+                        driveData: "visual",
                     },
                 ],
             },
@@ -677,7 +808,7 @@ describe("createTimelineDetailStrip", () => {
         changeIcLoraSelect("apply", "-1");
         const entry = savedClips(saveSpy)[0].icLoras[0];
         expect(entry.stage).toBe(-1);
-        expect(entry.source).toBe("Upload");
+        expect(entry.driveSource).toBe("Upload");
         expect(controlNetLabels()).toContain("Drive Media");
     });
 
@@ -698,19 +829,17 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        // On a sourced clip the footage is the drive, so the Source select renders even at the
-        // default All-stages placement: Preset, LoRA, Control, Apply on, Source = 5 selects.
+        // Custom also exposes Drive data, and Incoming is available because
+        // source footage enters stage 0.
         expect(
             document.querySelectorAll(".vst-detail-iclora select"),
-        ).toHaveLength(5);
+        ).toHaveLength(6);
         expect(icLoraSelect("source").value).toBe("Upload");
         expect(controlNetLabels()).toContain("Drive Media");
-        expect(detail()?.textContent).toContain(
-            "No upload — drives from the stage's incoming footage.",
-        );
+        expect(icLoraSelect("source").options[1].disabled).toBe(false);
     });
 
-    it("sourced clip Stage-Input entry shows the footage-drive hint at stage 0", () => {
+    it("sourced clip Incoming entry shows its data source at stage 0", () => {
         setup([
             {
                 duration: 4,
@@ -727,20 +856,21 @@ describe("createTimelineDetailStrip", () => {
                     {
                         lora: "lora-x.safetensors",
                         stage: 0,
-                        source: "Stage Input",
+                        driveSource: "Incoming",
+                        driveData: "visual",
                     },
                 ],
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(icLoraSelect("source").value).toBe("Stage Input");
+        expect(icLoraSelect("source").value).toBe("Incoming");
         expect(controlNetLabels()).not.toContain("Drive Media");
         expect(detail()?.textContent).toContain(
-            "Driven by each stage's incoming frames (the source footage on stage 0)",
+            "Uses visual from stage 0's incoming media.",
         );
     });
 
-    it("unsourced clip omits the IC-LoRA Source select on a stage-0/all entry", () => {
+    it("unsourced clip disables Incoming on a stage-0/all entry", () => {
         setup([
             {
                 duration: 4,
@@ -749,11 +879,120 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        // Preset, LoRA, Control, Apply on — no Source select without a refine-stage placement.
         expect(
             document.querySelectorAll(".vst-detail-iclora select"),
-        ).toHaveLength(4);
+        ).toHaveLength(6);
+        expect(icLoraSelect("source").options[1].disabled).toBe(true);
         expect(controlNetLabels()).toContain("Drive Media");
+    });
+
+    it("does not mistake a skipped authored stage for prior-stage Incoming media", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{ skipped: true }, {}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 1,
+                        driveData: "visual",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+        expect(icLoraSelect("source").options[1].disabled).toBe(true);
+    });
+
+    it("repairs Incoming to Upload when skipping its supplying stage", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}, {}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 1,
+                        driveSource: "Incoming",
+                        driveData: "visual",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const skip = checkboxByLabel("Skip this stage");
+        skip.checked = true;
+        skip.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(savedClips(saveSpy)[0].icLoras[0].driveSource).toBe("Upload");
+        expect(
+            fieldByLabel("Drive Media").querySelector<HTMLInputElement>(
+                'input[type="file"]',
+            )?.accept,
+        ).toBe("image/*,video/*");
+    });
+
+    it("repairs a later clip's Incoming source when its prior clip is skipped", () => {
+        setup([
+            { duration: 4, stages: [{}] },
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 0,
+                        driveSource: "Incoming",
+                        driveData: "visual",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const skip = checkboxByLabel("Skip this clip");
+        skip.checked = true;
+        skip.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(savedClips(saveSpy)[1].icLoras[0].driveSource).toBe("Upload");
+    });
+
+    it("uses the nearest executable earlier clip for Incoming availability", () => {
+        setup([
+            { duration: 4, stages: [{}] },
+            { duration: 4, skipped: true, stages: [{}] },
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 0,
+                        driveData: "visual",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 2, stageIdx: 0 });
+        expect(icLoraSelect("source").options[1].disabled).toBe(false);
+    });
+
+    it("does not treat a skipped earlier clip as Incoming output", () => {
+        setup([
+            { duration: 4, skipped: true, stages: [{}] },
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [
+                    {
+                        lora: "lora-x.safetensors",
+                        stage: 0,
+                        driveData: "visual",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
+        expect(icLoraSelect("source").options[1].disabled).toBe(true);
     });
 
     it("leads the IC-LoRA LoRA dropdown with [AUTO]", () => {
@@ -990,7 +1229,12 @@ describe("createTimelineDetailStrip", () => {
                 stages: [{}, {}, {}],
                 icLoras: [
                     { lora: "a", stage: 2 },
-                    { lora: "b", stage: 1, source: "Stage Input" },
+                    {
+                        lora: "b",
+                        stage: 1,
+                        driveSource: "Incoming",
+                        driveData: "visual",
+                    },
                     { lora: "c", stage: 0 },
                     { lora: "d", stage: -1 },
                 ],
@@ -999,10 +1243,10 @@ describe("createTimelineDetailStrip", () => {
         clickRegionStageChip(body, 0, 1, true);
         const clip = savedClips(saveSpy)[0];
         expect(clip.stages).toHaveLength(2);
-        // Above the deleted stage shifts down; on it falls back to all stages
-        // (which also invalidates a Stage Input source); below is untouched.
+        // Above the deleted stage shifts down; on it falls back to all stages.
+        // Removing the supplying stage also repairs stale Incoming state.
         expect(clip.icLoras.map((e) => e.stage)).toEqual([1, -1, 0, -1]);
-        expect(clip.icLoras[1].source).toBe("Upload");
+        expect(clip.icLoras[1].driveSource).toBe("Upload");
     });
 
     it("adds a stage from the rail's Add button and selects it", () => {
@@ -1592,7 +1836,13 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 5,
                 stages: [{}, {}, {}],
-                icLoras: [{ lora: "some-lora", source: "ControlNet 1" }],
+                icLoras: [
+                    {
+                        lora: "some-lora",
+                        driveSource: "ControlNet 1",
+                        driveData: "visual",
+                    },
+                ],
             },
         ]);
         setSelection({ kind: "audio", clipIdx: 0 });
@@ -1648,6 +1898,7 @@ describe("createTimelineDetailStrip", () => {
             ".vst-detail-add-segment",
         );
         expect(addBtn).not.toBeNull();
+        expect(addBtn?.textContent).toBe("+ Add Segment");
         addBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         expect(getSelection()).toEqual({
@@ -1684,7 +1935,7 @@ describe("createTimelineDetailStrip", () => {
         });
     });
 
-    it("shows base audio and every segment together in the Audio panel", () => {
+    it("keeps base audio visible and opens one default segment editor at a time", () => {
         setup([
             {
                 duration: 10,
@@ -1707,39 +1958,52 @@ describe("createTimelineDetailStrip", () => {
         ).toBe("Upload");
         expect(detailBody()?.textContent).toContain("base.wav");
         expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
-            2,
+            1,
         );
+        expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
+        expect(document.querySelectorAll(".vst-segment-tab")).toHaveLength(2);
         expect(
-            document.querySelector(".vst-detail-instance-active"),
-        ).toBeNull();
+            document
+                .querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[0]
+                ?.getAttribute("aria-pressed"),
+        ).toBe("true");
 
-        // Focusing a segment selects/highlights it without rebuilding the
-        // unified panel or hiding the base-audio controls.
+        // Selecting S2 swaps the one editor without hiding base-audio controls.
         const before = detailBody();
-        segRow(1).querySelector<HTMLInputElement>("input")?.focus();
+        const secondTab =
+            document.querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[1];
+        secondTab?.focus();
+        secondTab?.click();
         expect(getSelection()).toEqual({
             kind: "audio-segment",
             clipIdx: 0,
             segIdx: 1,
         });
-        expect(detailBody()).toBe(before);
+        expect(detailBody()).not.toBe(before);
+        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
+            1,
+        );
         expect(segRow(1).classList.contains("vst-detail-instance-active")).toBe(
             true,
         );
+        const rerenderedSecondTab =
+            document.querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[1];
+        expect(rerenderedSecondTab?.getAttribute("aria-pressed")).toBe("true");
+        expect(document.activeElement).toBe(rerenderedSecondTab);
         expect(
             fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
                 "select",
             )?.value,
         ).toBe("Upload");
 
-        // Selecting the base track clears the segment highlight without
-        // tearing down the same panel.
+        // Selecting the base track restores the first segment as the default editor.
         setSelection({ kind: "audio", clipIdx: 0 });
-        expect(detailBody()).toBe(before);
         expect(crumbText()).toBe("Audio · Clip 1");
-        expect(
-            document.querySelector(".vst-detail-instance-active"),
-        ).toBeNull();
+        expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            true,
+        );
     });
 
     it("renders the audio-segment editor with breadcrumb, fields and remove", () => {
@@ -1920,47 +2184,44 @@ describe("createTimelineDetailStrip", () => {
         },
     ];
 
-    it("stacks EVERY audio segment, highlighting + re-pointing + distinct keys", () => {
+    it("uses the segment rail to swap one active editor with segment-specific keys", () => {
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
 
         expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
-            2,
+            1,
         );
         expect(segRow(1).classList.contains("vst-detail-instance-active")).toBe(
             true,
         );
-        expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
-            false,
-        );
-        expect(
-            segRow(0).querySelector(".vst-detail-instance-delete"),
-        ).not.toBeNull();
         expect(
             segRow(1).querySelector(".vst-detail-instance-delete"),
         ).not.toBeNull();
+        expect(
+            segRow(1).querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="seg-1-start"]',
+            ),
+        ).not.toBeNull();
 
-        // Per-segment pending keys are distinct: editing seg 0 and seg 1 both
-        // land without clobbering each other.
-        jest.useFakeTimers();
-        const s0 = segRow(0).querySelector<HTMLInputElement>(
-            'input[data-vst-focus-key="seg-0-start"]',
+        document
+            .querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[0]
+            ?.click();
+        expect(getSelection()).toEqual({
+            kind: "audio-segment",
+            clipIdx: 0,
+            segIdx: 0,
+        });
+        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
+            1,
         );
-        const s1 = segRow(1).querySelector<HTMLInputElement>(
-            'input[data-vst-focus-key="seg-1-start"]',
+        expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
+            true,
         );
-        if (!s0 || !s1) {
-            throw new Error("segment start inputs missing");
-        }
-        s0.value = "2";
-        s0.dispatchEvent(new Event("input", { bubbles: true }));
-        s1.value = "5";
-        s1.dispatchEvent(new Event("input", { bubbles: true }));
-        jest.advanceTimersByTime(200);
-        const segs = savedClips(saveSpy)[0].audioSegments;
-        expect(segs[0].startSeconds).toBe(2);
-        expect(segs[1].startSeconds).toBe(5);
-        jest.useRealTimers();
+        expect(
+            segRow(0).querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="seg-0-start"]',
+            ),
+        ).not.toBeNull();
     });
 
     it("clamps a segment's Start/Length only to the clip bounds (overlap allowed)", () => {
@@ -2003,33 +2264,38 @@ describe("createTimelineDetailStrip", () => {
         jest.useRealTimers();
     });
 
-    it("re-points the selection to a segment via a targeted highlight swap", () => {
+    it("selects a segment through its rail tab", () => {
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        const before = segRow(1);
-        // Interacting with seg 1's row re-points selection to seg 1 without a
-        // rebuild (same node) and swaps the highlight.
-        segRow(1).querySelector<HTMLInputElement>("input")?.focus();
+        document
+            .querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[1]
+            ?.click();
         expect(getSelection()).toEqual({
             kind: "audio-segment",
             clipIdx: 0,
             segIdx: 1,
         });
-        expect(segRow(1)).toBe(before);
         expect(segRow(1).classList.contains("vst-detail-instance-active")).toBe(
             true,
-        );
-        expect(segRow(0).classList.contains("vst-detail-instance-active")).toBe(
-            false,
         );
     });
 
     it("deletes one segment via its per-row delete button", () => {
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
+        const observedSelections: ReturnType<typeof getSelection>[] = [];
+        const stopObserving = subscribeSelection((selection) =>
+            observedSelections.push(selection),
+        );
+        const bodyBeforeDelete = detailBody();
+        if (!bodyBeforeDelete) {
+            throw new Error("dock body missing");
+        }
+        bodyBeforeDelete.scrollTop = 140;
         segRow(1)
             .querySelector<HTMLElement>(".vst-detail-instance-delete")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        stopObserving();
         const segs = savedClips(saveSpy)[0].audioSegments;
         expect(segs).toHaveLength(1);
         expect(segs[0].startSeconds).toBe(1); // the surviving first segment
@@ -2038,6 +2304,12 @@ describe("createTimelineDetailStrip", () => {
             clipIdx: 0,
             segIdx: 0,
         });
+        expect(observedSelections).not.toContainEqual({ kind: "none" });
+        expect(detailBody()?.scrollTop).toBe(140);
+        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
+            1,
+        );
+        expect(segRow(0)).not.toBeNull();
     });
 
     it("edits the clip's major prompt (debounced) through saveClips", () => {

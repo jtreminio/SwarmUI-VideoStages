@@ -766,13 +766,18 @@
     return value.map((raw) => normalizeAudioSegment(raw, clipDuration)).filter((seg) => seg !== null);
   };
 
+  // frontend/clipSemantics.ts
+  var activeStageCount = (clip) => clip.stages.filter((stage) => !stage.skipped).length;
+  var isExecutableClip = (clip) => !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
+  var executableClipIndexes = (clips) => clips.flatMap((clip, index) => isExecutableClip(clip) ? [index] : []);
+
   // frontend/icLoraAuthoring.ts
   var STAGE_CONTROLNET_STRENGTH_MIN = 0;
   var STAGE_CONTROLNET_STRENGTH_MAX = 1;
   var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
   var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
   var IC_LORA_SOURCE_UPLOAD = "Upload";
-  var IC_LORA_SOURCE_STAGE_INPUT = "Stage Input";
+  var IC_LORA_SOURCE_INCOMING = "Incoming";
   var IC_LORA_STAGE_ALL = -1;
   var IC_LORA_STRENGTH_MIN = 0;
   var IC_LORA_STRENGTH_MAX = 2;
@@ -783,22 +788,64 @@
   var IC_LORA_ATTENTION_STEP = 0.05;
   var IC_LORA_ATTENTION_DEFAULT = 1;
 
+  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
+  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
+    if (entry.driveData === "none" || !isExecutableClip(clip)) {
+      return false;
+    }
+    const acceptedKinds = entry.driveMediaKinds;
+    const activeStageIndexes = clip.stages.flatMap(
+      (stage, rawIndex) => stage.skipped ? [] : [rawIndex]
+    );
+    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
+    const hasPreviousClipOutput = clips.slice(0, clipIdx).some(isExecutableClip);
+    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
+      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
+      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
+      return incomingKind !== null && acceptedKinds.includes(incomingKind);
+    });
+  };
+  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
+    const clip = clips[clipIdx];
+    if (!clip) {
+      return false;
+    }
+    let changed = false;
+    for (const entry of clip.icLoras) {
+      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+        entry,
+        clip,
+        clipIdx,
+        clips,
+        generatedEntryMode
+      )) {
+        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+        changed = true;
+      }
+    }
+    return changed;
+  };
+
   // frontend/architectures/ltx2/icLoraPresets.ts
   var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
   var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
     acceptedKinds: ["image", "video"],
-    consumes: "visual",
-    visualSource: "drive-media",
-    requiresUpload: false
+    driveData: "visual"
   };
   var LIPDUB_DRIVE_MEDIA_CONTRACT = {
     acceptedKinds: ["audio", "video"],
-    consumes: "audio",
-    visualSource: "clip-entry",
-    requiresUpload: true
+    driveData: "audio"
+  };
+  var icLoraDriveMediaContractForData = (driveData) => {
+    if (driveData === "audio") {
+      return LIPDUB_DRIVE_MEDIA_CONTRACT;
+    }
+    if (driveData === "visual") {
+      return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+    }
+    return { acceptedKinds: [], driveData: "none" };
   };
   var IC_LORA_PRESET_CUSTOM_ID = "custom";
-  var IC_LORA_PRESET_UNION_CONTROL_ID = "union-control";
   var HF = "https://huggingface.co";
   var IC_LORA_PRESETS = [
     {
@@ -807,6 +854,7 @@
       triggerPhrase: "",
       strength: 1,
       controlType: "depth",
+      allowedControlTypes: ["none", "canny", "depth", "normal"],
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
       note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
     },
@@ -844,7 +892,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
-      note: "Generates new speech + lips from the prompt's words. Drive Media supplies the speaker sample: audio is used directly, and video uploads have their audio extracted while their frames are ignored.",
+      note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
       driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
     },
     {
@@ -864,7 +912,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
-      note: "Apply on a refine stage with Upscale ×2 and source Stage Input. Dims snap to multiples of 64."
+      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
     },
     {
       id: "pixel-spatial-upscaler-x4",
@@ -873,7 +921,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
-      note: "Apply on a refine stage with Upscale ×4 and source Stage Input. Dims snap to multiples of 128."
+      note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
     },
     {
       id: "deblur",
@@ -1033,7 +1081,9 @@
   var defaultIcLora = (overrides = {}) => ({
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
-    source: IC_LORA_SOURCE_UPLOAD,
+    driveSource: IC_LORA_SOURCE_UPLOAD,
+    driveData: "visual",
+    driveMediaKinds: ["image", "video"],
     stage: IC_LORA_STAGE_ALL,
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
@@ -1056,15 +1106,34 @@
     const raw = `${value ?? ""}`.trim().toLowerCase();
     return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
   };
-  var normalizeIcLoraSource = (value) => {
+  var normalizeIcLoraDriveSource = (value) => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
     if (!compact || compact === "upload") {
       return IC_LORA_SOURCE_UPLOAD;
     }
-    if (compact === "stageinput") {
-      return IC_LORA_SOURCE_STAGE_INPUT;
+    if (compact === "incoming" || compact === "stageinput") {
+      return IC_LORA_SOURCE_INCOMING;
     }
     return normalizeControlNetSource(value);
+  };
+  var normalizeIcLoraDriveData = (value) => {
+    const compact = `${value ?? ""}`.trim().toLowerCase();
+    return compact === "none" || compact === "audio" ? compact : "visual";
+  };
+  var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
+  var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
+    const allowed = mediaKindsForData(driveData);
+    if (!Array.isArray(value)) {
+      return [...allowed];
+    }
+    const kinds = [];
+    for (const rawKind of value) {
+      const kind = `${rawKind ?? ""}`.trim().toLowerCase();
+      if ((kind === "image" || kind === "video" || kind === "audio") && allowed.includes(kind) && !kinds.includes(kind)) {
+        kinds.push(kind);
+      }
+    }
+    return kinds;
   };
   var normalizeIcLoraStage = (value, stageCount) => {
     if (value == null || `${value}`.trim() === "") {
@@ -1076,7 +1145,7 @@
     }
     return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
   };
-  var normalizeIcLora = (raw, stageCount = 0, sourcedClip = false) => {
+  var normalizeIcLora = (raw, stageCount = 0, _sourcedClip = false) => {
     if (!isRecord(raw)) {
       return null;
     }
@@ -1086,26 +1155,26 @@
     }
     const preset = `${raw.preset ?? ""}`.trim();
     const normalizedPreset = preset || IC_LORA_PRESET_CUSTOM_ID;
-    const driveContract = icLoraDriveMediaContract(
-      findIcLoraPreset(normalizedPreset)
+    const driveData = normalizeIcLoraDriveData(raw.driveData);
+    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      raw.driveMediaKinds,
+      driveData
     );
-    const consumesAudio = driveContract.consumes === "audio";
     const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
-    const driveMedia = normalizedDriveMedia && driveContract.acceptedKinds.some(
+    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
+    const driveMedia = driveSource === IC_LORA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
       (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
     ) ? normalizedDriveMedia : null;
     const stage = normalizeIcLoraStage(raw.stage, stageCount);
-    let source = normalizeIcLoraSource(raw.source);
-    if (source === IC_LORA_SOURCE_STAGE_INPUT && stage < 1 && !sourcedClip) {
-      source = IC_LORA_SOURCE_UPLOAD;
-    }
-    if (consumesAudio) {
-      source = IC_LORA_SOURCE_UPLOAD;
+    if (driveData === "none") {
+      driveSource = IC_LORA_SOURCE_UPLOAD;
     }
     return {
       lora,
       preset: normalizedPreset,
-      source,
+      driveSource,
+      driveData,
+      driveMediaKinds,
       stage,
       strength: snapValueToStep(
         raw.strength,
@@ -1121,7 +1190,7 @@
         IC_LORA_ATTENTION_MAX,
         IC_LORA_ATTENTION_STEP
       ),
-      controlType: consumesAudio ? "none" : normalizeIcLoraControlType(raw.controlType),
+      controlType: driveData !== "visual" ? "none" : normalizeIcLoraControlType(raw.controlType),
       driveMedia
     };
   };
@@ -1131,20 +1200,26 @@
     }
     return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
   };
-  var reconcileIcLoraStage = (entry, sourcedClip = false) => {
-    if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT && !sourcedClip) {
-      entry.source = IC_LORA_SOURCE_UPLOAD;
+  var canonicalizeIcLoraFields = (entry) => {
+    if (entry.driveData === "none") {
+      entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+      entry.driveMedia = null;
     }
+    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      entry.driveMediaKinds,
+      entry.driveData
+    );
   };
   var isHdrFeature = (entry) => `${entry.preset ?? ""}`.trim().toLowerCase() === "hdr" || `${entry.lora ?? ""}`.toLowerCase().includes("hdr");
   var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
-    (entry) => entry.source !== IC_LORA_SOURCE_UPLOAD && entry.source !== IC_LORA_SOURCE_STAGE_INPUT
+    (entry) => entry.driveSource !== IC_LORA_SOURCE_UPLOAD && entry.driveSource !== IC_LORA_SOURCE_INCOMING
   );
 
   // frontend/architectures/behaviorRegistry.ts
   var ltx2Behavior = {
     normalizeIcLoras,
-    reconcileIcLoraStage,
+    canonicalizeIcLoraFields,
+    reconcileIncomingIcLoraDrives,
     hasSlotSourcedIcLora,
     isHdrFeature
   };
@@ -1159,11 +1234,21 @@
     }
     return allowPersistedLtxFallback && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
   };
-  var reconcileArchitectureIcLoraStage = (architectureId, entry, sourcedClip) => {
-    architectureBehavior(architectureId)?.reconcileIcLoraStage(
-      entry,
-      sourcedClip
-    );
+  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
+    architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
+  };
+  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode) => {
+    let changed = false;
+    clips.forEach((clip, clipIdx) => {
+      changed = architectureBehavior(
+        clip.architecture
+      )?.reconcileIncomingIcLoraDrives(
+        clips,
+        clipIdx,
+        generatedEntryMode
+      ) || changed;
+    });
+    return changed;
   };
   var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
   var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
@@ -2803,7 +2888,9 @@
         icLoras: clip.icLoras.map((entry) => ({
           lora: entry.lora,
           preset: entry.preset,
-          source: entry.source,
+          driveSource: entry.driveSource,
+          driveData: entry.driveData,
+          driveMediaKinds: entry.driveMediaKinds,
           stage: entry.stage,
           strength: entry.strength,
           attentionStrength: entry.attentionStrength,
@@ -3087,11 +3174,6 @@
     clip.modelProfileId = identity.modelProfileId;
     return true;
   };
-
-  // frontend/clipSemantics.ts
-  var activeStageCount = (clip) => clip.stages.filter((stage) => !stage.skipped).length;
-  var isExecutableClip = (clip) => !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
-  var executableClipIndexes = (clips) => clips.flatMap((clip, index) => isExecutableClip(clip) ? [index] : []);
 
   // frontend/architectures/policy/boundaryPolicy.ts
   var forceCrossArchitectureCutsForConversion = (clips) => {
@@ -3494,8 +3576,9 @@
           entry.stage = IC_LORA_STAGE_ALL;
           repairedTargets = true;
         }
-        if (entry.stage < 1 && entry.source === IC_LORA_SOURCE_STAGE_INPUT && clip.sourceVideo === null) {
-          entry.source = IC_LORA_SOURCE_UPLOAD;
+        if (entry.driveData === "none" && entry.driveSource !== IC_LORA_SOURCE_UPLOAD) {
+          entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+          entry.driveMedia = null;
         }
       }
       if (repairedTargets) {
@@ -6279,6 +6362,7 @@
     }
     return heights;
   };
+  var audioSegmentWaveBarHeights = (clipIdx, segmentIdx, count) => waveBarHeights(clipIdx * 4099 + segmentIdx + 1, count);
   var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
   var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
     if (pxPerSecond <= 0) {
@@ -6351,7 +6435,7 @@
     }
     const left = start / options.durationSeconds * 100;
     const width = (end - start) / options.durationSeconds * 100;
-    return `<div class="${options.className}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(options.title)}" aria-label="${escapeAttr(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span><span class="${options.labelClass}">${escapeAttr(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
+    return `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(options.title)}" aria-label="${escapeAttr(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` + (options.decoration ?? "") + `<span class="${options.labelClass}">${escapeAttr(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
   };
   var headTag = (kind, label, options) => {
     const classes = `vst-head-tag vst-head-tag-${kind}` + (options?.active ? " vst-head-tag-active" : "") + (options?.muted ? " vst-head-tag-muted" : "");
@@ -6880,17 +6964,20 @@
     const name = typeof segment.source === "string" ? segment.source : segment.source?.fileName;
     const labelText = name || "audio segment";
     const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
+    const waveform = audioSegmentWaveBarHeights(clipIdx, segmentIdx, 28).map((height) => `<span style="height:${height}%"></span>`).join("");
     return renderWindowSpan({
       className: "vst-audio-seg",
+      extraClassName: `vst-audio-seg-tone-${segmentIdx % 5}`,
       dataAttrs: `data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segmentIdx}"`,
       edgeAttr: "data-vst-audio-seg-edge",
-      labelClass: "vst-audio-seg-label",
+      labelClass: "vst-audio-label",
       label: labelText,
       title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
       ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx + 1}`,
       startSeconds: segment.startSeconds,
       lengthSeconds: segment.lengthSeconds,
-      durationSeconds
+      durationSeconds,
+      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
     });
   };
   var renderAudioSegmentLanes = (clip, clipIdx, durationSeconds, startPx, widthPx, canCreate) => {
@@ -8457,12 +8544,50 @@
     body.className = "vst-detail-instance-body vst-detail-seg-body";
     const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
     const clampSegment = (start, length) => clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
-    segments.forEach((segment, segIdx) => {
+    const activeSegmentIndex = selectedSegmentIndex !== null && selectedSegmentIndex >= 0 && selectedSegmentIndex < segments.length ? selectedSegmentIndex : segments.length > 0 ? 0 : null;
+    if (activeSegmentIndex !== null) {
+      const rail = document.createElement("div");
+      rail.className = "vst-detail-segment-rail";
+      const railLabel = document.createElement("span");
+      railLabel.className = "vst-detail-segment-rail-label";
+      railLabel.textContent = "Segments";
+      const railList = document.createElement("div");
+      railList.className = "vst-detail-segment-rail-list";
+      segments.forEach((_, segIdx2) => {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "vst-chip vst-segment-tab";
+        if (segIdx2 === activeSegmentIndex) {
+          tab.classList.add("vst-segment-tab-active");
+        }
+        tab.setAttribute(
+          "aria-pressed",
+          `${segIdx2 === activeSegmentIndex}`
+        );
+        tab.setAttribute(
+          "data-vst-focus-key",
+          `audio-segment-tab-${segIdx2}`
+        );
+        tab.textContent = `S${segIdx2 + 1}`;
+        tab.title = `Edit segment ${segIdx2 + 1} · Shift+click to delete`;
+        tab.addEventListener("click", (event) => {
+          if (event.shiftKey) {
+            ctx.removeAudioSegment(clipIdx, segIdx2);
+          } else {
+            setSelection({ kind: "audio-segment", clipIdx, segIdx: segIdx2 });
+          }
+        });
+        railList.appendChild(tab);
+      });
+      rail.append(railLabel, railList);
+      body.appendChild(rail);
+      const segment = segments[activeSegmentIndex];
+      const segIdx = activeSegmentIndex;
       const { row, fields } = buildInstanceRow({
         rowClass: "vst-detail-seg-row",
         indexAttr: "data-vst-seg-index",
         index: segIdx,
-        active: segIdx === selectedSegmentIndex,
+        active: true,
         title: `S${segIdx + 1}`,
         deleteLabel: "Remove segment",
         onDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
@@ -8629,7 +8754,7 @@
         disableCapabilityControls(row, decision, [".vst-detail-delete"]);
       }
       body.appendChild(row);
-    });
+    }
     const note = document.createElement("p");
     note.className = "vst-detail-note";
     note.textContent = segments.length === 0 ? "No overlay segments." : "Overlaid additively over the base audio; overlapping segments mix together.";
@@ -8802,7 +8927,7 @@
       const addSegment = document.createElement("button");
       addSegment.type = "button";
       addSegment.className = "basic-button small-button vst-detail-add-segment";
-      addSegment.textContent = "+ Add segment";
+      addSegment.textContent = "+ Add Segment";
       addSegment.title = "Overlay an extra uploaded audio piece on this clip's audio lane";
       addSegment.addEventListener("click", (event) => {
         event.preventDefault();
@@ -9157,7 +9282,7 @@
         sectionLabel2,
         wrap,
         "IC-LoRAs",
-        "In-context LoRAs use a drive media upload for pose, depth, motion, style, or other preset-specific conditioning. Add one per guide you want to apply."
+        "In-context LoRAs use uploaded or incoming media for pose, depth, motion, style, audio, or other preset-specific conditioning. Add one per guide you want to apply."
       );
     }
     const entryAt = (clips, entryIdx) => clips[clipIdx]?.icLoras[entryIdx];
@@ -9186,8 +9311,8 @@
       });
       const persistedHdr = isHdrFeature(entry);
       const preset = findIcLoraPreset(entry.preset);
-      const driveContract = icLoraDriveMediaContract(preset);
-      const audioDriveMedia = driveContract.consumes === "audio";
+      const driveMediaKinds = entry.driveMediaKinds;
+      const audioDriveMedia = entry.driveData === "audio";
       const presetOptions = IC_LORA_PRESETS.filter(
         (preset2) => hdrDecision.supported || !`${preset2.id} ${preset2.displayName}`.toLowerCase().includes("hdr")
       );
@@ -9220,15 +9345,26 @@
               target.controlType = preset2.controlType;
             }
             const nextContract = icLoraDriveMediaContract(preset2);
-            if (nextContract.consumes === "audio") {
-              target.source = IC_LORA_SOURCE_UPLOAD;
+            target.driveData = nextContract.driveData;
+            target.driveMediaKinds = [...nextContract.acceptedKinds];
+            if (nextContract.driveData !== "visual") {
               target.controlType = "none";
             }
             const driveData = target.driveMedia?.data ?? "";
-            if (driveData && !nextContract.acceptedKinds.some(
+            if (driveData && !target.driveMediaKinds.some(
               (kind) => driveData.startsWith(`data:${kind}/`)
             )) {
               target.driveMedia = null;
+            }
+            const targetClip = clips[clipIdx];
+            if (targetClip && target.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+              target,
+              targetClip,
+              clipIdx,
+              clips,
+              context.generatedEntryMode()
+            )) {
+              target.driveSource = IC_LORA_SOURCE_UPLOAD;
             }
           });
           clearIcLoraAutoFailure(value);
@@ -9297,7 +9433,7 @@
           "How strongly this IC-LoRA steers generation. Higher follows the drive media more closely; too high can overpower the prompt."
         )
       );
-      if (!audioDriveMedia) {
+      if (entry.driveData === "visual") {
         const attention = context.buildClampedNumber({
           key: `iclora-${entryIdx}-attention`,
           value: entry.attentionStrength,
@@ -9321,14 +9457,19 @@
           )
         );
       }
-      if (!audioDriveMedia && (!preset || preset.id === IC_LORA_PRESET_UNION_CONTROL_ID)) {
+      if (entry.driveData === "visual" && (!preset || (preset.allowedControlTypes?.length ?? 0) > 1)) {
+        const allowedControlTypes = preset?.allowedControlTypes ?? ["none", "canny", "depth", "normal"];
         const controlSelect = buildOptionSelect(
           [
             { value: "none", label: "None (raw video)" },
             { value: "canny", label: "Canny edges" },
             { value: "depth", label: "Depth map" },
             { value: "normal", label: "Normal map" }
-          ],
+          ].filter(
+            (option) => allowedControlTypes.includes(
+              option.value
+            )
+          ),
           entry.controlType,
           (value) => {
             context.commit((clips) => {
@@ -9365,7 +9506,17 @@
             }
             const stage = Number(value);
             target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
-            reconcileIcLoraStage(target, !!clips[clipIdx]?.sourceVideo);
+            canonicalizeIcLoraFields(target);
+            const targetClip = clips[clipIdx];
+            if (targetClip && target.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+              target,
+              targetClip,
+              clipIdx,
+              clips,
+              context.generatedEntryMode()
+            )) {
+              target.driveSource = IC_LORA_SOURCE_UPLOAD;
+            }
           });
           context.render();
         }
@@ -9378,21 +9529,88 @@
           "Which stage this IC-LoRA conditions — a single stage, or All stages of the clip."
         )
       );
-      if (!audioDriveMedia && (entry.stage >= 1 || !!clip.sourceVideo) && (entry.source === IC_LORA_SOURCE_UPLOAD || entry.source === IC_LORA_SOURCE_STAGE_INPUT)) {
+      if (!preset) {
+        const dataSelect = buildOptionSelect(
+          [
+            { value: "visual", label: "Visual frames" },
+            { value: "audio", label: "Audio" },
+            { value: "none", label: "None (model only)" }
+          ],
+          entry.driveData,
+          (value) => {
+            context.commit((clips) => {
+              const target = entryAt(clips, entryIdx);
+              if (!target) {
+                return;
+              }
+              target.driveData = value;
+              target.driveMediaKinds = [
+                ...icLoraDriveMediaContractForData(target.driveData).acceptedKinds
+              ];
+              if (target.driveData !== "visual") {
+                target.controlType = "none";
+              }
+              if (target.driveData === "none") {
+                target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                target.driveMedia = null;
+                return;
+              }
+              const data = target.driveMedia?.data ?? "";
+              if (data && !target.driveMediaKinds.some(
+                (kind) => data.startsWith(`data:${kind}/`)
+              )) {
+                target.driveMedia = null;
+              }
+              const targetClip = clips[clipIdx];
+              if (targetClip && target.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+                target,
+                targetClip,
+                clipIdx,
+                clips,
+                context.generatedEntryMode()
+              )) {
+                target.driveSource = IC_LORA_SOURCE_UPLOAD;
+              }
+            });
+            context.render();
+          }
+        );
+        fields.appendChild(
+          buildField(
+            "Drive data",
+            dataSelect,
+            void 0,
+            "Which stream this custom IC-LoRA extracts from its drive source. Visual frames create an IC-LoRA guide; Audio creates speaker/audio reference tokens; None applies only the model patch."
+          )
+        );
+      }
+      if (entry.driveData !== "none") {
+        const currentClips = getClips();
+        const incomingAvailable = canUseIncomingIcLoraDrive(
+          entry,
+          clip,
+          clipIdx,
+          currentClips,
+          context.generatedEntryMode()
+        );
         const sourceSelect = buildOptionSelect(
           [
             { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
             {
-              value: IC_LORA_SOURCE_STAGE_INPUT,
-              label: "Stage input"
+              value: IC_LORA_SOURCE_INCOMING,
+              label: incomingAvailable ? "Incoming media" : "Incoming media (unavailable)",
+              disabled: !incomingAvailable
             }
           ],
-          entry.source,
+          entry.driveSource,
           (value) => {
             context.commit((clips) => {
               const target = entryAt(clips, entryIdx);
               if (target) {
-                target.source = value;
+                target.driveSource = value;
+                if (value !== IC_LORA_SOURCE_UPLOAD) {
+                  target.driveMedia = null;
+                }
               }
             });
             context.render();
@@ -9403,12 +9621,12 @@
             "Source",
             sourceSelect,
             void 0,
-            "Where the drive media comes from: Upload your own video/image, or Stage input to drive from the frames already entering this stage."
+            "Where the selected drive data comes from: Upload your own media, or use compatible media already entering this generation point."
           )
         );
       }
-      if (audioDriveMedia || entry.source === IC_LORA_SOURCE_UPLOAD) {
-        const acceptedKinds = driveContract.acceptedKinds;
+      if (entry.driveData !== "none" && entry.driveSource === IC_LORA_SOURCE_UPLOAD) {
+        const acceptedKinds = driveMediaKinds;
         fields.appendChild(
           buildMediaPickRow(
             "Drive Media",
@@ -9438,23 +9656,18 @@
         if (audioDriveMedia) {
           const hint = document.createElement("small");
           hint.className = "vst-audio-field-hint";
-          hint.textContent = "LipDub uses only this media's audio as the speaker sample. For a video upload, its frames are ignored; the clip's normal text, image, or video entry path supplies visuals.";
-          fields.appendChild(hint);
-        } else if (!entry.driveMedia?.data && !!clip.sourceVideo) {
-          const hint = document.createElement("small");
-          hint.className = "vst-audio-field-hint";
-          hint.textContent = "No upload — drives from the stage's incoming footage.";
+          hint.textContent = "Only this media's audio is used as the reference sample. For a video upload, its frames are ignored; the clip's normal text, image, or video entry path supplies visuals.";
           fields.appendChild(hint);
         }
-      } else if (entry.source === IC_LORA_SOURCE_STAGE_INPUT) {
+      } else if (entry.driveSource === IC_LORA_SOURCE_INCOMING) {
         const hint = document.createElement("small");
         hint.className = "vst-audio-field-hint";
-        hint.textContent = entry.stage >= 1 ? `Driven by stage ${entry.stage}'s input (the previous stage's output).` : "Driven by each stage's incoming frames (the source footage on stage 0).";
+        hint.textContent = entry.stage >= 0 ? `Uses ${entry.driveData} from stage ${entry.stage}'s incoming media.` : `Uses ${entry.driveData} from each stage's incoming media.`;
         fields.appendChild(hint);
-      } else {
+      } else if (entry.driveData !== "none") {
         const slot = document.createElement("small");
         slot.className = "vst-audio-field-hint";
-        slot.textContent = `Driven by ${entry.source} (legacy source)`;
+        slot.textContent = `Driven by ${entry.driveSource} (legacy source)`;
         fields.appendChild(slot);
       }
       const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
@@ -9620,8 +9833,13 @@
           const target = clips[clipIdx];
           if (target) {
             target.skipped = value;
+            reconcileArchitectureIncomingIcLoraDrives(
+              clips,
+              context.generatedEntryMode()
+            );
           }
         });
+        context.render();
       })
     );
     return column;
@@ -9896,6 +10114,10 @@
         reconcileSourcedClipIdentity(
           target,
           context.capabilities().catalog
+        );
+        reconcileArchitectureIncomingIcLoraDrives(
+          clips,
+          context.generatedEntryMode()
         );
         return "render";
       });
@@ -10587,7 +10809,12 @@ The conversion is one undoable change.`;
             targetClip,
             context.capabilities().catalog
           );
+          reconcileArchitectureIncomingIcLoraDrives(
+            clips,
+            context.generatedEntryMode()
+          );
         });
+        context.render();
       })
     );
     column.appendChild(fields);
@@ -11645,7 +11872,15 @@ The conversion is one undoable change.`;
     }
     if (selection2.kind === "audio-segment") {
       const segments = clip.audioSegments ?? [];
-      return selection2.segIdx >= 0 && selection2.segIdx < segments.length ? selection2 : { kind: "none" };
+      if (segments.length === 0) {
+        return { kind: "audio", clipIdx: selection2.clipIdx };
+      }
+      const segIdx = clamp(selection2.segIdx, 0, segments.length - 1);
+      return segIdx === selection2.segIdx ? selection2 : {
+        kind: "audio-segment",
+        clipIdx: selection2.clipIdx,
+        segIdx
+      };
     }
     return selection2;
   };
@@ -11790,14 +12025,7 @@ The conversion is one undoable change.`;
       const previousIsAudio = previous.kind === "audio" || previous.kind === "audio-segment";
       const selectionIsAudio = selection2.kind === "audio" || selection2.kind === "audio-segment";
       if (previousIsAudio && selectionIsAudio) {
-        if (selection2.clipIdx !== previous.clipIdx) {
-          return false;
-        }
-        return swap(
-          ".vst-detail-seg-row",
-          "vst-detail-instance-active",
-          selection2.kind === "audio-segment" ? selection2.segIdx : -1
-        );
+        return false;
       }
       if (rendered.kind !== selection2.kind) {
         return false;
@@ -11831,13 +12059,6 @@ The conversion is one undoable change.`;
           ".vst-detail-ref-row",
           "vst-detail-instance-active",
           selection2.refIdx
-        );
-      }
-      if (selection2.kind === "audio-segment" && previous.kind === "audio-segment") {
-        return selection2.clipIdx === previous.clipIdx && swap(
-          ".vst-detail-seg-row",
-          "vst-detail-instance-active",
-          selection2.segIdx
         );
       }
       return false;
@@ -11903,7 +12124,7 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/selectionDomainOperations.ts
   var createDetailSelectionDomainOperations = (structuralCommit, getCapabilities, renderAfterExternalCommand = () => {
-  }) => {
+  }, getGeneratedEntryMode = () => "text-to-video") => {
     const commitRemoval = (remove, index, neighbour, fallback) => structuralCommit((clips) => {
       const remaining = remove(clips);
       if (remaining === null) {
@@ -12118,13 +12339,16 @@ The conversion is one undoable change.`;
             } else if (entry.stage > stageIdx) {
               entry.stage -= 1;
             }
-            reconcileArchitectureIcLoraStage(
+            canonicalizeArchitectureIcLoraFields(
               clip.architecture,
-              entry,
-              !!clip.sourceVideo
+              entry
             );
           }
           reconcileSourcedClipIdentity(clip, getCapabilities().catalog);
+          reconcileArchitectureIncomingIcLoraDrives(
+            clips,
+            getGeneratedEntryMode()
+          );
           return {
             kind: "clip",
             clipIdx,
@@ -12152,11 +12376,12 @@ The conversion is one undoable change.`;
   var MODEL_SELECTOR = "[data-vst-model]";
   var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
   var createDetailSelectionOperations = (structuralCommit, getCapabilities, renderAfterExternalCommand = () => {
-  }) => {
+  }, getGeneratedEntryMode = () => "text-to-video") => {
     const domain = createDetailSelectionDomainOperations(
       structuralCommit,
       getCapabilities,
-      renderAfterExternalCommand
+      renderAfterExternalCommand,
+      getGeneratedEntryMode
     );
     const handleActivation = (target, shiftKey) => {
       const stageChip = target.closest(STAGE_SELECTOR);
@@ -12252,7 +12477,8 @@ The conversion is one undoable change.`;
     const selectionOperations = createDetailSelectionOperations(
       draftQueue.structuralCommit,
       () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
-      render
+      render,
+      getRootGeneratedEntryMode
     );
     const context = {
       commit: draftQueue.commit,
@@ -12720,6 +12946,10 @@ The conversion is one undoable change.`;
         return;
       }
       clips[idx].skipped = !clips[idx].skipped;
+      reconcileArchitectureIncomingIcLoraDrives(
+        clips,
+        getRootGeneratedEntryMode()
+      );
       saveClips(clips, { origin: "linking" });
     };
     const applyDelete = (idx) => {
@@ -12728,6 +12958,10 @@ The conversion is one undoable change.`;
         return;
       }
       clips.splice(idx, 1);
+      reconcileArchitectureIncomingIcLoraDrives(
+        clips,
+        getRootGeneratedEntryMode()
+      );
       const sel = getSelection();
       if (sel.kind === "clip") {
         if (sel.clipIdx === idx) {
@@ -12833,7 +13067,12 @@ The conversion is one undoable change.`;
             }
             const destIdx = finalIndexAfterMove(from, gap);
             selectClip(destIdx, stageForClip(from));
-            return moveItem(clips, from, gap);
+            const reordered = moveItem(clips, from, gap);
+            reconcileArchitectureIncomingIcLoraDrives(
+              reordered,
+              getRootGeneratedEntryMode()
+            );
+            return reordered;
           });
         },
         onCancel: cleanup

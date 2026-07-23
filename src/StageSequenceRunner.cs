@@ -48,7 +48,10 @@ internal sealed class StageSequenceRunner(
                 PreviousClipOutput: exposesPrevious ? previousClipOutput : null,
                 preparedAudioSources,
                 assembly,
-                rootPolicy);
+                rootPolicy)
+            {
+                PreviousTimelineClipOutput = clipIndex > 0 ? previousClipOutput : null,
+            };
             DecodedClipArtifact output = runtimeDispatcher.Execute(runtimeContext);
             if (parallelMultiClip)
             {

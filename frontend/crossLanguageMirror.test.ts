@@ -14,6 +14,7 @@ import {
     IC_LORA_PRESETS,
     icLoraAutoModelName,
     icLoraDriveMediaContract,
+    icLoraDriveMediaContractForData,
 } from "./architectures/ltx2/icLoraPresets";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { crossfadePlanForClips } from "./boundaryPlan";
@@ -129,28 +130,43 @@ describe("cross-language mirror: M4 IC-LoRA auto-model naming (icLoraPresets)", 
 
 describe("cross-language mirror: LTX IC-LoRA Drive Media contracts", () => {
     interface DriveMediaContract {
+        driveMediaKinds: string[];
         acceptedKinds: string[];
-        consumes: string;
-        visualSource: string;
-        requiresUpload: boolean;
+        driveData: string;
     }
     const contract = loadFixture<{
-        default: DriveMediaContract;
-        lipdub: DriveMediaContract;
+        none: DriveMediaContract;
+        visual: DriveMediaContract;
+        audio: DriveMediaContract;
+        "visual-image-only": DriveMediaContract;
     }>("ic-lora-drive-media-contract.json");
 
-    it("keeps default and LipDub stream semantics aligned with the backend", () => {
-        expect(DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT).toEqual({
-            acceptedKinds: contract.default.acceptedKinds,
-            consumes: contract.default.consumes,
-            visualSource: contract.default.visualSource,
-            requiresUpload: contract.default.requiresUpload,
+    it("keeps declarative stream semantics aligned with the backend", () => {
+        expect(icLoraDriveMediaContractForData("none")).toEqual({
+            acceptedKinds: contract.none.acceptedKinds,
+            driveData: contract.none.driveData,
         });
+        expect(contract.none.driveMediaKinds).toEqual(
+            contract.none.acceptedKinds,
+        );
+        expect(DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT).toEqual({
+            acceptedKinds: contract.visual.acceptedKinds,
+            driveData: contract.visual.driveData,
+        });
+        expect(contract.visual.driveMediaKinds).toEqual(
+            DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT.acceptedKinds,
+        );
         expect(icLoraDriveMediaContract(findIcLoraPreset("lipdub"))).toEqual({
-            acceptedKinds: contract.lipdub.acceptedKinds,
-            consumes: contract.lipdub.consumes,
-            visualSource: contract.lipdub.visualSource,
-            requiresUpload: contract.lipdub.requiresUpload,
+            acceptedKinds: contract.audio.acceptedKinds,
+            driveData: contract.audio.driveData,
+        });
+        expect(contract.audio.driveMediaKinds).toEqual(
+            contract.audio.acceptedKinds,
+        );
+        expect(contract["visual-image-only"]).toMatchObject({
+            driveData: "visual",
+            driveMediaKinds: ["image"],
+            acceptedKinds: ["image"],
         });
     });
 });

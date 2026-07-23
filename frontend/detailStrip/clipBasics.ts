@@ -1,3 +1,4 @@
+import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
 import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
 import { buildCheckbox, buildField, buildNumber } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
@@ -55,8 +56,13 @@ export const buildClipColumn = (
                 const target = clips[clipIdx];
                 if (target) {
                     target.skipped = value;
+                    reconcileArchitectureIncomingIcLoraDrives(
+                        clips,
+                        context.generatedEntryMode(),
+                    );
                 }
             });
+            context.render();
         }),
     );
     return column;

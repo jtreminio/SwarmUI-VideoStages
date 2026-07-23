@@ -27,9 +27,13 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         out ResolvedIcLoraDrive drive)
     {
         drive = null;
-        switch (entry.VisualGuide.Kind)
+        if (!entry.MediaContract.ConsumesVisual)
         {
-            case IcLoraVisualGuideSourceKind.UploadedMedia:
+            return false;
+        }
+        switch (entry.MediaInput.Source)
+        {
+            case IcLoraMediaSourceKind.Upload:
             {
                 JArray images = GetOrCreateUploadedDriveImages(
                     bridge,
@@ -45,46 +49,27 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                     entry.DriveMedia.Kind == IcLoraDriveMediaKind.Image);
                 return true;
             }
-            case IcLoraVisualGuideSourceKind.StageInput:
-                if (stage.ClipStageRawIndex < 1 && !clip.IsSourced)
-                {
-                    throw new SwarmUserErrorException(
-                        "An IC-LoRA uses the Stage Input drive source but is not applied to a refine "
-                        + "stage. Set 'Apply on' to Stage 1 or later, or switch the source to Upload.");
-                }
+            case IcLoraMediaSourceKind.Incoming:
                 if (stageInput is null || !IsImageStream(stageInput))
                 {
                     throw new SwarmUserErrorException(
-                        $"VideoStages: planned IC-LoRA Stage Input drive is unavailable for stage "
-                        + $"{stage.ClipStageRawIndex}. Regenerate after updating the timeline or upload drive media.");
+                        $"VideoStages: planned IC-LoRA Incoming visual media is unavailable for stage "
+                        + $"{stage.ClipStageRawIndex}.");
                 }
                 drive = new(
                     new JArray(stageInput.Path[0], stageInput.Path[1]),
                     null,
-                    false);
+                    entry.MediaInput.Kind == IcLoraDriveMediaKind.Image);
                 return true;
-            case IcLoraVisualGuideSourceKind.SourcedClipInput:
-                if (stageInput is null || !IsImageStream(stageInput))
-                {
-                    Logs.Warning(
-                        $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} requires sourced clip input "
-                        + "media, but it is unavailable; applying the model patch without a guide.");
-                    return false;
-                }
-                drive = new(
-                    new JArray(stageInput.Path[0], stageInput.Path[1]),
-                    null,
-                    false);
-                return true;
-            case IcLoraVisualGuideSourceKind.ControlNet:
-                if (entry.VisualGuide.ControlNetIndex is not int index
+            case IcLoraMediaSourceKind.ControlNet:
+                if (entry.MediaInput.ControlNetIndex is not int index
                     || !new ControlNetCapture(g).TryGetCapturedCoreControlImage(
                         index,
                         out WGNodeData controlImage))
                 {
                     Logs.Warning(
                         $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} requires ControlNet "
-                        + $"{(entry.VisualGuide.ControlNetIndex ?? -1) + 1} drive media, but it is unavailable; "
+                        + $"{(entry.MediaInput.ControlNetIndex ?? -1) + 1} drive media, but it is unavailable; "
                         + "applying the model patch without a guide.");
                     return false;
                 }
@@ -93,7 +78,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                     index,
                     false);
                 return true;
-            case IcLoraVisualGuideSourceKind.LoaderOnly:
+            case IcLoraMediaSourceKind.LoaderOnly:
                 return false;
             default:
                 Logs.Warning(

@@ -222,7 +222,7 @@ export const buildAudioBody = (
         addSegment.type = "button";
         addSegment.className =
             "basic-button small-button vst-detail-add-segment";
-        addSegment.textContent = "+ Add segment";
+        addSegment.textContent = "+ Add Segment";
         addSegment.title =
             "Overlay an extra uploaded audio piece on this clip's audio lane";
         addSegment.addEventListener("click", (event) => {

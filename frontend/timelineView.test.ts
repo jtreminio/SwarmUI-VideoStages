@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
 import { projectVideoExecutionPath } from "./executionPath";
 import {
+    audioSegmentWaveBarHeights,
     clampPxPerSecond,
     computeFitPxPerSecond,
     computeRegionLayout,
@@ -113,6 +114,18 @@ describe("waveBarHeights", () => {
 
     it("varies bars per clip so adjacent lanes don't render identically", () => {
         expect(waveBarHeights(0, 16)).not.toEqual(waveBarHeights(1, 16));
+    });
+
+    it("gives each audio segment a deterministic, clip-aware waveform", () => {
+        expect(audioSegmentWaveBarHeights(2, 1, 20)).toEqual(
+            audioSegmentWaveBarHeights(2, 1, 20),
+        );
+        expect(audioSegmentWaveBarHeights(2, 1, 20)).not.toEqual(
+            audioSegmentWaveBarHeights(2, 2, 20),
+        );
+        expect(audioSegmentWaveBarHeights(2, 1, 20)).not.toEqual(
+            audioSegmentWaveBarHeights(3, 1, 20),
+        );
     });
 });
 
@@ -670,6 +683,43 @@ describe("renderTimeline (DOM)", () => {
         expect(uploadSeg?.querySelector(".vst-audio-label")?.textContent).toBe(
             "Upload",
         );
+    });
+
+    it("renders deterministic waveforms and cycling tones for overlay segments", () => {
+        const clip = minimalClip({
+            duration: 6,
+            audioSegments: Array.from({ length: 6 }, (_, index) => ({
+                source: `audio${index}`,
+                startSeconds: index * 0.5,
+                trimStartSeconds: 0,
+                lengthSeconds: 1,
+                volume: 1,
+            })),
+        });
+        const html = renderAudioTrackRow([clip], computeRegionLayout([clip]));
+        const host = document.createElement("div");
+        host.innerHTML = html;
+        const segments = host.querySelectorAll<HTMLElement>(".vst-audio-seg");
+
+        expect(segments).toHaveLength(6);
+        expect(segments[0].classList.contains("vst-audio-seg-tone-0")).toBe(
+            true,
+        );
+        expect(segments[4].classList.contains("vst-audio-seg-tone-4")).toBe(
+            true,
+        );
+        expect(segments[5].classList.contains("vst-audio-seg-tone-0")).toBe(
+            true,
+        );
+        expect(
+            segments[0].querySelectorAll(".vst-audio-seg-wave span"),
+        ).toHaveLength(28);
+        expect(segments[0].querySelector(".vst-audio-label")?.textContent).toBe(
+            "audio0",
+        );
+        expect(
+            segments[0].querySelector(".vst-audio-seg-wave")?.innerHTML,
+        ).not.toBe(segments[1].querySelector(".vst-audio-seg-wave")?.innerHTML);
     });
 
     it("marks sub-12px regions as tiny so CSS can collapse their interiors", () => {

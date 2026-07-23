@@ -70,7 +70,7 @@ public class AudioPlanCompilerTests
     {
         IcLoraSpec controlNetDrive = new(
             Lora: "drive.safetensors",
-            Source: Constants.ControlNetSourceTwo,
+            DriveSource: Constants.ControlNetSourceTwo,
             Strength: 1,
             AttentionStrength: 1,
             ControlType: Constants.IcLoraControlNone,

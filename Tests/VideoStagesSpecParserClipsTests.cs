@@ -307,7 +307,8 @@ public class VideoStagesSpecParserClipsTests
                     ["Lora"] = "clip-lora",
                     ["Preset"] = "deblur",
                     ["Stage"] = 0,
-                    ["Source"] = Constants.ControlNetSourceTwo,
+                    ["DriveSource"] = Constants.ControlNetSourceTwo,
+                    ["DriveData"] = nameof(IcLoraDriveData.Visual),
                     ["Strength"] = 0.7,
                     ["AttentionStrength"] = 0.4,
                     ["ControlType"] = Constants.IcLoraControlCanny,
@@ -330,7 +331,8 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal("clip-lora", entry.Lora);
         Assert.Equal("deblur", entry.Preset);
         Assert.Equal(0, entry.Stage);
-        Assert.Equal(Constants.ControlNetSourceTwo, entry.Source);
+        Assert.Equal(Constants.ControlNetSourceTwo, entry.DriveSource);
+        Assert.Equal(IcLoraDriveData.Visual, entry.DriveData);
         Assert.Equal(0.7, entry.Strength);
         Assert.Equal(0.4, entry.AttentionStrength);
         Assert.Equal(Constants.IcLoraControlCanny, entry.ControlType);
@@ -360,7 +362,9 @@ public class VideoStagesSpecParserClipsTests
         {
             ["Lora"] = "lipdub.safetensors",
             ["Preset"] = "lipdub",
-            ["Source"] = Constants.IcLoraSourceUpload,
+            ["DriveSource"] = Constants.IcLoraSourceUpload,
+            ["DriveData"] = nameof(IcLoraDriveData.Audio),
+            ["DriveMediaKinds"] = new JArray("audio", "video"),
             ["ControlType"] = Constants.IcLoraControlNone,
             ["DriveMedia"] = new JObject
             {
@@ -378,9 +382,82 @@ public class VideoStagesSpecParserClipsTests
         IcLoraSpec parsed = Assert.Single(clip.IcLoras);
 
         Assert.Equal("lipdub", parsed.Preset);
+        Assert.Equal(Constants.IcLoraSourceUpload, parsed.DriveSource);
+        Assert.Equal(IcLoraDriveData.Audio, parsed.DriveData);
+        Assert.Equal(["audio", "video"], parsed.DriveMediaKinds);
         Assert.NotNull(parsed.DriveMedia);
         Assert.Equal("data:audio/wav;base64,QUJD", parsed.DriveMedia.Data);
         Assert.Equal("target-voice.wav", parsed.DriveMedia.FileName);
+    }
+
+    [Fact]
+    public void ParseClips_IcLoraDoesNotInferMissingDriveDataFromPresetOrUpload()
+    {
+        JObject entry = new()
+        {
+            ["Lora"] = "lipdub.safetensors",
+            ["Preset"] = "lipdub",
+            ["DriveSource"] = Constants.IcLoraSourceUpload,
+            ["DriveMedia"] = new JObject
+            {
+                ["Data"] = "data:audio/wav;base64,QUJD",
+                ["FileName"] = "voice.wav",
+            },
+        };
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                stages: [MakeStage("model-a")],
+                icLoras: new JArray(entry))));
+
+        IcLoraSpec parsed = Assert.Single(
+            Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips).IcLoras);
+
+        Assert.Equal(IcLoraDriveData.None, parsed.DriveData);
+        Assert.Null(parsed.DriveMediaKinds);
+    }
+
+    [Fact]
+    public void ParseClips_IcLoraPreservesMalformedDriveDataForPlanningValidation()
+    {
+        JObject entry = new()
+        {
+            ["Lora"] = "adapter.safetensors",
+            ["DriveSource"] = Constants.IcLoraSourceUpload,
+            ["DriveData"] = "future-stream",
+        };
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                stages: [MakeStage("model-a")],
+                icLoras: new JArray(entry))));
+
+        IcLoraSpec parsed = Assert.Single(
+            Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips).IcLoras);
+
+        Assert.False(Enum.IsDefined(parsed.DriveData));
+    }
+
+    [Fact]
+    public void ParseClips_IcLoraMalformedDriveMediaKindsReachPlanningDiagnostics()
+    {
+        JObject entry = new()
+        {
+            ["Lora"] = "adapter.safetensors",
+            ["DriveSource"] = Constants.IcLoraSourceUpload,
+            ["DriveData"] = nameof(IcLoraDriveData.Visual),
+            ["DriveMediaKinds"] = "image",
+        };
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                stages: [MakeStage("model-a")],
+                icLoras: new JArray(entry))));
+
+        ClipSpec clip = Assert.Single(
+            VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
+
+        Assert.Contains(
+            IcLoraPlanCompiler.ValidateClip(clip),
+            diagnostic => diagnostic.Code
+                == "ltx2.ic-lora.drive-media-kinds-malformed");
     }
 
     [Fact]
@@ -696,7 +773,7 @@ public class VideoStagesSpecParserClipsTests
                 {
                     ["Lora"] = "clip-lora",
                     ["Stage"] = 2,
-                    ["Source"] = Constants.IcLoraSourceUpload,
+                    ["DriveSource"] = Constants.IcLoraSourceUpload,
                 }))
         ));
         WorkflowGenerator parser = BuildParser(json);

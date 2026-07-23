@@ -3,7 +3,6 @@ import {
     isAllowedAudioSource,
 } from "../../audioSource";
 import {
-    IC_LORA_SOURCE_STAGE_INPUT,
     IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
 } from "../../icLoraAuthoring";
@@ -185,11 +184,11 @@ export const planArchitectureConversion = (
                 repairedTargets = true;
             }
             if (
-                entry.stage < 1 &&
-                entry.source === IC_LORA_SOURCE_STAGE_INPUT &&
-                clip.sourceVideo === null
+                entry.driveData === "none" &&
+                entry.driveSource !== IC_LORA_SOURCE_UPLOAD
             ) {
-                entry.source = IC_LORA_SOURCE_UPLOAD;
+                entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+                entry.driveMedia = null;
             }
         }
         if (repairedTargets) {

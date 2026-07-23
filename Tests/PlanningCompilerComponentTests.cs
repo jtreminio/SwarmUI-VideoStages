@@ -129,6 +129,7 @@ public class PlanningCompilerComponentTests
                     1,
                     Constants.IcLoraControlCanny,
                     null,
+                    DriveData: IcLoraDriveData.Visual,
                     Stage: 1),
             ],
         };
@@ -145,27 +146,28 @@ public class PlanningCompilerComponentTests
             loras,
             lora => Assert.Equal("clip", lora.Name),
             lora => Assert.Equal("stage", lora.Name));
-        Assert.Equal(IcLoraVisualGuideSourceKind.ControlNet, Assert.Single(icLoras).VisualGuide.Kind);
-        Assert.Equal(1, icLoras[0].VisualGuide.ControlNetIndex);
+        Assert.Equal(IcLoraMediaSourceKind.ControlNet, Assert.Single(icLoras).MediaInput.Source);
+        Assert.Equal(1, icLoras[0].MediaInput.ControlNetIndex);
         Assert.Equal(ImageReferenceSourceKind.Upload, Assert.Single(references).SourceKind);
     }
 
     [Theory]
-    [InlineData(2, "Upload", "none", null, "ltx2.ic-lora.stage-target-invalid")]
-    [InlineData(-1, "future-source", "none", null, "ltx2.ic-lora.source-unsupported")]
-    [InlineData(-1, "Stage Input", "none", null, "ltx2.ic-lora.stage-input-unavailable")]
-    [InlineData(-1, "Upload", "future-control", null, "ltx2.ic-lora.control-mode-unsupported")]
+    [InlineData(2, "Upload", "none", null, (int)IcLoraDriveData.None, "ltx2.ic-lora.stage-target-invalid")]
+    [InlineData(-1, "future-source", "none", null, (int)IcLoraDriveData.Visual, "ltx2.ic-lora.drive-source-unsupported")]
+    [InlineData(-1, "Upload", "future-control", null, (int)IcLoraDriveData.None, "ltx2.ic-lora.control-mode-unsupported")]
     [InlineData(
         -1,
         "Upload",
         "none",
         "data:application/octet-stream;base64,QQ==",
-        "ltx2.ic-lora.upload-kind-unsupported")]
+        (int)IcLoraDriveData.Visual,
+        "ltx2.ic-lora.drive-media-kind-unsupported")]
     public void LtxIcLoraStructuralErrors_AreBlockingPlanningDiagnostics(
         int targetStage,
         string source,
         string control,
         string uploadedData,
+        int driveData,
         string expectedCode)
     {
         ClipSpec clip = GeneratedClip(0, Stage(10)) with
@@ -180,6 +182,7 @@ public class PlanningCompilerComponentTests
                     1,
                     control,
                     uploadedData is null ? null : new(uploadedData, "drive.bin"),
+                    DriveData: (IcLoraDriveData)driveData,
                     Stage: targetStage),
             ],
         };
@@ -208,7 +211,8 @@ public class PlanningCompilerComponentTests
                     1,
                     1,
                     Constants.IcLoraControlNone,
-                    null),
+                    null,
+                    DriveData: IcLoraDriveData.Visual),
             ],
         };
 
@@ -224,7 +228,7 @@ public class PlanningCompilerComponentTests
         Assert.Null(Assert.Single(plannedClip.Stages).ArchitecturePayload);
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "ltx2.ic-lora.source-unsupported"
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-source-unsupported"
                 && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
     }
 
@@ -312,6 +316,7 @@ public class PlanningCompilerComponentTests
                             1,
                             Constants.IcLoraControlNone,
                             new UploadedMediaSpec("data:image/png;base64,Qg==", "drive.png"),
+                            DriveData: IcLoraDriveData.Visual,
                             Preset: "deblur",
                             Stage: 1),
                     ],

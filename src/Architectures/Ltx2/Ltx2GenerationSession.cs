@@ -28,6 +28,7 @@ internal sealed class Ltx2GenerationSession(
                 context.HasPreviousTimelineClip,
                 context.PreviousClip,
                 ToNodeData(context.PreviousClipOutput),
+                ToNodeData(context.PreviousTimelineClipOutput),
                 rootSources,
                 context.Assembly,
                 hostScope,

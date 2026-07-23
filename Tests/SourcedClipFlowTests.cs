@@ -137,8 +137,9 @@ public partial class StageFlowTests
         sourced["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = lipDub.Name,
-            ["Preset"] = IcLoraDriveMediaContracts.LipDubPreset,
-            ["Source"] = Constants.IcLoraSourceUpload,
+            ["Preset"] = "lipdub",
+            ["DriveSource"] = Constants.IcLoraSourceUpload,
+            ["DriveData"] = $"{IcLoraDriveData.Audio}",
             ["DriveMedia"] = new JObject
             {
                 ["Data"] = "data:video/mp4;base64,RFJJVkU=",
@@ -176,6 +177,128 @@ public partial class StageFlowTests
         Assert.False(
             ReachesUpstream(bridge, sampler.LatentImage.Connection!.Node, driveComponents.Id),
             "Drive Media video frames leaked into the generated visual path.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Sourced_clip_incoming_audio_ic_lora_uses_the_attached_init_video_audio()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel icLora = new(
+            loraHandler,
+            "/tmp",
+            "/tmp/UnitTest_IncomingAudio.safetensors",
+            "UnitTest_IncomingAudio.safetensors");
+        loraHandler.Models[icLora.Name] = icLora;
+
+        JObject sourced = MakeSourcedClip(models);
+        sourced["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = icLora.Name,
+            ["Preset"] = "custom-audio",
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Audio}",
+        });
+
+        (JObject workflow, WorkflowGenerator _generator) =
+            GenerateSourcedFlow(models, sourced);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadVideoB64Node sourceLoad =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        LTXVSetAudioRefTokensNode refTokens =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        Assert.True(
+            ReachesUpstream(bridge, refTokens.AudioLatent.Connection!.Node, sourceLoad.Id),
+            "Incoming audio reference tokens do not trace to the init video's attached audio.");
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Incoming_audio_after_cut_traces_to_the_previous_clip_output()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel icLora = new(
+            loraHandler,
+            "/tmp",
+            "/tmp/UnitTest_PreviousClipAudio.safetensors",
+            "UnitTest_PreviousClipAudio.safetensors");
+        loraHandler.Models[icLora.Name] = icLora;
+
+        JObject first = MakeSourcedClip(models);
+        first["BoundaryOut"] = Constants.BoundaryOutCut;
+        JObject second = MakeGeneratedClip(models);
+        second["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = icLora.Name,
+            ["Preset"] = "custom-audio",
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Audio}",
+        });
+
+        (JObject workflow, WorkflowGenerator _generator) =
+            GenerateSourcedFlow(models, first, second);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        SwarmKSamplerNode firstClipSampler = SamplerNodesOrdered(bridge).First();
+        LTXVSetAudioRefTokensNode refTokens =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+
+        Assert.True(
+            ReachesUpstream(bridge, refTokens.AudioLatent.Connection!.Node, firstClipSampler.Id),
+            "Incoming Audio after a cut does not trace to the previous clip's output audio.");
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Multi_stage_incoming_audio_reuses_latent_audio_without_second_stage_churn()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
+        Program.T2IModelSets["LoRA"] = loraHandler;
+        T2IModel icLora = new(
+            loraHandler,
+            "/tmp",
+            "/tmp/UnitTest_MultiStageIncomingAudio.safetensors",
+            "UnitTest_MultiStageIncomingAudio.safetensors");
+        loraHandler.Models[icLora.Name] = icLora;
+
+        JObject sourced = MakeSourcedClip(models);
+        ((JArray)sourced["Stages"]).Add(
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 12));
+        sourced["IcLoras"] = new JArray(new JObject
+        {
+            ["Lora"] = icLora.Name,
+            ["Preset"] = "custom-audio",
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Audio}",
+        });
+
+        (JObject workflow, WorkflowGenerator _generator) =
+            GenerateSourcedFlow(models, sourced);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<LTXVSetAudioRefTokensNode> refTokens =
+            [.. bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>()
+                .OrderBy(node => int.Parse(node.Id))];
+        Assert.Equal(2, refTokens.Count);
+        Assert.IsType<LTXVAudioVAEEncodeNode>(refTokens[0].AudioLatent.Connection!.Node);
+        ComfyNode secondStageAudio = refTokens[1].AudioLatent.Connection!.Node;
+        Assert.IsNotType<LTXVAudioVAEEncodeNode>(secondStageAudio);
+        Assert.IsNotType<LTXVAudioVAEDecodeNode>(secondStageAudio);
+        Assert.IsNotType<SwarmEnsureAudioNode>(secondStageAudio);
         AssertWorkflowHasNoCycles(workflow);
     }
 
@@ -222,9 +345,8 @@ public partial class StageFlowTests
             loraHandler, "/tmp", "/tmp/UnitTest_IcLoraUpscaler.safetensors", "UnitTest_IcLoraUpscaler.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        // Passthrough stage 0 (Control 0) + a ×2 refine stage. An Upload/no-media IC-LoRA on a
-        // sourced clip now drives implicitly from the stage's incoming frames, so it is no longer
-        // loader-only: it emits the full guide on the sampling refine stage.
+        // Passthrough stage 0 (Control 0) + a ×2 refine stage. The IC-LoRA explicitly targets the
+        // refine stage and consumes the media entering that stage.
         JObject sourced = MakeSourcedClip(models);
         ((JArray)sourced["Stages"])[0]["Control"] = 0.0;
         ((JArray)sourced["Stages"]).Add(
@@ -232,7 +354,9 @@ public partial class StageFlowTests
         sourced["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_IcLoraUpscaler",
-            ["Source"] = Constants.IcLoraSourceUpload,
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["Stage"] = 1,
         });
         // Paired with a generated lead clip: the cross-clip merge owns the final save, so the run
         // does not take the lone-sourced-clip root-save retarget path.
@@ -270,15 +394,16 @@ public partial class StageFlowTests
             loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        // Single sampling stage (Control 0.5, steps 10) + an Upload/no-media IC-LoRA: the sourced
-        // footage is the implicit drive, so stage 0 emits the full guide from its incoming frames.
+        // Single sampling stage (Control 0.5, steps 10) + an Incoming IC-LoRA: the sourced
+        // footage is the explicit drive, so stage 0 emits the full guide from its incoming frames.
         // Paired with a generated lead clip so the merge owns the save (the lone-sourced retarget
         // path is covered by Lone_sourced_clip_with_ic_lora_guide_saves_decoded_audio_not_a_latent).
         JObject sourced = MakeSourcedClip(models);
         sourced["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_IcLoraDrive",
-            ["Source"] = Constants.IcLoraSourceUpload,
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
             models, MakeGeneratedClip(models), sourced);
@@ -312,7 +437,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_stage_input_source_is_legal_at_stage_zero_and_emits_a_guide()
+    public void Sourced_clip_incoming_source_is_legal_at_stage_zero_and_emits_a_guide()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -322,14 +447,14 @@ public partial class StageFlowTests
             loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        // On a sourced clip, stage 0's incoming frames ARE the footage, so an explicit "Stage Input"
-        // drive at Stage 0 is legal (it throws on an unsourced clip — see LtxIcLoraTests
-        // Stage_input_source_without_refine_placement_is_a_user_error) and emits a guide.
+        // On a sourced clip, stage 0's Incoming media IS the footage, so that
+        // explicit drive source is legal at Stage 0 and emits a guide.
         JObject sourced = MakeSourcedClip(models);
         sourced["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_IcLoraDrive",
-            ["Source"] = Constants.IcLoraSourceStageInput,
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
             ["Stage"] = 0,
         });
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
@@ -365,7 +490,8 @@ public partial class StageFlowTests
         sourced["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_IcLoraDrive",
-            ["Source"] = Constants.IcLoraSourceUpload,
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -798,7 +924,8 @@ public partial class StageFlowTests
         sourced["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_StageLora",
-            ["Source"] = Constants.IcLoraSourceUpload,
+            ["DriveSource"] = Constants.IcLoraSourceIncoming,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildTextToVideoInput(
             models.VideoModel, MakeRootConfig(512, 512, sourced).ToString());
@@ -1025,7 +1152,8 @@ public partial class StageFlowTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "UnitTest_IcLoraDrive",
-            ["Source"] = Constants.IcLoraSourceUpload,
+            ["DriveSource"] = Constants.IcLoraSourceUpload,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
             ["DriveMedia"] = new JObject
             {
                 ["Data"] = "data:video/mp4;base64,QUJD",

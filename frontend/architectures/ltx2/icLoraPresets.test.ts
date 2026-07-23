@@ -15,12 +15,10 @@ describe("LTX IC-LoRA drive-media contracts", () => {
         );
     });
 
-    it("makes LipDub consume audio from audio or video media and keep clip-entry visuals", () => {
+    it("makes LipDub extract audio from audio or video media", () => {
         expect(icLoraDriveMediaContract(findIcLoraPreset("lipdub"))).toEqual({
             acceptedKinds: ["audio", "video"],
-            consumes: "audio",
-            visualSource: "clip-entry",
-            requiresUpload: true,
+            driveData: "audio",
         });
     });
 });

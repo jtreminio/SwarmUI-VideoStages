@@ -54,7 +54,14 @@ internal sealed record ArchitectureClipRuntimeContext(
     DecodedClipArtifact PreviousClipOutput,
     AudioRuntimeSources AudioSources,
     TimelineAssemblySession Assembly,
-    RootExecutionPolicy RootPolicy);
+    RootExecutionPolicy RootPolicy)
+{
+    /// <summary>
+    /// The prior timeline clip's decoded output regardless of boundary mode. This is contextual
+    /// media only; <see cref="PreviousClipOutput"/> remains restricted to non-cut continuity.
+    /// </summary>
+    internal DecodedClipArtifact PreviousTimelineClipOutput { get; init; }
+}
 
 internal sealed record ArchitectureClipExecutionRequest(
     ClipPlan Clip,

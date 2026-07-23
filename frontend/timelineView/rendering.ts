@@ -23,6 +23,7 @@ export const applyBackgroundImages = (root: HTMLElement): void => {
 
 export const renderWindowSpan = (options: {
     className: string;
+    extraClassName?: string;
     dataAttrs: string;
     edgeAttr: string;
     labelClass: string;
@@ -32,6 +33,7 @@ export const renderWindowSpan = (options: {
     startSeconds: number;
     lengthSeconds: number;
     durationSeconds: number;
+    decoration?: string;
 }): string => {
     const start = clamp(options.startSeconds, 0, options.durationSeconds);
     const end = clamp(
@@ -45,8 +47,9 @@ export const renderWindowSpan = (options: {
     const left = (start / options.durationSeconds) * 100;
     const width = ((end - start) / options.durationSeconds) * 100;
     return (
-        `<div class="${options.className}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeHtml(options.title)}" aria-label="${escapeHtml(options.ariaLabel)}">` +
+        `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeHtml(options.title)}" aria-label="${escapeHtml(options.ariaLabel)}">` +
         `<span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` +
+        (options.decoration ?? "") +
         `<span class="${options.labelClass}">${escapeHtml(options.label)}</span>` +
         `<span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span>` +
         `</div>`

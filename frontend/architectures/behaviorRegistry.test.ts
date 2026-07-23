@@ -1,15 +1,18 @@
 import { describe, expect, it } from "@jest/globals";
-import type { IcLora } from "../types";
+import type { Clip, IcLora } from "../types";
 import {
     architectureBehavior,
     isArchitectureHdrFeature,
     normalizeArchitectureIcLoras,
+    reconcileArchitectureIncomingIcLoraDrives,
 } from "./behaviorRegistry";
 
 const hdrEntry: IcLora = {
     lora: "ltx-hdr.safetensors",
     preset: "hdr",
-    source: "Upload",
+    driveSource: "Upload",
+    driveData: "visual",
+    driveMediaKinds: ["image", "video"],
     stage: -1,
     strength: 1,
     attentionStrength: 1,
@@ -34,5 +37,36 @@ describe("architecture behavior registry", () => {
         expect(
             normalizeArchitectureIcLoras("future-video", raw, 1, false, true),
         ).toHaveLength(1);
+    });
+
+    it("repairs only an owning architecture's Incoming entries", () => {
+        const incoming = {
+            ...hdrEntry,
+            preset: "custom",
+            driveSource: "Incoming",
+            stage: 0,
+        };
+        const ltx = {
+            architecture: "ltx2",
+            skipped: false,
+            sourceVideo: null,
+            stages: [{}],
+            icLoras: [incoming],
+        } as unknown as Clip;
+        const foreign = {
+            architecture: "future-video",
+            skipped: false,
+            sourceVideo: null,
+            stages: [{}],
+            icLoras: [{ ...incoming }],
+        } as unknown as Clip;
+
+        reconcileArchitectureIncomingIcLoraDrives(
+            [ltx, foreign],
+            "text-to-video",
+        );
+
+        expect(ltx.icLoras[0].driveSource).toBe("Upload");
+        expect(foreign.icLoras[0].driveSource).toBe("Incoming");
     });
 });

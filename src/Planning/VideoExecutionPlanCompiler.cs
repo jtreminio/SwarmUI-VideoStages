@@ -76,6 +76,10 @@ internal static class VideoExecutionPlanCompiler
                 if (!capabilityDiagnostics.Any(diagnostic =>
                     diagnostic.Severity == VideoPlanDiagnosticSeverity.Error))
                 {
+                    ArchitectureEntryMode entryMode = ResolveEntryMode(
+                        spec,
+                        rootEnvironment,
+                        activeClips[i]);
                     ArchitectureClipCompilation architectureCompilation =
                         assignment.Module.ValidateAndCompileClip(
                             activeClips[i],
@@ -83,7 +87,9 @@ internal static class VideoExecutionPlanCompiler
                             new(
                                 spec.Width,
                                 spec.Height,
-                                spec.FPS));
+                                spec.FPS,
+                                entryMode,
+                                HasPreviousClipOutput: i > 0));
                     diagnostics.AddRange(architectureCompilation.Diagnostics);
                     if (!architectureCompilation.Diagnostics.Any(diagnostic =>
                         diagnostic.Severity == VideoPlanDiagnosticSeverity.Error))

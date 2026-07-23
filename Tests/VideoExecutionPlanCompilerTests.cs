@@ -167,6 +167,7 @@ public class VideoExecutionPlanCompilerTests
                 0.7,
                 Constants.IcLoraControlCanny,
                 new UploadedMediaSpec("data:image/png;base64,Qg==", "drive.png"),
+                DriveData: IcLoraDriveData.Visual,
                 Preset: "pixel-spatial-upscaler-x2",
                 Stage: 1),
             new(
@@ -176,6 +177,7 @@ public class VideoExecutionPlanCompilerTests
                 1,
                 Constants.IcLoraControlDepth,
                 null,
+                DriveData: IcLoraDriveData.Visual,
                 Stage: -1),
             new(
                 "other-stage.safetensors",
@@ -259,12 +261,12 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(2, ltx.IcLoras.Length);
         IcLoraPlan uploaded = ltx.IcLoras[0];
         Assert.True(uploaded.UsesAutoModel);
-        Assert.Equal(IcLoraVisualGuideSourceKind.UploadedMedia, uploaded.VisualGuide.Kind);
+        Assert.Equal(IcLoraMediaSourceKind.Upload, uploaded.MediaInput.Source);
         Assert.Equal(IcLoraDriveMediaKind.Image, uploaded.DriveMedia.Kind);
         Assert.Equal(IcLoraControlMode.Canny, uploaded.ControlMode);
         Assert.Equal(0.55, uploaded.GuideStrength);
-        Assert.Equal(IcLoraVisualGuideSourceKind.ControlNet, ltx.IcLoras[1].VisualGuide.Kind);
-        Assert.Equal(1, ltx.IcLoras[1].VisualGuide.ControlNetIndex);
+        Assert.Equal(IcLoraMediaSourceKind.ControlNet, ltx.IcLoras[1].MediaInput.Source);
+        Assert.Equal(1, ltx.IcLoras[1].MediaInput.ControlNetIndex);
 
         Assert.Equal(new RetakePlan(8, 16, 0.75), ltx.Retake);
         Assert.Equal(PromptRelayMode.Relay, ltx.PromptRelay.Mode);
@@ -331,7 +333,14 @@ public class VideoExecutionPlanCompilerTests
             ClipLengthFromAudio = !controlNetOwnsLength,
             ClipLengthFromControlNet = controlNetOwnsLength,
             IcLoras = controlNetOwnsLength
-                ? [new IcLoraSpec("control", Constants.ControlNetSourceOne, 1, 1, Constants.IcLoraControlNone, null)]
+                ? [new IcLoraSpec(
+                    "control",
+                    Constants.ControlNetSourceOne,
+                    1,
+                    1,
+                    Constants.IcLoraControlNone,
+                    null,
+                    DriveData: IcLoraDriveData.Visual)]
                 : [],
             PromptWindows = [new PromptWindowSpec("opening", 0, 1)],
         };

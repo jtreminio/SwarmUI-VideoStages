@@ -82,6 +82,7 @@ export const createTimelineDetailStrip = (
         draftQueue.structuralCommit,
         () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
         render,
+        getRootGeneratedEntryMode,
     );
 
     const context: DetailStripContext = {

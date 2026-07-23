@@ -75,12 +75,13 @@ internal class StageRunner
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
         {
+            WGNodeData incomingMedia = _icLoraStageInputResolver.Resolve(stageFrame);
             bool needsCrop = new IcLoraApplicator(_generator).ApplyIcLoras(
                 currentGenInfo,
                 clip,
                 stage,
                 clip.Frames,
-                _icLoraStageInputResolver.Resolve(stageFrame));
+                incomingMedia);
             if (needsCrop)
             {
                 stageFrame.NeedsCropGuidesAfterSampler = true;
@@ -88,7 +89,8 @@ internal class StageRunner
             new IcLoraAudioReferenceApplicator(_generator).ApplyAudioReferenceTokens(
                 currentGenInfo,
                 clip,
-                stageFrame);
+                stageFrame,
+                incomingMedia);
         });
 
         _stageOrchestrator.RunLtxPath(

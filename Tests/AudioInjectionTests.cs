@@ -401,7 +401,8 @@ public class AudioInjectionTests
         clip["IcLoras"] = new JArray(new JObject
         {
             ["Lora"] = "unused-control",
-            ["Source"] = Constants.ControlNetSourceOne,
+            ["DriveSource"] = Constants.ControlNetSourceOne,
+            ["DriveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,

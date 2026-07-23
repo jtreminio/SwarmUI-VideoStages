@@ -1,4 +1,8 @@
-import type { IcLoraControlType } from "../../types";
+import type {
+    IcLoraControlType,
+    IcLoraDriveData,
+    IcLoraDriveMediaKind,
+} from "../../types";
 
 const IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
 
@@ -19,42 +23,44 @@ export interface IcLoraPreset {
     strength: number;
     /** Control signal the drive video should be rendered into. */
     controlType: IcLoraControlType;
+    /** Preset-authorized alternatives; omitted when its seeded control is fixed. */
+    allowedControlTypes?: readonly IcLoraControlType[];
     /** Direct safetensors URL for the [AUTO] download. */
     weightsUrl: string;
     note: string;
-    /** LTX-owned declaration of which part of one Drive Media upload this preset consumes. */
+    /** LTX-owned declaration of which part of a drive source this preset consumes. */
     driveMedia?: IcLoraDriveMediaContract;
 }
 
-export type IcLoraDriveMediaKind = "image" | "video" | "audio";
-export type IcLoraDriveMediaConsumption = "visual" | "audio";
-
 export interface IcLoraDriveMediaContract {
     acceptedKinds: readonly IcLoraDriveMediaKind[];
-    consumes: IcLoraDriveMediaConsumption;
-    visualSource: "drive-media" | "clip-entry";
-    requiresUpload: boolean;
+    driveData: IcLoraDriveData;
 }
 
 export const DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT: IcLoraDriveMediaContract = {
     acceptedKinds: ["image", "video"],
-    consumes: "visual",
-    visualSource: "drive-media",
-    requiresUpload: false,
+    driveData: "visual",
 };
 
 export const LIPDUB_DRIVE_MEDIA_CONTRACT: IcLoraDriveMediaContract = {
     acceptedKinds: ["audio", "video"],
-    consumes: "audio",
-    visualSource: "clip-entry",
-    requiresUpload: true,
+    driveData: "audio",
+};
+
+export const icLoraDriveMediaContractForData = (
+    driveData: IcLoraDriveData,
+): IcLoraDriveMediaContract => {
+    if (driveData === "audio") {
+        return LIPDUB_DRIVE_MEDIA_CONTRACT;
+    }
+    if (driveData === "visual") {
+        return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+    }
+    return { acceptedKinds: [], driveData: "none" };
 };
 
 /** Sentinel id for the "Custom" (no preset) choice. */
 export const IC_LORA_PRESET_CUSTOM_ID = "custom";
-
-/** The one curated preset whose LoRA consumes rendered control signals (canny/depth/normal). */
-export const IC_LORA_PRESET_UNION_CONTROL_ID = "union-control";
 
 const HF = "https://huggingface.co";
 
@@ -65,6 +71,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         triggerPhrase: "",
         strength: 1,
         controlType: "depth",
+        allowedControlTypes: ["none", "canny", "depth", "normal"],
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
         note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64.",
     },
@@ -102,7 +109,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
-        note: "Generates new speech + lips from the prompt's words. Drive Media supplies the speaker sample: audio is used directly, and video uploads have their audio extracted while their frames are ignored.",
+        note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
         driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT,
     },
     {
@@ -122,7 +129,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
-        note: "Apply on a refine stage with Upscale ×2 and source Stage Input. Dims snap to multiples of 64.",
+        note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64.",
     },
     {
         id: "pixel-spatial-upscaler-x4",
@@ -131,7 +138,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
-        note: "Apply on a refine stage with Upscale ×4 and source Stage Input. Dims snap to multiples of 128.",
+        note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128.",
     },
     {
         id: "deblur",
@@ -266,9 +273,6 @@ export const icLoraDriveMediaContract = (
     preset: IcLoraPreset | null,
 ): IcLoraDriveMediaContract =>
     preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-
-export const icLoraPresetConsumesAudio = (presetId: string): boolean =>
-    icLoraDriveMediaContract(findIcLoraPreset(presetId)).consumes === "audio";
 
 /**
  * The model name an [AUTO] entry resolves to — where the preset's weights land in the LoRA

@@ -55,7 +55,7 @@ const renderSegments = (body: HTMLElement, clips: ClipFixture[]): void => {
                     `<div class="vst-audio-seg-lane" style="left:${startPx}px;width:${widthPx}px">` +
                     `<div class="vst-audio-seg" data-vst-audio-seg data-clip-idx="${i}" data-seg-idx="${s}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0">` +
                     `<span class="vst-audio-seg-resize vst-audio-seg-resize-l" data-vst-audio-seg-edge="left"></span>` +
-                    `<span class="vst-audio-seg-label"></span>` +
+                    `<span class="vst-audio-label"></span>` +
                     `<span class="vst-audio-seg-resize vst-audio-seg-resize-r" data-vst-audio-seg-edge="right"></span>` +
                     `</div></div>`
                 );

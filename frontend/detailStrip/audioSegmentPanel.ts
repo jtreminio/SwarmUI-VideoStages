@@ -28,9 +28,9 @@ import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 /**
- * Lists every overlay segment of a clip inside the unified Audio panel.
- * The selected segment is highlighted; touching any segment's control
- * re-points the selection to it without rebuilding the panel.
+ * The Audio panel keeps its base controls visible, then exposes one selected
+ * overlay segment below a compact rail. This mirrors the stage rail: selecting
+ * a segment swaps the editor instead of stacking every segment's full form.
  */
 export const buildAudioSegmentSection = (
     ctx: DetailStripContext,
@@ -55,12 +55,59 @@ export const buildAudioSegmentSection = (
     ): { start: number; length: number } =>
         clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
 
-    segments.forEach((segment, segIdx) => {
+    const activeSegmentIndex =
+        selectedSegmentIndex !== null &&
+        selectedSegmentIndex >= 0 &&
+        selectedSegmentIndex < segments.length
+            ? selectedSegmentIndex
+            : segments.length > 0
+              ? 0
+              : null;
+
+    if (activeSegmentIndex !== null) {
+        const rail = document.createElement("div");
+        rail.className = "vst-detail-segment-rail";
+        const railLabel = document.createElement("span");
+        railLabel.className = "vst-detail-segment-rail-label";
+        railLabel.textContent = "Segments";
+        const railList = document.createElement("div");
+        railList.className = "vst-detail-segment-rail-list";
+        segments.forEach((_, segIdx) => {
+            const tab = document.createElement("button");
+            tab.type = "button";
+            tab.className = "vst-chip vst-segment-tab";
+            if (segIdx === activeSegmentIndex) {
+                tab.classList.add("vst-segment-tab-active");
+            }
+            tab.setAttribute(
+                "aria-pressed",
+                `${segIdx === activeSegmentIndex}`,
+            );
+            tab.setAttribute(
+                "data-vst-focus-key",
+                `audio-segment-tab-${segIdx}`,
+            );
+            tab.textContent = `S${segIdx + 1}`;
+            tab.title = `Edit segment ${segIdx + 1} · Shift+click to delete`;
+            tab.addEventListener("click", (event) => {
+                if (event.shiftKey) {
+                    ctx.removeAudioSegment(clipIdx, segIdx);
+                } else {
+                    setSelection({ kind: "audio-segment", clipIdx, segIdx });
+                }
+            });
+            railList.appendChild(tab);
+        });
+        rail.append(railLabel, railList);
+        body.appendChild(rail);
+
+        const segment = segments[activeSegmentIndex];
+        const segIdx = activeSegmentIndex;
         const { row, fields } = buildInstanceRow({
             rowClass: "vst-detail-seg-row",
             indexAttr: "data-vst-seg-index",
             index: segIdx,
-            active: segIdx === selectedSegmentIndex,
+            active: true,
             title: `S${segIdx + 1}`,
             deleteLabel: "Remove segment",
             onDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
@@ -254,7 +301,7 @@ export const buildAudioSegmentSection = (
             disableCapabilityControls(row, decision, [".vst-detail-delete"]);
         }
         body.appendChild(row);
-    });
+    }
 
     const note = document.createElement("p");
     note.className = "vst-detail-note";

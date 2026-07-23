@@ -1,3 +1,4 @@
+import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
 import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import { buildCheckbox, buildSlider, tagFocus } from "../detailWidgets";
 import type { Clip, RootDefaults, Stage } from "../types";
@@ -103,7 +104,12 @@ export const buildStageParamsColumn = (
                     targetClip,
                     context.capabilities().catalog,
                 );
+                reconcileArchitectureIncomingIcLoraDrives(
+                    clips,
+                    context.generatedEntryMode(),
+                );
             });
+            context.render();
         }),
     );
     column.appendChild(fields);

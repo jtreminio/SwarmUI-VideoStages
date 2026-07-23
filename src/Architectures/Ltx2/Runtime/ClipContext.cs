@@ -27,6 +27,12 @@ internal sealed class ClipContext
     public ClipDimensionState Dimensions { get; }
     public WGNodeData SourceMedia { get; }
     public WGNodeData SourceVae { get; }
+    /// <summary>
+    /// Contextual media exposed to stage-0 IC-LoRAs using DriveSource=Incoming. A clip's own source
+    /// video wins; otherwise this is the previous clip's decoded output, then the host entry media.
+    /// It does not replace the clip's normal sampler input.
+    /// </summary>
+    public WGNodeData IcLoraEntryIncomingMedia { get; set; }
     public Ltx2ClipAudioReuseState AudioReuse { get; } = new();
 
     // Set when the previous clip's outgoing boundary is "continue": the previous clip's final rendered

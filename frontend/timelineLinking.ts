@@ -1,9 +1,10 @@
+import { reconcileArchitectureIncomingIcLoraDrives } from "./architectures/behaviorRegistry";
 import { documentFps } from "./documentQueries";
 import type { GestureRouter, GestureSession } from "./gestureRouter";
 import { getClips, getState, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { getSelectedClipIndex, getSelection, setSelection } from "./selection";
-import { readStateToken } from "./swarmInputs";
+import { getRootGeneratedEntryMode, readStateToken } from "./swarmInputs";
 import { applyClipDurationResize, pxToDuration } from "./timelineEdit";
 import {
     computeDropIndex,
@@ -189,6 +190,10 @@ export const createTimelineLinking = (): TimelineLinking => {
             return;
         }
         clips[idx].skipped = !clips[idx].skipped;
+        reconcileArchitectureIncomingIcLoraDrives(
+            clips,
+            getRootGeneratedEntryMode(),
+        );
         saveClips(clips, { origin: "linking" });
     };
 
@@ -198,6 +203,10 @@ export const createTimelineLinking = (): TimelineLinking => {
             return;
         }
         clips.splice(idx, 1);
+        reconcileArchitectureIncomingIcLoraDrives(
+            clips,
+            getRootGeneratedEntryMode(),
+        );
         const sel = getSelection();
         if (sel.kind === "clip") {
             if (sel.clipIdx === idx) {
@@ -334,7 +343,12 @@ export const createTimelineLinking = (): TimelineLinking => {
                     }
                     const destIdx = finalIndexAfterMove(from, gap);
                     selectClip(destIdx, stageForClip(from));
-                    return moveItem(clips, from, gap);
+                    const reordered = moveItem(clips, from, gap);
+                    reconcileArchitectureIncomingIcLoraDrives(
+                        reordered,
+                        getRootGeneratedEntryMode(),
+                    );
+                    return reordered;
                 });
             },
             onCancel: cleanup,
