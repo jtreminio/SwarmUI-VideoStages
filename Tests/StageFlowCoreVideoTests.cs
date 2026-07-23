@@ -718,19 +718,21 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Two_defaulted_ltx_stages_use_generated_then_previous_stage_guides_and_save_second_stage_audio()
+    public void Defaulted_ltx_stage_chain_uses_host_image_only_for_the_opening_implicit_guide()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject stage0 = MakeStage(models.VideoModel.Name, "Generated", steps: 8);
         JObject stage1 = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8);
+        JObject stage2 = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8);
         stage0.Remove("ImageReference");
         stage1.Remove("ImageReference");
+        stage2.Remove("ImageReference");
         string stagesJson = MakeRootConfig(
             width: 1024,
             height: 1024,
-            MakeClipWithRefs(stages: [stage0, stage1])
+            MakeClipWithRefs(stages: [stage0, stage1, stage2])
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -740,21 +742,15 @@ public partial class StageFlowTests
         StageRefStore store = new(generator);
         Assert.NotNull(store.Generated);
 
-        List<LTXVImgToVideoInplaceNode> imgToVideoNodes = bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()
-            .OrderBy(node => int.Parse(node.Id))
-            .ToList();
-        Assert.Equal(2, imgToVideoNodes.Count);
-        List<LTXVPreprocessNode> preprocessNodes = bridge.Graph.NodesOfType<LTXVPreprocessNode>()
-            .OrderBy(node => int.Parse(node.Id))
-            .ToList();
-        Assert.Equal(2, preprocessNodes.Count);
+        LTXVImgToVideoInplaceNode imgToVideo = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
+        LTXVPreprocessNode preprocess = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
-            WorkflowBridge.ToPath(imgToVideoNodes[0].Image.Connection!),
+            WorkflowBridge.ToPath(imgToVideo.Image.Connection!),
             store.Generated);
-        Assert.True(
-            ReachesUpstream(bridge, imgToVideoNodes[1].Image.Connection!.Node, SamplerNodesOrdered(bridge)[0].Id),
-            "The default PreviousStage guide does not trace to stage 0.");
+        Assert.Same(preprocess.OutputImage, imgToVideo.Image.Connection);
 
         ImageScaleNode guideScale = Assert.Single(
             bridge.Graph.NodesOfType<ImageScaleNode>(),
@@ -764,16 +760,22 @@ public partial class StageFlowTests
         Assert.Equal("center", guideScale.Crop.LiteralAsString());
 
         List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(2, samplers.Count);
+        Assert.Equal(3, samplers.Count);
+        Assert.True(
+            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, samplers[0].Id),
+            "Stage 1 must refine stage 0's latent without rebuilding an implicit image guide.");
+        Assert.True(
+            ReachesUpstream(bridge, samplers[2].LatentImage.Connection!.Node, samplers[1].Id),
+            "Stage 2 must refine stage 1's latent without rebuilding an implicit image guide.");
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.True(ReachesUpstream(bridge, saveNode.Images.Connection!.Node, samplers[1].Id));
+        Assert.True(ReachesUpstream(bridge, saveNode.Images.Connection!.Node, samplers[2].Id));
 
         LTXVAudioVAEDecodeNode finalAudioDecode = Assert.IsType<LTXVAudioVAEDecodeNode>(saveNode.Audio.Connection!.Node);
         LTXVSeparateAVLatentNode finalSeparate = Assert.IsType<LTXVSeparateAVLatentNode>(finalAudioDecode.Samples.Connection!.Node);
         ComfyNode finalSeparateAvLatentStart = finalSeparate.AvLatent.Connection!.Node;
         Assert.True(
-            ReachesUpstream(bridge, finalSeparateAvLatentStart, samplers[1].Id),
-            $"Expected save audio to decode stage 1 latent at {samplers[1].Id}, but av_latent came from {finalSeparateAvLatentStart.Id}.");
+            ReachesUpstream(bridge, finalSeparateAvLatentStart, samplers[2].Id),
+            $"Expected save audio to decode stage 2 latent at {samplers[2].Id}, but av_latent came from {finalSeparateAvLatentStart.Id}.");
     }
 
     [Fact]

@@ -27,7 +27,7 @@ internal sealed class LtxAudioReferenceResolver
 
     public void AttachSourceAudio(WGNodeData media)
     {
-        if (media is null || IsExplicitUploadAudio(media.AttachedAudio))
+        if (media is null)
         {
             return;
         }
@@ -61,6 +61,19 @@ internal sealed class LtxAudioReferenceResolver
                 ResolveAudioCompat());
         }
 
+        if (ReferencesCapturedDecodedAudio(state.CurrentOutputMedia?.AttachedAudio))
+        {
+            // Final publication exposes decoded audio, and that decode can still trace to an
+            // originally uploaded track. For another LTX stage, however, the captured separator's
+            // audio output is the native handoff; decoding and re-encoding it only adds a second
+            // ensure/encode/noise-mask chain.
+            return new WGNodeData(
+                PathUtils.Clone(state.AudioLatentPath),
+                g,
+                WGNodeData.DT_LATENT_AUDIO,
+                ResolveAudioCompat());
+        }
+
         if (IsExplicitUploadAudio(state.CurrentOutputMedia?.AttachedAudio))
         {
             JArray currentAudioLatentPath = PathUtils.Clone(state.AudioLatentPath);
@@ -81,6 +94,26 @@ internal sealed class LtxAudioReferenceResolver
             g,
             WGNodeData.DT_LATENT_AUDIO,
             ResolveAudioCompat());
+    }
+
+    private bool ReferencesCapturedDecodedAudio(WGNodeData audio)
+    {
+        if (audio?.Path is not JArray { Count: 2 } audioPath
+            || state.AudioLatentPath is not { Count: 2 })
+        {
+            return false;
+        }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.ResolvePath(audioPath)?.Node is not LTXVAudioVAEDecodeNode decode
+            || decode.Samples.Connection is not INodeOutput samples)
+        {
+            return false;
+        }
+
+        return JToken.DeepEquals(
+            WorkflowBridge.ToPath(samples),
+            state.AudioLatentPath);
     }
 
     internal bool IsExplicitUploadAudio(WGNodeData audio)

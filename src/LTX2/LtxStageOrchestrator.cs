@@ -71,10 +71,19 @@ internal sealed class LtxStageOrchestrator(
         bool implicitSourcedGuide = sourcedFootageIsStageInput
             && stage.Guide.Kind == GuideReferenceKind.Generated
             && !stage.Core.ImageReferenceWasExplicit;
+        bool implicitHostGuideOutsideOpeningStage =
+            stageFrame.ClipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
+            && !stage.Core.ImageReferenceWasExplicit
+            && (stageFrame.ClipContext.PlannedClip.ClipId != 0
+                || stage.ClipStageIndex != 0);
+        // The host's incoming image is the implicit frame-1 guide for clip 0/stage 0 only.
+        // Later defaulted stages refine their incoming latent directly. Authored ImageReference
+        // selectors and authored frame refs remain eligible for guide construction.
         bool skipGuideReinjection = primaryGuideClipRef is null
             && (replacesTextToVideoRoot
                 || clipRefs is { Count: > 0 }
                 || implicitSourcedGuide
+                || implicitHostGuideOutsideOpeningStage
                 || ShouldSkipGeneratedGuideReinjection(
                     stage,
                     sourceMedia,

@@ -484,6 +484,53 @@ public class AudioInjectionTests
     }
 
     [Fact]
+    public void Multi_stage_clip_keeps_generated_audio_latent_native_between_stages()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = MakeRootConfig(
+            MakeClipConfigWithUpload(
+                MakeUploadedAudio(),
+                MakeStage(models.VideoModel.Name),
+                MakeStage(models.VideoModel.Name))
+        ).ToString();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            stagesJson);
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(2, samplers.Count);
+
+        LTXVConcatAVLatentNode secondStageInput = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>(),
+            node => node.Latent == samplers[1].LatentImage.Connection);
+        LTXVSeparateAVLatentNode handoff = Assert.IsType<LTXVSeparateAVLatentNode>(
+            secondStageInput.AudioLatent.Connection!.Node);
+        Assert.Equal(1, secondStageInput.AudioLatent.Connection.SlotIndex);
+        Assert.True(
+            ReachesUpstream(bridge, handoff.AvLatent.Connection!.Node, samplers[0].Id),
+            "Stage 1 audio must come directly from stage 0's sampled AV latent.");
+
+        // One encode/mask pair installs the authored upload before stage 0. The stage-to-stage
+        // handoff must not decode, ensure, re-encode, and mask that native audio latent again.
+        Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+
+        SwarmLoadAudioB64Node uploaded = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(ReachesUpstream(bridge, save.Audio.Connection!.Node, uploaded.Id));
+        Assert.True(ReachesUpstream(bridge, save.Audio.Connection.Node, samplers[1].Id));
+    }
+
+    [Fact]
     public void Save_audio_stage_matches_video_length_to_uploaded_audio_when_enabled()
     {
         using SwarmUiTestContext _ = new();
