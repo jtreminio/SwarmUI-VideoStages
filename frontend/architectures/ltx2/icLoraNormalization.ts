@@ -12,7 +12,7 @@ import {
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
 import { normalizeUploadedAudio } from "../../normalizationMedia";
-import { snapStrengthToStep } from "../../normalizationShared";
+import { snapValueToStep } from "../../normalizationShared";
 import type { IcLora, IcLoraControlType } from "../../types";
 import { isRecord } from "../../utils";
 import { IC_LORA_PRESET_CUSTOM_ID } from "./icLoraPresets";
@@ -116,14 +116,14 @@ export const normalizeIcLora = (
         preset: preset || IC_LORA_PRESET_CUSTOM_ID,
         source,
         stage,
-        strength: snapStrengthToStep(
+        strength: snapValueToStep(
             raw.strength,
             IC_LORA_STRENGTH_DEFAULT,
             IC_LORA_STRENGTH_MIN,
             IC_LORA_STRENGTH_MAX,
             IC_LORA_STRENGTH_STEP,
         ),
-        attentionStrength: snapStrengthToStep(
+        attentionStrength: snapValueToStep(
             raw.attentionStrength,
             IC_LORA_ATTENTION_DEFAULT,
             IC_LORA_ATTENTION_MIN,

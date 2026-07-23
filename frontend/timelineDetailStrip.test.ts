@@ -77,6 +77,7 @@ interface ClipFixture {
         startSeconds: number;
         trimStartSeconds: number;
         lengthSeconds: number;
+        volume?: number;
     }[];
 }
 
@@ -1619,6 +1620,7 @@ describe("createTimelineDetailStrip", () => {
         expect(segments).toHaveLength(1);
         expect(segments[0].startSeconds).toBe(0);
         expect(segments[0].lengthSeconds).toBe(2); // min(default 2, clip 4)
+        expect(segments[0].volume).toBe(1);
         expect(segments[0].source).toBeNull();
     });
 
@@ -1676,9 +1678,95 @@ describe("createTimelineDetailStrip", () => {
             fieldByLabel("Length (s)").querySelector<HTMLInputElement>("input")
                 ?.value,
         ).toBe("3");
+        const volume = sliderNumberByLabel("Volume");
+        const volumeRange = volume
+            .closest(".vst-stage-slider")
+            ?.querySelector<HTMLInputElement>("input.auto-slider-range");
+        expect(volume.value).toBe("1");
+        expect(volume.min).toBe("0.00001");
+        expect(volume.max).toBe("100000");
+        expect(volume.step).toBe("any");
+        expect(volumeRange?.min).toBe("0.1");
+        expect(volumeRange?.max).toBe("4");
+        expect(volumeRange?.step).toBe("0.1");
         expect(
             detailBody()?.querySelector(".vst-detail-delete")?.textContent,
         ).toBe("Remove segment");
+    });
+
+    it("persists an audio segment Volume edit", () => {
+        setup([
+            {
+                duration: 10,
+                stages: [{}],
+                audioSegments: [
+                    {
+                        source: {
+                            data: "data:audio/wav;base64,QUJD",
+                            fileName: "a.wav",
+                        },
+                        startSeconds: 2,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 3,
+                        volume: 1,
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
+        jest.useFakeTimers();
+        const volume = sliderNumberByLabel("Volume");
+        // The number field intentionally accepts values outside the practical
+        // slider range.
+        volume.value = "12.345";
+        volume.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        expect(savedClips(saveSpy)[0].audioSegments[0].volume).toBe(12.345);
+        jest.useRealTimers();
+    });
+
+    it("keeps the audio segment Volume slider and number input synchronized", () => {
+        setup([
+            {
+                duration: 10,
+                stages: [{}],
+                audioSegments: [
+                    {
+                        source: {
+                            data: "data:audio/wav;base64,QUJD",
+                            fileName: "a.wav",
+                        },
+                        startSeconds: 2,
+                        trimStartSeconds: 0,
+                        lengthSeconds: 3,
+                        volume: 1,
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
+        const number = sliderNumberByLabel("Volume");
+        const range = number
+            .closest(".vst-stage-slider")
+            ?.querySelector<HTMLInputElement>("input.auto-slider-range");
+        if (!range) {
+            throw new Error("Volume range input not found");
+        }
+
+        range.value = "2.5";
+        range.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(number.value).toBe("2.5");
+
+        number.value = "3.2";
+        number.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(range.value).toBe("3.2");
+
+        // Values beyond the practical slider remain valid in the number
+        // field, while the browser pins the visual range control at its edge.
+        number.value = "12.345";
+        number.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(number.value).toBe("12.345");
+        expect(range.value).toBe("4");
     });
 
     it("live-applies an audio-segment Start edit and removes the segment", () => {

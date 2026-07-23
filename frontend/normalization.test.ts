@@ -877,6 +877,7 @@ describe("stage loras", () => {
                             startSeconds: 2,
                             trimStartSeconds: 1,
                             lengthSeconds: 3,
+                            volume: 0.56,
                         },
                     ],
                     10,
@@ -887,6 +888,7 @@ describe("stage loras", () => {
                     startSeconds: 2,
                     trimStartSeconds: 1,
                     lengthSeconds: 3,
+                    volume: 0.56,
                 },
             ]);
         });
@@ -910,6 +912,7 @@ describe("stage loras", () => {
                     startSeconds: 1,
                     trimStartSeconds: 0,
                     lengthSeconds: 2,
+                    volume: 1,
                 },
             ]);
         });
@@ -949,6 +952,7 @@ describe("stage loras", () => {
                     startSeconds: 8,
                     trimStartSeconds: 0,
                     lengthSeconds: 2,
+                    volume: 1,
                 },
             ]);
         });
@@ -981,6 +985,36 @@ describe("stage loras", () => {
             // Order preserved (no start-time sort): lanes must not reshuffle.
             expect(result.map((s) => s.startSeconds)).toEqual([4, 2, 1]);
             expect(result.map((s) => s.source)).toEqual([src, null, src]);
+            expect(result.map((s) => s.volume)).toEqual([1, 1, 1]);
+        });
+
+        it("preserves arbitrary segment volume and clamps to the -100–100 dB multiplier range", () => {
+            const result = normalizeAudioSegments(
+                [
+                    {
+                        source: src,
+                        startSeconds: 0,
+                        lengthSeconds: 1,
+                        volume: 0,
+                    },
+                    {
+                        source: src,
+                        startSeconds: 1,
+                        lengthSeconds: 1,
+                        volume: 0.000123,
+                    },
+                    {
+                        source: src,
+                        startSeconds: 2,
+                        lengthSeconds: 1,
+                        volume: 200000,
+                    },
+                ],
+                10,
+            );
+            expect(result.map((segment) => segment.volume)).toEqual([
+                0.00001, 0.000123, 100000,
+            ]);
         });
 
         it("returns [] for absent or non-array input", () => {

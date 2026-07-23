@@ -12,10 +12,11 @@ namespace VideoStages;
 /// <summary>
 /// Combines a clip's optional overlay audio segments with its base audio, before the cross-clip merge.
 /// Each segment is trimmed (<see cref="TrimAudioDurationNode"/>, seconds), offset by prepending
-/// silence (<see cref="EmptyAudioNode"/> + <see cref="AudioConcatNode"/>), then mixed additively over the
-/// running base with <see cref="AudioMergeNode"/> (<c>merge_method="add"</c>, which pads/trims the overlay
-/// to the base length). A clip with no segments returns its base audio untouched — the pure existing graph
-/// is preserved (regression lock). The combined result is used both as the mux-time audio track and, via
+/// silence (<see cref="EmptyAudioNode"/> + <see cref="AudioConcatNode"/>), attenuated when requested
+/// (<see cref="AudioAdjustVolumeNode"/>), then mixed additively over the running base with
+/// <see cref="AudioMergeNode"/> (<c>merge_method="add"</c>, which pads/trims the overlay to the base
+/// length). A clip with no segments returns its base audio untouched — the pure existing graph is
+/// preserved (regression lock). The combined result is used both as the mux-time audio track and, via
 /// <see cref="StageSequenceRunner"/>, as generation-time conditioning audio (segments baked into the
 /// preserved track, or preserve-windowed over a silent bed when there is no locked base).
 /// </summary>
@@ -138,7 +139,7 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
             Duration: segment.LengthSeconds);
         trim.Audio.ConnectTo(ensure.AUDIO);
         bridge.SyncNode(trim);
-        INodeOutput trimmed = trim.AUDIO;
+        INodeOutput trimmed = ApplyVolume(bridge, trim.AUDIO, segment.Volume);
 
         if (segment.StartSeconds <= 0)
         {
@@ -151,6 +152,29 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
         concat.Audio2.ConnectToUntyped(trimmed);
         bridge.SyncNode(concat);
         return concat.AUDIO;
+    }
+
+    private static INodeOutput ApplyVolume(
+        WorkflowBridge bridge,
+        INodeOutput audio,
+        double volume)
+    {
+        double normalized = double.IsFinite(volume)
+            ? Math.Clamp(volume, 0.00001, 100000.0)
+            : 1.0;
+
+        int decibels = (int)Math.Round(
+            20 * Math.Log10(normalized),
+            MidpointRounding.AwayFromZero);
+        if (decibels == 0)
+        {
+            return audio;
+        }
+        AudioAdjustVolumeNode adjust = bridge.AddNode(
+            new AudioAdjustVolumeNode().With(Volume: decibels));
+        adjust.Audio.ConnectToUntyped(audio);
+        bridge.SyncNode(adjust);
+        return adjust.AUDIO;
     }
 
     private static INodeOutput Silence(WorkflowBridge bridge, double durationSeconds)

@@ -1342,7 +1342,8 @@ public class VideoStagesSpecParserClipsTests
         double startSeconds,
         double trimStartSeconds,
         double lengthSeconds,
-        JObject source = null)
+        JObject source = null,
+        double? volume = null)
     {
         JObject seg = new()
         {
@@ -1353,6 +1354,10 @@ public class VideoStagesSpecParserClipsTests
         if (source is not null)
         {
             seg["Source"] = source;
+        }
+        if (volume.HasValue)
+        {
+            seg["Volume"] = volume.Value;
         }
         return seg;
     }
@@ -1370,10 +1375,10 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 10.0);
         clip["AudioSegments"] = new JArray(
-            MakeAudioSegment(4.0, 0.0, 1.0, MakeUploadedAudio()),
+            MakeAudioSegment(4.0, 0.0, 1.0, MakeUploadedAudio(), volume: 0.56789),
             // Length overruns the clip -> clamped to (10 - 8) = 2.
-            MakeAudioSegment(8.0, 0.5, 5.0, MakeUploadedAudio()),
-            MakeAudioSegment(1.0, 0.0, 2.0, MakeUploadedAudio()));
+            MakeAudioSegment(8.0, 0.5, 5.0, MakeUploadedAudio(), volume: 200000.0),
+            MakeAudioSegment(1.0, 0.0, 2.0, MakeUploadedAudio(), volume: 0.000001));
 
         ClipSpec parsed = ParseSingleClip(clip);
 
@@ -1381,6 +1386,7 @@ public class VideoStagesSpecParserClipsTests
         // Sorted by start.
         Assert.Equal(new[] { 1.0, 4.0, 8.0 }, parsed.AudioSegments.Select(s => s.StartSeconds));
         Assert.Equal(2.0, parsed.AudioSegments[2].LengthSeconds);
+        Assert.Equal([0.00001, 0.56789, 100000.0], parsed.AudioSegments.Select(s => s.Volume));
         Assert.All(parsed.AudioSegments, s => Assert.NotNull(s.Source));
     }
 

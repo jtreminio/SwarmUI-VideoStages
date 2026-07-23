@@ -62,7 +62,7 @@ export const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues[0] ??
     "";
 
-export const snapStrengthToStep = (
+export const snapValueToStep = (
     value: unknown,
     fallback: number,
     min: number,

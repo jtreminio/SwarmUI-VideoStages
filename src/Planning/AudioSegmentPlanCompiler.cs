@@ -33,14 +33,16 @@ internal static class AudioSegmentPlanCompiler
             if (AudioHandler.TryParseAceStepFunAudioSource(segment.AceStepFunSource, out int aceTrack))
             {
                 items.Add(new(AudioSegmentSourceKind.AceStepFun, aceTrack,
-                    segment.StartSeconds, segment.TrimStartSeconds, segment.LengthSeconds, null));
+                    segment.StartSeconds, segment.TrimStartSeconds, segment.LengthSeconds, null,
+                    segment.Volume));
                 continue;
             }
             if (!string.IsNullOrWhiteSpace(segment.Source?.Data))
             {
                 items.Add(new(AudioSegmentSourceKind.Upload, null,
                     segment.StartSeconds, segment.TrimStartSeconds, segment.LengthSeconds,
-                    AudioMediaIdentityCompiler.Compile(segment.Source)));
+                    AudioMediaIdentityCompiler.Compile(segment.Source),
+                    segment.Volume));
                 continue;
             }
             diagnostics.Add(new(SegmentIgnoredNoSource, "An audio segment has no usable upload or AceStepFun source and was ignored."));

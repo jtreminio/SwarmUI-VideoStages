@@ -75,8 +75,9 @@ export interface StageLora {
  * URI + fileName) or an AceStepFun track ref string ("audio0", "audio1", …).
  * `startSeconds` is where the piece begins inside the clip;
  * `trimStartSeconds` is how far into the source file playback starts; and
- * `lengthSeconds` is how long the piece plays. All seconds, 0.1 step, clamped
- * inside the clip. Backend mixes each segment additively over the base audio.
+ * `lengthSeconds` is how long the piece plays. `volume` is its relative
+ * loudness before the additive mix: 1 is unchanged, lower is quieter, and
+ * higher is louder. Timeline values use a 0.1-second step.
  */
 export interface AudioSegment {
     id?: string;
@@ -84,6 +85,7 @@ export interface AudioSegment {
     startSeconds: number;
     trimStartSeconds: number;
     lengthSeconds: number;
+    volume: number;
 }
 
 export interface Stage {

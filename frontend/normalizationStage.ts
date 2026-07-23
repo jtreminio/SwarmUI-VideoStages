@@ -18,8 +18,8 @@ import {
     normalizeOptionalEntityId,
     readProp,
     resolveRootPreferredUpscaleMethod,
-    snapStrengthToStep,
     snapToStep,
+    snapValueToStep,
 } from "./normalizationShared";
 import { framesForClip } from "./renderUtils";
 import {
@@ -33,7 +33,7 @@ import {
 import { isRecord, toNumber } from "./utils";
 
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
-    snapStrengthToStep(
+    snapValueToStep(
         value,
         STAGE_REF_STRENGTH_DEFAULT,
         STAGE_REF_STRENGTH_MIN,
@@ -42,7 +42,7 @@ export const normalizeStageRefStrengthValue = (value: unknown): number =>
     );
 
 export const normalizeStageControlNetStrengthValue = (value: unknown): number =>
-    snapStrengthToStep(
+    snapValueToStep(
         value,
         STAGE_CONTROLNET_STRENGTH_DEFAULT,
         STAGE_CONTROLNET_STRENGTH_MIN,

@@ -180,7 +180,14 @@ export const buildSlider = (
     max: number,
     step: number,
     onChange: (value: number) => void,
-    opts?: { hint?: string; title?: string; help?: string },
+    opts?: {
+        hint?: string;
+        title?: string;
+        help?: string;
+        sliderMin?: number;
+        sliderMax?: number;
+        numberStep?: number | "any";
+    },
 ): HTMLElement => {
     const holder = document.createElement("div");
     holder.className = "vst-stage-slider";
@@ -191,12 +198,15 @@ export const buildSlider = (
         value,
         min,
         max,
+        viewMin: opts?.sliderMin,
+        viewMax: opts?.sliderMax,
         step,
     });
     const number = holder.querySelector<HTMLInputElement>(
         "input.auto-slider-number",
     );
     if (number) {
+        number.step = `${opts?.numberStep ?? step}`;
         wireNumericInput(number, value, min, max, onChange);
     }
     if (opts?.title) {

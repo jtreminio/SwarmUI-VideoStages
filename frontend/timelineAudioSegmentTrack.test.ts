@@ -129,6 +129,7 @@ const SEGMENT: AudioSegment = {
     startSeconds: 2,
     trimStartSeconds: 1,
     lengthSeconds: 3,
+    volume: 1,
 };
 
 describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {

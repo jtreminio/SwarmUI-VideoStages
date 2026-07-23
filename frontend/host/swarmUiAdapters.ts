@@ -63,6 +63,8 @@ export interface HostSliderSpec {
     value: number;
     min: number;
     max: number;
+    viewMin?: number;
+    viewMax?: number;
     step: number;
 }
 
@@ -76,8 +78,8 @@ export const renderHostSlider = (spec: HostSliderSpec): string =>
         spec.value,
         spec.min,
         spec.max,
-        spec.min,
-        spec.max,
+        spec.viewMin ?? spec.min,
+        spec.viewMax ?? spec.max,
         spec.step,
         false,
         false,

@@ -185,8 +185,8 @@ internal sealed class LtxAudioInjector(
     {
         JArray windowsJson = new(preserveWindows.Select(window => new JObject
         {
-            ["start"] = window.Start,
-            ["end"] = window.End,
+            ["start"] = RoundWindowSeconds(window.Start),
+            ["end"] = RoundWindowSeconds(window.End),
         }));
         SwarmSetAudioMaskWindowsNode node = new SwarmSetAudioMaskWindowsNode().With(
             Windows: windowsJson.ToString(Newtonsoft.Json.Formatting.None),
@@ -196,6 +196,9 @@ internal sealed class LtxAudioInjector(
         bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 400, stableIdSlot));
         return node;
     }
+
+    private static double RoundWindowSeconds(double value) =>
+        Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
     private static void ReplaceAudioLatentConnections(
         WorkflowBridge bridge,

@@ -1,5 +1,11 @@
 import { isAceStepFunAudioSource } from "./audioSource";
-import { AUDIO_SEGMENT_MIN_LENGTH } from "./constants";
+import {
+    AUDIO_SEGMENT_MIN_LENGTH,
+    AUDIO_SEGMENT_VOLUME_DEFAULT,
+    AUDIO_SEGMENT_VOLUME_MAX,
+    AUDIO_SEGMENT_VOLUME_MIN,
+    clamp,
+} from "./constants";
 import { normalizeUploadedAudio } from "./normalizationMedia";
 import {
     clampWindowInDuration,
@@ -139,6 +145,14 @@ const normalizeAudioSegment = (
         startSeconds: roundToTenth(window.startSeconds),
         trimStartSeconds: roundToTenth(trimStartRaw),
         lengthSeconds: roundToTenth(window.lengthSeconds),
+        volume: clamp(
+            toNumber(
+                `${value.volume ?? AUDIO_SEGMENT_VOLUME_DEFAULT}`,
+                AUDIO_SEGMENT_VOLUME_DEFAULT,
+            ),
+            AUDIO_SEGMENT_VOLUME_MIN,
+            AUDIO_SEGMENT_VOLUME_MAX,
+        ),
     };
 };
 

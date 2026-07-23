@@ -222,14 +222,16 @@ public class AudioPlanCompilerTests
             uploadedAudio: Upload(),
             segments:
             [
-                new(Upload(), StartSeconds: 4, TrimStartSeconds: 0, LengthSeconds: 1),
-                new(null, StartSeconds: 1, TrimStartSeconds: 0.5, LengthSeconds: 2, AceStepFunSource: "audio3")
+                new(Upload(), StartSeconds: 4, TrimStartSeconds: 0, LengthSeconds: 1, Volume: 0.4),
+                new(null, StartSeconds: 1, TrimStartSeconds: 0.5, LengthSeconds: 2, AceStepFunSource: "audio3", Volume: 0.7)
             ]));
 
         Assert.Equal([1, 4], plan.Segments.Items.Select(item => item.StartSeconds));
         Assert.Equal(AudioSegmentSourceKind.AceStepFun, plan.Segments.Items[0].SourceKind);
         Assert.Equal(3, plan.Segments.Items[0].AceStepFunTrack);
+        Assert.Equal(0.7, plan.Segments.Items[0].Volume);
         Assert.Equal(AudioSegmentSourceKind.Upload, plan.Segments.Items[1].SourceKind);
+        Assert.Equal(0.4, plan.Segments.Items[1].Volume);
         Assert.Equal("data:audio/wav;base64,QUJD", plan.Segments.Items[1].UploadedMedia.Data);
         Assert.Equal("clip.wav", plan.Segments.Items[1].UploadedMedia.FileName);
     }

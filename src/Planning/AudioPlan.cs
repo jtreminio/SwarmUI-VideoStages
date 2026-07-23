@@ -60,7 +60,8 @@ internal sealed record AudioSegmentItemPlan(
     double StartSeconds,
     double TrimStartSeconds,
     double LengthSeconds,
-    AudioMediaIdentityPlan UploadedMedia);
+    AudioMediaIdentityPlan UploadedMedia,
+    double Volume = 1);
 
 /// <summary>
 /// The declared segments are represented as simple values rather than graph paths. A later executor

@@ -39,12 +39,11 @@ export const renderDetailShell = (options: {
             options.clips,
         );
         options.detail.appendChild(body);
-        if (
-            options.selection.kind === "clip" ||
-            options.selection.kind === "retake"
-        ) {
-            getVideoStagesHostBridge().enableSliders(body);
-        }
+        // SwarmUI renders the paired number/range controls but wires their
+        // bidirectional synchronization separately after they enter the DOM.
+        // Initialize every detail body so sliders added to any panel work
+        // without requiring a selection-kind allowlist here.
+        getVideoStagesHostBridge().enableSliders(body);
     }
     options.focus.restore(options.detail);
     const newBody =

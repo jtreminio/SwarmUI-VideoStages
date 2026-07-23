@@ -52,6 +52,7 @@ const segment = (id: string): CanonicalAudioSegment => ({
     startSeconds: 0,
     trimStartSeconds: 0,
     lengthSeconds: 1,
+    volume: 1,
 });
 
 const window = (id: string): CanonicalPromptWindow => ({

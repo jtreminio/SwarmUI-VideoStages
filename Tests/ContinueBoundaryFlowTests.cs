@@ -115,7 +115,7 @@ public partial class StageFlowTests
         JObject carryWindow = Assert.IsType<JObject>(Assert.Single(windows));
         Assert.Equal(0.0, carryWindow.Value<double>("start"), 6);
         Assert.Equal(
-            carryFrames / 24.0,
+            Math.Round(carryFrames / 24.0, 2, MidpointRounding.AwayFromZero),
             carryWindow.Value<double>("end"),
             6);
 

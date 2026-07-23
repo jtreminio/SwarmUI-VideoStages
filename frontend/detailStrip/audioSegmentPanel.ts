@@ -6,6 +6,11 @@ import {
 import {
     AUDIO_SEGMENT_MIN_LENGTH,
     AUDIO_SEGMENT_STEP,
+    AUDIO_SEGMENT_VOLUME_MAX,
+    AUDIO_SEGMENT_VOLUME_MIN,
+    AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
+    AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
+    AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
     CLIP_DURATION_MAX,
 } from "../constants";
 import {
@@ -14,6 +19,7 @@ import {
     buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
+    buildSlider,
     clampStartLength,
     wrapForm,
 } from "../detailWidgets";
@@ -130,6 +136,39 @@ export const buildAudioSegmentBody = (
                 ),
             );
         }
+
+        const volumeSlider = buildSlider(
+            "Volume",
+            segment.volume,
+            AUDIO_SEGMENT_VOLUME_MIN,
+            AUDIO_SEGMENT_VOLUME_MAX,
+            AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
+            (value) => {
+                ctx.debouncedCommit(`seg-${segIdx}-volume`, (cs) => {
+                    const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+                    if (seg) {
+                        seg.volume = Math.min(
+                            AUDIO_SEGMENT_VOLUME_MAX,
+                            Math.max(AUDIO_SEGMENT_VOLUME_MIN, value),
+                        );
+                    }
+                });
+            },
+            {
+                sliderMin: AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
+                sliderMax: AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
+                numberStep: "any",
+                help:
+                    "Relative loudness before this segment is mixed over the clip. " +
+                    "1 keeps its original level, values below 1 make it quieter, " +
+                    "and values above 1 make it louder. The slider covers 0.1–4; " +
+                    "the number input accepts 0.00001–100000 (-100 dB to +100 dB).",
+            },
+        );
+        volumeSlider
+            .querySelector<HTMLInputElement>("input.auto-slider-number")
+            ?.setAttribute("data-vst-focus-key", `seg-${segIdx}-volume`);
+        fields.appendChild(volumeSlider);
 
         const startInput = ctx.buildClampedNumber({
             key: `seg-${segIdx}-start`,

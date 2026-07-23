@@ -107,6 +107,7 @@ const AUDIO_SEGMENT_PATCH_KEYS = [
     "startSeconds",
     "trimStartSeconds",
     "lengthSeconds",
+    "volume",
 ] as const satisfies readonly (keyof CanonicalAudioSegment)[];
 
 const PROMPT_WINDOW_PATCH_KEYS = [

@@ -114,6 +114,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 startSeconds: segment.startSeconds,
                 trimStartSeconds: segment.trimStartSeconds,
                 lengthSeconds: segment.lengthSeconds,
+                volume: segment.volume,
             })),
             retake: clip.retake
                 ? {

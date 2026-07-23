@@ -183,6 +183,7 @@ describe("versioned authoring document identity", () => {
                             startSeconds: 0,
                             trimStartSeconds: 0,
                             lengthSeconds: 1,
+                            volume: 1,
                         },
                     ],
                     promptWindows: [
@@ -250,6 +251,7 @@ describe("versioned authoring document identity", () => {
                     startSeconds: 0,
                     trimStartSeconds: 0,
                     lengthSeconds: 0.5,
+                    volume: 1,
                 },
                 {
                     id: "audio_segment_legacy_1_0",
@@ -257,6 +259,7 @@ describe("versioned authoring document identity", () => {
                     startSeconds: 1,
                     trimStartSeconds: 0,
                     lengthSeconds: 0.5,
+                    volume: 1,
                 },
             ],
             promptWindows: [
@@ -399,6 +402,7 @@ describe("versioned authoring document identity", () => {
                             startSeconds: 0,
                             trimStartSeconds: 0,
                             lengthSeconds: 0.5,
+                            volume: 1,
                         },
                         {
                             id: "segment-b",
@@ -406,6 +410,7 @@ describe("versioned authoring document identity", () => {
                             startSeconds: 1,
                             trimStartSeconds: 0,
                             lengthSeconds: 0.5,
+                            volume: 1,
                         },
                     ],
                 }),

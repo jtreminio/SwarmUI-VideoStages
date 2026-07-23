@@ -10,6 +10,9 @@ internal static class ClipTimelineSpecParser
 {
     private const int FrameAlignment = 8;
     private const double AudioSegmentMinLength = 0.1;
+    private const double AudioSegmentMinVolume = 0.00001;
+    private const double AudioSegmentMaxVolume = 100000.0;
+    private const double AudioSegmentDefaultVolume = 1.0;
 
     public static int CalculateAlignedFrameCount(double durationSeconds, int fps)
     {
@@ -125,10 +128,18 @@ internal static class ClipTimelineSpecParser
                 segmentObject, "TrimStartSeconds", 0, "Clip AudioSegment");
             double length = VideoStagesJsonReader.GetOptionalDouble(
                 segmentObject, "LengthSeconds", 0, "Clip AudioSegment");
-            if (!IsFinite(start) || !IsFinite(trim) || !IsFinite(length) || length <= 0)
+            double volume = VideoStagesJsonReader.GetOptionalDouble(
+                segmentObject, "Volume", 1, "Clip AudioSegment");
+            if (!IsFinite(start)
+                || !IsFinite(trim)
+                || !IsFinite(length)
+                || length <= 0)
             {
                 continue;
             }
+            volume = IsFinite(volume)
+                ? Math.Clamp(volume, AudioSegmentMinVolume, AudioSegmentMaxVolume)
+                : AudioSegmentDefaultVolume;
 
             start = Math.Max(0, start);
             trim = Math.Max(0, trim);
@@ -147,7 +158,8 @@ internal static class ClipTimelineSpecParser
                 RoundTenth(start),
                 RoundTenth(trim),
                 RoundTenth(length),
-                aceSource));
+                AceStepFunSource: aceSource,
+                Volume: volume));
         }
         segments.Sort((left, right) => left.StartSeconds.CompareTo(right.StartSeconds));
         return segments;

@@ -55,6 +55,7 @@ const segment = (id: string): CanonicalAudioSegment => ({
     startSeconds: 0,
     trimStartSeconds: 0,
     lengthSeconds: 1,
+    volume: 1,
 });
 
 const window = (id: string): CanonicalPromptWindow => ({
@@ -538,6 +539,7 @@ describe("diffDocuments", () => {
                     fileName: "s.wav",
                 };
                 after.clips[0].audioSegments[0].lengthSeconds = 2;
+                after.clips[0].audioSegments[0].volume = 0.4;
             },
         },
         {

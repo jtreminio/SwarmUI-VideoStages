@@ -2,6 +2,7 @@ import type { CapabilityViewResolver } from "./architectures/policy";
 import {
     AUDIO_SEGMENT_DEFAULT_LENGTH,
     AUDIO_SEGMENT_MIN_LENGTH,
+    AUDIO_SEGMENT_VOLUME_DEFAULT,
     clamp,
 } from "./constants";
 import type { GestureRouter } from "./gestureRouter";
@@ -134,6 +135,7 @@ export const createTimelineAudioSegmentTrack = (
                 startSeconds: roundToTenth(geom.start),
                 trimStartSeconds: 0,
                 lengthSeconds: roundToTenth(geom.length),
+                volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
             };
             const segments = [...(clip.audioSegments ?? []), segment];
             clip.audioSegments = segments;

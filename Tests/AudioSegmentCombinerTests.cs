@@ -94,7 +94,12 @@ public class AudioSegmentCombinerTests
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
             0,
             SegmentPlan(
-                new AudioSegmentSpec(Upload("QUJD"), StartSeconds: 0.0, TrimStartSeconds: 1.0, LengthSeconds: 3.0),
+                new AudioSegmentSpec(
+                    Upload("QUJD"),
+                    StartSeconds: 0.0,
+                    TrimStartSeconds: 1.0,
+                    LengthSeconds: 3.0,
+                    Volume: 0.5),
                 new AudioSegmentSpec(Upload("WFla"), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
@@ -105,6 +110,7 @@ public class AudioSegmentCombinerTests
         Assert.Equal(2, CountClassType(workflow, "TrimAudioDuration"));
         Assert.Equal(1, CountClassType(workflow, "EmptyAudio"));
         Assert.Equal(1, CountClassType(workflow, "AudioConcat"));
+        Assert.Equal(1, CountClassType(workflow, "AudioAdjustVolume"));
         // Base is audio1; each segment is mixed over the running accumulator -> two merges.
         Assert.Equal(2, CountClassType(workflow, "AudioMerge"));
 
@@ -121,6 +127,13 @@ public class AudioSegmentCombinerTests
             bridge.Graph.NodesOfType<AudioConcatNode>());
         Assert.IsType<EmptyAudioNode>(placement.Audio1.Connection!.Node);
         Assert.IsType<TrimAudioDurationNode>(placement.Audio2.Connection!.Node);
+        AudioAdjustVolumeNode adjusted = Assert.Single(
+            bridge.Graph.NodesOfType<AudioAdjustVolumeNode>());
+        Assert.Equal(-6, adjusted.Volume.LiteralAsInt());
+        Assert.IsType<TrimAudioDurationNode>(adjusted.Audio.Connection!.Node);
+        Assert.Contains(
+            bridge.Graph.NodesOfType<AudioMergeNode>(),
+            merge => ReferenceEquals(merge.Audio2.Connection, adjusted.AUDIO));
         Assert.Contains(
             bridge.Graph.NodesOfType<AudioMergeNode>(),
             merge => ReferenceEquals(merge.Audio2.Connection, placement.AUDIO));
@@ -143,6 +156,31 @@ public class AudioSegmentCombinerTests
             out IReadOnlyList<(double Start, double End)> windows);
 
         Assert.Equal([(0.5, 3.5), (6.0, 8.0)], windows);
+    }
+
+    [Fact]
+    public void Combine_MapsFullVolumeMultiplierRangeToComfyDb()
+    {
+        JObject workflow = BuildWorkflowWithBaseAudio();
+        WorkflowGenerator g = BuildGenerator(workflow);
+
+        _ = new AudioSegmentCombiner(g).Combine(
+            0,
+            SegmentPlan(
+                new AudioSegmentSpec(Upload("MDE="), 0, 0, 1, Volume: 0.00001),
+                new AudioSegmentSpec(Upload("MDI="), 1, 0, 1, Volume: 1),
+                new AudioSegmentSpec(Upload("MDM="), 2, 0, 1, Volume: 4),
+                new AudioSegmentSpec(Upload("MDQ="), 3, 0, 1, Volume: 100000)),
+            BaseAudio(g),
+            clipDurationSeconds: 10,
+            out _);
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        int[] adjustments = bridge.Graph.NodesOfType<AudioAdjustVolumeNode>()
+            .Select(node => node.Volume.LiteralAsInt()!.Value)
+            .Order()
+            .ToArray();
+        Assert.Equal([-100, 12, 100], adjustments);
     }
 
     [Fact]

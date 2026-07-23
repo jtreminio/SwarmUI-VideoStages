@@ -194,6 +194,7 @@ describe("catalog-backed authoring policy", () => {
                 startSeconds: 0,
                 trimStartSeconds: 0,
                 lengthSeconds: 1,
+                volume: 1,
             },
         ];
         const body = document.createElement("div");

@@ -272,7 +272,7 @@ public class AudioInjectionTests
             generator,
             audio,
             matchVideoLengthToAudio: false,
-            preserveWindows: [(1.0, 2.5), (4.0, 5.5)]));
+            preserveWindows: [(0.0, 1.0 / 3.0), (4.004, 5.555)]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         SwarmSetAudioMaskWindowsNode maskNode = Assert.Single(
@@ -282,10 +282,10 @@ public class AudioInjectionTests
 
         JArray windows = JArray.Parse(maskNode.Windows.LiteralAsString());
         Assert.Equal(2, windows.Count);
-        Assert.Equal(1.0, (double)windows[0]["start"]);
-        Assert.Equal(2.5, (double)windows[0]["end"]);
+        Assert.Equal(0.0, (double)windows[0]["start"]);
+        Assert.Equal(0.33, (double)windows[0]["end"]);
         Assert.Equal(4.0, (double)windows[1]["start"]);
-        Assert.Equal(5.5, (double)windows[1]["end"]);
+        Assert.Equal(5.56, (double)windows[1]["end"]);
 
         Assert.Equal("105", maskNode.AudioVae.Connection!.Node.Id);
         LTXVAudioVAEEncodeNode audioEncode = Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());

@@ -6,6 +6,7 @@ import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import {
     AUDIO_SEGMENT_DEFAULT_LENGTH,
     AUDIO_SEGMENT_MIN_LENGTH,
+    AUDIO_SEGMENT_VOLUME_DEFAULT,
     clamp,
     RETAKE_DEFAULT_DURATION,
     RETAKE_MIN_DURATION,
@@ -150,6 +151,7 @@ export const createDetailSelectionDomainOperations = (
                 lengthSeconds: roundToTenth(
                     Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDuration),
                 ),
+                volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
             };
             clip.audioSegments = [...(clip.audioSegments ?? []), segment];
             return {

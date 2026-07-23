@@ -49,8 +49,8 @@
     spec.value,
     spec.min,
     spec.max,
-    spec.min,
-    spec.max,
+    spec.viewMin ?? spec.min,
+    spec.viewMax ?? spec.max,
     spec.step,
     false,
     false,
@@ -446,6 +446,12 @@
   var AUDIO_SEGMENT_MIN_LENGTH = 0.1;
   var AUDIO_SEGMENT_DEFAULT_LENGTH = 2;
   var AUDIO_SEGMENT_STEP = 0.1;
+  var AUDIO_SEGMENT_VOLUME_MIN = 1e-5;
+  var AUDIO_SEGMENT_VOLUME_MAX = 1e5;
+  var AUDIO_SEGMENT_VOLUME_SLIDER_MIN = 0.1;
+  var AUDIO_SEGMENT_VOLUME_SLIDER_MAX = 4;
+  var AUDIO_SEGMENT_VOLUME_SLIDER_STEP = 0.1;
+  var AUDIO_SEGMENT_VOLUME_DEFAULT = 1;
   var ROOT_DIMENSION_MIN = 256;
   var ROOT_DIMENSION_MAX = 4096;
   var ROOT_DIMENSION_STEP = 32;
@@ -536,7 +542,7 @@
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
     (value) => value.trim().toLowerCase().startsWith("latentmodel-")
   ) ?? upscaleMethodValues[0] ?? "";
-  var snapStrengthToStep = (value, fallback, min, max, step) => {
+  var snapValueToStep = (value, fallback, min, max, step) => {
     const unitScale = 1 / step;
     return Math.round(
       clamp(toNumber(`${value ?? fallback}`, fallback), min, max) * unitScale
@@ -744,7 +750,15 @@
       source,
       startSeconds: roundToTenth(window2.startSeconds),
       trimStartSeconds: roundToTenth(trimStartRaw),
-      lengthSeconds: roundToTenth(window2.lengthSeconds)
+      lengthSeconds: roundToTenth(window2.lengthSeconds),
+      volume: clamp(
+        toNumber(
+          `${value.volume ?? AUDIO_SEGMENT_VOLUME_DEFAULT}`,
+          AUDIO_SEGMENT_VOLUME_DEFAULT
+        ),
+        AUDIO_SEGMENT_VOLUME_MIN,
+        AUDIO_SEGMENT_VOLUME_MAX
+      )
     };
   };
   var normalizeAudioSegments = (value, clipDuration) => {
@@ -1070,14 +1084,14 @@
       preset: preset || IC_LORA_PRESET_CUSTOM_ID,
       source,
       stage,
-      strength: snapStrengthToStep(
+      strength: snapValueToStep(
         raw.strength,
         IC_LORA_STRENGTH_DEFAULT,
         IC_LORA_STRENGTH_MIN,
         IC_LORA_STRENGTH_MAX,
         IC_LORA_STRENGTH_STEP
       ),
-      attentionStrength: snapStrengthToStep(
+      attentionStrength: snapValueToStep(
         raw.attentionStrength,
         IC_LORA_ATTENTION_DEFAULT,
         IC_LORA_ATTENTION_MIN,
@@ -1820,14 +1834,14 @@
   var REF_SOURCE_UPLOAD = "Upload";
 
   // frontend/normalizationStage.ts
-  var normalizeStageRefStrengthValue = (value) => snapStrengthToStep(
+  var normalizeStageRefStrengthValue = (value) => snapValueToStep(
     value,
     STAGE_REF_STRENGTH_DEFAULT,
     STAGE_REF_STRENGTH_MIN,
     STAGE_REF_STRENGTH_MAX,
     STAGE_REF_STRENGTH_STEP
   );
-  var normalizeStageControlNetStrengthValue = (value) => snapStrengthToStep(
+  var normalizeStageControlNetStrengthValue = (value) => snapValueToStep(
     value,
     STAGE_CONTROLNET_STRENGTH_DEFAULT,
     STAGE_CONTROLNET_STRENGTH_MIN,
@@ -2799,7 +2813,8 @@
           source: segment.source,
           startSeconds: segment.startSeconds,
           trimStartSeconds: segment.trimStartSeconds,
-          lengthSeconds: segment.lengthSeconds
+          lengthSeconds: segment.lengthSeconds,
+          volume: segment.volume
         })),
         retake: clip.retake ? {
           id: clip.retake.id,
@@ -3578,7 +3593,8 @@
     "source",
     "startSeconds",
     "trimStartSeconds",
-    "lengthSeconds"
+    "lengthSeconds",
+    "volume"
   ];
   var PROMPT_WINDOW_PATCH_KEYS = [
     "prompt",
@@ -7606,7 +7622,8 @@
         source: null,
         startSeconds: roundToTenth(geom.start),
         trimStartSeconds: 0,
-        lengthSeconds: roundToTenth(geom.length)
+        lengthSeconds: roundToTenth(geom.length),
+        volume: AUDIO_SEGMENT_VOLUME_DEFAULT
       };
       const segments = [...clip.audioSegments ?? [], segment];
       clip.audioSegments = segments;
@@ -7818,12 +7835,15 @@
       value,
       min,
       max,
+      viewMin: opts?.sliderMin,
+      viewMax: opts?.sliderMax,
       step
     });
     const number = holder.querySelector(
       "input.auto-slider-number"
     );
     if (number) {
+      number.step = `${opts?.numberStep ?? step}`;
       wireNumericInput(number, value, min, max, onChange);
     }
     if (opts?.title) {
@@ -8680,6 +8700,32 @@
           )
         );
       }
+      const volumeSlider = buildSlider(
+        "Volume",
+        segment.volume,
+        AUDIO_SEGMENT_VOLUME_MIN,
+        AUDIO_SEGMENT_VOLUME_MAX,
+        AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
+        (value) => {
+          ctx.debouncedCommit(`seg-${segIdx}-volume`, (cs) => {
+            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
+            if (seg) {
+              seg.volume = Math.min(
+                AUDIO_SEGMENT_VOLUME_MAX,
+                Math.max(AUDIO_SEGMENT_VOLUME_MIN, value)
+              );
+            }
+          });
+        },
+        {
+          sliderMin: AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
+          sliderMax: AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
+          numberStep: "any",
+          help: "Relative loudness before this segment is mixed over the clip. 1 keeps its original level, values below 1 make it quieter, and values above 1 make it louder. The slider covers 0.1–4; the number input accepts 0.00001–100000 (-100 dB to +100 dB)."
+        }
+      );
+      volumeSlider.querySelector("input.auto-slider-number")?.setAttribute("data-vst-focus-key", `seg-${segIdx}-volume`);
+      fields.appendChild(volumeSlider);
       const startInput = ctx.buildClampedNumber({
         key: `seg-${segIdx}-start`,
         value: segment.startSeconds,
@@ -11806,9 +11852,7 @@ The conversion is one undoable change.`;
         options.clips
       );
       options.detail.appendChild(body);
-      if (options.selection.kind === "clip" || options.selection.kind === "retake") {
-        getVideoStagesHostBridge().enableSliders(body);
-      }
+      getVideoStagesHostBridge().enableSliders(body);
     }
     options.focus.restore(options.detail);
     const newBody = options.detail.querySelector(".vst-detail-body");
@@ -11916,7 +11960,8 @@ The conversion is one undoable change.`;
           trimStartSeconds: 0,
           lengthSeconds: roundToTenth(
             Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDuration)
-          )
+          ),
+          volume: AUDIO_SEGMENT_VOLUME_DEFAULT
         };
         clip.audioSegments = [...clip.audioSegments ?? [], segment];
         return {
