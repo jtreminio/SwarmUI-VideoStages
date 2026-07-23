@@ -9,7 +9,6 @@ import {
     TIMELINE_BODY_ID,
     updateTimelineTabIndicator,
 } from "./bottomTimelineTab";
-import { projectVideoExecutionPath } from "./executionPath";
 import { createGestureRouter } from "./gestureRouter";
 import { getVideoStagesHostBridge } from "./host";
 import { buildDefaultClip } from "./normalization";
@@ -25,8 +24,6 @@ import { setSelection, subscribeSelection } from "./selection";
 import type { UpdateMeta } from "./store";
 import {
     getRootGeneratedEntryMode,
-    getRootModelInput,
-    isRootTextToVideoModel,
     isVideoStagesEnabled,
     readGlobalPrompt,
     setVideoStagesEnabled,
@@ -260,15 +257,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                     generatedEntryMode: getRootGeneratedEntryMode(),
                 }),
                 capabilities: capabilities(),
-                executionSummary: projectVideoExecutionPath(state, {
-                    catalog: architectureCatalog,
-                    generatedEntry:
-                        !`${getRootModelInput()?.value ?? ""}`.trim() ||
-                        isRootTextToVideoModel()
-                            ? "text-to-video"
-                            : "host-image-guidance",
-                    globalPrompt,
-                }),
             });
             viewport.restoreScroll(prevScrollLeft);
             linking.reapplySelection(body, clips.length);

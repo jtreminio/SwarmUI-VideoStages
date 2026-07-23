@@ -14,7 +14,7 @@ import {
 } from "./normalization";
 import { getClips, getState } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
-import { setSelection } from "./selection";
+import { activateSelection, setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
 import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
@@ -251,7 +251,7 @@ export const createTimelineReferencesTrack = (
     };
 
     const selectRef = (clipIdx: number, refIdx: number): void => {
-        setSelection({ kind: "ref", clipIdx, refIdx });
+        activateSelection({ kind: "ref", clipIdx, refIdx });
     };
 
     const onBodyClick = (event: Event): void => {

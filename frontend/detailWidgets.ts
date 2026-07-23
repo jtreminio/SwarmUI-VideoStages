@@ -94,14 +94,14 @@ export const buildField = (
     help?: string,
 ): HTMLElement => {
     const row = document.createElement("div");
-    row.className = "auto-input vst-audio-field";
+    row.className = "auto-input vst-detail-field";
     const boxClass = boxClassFor(control);
     if (boxClass) {
         row.classList.add(boxClass);
     }
     const labelEl = document.createElement("label");
     const text = document.createElement("span");
-    text.className = "auto-input-name vst-audio-field-label";
+    text.className = "auto-input-name vst-detail-field-label";
     text.textContent = label;
     labelEl.appendChild(text);
     if (help) {
@@ -110,7 +110,7 @@ export const buildField = (
     row.append(labelEl, control);
     if (hint) {
         const small = document.createElement("small");
-        small.className = "vst-audio-field-hint";
+        small.className = "vst-detail-field-hint";
         small.textContent = hint;
         row.appendChild(small);
     }
@@ -220,7 +220,7 @@ export const buildSlider = (
     }
     if (opts?.hint) {
         const small = document.createElement("small");
-        small.className = "vst-audio-field-hint";
+        small.className = "vst-detail-field-hint";
         small.textContent = opts.hint;
         holder.appendChild(small);
     }
@@ -235,14 +235,14 @@ export const buildCheckbox = (
 ): HTMLElement => {
     const row = document.createElement("label");
     row.className =
-        "auto-input auto-checkbox-box auto-input-flex vst-audio-field vst-audio-field-check";
+        "auto-input auto-checkbox-box auto-input-flex vst-detail-field vst-detail-field-check";
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "auto-checkbox";
     input.checked = checked;
     input.addEventListener("change", () => onChange(input.checked));
     const text = document.createElement("span");
-    text.className = "auto-input-name vst-audio-field-label";
+    text.className = "auto-input-name vst-detail-field-label";
     text.textContent = label;
     row.append(input, text);
     if (opts?.help) {
@@ -307,9 +307,9 @@ export const buildMediaPickRow = (
     onClear: () => void,
 ): HTMLElement => {
     const row = document.createElement("div");
-    row.className = "auto-input vst-audio-field vst-audio-upload";
+    row.className = "auto-input vst-detail-field vst-audio-upload";
     const pickLabel = document.createElement("span");
-    pickLabel.className = "auto-input-name vst-audio-field-label";
+    pickLabel.className = "auto-input-name vst-detail-field-label";
     pickLabel.textContent = label;
     const fileInput = document.createElement("input");
     fileInput.type = "file";
@@ -363,63 +363,191 @@ export const buildMediaPickRow = (
     return row;
 };
 
-export interface InstanceRowSpec {
-    rowClass: string;
-    indexAttr: string;
-    index: number;
-    active: boolean;
-    title: string;
-    deleteLabel: string;
-    onDelete: () => void;
-    repoint: () => void;
-}
-
-/**
- * One instance of a "clip has multiples of a thing" panel (a ref, an audio
- * segment) rendered as a stacked, individually-editable sub-section. Shared
- * machinery matching the relay list: a `R{n}`/`S{n}` title, a per-row delete,
- * an active highlight, and a focusin re-point so touching any control makes
- * this instance the selection (timeline highlight follows) — targeted swap,
- * no rebuild. Returns the row and the field-body to append controls into.
- */
-export const buildInstanceRow = (
-    spec: InstanceRowSpec,
-): { row: HTMLElement; fields: HTMLElement } => {
-    const row = document.createElement("div");
-    row.className = `vst-detail-instance ${spec.rowClass}`;
-    row.setAttribute(spec.indexAttr, `${spec.index}`);
-    if (spec.active) {
-        row.classList.add("vst-detail-instance-active");
-    }
-    const head = document.createElement("div");
-    head.className = "vst-detail-instance-head";
-    const title = document.createElement("span");
-    title.className = "vst-detail-instance-title";
-    title.textContent = spec.title;
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className =
-        "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-instance-delete";
-    del.textContent = spec.deleteLabel;
-    del.title = spec.deleteLabel;
-    del.addEventListener("click", (event) => {
-        event.preventDefault();
-        spec.onDelete();
-    });
-    head.append(title, del);
-    row.appendChild(head);
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-instance-fields";
-    row.appendChild(fields);
-    row.addEventListener("focusin", () => spec.repoint());
-    return { row, fields };
-};
-
 export const sectionLabel = (text: string): HTMLElement => {
     const sec = document.createElement("div");
     sec.className = "vst-detail-sec vst-detail-wrap-sec";
     sec.textContent = text;
     return sec;
+};
+
+export interface RepeatingGroupItem {
+    label: string;
+    focusKey?: string;
+    title?: string;
+    active?: boolean;
+    className?: string;
+    onSelect: () => void;
+    onShiftDelete?: () => void;
+    onDelete?: () => void;
+    deleteTitle?: string;
+    deleteDisabled?: boolean;
+    headerAction?: {
+        label: string;
+        title: string;
+        className?: string;
+        active?: boolean;
+        onClick: () => void;
+    };
+}
+
+export interface RepeatingGroupAddAction {
+    title: string;
+    className: string;
+    disabled?: boolean;
+    onClick: () => void;
+}
+
+export interface RepeatingEditorSpec {
+    key: string;
+    label: string;
+    items: readonly RepeatingGroupItem[];
+    add: RepeatingGroupAddAction;
+    remove: {
+        title: string;
+        className: string;
+    };
+    editor?: HTMLElement;
+    sectionClass?: string;
+    listClass?: string;
+}
+
+/**
+ * Canonical repeating-child section. Every repeater gets the same title,
+ * collapsible input-group items, per-item actions, an Add button, active-editor slot, and stable key
+ * used by the detail shell for scroll preservation and external reveal.
+ */
+export const buildRepeatingEditor = (
+    spec: RepeatingEditorSpec,
+): {
+    section: HTMLElement;
+    heading: HTMLElement;
+    list: HTMLElement;
+    editor: HTMLElement | null;
+} => {
+    const section = document.createElement("div");
+    section.className =
+        `vst-detail-stages-wrap vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim();
+    section.dataset.vstRepeaterKey = spec.key;
+    const heading = sectionLabel(spec.label);
+    section.appendChild(heading);
+    const list = document.createElement("div");
+    list.className =
+        `vst-detail-repeating-group-list ${spec.listClass ?? ""}`.trim();
+    spec.items.forEach((item, index) => {
+        const active = item.active === true;
+        const group = document.createElement("div");
+        group.className = `input-group vst-detail-repeating-group ${
+            active ? "input-group-open" : "input-group-closed"
+        }`;
+        const header = document.createElement("div");
+        header.className =
+            `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim();
+        header.tabIndex = 0;
+        header.setAttribute("role", "button");
+        header.setAttribute("aria-expanded", `${active}`);
+        header.setAttribute("aria-pressed", `${active}`);
+        if (item.focusKey) {
+            header.dataset.vstFocusKey = item.focusKey;
+        }
+        const labelWrap = document.createElement("span");
+        labelWrap.className = "header-label-wrap";
+        const symbol = document.createElement("span");
+        symbol.className = "auto-symbol";
+        symbol.textContent = active ? "▾" : "▸";
+        const label = document.createElement("span");
+        label.className = "header-label";
+        label.textContent = item.label;
+        const spacer = document.createElement("span");
+        spacer.className = "header-label-spacer";
+        const actions = document.createElement("span");
+        actions.className = "vst-detail-repeating-group-actions";
+        if (item.headerAction) {
+            const action = document.createElement("button");
+            action.type = "button";
+            action.className =
+                `basic-button small-button vst-detail-repeating-group-action ${item.headerAction.className ?? ""}`.trim();
+            action.textContent = item.headerAction.label;
+            action.title = item.headerAction.title;
+            action.setAttribute("aria-label", item.headerAction.title);
+            action.classList.toggle(
+                "vst-detail-repeating-group-action-active",
+                item.headerAction.active === true,
+            );
+            action.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                item.headerAction?.onClick();
+            });
+            actions.appendChild(action);
+        }
+        const onDelete = item.onDelete ?? item.onShiftDelete;
+        if (onDelete) {
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className =
+                `basic-button small-button vst-refs-delete vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim();
+            remove.textContent = "- Delete";
+            remove.title =
+                item.deleteTitle ??
+                (active ? spec.remove.title : `Delete ${item.label}`);
+            remove.setAttribute("aria-label", remove.title);
+            remove.disabled = item.deleteDisabled === true;
+            remove.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onDelete();
+            });
+            actions.appendChild(remove);
+        }
+        labelWrap.append(symbol, label, spacer, actions);
+        header.appendChild(labelWrap);
+        const content = document.createElement("div");
+        content.className =
+            "input-group-content vst-detail-repeating-group-content";
+        if (active && spec.editor) {
+            spec.editor.classList.add("vst-detail-repeating-editor-active");
+            content.appendChild(spec.editor);
+        } else {
+            content.hidden = true;
+        }
+        const activateOrToggle = (): void => {
+            if (!active) {
+                item.onSelect();
+                return;
+            }
+            const opening = content.hidden === true;
+            content.hidden = !opening;
+            group.classList.toggle("input-group-open", opening);
+            group.classList.toggle("input-group-closed", !opening);
+            header.setAttribute("aria-expanded", `${opening}`);
+            symbol.textContent = opening ? "▾" : "▸";
+        };
+        header.addEventListener("click", activateOrToggle);
+        header.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                activateOrToggle();
+            }
+        });
+        group.append(header, content);
+        list.appendChild(group);
+        group.dataset.vstRepeaterItem = `${index}`;
+    });
+    section.appendChild(list);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className =
+        `basic-button small-button vst-add-btn vst-detail-repeating-add ${spec.add.className}`.trim();
+    add.textContent = "+ Add";
+    add.title = spec.add.title;
+    add.setAttribute("aria-label", spec.add.title);
+    add.disabled = spec.add.disabled === true;
+    add.addEventListener("click", (event) => {
+        event.preventDefault();
+        spec.add.onClick();
+    });
+    section.appendChild(add);
+    return { section, heading, list, editor: spec.editor ?? null };
 };
 
 export const clampStartLength = (
@@ -489,21 +617,4 @@ export const buildStackSection = (
     col.className = `vst-detail-col ${colClass}`;
     wrap.appendChild(col);
     return { wrap, col };
-};
-
-/** Trailing "Add" button for a stacked section. */
-export const buildAddButton = (
-    label: string,
-    extraClass: string,
-    onClick: () => void,
-): HTMLButtonElement => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `basic-button small-button vst-detail-rail-btn ${extraClass}`;
-    btn.textContent = label;
-    btn.addEventListener("click", (event) => {
-        event.preventDefault();
-        onClick();
-    });
-    return btn;
 };

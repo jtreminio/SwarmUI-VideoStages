@@ -1108,15 +1108,8 @@
 .vst-retake-resize-r {
     right: -1px;
 }
-.vst-detail-add-retake,
-.vst-detail-add-iclora {
-    align-self: flex-start;
-    margin-top: 2px;
-}
 .vst-detail-add-segment {
-    align-self: flex-end;
-    margin-top: 2px;
-    margin-left: auto;
+    align-self: auto;
 }
 .vst-detail-note {
     margin: 2px 0 0;
@@ -1330,7 +1323,7 @@
 .vst-detail .vst-stage-slider .auto-slider-range {
     width: 100%;
 }
-.vst-detail .vst-stage-slider .vst-audio-field-hint {
+.vst-detail .vst-stage-slider .vst-detail-field-hint {
     display: block;
     margin-top: 2px;
 }
@@ -1564,48 +1557,54 @@
     margin-top: 2px;
 }
 /* Destructive buttons: red-tinted background on top of the host chrome. */
-.vst-refs-delete,
-.vst-stage-lora-remove {
+.vst-refs-delete {
     background-color: color-mix(in srgb, var(--red) 30%, var(--button-background));
     border-color: color-mix(in srgb, var(--red) 50%, var(--button-border));
 }
-.vst-refs-delete:hover,
-.vst-stage-lora-remove:hover {
+.vst-refs-delete:hover {
     background-color: color-mix(in srgb, var(--red) 50%, var(--button-background-hover));
 }
 
 .vst-stage-loras {
-    gap: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 6px;
+}
+.vst-stage-loras > .vst-detail-wrap-sec {
+    padding: 0;
 }
 .vst-stage-lora-list {
     display: flex;
     flex-direction: column;
+    gap: 10px;
+}
+.vst-stage-lora-entry {
+    display: flex;
+    flex-direction: column;
     gap: 5px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--vst-hairline);
 }
 .vst-stage-lora-row {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 6px;
 }
-.vst-stage-lora-row .vst-audio-select {
+.vst-stage-lora-row > .vst-detail-field {
     flex: 1 1 auto;
     min-width: 0;
 }
-.vst-stage-lora-weight {
-    flex: 0 0 68px;
-    width: 68px;
-}
 .vst-stage-lora-remove {
     flex: none;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     padding: 0;
-    font-size: var(--vst-font-sm);
     line-height: 1;
 }
 .vst-stage-lora-add {
-    align-self: flex-start;
-    margin-top: 4px;
+    align-self: stretch;
+    margin: 0;
 }
 /* --- Settings chip (topbar) + popover --- */
 .vst-settings-chip {
@@ -1787,7 +1786,7 @@
     align-items: stretch;
 }
 /* Form editors (ref / audio / prompt / settings) stack vertically in the dock;
-   the shared `.vst-audio-field` base is already label-above. */
+   the shared `.vst-detail-field` base is already label-above. */
 .vst-detail-form-body {
     --vst-content-pad: 12px 14px;
     display: flex;
@@ -1815,16 +1814,12 @@
 .vst-detail-minor-body {
     gap: 12px;
 }
-/* Relay windows and the stacked multi-instance panels (refs, audio segments)
-   share one detail-card look; only the internal gap differs. */
-.vst-detail-minor-window,
-.vst-detail-instance {
+/* Repeating child editors are separated by their parent input-group and
+   header/rail hierarchy, not by nested cards. */
+.vst-detail-minor-window {
     display: flex;
     flex-direction: column;
     padding: 8px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    background: color-mix(in srgb, var(--emphasis) 3%, transparent);
     /* Explicit full width: the card is its fields' containing block, so it
        must span the dock rather than lean on flex-stretch alone. */
     width: 100%;
@@ -1838,46 +1833,33 @@
     display: flex;
     gap: 8px;
 }
-.vst-detail-minor-range > .vst-audio-field {
+.vst-detail-minor-range > .vst-detail-field {
     flex: 1 1 0;
     min-width: 0;
 }
-/* Active = a single highlight border only: no background tint, no inner
-   box-shadow, no child highlights. */
-.vst-detail-minor-active,
-.vst-detail-instance-active {
-    border-color: var(--emphasis);
-}
-.vst-detail-minor-head,
-.vst-detail-instance-head {
+.vst-detail-minor-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
 }
-.vst-detail-minor-title,
-.vst-detail-instance-title {
+.vst-detail-minor-title {
     font-size: var(--vst-font-3xs);
     letter-spacing: 0.06em;
     text-transform: uppercase;
     font-weight: 600;
     color: var(--text-soft);
 }
-.vst-detail-minor-delete,
-.vst-detail-instance-delete {
+.vst-detail-minor-delete {
     margin-top: 0;
-    padding: 1px 8px;
-    font-size: var(--vst-font-3xs);
+    min-width: 24px;
+    padding: 1px 6px;
+    font-size: var(--vst-font-sm);
+    line-height: 1;
 }
 .vst-detail-minor-window .vst-detail-prompt {
     min-height: 72px;
     flex: none;
-}
-.vst-detail-instance-body {
-    gap: 12px;
-}
-.vst-detail-instance {
-    gap: 8px;
 }
 .vst-detail-instance-fields {
     display: flex;
@@ -1974,7 +1956,7 @@
     box-sizing: border-box;
 }
 /* Field hints drop onto their own line below the control in the block stack. */
-.vst-detail .vst-audio-field-hint {
+.vst-detail .vst-detail-field-hint {
     display: block;
     font-size: var(--vst-font-3xs);
     color: var(--text-soft);
@@ -1984,98 +1966,87 @@
 .vst-detail-clip-body > .vst-detail-clip {
     border-bottom: 1px solid var(--vst-hairline);
 }
-/* One Stages section: selector rail on top, the selected stage's parameters
-   directly beneath — collapse the seam padding between the two columns. */
+.vst-detail-audio-body > .vst-detail-audio {
+    border-bottom: 1px solid var(--vst-hairline);
+}
+.vst-detail-prompts-body > .vst-detail-prompt-major {
+    border-bottom: 1px solid var(--vst-hairline);
+}
+.vst-detail-audio > .vst-detail-wrap-sec {
+    margin: 0;
+    padding: 0;
+}
+.vst-detail-prompt-major > .vst-detail-wrap-sec {
+    margin: 0;
+    padding: 0;
+}
+/* Repeating sidebar collections follow SwarmUI's input-group card hierarchy:
+   one collapsible group per item, item actions in the header, Add below. */
 .vst-detail-stages-wrap {
     display: flex;
     flex-direction: column;
     min-width: 0;
 }
-/* Section label inside a group wrap (Stages / Retake) — the group chrome is
-   headerless, so this is the one plain-text label. */
 .vst-detail-wrap-sec {
     margin: 0;
     padding: 10px 14px 0;
 }
-/* The rail is one row: stage tabs left-aligned filling the width, and a
-   right-aligned action column (Add above Delete, both always present). */
-.vst-detail-stages-wrap > .vst-detail-rail {
-    flex-direction: row;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-    padding-bottom: 0;
-}
-.vst-detail-rail-list {
-    display: flex;
-    flex-flow: row wrap;
-    gap: 4px;
-    align-items: flex-start;
-    align-content: flex-start;
-    justify-content: flex-start;
-    flex: 1 1 auto;
-    min-width: 0;
-}
-.vst-detail-rail-actions {
-    flex: none;
-    margin-left: auto;
+.vst-detail-repeating-group-list {
     display: flex;
     flex-direction: column;
-    /* stretch = both buttons share the widest one's width. */
-    align-items: stretch;
-    gap: 4px;
-}
-.vst-detail-rail-btn {
-    padding: 2px 10px;
-    white-space: nowrap;
-    text-align: center;
-    /* Rail buttons stack in a stretch column; the host's side margins would
-       make them ragged. */
-    margin-left: 0;
-    margin-right: 0;
-}
-.vst-detail-rail-list .vst-stage-tab {
-    cursor: pointer;
-    text-align: center;
-    padding: 2px 8px;
-    background: color-mix(in srgb, var(--background) 40%, transparent);
-    transition: border-color var(--vst-ease), background var(--vst-ease),
-        filter var(--vst-ease);
-}
-.vst-detail-segment-rail {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 0 2px;
-}
-.vst-detail-segment-rail-label {
-    flex: none;
-    font-size: var(--vst-font-3xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-    font-weight: 600;
-}
-.vst-detail-segment-rail-list {
-    display: flex;
-    flex: 1 1 auto;
-    flex-flow: row wrap;
-    gap: 4px;
+    gap: 6px;
+    padding: 8px 10px;
     min-width: 0;
 }
-.vst-segment-tab {
-    cursor: pointer;
-    min-width: 30px;
-    padding: 2px 8px;
-    text-align: center;
-    background: color-mix(in srgb, var(--background) 40%, transparent);
-    transition: border-color var(--vst-ease), background var(--vst-ease),
-        filter var(--vst-ease);
+.vst-detail .vst-detail-repeating-group.input-group {
+    border: 1px solid var(--vst-hairline);
+    border-radius: var(--vst-radius-sm);
+    overflow: hidden;
 }
-.vst-segment-tab-active {
-    color: var(--emphasis-text, var(--button-text));
-    border-color: var(--emphasis);
-    background: var(--emphasis);
+.vst-detail-repeating-group-header {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 4px 7px;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--background) 55%, var(--vst-panel));
+}
+.vst-detail-repeating-group-header > .header-label-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+}
+.vst-detail-repeating-group-header .header-label {
+    font-weight: 600;
+}
+.vst-detail-repeating-group-header .header-label-spacer {
+    flex: 1 1 auto;
+}
+.vst-detail-repeating-group-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.vst-detail-repeating-group-actions > button {
+    margin: 0;
+    padding: 2px 7px;
+    white-space: nowrap;
+}
+.vst-detail-repeating-group-action-active {
+    color: var(--red);
+}
+.vst-detail .vst-detail-repeating-group-content.input-group-content[hidden] {
+    display: none;
+}
+.vst-detail-repeating-add {
+    align-self: stretch;
+    margin: 0 10px 10px;
+}
+.vst-detail-repeating-editor-active {
+    width: 100%;
+    box-sizing: border-box;
 }
 .vst-detail-fields {
     display: grid;

@@ -35,7 +35,9 @@ export interface DetailStripContext {
     capabilities(): CapabilityViewResolver;
     generatedEntryMode(): "text-to-video" | "image-to-video";
 
+    addRefEntry(clipIdx: number): void;
     deleteRefEntry(clipIdx: number, refIdx: number): void;
+    addPromptWindow(clipIdx: number): void;
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
     createRetake(clipIdx: number): void;
     removeRetake(clipIdx: number): void;

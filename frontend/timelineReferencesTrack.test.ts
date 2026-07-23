@@ -13,6 +13,7 @@ import {
     getSelection,
     resetSelectionForTests,
     setSelection,
+    subscribeSelection,
 } from "./selection";
 import {
     createTimelineReferencesTrack,
@@ -177,6 +178,20 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         );
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 0 });
         expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it("re-activates an already-selected reference when its thumb is clicked", () => {
+        const body = setup([{ duration: 5, refs: [{ source: "Refiner" }] }]);
+        setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
+        const observed: unknown[] = [];
+        const stop = subscribeSelection((selection) =>
+            observed.push(selection),
+        );
+        markEl(body, 0, 0).dispatchEvent(
+            new MouseEvent("click", { bubbles: true }),
+        );
+        stop();
+        expect(observed).toEqual([{ kind: "ref", clipIdx: 0, refIdx: 0 }]);
     });
 
     it("selects the reference via keyboard activation", () => {

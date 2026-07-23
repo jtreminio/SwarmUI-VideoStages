@@ -39,10 +39,10 @@ describe("buildRefBody", () => {
             getClips(),
         );
         const field = Array.from(
-            body.querySelectorAll<HTMLElement>(".vst-audio-field"),
+            body.querySelectorAll<HTMLElement>(".vst-detail-field"),
         ).find((el) =>
             el
-                .querySelector(".vst-audio-field-label")
+                .querySelector(".vst-detail-field-label")
                 ?.textContent?.startsWith("Attach at Frame"),
         );
 

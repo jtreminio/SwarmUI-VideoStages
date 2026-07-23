@@ -1,10 +1,11 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
-import { buildGroup, sectionLabel } from "../detailWidgets";
+import { buildGroup } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
 import type { Clip, TimelineSelection } from "../types";
 import { disableCapabilityControls } from "./capabilityUi";
 import { buildClipColumn } from "./clipBasics";
 import type { DetailStripContext } from "./context";
+import { buildRefSection, GROUP_REF } from "./refPanel";
 import { buildRetakeSection } from "./retakePanel";
 import { buildSourceVideoSection } from "./sourceVideoPanel";
 import { buildStageParamsColumn } from "./stagePanel";
@@ -21,35 +22,41 @@ const GROUP_SOURCE = "vstdock_source";
  */
 export const buildClipBody = (
     context: DetailStripContext,
-    selection: Extract<TimelineSelection, { kind: "clip" }>,
+    selection: Extract<
+        TimelineSelection,
+        { kind: "clip" | "ref" | "ic-lora" | "retake" }
+    >,
     clips: Clip[],
 ): HTMLElement => {
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
-    const clip = clips[selection.clipIdx];
-    const stage = clip.stages[selection.stageIdx];
+    const { clipIdx } = selection;
+    const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
+    const clip = clips[clipIdx];
+    const stage = clip.stages[stageIdx];
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
 
-    body.appendChild(buildClipColumn(context, clip, selection.clipIdx));
-    const stages = document.createElement("div");
-    stages.className = "vst-detail-stages-wrap";
-    stages.append(
-        sectionLabel("Stages"),
-        buildStageRail(context, clip, selection.clipIdx, selection.stageIdx),
-    );
+    body.appendChild(buildClipColumn(context, clip, clipIdx));
+    let stageEditor: HTMLElement | undefined;
     if (stage) {
-        stages.appendChild(
-            buildStageParamsColumn(
-                context,
-                clip,
-                selection.clipIdx,
-                selection.stageIdx,
-                stage,
-                defaults,
-            ),
+        stageEditor = buildStageParamsColumn(
+            context,
+            clip,
+            clipIdx,
+            stageIdx,
+            stage,
+            defaults,
         );
-    } else {
+    }
+    const stages = buildStageRail(
+        context,
+        clip,
+        clipIdx,
+        stageIdx,
+        stageEditor,
+    );
+    if (!stage) {
         const note = document.createElement("p");
         note.className = "vst-detail-note vst-source-only-note";
         note.textContent =
@@ -59,7 +66,7 @@ export const buildClipBody = (
     body.appendChild(buildGroup(GROUP_STAGES, stages));
     const appendCapabilityGroup = (
         groupId: string,
-        feature: "icLora" | "sourceVideo" | "retake",
+        feature: "frameReferences" | "icLora" | "sourceVideo" | "retake",
         persisted: boolean,
         content: () => HTMLElement,
         removableSelectors: readonly string[],
@@ -75,6 +82,19 @@ export const buildClipBody = (
         body.appendChild(buildGroup(groupId, section));
     };
     appendCapabilityGroup(
+        GROUP_REF,
+        "frameReferences",
+        clip.refs.length > 0,
+        () =>
+            buildRefSection(
+                context,
+                clipIdx,
+                selection.kind === "ref" ? selection.refIdx : null,
+                clips,
+            ),
+        [],
+    );
+    appendCapabilityGroup(
         GROUP_ICLORA,
         "icLora",
         clip.icLoras.length > 0,
@@ -82,8 +102,9 @@ export const buildClipBody = (
             buildArchitectureIcLorasSection(
                 context,
                 clip,
-                selection.clipIdx,
+                clipIdx,
                 defaults,
+                selection.kind === "ic-lora" ? selection.entryIdx : null,
             ),
         [".vst-detail-delete"],
     );
@@ -91,14 +112,14 @@ export const buildClipBody = (
         GROUP_SOURCE,
         "sourceVideo",
         clip.sourceVideo !== null,
-        () => buildSourceVideoSection(context, clip, selection.clipIdx),
+        () => buildSourceVideoSection(context, clip, clipIdx),
         [".vst-detail-delete"],
     );
     appendCapabilityGroup(
         GROUP_RETAKE,
         "retake",
         clip.retake !== null,
-        () => buildRetakeSection(context, clip, selection.clipIdx),
+        () => buildRetakeSection(context, clip, clipIdx),
         [".vst-detail-delete"],
     );
     return body;

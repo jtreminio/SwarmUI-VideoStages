@@ -18,7 +18,6 @@ import { applyBackgroundImages } from "./timelineView/rendering";
 import {
     type RenderTimelineOptions,
     renderDiagnosticPanel,
-    renderExecutionSummary,
     renderTimelineHeader,
     wireTimelineToolbar,
     wireTimelineZoomWheel,
@@ -134,11 +133,10 @@ export const renderTimeline = (
         options,
     );
     const diagnostics = renderDiagnosticPanel(options?.diagnostics);
-    const executionSummary = renderExecutionSummary(options?.executionSummary);
 
     if (clips.length === 0) {
         body.innerHTML =
-            `${header}${executionSummary}${diagnostics}<div class="vst-empty">` +
+            `${header}${diagnostics}<div class="vst-empty">` +
             `<div class="vst-empty-icon" aria-hidden="true">🎬</div>` +
             `<div class="vst-empty-title">No clips yet.</div>` +
             `<div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div>` +
@@ -172,7 +170,7 @@ export const renderTimeline = (
     const audioRow = renderAudioTrackRow(clips, layouts, options?.capabilities);
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
     body.innerHTML =
-        `${header}${executionSummary}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +
+        `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +
         `<div class="vst-ruler-row">` +
         `<div class="vst-corner">Timeline</div>` +
         `<div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div>` +

@@ -1,16 +1,16 @@
 import {
-    buildAddButton,
     buildField,
-    buildInstanceRow,
     buildOptionSelect,
-    buildStackSection,
+    buildRepeatingEditor,
     type OptionSpec,
 } from "../detailWidgets";
 import { createEntityId } from "../identity";
+import { setSelection } from "../selection";
 import type {
     AudioTrack,
     AudioTrackSourceKind,
     AudioTrackSpan,
+    TimelineSelection,
     VideoStagesConfig,
 } from "../types";
 import type { DetailStripContext } from "./context";
@@ -125,33 +125,18 @@ const clipOptions = (
     return options;
 };
 
-const buildSpanRow = (
+const buildSpanEditor = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
     track: AudioTrack,
     span: AudioTrackSpan,
-    spanIndex: number,
 ): HTMLElement => {
     const trackId = track.id as string;
     const spanId = span.id as string;
-    const { row, fields } = buildInstanceRow({
-        rowClass: "vst-audio-track-span",
-        indexAttr: "data-vst-audio-span-index",
-        index: spanIndex,
-        active: false,
-        title: `Span ${spanIndex + 1}`,
-        deleteLabel: "Delete span",
-        onDelete: () => {
-            commitTrack(ctx, trackId, (nextTrack) => {
-                nextTrack.spans = nextTrack.spans.filter(
-                    (entry) => entry.id !== spanId,
-                );
-            });
-            ctx.render();
-        },
-        repoint: () => {},
-    });
-    row.dataset.vstAudioSpanId = spanId;
+    const fields = document.createElement("div");
+    fields.className =
+        "vst-detail-col vst-detail-instance-fields vst-audio-track-span";
+    fields.dataset.vstAudioSpanId = spanId;
 
     fields.append(
         buildField(
@@ -239,34 +224,21 @@ const buildSpanRow = (
                 "with the same first and last clip.",
         ),
     );
-    return row;
+    return fields;
 };
 
-const buildTrackRow = (
+const buildTrackEditor = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
     track: AudioTrack,
     trackIndex: number,
+    selectedSpanIndex: number | null,
 ): HTMLElement => {
     const trackId = track.id as string;
-    const { row, fields } = buildInstanceRow({
-        rowClass: "vst-audio-track",
-        indexAttr: "data-vst-audio-track-index",
-        index: trackIndex,
-        active: false,
-        title: `Track ${trackIndex + 1}`,
-        deleteLabel: "Delete track",
-        onDelete: () => {
-            ctx.commitState((next) => {
-                next.audioTracks = (next.audioTracks ?? []).filter(
-                    (entry) => entry.id !== trackId,
-                );
-            });
-            ctx.render();
-        },
-        repoint: () => {},
-    });
-    row.dataset.vstAudioTrackId = trackId;
+    const fields = document.createElement("div");
+    fields.className =
+        "vst-detail-col vst-detail-instance-fields vst-audio-track";
+    fields.dataset.vstAudioTrackId = trackId;
     fields.append(
         buildField(
             "Source kind",
@@ -311,71 +283,189 @@ const buildTrackRow = (
         );
     }
 
-    const spans = document.createElement("div");
-    spans.className = "vst-audio-track-spans";
-    for (let index = 0; index < track.spans.length; index++) {
-        spans.appendChild(
-            buildSpanRow(ctx, state, track, track.spans[index], index),
-        );
-    }
-    spans.appendChild(
-        buildAddButton("Add span", "vst-audio-track-add-span", () => {
-            const ownerId = state.clips[0]?.id ?? null;
-            commitTrack(ctx, trackId, (next) => {
-                next.spans.push({
-                    id: createEntityId("audio_span"),
-                    firstClipId: ownerId,
-                    lastClipId: ownerId,
-                    timelineStartSeconds: null,
-                    timelineLengthSeconds: null,
-                    sourceStartSeconds: 0,
-                    clipStartOffsetSeconds: null,
-                    clipLengthSeconds: null,
+    const activeSpanIndex =
+        track.spans.length === 0
+            ? null
+            : Math.max(
+                  0,
+                  Math.min(selectedSpanIndex ?? 0, track.spans.length - 1),
+              );
+    const spans = buildRepeatingEditor({
+        key: "audio-track-spans",
+        label: "Spans",
+        sectionClass: "vst-audio-track-spans",
+        items: track.spans.map((_, spanIndex) => ({
+            label: `S${spanIndex + 1}`,
+            focusKey: `audio-track-${trackIndex}-span-tab-${spanIndex}`,
+            title: `Edit span ${spanIndex + 1}`,
+            active: spanIndex === activeSpanIndex,
+            className: "vst-audio-track-span-tab",
+            onSelect: () =>
+                setSelection({
+                    kind: "audio-track-span",
+                    trackIdx: trackIndex,
+                    spanIdx: spanIndex,
+                }),
+            onDelete: () => {
+                commitTrack(ctx, trackId, (next) => {
+                    next.spans.splice(spanIndex, 1);
                 });
-            });
-            ctx.render();
-        }),
-    );
-    fields.appendChild(spans);
-    return row;
+                if (track.spans.length) {
+                    setSelection({
+                        kind: "audio-track-span",
+                        trackIdx: trackIndex,
+                        spanIdx: Math.min(spanIndex, track.spans.length - 1),
+                    });
+                } else {
+                    setSelection({ kind: "audio-track", trackIdx: trackIndex });
+                }
+                ctx.render();
+            },
+        })),
+        add: {
+            title: "Add a span to this audio track",
+            className: "vst-audio-track-add-span",
+            onClick: () => {
+                const ownerId = state.clips[0]?.id ?? null;
+                commitTrack(ctx, trackId, (next) => {
+                    next.spans.push({
+                        id: createEntityId("audio_span"),
+                        firstClipId: ownerId,
+                        lastClipId: ownerId,
+                        timelineStartSeconds: null,
+                        timelineLengthSeconds: null,
+                        sourceStartSeconds: 0,
+                        clipStartOffsetSeconds: null,
+                        clipLengthSeconds: null,
+                    });
+                });
+                setSelection({
+                    kind: "audio-track-span",
+                    trackIdx: trackIndex,
+                    spanIdx: track.spans.length - 1,
+                });
+                ctx.render();
+            },
+        },
+        remove: {
+            title:
+                activeSpanIndex === null
+                    ? "No span to delete"
+                    : `Delete span ${activeSpanIndex + 1}`,
+            className: "vst-audio-track-delete-span",
+        },
+        editor:
+            activeSpanIndex === null
+                ? undefined
+                : buildSpanEditor(
+                      ctx,
+                      state,
+                      track,
+                      track.spans[activeSpanIndex],
+                  ),
+    });
+    fields.appendChild(spans.section);
+    return fields;
 };
 
 export const buildAudioTracksPanel = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
+    selection: Extract<
+        TimelineSelection,
+        { kind: "none" | "audio-track" | "audio-track-span" }
+    > = { kind: "none" },
 ): HTMLElement => {
-    const { wrap, col } = buildStackSection(
-        "Planned multi-clip audio",
-        "vst-audio-tracks-col",
-    );
-    wrap.classList.add("vst-audio-tracks-panel");
-
+    const tracks = state.audioTracks ?? [];
+    const activeTrackIndex =
+        tracks.length === 0
+            ? null
+            : Math.max(
+                  0,
+                  Math.min(
+                      selection.kind === "audio-track" ||
+                          selection.kind === "audio-track-span"
+                          ? selection.trackIdx
+                          : 0,
+                      tracks.length - 1,
+                  ),
+              );
+    const selectedSpanIndex =
+        selection.kind === "audio-track-span" &&
+        selection.trackIdx === activeTrackIndex
+            ? selection.spanIdx
+            : null;
+    const built = buildRepeatingEditor({
+        key: "audio-tracks",
+        label: "Planned multi-clip audio",
+        sectionClass: "vst-audio-tracks-panel",
+        items: tracks.map((_, trackIndex) => ({
+            label: `T${trackIndex + 1}`,
+            focusKey: `audio-track-tab-${trackIndex}`,
+            title: `Edit audio track ${trackIndex + 1}`,
+            active: trackIndex === activeTrackIndex,
+            className: "vst-audio-track-tab",
+            onSelect: () =>
+                setSelection({ kind: "audio-track", trackIdx: trackIndex }),
+            onDelete: () => {
+                ctx.commitState((next) => {
+                    next.audioTracks?.splice(trackIndex, 1);
+                });
+                if (tracks.length) {
+                    setSelection({
+                        kind: "audio-track",
+                        trackIdx: Math.min(trackIndex, tracks.length - 1),
+                    });
+                } else {
+                    setSelection({ kind: "none" });
+                }
+                ctx.render();
+            },
+        })),
+        add: {
+            title: "Add a planned multi-clip audio track",
+            className: "vst-audio-track-add",
+            onClick: () => {
+                ctx.commitState((next) => {
+                    next.audioTracks ??= [];
+                    next.audioTracks.push({
+                        id: createEntityId("audio_track"),
+                        source: {
+                            kind: "External",
+                            reference: "",
+                            uploadedAudio: null,
+                        },
+                        spans: [],
+                    });
+                });
+                setSelection({
+                    kind: "audio-track",
+                    trackIdx: tracks.length - 1,
+                });
+                ctx.render();
+            },
+        },
+        remove: {
+            title:
+                activeTrackIndex === null
+                    ? "No audio track to delete"
+                    : `Delete audio track ${activeTrackIndex + 1}`,
+            className: "vst-audio-track-delete",
+        },
+        editor:
+            activeTrackIndex === null
+                ? undefined
+                : buildTrackEditor(
+                      ctx,
+                      state,
+                      tracks[activeTrackIndex],
+                      activeTrackIndex,
+                      selectedSpanIndex,
+                  ),
+    });
     const warning = document.createElement("div");
     warning.className = "vst-audio-tracks-planned-warning";
     warning.textContent = "Planned — runtime mixer not yet connected";
-    col.appendChild(warning);
-
-    for (let index = 0; index < (state.audioTracks ?? []).length; index++) {
-        col.appendChild(
-            buildTrackRow(ctx, state, (state.audioTracks ?? [])[index], index),
-        );
-    }
-    col.appendChild(
-        buildAddButton("Add track", "vst-audio-track-add", () => {
-            ctx.commitState((next) => {
-                next.audioTracks ??= [];
-                next.audioTracks.push({
-                    id: createEntityId("audio_track"),
-                    source: {
-                        kind: "External",
-                        reference: "",
-                        uploadedAudio: null,
-                    },
-                    spans: [],
-                });
-            });
-            ctx.render();
-        }),
-    );
-    return wrap;
+    built.list.before(warning);
+    return built.section;
 };

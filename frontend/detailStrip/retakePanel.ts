@@ -8,12 +8,12 @@ import {
 } from "../constants";
 import {
     appendHelp,
-    buildAddButton,
     buildField,
+    buildRepeatingEditor,
     buildSlider,
-    buildStackSection,
     clampStartLength,
 } from "../detailWidgets";
+import { setSelection } from "../selection";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
 
@@ -22,31 +22,64 @@ export const buildRetakeSection = (
     clip: Clip,
     clipIdx: number,
 ): HTMLElement => {
-    const { wrap, col } = buildStackSection("Retake", "vst-detail-retake-col");
-    const sectionLabel = wrap.querySelector<HTMLElement>(".vst-detail-sec");
-    if (sectionLabel) {
+    const retake = clip.retake;
+    const decision = context.capabilities().forClip(clip).decision("retake");
+    const col = document.createElement("div");
+    col.className = "vst-detail-col vst-detail-retake-col";
+    const buildSection = (): HTMLElement => {
+        const built = buildRepeatingEditor({
+            key: "retakes",
+            label: "Retake",
+            sectionClass: "vst-detail-retake-section",
+            listClass: "vst-detail-retake-rail",
+            items: retake
+                ? [
+                      {
+                          label: "RT",
+                          title: "Edit retake window",
+                          active: true,
+                          className: "vst-retake-tab",
+                          onSelect: () =>
+                              setSelection({ kind: "retake", clipIdx }),
+                          onDelete: () => context.removeRetake(clipIdx),
+                      },
+                  ]
+                : [],
+            add: {
+                title: retake
+                    ? "This clip already has a retake window"
+                    : decision.supported
+                      ? "Add a retake window"
+                      : decision.reason,
+                className: "vst-detail-add-retake",
+                disabled: !!retake || !decision.supported,
+                onClick: () => context.createRetake(clipIdx),
+            },
+            remove: {
+                title: retake
+                    ? "Delete the retake window"
+                    : "No retake window to delete",
+                className: "vst-detail-delete-retake",
+            },
+            editor: col,
+        });
         appendHelp(
-            sectionLabel,
-            wrap,
+            built.heading,
+            built.section,
             "Retake",
             "Regenerate just a time window of a base video, leaving the rest " +
                 "untouched — handy for fixing one bad stretch without redoing " +
                 "the whole clip.",
         );
-    }
-    const retake = clip.retake;
+        return built.section;
+    };
     if (!retake) {
         const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
+        hint.className = "vst-detail-field-hint";
         hint.textContent =
             "Regenerates a sub-range when refining a base video.";
-        col.append(
-            hint,
-            buildAddButton("Add retake", "vst-detail-add-retake", () =>
-                context.createRetake(clipIdx),
-            ),
-        );
-        return wrap;
+        col.appendChild(hint);
+        return buildSection();
     }
 
     const clipDuration = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
@@ -139,15 +172,5 @@ export const buildRetakeSection = (
         "Applies when refining a base video; audio inside the window regenerates with the frames.";
     col.appendChild(note);
 
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className =
-        "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
-    removeButton.textContent = "Remove retake";
-    removeButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        context.removeRetake(clipIdx);
-    });
-    col.appendChild(removeButton);
-    return wrap;
+    return buildSection();
 };

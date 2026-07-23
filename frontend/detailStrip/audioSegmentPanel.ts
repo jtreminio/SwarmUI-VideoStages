@@ -15,10 +15,10 @@ import {
 } from "../constants";
 import {
     buildField,
-    buildInstanceRow,
     buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
+    buildRepeatingEditor,
     buildSlider,
     clampStartLength,
 } from "../detailWidgets";
@@ -40,9 +40,8 @@ export const buildAudioSegmentSection = (
 ): HTMLElement => {
     const clip = clips[clipIdx];
     const segments = clip?.audioSegments ?? [];
-    const body = document.createElement("div");
-    body.className = "vst-detail-instance-body vst-detail-seg-body";
     const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
+    const decision = ctx.capabilities().forClip(clip).decision("audioSegments");
 
     /**
      * Segments live on per-segment lanes and may overlap in time (the
@@ -63,57 +62,15 @@ export const buildAudioSegmentSection = (
             : segments.length > 0
               ? 0
               : null;
+    let editor: HTMLElement | undefined;
 
     if (activeSegmentIndex !== null) {
-        const rail = document.createElement("div");
-        rail.className = "vst-detail-segment-rail";
-        const railLabel = document.createElement("span");
-        railLabel.className = "vst-detail-segment-rail-label";
-        railLabel.textContent = "Segments";
-        const railList = document.createElement("div");
-        railList.className = "vst-detail-segment-rail-list";
-        segments.forEach((_, segIdx) => {
-            const tab = document.createElement("button");
-            tab.type = "button";
-            tab.className = "vst-chip vst-segment-tab";
-            if (segIdx === activeSegmentIndex) {
-                tab.classList.add("vst-segment-tab-active");
-            }
-            tab.setAttribute(
-                "aria-pressed",
-                `${segIdx === activeSegmentIndex}`,
-            );
-            tab.setAttribute(
-                "data-vst-focus-key",
-                `audio-segment-tab-${segIdx}`,
-            );
-            tab.textContent = `S${segIdx + 1}`;
-            tab.title = `Edit segment ${segIdx + 1} · Shift+click to delete`;
-            tab.addEventListener("click", (event) => {
-                if (event.shiftKey) {
-                    ctx.removeAudioSegment(clipIdx, segIdx);
-                } else {
-                    setSelection({ kind: "audio-segment", clipIdx, segIdx });
-                }
-            });
-            railList.appendChild(tab);
-        });
-        rail.append(railLabel, railList);
-        body.appendChild(rail);
-
         const segment = segments[activeSegmentIndex];
         const segIdx = activeSegmentIndex;
-        const { row, fields } = buildInstanceRow({
-            rowClass: "vst-detail-seg-row",
-            indexAttr: "data-vst-seg-index",
-            index: segIdx,
-            active: true,
-            title: `S${segIdx + 1}`,
-            deleteLabel: "Remove segment",
-            onDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
-            repoint: () =>
-                setSelection({ kind: "audio-segment", clipIdx, segIdx }),
-        });
+        const fields = document.createElement("div");
+        fields.className =
+            "vst-detail-col vst-detail-instance-fields vst-detail-seg-row";
+        fields.dataset.vstSegIndex = `${segIdx}`;
 
         // Source select: an upload, or an AceStepFun generated track ref.
         const segSourceRef =
@@ -293,14 +250,10 @@ export const buildAudioSegmentSection = (
                 "How long this segment plays on the clip, in seconds.",
             ),
         );
-        const decision = ctx
-            .capabilities()
-            .forClip(clip)
-            .decision("audioSegments");
         if (!decision.supported) {
-            disableCapabilityControls(row, decision, [".vst-detail-delete"]);
+            disableCapabilityControls(fields, decision);
         }
-        body.appendChild(row);
+        editor = fields;
     }
 
     const note = document.createElement("p");
@@ -309,7 +262,38 @@ export const buildAudioSegmentSection = (
         segments.length === 0
             ? "No overlay segments."
             : "Overlaid additively over the base audio; overlapping segments mix together.";
-    body.appendChild(note);
-
-    return body;
+    const built = buildRepeatingEditor({
+        key: "audio-segments",
+        label: "Segments",
+        sectionClass: "vst-detail-audio-segments",
+        listClass: "vst-detail-segment-rail",
+        items: segments.map((_, segIdx) => ({
+            label: `S${segIdx + 1}`,
+            focusKey: `audio-segment-tab-${segIdx}`,
+            title: `Edit segment ${segIdx + 1}`,
+            active: segIdx === activeSegmentIndex,
+            className: "vst-segment-tab",
+            onSelect: () =>
+                setSelection({ kind: "audio-segment", clipIdx, segIdx }),
+            onShiftDelete: () => ctx.removeAudioSegment(clipIdx, segIdx),
+        })),
+        add: {
+            title: decision.supported
+                ? "Overlay an extra audio piece on this clip"
+                : decision.reason,
+            className: "vst-detail-add-segment",
+            disabled: !decision.supported,
+            onClick: () => ctx.addAudioSegment(clipIdx),
+        },
+        remove: {
+            title:
+                activeSegmentIndex === null
+                    ? "No audio segment to delete"
+                    : `Delete audio segment ${activeSegmentIndex + 1}`,
+            className: "vst-detail-delete-segment",
+        },
+        editor,
+    });
+    built.section.appendChild(note);
+    return built.section;
 };

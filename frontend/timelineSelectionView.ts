@@ -14,10 +14,16 @@ export const applySelectionHighlight = (body: HTMLElement): void => {
     for (const el of body.querySelectorAll(`.${SELECTED}`)) {
         el.classList.remove(SELECTED);
     }
-    if (sel.kind !== "clip") {
+    if (sel.kind !== "clip" && sel.kind !== "ic-lora") {
         for (const el of body.querySelectorAll(`.${REGION_SELECTED}`)) {
             el.classList.remove(REGION_SELECTED);
         }
+    }
+    if (sel.kind === "ic-lora") {
+        body.querySelector(
+            `.vst-region[data-clip-idx="${sel.clipIdx}"]`,
+        )?.classList.add(REGION_SELECTED);
+        return;
     }
     let selector: string | null = null;
     switch (sel.kind) {

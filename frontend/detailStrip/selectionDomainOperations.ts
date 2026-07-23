@@ -11,13 +11,20 @@ import {
     AUDIO_SEGMENT_MIN_LENGTH,
     AUDIO_SEGMENT_VOLUME_DEFAULT,
     clamp,
+    PROMPT_WINDOW_DEFAULT_DURATION,
+    PROMPT_WINDOW_MIN_DURATION,
     RETAKE_DEFAULT_DURATION,
     RETAKE_MIN_DURATION,
     RETAKE_STRENGTH_DEFAULT,
 } from "../constants";
 import { IC_LORA_STAGE_ALL } from "../icLoraAuthoring";
 import { createEntityId } from "../identity";
-import { buildDefaultStage, removeRefAt } from "../normalization";
+import {
+    appendRefToClip,
+    buildDefaultRef,
+    buildDefaultStage,
+    removeRefAt,
+} from "../normalization";
 import { dispatchDocumentCommand, getTimelineStore } from "../persistence";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import { setSelection } from "../selection";
@@ -30,7 +37,9 @@ export type StructuralCommit = (
 ) => void;
 
 export interface DetailSelectionDomainOperations {
+    addRefEntry(clipIdx: number): void;
     deleteRefEntry(clipIdx: number, refIdx: number): void;
+    addPromptWindow(clipIdx: number): void;
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
     createRetake(clipIdx: number): void;
     removeRetake(clipIdx: number): void;
@@ -76,6 +85,81 @@ export const createDetailSelectionDomainOperations = (
             (index) => ({ kind: "ref", clipIdx, refIdx: index }),
             { kind: "clip", clipIdx, stageIdx: 0 },
         );
+    };
+
+    const addRefEntry = (clipIdx: number): void => {
+        structuralCommit((clips) => {
+            const clip = clips[clipIdx];
+            if (
+                !clip ||
+                !getCapabilities().forClip(clip).decision("frameReferences")
+                    .supported
+            ) {
+                return null;
+            }
+            appendRefToClip(clip, buildDefaultRef());
+            return {
+                kind: "ref",
+                clipIdx,
+                refIdx: clip.refs.length - 1,
+            };
+        });
+    };
+
+    const addPromptWindow = (clipIdx: number): void => {
+        structuralCommit((clips) => {
+            const clip = clips[clipIdx];
+            if (
+                !clip ||
+                !getCapabilities().forClip(clip).decision("promptRelay")
+                    .supported
+            ) {
+                return null;
+            }
+            const clipDuration = Math.max(0, clip.duration || 0);
+            const windows = [...(clip.promptWindows ?? [])].sort(
+                (a, b) => a.start - b.start,
+            );
+            let start = 0;
+            let end = clipDuration;
+            for (const window of windows) {
+                const windowStart = clamp(window.start, 0, clipDuration);
+                if (windowStart - start >= PROMPT_WINDOW_MIN_DURATION) {
+                    end = windowStart;
+                    break;
+                }
+                start = Math.max(
+                    start,
+                    clamp(window.start + window.duration, 0, clipDuration),
+                );
+            }
+            if (end === clipDuration) {
+                const next = windows.find(
+                    (window) =>
+                        window.start >= start + PROMPT_WINDOW_MIN_DURATION,
+                );
+                if (next) {
+                    end = clamp(next.start, start, clipDuration);
+                }
+            }
+            if (end - start < PROMPT_WINDOW_MIN_DURATION) {
+                return null;
+            }
+            const window = {
+                prompt: "",
+                start: roundToTenth(start),
+                duration: roundToTenth(
+                    Math.min(PROMPT_WINDOW_DEFAULT_DURATION, end - start),
+                ),
+            };
+            clip.promptWindows.push(window);
+            clip.promptWindows.sort((a, b) => a.start - b.start);
+            return {
+                kind: "prompt-minor",
+                clipIdx,
+                windowIdx: clip.promptWindows.indexOf(window),
+            };
+        });
     };
 
     const deleteWindowEntry = (clipIdx: number, windowIdx: number): void => {
@@ -330,7 +414,9 @@ export const createDetailSelectionDomainOperations = (
     };
 
     return {
+        addRefEntry,
         deleteRefEntry,
+        addPromptWindow,
         deleteWindowEntry,
         createRetake,
         removeRetake,

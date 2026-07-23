@@ -27,6 +27,7 @@ import {
 } from "../persistence";
 import { createTimelineHistory } from "../timelineHistory";
 import type { DetailStripContext } from "./context";
+import { buildStageLorasSection } from "./stageLorasPanel";
 import { buildStageParamsColumn } from "./stagePanel";
 
 const catalog = (): ArchitectureModelCatalog => {
@@ -50,7 +51,9 @@ const context = (
     buildClampedNumber: () => document.createElement("input"),
     structuralCommit: jest.fn(),
     render: jest.fn(),
+    addRefEntry: jest.fn(),
     deleteRefEntry: jest.fn(),
+    addPromptWindow: jest.fn(),
     deleteWindowEntry: jest.fn(),
     createRetake: jest.fn(),
     removeRetake: jest.fn(),
@@ -100,6 +103,15 @@ describe("stage architecture model filtering", () => {
             0,
             stage,
             testRootDefaults(models),
+        );
+        column.appendChild(
+            buildStageLorasSection(
+                context(models),
+                0,
+                0,
+                stage,
+                testRootDefaults(models),
+            ),
         );
         const option = (value: string) =>
             Array.from(column.querySelectorAll("option")).find(

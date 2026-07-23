@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
-import { projectVideoExecutionPath } from "./executionPath";
 import {
     audioSegmentWaveBarHeights,
     clampPxPerSecond,
@@ -851,6 +850,7 @@ describe("renderTimeline (DOM)", () => {
         expect(videoIdx).toBeGreaterThanOrEqual(0);
         expect(refsIdx).toBe(videoIdx + 1);
         expect(audioIdx).toBe(refsIdx + 1);
+        expect(body.querySelector(".vst-track-refs .vst-head-tags")).toBeNull();
     });
 
     it("renders one References mark per ref, flagging primary (cover) and from-end refs", () => {
@@ -1016,29 +1016,5 @@ describe("authoring diagnostics", () => {
             "Retake and references cannot run together.",
         );
         expect(item?.className).toContain("vst-diagnostic-error");
-    });
-});
-
-describe("execution path summary", () => {
-    it("renders the compact nontechnical projection above the tracks", () => {
-        const clip = minimalClip();
-        const summary = projectVideoExecutionPath({
-            width: 1280,
-            height: 720,
-            fps: 24,
-            dimsExplicit: false,
-            fpsExplicit: false,
-            clips: [clip],
-        });
-
-        renderTimeline(document.body, [clip], { executionSummary: summary });
-
-        const panel = document.querySelector<HTMLElement>(
-            "[data-vst-execution-summary]",
-        );
-        expect(panel?.textContent).toContain("Execution path");
-        expect(panel?.textContent).toContain(
-            "VideoStages → LTX Video 2.3 → Text-to-video · Single clip · single stage",
-        );
     });
 });

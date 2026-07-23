@@ -26,10 +26,10 @@ const fieldControl = <T extends HTMLElement>(
     selector: string,
 ): T => {
     const field = Array.from(
-        root.querySelectorAll<HTMLElement>(".vst-audio-field"),
+        root.querySelectorAll<HTMLElement>(".vst-detail-field"),
     ).find(
         (entry) =>
-            entry.querySelector(".vst-audio-field-label")?.textContent ===
+            entry.querySelector(".vst-detail-field-label")?.textContent ===
             label,
     );
     const control = field?.querySelector<T>(selector);
@@ -153,12 +153,12 @@ describe("planned multi-clip audio tracks panel", () => {
             ],
         });
 
-        spanRow
-            .querySelector<HTMLButtonElement>(".vst-detail-instance-delete")
-            ?.click();
+        host.querySelector<HTMLButtonElement>(
+            ".vst-audio-track-delete-span",
+        )?.click();
         expect(state.audioTracks?.[0].spans).toEqual([]);
         host.querySelector<HTMLButtonElement>(
-            ".vst-audio-track > .vst-detail-instance-head .vst-detail-instance-delete",
+            ".vst-audio-track-delete",
         )?.click();
         expect(state.audioTracks).toEqual([]);
         expect(renderSpy).toHaveBeenCalledTimes(5);

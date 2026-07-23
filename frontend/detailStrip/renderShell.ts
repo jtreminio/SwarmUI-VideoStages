@@ -1,5 +1,4 @@
 import { getVideoStagesHostBridge } from "../host";
-import { isSameSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import type { DetailStripContext } from "./context";
 import type { DetailFocusSession } from "./focusSession";
@@ -14,6 +13,7 @@ export const renderDetailShell = (options: {
     clips: Clip[];
     selection: TimelineSelection;
     previousSelection: TimelineSelection | null;
+    revealSelection: boolean;
     collapsed: boolean;
     clearSelection: () => void;
     toggleCollapsed: () => void;
@@ -52,26 +52,30 @@ export const renderDetailShell = (options: {
         newBody.scrollTop = savedScroll;
     }
 
-    if (
-        options.selection.kind === "retake" &&
-        !options.collapsed &&
-        !(
-            options.previousSelection &&
-            isSameSelection(options.selection, options.previousSelection)
-        )
-    ) {
-        const active = document.activeElement;
-        const retakeColumn = options.detail.querySelector<HTMLElement>(
-            ".vst-detail-retake-col",
-        );
-        if (
-            !(
-                active instanceof HTMLElement && options.detail.contains(active)
-            ) &&
-            retakeColumn &&
-            typeof retakeColumn.scrollIntoView === "function"
-        ) {
-            retakeColumn.scrollIntoView({ block: "nearest" });
+    if (options.revealSelection && !options.collapsed) {
+        const key =
+            options.selection.kind === "ref"
+                ? "references"
+                : options.selection.kind === "audio-segment"
+                  ? "audio-segments"
+                  : options.selection.kind === "audio-track"
+                    ? "audio-tracks"
+                    : options.selection.kind === "audio-track-span"
+                      ? "audio-track-spans"
+                      : options.selection.kind === "prompt-minor"
+                        ? "relay-prompts"
+                        : options.selection.kind === "ic-lora"
+                          ? "ic-loras"
+                          : options.selection.kind === "retake"
+                            ? "retakes"
+                            : null;
+        const target = key
+            ? options.detail.querySelector<HTMLElement>(
+                  `[data-vst-repeater-key="${key}"]`,
+              )
+            : null;
+        if (target && typeof target.scrollIntoView === "function") {
+            target.scrollIntoView({ block: "nearest" });
         }
     }
     if (!options.collapsed) {

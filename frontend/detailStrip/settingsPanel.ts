@@ -22,6 +22,7 @@ import {
 } from "../dimensionPresets";
 import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
+import type { TimelineSelection } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
 
@@ -39,7 +40,13 @@ const clampDimension = (value: number): number =>
 const clampFps = (value: number): number =>
     clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
 
-export const buildSettingsBody = (ctx: DetailStripContext): HTMLElement => {
+export const buildSettingsBody = (
+    ctx: DetailStripContext,
+    selection: Extract<
+        TimelineSelection,
+        { kind: "none" | "audio-track" | "audio-track-span" }
+    > = { kind: "none" },
+): HTMLElement => {
     const state = getState();
     const defaults = getRootDefaults();
     const core = {
@@ -193,6 +200,6 @@ export const buildSettingsBody = (ctx: DetailStripContext): HTMLElement => {
         fpsField.classList.add("vst-audio-disabled");
     }
     body.appendChild(fpsField);
-    body.appendChild(buildAudioTracksPanel(ctx, state));
+    body.appendChild(buildAudioTracksPanel(ctx, state, selection));
     return wrapForm(GROUP_SETTINGS, body);
 };

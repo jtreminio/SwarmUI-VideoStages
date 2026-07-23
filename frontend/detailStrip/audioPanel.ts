@@ -8,10 +8,10 @@ import {
 import {
     buildCheckbox,
     buildField,
+    buildGroup,
     buildMediaPickRow,
     buildOptionSelect,
     sectionLabel,
-    wrapForm,
 } from "../detailWidgets";
 import type { Clip, TimelineSelection } from "../types";
 import { buildAudioSegmentSection } from "./audioSegmentPanel";
@@ -21,7 +21,7 @@ import {
 } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-const GROUP_AUDIO = "vstdock_audio";
+const GROUP_AUDIO_SEGMENTS = "vstdock_audiosegments";
 
 export const buildAudioBody = (
     ctx: DetailStripContext,
@@ -76,8 +76,11 @@ export const buildAudioBody = (
     };
 
     const body = document.createElement("div");
-    body.className = "vst-detail-form-body";
-    body.appendChild(sectionLabel("Base audio"));
+    body.className = "vst-detail-body vst-detail-audio-body";
+    const base = document.createElement("div");
+    base.className = "vst-detail-col vst-detail-audio";
+    base.appendChild(sectionLabel("Base audio"));
+    body.appendChild(base);
 
     const select = buildOptionSelect(
         options.map((o) => ({ value: o.value, label: o.label })),
@@ -89,7 +92,7 @@ export const buildAudioBody = (
             ctx.render();
         },
     );
-    body.appendChild(
+    base.appendChild(
         buildField(
             "Audio Source",
             select,
@@ -116,7 +119,7 @@ export const buildAudioBody = (
                 (reuseDecision.reason ? ` ${reuseDecision.reason}` : ""),
         },
     );
-    body.appendChild(reuseRow);
+    base.appendChild(reuseRow);
     if (clip.reuseAudio && !reuseDecision.supported) {
         reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
         const remove = document.createElement("button");
@@ -148,7 +151,7 @@ export const buildAudioBody = (
                 "known length.",
         },
     );
-    body.appendChild(lengthRow);
+    base.appendChild(lengthRow);
 
     const saveRow = buildCheckbox(
         "Save Audio Track",
@@ -165,10 +168,10 @@ export const buildAudioBody = (
                 "video. Only available for generated (AceStep) audio.",
         },
     );
-    body.appendChild(saveRow);
+    base.appendChild(saveRow);
 
     if (source === AUDIO_SOURCE_UPLOAD) {
-        body.appendChild(
+        base.appendChild(
             buildMediaPickRow(
                 "Audio Upload",
                 "audio/*",
@@ -190,7 +193,7 @@ export const buildAudioBody = (
         );
     }
     if (!audioDecision.supported) {
-        disableCapabilityControls(body, audioDecision, [
+        disableCapabilityControls(base, audioDecision, [
             ".vst-remove-unsupported-audio",
         ]);
         const remove = document.createElement("button");
@@ -212,35 +215,19 @@ export const buildAudioBody = (
                 return "render";
             });
         });
-        body.appendChild(remove);
+        base.appendChild(remove);
     }
 
-    body.appendChild(sectionLabel("Audio segments"));
-    const segCount = clip.audioSegments?.length ?? 0;
-    if (segmentDecision.supported) {
-        const addSegment = document.createElement("button");
-        addSegment.type = "button";
-        addSegment.className =
-            "basic-button small-button vst-detail-add-segment";
-        addSegment.textContent = "+ Add Segment";
-        addSegment.title =
-            "Overlay an extra uploaded audio piece on this clip's audio lane";
-        addSegment.addEventListener("click", (event) => {
-            event.preventDefault();
-            ctx.addAudioSegment(clipIdx);
-        });
-        body.appendChild(addSegment);
-    } else if (segCount > 0) {
-        body.appendChild(buildCapabilityNotice(segmentDecision));
-    }
-    body.appendChild(
-        buildAudioSegmentSection(
-            ctx,
-            clipIdx,
-            sel.kind === "audio-segment" ? sel.segIdx : null,
-            clips,
-        ),
+    const segments = buildAudioSegmentSection(
+        ctx,
+        clipIdx,
+        sel.kind === "audio-segment" ? sel.segIdx : null,
+        clips,
     );
+    if (!segmentDecision.supported && (clip.audioSegments?.length ?? 0) > 0) {
+        segments.appendChild(buildCapabilityNotice(segmentDecision));
+    }
+    body.appendChild(buildGroup(GROUP_AUDIO_SEGMENTS, segments));
 
-    return wrapForm(GROUP_AUDIO, body);
+    return body;
 };

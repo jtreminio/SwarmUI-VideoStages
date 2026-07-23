@@ -1,4 +1,6 @@
 import type { DetailStripContext } from "../detailStrip/context";
+import { buildRepeatingEditor } from "../detailWidgets";
+import { setSelection } from "../selection";
 import type { Clip, RootDefaults } from "../types";
 import { buildIcLorasSection as buildLtx2IcLorasSection } from "./ltx2/icLoraPanel";
 
@@ -9,6 +11,7 @@ interface ArchitectureAuthoringPanel {
         clip: Clip,
         clipIdx: number,
         defaults: RootDefaults,
+        selectedEntryIdx?: number | null,
     ): HTMLElement;
 }
 
@@ -20,38 +23,77 @@ const persistedIcLoraRemovalPanel = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
+    selectedEntryIdx: number | null,
 ): HTMLElement => {
-    const section = document.createElement("section");
-    section.className = "vst-detail-col vst-detail-iclora-col";
-    const heading = document.createElement("div");
-    heading.className = "vst-detail-sec";
-    heading.textContent = "Persisted IC-LoRAs";
+    const entryIdx =
+        clip.icLoras.length === 0
+            ? null
+            : Math.max(
+                  0,
+                  Math.min(selectedEntryIdx ?? 0, clip.icLoras.length - 1),
+              );
+    const content = document.createElement("div");
+    content.className = "vst-detail-col vst-detail-iclora-col";
     const note = document.createElement("p");
     note.className = "vst-detail-note";
     note.textContent =
         "This architecture has no IC-LoRA editor. Existing entries remain available for removal.";
-    section.append(heading, note);
-    clip.icLoras.forEach((entry, entryIdx) => {
-        const row = document.createElement("div");
-        row.className = "vst-detail-instance vst-detail-iclora";
+    content.appendChild(note);
+    if (entryIdx !== null) {
+        const entry = clip.icLoras[entryIdx];
         const label = document.createElement("span");
         label.textContent = entry.lora || `IC-LoRA ${entryIdx + 1}`;
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "basic-button small-button vst-detail-delete";
-        remove.textContent = "Remove";
-        remove.addEventListener("click", () => {
-            context.structuralCommit((clips) => {
-                const target = clips[clipIdx];
-                if (!target?.icLoras[entryIdx]) return null;
-                target.icLoras.splice(entryIdx, 1);
-                return "render";
-            });
-        });
-        row.append(label, remove);
-        section.appendChild(row);
-    });
-    return section;
+        content.appendChild(label);
+    }
+    return buildRepeatingEditor({
+        key: "ic-loras",
+        label: "Persisted IC-LoRAs",
+        sectionClass: "vst-detail-iclora-section",
+        listClass: "vst-detail-iclora-rail",
+        items: clip.icLoras.map((_, index) => ({
+            label: `IC${index + 1}`,
+            focusKey: `ic-lora-tab-${index}`,
+            title: `Inspect persisted IC-LoRA ${index + 1}`,
+            active: index === entryIdx,
+            onSelect: () =>
+                setSelection({
+                    kind: "ic-lora",
+                    clipIdx,
+                    entryIdx: index,
+                }),
+            onDelete: () => {
+                context.structuralCommit((clips) => {
+                    const target = clips[clipIdx];
+                    if (!target?.icLoras[index]) return null;
+                    target.icLoras.splice(index, 1);
+                    return target.icLoras.length > 0
+                        ? {
+                              kind: "ic-lora",
+                              clipIdx,
+                              entryIdx: Math.min(
+                                  index,
+                                  target.icLoras.length - 1,
+                              ),
+                          }
+                        : { kind: "clip", clipIdx, stageIdx: 0 };
+                });
+            },
+        })),
+        add: {
+            title: "This architecture has no IC-LoRA editor",
+            className: "vst-detail-add-iclora",
+            disabled: true,
+            onClick: () => {},
+        },
+        remove: {
+            title:
+                entryIdx === null
+                    ? "No IC-LoRA to delete"
+                    : `Delete persisted IC-LoRA ${entryIdx + 1}`,
+            className: "vst-detail-delete-iclora",
+        },
+        editor: content,
+    }).section;
 };
 
 export const buildArchitectureIcLorasSection = (
@@ -59,8 +101,15 @@ export const buildArchitectureIcLorasSection = (
     clip: Clip,
     clipIdx: number,
     defaults: RootDefaults,
+    selectedEntryIdx: number | null = null,
 ): HTMLElement =>
     panels
         .get(clip.architecture)
-        ?.buildIcLorasSection(context, clip, clipIdx, defaults) ??
-    persistedIcLoraRemovalPanel(context, clip, clipIdx);
+        ?.buildIcLorasSection(
+            context,
+            clip,
+            clipIdx,
+            defaults,
+            selectedEntryIdx,
+        ) ??
+    persistedIcLoraRemovalPanel(context, clip, clipIdx, selectedEntryIdx);

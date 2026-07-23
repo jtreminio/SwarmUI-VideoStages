@@ -85,5 +85,5 @@ export const renderTrackHead = (
     `<div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div>` +
     `<div class="vst-track-label"><strong>${title}</strong></div>` +
     `</div>` +
-    `<div class="vst-head-tags">${tags}</div>` +
+    (tags ? `<div class="vst-head-tags">${tags}</div>` : "") +
     `</div>`;

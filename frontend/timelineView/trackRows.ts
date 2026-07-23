@@ -403,15 +403,7 @@ export const renderReferencesTrackRow = (
         .join("");
     return (
         `<div class="vst-track-row vst-track-refs">` +
-        renderTrackHead(
-            "vst-track-icon-refs",
-            "⧉",
-            "References",
-            headTag("refs", "Refs", {
-                active: clips.some((clip) => (clip.refs?.length ?? 0) > 0),
-                muted: true,
-            }),
-        ) +
+        renderTrackHead("vst-track-icon-refs", "⧉", "References", "") +
         `<div class="vst-track-cell">${lanes}</div>` +
         `</div>`
     );

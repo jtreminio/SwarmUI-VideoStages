@@ -1,6 +1,4 @@
-import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
-import { reconcileSourcedClipIdentity } from "../architectures/policy";
-import { buildCheckbox, buildSlider, tagFocus } from "../detailWidgets";
+import { buildSlider, tagFocus } from "../detailWidgets";
 import type { Clip, RootDefaults, Stage } from "../types";
 import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
@@ -75,45 +73,8 @@ export const buildStageParamsColumn = (
         );
     const fields = document.createElement("div");
     fields.className = "vst-detail-fields";
-    const applyMutedStyle = (): void => {
-        fields.classList.toggle(
-            "vst-stage-fields-muted",
-            stage.skipped === true,
-        );
-    };
-    const syncRailChip = (skipped: boolean): void => {
-        context
-            .getDockEl()
-            ?.querySelector<HTMLElement>(
-                `.vst-detail-rail-list .vst-stage-tab:nth-child(${stageIdx + 1})`,
-            )
-            ?.classList.toggle("vst-stage-tab-skipped", skipped);
-    };
-
-    column.appendChild(
-        buildCheckbox("Skip this stage", stage.skipped === true, (value) => {
-            stage.skipped = value;
-            applyMutedStyle();
-            syncRailChip(value);
-            context.commit((clips) => {
-                const targetClip = clips[clipIdx];
-                const target = targetClip?.stages[stageIdx];
-                if (!targetClip || !target) return;
-                target.skipped = value;
-                reconcileSourcedClipIdentity(
-                    targetClip,
-                    context.capabilities().catalog,
-                );
-                reconcileArchitectureIncomingIcLoraDrives(
-                    clips,
-                    context.generatedEntryMode(),
-                );
-            });
-            context.render();
-        }),
-    );
     column.appendChild(fields);
-    applyMutedStyle();
+    fields.classList.toggle("vst-stage-fields-muted", stage.skipped === true);
 
     const bindings: StagePanelBindings = {
         context,
@@ -153,6 +114,7 @@ export const buildStageParamsColumn = (
         }
         fields.appendChild(loras);
     }
+
     if (sourcedStage0) {
         const note = document.createElement("p");
         note.className = "vst-detail-note vst-stage-passthrough-note";

@@ -5,7 +5,12 @@ let selection: TimelineSelection = NO_SELECTION;
 const selectionSubscribers = new Set<(sel: TimelineSelection) => void>();
 
 const clipIdxOf = (sel: TimelineSelection): number | null =>
-    sel.kind === "none" || sel.kind === "boundary" ? null : sel.clipIdx;
+    sel.kind === "none" ||
+    sel.kind === "boundary" ||
+    sel.kind === "audio-track" ||
+    sel.kind === "audio-track-span"
+        ? null
+        : sel.clipIdx;
 
 const sameSelection = (a: TimelineSelection, b: TimelineSelection): boolean => {
     if (a.kind !== b.kind) {
@@ -20,6 +25,20 @@ const sameSelection = (a: TimelineSelection, b: TimelineSelection): boolean => {
             b.kind === "boundary" &&
             a.leftClipIdx === b.leftClipIdx
         );
+    }
+    if (a.kind === "audio-track" && b.kind === "audio-track") {
+        return a.trackIdx === b.trackIdx;
+    }
+    if (a.kind === "audio-track-span" && b.kind === "audio-track-span") {
+        return a.trackIdx === b.trackIdx && a.spanIdx === b.spanIdx;
+    }
+    if (
+        a.kind === "audio-track" ||
+        b.kind === "audio-track" ||
+        a.kind === "audio-track-span" ||
+        b.kind === "audio-track-span"
+    ) {
+        return false;
     }
     if (a.clipIdx !== clipIdxOf(b)) {
         return false;
@@ -52,6 +71,19 @@ export const setSelection = (next: TimelineSelection): void => {
     if (sameSelection(selection, next)) {
         return;
     }
+    selection = next;
+    for (const cb of [...selectionSubscribers]) {
+        try {
+            cb(selection);
+        } catch {}
+    }
+};
+
+/**
+ * Select and notify even when the same item is activated again. Timeline marks
+ * use this when activation should also reveal the owning sidebar repeater.
+ */
+export const activateSelection = (next: TimelineSelection): void => {
     selection = next;
     for (const cb of [...selectionSubscribers]) {
         try {

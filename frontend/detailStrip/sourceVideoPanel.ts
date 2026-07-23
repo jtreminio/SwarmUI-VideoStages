@@ -129,7 +129,7 @@ export const buildSourceVideoSection = (
     );
     if (!source) {
         const hint = document.createElement("small");
-        hint.className = "vst-audio-field-hint";
+        hint.className = "vst-detail-field-hint";
         hint.textContent =
             "Use an existing video file as this clip instead of generating it.";
         col.appendChild(hint);
@@ -137,7 +137,7 @@ export const buildSourceVideoSection = (
     }
 
     const info = document.createElement("small");
-    info.className = "vst-audio-field-hint";
+    info.className = "vst-detail-field-hint";
     info.textContent = `Detected: ${
         source.fps > 0 ? `${source.fps} fps` : "unknown fps"
     } · ${

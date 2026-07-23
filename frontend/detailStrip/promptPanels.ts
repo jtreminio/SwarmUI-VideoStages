@@ -1,5 +1,11 @@
-import { PROMPT_WINDOW_MIN_DURATION } from "../constants";
-import { buildField, buildTextarea, wrapForm } from "../detailWidgets";
+import { clamp, PROMPT_WINDOW_MIN_DURATION } from "../constants";
+import {
+    buildField,
+    buildGroup,
+    buildRepeatingEditor,
+    buildTextarea,
+    sectionLabel,
+} from "../detailWidgets";
 import {
     applyPromptWindowBegin,
     applyPromptWindowEnd,
@@ -11,214 +17,237 @@ import { gridCeil, gridFloor, roundToTenth } from "../utils";
 import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-const GROUP_PROMPTMAJOR = "vstdock_promptmajor";
-const GROUP_PROMPTMINOR = "vstdock_promptminor";
+const GROUP_PROMPTS = "vstdock_prompts";
 
-export const buildPromptMajorBody = (
+type PromptSelection = Extract<
+    TimelineSelection,
+    { kind: "prompt-major" | "prompt-minor" }
+>;
+
+const buildMajorPromptSection = (
     ctx: DetailStripContext,
-    sel: Extract<TimelineSelection, { kind: "prompt-major" }>,
-    clips: Clip[],
+    clip: Clip,
+    clipIdx: number,
 ): HTMLElement => {
-    const { clipIdx } = sel;
-    const body = document.createElement("div");
-    body.className = "vst-detail-form-body vst-detail-prompt-body";
-    body.appendChild(
+    const section = document.createElement("div");
+    section.className =
+        "vst-detail-col vst-detail-prompt-major vst-detail-prompt-body";
+    section.appendChild(sectionLabel("Major Prompt"));
+    section.appendChild(
         buildTextarea(
-            clips[clipIdx].prompt ?? "",
+            clip.prompt ?? "",
             "Clip prompt (blank inherits the global prompt)…",
             "prompt-major",
             (value) => {
-                ctx.debouncedCommit("prompt-major", (cs) => {
-                    const c = cs[clipIdx];
-                    if (c) {
-                        c.prompt = value.trim();
+                ctx.debouncedCommit("prompt-major", (clips) => {
+                    const target = clips[clipIdx];
+                    if (target) {
+                        target.prompt = value.trim();
                     }
                 });
             },
         ),
     );
-    const decision = ctx
-        .capabilities()
-        .forClip(clips[clipIdx])
-        .decision("majorPrompt");
+    const decision = ctx.capabilities().forClip(clip).decision("majorPrompt");
     if (!decision.supported) {
-        disableCapabilityControls(body, decision);
-        if (clips[clipIdx].prompt.trim()) {
+        disableCapabilityControls(section, decision);
+        if (clip.prompt.trim()) {
             const clear = document.createElement("button");
             clear.type = "button";
             clear.className =
                 "basic-button small-button vst-remove-unsupported-prompt";
             clear.textContent = "Remove unsupported clip prompt";
             clear.addEventListener("click", () => {
-                ctx.commit((items) => {
-                    const clip = items[clipIdx];
-                    if (clip) {
-                        clip.prompt = "";
+                ctx.commit((clips) => {
+                    const target = clips[clipIdx];
+                    if (target) {
+                        target.prompt = "";
                     }
                 });
                 ctx.render();
             });
-            body.appendChild(clear);
+            section.appendChild(clear);
         }
     }
-    return wrapForm(GROUP_PROMPTMAJOR, body);
+    return section;
 };
 
-/**
- * Focusing another window's textarea re-points the selection so the timeline
- * highlight follows, without disrupting typing.
- */
-export const buildPromptMinorBody = (
+const buildRelayPromptSection = (
     ctx: DetailStripContext,
-    sel: Extract<TimelineSelection, { kind: "prompt-minor" }>,
+    clip: Clip,
+    clipIdx: number,
+    selectedWindowIdx: number | null,
+): HTMLElement => {
+    const windows = clip.promptWindows ?? [];
+    const decision = ctx.capabilities().forClip(clip).decision("promptRelay");
+    const activeWindowIdx =
+        windows.length === 0
+            ? null
+            : clamp(selectedWindowIdx ?? 0, 0, windows.length - 1);
+    const buildSection = (editor?: HTMLElement): HTMLElement =>
+        buildRepeatingEditor({
+            key: "relay-prompts",
+            label: "Relay Prompts",
+            sectionClass: "vst-detail-relay-section",
+            listClass: "vst-detail-relay-rail",
+            items: windows.map((window, index) => ({
+                label: `R${index + 1}`,
+                focusKey: `relay-tab-${index}`,
+                title: `Relay prompt ${roundToTenth(window.start)}–${roundToTenth(window.start + window.duration)} seconds`,
+                active: index === activeWindowIdx,
+                className: "vst-relay-tab",
+                onSelect: () =>
+                    setSelection({
+                        kind: "prompt-minor",
+                        clipIdx,
+                        windowIdx: index,
+                    }),
+                onShiftDelete: () => ctx.deleteWindowEntry(clipIdx, index),
+            })),
+            add: {
+                title: decision.supported
+                    ? "Add a relay prompt in the first available time window"
+                    : decision.reason,
+                className: "vst-detail-add-relay",
+                disabled: !decision.supported,
+                onClick: () => ctx.addPromptWindow(clipIdx),
+            },
+            remove: {
+                title:
+                    activeWindowIdx === null
+                        ? "No relay prompt to delete"
+                        : `Delete relay prompt ${activeWindowIdx + 1}`,
+                className: "vst-detail-delete-relay",
+            },
+            editor,
+        }).section;
+    if (activeWindowIdx === null) {
+        return buildSection();
+    }
+
+    const window = windows[activeWindowIdx];
+    const clipDuration = Math.max(
+        PROMPT_WINDOW_MIN_DURATION,
+        clip.duration || 0,
+    );
+    const editorSection = document.createElement("div");
+    editorSection.className =
+        "vst-detail-col vst-detail-prompt-body vst-detail-minor-window";
+    editorSection.setAttribute("data-vst-minor-window", `${activeWindowIdx}`);
+    const range = document.createElement("div");
+    range.className = "vst-detail-minor-range";
+    const bounds = promptWindowNeighborBounds(clip, activeWindowIdx);
+    const beginInput = ctx.buildClampedNumber({
+        key: `minor-${activeWindowIdx}-begin`,
+        value: roundToTenth(window.start),
+        min: bounds?.beginMin ?? 0,
+        max: gridFloor(Math.max(0, clipDuration - PROMPT_WINDOW_MIN_DURATION)),
+        step: 0.1,
+        readBack: (clips) => {
+            const target = clips[clipIdx]?.promptWindows?.[activeWindowIdx];
+            return target ? roundToTenth(target.start) : null;
+        },
+        mutate: (clips, value) => {
+            const target = clips[clipIdx];
+            if (target) {
+                applyPromptWindowBegin(target, activeWindowIdx, value);
+            }
+        },
+    });
+    range.appendChild(
+        buildField(
+            "Begin (s)",
+            beginInput,
+            undefined,
+            "When this relay prompt starts within the clip.",
+        ),
+    );
+    const endInput = ctx.buildClampedNumber({
+        key: `minor-${activeWindowIdx}-end`,
+        value: roundToTenth(window.start + window.duration),
+        min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
+        max: bounds?.endMax ?? clipDuration,
+        step: 0.1,
+        readBack: (clips) => {
+            const target = clips[clipIdx]?.promptWindows?.[activeWindowIdx];
+            return target ? roundToTenth(target.start + target.duration) : null;
+        },
+        mutate: (clips, value) => {
+            const target = clips[clipIdx];
+            if (target) {
+                applyPromptWindowEnd(target, activeWindowIdx, value);
+            }
+        },
+    });
+    range.appendChild(
+        buildField(
+            "End (s)",
+            endInput,
+            undefined,
+            "When this relay prompt ends. It cannot cross a neighbouring relay.",
+        ),
+    );
+    editorSection.appendChild(range);
+    const editor = buildTextarea(
+        window.prompt ?? "",
+        "Relay prompt for this window…",
+        `minor-${activeWindowIdx}`,
+        (value) => {
+            ctx.debouncedCommit(`minor-${activeWindowIdx}`, (clips) => {
+                const target = clips[clipIdx]?.promptWindows?.[activeWindowIdx];
+                if (target) {
+                    target.prompt = value.trim();
+                }
+            });
+        },
+    );
+    editor.addEventListener("focus", () => {
+        setSelection({
+            kind: "prompt-minor",
+            clipIdx,
+            windowIdx: activeWindowIdx,
+        });
+    });
+    editorSection.appendChild(editor);
+    if (!decision.supported) {
+        disableCapabilityControls(editorSection, decision);
+    }
+    return buildSection(editorSection);
+};
+
+/** Major and relay prompts are one clip-prompt sidebar with child relays. */
+export const buildPromptBody = (
+    ctx: DetailStripContext,
+    selection: PromptSelection,
     clips: Clip[],
 ): HTMLElement => {
-    const { clipIdx, windowIdx } = sel;
+    const clipIdx = selection.clipIdx;
     const clip = clips[clipIdx];
-    const windows = clip?.promptWindows ?? [];
-    const clipDur = Math.max(PROMPT_WINDOW_MIN_DURATION, clip?.duration || 0);
     const body = document.createElement("div");
-    body.className =
-        "vst-detail-form-body vst-detail-prompt-body vst-detail-minor-body";
-
-    windows.forEach((w, idx) => {
-        const row = document.createElement("div");
-        row.className = "vst-detail-minor-window";
-        row.setAttribute("data-vst-minor-window", `${idx}`);
-        if (idx === windowIdx) {
-            row.classList.add("vst-detail-minor-active");
-        }
-
-        const head = document.createElement("div");
-        head.className = "vst-detail-minor-head";
-        const title = document.createElement("span");
-        title.className = "vst-detail-minor-title";
-        title.textContent = `W${idx + 1}`;
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className =
-            "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-minor-delete";
-        del.textContent = "Delete";
-        del.title = "Delete this prompt window";
-        del.addEventListener("click", (event) => {
-            event.preventDefault();
-            ctx.deleteWindowEntry(clipIdx, idx);
-        });
-        head.append(title, del);
-        row.appendChild(head);
-
-        /**
-         * Begin/end are editable, reusing the timeline's edge-resize clamp:
-         * begin holds the end fixed, end holds the begin fixed, both stay in
-         * the clip, keep a minimum duration, and can't cross a neighbouring
-         * window (applyPromptWindowBegin/End). The inputs' min/max are the
-         * SAME neighbour-aware intervals, so spinner arrows stop AT the
-         * neighbour instead of running past and snapping back on commit.
-         * Distinct pending keys per edge per window; the commit repaints the
-         * on-track segment.
-         */
-        const range = document.createElement("div");
-        range.className = "vst-detail-minor-range";
-        const bounds = clip ? promptWindowNeighborBounds(clip, idx) : null;
-
-        /**
-         * The browser's number spinner steps on a grid anchored at the
-         * `min` attribute. A min of 0.25 puts whole-tenth values OFF the
-         * 0.1 grid, so a down-spin snaps to x.95 — which roundSeconds
-         * (half-up) rounds straight back to the original value: END could
-         * never decrease. Keep the attrs ON the 0.1 grid (min rounded up,
-         * max rounded down); the true 0.25-duration floor stays enforced
-         * by the commit clamp (applyPromptWindowBegin/End).
-         */
-        const beginInput = ctx.buildClampedNumber({
-            key: `minor-${idx}-begin`,
-            value: roundToTenth(w.start),
-            min: bounds?.beginMin ?? 0,
-            max: gridFloor(Math.max(0, clipDur - PROMPT_WINDOW_MIN_DURATION)),
-            step: 0.1,
-            readBack: (cs) => {
-                const win = cs[clipIdx]?.promptWindows?.[idx];
-                return win ? roundToTenth(win.start) : null;
-            },
-            mutate: (cs, value) => {
-                const c = cs[clipIdx];
-                if (c) {
-                    applyPromptWindowBegin(c, idx, value);
-                }
-            },
-        });
-        range.appendChild(
-            buildField(
-                "Begin (s)",
-                beginInput,
-                undefined,
-                "When this prompt window starts within the clip, in seconds. " +
-                    "Its prompt applies from here until End.",
+    body.className = "vst-detail-body vst-detail-prompts-body";
+    body.appendChild(buildMajorPromptSection(ctx, clip, clipIdx));
+    body.appendChild(
+        buildGroup(
+            GROUP_PROMPTS,
+            buildRelayPromptSection(
+                ctx,
+                clip,
+                clipIdx,
+                selection.kind === "prompt-minor" ? selection.windowIdx : null,
             ),
-        );
-
-        const endInput = ctx.buildClampedNumber({
-            key: `minor-${idx}-end`,
-            value: roundToTenth(w.start + w.duration),
-            min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
-            max: bounds?.endMax ?? clipDur,
-            step: 0.1,
-            readBack: (cs) => {
-                const win = cs[clipIdx]?.promptWindows?.[idx];
-                return win ? roundToTenth(win.start + win.duration) : null;
-            },
-            mutate: (cs, value) => {
-                const c = cs[clipIdx];
-                if (c) {
-                    applyPromptWindowEnd(c, idx, value);
-                }
-            },
-        });
-        range.appendChild(
-            buildField(
-                "End (s)",
-                endInput,
-                undefined,
-                "When this prompt window ends within the clip, in seconds. The " +
-                    "window can't cross into a neighbouring window.",
-            ),
-        );
-        row.appendChild(range);
-
-        const editor = buildTextarea(
-            w.prompt ?? "",
-            "Minor prompt for this window…",
-            `minor-${idx}`,
-            (value) => {
-                ctx.debouncedCommit(`minor-${idx}`, (cs) => {
-                    const win = cs[clipIdx]?.promptWindows?.[idx];
-                    if (win) {
-                        win.prompt = value.trim();
-                    }
-                });
-            },
-        );
-        /**
-         * Focusing this window's editor makes it the active selection so the
-         * timeline highlight follows. setSelection no-ops on an identical
-         * selection, so this is a no-op while typing in the already-selected
-         * window and never interrupts the caret.
-         */
-        editor.addEventListener("focus", () => {
-            setSelection({ kind: "prompt-minor", clipIdx, windowIdx: idx });
-        });
-        row.appendChild(editor);
-        const decision = ctx
-            .capabilities()
-            .forClip(clip)
-            .decision("promptRelay");
-        if (!decision.supported) {
-            disableCapabilityControls(row, decision, [
-                ".vst-detail-minor-delete",
-            ]);
-        }
-        body.appendChild(row);
-    });
-
-    return wrapForm(GROUP_PROMPTMINOR, body);
+        ),
+    );
+    return body;
 };
+
+export const buildPromptMajorBody = (
+    ctx: DetailStripContext,
+    selection: Extract<TimelineSelection, { kind: "prompt-major" }>,
+    clips: Clip[],
+): HTMLElement => buildPromptBody(ctx, selection, clips);
+
+export const buildPromptMinorBody = (
+    ctx: DetailStripContext,
+    selection: Extract<TimelineSelection, { kind: "prompt-minor" }>,
+    clips: Clip[],
+): HTMLElement => buildPromptBody(ctx, selection, clips);

@@ -1,7 +1,6 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import type { AuthoringDiagnostic } from "../authoringDiagnostics";
 import { matchPresetKey } from "../dimensionPresets";
-import type { VideoExecutionPathSummary } from "../executionPath";
 import {
     escapeHtml,
     formatTimeLabel,
@@ -37,26 +36,8 @@ export interface RenderTimelineOptions {
     onRedo?: () => void;
     globalPrompt?: string;
     diagnostics?: readonly AuthoringDiagnostic[];
-    executionSummary?: VideoExecutionPathSummary;
     capabilities?: CapabilityViewResolver;
 }
-
-export const renderExecutionSummary = (
-    summary: VideoExecutionPathSummary | undefined,
-): string => {
-    if (!summary) {
-        return "";
-    }
-    const [engine, entry, shape, ...features] = summary.labels;
-    const core = [engine, entry, shape].filter(Boolean).join(" → ");
-    const detail = features.length > 0 ? ` · ${features.join(" · ")}` : "";
-    return (
-        `<div class="vst-execution-summary" data-vst-execution-summary role="status">` +
-        `<strong>Execution path</strong>` +
-        `<span>${escapeHtml(core + detail)}</span>` +
-        `</div>`
-    );
-};
 
 export const renderDiagnosticPanel = (
     diagnostics: readonly AuthoringDiagnostic[] = [],

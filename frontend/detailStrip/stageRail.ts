@@ -1,4 +1,6 @@
-import { buildAddButton } from "../detailWidgets";
+import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
+import { reconcileSourcedClipIdentity } from "../architectures/policy";
+import { buildRepeatingEditor } from "../detailWidgets";
 import { stageChipLabel, stageChipTitle } from "../timelineDetail";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
@@ -8,66 +10,77 @@ export const buildStageRail = (
     clip: Clip,
     clipIdx: number,
     stageIdx: number,
+    editor?: HTMLElement,
 ): HTMLElement => {
-    const column = document.createElement("div");
-    column.className = "vst-detail-col vst-detail-rail";
-    const list = document.createElement("div");
-    list.className = "vst-detail-rail-list";
-    clip.stages.forEach((stage, index) => {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "vst-chip vst-stage-tab";
-        if (index === stageIdx) {
-            chip.classList.add("vst-stage-tab-active");
-        }
-        if (stage.skipped) {
-            chip.classList.add("vst-stage-tab-skipped");
-        }
-        chip.textContent = stageChipLabel(index);
-        chip.title = `${stageChipTitle(stage, index)} · click to edit · Shift+click to delete`;
-        chip.addEventListener("click", (event) => {
-            if (event.shiftKey) {
-                context.deleteStage(clipIdx, index);
-            } else {
-                context.selectStage(clipIdx, index);
-            }
-        });
-        list.appendChild(chip);
-    });
-    column.appendChild(list);
-
-    const actions = document.createElement("div");
-    actions.className = "vst-detail-rail-actions";
-    const addButton = buildAddButton("Add stage", "vst-detail-add-stage", () =>
-        context.addStage(clipIdx),
-    );
     const canAdd =
         clip.stages.length === 0 ||
         context.capabilities().forClip(clip).decision("multiStage").supported;
-    addButton.disabled = !canAdd;
-    addButton.title = canAdd
+    const addTitle = canAdd
         ? clip.stages.length === 0
             ? "Add the first stage and choose its architecture"
             : "Add a refine stage"
         : context.capabilities().forClip(clip).decision("multiStage").reason;
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className =
-        "basic-button small-button vst-refs-delete vst-detail-rail-btn vst-detail-delete-stage";
-    deleteButton.textContent = "Delete stage";
-    deleteButton.disabled =
+    const cannotDelete =
         clip.stages.length === 0 ||
         (clip.stages.length === 1 && clip.sourceVideo === null);
-    deleteButton.title = deleteButton.disabled
-        ? clip.stages.length === 0
-            ? "This source-only clip has no generation stage"
-            : "Add a source video before removing the only generation stage"
-        : `Delete stage ${stageChipLabel(stageIdx)}`;
-    deleteButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        context.deleteStage(clipIdx, stageIdx);
-    });
-    actions.append(addButton, deleteButton);
-    column.appendChild(actions);
-    return column;
+
+    return buildRepeatingEditor({
+        key: "stages",
+        label: "Stages",
+        sectionClass: "vst-detail-stage-groups",
+        listClass: "vst-detail-stage-group-list",
+        items: clip.stages.map((stage, index) => ({
+            label: `Stage ${stageChipLabel(index)}`,
+            focusKey: `stage-group-${index}`,
+            title: stageChipTitle(stage, index),
+            active: index === stageIdx,
+            className: `vst-stage-tab${stage.skipped ? " vst-stage-tab-skipped" : ""}`,
+            onSelect: () => context.selectStage(clipIdx, index),
+            onDelete: () => context.deleteStage(clipIdx, index),
+            deleteDisabled: cannotDelete,
+            deleteTitle: cannotDelete
+                ? clip.stages.length === 0
+                    ? "This source-only clip has no generation stage"
+                    : "Add a source video before removing the only generation stage"
+                : `Delete stage ${stageChipLabel(index)}`,
+            headerAction: {
+                label: stage.skipped ? "Enable" : "Skip",
+                title: stage.skipped
+                    ? `Enable stage ${stageChipLabel(index)}`
+                    : `Skip stage ${stageChipLabel(index)}`,
+                className: "vst-detail-skip-stage",
+                active: stage.skipped,
+                onClick: () => {
+                    context.commit((clips) => {
+                        const targetClip = clips[clipIdx];
+                        const target = targetClip?.stages[index];
+                        if (!targetClip || !target) {
+                            return;
+                        }
+                        target.skipped = !target.skipped;
+                        reconcileSourcedClipIdentity(
+                            targetClip,
+                            context.capabilities().catalog,
+                        );
+                        reconcileArchitectureIncomingIcLoraDrives(
+                            clips,
+                            context.generatedEntryMode(),
+                        );
+                    });
+                    context.render();
+                },
+            },
+        })),
+        add: {
+            title: addTitle,
+            className: "vst-detail-add-stage",
+            disabled: !canAdd,
+            onClick: () => context.addStage(clipIdx),
+        },
+        remove: {
+            title: "Delete stage",
+            className: "vst-detail-delete-stage",
+        },
+        editor,
+    }).section;
 };

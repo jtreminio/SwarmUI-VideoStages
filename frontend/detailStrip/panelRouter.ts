@@ -1,4 +1,5 @@
 import { clamp } from "../constants";
+import { getState } from "../persistence";
 import { stageChipLabel } from "../timelineDetail";
 import type { Clip, TimelineSelection } from "../types";
 import { roundToTenth } from "../utils";
@@ -7,7 +8,6 @@ import { buildBoundaryBody } from "./boundaryPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
 import { buildPromptMajorBody, buildPromptMinorBody } from "./promptPanels";
-import { buildRefBody } from "./refPanel";
 import { buildSettingsBody } from "./settingsPanel";
 
 export const clampDetailSelection = (
@@ -22,6 +22,23 @@ export const clampDetailSelection = (
             selection.leftClipIdx <= clips.length - 2
             ? selection
             : { kind: "none" };
+    }
+    if (
+        selection.kind === "audio-track" ||
+        selection.kind === "audio-track-span"
+    ) {
+        const tracks = getState().audioTracks ?? [];
+        const track = tracks[selection.trackIdx];
+        if (!track) {
+            return { kind: "none" };
+        }
+        if (selection.kind === "audio-track") {
+            return selection;
+        }
+        if (selection.spanIdx < 0 || selection.spanIdx >= track.spans.length) {
+            return { kind: "audio-track", trackIdx: selection.trackIdx };
+        }
+        return selection;
     }
     if (selection.clipIdx < 0 || selection.clipIdx >= clips.length) {
         return { kind: "none" };
@@ -40,6 +57,12 @@ export const clampDetailSelection = (
         return selection.refIdx >= 0 && selection.refIdx < clip.refs.length
             ? selection
             : { kind: "none" };
+    }
+    if (selection.kind === "ic-lora") {
+        return selection.entryIdx >= 0 &&
+            selection.entryIdx < clip.icLoras.length
+            ? selection
+            : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
     }
     if (selection.kind === "prompt-minor") {
         const windows = clip.promptWindows ?? [];
@@ -78,6 +101,8 @@ export const detailBreadcrumb = (
                 : `Clip ${selection.clipIdx + 1} · ${stageChipLabel(selection.stageIdx)}`;
         case "ref":
             return `Ref ${selection.refIdx + 1} · Clip ${selection.clipIdx + 1}`;
+        case "ic-lora":
+            return `IC-LoRA ${selection.entryIdx + 1} · Clip ${selection.clipIdx + 1}`;
         case "audio":
             return `Audio · Clip ${selection.clipIdx + 1}`;
         case "audio-segment": {
@@ -92,10 +117,14 @@ export const detailBreadcrumb = (
             );
             return `Audio segment · Clip ${selection.clipIdx + 1} · ${start}–${end} s`;
         }
+        case "audio-track":
+            return `Audio track ${selection.trackIdx + 1}`;
+        case "audio-track-span":
+            return `Audio track ${selection.trackIdx + 1} · Span ${selection.spanIdx + 1}`;
         case "boundary":
             return `Boundary · Clip ${selection.leftClipIdx + 1} → ${selection.leftClipIdx + 2}`;
         case "prompt-major":
-            return `Prompt · Clip ${selection.clipIdx + 1}`;
+            return `Prompts · Clip ${selection.clipIdx + 1}`;
         case "prompt-minor": {
             const window =
                 clips[selection.clipIdx]?.promptWindows?.[selection.windowIdx];
@@ -166,28 +195,25 @@ export const buildDetailPanelBody = (
         case "clip":
             return buildClipBody(context, selection, clips);
         case "ref":
-            return buildRefBody(context, selection, clips);
+            return buildClipBody(context, selection, clips);
+        case "ic-lora":
+            return buildClipBody(context, selection, clips);
         case "audio":
             return buildAudioBody(context, selection, clips);
         case "audio-segment":
             return buildAudioBody(context, selection, clips);
+        case "audio-track":
+        case "audio-track-span":
+            return buildSettingsBody(context, selection);
         case "prompt-major":
             return buildPromptMajorBody(context, selection, clips);
         case "prompt-minor":
             return buildPromptMinorBody(context, selection, clips);
         case "retake":
-            return buildClipBody(
-                context,
-                {
-                    kind: "clip",
-                    clipIdx: selection.clipIdx,
-                    stageIdx: 0,
-                },
-                clips,
-            );
+            return buildClipBody(context, selection, clips);
         case "boundary":
             return buildBoundaryBody(context, selection, clips);
         default:
-            return buildSettingsBody(context);
+            return buildSettingsBody(context, { kind: "none" });
     }
 };

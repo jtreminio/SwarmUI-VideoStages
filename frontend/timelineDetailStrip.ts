@@ -49,6 +49,7 @@ export const createTimelineDetailStrip = (
     let rendering = false;
     let suppressSelectionRender = false;
     let settingsMode: string | null = null;
+    let revealSelectionOnNextRender = false;
     let draftQueue: DetailDraftQueue;
     let renderImplementation: (meta?: UpdateMeta) => void = () => {};
     const render = (meta?: UpdateMeta): void => renderImplementation(meta);
@@ -96,7 +97,9 @@ export const createTimelineDetailStrip = (
         capabilities: () =>
             createCapabilityViewResolver(getRootDefaults().modelCatalog),
         generatedEntryMode: getRootGeneratedEntryMode,
+        addRefEntry: selectionOperations.addRefEntry,
         deleteRefEntry: selectionOperations.deleteRefEntry,
+        addPromptWindow: selectionOperations.addPromptWindow,
         deleteWindowEntry: selectionOperations.deleteWindowEntry,
         createRetake: selectionOperations.createRetake,
         removeRetake: selectionOperations.removeRetake,
@@ -153,6 +156,8 @@ export const createTimelineDetailStrip = (
             }
 
             const collapsed = options.isCollapsed();
+            const revealSelection = revealSelectionOnNextRender;
+            revealSelectionOnNextRender = false;
             renderDetailShell({
                 detail,
                 context,
@@ -160,6 +165,7 @@ export const createTimelineDetailStrip = (
                 clips,
                 selection,
                 previousSelection: renderedSelection,
+                revealSelection,
                 collapsed,
                 clearSelection: () => setSelection({ kind: "none" }),
                 toggleCollapsed: () => {
@@ -189,6 +195,10 @@ export const createTimelineDetailStrip = (
         }
         focus.beginSelectionSession();
         settingsMode = null;
+        const active = document.activeElement;
+        revealSelectionOnNextRender = !(
+            active instanceof HTMLElement && dockEl?.contains(active)
+        );
         if (selection.kind !== "none" && options.isCollapsed()) {
             options.setCollapsed(false);
         }

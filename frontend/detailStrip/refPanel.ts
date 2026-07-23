@@ -2,11 +2,11 @@ import { clamp, mediaPreviewSrc, REF_FRAME_MIN } from "../constants";
 import {
     buildCheckbox,
     buildField,
-    buildInstanceRow,
+    buildGroup,
     buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
-    wrapForm,
+    buildRepeatingEditor,
 } from "../detailWidgets";
 import {
     buildImageSourceOptions,
@@ -20,174 +20,216 @@ import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
 import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-const GROUP_REF = "vstdock_ref";
+export const GROUP_REF = "vstdock_ref";
 
 /**
- * The ref panel lists EVERY reference of the clip, stacked. The selected ref
- * is highlighted; touching any ref's control re-points the selection to it
- * and per-ref keys keep edits distinct.
+ * Stage-style reference-image child section for the owning clip panel. The
+ * rail lists every reference while only the selected reference editor renders.
  */
-export const buildRefBody = (
+export const buildRefSection = (
     ctx: DetailStripContext,
-    sel: Extract<TimelineSelection, { kind: "ref" }>,
+    clipIdx: number,
+    selectedRefIdx: number | null,
     clips: Clip[],
 ): HTMLElement => {
-    const { clipIdx } = sel;
     const clip = clips[clipIdx];
-    const body = document.createElement("div");
-    body.className =
-        "vst-detail-form-body vst-detail-instance-body vst-detail-ref-body";
+    const decision = ctx
+        .capabilities()
+        .forClip(clip)
+        .decision("frameReferences");
+    const activeRefIdx =
+        clip.refs.length === 0
+            ? null
+            : clamp(selectedRefIdx ?? 0, 0, clip.refs.length - 1);
+    const buildSection = (editor?: HTMLElement): HTMLElement =>
+        buildRepeatingEditor({
+            key: "references",
+            label: "Reference Images",
+            sectionClass: "vst-detail-ref-section",
+            listClass: "vst-detail-ref-rail",
+            items: clip.refs.map((_, refIdx) => ({
+                label: `R${refIdx + 1}`,
+                focusKey: `reference-tab-${refIdx}`,
+                title: `Edit reference image ${refIdx + 1}`,
+                active: refIdx === activeRefIdx,
+                className: "vst-ref-tab",
+                onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
+                onShiftDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
+            })),
+            add: {
+                title: decision.supported
+                    ? "Add a reference image"
+                    : decision.reason,
+                className: "vst-detail-add-ref",
+                disabled: !decision.supported,
+                onClick: () => ctx.addRefEntry(clipIdx),
+            },
+            remove: {
+                title:
+                    activeRefIdx === null
+                        ? "No reference image to delete"
+                        : `Delete reference image ${activeRefIdx + 1}`,
+                className: "vst-detail-delete-ref",
+            },
+            editor,
+        }).section;
+
+    if (activeRefIdx === null) {
+        return buildSection();
+    }
+    const ref = clip.refs[activeRefIdx];
+    const options = buildImageSourceOptions(ref.source ?? "");
+    const source = resolveImageSourceValue(ref.source ?? "", options);
+    const isUpload = source === REF_SOURCE_UPLOAD;
+    const fields = document.createElement("div");
+    fields.className =
+        "vst-detail-col vst-detail-instance-fields vst-detail-ref-row vst-detail-ref-editor";
+    fields.setAttribute("data-vst-ref-index", `${activeRefIdx}`);
+
+    const select = buildOptionSelect(options, source, (value) => {
+        ctx.commit((cs) => {
+            const target = cs[clipIdx]?.refs[activeRefIdx];
+            if (!target) {
+                return;
+            }
+            const resolved = resolveImageSourceValue(
+                value,
+                buildImageSourceOptions(value),
+            );
+            target.source = resolved;
+            if (resolved !== REF_SOURCE_UPLOAD) {
+                target.uploadedImage = null;
+                target.uploadFileName = null;
+            }
+        });
+        ctx.render();
+    });
+    fields.appendChild(
+        buildField(
+            "Image Source",
+            select,
+            undefined,
+            "Where this reference image comes from — an upload, or another " +
+                "clip's rendered frame. The image guides how the clip looks " +
+                "at its attach frame.",
+        ),
+    );
+
+    if (isUpload) {
+        const preview = document.createElement("div");
+        preview.className = "vst-refs-thumb-preview";
+        const data = ref.uploadedImage?.data;
+        if (data) {
+            preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
+            preview.classList.add("vst-refs-thumb-preview-set");
+        }
+        fields.appendChild(preview);
+    }
+
     const frameMax = getReferenceFrameMax(
         getRootDefaults,
         clip,
         getState().fps,
     );
-
-    clip.refs.forEach((ref, refIdx) => {
-        const options = buildImageSourceOptions(ref.source ?? "");
-        const source = resolveImageSourceValue(ref.source ?? "", options);
-        const isUpload = source === REF_SOURCE_UPLOAD;
-        const { row, fields } = buildInstanceRow({
-            rowClass: "vst-detail-ref-row",
-            indexAttr: "data-vst-ref-index",
-            index: refIdx,
-            active: refIdx === sel.refIdx,
-            title: `R${refIdx + 1}`,
-            deleteLabel: "Delete",
-            onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
-            repoint: () => setSelection({ kind: "ref", clipIdx, refIdx }),
-        });
-
-        const select = buildOptionSelect(options, source, (value) => {
-            ctx.commit((cs) => {
-                const r = cs[clipIdx]?.refs[refIdx];
-                if (!r) {
-                    return;
-                }
-                const resolved = resolveImageSourceValue(
-                    value,
-                    buildImageSourceOptions(value),
-                );
-                r.source = resolved;
-                if (resolved !== REF_SOURCE_UPLOAD) {
-                    r.uploadedImage = null;
-                    r.uploadFileName = null;
+    const frameInput = buildNumber(
+        ref.frame,
+        REF_FRAME_MIN,
+        frameMax,
+        1,
+        (value) => {
+            ctx.debouncedCommit(`ref-${activeRefIdx}-frame`, (cs) => {
+                const target = cs[clipIdx]?.refs[activeRefIdx];
+                if (target) {
+                    target.frame = clamp(
+                        Math.round(value),
+                        REF_FRAME_MIN,
+                        frameMax,
+                    );
                 }
             });
-            ctx.render();
-        });
-        fields.appendChild(
-            buildField(
-                "Image Source",
-                select,
-                undefined,
-                "Where this reference image comes from — an upload, or another " +
-                    "clip's rendered frame. The image guides how the clip looks " +
-                    "at its attach frame.",
-            ),
-        );
-
-        if (isUpload) {
-            const preview = document.createElement("div");
-            preview.className = "vst-refs-thumb-preview";
-            const data = ref.uploadedImage?.data;
-            if (data) {
-                preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-                preview.classList.add("vst-refs-thumb-preview-set");
-            }
-            fields.appendChild(preview);
-        }
-
-        const frameInput = buildNumber(
-            ref.frame,
-            REF_FRAME_MIN,
-            frameMax,
-            1,
+        },
+    );
+    frameInput.setAttribute("data-vst-focus-key", `ref-${activeRefIdx}-frame`);
+    fields.appendChild(
+        buildField(
+            "Attach at Frame",
+            frameInput,
+            undefined,
+            "The frame within the clip where this reference is anchored. " +
+                "Frame 1 is the first frame; the image influences the clip " +
+                "most strongly around here.",
+        ),
+    );
+    fields.appendChild(
+        buildCheckbox(
+            "Count from clip end",
+            ref.fromEnd === true,
             (value) => {
-                ctx.debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
-                    const r = cs[clipIdx]?.refs[refIdx];
-                    if (r) {
-                        r.frame = clamp(
-                            Math.round(value),
-                            REF_FRAME_MIN,
-                            frameMax,
-                        );
+                ctx.commit((cs) => {
+                    const target = cs[clipIdx]?.refs[activeRefIdx];
+                    if (target) {
+                        target.fromEnd = value;
                     }
                 });
             },
-        );
-        frameInput.setAttribute("data-vst-focus-key", `ref-${refIdx}-frame`);
-        fields.appendChild(
-            buildField(
-                "Attach at Frame",
-                frameInput,
-                undefined,
-                "The frame within the clip where this reference is anchored. " +
-                    "Frame 1 is the first frame; the image influences the clip " +
-                    "most strongly around here.",
-            ),
-        );
+            {
+                help:
+                    "Count the attach frame backwards from the last frame " +
+                    "instead of forward from the first — so it stays " +
+                    "anchored to the end even if the clip length changes.",
+            },
+        ),
+    );
 
+    if (isUpload) {
         fields.appendChild(
-            buildCheckbox(
-                "Count from clip end",
-                ref.fromEnd === true,
-                (value) => {
+            buildMediaPickRow(
+                "Image Upload",
+                "image/*",
+                ["image"],
+                ref.uploadedImage?.fileName,
+                (data, fileName) => {
                     ctx.commit((cs) => {
-                        const r = cs[clipIdx]?.refs[refIdx];
-                        if (r) {
-                            r.fromEnd = value;
+                        const target = cs[clipIdx]?.refs[activeRefIdx];
+                        if (target) {
+                            target.uploadedImage = { data, fileName };
+                            target.uploadFileName = fileName;
                         }
                     });
+                    ctx.render();
                 },
-                {
-                    help:
-                        "Count the attach frame backwards from the last frame " +
-                        "instead of forward from the first — so it stays " +
-                        "anchored to the end even if the clip length changes.",
+                () => {
+                    ctx.commit((cs) => {
+                        const target = cs[clipIdx]?.refs[activeRefIdx];
+                        if (target) {
+                            target.uploadedImage = null;
+                            target.uploadFileName = null;
+                        }
+                    });
+                    ctx.render();
                 },
             ),
         );
+    }
+    if (!decision.supported) {
+        disableCapabilityControls(fields, decision);
+    }
+    return buildSection(fields);
+};
 
-        if (isUpload) {
-            fields.appendChild(
-                buildMediaPickRow(
-                    "Image Upload",
-                    "image/*",
-                    ["image"],
-                    ref.uploadedImage?.fileName,
-                    (data, fileName) => {
-                        ctx.commit((cs) => {
-                            const r = cs[clipIdx]?.refs[refIdx];
-                            if (r) {
-                                r.uploadedImage = { data, fileName };
-                                r.uploadFileName = fileName;
-                            }
-                        });
-                        ctx.render();
-                    },
-                    () => {
-                        ctx.commit((cs) => {
-                            const r = cs[clipIdx]?.refs[refIdx];
-                            if (r) {
-                                r.uploadedImage = null;
-                                r.uploadFileName = null;
-                            }
-                        });
-                        ctx.render();
-                    },
-                ),
-            );
-        }
-        const decision = ctx
-            .capabilities()
-            .forClip(clip)
-            .decision("frameReferences");
-        if (!decision.supported) {
-            disableCapabilityControls(row, decision, [".vst-detail-delete"]);
-        }
-        body.appendChild(row);
-    });
-
-    return wrapForm(GROUP_REF, body);
+/** Standalone wrapper retained for focused panel tests and integrations. */
+export const buildRefBody = (
+    ctx: DetailStripContext,
+    sel: Extract<TimelineSelection, { kind: "ref" }>,
+    clips: Clip[],
+): HTMLElement => {
+    const body = document.createElement("div");
+    body.className = "vst-detail-body";
+    body.appendChild(
+        buildGroup(
+            GROUP_REF,
+            buildRefSection(ctx, sel.clipIdx, sel.refIdx, clips),
+        ),
+    );
+    return body;
 };
