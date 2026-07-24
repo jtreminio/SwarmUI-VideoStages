@@ -31,23 +31,46 @@ public class AudioSegmentCombinerTests
     private static WGNodeData BaseAudio(WorkflowGenerator g) =>
         new(new JArray("203", 0), g, WGNodeData.DT_AUDIO, T2IModelClassSorter.CompatLtxv2);
 
-    private static UploadedMediaSpec Upload(string base64 = "QUJD") =>
+    private static AudioMediaIdentityPlan Upload(string base64 = "QUJD") =>
         new($"data:audio/wav;base64,{base64}", "seg.wav");
 
-    private static AudioSegmentPlan SegmentPlan(params AudioSegmentSpec[] segments) =>
-        AudioPlanCompiler.Compile(new ClipSpec(
-            Id: 0,
-            Frames: 240,
-            AudioSource: Constants.AudioSourceNative,
-            IcLoras: null,
-            SaveAudioTrack: false,
-            ClipLengthFromAudio: false,
-            ClipLengthFromControlNet: false,
-            ReuseAudio: false,
-            UploadedAudio: null,
-            ImageRefs: [],
-            Stages: [],
-            AudioSegments: segments)).Segments;
+    private static AudioSegmentItemPlan UploadSegment(
+        AudioMediaIdentityPlan source,
+        double StartSeconds,
+        double TrimStartSeconds,
+        double LengthSeconds,
+        double Volume = 1) =>
+        new(
+            AudioSegmentSourceKind.Upload,
+            AceStepFunTrack: null,
+            StartSeconds,
+            TrimStartSeconds,
+            LengthSeconds,
+            source,
+            Volume);
+
+    private static AudioSegmentItemPlan AceSegment(
+        int track,
+        double StartSeconds,
+        double TrimStartSeconds,
+        double LengthSeconds) =>
+        new(
+            AudioSegmentSourceKind.AceStepFun,
+            track,
+            StartSeconds,
+            TrimStartSeconds,
+            LengthSeconds,
+            UploadedMedia: null);
+
+    private static AudioSegmentPlan SegmentPlan(params AudioSegmentItemPlan[] segments) =>
+        AudioSegmentPlanCompiler.Compile(
+            segments,
+            new AudioBaseSourcePlan(
+                AudioBaseSourceKind.Native,
+                Constants.AudioSourceNative,
+                AceStepFunTrack: null,
+                HasConfiguredTrack: true,
+                UploadedMedia: null)).Plan;
 
     private static int CountClassType(JObject workflow, string classType)
     {
@@ -94,13 +117,13 @@ public class AudioSegmentCombinerTests
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
             0,
             SegmentPlan(
-                new AudioSegmentSpec(
+                UploadSegment(
                     Upload("QUJD"),
                     StartSeconds: 0.0,
                     TrimStartSeconds: 1.0,
                     LengthSeconds: 3.0,
                     Volume: 0.5),
-                new AudioSegmentSpec(Upload("WFla"), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
+                UploadSegment(Upload("WFla"), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
             out _);
@@ -149,8 +172,8 @@ public class AudioSegmentCombinerTests
         _ = new AudioSegmentCombiner(g).Combine(
             0,
             SegmentPlan(
-                new AudioSegmentSpec(Upload("QUJD"), StartSeconds: 0.5, TrimStartSeconds: 0.0, LengthSeconds: 3.0),
-                new AudioSegmentSpec(Upload("WFla"), StartSeconds: 6.0, TrimStartSeconds: 0.0, LengthSeconds: 2.0)),
+                UploadSegment(Upload("QUJD"), StartSeconds: 0.5, TrimStartSeconds: 0.0, LengthSeconds: 3.0),
+                UploadSegment(Upload("WFla"), StartSeconds: 6.0, TrimStartSeconds: 0.0, LengthSeconds: 2.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
             out IReadOnlyList<(double Start, double End)> windows);
@@ -167,10 +190,10 @@ public class AudioSegmentCombinerTests
         _ = new AudioSegmentCombiner(g).Combine(
             0,
             SegmentPlan(
-                new AudioSegmentSpec(Upload("MDE="), 0, 0, 1, Volume: 0.00001),
-                new AudioSegmentSpec(Upload("MDI="), 1, 0, 1, Volume: 1),
-                new AudioSegmentSpec(Upload("MDM="), 2, 0, 1, Volume: 4),
-                new AudioSegmentSpec(Upload("MDQ="), 3, 0, 1, Volume: 100000)),
+                UploadSegment(Upload("MDE="), 0, 0, 1, Volume: 0.00001),
+                UploadSegment(Upload("MDI="), 1, 0, 1, Volume: 1),
+                UploadSegment(Upload("MDM="), 2, 0, 1, Volume: 4),
+                UploadSegment(Upload("MDQ="), 3, 0, 1, Volume: 100000)),
             BaseAudio(g),
             clipDurationSeconds: 10,
             out _);
@@ -192,9 +215,8 @@ public class AudioSegmentCombinerTests
 
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
             0,
-            SegmentPlan(new AudioSegmentSpec(
-                Source: null, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
-                AceStepFunSource: "audio5")),
+            SegmentPlan(AceSegment(
+                track: 5, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
             out IReadOnlyList<(double Start, double End)> windows);
@@ -258,9 +280,8 @@ public class AudioSegmentCombinerTests
 
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
             0,
-            SegmentPlan(new AudioSegmentSpec(
-                Source: null, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0,
-                AceStepFunSource: "audio5")),
+            SegmentPlan(AceSegment(
+                track: 5, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
             out _);
@@ -278,7 +299,7 @@ public class AudioSegmentCombinerTests
         WGNodeData result = new AudioSegmentCombiner(g).Combine(
             0,
             SegmentPlan(
-                new AudioSegmentSpec(Upload(), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
+                UploadSegment(Upload(), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio: null,
             clipDurationSeconds: 10.0,
             out _);

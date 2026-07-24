@@ -1,4 +1,5 @@
 import { ROOT_DIMENSION_MIN } from "../constants";
+import { getVideoStagesHostBridge } from "../host";
 import {
     ensureAuthoringDocumentIdentity,
     ensureClipEntityIdentities,
@@ -6,7 +7,6 @@ import {
 import { normalizeAudioTracks, normalizeClip } from "../normalization";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import type { StoredClip } from "../storageTypes";
-import { migrateClipAudioSegmentsToTimeline } from "../timelineAudioMigration";
 import {
     type CanonicalClip,
     type CanonicalVideoStagesConfig,
@@ -110,14 +110,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                       lengthSeconds: clip.sourceVideo.lengthSeconds,
                   }
                 : null,
-            audioSegments: clip.audioSegments.map((segment) => ({
-                id: segment.id,
-                source: segment.source,
-                startSeconds: segment.startSeconds,
-                trimStartSeconds: segment.trimStartSeconds,
-                lengthSeconds: segment.lengthSeconds,
-                volume: segment.volume,
-            })),
             retake: clip.retake
                 ? {
                       id: clip.retake.id,
@@ -286,14 +278,6 @@ export const serializeStateForDurableStorage = (
         ) {
             clip.sourceVideo = null;
         }
-        for (const segment of clip.audioSegments) {
-            if (
-                typeof segment.source === "object" &&
-                isTransientBrowserMedia(segment.source)
-            ) {
-                segment.source = null;
-            }
-        }
         for (const ref of clip.refs) {
             if (isTransientBrowserMedia(ref.uploadedImage)) {
                 ref.uploadedImage = null;
@@ -325,9 +309,9 @@ const hasArrayOfRecords = (
 };
 
 /**
- * v3 keeps scalar normalization deliberately forgiving, but its collection
- * topology is strict: a malformed present collection must never disappear as
- * an empty list, and a malformed item must never turn into a default entity.
+ * Scalar normalization is deliberately forgiving, but collection topology is
+ * strict: a malformed present collection must never disappear as an empty
+ * list, and a malformed item must never turn into a default entity.
  */
 const hasValidStoredCollections = (
     parsed: Record<string, unknown>,
@@ -347,7 +331,6 @@ const hasValidStoredCollections = (
         if (
             !hasArrayOfRecords(clip, "stages") ||
             !hasArrayOfRecords(clip, "refs") ||
-            !hasArrayOfRecords(clip, "audioSegments") ||
             !hasArrayOfRecords(clip, "icLoras")
         ) {
             return false;
@@ -383,44 +366,53 @@ const hasValidStoredCollections = (
     );
 };
 
-/**
- * Strict current decode with one deliberate v3→v4 migration: v3's clip-local
- * overlays become root timeline lanes. Older schemas remain rejected.
- */
+const OUTDATED_SCHEMA_NOTICE =
+    "VideoStages: the saved timeline was created by an older version and " +
+    "could not be loaded.";
+
+// Repeated decodes of the same stale carrier value must not stack notices.
+let noticedOutdatedDocument: string | null = null;
+
+const noticeOutdatedSchema = (serialized: string): void => {
+    if (noticedOutdatedDocument === serialized) {
+        return;
+    }
+    noticedOutdatedDocument = serialized;
+    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
+};
+
+/** Strict current decode: any other schema version is rejected outright. */
 export const decodeStoredDocument = (
     serialized: string,
     inherited: InheritedDims,
 ): DecodedStoredDocument | null => {
     try {
         const parsed: unknown = JSON.parse(serialized);
-        if (
-            !isRecord(parsed) ||
-            (parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION &&
-                parsed.schemaVersion !== 3) ||
-            !hasValidStoredCollections(parsed)
-        ) {
+        if (!isRecord(parsed)) {
+            return null;
+        }
+        if (parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION) {
+            noticeOutdatedSchema(serialized);
+            return null;
+        }
+        if (!hasValidStoredCollections(parsed)) {
             return null;
         }
         const dims = resolveRootDims(inherited, {
             width: parsed.width,
             height: parsed.height,
         });
-        const clips = parsed.clips.map((entry) =>
-            normalizeClip(
-                entry,
-                getRootDefaults,
-                getDefaultStageModel,
-                dims.fps,
-            ),
-        );
-        const audioTracks = normalizeAudioTracks(parsed.audioTracks);
         return {
             dims,
-            clips,
-            audioTracks:
-                parsed.schemaVersion === 3
-                    ? migrateClipAudioSegmentsToTimeline(clips, audioTracks)
-                    : audioTracks,
+            clips: parsed.clips.map((entry) =>
+                normalizeClip(
+                    entry,
+                    getRootDefaults,
+                    getDefaultStageModel,
+                    dims.fps,
+                ),
+            ),
+            audioTracks: normalizeAudioTracks(parsed.audioTracks),
         };
     } catch {
         return null;
@@ -460,7 +452,7 @@ export const storedDocumentNeedsCanonicalIdRepair = (
         const seenIds = new Set<string>();
         for (const rawClip of parsed.clips) {
             if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-            for (const key of ["stages", "refs", "audioSegments"] as const) {
+            for (const key of ["stages", "refs"] as const) {
                 const children = rawClip[key];
                 if (
                     !Array.isArray(children) ||

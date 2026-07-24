@@ -10,7 +10,6 @@ describe("normalization compatibility facade", () => {
             "buildDefaultStage",
             "buildDefaultStageRefStrengths",
             "getReferenceFrameMax",
-            "normalizeAudioSegments",
             "normalizeAudioTrackSpan",
             "normalizeAudioTracks",
             "normalizeBoundaryOut",

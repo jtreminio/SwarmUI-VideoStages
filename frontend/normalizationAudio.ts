@@ -1,23 +1,13 @@
-import { isAceStepFunAudioSource } from "./audioSource";
 import {
-    AUDIO_SEGMENT_MIN_LENGTH,
     AUDIO_SEGMENT_VOLUME_DEFAULT,
     AUDIO_SEGMENT_VOLUME_MAX,
     AUDIO_SEGMENT_VOLUME_MIN,
     clamp,
 } from "./constants";
 import { normalizeUploadedMedia } from "./normalizationMedia";
-import {
-    clampWindowInDuration,
-    normalizeOptionalEntityId,
-} from "./normalizationShared";
-import type {
-    AudioSegment,
-    AudioTrack,
-    AudioTrackSourceKind,
-    AudioTrackSpan,
-} from "./types";
-import { isRecord, roundToTenth, toNumber } from "./utils";
+import { normalizeOptionalEntityId } from "./normalizationShared";
+import type { AudioTrack, AudioTrackSourceKind, AudioTrackSpan } from "./types";
+import { isRecord, toNumber } from "./utils";
 
 const normalizeOptionalNonNegative = (value: unknown): number | null => {
     if (value == null || `${value}`.trim() === "") {
@@ -118,69 +108,4 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
         });
     }
     return tracks;
-};
-
-const normalizeAudioSegment = (
-    value: unknown,
-    clipDuration: number,
-): AudioSegment | null => {
-    if (!isRecord(value)) {
-        return null;
-    }
-    // A sourceless segment is kept in the working state so the "+ Add segment"
-    // flow can create it and then prompt for the upload; the backend parser
-    // drops segments with no source at generation time. A string source is an
-    // AceStepFun track ref ("audio0", …).
-    const rawSource = value.source;
-    const source =
-        typeof rawSource === "string" && isAceStepFunAudioSource(rawSource)
-            ? rawSource.trim()
-            : normalizeUploadedMedia(rawSource);
-    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
-    const trimStartRaw = Math.max(
-        0,
-        toNumber(`${value.trimStartSeconds ?? 0}`, 0),
-    );
-    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
-    const window = clampWindowInDuration(
-        startRaw,
-        lengthRaw,
-        clipDuration,
-        AUDIO_SEGMENT_MIN_LENGTH,
-    );
-    if (!window) {
-        return null;
-    }
-    return {
-        id: normalizeOptionalEntityId(value.id),
-        source,
-        startSeconds: roundToTenth(window.startSeconds),
-        trimStartSeconds: roundToTenth(trimStartRaw),
-        lengthSeconds: roundToTenth(window.lengthSeconds),
-        volume: clamp(
-            toNumber(
-                `${value.volume ?? AUDIO_SEGMENT_VOLUME_DEFAULT}`,
-                AUDIO_SEGMENT_VOLUME_DEFAULT,
-            ),
-            AUDIO_SEGMENT_VOLUME_MIN,
-            AUDIO_SEGMENT_VOLUME_MAX,
-        ),
-    };
-};
-
-/**
- * Normalizes the optional per-clip audio segment list against the clip
- * duration. Array ORDER is preserved — the index is the segment's timeline
- * lane, and lanes must not reshuffle as segments move. Returns [] when absent.
- */
-export const normalizeAudioSegments = (
-    value: unknown,
-    clipDuration: number,
-): AudioSegment[] => {
-    if (!Array.isArray(value)) {
-        return [];
-    }
-    return value
-        .map((raw) => normalizeAudioSegment(raw, clipDuration))
-        .filter((seg): seg is AudioSegment => seg !== null);
 };

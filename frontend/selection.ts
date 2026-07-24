@@ -55,9 +55,6 @@ const sameSelection = (a: TimelineSelection, b: TimelineSelection): boolean => {
     if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
         return a.windowIdx === b.windowIdx;
     }
-    if (a.kind === "audio-segment" && b.kind === "audio-segment") {
-        return a.segIdx === b.segIdx;
-    }
     return true;
 };
 

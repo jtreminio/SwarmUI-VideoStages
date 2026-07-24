@@ -48,7 +48,6 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     clipLengthFromControlNet: false,
     reuseAudio: false,
     uploadedAudio: null,
-    audioSegments: [],
     prompt: "",
     promptWindows: [],
     retake: null,

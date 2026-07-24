@@ -1111,9 +1111,6 @@
 .vst-retake-resize-r {
     right: -1px;
 }
-.vst-detail-add-segment {
-    align-self: auto;
-}
 .vst-detail-note {
     margin: 2px 0 0;
     font-size: var(--vst-font-3xs);

@@ -16,8 +16,7 @@ public class AudioTimelinePlanningComponentsTests
         int id,
         int? frames = 48,
         string boundary = Constants.BoundaryOutCut,
-        int overlap = 8,
-        IReadOnlyList<AudioSegmentSpec> segments = null) => new(
+        int overlap = 8) => new(
             id,
             frames,
             Constants.AudioSourceNative,
@@ -29,7 +28,6 @@ public class AudioTimelinePlanningComponentsTests
             null,
             [],
             [Stage(id)],
-            AudioSegments: segments,
             BoundaryOut: boundary,
             BoundaryOutOverlap: overlap);
 
@@ -58,23 +56,15 @@ public class AudioTimelinePlanningComponentsTests
     }
 
     [Fact]
-    public void Compatibility_track_spec_planner_expands_clip_base_and_segment_without_projection()
+    public void Compatibility_track_spec_planner_expands_clip_base_without_projection()
     {
-        AudioSegmentSpec segment = new(
-            new UploadedMediaSpec("data:audio/wav;base64,QUJD", "line.wav"),
-            StartSeconds: 1,
-            TrimStartSeconds: 2,
-            LengthSeconds: 0.5);
-
         ImmutableArray<AudioTrackSpec> tracks =
-            ClipAudioTrackSpecPlanner.Compile(Plan(Clip(4, segments: [segment])));
+            ClipAudioTrackSpecPlanner.Compile(Plan(Clip(4)));
 
-        Assert.Equal(["clip-4-base", "clip-4-segment-0"], tracks.Select(track => track.TrackId));
-        AudioTrackSpanSpec span = Assert.Single(tracks[1].Spans);
+        Assert.Equal(["clip-4-base"], tracks.Select(track => track.TrackId));
+        AudioTrackSpanSpec span = Assert.Single(tracks[0].Spans);
         Assert.Equal(4, span.FirstClipId);
-        Assert.Equal(1, span.ClipStartOffsetSeconds);
-        Assert.Equal(0.5, span.ClipLengthSeconds);
-        Assert.Equal(2, span.SourceStartSeconds);
+        Assert.Equal(4, span.LastClipId);
     }
 
     [Fact]

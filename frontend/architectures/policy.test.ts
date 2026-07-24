@@ -96,7 +96,6 @@ describe("catalog-backed authoring policy", () => {
         const view = createCapabilityViewResolver(models).forClip(clip);
         expect(view.known).toBe(true);
         expect(view.decision("sourceVideo").supported).toBe(true);
-        expect(view.decision("audioSegments").supported).toBe(true);
         expect(view.decision("majorPrompt").supported).toBe(false);
     });
 
@@ -188,15 +187,6 @@ describe("catalog-backed authoring policy", () => {
             data: "data:audio/wav;base64,AA==",
             fileName: "persisted.wav",
         };
-        clip.audioSegments = [
-            {
-                source: null,
-                startSeconds: 0,
-                trimStartSeconds: 0,
-                lengthSeconds: 1,
-                volume: 1,
-            },
-        ];
         const body = document.createElement("div");
         renderTimeline(body, [clip], {
             capabilities: createCapabilityViewResolver(catalog()),
@@ -206,14 +196,12 @@ describe("catalog-backed authoring policy", () => {
         expect(body.querySelector(".vst-minor-seg")).not.toBeNull();
         expect(body.querySelector(".vst-refs-mark")).not.toBeNull();
         expect(body.querySelector(".vst-retake")).not.toBeNull();
-        expect(body.querySelector(".vst-audio-seg")).not.toBeNull();
         expect(body.querySelector(".vst-audio-clip")?.className).toContain(
             "vst-capability-disabled",
         );
         expect(body.querySelector("[data-vst-prompt-add]")).toBeNull();
         expect(body.querySelector("[data-vst-ref-add]")).toBeNull();
         expect(body.querySelector("[data-vst-retake-add]")).toBeNull();
-        expect(body.querySelector("[data-vst-audio-seg-add]")).toBeNull();
     });
 
     it("keeps a zero-stage source-only clip selectable and labels it plainly", () => {

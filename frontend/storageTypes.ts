@@ -1,10 +1,4 @@
-import type {
-    CanonicalAudioSegment,
-    CanonicalRetake,
-    Clip,
-    RefImage,
-    Stage,
-} from "./types";
+import type { CanonicalRetake, Clip, RefImage, Stage } from "./types";
 
 /**
  * Canonical lists of the fields each stored type persists. Exhaustiveness
@@ -53,7 +47,6 @@ export const STORED_CLIP_KEYS = [
     "clipLengthFromControlNet",
     "reuseAudio",
     "uploadedAudio",
-    "audioSegments",
     "retake",
     "sourceVideo",
     "refs",
@@ -102,13 +95,9 @@ export type StoredStage = RequireEntityId<
 export type StoredClip = RequireEntityId<
     Pick<
         Clip,
-        Exclude<
-            (typeof STORED_CLIP_KEYS)[number],
-            "audioSegments" | "retake" | "refs" | "stages"
-        >
+        Exclude<(typeof STORED_CLIP_KEYS)[number], "retake" | "refs" | "stages">
     >
 > & {
-    audioSegments: CanonicalAudioSegment[];
     retake: CanonicalRetake | null;
     refs: StoredRefImage[];
     stages: StoredStage[];

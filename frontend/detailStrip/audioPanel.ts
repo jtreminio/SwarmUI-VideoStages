@@ -18,7 +18,6 @@ import {
 } from "../documentQueries";
 import { getState } from "../persistence";
 import type { Clip, TimelineSelection } from "../types";
-import { buildAudioSegmentSection } from "./audioSegmentPanel";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import {
     buildCapabilityNotice,
@@ -28,10 +27,7 @@ import type { DetailStripContext } from "./context";
 
 export const buildAudioBody = (
     ctx: DetailStripContext,
-    sel: Extract<
-        TimelineSelection,
-        { kind: "audio" } | { kind: "audio-segment" }
-    >,
+    sel: Extract<TimelineSelection, { kind: "audio" }>,
     clips: Clip[],
 ): HTMLElement => {
     const { clipIdx } = sel;
@@ -39,7 +35,6 @@ export const buildAudioBody = (
     const capabilityView = ctx.capabilities().forClip(clip);
     const audioDecision = capabilityView.decision("clipAudio");
     const reuseDecision = capabilityView.decision("audioReuse");
-    const segmentDecision = capabilityView.decision("audioSegments");
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
         clip.architecture,
         clip.icLoras,
@@ -223,44 +218,24 @@ export const buildAudioBody = (
             key: "base-audio",
             label: "Base Audio",
             content: base,
-            open: sel.kind === "audio",
+            open: true,
             flattenContent: true,
         }).section,
     );
 
-    if (sel.kind === "audio-segment" || (clip.audioSegments?.length ?? 0) > 0) {
-        const segments = buildAudioSegmentSection(
+    const state = getState();
+    body.appendChild(
+        buildAudioTracksPanel(
             ctx,
-            clipIdx,
-            sel.kind === "audio-segment" ? sel.segIdx : null,
-            clips,
-            sel.kind === "audio-segment",
-        );
-        if (
-            !segmentDecision.supported &&
-            (clip.audioSegments?.length ?? 0) > 0
-        ) {
-            segments.appendChild(buildCapabilityNotice(segmentDecision));
-        }
-        body.appendChild(segments);
-    } else {
-        const state = getState();
-        body.appendChild(
-            buildAudioTracksPanel(
-                ctx,
-                state,
-                { kind: "none" },
-                {
-                    trackIndices: audioTrackIndicesForClipWindow(
-                        state,
-                        clipIdx,
-                    ),
-                    clipWindow:
-                        clipTimelineWindow(state.clips, clipIdx) ?? undefined,
-                },
-            ),
-        );
-    }
+            state,
+            { kind: "none" },
+            {
+                trackIndices: audioTrackIndicesForClipWindow(state, clipIdx),
+                clipWindow:
+                    clipTimelineWindow(state.clips, clipIdx) ?? undefined,
+            },
+        ),
+    );
 
     return body;
 };

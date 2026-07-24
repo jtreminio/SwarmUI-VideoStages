@@ -61,7 +61,7 @@ export interface VideoStagesConfig {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 4;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 5;
 
 export interface UploadedMedia {
     data: string;
@@ -71,25 +71,6 @@ export interface UploadedMedia {
 export interface StageLora {
     name: string;
     weight: number;
-}
-
-/**
- * One overlay audio piece placed on a clip's audio lane, in addition to the
- * clip's base audio source. `source` is either an uploaded audio blob (data
- * URI + fileName) or an AceStepFun track ref string ("audio0", "audio1", …).
- * `startSeconds` is where the piece begins inside the clip;
- * `trimStartSeconds` is how far into the source file playback starts; and
- * `lengthSeconds` is how long the piece plays. `volume` is its relative
- * loudness before the additive mix: 1 is unchanged, lower is quieter, and
- * higher is louder. Timeline values use a 0.1-second step.
- */
-export interface AudioSegment {
-    id?: string;
-    source: UploadedMedia | string | null;
-    startSeconds: number;
-    trimStartSeconds: number;
-    lengthSeconds: number;
-    volume: number;
 }
 
 export interface Stage {
@@ -233,7 +214,6 @@ export interface Clip {
     clipLengthFromControlNet: boolean;
     reuseAudio: boolean;
     uploadedAudio: UploadedMedia | null;
-    audioSegments: AudioSegment[];
     prompt: string;
     promptWindows: PromptWindow[];
     retake: Retake | null;
@@ -291,7 +271,6 @@ type WithRequiredId<T extends { id?: string }> = Omit<T, "id"> & {
     id: string;
 };
 
-export type CanonicalAudioSegment = WithRequiredId<AudioSegment>;
 export type CanonicalStage = WithRequiredId<Stage>;
 export type CanonicalPromptWindow = WithRequiredId<PromptWindow>;
 export type CanonicalRetake = WithRequiredId<Retake>;
@@ -302,9 +281,8 @@ export type CanonicalAudioTrack = Omit<WithRequiredId<AudioTrack>, "spans"> & {
 };
 export type CanonicalClip = Omit<
     WithRequiredId<Clip>,
-    "audioSegments" | "promptWindows" | "retake" | "refs" | "stages"
+    "promptWindows" | "retake" | "refs" | "stages"
 > & {
-    audioSegments: CanonicalAudioSegment[];
     promptWindows: CanonicalPromptWindow[];
     retake: CanonicalRetake | null;
     refs: CanonicalRefImage[];

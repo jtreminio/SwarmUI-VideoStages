@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace VideoStages.Planning;
 
 /// <summary>
@@ -13,12 +15,13 @@ internal static class AudioPlanCompiler
 
         AudioPlanComponentResult<AudioBaseSourcePlan> baseSource = AudioBaseSourcePlanCompiler.Compile(clip);
         AudioPlanComponentResult<AudioLengthPlan> length = AudioLengthPlanCompiler.Compile(clip, baseSource.Plan);
-        AudioPlanComponentResult<AudioSegmentPlan> segments = AudioSegmentPlanCompiler.Compile(clip, baseSource.Plan);
 
+        // Segments are no longer authored per clip: the root timeline audio tracks are projected
+        // onto each clip after the plan exists (see TimelineAudioSegmentPlanProjector).
         return new(
             baseSource.Plan,
             length.Plan,
-            segments.Plan,
-            [.. baseSource.Diagnostics, .. length.Diagnostics, .. segments.Diagnostics]);
+            new(ImmutableArray<AudioSegmentItemPlan>.Empty),
+            [.. baseSource.Diagnostics, .. length.Diagnostics]);
     }
 }

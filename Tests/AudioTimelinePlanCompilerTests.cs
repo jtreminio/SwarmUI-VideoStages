@@ -15,8 +15,7 @@ public class AudioTimelinePlanCompilerTests
         int id,
         int? frames = 48,
         string boundary = Constants.BoundaryOutCut,
-        int overlap = 8,
-        IReadOnlyList<AudioSegmentSpec> segments = null) => new(
+        int overlap = 8) => new(
             id,
             frames,
             Constants.AudioSourceNative,
@@ -28,7 +27,6 @@ public class AudioTimelinePlanCompilerTests
             null,
             [],
             [Stage(id)],
-            AudioSegments: segments,
             BoundaryOut: boundary,
             BoundaryOutOverlap: overlap);
 
@@ -44,32 +42,31 @@ public class AudioTimelinePlanCompilerTests
         Assert.Single(plan.Tracks.Where(track => track.TrackId == id));
 
     [Fact]
-    public void Default_projection_preserves_clip_local_base_and_segment_tracks()
+    public void Default_projection_preserves_clip_local_base_and_clip_relative_tracks()
     {
-        AudioSegmentSpec segment = new(
-            new UploadedMediaSpec("data:audio/wav;base64,QUJD", "line.wav"),
-            StartSeconds: 1,
-            TrimStartSeconds: 2,
-            LengthSeconds: 0.5);
-        VideoExecutionPlan video = Plan(Clip(10, segments: [segment]));
+        VideoExecutionPlan video = Plan(Clip(10));
 
-        AudioTimelinePlan timeline = video.AudioTimeline;
+        AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(
+            video,
+            [Track("overlay", new AudioTrackSpanSpec(
+                FirstClipId: 10,
+                LastClipId: 10,
+                SourceStartSeconds: 2,
+                ClipStartOffsetSeconds: 1,
+                ClipLengthSeconds: 0.5))]);
         AudioTimelineTrackPlan baseTrack = Track(timeline, "clip-10-base");
-        AudioTimelineTrackPlan segmentTrack = Track(timeline, "clip-10-segment-0");
+        AudioTimelineTrackPlan overlayTrack = Track(timeline, "overlay");
 
         AudioTrackClipWindow baseWindow = Assert.Single(baseTrack.Windows);
         Assert.Equal(0, baseWindow.TimelineStartSeconds);
         Assert.Equal(2, baseWindow.DurationSeconds, 8);
         Assert.Equal(0, baseWindow.SourceStartSeconds);
 
-        AudioTrackClipWindow segmentWindow = Assert.Single(segmentTrack.Windows);
-        Assert.Equal(1, segmentWindow.TimelineStartSeconds, 8);
-        Assert.Equal(0.5, segmentWindow.DurationSeconds, 8);
-        Assert.Equal(2, segmentWindow.SourceStartSeconds, 8);
-        AudioTrackSpanSpec authoredSegment = Assert.Single(segmentTrack.AuthoredSpans);
-        Assert.Equal(1, authoredSegment.ClipStartOffsetSeconds);
-        Assert.Equal(0.5, authoredSegment.ClipLengthSeconds);
-        Assert.Equal(AudioTimelineSpanOwnership.ClipRelativeWindow, segmentWindow.Ownership);
+        AudioTrackClipWindow overlayWindow = Assert.Single(overlayTrack.Windows);
+        Assert.Equal(1, overlayWindow.TimelineStartSeconds, 8);
+        Assert.Equal(0.5, overlayWindow.DurationSeconds, 8);
+        Assert.Equal(2, overlayWindow.SourceStartSeconds, 8);
+        Assert.Equal(AudioTimelineSpanOwnership.ClipRelativeWindow, overlayWindow.Ownership);
     }
 
     [Fact]
@@ -237,14 +234,16 @@ public class AudioTimelinePlanCompilerTests
     [Fact]
     public void Clip_relative_span_is_retained_as_pending_when_clip_timing_is_unknown()
     {
-        AudioSegmentSpec segment = new(
-            new UploadedMediaSpec("data:audio/wav;base64,QUJD", "pending.wav"),
-            StartSeconds: 1.25,
-            TrimStartSeconds: 0.5,
-            LengthSeconds: 2);
-        AudioTimelinePlan timeline = Plan(Clip(8, frames: null, segments: [segment])).AudioTimeline;
+        AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(
+            Plan(Clip(8, frames: null)),
+            [Track("pending-overlay", new AudioTrackSpanSpec(
+                FirstClipId: 8,
+                LastClipId: 8,
+                SourceStartSeconds: 0.5,
+                ClipStartOffsetSeconds: 1.25,
+                ClipLengthSeconds: 2))]);
 
-        AudioTimelineTrackPlan track = Track(timeline, "clip-8-segment-0");
+        AudioTimelineTrackPlan track = Track(timeline, "pending-overlay");
         Assert.Empty(track.Windows);
         AudioTrackSpanSpec authored = Assert.Single(track.AuthoredSpans);
         Assert.Equal(8, authored.FirstClipId);

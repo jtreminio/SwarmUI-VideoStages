@@ -8,7 +8,6 @@ export type EntityKind =
     | "clip"
     | "stage"
     | "ref"
-    | "audio_segment"
     | "prompt_window"
     | "retake"
     | "audio_track"
@@ -94,17 +93,6 @@ const clipIdentityEntries = (
                 entity: clip.refs[refIndex],
                 kind: "ref",
                 repairPath: `${clipIndex}_${refIndex}`,
-            });
-        }
-        for (
-            let segmentIndex = 0;
-            segmentIndex < clip.audioSegments.length;
-            segmentIndex++
-        ) {
-            entries.push({
-                entity: clip.audioSegments[segmentIndex],
-                kind: "audio_segment",
-                repairPath: `${clipIndex}_${segmentIndex}`,
             });
         }
         for (
@@ -211,9 +199,6 @@ export const collectAuthoringEntityIds = (
         if (clip.id) ids.push(clip.id);
         for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
         for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
-        for (const segment of clip.audioSegments) {
-            if (segment.id) ids.push(segment.id);
-        }
         for (const window of clip.promptWindows) {
             if (window.id) ids.push(window.id);
         }

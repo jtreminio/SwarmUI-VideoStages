@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 
 namespace VideoStages.Planning;
 
-/// <summary>Expands existing clip-local audio plans into explicit one-clip timeline track specs.</summary>
+/// <summary>Expands each clip's base audio plan into an explicit one-clip timeline track spec.</summary>
 internal static class ClipAudioTrackSpecPlanner
 {
     internal static ImmutableArray<AudioTrackSpec> Compile(VideoExecutionPlan videoPlan)
@@ -20,29 +20,6 @@ internal static class ClipAudioTrackSpecPlanner
                         clip.Audio.Base.UploadedMedia?.FileName ?? clip.Audio.Base.RawSource,
                         clip.Audio.Base.UploadedMedia),
                     [new AudioTrackSpanSpec(FirstClipId: clip.ClipId, LastClipId: clip.ClipId)]));
-            }
-
-            for (int segmentIndex = 0; segmentIndex < clip.Audio.Segments.Items.Length; segmentIndex++)
-            {
-                AudioSegmentItemPlan segment = clip.Audio.Segments.Items[segmentIndex];
-                tracks.Add(new(
-                    $"clip-{clip.ClipId}-segment-{segmentIndex}",
-                    new(
-                        segment.SourceKind == AudioSegmentSourceKind.AceStepFun
-                            ? AudioTimelineTrackSourceKind.AceStepFun
-                            : AudioTimelineTrackSourceKind.Upload,
-                        segment.SourceKind == AudioSegmentSourceKind.AceStepFun
-                            ? $"audio{segment.AceStepFunTrack}"
-                            : segment.UploadedMedia?.FileName
-                                ?? $"clip-{clip.ClipId}-segment-{segmentIndex}",
-                        segment.UploadedMedia),
-                    [new AudioTrackSpanSpec(
-                        FirstClipId: clip.ClipId,
-                        LastClipId: clip.ClipId,
-                        SourceStartSeconds: segment.TrimStartSeconds,
-                        ClipStartOffsetSeconds: segment.StartSeconds,
-                        ClipLengthSeconds: segment.LengthSeconds)],
-                    segment.Volume));
             }
         }
         return tracks.ToImmutable();

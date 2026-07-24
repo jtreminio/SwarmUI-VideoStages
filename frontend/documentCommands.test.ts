@@ -9,7 +9,6 @@ import {
     reduceDocumentCommand,
 } from "./documentCommands";
 import type {
-    CanonicalAudioSegment,
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
@@ -47,15 +46,6 @@ const ref = (id: string): CanonicalRefImage => ({
     fromEnd: false,
 });
 
-const segment = (id: string): CanonicalAudioSegment => ({
-    id,
-    source: "audio0",
-    startSeconds: 0,
-    trimStartSeconds: 0,
-    lengthSeconds: 1,
-    volume: 1,
-});
-
 const window = (id: string): CanonicalPromptWindow => ({
     id,
     prompt: id,
@@ -87,7 +77,6 @@ const clip = (id: string): CanonicalClip => ({
     clipLengthFromControlNet: false,
     reuseAudio: false,
     uploadedAudio: null,
-    audioSegments: [],
     prompt: id,
     promptWindows: [],
     retake: null,
@@ -121,7 +110,6 @@ const document = (): CanonicalVideoStagesConfig => {
     const first = clip("clip-a");
     first.stages = [stage("stage-a"), stage("stage-b")];
     first.refs = [ref("ref-a")];
-    first.audioSegments = [segment("segment-a")];
     first.promptWindows = [window("window-a")];
     first.retake = retake("retake-a");
     const second = clip("clip-b");
@@ -301,40 +289,6 @@ describe("reduceDocumentCommand", () => {
             value: (state: CanonicalVideoStagesConfig) =>
                 state.clips[0].refs.find((item) => item.id === "ref-b")?.frame,
             expectedValue: 3,
-        },
-        {
-            name: "audio segment",
-            targetId: "segment-b",
-            add: {
-                type: "audio-segment.add",
-                clipId: "clip-a",
-                segment: segment("segment-b"),
-                beforeSegmentId: "segment-a",
-            },
-            move: {
-                type: "audio-segment.move",
-                clipId: "clip-a",
-                segmentId: "segment-b",
-                beforeSegmentId: null,
-            },
-            patch: {
-                type: "audio-segment.patch",
-                clipId: "clip-a",
-                segmentId: "segment-b",
-                patch: { lengthSeconds: 2 },
-            },
-            remove: {
-                type: "audio-segment.remove",
-                clipId: "clip-a",
-                segmentId: "segment-b",
-            },
-            ids: (state: CanonicalVideoStagesConfig) =>
-                state.clips[0].audioSegments.map((item) => item.id),
-            value: (state: CanonicalVideoStagesConfig) =>
-                state.clips[0].audioSegments.find(
-                    (item) => item.id === "segment-b",
-                )?.lengthSeconds,
-            expectedValue: 2,
         },
         {
             name: "prompt window",
@@ -656,7 +610,6 @@ describe("reduceDocumentCommand", () => {
         targetClip.prompt = "preserve me";
         targetClip.refs = [ref("ref-convert")];
         targetClip.promptWindows = [window("window-convert")];
-        targetClip.audioSegments = [segment("segment-convert")];
         targetClip.retake = retake("retake-convert");
         targetClip.audioSource = "Upload";
         targetClip.uploadedAudio = {
@@ -731,7 +684,6 @@ describe("reduceDocumentCommand", () => {
             prompt: "preserve me",
             refs: [],
             promptWindows: [],
-            audioSegments: [],
             retake: null,
             sourceVideo: null,
             icLoras: [],

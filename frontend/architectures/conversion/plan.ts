@@ -215,14 +215,6 @@ export const planArchitectureConversion = (
         removedEntityIds.push(...collectIds(clip.promptWindows));
         clip.promptWindows = [];
     }
-    if (
-        !clipCapabilities.includes("audio-segments") &&
-        clip.audioSegments.length > 0
-    ) {
-        removals.push(countLabel(clip.audioSegments.length, "audio segment"));
-        removedEntityIds.push(...collectIds(clip.audioSegments));
-        clip.audioSegments = [];
-    }
     if (!clipCapabilities.includes("source-video") && clip.sourceVideo) {
         removals.push("source video");
         clip.sourceVideo = null;

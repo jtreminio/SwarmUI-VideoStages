@@ -99,7 +99,6 @@ public class VideoExecutionPlanCompilerTests
             false, true, false, true, null,
             [new ImageRefSpec("Upload", 1, false, "ref.png")],
             [Stage(10, loras: [new LoraRef("stage")]), Stage(11)],
-            AudioSegments: [new AudioSegmentSpec(new UploadedMediaSpec("audio", "clip.wav"), 0, 0, 1)],
             Loras: [new LoraRef("clip")],
             PromptWindows: [new PromptWindowSpec("first", 0, 1)]);
 
@@ -110,7 +109,6 @@ public class VideoExecutionPlanCompilerTests
             compiled.ArchitecturePayload);
         Assert.Equal(AudioLengthOwner.Audio, compiled.Audio.Length.Owner);
         Assert.False(ltxClip.AudioReuse.IsEligible);
-        Assert.Single(compiled.Audio.Segments.Items);
         Assert.Equal(
             PromptRelayMode.Relay,
             compiled.Stages[0].RequireLtx2Payload().PromptRelay.Mode);

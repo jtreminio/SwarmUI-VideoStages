@@ -78,20 +78,6 @@ export const clampDetailSelection = (
         // action instead of jumping the sidebar back to the top.
         return selection;
     }
-    if (selection.kind === "audio-segment") {
-        const segments = clip.audioSegments ?? [];
-        if (segments.length === 0) {
-            return { kind: "audio", clipIdx: selection.clipIdx };
-        }
-        const segIdx = clamp(selection.segIdx, 0, segments.length - 1);
-        return segIdx === selection.segIdx
-            ? selection
-            : {
-                  kind: "audio-segment",
-                  clipIdx: selection.clipIdx,
-                  segIdx,
-              };
-    }
     return selection;
 };
 
@@ -110,18 +96,6 @@ export const detailBreadcrumb = (
             return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
         case "audio":
             return `Audio · Clip ${selection.clipIdx}`;
-        case "audio-segment": {
-            const segment =
-                clips[selection.clipIdx]?.audioSegments?.[selection.segIdx];
-            if (!segment) {
-                return `Audio segment · Clip ${selection.clipIdx}`;
-            }
-            const start = roundToTenth(segment.startSeconds);
-            const end = roundToTenth(
-                segment.startSeconds + segment.lengthSeconds,
-            );
-            return `Audio segment · Clip ${selection.clipIdx} · ${start}–${end} s`;
-        }
         case "audio-track":
             return `Audio segment S${selection.trackIdx}`;
         case "audio-track-span":
@@ -190,8 +164,6 @@ export const buildDetailPanelBody = (
         case "ic-lora":
             return buildClipBody(context, selection, clips);
         case "audio":
-            return buildAudioBody(context, selection, clips);
-        case "audio-segment":
             return buildAudioBody(context, selection, clips);
         case "audio-track":
         case "audio-track-span":

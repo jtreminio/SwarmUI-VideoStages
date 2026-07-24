@@ -113,12 +113,6 @@ internal static class VideoExecutionPlanCompiler
                     firstStageOrdinal,
                     assignment,
                     architecturePayload)));
-            diagnostics.AddRange(clips[^1].Audio.Diagnostics.Select(audioDiagnostic =>
-                new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Warning,
-                    audioDiagnostic.Code,
-                    audioDiagnostic.Message,
-                    clips[^1].ClipId)));
             firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
         }
         BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(activeClips, clips);
@@ -176,6 +170,26 @@ internal static class VideoExecutionPlanCompiler
                 audioTimeline,
                 authoredAudioTracks.Select(track => track.TrackId).ToHashSet(
                     StringComparer.Ordinal));
+        // Audio diagnostics are collected only once the timeline projection has run, because the
+        // projected segments are what a clip's audio plan finally owns.
+        foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
+        {
+            diagnostics.AddRange(clipPlan.Audio.Diagnostics.Select(audioDiagnostic =>
+                new VideoPlanDiagnostic(
+                    VideoPlanDiagnosticSeverity.Warning,
+                    audioDiagnostic.Code,
+                    audioDiagnostic.Message,
+                    clipPlan.ClipId)));
+            VideoArchitectureDescriptor descriptor = architecturePlanning.Clips
+                .GetValueOrDefault(clipPlan.ClipId)?.Architecture;
+            if (descriptor is not null)
+            {
+                diagnostics.AddRange(
+                    ArchitectureCapabilityValidator.ValidateProjectedAudioSegments(
+                        clipPlan,
+                        descriptor));
+            }
+        }
         diagnostics.AddRange(audioTimeline.Diagnostics.Select(MapAudioTimelineDiagnostic));
         return plan with
         {

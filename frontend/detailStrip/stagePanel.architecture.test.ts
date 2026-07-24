@@ -57,8 +57,6 @@ const context = (
     deleteWindowEntry: jest.fn(),
     createRetake: jest.fn(),
     removeRetake: jest.fn(),
-    addAudioSegment: jest.fn(),
-    removeAudioSegment: jest.fn(),
     addStage: jest.fn(),
     deleteStage: jest.fn(),
     selectStage: jest.fn(),

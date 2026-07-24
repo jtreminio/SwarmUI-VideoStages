@@ -16,7 +16,29 @@ import {
     zoomAnchorScrollLeft,
     zoomAnchorTime,
 } from "./timelineView";
-import type { BoundaryOut, Clip } from "./types";
+import type { AudioTrack, BoundaryOut, Clip } from "./types";
+
+const audioTracks = (count: number): AudioTrack[] =>
+    Array.from({ length: count }, (_, index) => ({
+        id: `track-${index}`,
+        source: {
+            kind: "AceStepFun",
+            reference: `audio${index}`,
+            uploadedAudio: null,
+        },
+        spans: [
+            {
+                id: `span-${index}`,
+                firstClipId: null,
+                lastClipId: null,
+                timelineStartSeconds: index * 0.5,
+                timelineLengthSeconds: 1,
+                sourceStartSeconds: 0,
+                clipStartOffsetSeconds: null,
+                clipLengthSeconds: null,
+            },
+        ],
+    }));
 
 const boundaryClip = (boundaryOut: BoundaryOut = "cut"): Clip =>
     ({
@@ -684,18 +706,14 @@ describe("renderTimeline (DOM)", () => {
         );
     });
 
-    it("renders deterministic waveforms and cycling tones for overlay segments", () => {
-        const clip = minimalClip({
-            duration: 6,
-            audioSegments: Array.from({ length: 6 }, (_, index) => ({
-                source: `audio${index}`,
-                startSeconds: index * 0.5,
-                trimStartSeconds: 0,
-                lengthSeconds: 1,
-                volume: 1,
-            })),
-        });
-        const html = renderAudioTrackRow([clip], computeRegionLayout([clip]));
+    it("renders deterministic waveforms and cycling tones for timeline lanes", () => {
+        const clip = minimalClip({ duration: 6 });
+        const html = renderAudioTrackRow(
+            [clip],
+            computeRegionLayout([clip]),
+            undefined,
+            audioTracks(6),
+        );
         const host = document.createElement("div");
         host.innerHTML = html;
         const segments = host.querySelectorAll<HTMLElement>(".vst-audio-seg");
@@ -712,7 +730,7 @@ describe("renderTimeline (DOM)", () => {
         );
         expect(
             segments[0].querySelectorAll(".vst-audio-seg-wave span"),
-        ).toHaveLength(28);
+        ).toHaveLength(40);
         expect(segments[0].querySelector(".vst-audio-label")?.textContent).toBe(
             "audio0",
         );
@@ -947,34 +965,23 @@ describe("track-head lane tags", () => {
         const clips = [
             minimalClip({
                 duration: 5,
-                audioSegments: [
-                    {
-                        source: "a.wav",
-                        startSeconds: 0.5,
-                        trimStartSeconds: 0,
-                        lengthSeconds: 1.5,
-                        volume: 1,
-                    },
-                    {
-                        source: "b.wav",
-                        startSeconds: 2.5,
-                        trimStartSeconds: 0,
-                        lengthSeconds: 2,
-                        volume: 1,
-                    },
-                ],
                 promptWindows: [{ start: 1, duration: 2, prompt: "push in" }],
             }),
             minimalClip({ duration: 3 }),
         ];
         const layouts = computeRegionLayout(clips, { pxPerSecond: 60 });
 
-        // Audio: laneCount = 3 -> Src, S1, S2 active; trailing "+" muted on
+        // Audio: laneCount = 3 -> Src, S0, S1 active; trailing "+" muted on
         // the blank add-lane, placed via the same lane-idx var the lanes use.
-        const audio = renderAudioTrackRow(clips, layouts);
+        const audio = renderAudioTrackRow(
+            clips,
+            layouts,
+            undefined,
+            audioTracks(2),
+        );
         expect(audio).toContain("vst-head-tag-src");
+        expect(audio).toContain(">S0<");
         expect(audio).toContain(">S1<");
-        expect(audio).toContain(">S2<");
         expect(audio).toMatch(
             /vst-head-tag-seg vst-head-tag-muted" style="--vst-audio-lane-idx:2"/,
         );

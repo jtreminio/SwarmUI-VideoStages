@@ -9,10 +9,6 @@ namespace VideoStages;
 internal static class ClipTimelineSpecParser
 {
     private const int FrameAlignment = 8;
-    private const double AudioSegmentMinLength = 0.1;
-    private const double AudioSegmentMinVolume = 0.00001;
-    private const double AudioSegmentMaxVolume = 100000.0;
-    private const double AudioSegmentDefaultVolume = 1.0;
 
     public static int CalculateAlignedFrameCount(double durationSeconds, int fps)
     {
@@ -89,80 +85,6 @@ internal static class ClipTimelineSpecParser
         double strength = VideoStagesJsonReader.GetOptionalDouble(retake, "Strength", 1.0, location);
         strength = IsFinite(strength) ? Math.Clamp(strength, 0.0, 1.0) : 1.0;
         return new RetakeWindowSpec(startFrame, lengthFrames, strength);
-    }
-
-    public static IReadOnlyList<AudioSegmentSpec> ParseAudioSegments(
-        JObject clipObject,
-        double clipDurationSeconds)
-    {
-        List<JObject> rawSegments = VideoStagesJsonReader.GetObjectArray(
-            clipObject, UploadContainers.SegmentsCollection);
-        if (rawSegments.Count == 0)
-        {
-            return [];
-        }
-
-        List<AudioSegmentSpec> segments = [];
-        foreach (JObject segmentObject in rawSegments)
-        {
-            UploadedMediaSpec source = VideoStagesJsonReader.GetEmbeddedUpload(
-                segmentObject, UploadContainers.SegmentSource);
-            string aceSource = null;
-            if (source is null)
-            {
-                string sourceRef = VideoStagesJsonReader.GetString(segmentObject, "Source")?.Trim();
-                if (!string.IsNullOrEmpty(sourceRef)
-                    && AudioHandler.TryParseAceStepFunAudioSource(sourceRef, out _))
-                {
-                    aceSource = sourceRef;
-                }
-            }
-            if (source is null && aceSource is null)
-            {
-                continue;
-            }
-
-            double start = VideoStagesJsonReader.GetOptionalDouble(
-                segmentObject, "StartSeconds", 0, "Clip AudioSegment");
-            double trim = VideoStagesJsonReader.GetOptionalDouble(
-                segmentObject, "TrimStartSeconds", 0, "Clip AudioSegment");
-            double length = VideoStagesJsonReader.GetOptionalDouble(
-                segmentObject, "LengthSeconds", 0, "Clip AudioSegment");
-            double volume = VideoStagesJsonReader.GetOptionalDouble(
-                segmentObject, "Volume", 1, "Clip AudioSegment");
-            if (!IsFinite(start)
-                || !IsFinite(trim)
-                || !IsFinite(length)
-                || length <= 0)
-            {
-                continue;
-            }
-            volume = IsFinite(volume)
-                ? Math.Clamp(volume, AudioSegmentMinVolume, AudioSegmentMaxVolume)
-                : AudioSegmentDefaultVolume;
-
-            start = Math.Max(0, start);
-            trim = Math.Max(0, trim);
-            if (clipDurationSeconds > 0)
-            {
-                double maxStart = Math.Max(0, clipDurationSeconds - AudioSegmentMinLength);
-                start = Math.Min(start, maxStart);
-                length = Math.Clamp(
-                    length,
-                    AudioSegmentMinLength,
-                    Math.Max(AudioSegmentMinLength, clipDurationSeconds - start));
-            }
-
-            segments.Add(new AudioSegmentSpec(
-                source,
-                RoundTenth(start),
-                RoundTenth(trim),
-                RoundTenth(length),
-                AceStepFunSource: aceSource,
-                Volume: volume));
-        }
-        segments.Sort((left, right) => left.StartSeconds.CompareTo(right.StartSeconds));
-        return segments;
     }
 
     private static bool IsFinite(double value) =>

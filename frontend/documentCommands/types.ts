@@ -3,7 +3,6 @@ import type {
     ArchitectureRetargetPlan,
 } from "../architectures/types";
 import type {
-    CanonicalAudioSegment,
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
@@ -43,7 +42,6 @@ type ClipPatch = Partial<
         | "id"
         | "architecture"
         | "modelProfileId"
-        | "audioSegments"
         | "promptWindows"
         | "retake"
         | "refs"
@@ -54,7 +52,6 @@ type StagePatch = Partial<
     Omit<CanonicalStage, "id" | "model" | "modelProfileId">
 >;
 type RefPatch = Partial<Omit<CanonicalRefImage, "id">>;
-type AudioSegmentPatch = Partial<Omit<CanonicalAudioSegment, "id">>;
 type PromptWindowPatch = Partial<Omit<CanonicalPromptWindow, "id">>;
 type RetakePatch = Partial<Omit<CanonicalRetake, "id">>;
 type AudioTrackPatch = Partial<Omit<CanonicalAudioTrack, "id" | "spans">>;
@@ -122,29 +119,6 @@ export type DocumentCommand =
           beforeRefId: string | null;
       }
     | { type: "ref.patch"; clipId: string; refId: string; patch: RefPatch }
-    | {
-          type: "audio-segment.add";
-          clipId: string;
-          segment: CanonicalAudioSegment;
-          beforeSegmentId?: string | null;
-      }
-    | {
-          type: "audio-segment.remove";
-          clipId: string;
-          segmentId: string;
-      }
-    | {
-          type: "audio-segment.move";
-          clipId: string;
-          segmentId: string;
-          beforeSegmentId: string | null;
-      }
-    | {
-          type: "audio-segment.patch";
-          clipId: string;
-          segmentId: string;
-          patch: AudioSegmentPatch;
-      }
     | {
           type: "prompt-window.add";
           clipId: string;

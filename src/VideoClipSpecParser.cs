@@ -58,8 +58,6 @@ internal static class VideoClipSpecParser
                 clipObject, UploadContainers.ClipAudio),
             ImageRefs: references,
             Stages: stages,
-            AudioSegments: ClipTimelineSpecParser.ParseAudioSegments(
-                clipObject, durationSeconds),
             Loras: VideoStageResourceParser.ParseLoras(clipObject),
             PromptWindows: SortWindows(context.Tags.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(

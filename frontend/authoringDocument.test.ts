@@ -133,7 +133,6 @@ describe("versioned authoring document identity", () => {
                         },
                     ],
                     refs: [{ id: "duplicate", source: "Base", frame: 1 }],
-                    audioSegments: [],
                     retake: null,
                 },
             ],
@@ -175,16 +174,6 @@ describe("versioned authoring document identity", () => {
                     id: duplicate,
                     stages: [minimalStage({ id: duplicate })],
                     refs: [minimalRef({ id: duplicate })],
-                    audioSegments: [
-                        {
-                            id: duplicate,
-                            source: "audio0",
-                            startSeconds: 0,
-                            trimStartSeconds: 0,
-                            lengthSeconds: 1,
-                            volume: 1,
-                        },
-                    ],
                     promptWindows: [
                         {
                             id: duplicate,
@@ -229,7 +218,7 @@ describe("versioned authoring document identity", () => {
 
         ensureAuthoringDocumentIdentity(state);
         const ids = collectAuthoringEntityIds(state);
-        expect(ids).toHaveLength(8);
+        expect(ids).toHaveLength(7);
         expect(new Set(ids).size).toBe(ids.length);
         expect(state.clips[0].id).toBe(duplicate);
         expect(state.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);
@@ -244,23 +233,6 @@ describe("versioned authoring document identity", () => {
             id: "clip-nested",
             stages: [minimalStage(), minimalStage({ id: "stage_legacy_1_0" })],
             refs: [minimalRef(), minimalRef({ id: "ref_legacy_1_0" })],
-            audioSegments: [
-                {
-                    source: "audio0",
-                    startSeconds: 0,
-                    trimStartSeconds: 0,
-                    lengthSeconds: 0.5,
-                    volume: 1,
-                },
-                {
-                    id: "audio_segment_legacy_1_0",
-                    source: "audio1",
-                    startSeconds: 1,
-                    trimStartSeconds: 0,
-                    lengthSeconds: 0.5,
-                    volume: 1,
-                },
-            ],
             promptWindows: [
                 { prompt: "new", start: 0, duration: 0.5 },
                 {
@@ -276,7 +248,6 @@ describe("versioned authoring document identity", () => {
         });
         const stableStage = nestedClip.stages[1];
         const stableRef = nestedClip.refs[1];
-        const stableSegment = nestedClip.audioSegments[1];
         const stableWindow = nestedClip.promptWindows[1];
         const stableSpan = {
             id: "audio_span_legacy_0_0",
@@ -321,8 +292,6 @@ describe("versioned authoring document identity", () => {
         expect(nestedClip.stages[0].id).not.toBe(stableStage.id);
         expect(stableRef.id).toBe("ref_legacy_1_0");
         expect(nestedClip.refs[0].id).not.toBe(stableRef.id);
-        expect(stableSegment.id).toBe("audio_segment_legacy_1_0");
-        expect(nestedClip.audioSegments[0].id).not.toBe(stableSegment.id);
         expect(stableWindow.id).toBe("prompt_window_legacy_1_0");
         expect(nestedClip.promptWindows[0].id).not.toBe(stableWindow.id);
         expect(stableSpan.id).toBe("audio_span_legacy_0_0");
@@ -394,24 +363,6 @@ describe("versioned authoring document identity", () => {
                         minimalStage({ id: "stage-a" }),
                         minimalStage({ id: "stage-b" }),
                     ],
-                    audioSegments: [
-                        {
-                            id: "segment-a",
-                            source: "audio0",
-                            startSeconds: 0,
-                            trimStartSeconds: 0,
-                            lengthSeconds: 0.5,
-                            volume: 1,
-                        },
-                        {
-                            id: "segment-b",
-                            source: "audio1",
-                            startSeconds: 1,
-                            trimStartSeconds: 0,
-                            lengthSeconds: 0.5,
-                            volume: 1,
-                        },
-                    ],
                 }),
             ],
             {
@@ -455,7 +406,6 @@ describe("versioned authoring document identity", () => {
         const clip = reordered.clips[0];
         clip.refs.reverse();
         clip.stages.reverse();
-        clip.audioSegments.reverse();
         reordered.audioTracks?.[0].spans.reverse();
         saveState(reordered, { notifyDomChange: false });
         __resetPersistenceForTests();
@@ -469,9 +419,6 @@ describe("versioned authoring document identity", () => {
             "stage-b",
             "stage-a",
         ]);
-        expect(
-            reloaded.clips[0].audioSegments.map((segment) => segment.id),
-        ).toEqual(["segment-b", "segment-a"]);
         expect(reloaded.audioTracks?.[0].spans.map((span) => span.id)).toEqual([
             "span-b",
             "span-a",

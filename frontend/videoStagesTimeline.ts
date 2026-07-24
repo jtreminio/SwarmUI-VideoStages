@@ -73,7 +73,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
     const audioTrack = createTimelineAudioTrack();
-    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
+    const audioSegmentTrack = createTimelineAudioSegmentTrack();
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;

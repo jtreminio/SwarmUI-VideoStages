@@ -83,12 +83,6 @@ const persistedCapabilityIssues = (
         "Source video",
     );
     unsupported(
-        !clipCapabilities.includes("audio-segments") &&
-            clip.audioSegments.length > 0,
-        "audio-segments",
-        "Audio segments",
-    );
-    unsupported(
         !clipCapabilities.includes("prompt-relay") &&
             clip.promptWindows.length > 0,
         "prompt-relay",

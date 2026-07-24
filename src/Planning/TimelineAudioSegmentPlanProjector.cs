@@ -75,16 +75,16 @@ internal static class TimelineAudioSegmentPlanProjector
             {
                 return clip;
             }
-            ImmutableArray<AudioSegmentItemPlan> items = clip.Audio.Segments.Items
-                .AddRange(projected)
-                .OrderBy(item => item.StartSeconds)
-                .ThenBy(item => item.TrimStartSeconds)
-                .ToImmutableArray();
+            AudioPlanComponentResult<AudioSegmentPlan> compiled =
+                AudioSegmentPlanCompiler.Compile(
+                    clip.Audio.Segments.Items.AddRange(projected),
+                    clip.Audio.Base);
             return clip with
             {
                 Audio = clip.Audio with
                 {
-                    Segments = new(items),
+                    Segments = compiled.Plan,
+                    Diagnostics = clip.Audio.Diagnostics.AddRange(compiled.Diagnostics),
                 },
             };
         }).ToArray());

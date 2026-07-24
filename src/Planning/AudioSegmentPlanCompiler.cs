@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 
 namespace VideoStages.Planning;
 
-/// <summary>Compiles independently ordered audio segment windows and their base-track requirement.</summary>
+/// <summary>Orders projected audio segment windows and reports their base-track requirement.</summary>
 internal static class AudioSegmentPlanCompiler
 {
     private const string SegmentsWithoutBase = "audio.segments.preserve_windowed_no_base";
@@ -10,12 +10,12 @@ internal static class AudioSegmentPlanCompiler
     private const string SegmentIgnoredInvalidWindow = "audio.segment.ignored_invalid_window";
 
     internal static AudioPlanComponentResult<AudioSegmentPlan> Compile(
-        ClipSpec clip,
+        IEnumerable<AudioSegmentItemPlan> segments,
         AudioBaseSourcePlan baseSource)
     {
         ImmutableArray<AudioPlanDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<AudioPlanDiagnostic>();
         ImmutableArray<AudioSegmentItemPlan>.Builder items = ImmutableArray.CreateBuilder<AudioSegmentItemPlan>();
-        foreach (AudioSegmentSpec segment in clip.AudioSegments ?? [])
+        foreach (AudioSegmentItemPlan segment in segments ?? [])
         {
             if (segment is null)
             {
@@ -30,44 +30,31 @@ internal static class AudioSegmentPlanCompiler
                 diagnostics.Add(new(SegmentIgnoredInvalidWindow, "An audio segment has an invalid time window and was ignored."));
                 continue;
             }
-            if (AudioHandler.TryParseAceStepFunAudioSource(segment.AceStepFunSource, out int aceTrack))
+            if (segment.SourceKind == AudioSegmentSourceKind.AceStepFun
+                && segment.AceStepFunTrack is null)
             {
-                items.Add(new(AudioSegmentSourceKind.AceStepFun, aceTrack,
-                    segment.StartSeconds, segment.TrimStartSeconds, segment.LengthSeconds, null,
-                    segment.Volume));
+                diagnostics.Add(new(SegmentIgnoredNoSource, "An audio segment has no usable AceStepFun track and was ignored."));
                 continue;
             }
-            if (!string.IsNullOrWhiteSpace(segment.Source?.Data))
+            if (segment.SourceKind == AudioSegmentSourceKind.Upload
+                && string.IsNullOrWhiteSpace(segment.UploadedMedia?.Data))
             {
-                items.Add(new(AudioSegmentSourceKind.Upload, null,
-                    segment.StartSeconds, segment.TrimStartSeconds, segment.LengthSeconds,
-                    AudioMediaIdentityCompiler.Compile(segment.Source),
-                    segment.Volume));
+                diagnostics.Add(new(SegmentIgnoredNoSource, "An audio segment has no usable upload source and was ignored."));
                 continue;
             }
-            diagnostics.Add(new(SegmentIgnoredNoSource, "An audio segment has no usable upload or AceStepFun source and was ignored."));
+            items.Add(segment);
         }
 
         ImmutableArray<AudioSegmentItemPlan> ordered = items
             .OrderBy(item => item.StartSeconds)
             .ThenBy(item => item.TrimStartSeconds)
             .ToImmutableArray();
-        if (ordered.IsEmpty)
-        {
-            return new(
-                new(ordered),
-                diagnostics.ToImmutable());
-        }
-        if (!baseSource.HasConfiguredTrack)
+        if (!ordered.IsEmpty && !baseSource.HasConfiguredTrack)
         {
             diagnostics.Add(new(
                 SegmentsWithoutBase,
                 "Audio segments have no locked base track, so only their windows are preserved and gaps are generated."));
-            return new(
-                new(ordered),
-                diagnostics.ToImmutable());
         }
-
         return new(new(ordered), diagnostics.ToImmutable());
     }
 }

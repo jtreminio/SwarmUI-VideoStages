@@ -7,9 +7,6 @@ import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import {
-    AUDIO_SEGMENT_DEFAULT_LENGTH,
-    AUDIO_SEGMENT_MIN_LENGTH,
-    AUDIO_SEGMENT_VOLUME_DEFAULT,
     clamp,
     PROMPT_WINDOW_DEFAULT_DURATION,
     PROMPT_WINDOW_MIN_DURATION,
@@ -28,7 +25,7 @@ import {
 import { dispatchDocumentCommand, getTimelineStore } from "../persistence";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import { setSelection } from "../selection";
-import type { AudioSegment, Clip, TimelineSelection } from "../types";
+import type { Clip, TimelineSelection } from "../types";
 import { roundToTenth } from "../utils";
 
 export type StructuralCommit = (
@@ -43,8 +40,6 @@ export interface DetailSelectionDomainOperations {
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
     createRetake(clipIdx: number): void;
     removeRetake(clipIdx: number): void;
-    addAudioSegment(clipIdx: number): void;
-    removeAudioSegment(clipIdx: number, segIdx: number): void;
     addStage(clipIdx: number): void;
     deleteStage(clipIdx: number, stageIdx: number): void;
     selectStage(clipIdx: number, stageIdx: number): void;
@@ -243,60 +238,6 @@ export const createDetailSelectionDomainOperations = (
         );
     };
 
-    const addAudioSegment = (clipIdx: number): void => {
-        structuralCommit((clips) => {
-            const clip = clips[clipIdx];
-            if (
-                !clip ||
-                !getCapabilities().forClip(clip).decision("audioSegments")
-                    .supported
-            ) {
-                return null;
-            }
-            const clipDuration = Math.max(0, clip.duration || 0);
-            if (clipDuration < AUDIO_SEGMENT_MIN_LENGTH) {
-                return null;
-            }
-            const segment: AudioSegment = {
-                source: null,
-                startSeconds: 0,
-                trimStartSeconds: 0,
-                lengthSeconds: roundToTenth(
-                    Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDuration),
-                ),
-                volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
-            };
-            clip.audioSegments = [...(clip.audioSegments ?? []), segment];
-            return {
-                kind: "audio-segment",
-                clipIdx,
-                segIdx: clip.audioSegments.length - 1,
-            };
-        });
-    };
-
-    const removeAudioSegment = (clipIdx: number, segmentIdx: number): void => {
-        commitRemoval(
-            (clips) => {
-                const clip = clips[clipIdx];
-                if (!clip?.audioSegments?.[segmentIdx]) {
-                    return null;
-                }
-                clip.audioSegments = clip.audioSegments.filter(
-                    (_, index) => index !== segmentIdx,
-                );
-                return clip.audioSegments.length;
-            },
-            segmentIdx,
-            (index) => ({
-                kind: "audio-segment",
-                clipIdx,
-                segIdx: index,
-            }),
-            { kind: "audio", clipIdx },
-        );
-    };
-
     const selectStage = (clipIdx: number, stageIdx: number): void => {
         setSelection({ kind: "clip", clipIdx, stageIdx });
     };
@@ -444,8 +385,6 @@ export const createDetailSelectionDomainOperations = (
         deleteWindowEntry,
         createRetake,
         removeRetake,
-        addAudioSegment,
-        removeAudioSegment,
         addStage,
         deleteStage,
         selectStage,

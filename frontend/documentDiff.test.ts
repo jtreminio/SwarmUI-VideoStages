@@ -12,7 +12,6 @@ import type {
 import { reduceDocumentCommand } from "./documentCommands";
 import { DocumentDiffError, diffDocuments } from "./documentDiff";
 import type {
-    CanonicalAudioSegment,
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
@@ -50,15 +49,6 @@ const ref = (id: string): CanonicalRefImage => ({
     fromEnd: false,
 });
 
-const segment = (id: string): CanonicalAudioSegment => ({
-    id,
-    source: "audio0",
-    startSeconds: 0,
-    trimStartSeconds: 0,
-    lengthSeconds: 1,
-    volume: 1,
-});
-
 const window = (id: string): CanonicalPromptWindow => ({
     id,
     prompt: id,
@@ -90,7 +80,6 @@ const clip = (id: string): CanonicalClip => ({
     clipLengthFromControlNet: false,
     reuseAudio: false,
     uploadedAudio: null,
-    audioSegments: [],
     prompt: id,
     promptWindows: [],
     retake: null,
@@ -124,11 +113,6 @@ const document = (): CanonicalVideoStagesConfig => {
     const clipA = clip("clip-a");
     clipA.stages = [stage("stage-a"), stage("stage-b"), stage("stage-c")];
     clipA.refs = [ref("ref-a"), ref("ref-b"), ref("ref-c")];
-    clipA.audioSegments = [
-        segment("segment-a"),
-        segment("segment-b"),
-        segment("segment-c"),
-    ];
     clipA.promptWindows = [
         window("window-a"),
         window("window-b"),
@@ -138,7 +122,7 @@ const document = (): CanonicalVideoStagesConfig => {
     const trackA = track("track-a");
     trackA.spans = [span("span-a"), span("span-b"), span("span-c")];
     return {
-        schemaVersion: 3,
+        schemaVersion: 5,
         width: 1024,
         height: 576,
         fps: 24,
@@ -532,18 +516,6 @@ describe("diffDocuments", () => {
             },
         },
         {
-            name: "audio segment",
-            type: "audio-segment.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
-                after.clips[0].audioSegments[0].source = {
-                    data: "data:audio/wav;base64,AA==",
-                    fileName: "s.wav",
-                };
-                after.clips[0].audioSegments[0].lengthSeconds = 2;
-                after.clips[0].audioSegments[0].volume = 0.4;
-            },
-        },
-        {
             name: "prompt window",
             type: "prompt-window.patch",
             mutate: (after: CanonicalVideoStagesConfig) => {
@@ -630,20 +602,6 @@ describe("diffDocuments", () => {
             mutate: (after: CanonicalVideoStagesConfig) => {
                 const items = after.clips[0].refs;
                 after.clips[0].refs = [items[2], ref("ref-new"), items[1]];
-            },
-        },
-        {
-            name: "audio segments",
-            removeType: "audio-segment.remove",
-            addType: "audio-segment.add",
-            moveType: "audio-segment.move",
-            mutate: (after: CanonicalVideoStagesConfig) => {
-                const items = after.clips[0].audioSegments;
-                after.clips[0].audioSegments = [
-                    items[2],
-                    segment("segment-new"),
-                    items[1],
-                ];
             },
         },
         {

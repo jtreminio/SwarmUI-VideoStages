@@ -47,10 +47,14 @@ public partial class StageFlowTests
     }
 
     private static (JObject Workflow, WorkflowGenerator Generator) GenerateSourcedFlow(
-        TestModelBundle models, params JObject[] clips)
+        TestModelBundle models, params JObject[] clips) =>
+        GenerateSourcedRootFlow(models, MakeRootConfig(512, 512, clips));
+
+    private static (JObject Workflow, WorkflowGenerator Generator) GenerateSourcedRootFlow(
+        TestModelBundle models, JObject root)
     {
         T2IParamInput input = BuildNativeInput(
-            models.BaseModel, models.VideoModel, MakeRootConfig(512, 512, clips).ToString());
+            models.BaseModel, models.VideoModel, root.ToString());
         return WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: true),

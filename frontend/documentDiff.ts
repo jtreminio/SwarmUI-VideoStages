@@ -7,7 +7,6 @@ import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import type { CommandFailure, DocumentCommand } from "./documentCommands";
 import type {
-    CanonicalAudioSegment,
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
@@ -102,14 +101,6 @@ const REF_PATCH_KEYS = [
     "fromEnd",
 ] as const satisfies readonly (keyof CanonicalRefImage)[];
 
-const AUDIO_SEGMENT_PATCH_KEYS = [
-    "source",
-    "startSeconds",
-    "trimStartSeconds",
-    "lengthSeconds",
-    "volume",
-] as const satisfies readonly (keyof CanonicalAudioSegment)[];
-
 const PROMPT_WINDOW_PATCH_KEYS = [
     "prompt",
     "start",
@@ -153,7 +144,6 @@ const _clipKeysExhaustive: AssertClassified<
     | "architecture"
     | "modelProfileId"
     | (typeof CLIP_PATCH_KEYS)[number]
-    | "audioSegments"
     | "promptWindows"
     | "retake"
     | "refs"
@@ -166,10 +156,6 @@ const _stageKeysExhaustive: AssertClassified<
 const _refKeysExhaustive: AssertClassified<
     CanonicalRefImage,
     "id" | (typeof REF_PATCH_KEYS)[number]
-> = true;
-const _audioSegmentKeysExhaustive: AssertClassified<
-    CanonicalAudioSegment,
-    "id" | (typeof AUDIO_SEGMENT_PATCH_KEYS)[number]
 > = true;
 const _promptWindowKeysExhaustive: AssertClassified<
     CanonicalPromptWindow,
@@ -192,7 +178,6 @@ void [
     _clipKeysExhaustive,
     _stageKeysExhaustive,
     _refKeysExhaustive,
-    _audioSegmentKeysExhaustive,
     _promptWindowKeysExhaustive,
     _retakeKeysExhaustive,
     _audioTrackKeysExhaustive,
@@ -251,7 +236,6 @@ const allEntityIds = (document: CanonicalVideoStagesConfig): unknown[] => [
         clip.id,
         ...clip.stages.map((stage) => stage.id),
         ...clip.refs.map((ref) => ref.id),
-        ...clip.audioSegments.map((segment) => segment.id),
         ...clip.promptWindows.map((window) => window.id),
         ...(clip.retake ? [clip.retake.id] : []),
     ]),
@@ -432,46 +416,6 @@ const diffRefs = (
         },
     });
 
-const diffAudioSegments = (
-    before: CanonicalClip,
-    after: CanonicalClip,
-    phases: CommandPhases,
-): void =>
-    diffEntityList(before.audioSegments, after.audioSegments, phases, {
-        remove: (segmentId) => ({
-            type: "audio-segment.remove",
-            clipId: before.id,
-            segmentId,
-        }),
-        add: (segment, beforeSegmentId) => ({
-            type: "audio-segment.add",
-            clipId: after.id,
-            segment,
-            beforeSegmentId,
-        }),
-        move: (segmentId, beforeSegmentId) => ({
-            type: "audio-segment.move",
-            clipId: after.id,
-            segmentId,
-            beforeSegmentId,
-        }),
-        patch: (previous, next) => {
-            const patch = changedPatch(
-                previous,
-                next,
-                AUDIO_SEGMENT_PATCH_KEYS,
-            );
-            if (hasPatch(patch)) {
-                phases.patches.push({
-                    type: "audio-segment.patch",
-                    clipId: after.id,
-                    segmentId: next.id,
-                    patch,
-                });
-            }
-        },
-    });
-
 const diffPromptWindows = (
     before: CanonicalClip,
     after: CanonicalClip,
@@ -555,7 +499,6 @@ const diffClipChildren = (
 ): void => {
     diffStages(before, after, phases);
     diffRefs(before, after, phases);
-    diffAudioSegments(before, after, phases);
     diffPromptWindows(before, after, phases);
     diffRetake(before, after, phases);
 };

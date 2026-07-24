@@ -25,7 +25,6 @@ import {
     getSelection,
     resetSelectionForTests,
     setSelection,
-    subscribeSelection,
 } from "./selection";
 import {
     createTimelineDetailStrip,
@@ -77,13 +76,6 @@ interface ClipFixture {
         startSeconds: number;
         lengthSeconds: number;
     };
-    audioSegments?: {
-        source: { data: string; fileName: string };
-        startSeconds: number;
-        trimStartSeconds: number;
-        lengthSeconds: number;
-        volume?: number;
-    }[];
 }
 
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
@@ -109,7 +101,6 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     promptWindows: [],
     ...(clip.retake ? { retake: clip.retake } : {}),
     ...(clip.sourceVideo ? { sourceVideo: clip.sourceVideo } : {}),
-    ...(clip.audioSegments ? { audioSegments: clip.audioSegments } : {}),
 });
 
 // Prompt windows + clip prompts ride in the prompt box as tags.
@@ -1954,15 +1945,6 @@ describe("createTimelineDetailStrip", () => {
         }
         return row;
     };
-    const segRow = (idx: number): HTMLElement => {
-        const row = document.querySelector<HTMLElement>(
-            `.vst-detail-seg-row[data-vst-seg-index="${idx}"]`,
-        );
-        if (!row) {
-            throw new Error(`segment row ${idx} missing`);
-        }
-        return row;
-    };
 
     it("adds and selects a reference from the clip sidebar rail", () => {
         setup([{ duration: 5, stages: [{}] }]);
@@ -2310,426 +2292,6 @@ describe("createTimelineDetailStrip", () => {
 
         setSelection({ kind: "audio", clipIdx: 1 });
         expect(visibleSegmentLabels()).toEqual(["S1", "S2"]);
-    });
-
-    it("+ Add segment appends a default-length segment on its own lane (overlap allowed)", () => {
-        // Existing segments [1,3] and [4,6]; the new one may overlap them.
-        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
-        setSelection({ kind: "audio", clipIdx: 0 });
-        document
-            .querySelector<HTMLElement>(".vst-detail-add-segment")
-            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-        const segments = savedClips(saveSpy)[0].audioSegments;
-        expect(segments).toHaveLength(3);
-        // Appended (the array index is the lane — no start-time sort): the new
-        // segment starts at 0 with the default length and is selected.
-        expect(segments.map((s) => s.startSeconds)).toEqual([1, 4, 0]);
-        expect(segments[2].lengthSeconds).toBe(2);
-        expect(getSelection()).toEqual({
-            kind: "audio-segment",
-            clipIdx: 0,
-            segIdx: 2,
-        });
-    });
-
-    it("keeps base audio visible and opens one default segment editor at a time", () => {
-        setup([
-            {
-                duration: 10,
-                stages: [{}],
-                audioSource: "Upload",
-                uploadedAudio: {
-                    data: "data:audio/wav;base64,QkFTRQ==",
-                    fileName: "base.wav",
-                },
-                audioSegments: twoSegments,
-            },
-        ]);
-        setSelection({ kind: "audio", clipIdx: 0 });
-
-        expect(crumbText()).toBe("Audio · Clip 0");
-        expect(
-            fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
-                "select",
-            )?.value,
-        ).toBe("Upload");
-        expect(detailBody()?.textContent).toContain("base.wav");
-        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
-            1,
-        );
-        expect(
-            segRow(0).classList.contains("vst-detail-repeating-editor-active"),
-        ).toBe(true);
-        expect(document.querySelectorAll(".vst-segment-tab")).toHaveLength(2);
-        const segmentSection = detail()?.querySelector<HTMLElement>(
-            '[data-vst-repeater-key="audio-segments"]',
-        );
-        expect(
-            segmentSection?.querySelector(
-                ":scope > .input-group-header .header-label",
-            )?.textContent,
-        ).toBe("Audio Segments");
-        const segmentContent = segmentSection?.querySelector<HTMLElement>(
-            ":scope > .input-group-content",
-        );
-        expect(segmentContent?.firstElementChild?.classList).toContain(
-            "vst-detail-note",
-        );
-        expect(segmentContent?.firstElementChild?.textContent).toBe(
-            "Overlaid additively over the base audio; overlapping segments mix together.",
-        );
-        expect(
-            document
-                .querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[0]
-                ?.getAttribute("aria-pressed"),
-        ).toBe("true");
-
-        // Selecting S2 swaps the one editor without hiding base-audio controls.
-        const before = detailBody();
-        const secondTab =
-            document.querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[1];
-        secondTab?.focus();
-        secondTab?.click();
-        expect(getSelection()).toEqual({
-            kind: "audio-segment",
-            clipIdx: 0,
-            segIdx: 1,
-        });
-        expect(detailBody()).not.toBe(before);
-        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
-            1,
-        );
-        expect(
-            segRow(1).classList.contains("vst-detail-repeating-editor-active"),
-        ).toBe(true);
-        const rerenderedSecondTab =
-            document.querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[1];
-        expect(rerenderedSecondTab?.getAttribute("aria-pressed")).toBe("true");
-        expect(document.activeElement).toBe(rerenderedSecondTab);
-        expect(
-            fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
-                "select",
-            )?.value,
-        ).toBe("Upload");
-
-        // Selecting the base track restores the first segment as the default editor.
-        setSelection({ kind: "audio", clipIdx: 0 });
-        expect(crumbText()).toBe("Audio · Clip 0");
-        expect(
-            segRow(0).classList.contains("vst-detail-repeating-editor-active"),
-        ).toBe(true);
-    });
-
-    it("renders the audio-segment editor with breadcrumb, fields and remove", () => {
-        setup([
-            {
-                duration: 10,
-                stages: [{}],
-                audioSegments: [
-                    {
-                        source: {
-                            data: "data:audio/wav;base64,QUJD",
-                            fileName: "a.wav",
-                        },
-                        startSeconds: 2,
-                        trimStartSeconds: 1,
-                        lengthSeconds: 3,
-                    },
-                ],
-            },
-        ]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        expect(crumbText()).toBe("Audio segment · Clip 0 · 2–5 s");
-        expect(
-            fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input")
-                ?.value,
-        ).toBe("2");
-        expect(
-            fieldByLabel("Trim start (s)").querySelector<HTMLInputElement>(
-                "input",
-            )?.value,
-        ).toBe("1");
-        expect(
-            fieldByLabel("Length (s)").querySelector<HTMLInputElement>("input")
-                ?.value,
-        ).toBe("3");
-        const volume = sliderNumberByLabel("Volume");
-        const volumeRange = volume
-            .closest(".vst-stage-slider")
-            ?.querySelector<HTMLInputElement>("input.auto-slider-range");
-        expect(volume.value).toBe("1");
-        expect(volume.min).toBe("0.00001");
-        expect(volume.max).toBe("100000");
-        expect(volume.step).toBe("any");
-        expect(volumeRange?.min).toBe("0.1");
-        expect(volumeRange?.max).toBe("4");
-        expect(volumeRange?.step).toBe("0.1");
-        const remove =
-            detailBody()?.querySelector<HTMLElement>(".vst-detail-delete");
-        expect(remove?.textContent).toBe("×");
-        expect(remove?.classList.contains("vst-detail-delete-segment")).toBe(
-            true,
-        );
-    });
-
-    it("persists an audio segment Volume edit", () => {
-        setup([
-            {
-                duration: 10,
-                stages: [{}],
-                audioSegments: [
-                    {
-                        source: {
-                            data: "data:audio/wav;base64,QUJD",
-                            fileName: "a.wav",
-                        },
-                        startSeconds: 2,
-                        trimStartSeconds: 0,
-                        lengthSeconds: 3,
-                        volume: 1,
-                    },
-                ],
-            },
-        ]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        jest.useFakeTimers();
-        const volume = sliderNumberByLabel("Volume");
-        // The number field intentionally accepts values outside the practical
-        // slider range.
-        volume.value = "12.345";
-        volume.dispatchEvent(new Event("input", { bubbles: true }));
-        jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].audioSegments[0].volume).toBe(12.345);
-        jest.useRealTimers();
-    });
-
-    it("keeps the audio segment Volume slider and number input synchronized", () => {
-        setup([
-            {
-                duration: 10,
-                stages: [{}],
-                audioSegments: [
-                    {
-                        source: {
-                            data: "data:audio/wav;base64,QUJD",
-                            fileName: "a.wav",
-                        },
-                        startSeconds: 2,
-                        trimStartSeconds: 0,
-                        lengthSeconds: 3,
-                        volume: 1,
-                    },
-                ],
-            },
-        ]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        const number = sliderNumberByLabel("Volume");
-        const range = number
-            .closest(".vst-stage-slider")
-            ?.querySelector<HTMLInputElement>("input.auto-slider-range");
-        if (!range) {
-            throw new Error("Volume range input not found");
-        }
-
-        range.value = "2.5";
-        range.dispatchEvent(new Event("input", { bubbles: true }));
-        expect(number.value).toBe("2.5");
-
-        number.value = "3.2";
-        number.dispatchEvent(new Event("input", { bubbles: true }));
-        expect(range.value).toBe("3.2");
-
-        // Values beyond the practical slider remain valid in the number
-        // field, while the browser pins the visual range control at its edge.
-        number.value = "12.345";
-        number.dispatchEvent(new Event("input", { bubbles: true }));
-        expect(number.value).toBe("12.345");
-        expect(range.value).toBe("4");
-    });
-
-    it("live-applies an audio-segment Start edit and removes the segment", () => {
-        setup([
-            {
-                duration: 10,
-                stages: [{}],
-                audioSegments: [
-                    {
-                        source: {
-                            data: "data:audio/wav;base64,QUJD",
-                            fileName: "a.wav",
-                        },
-                        startSeconds: 2,
-                        trimStartSeconds: 0,
-                        lengthSeconds: 3,
-                    },
-                ],
-            },
-        ]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        jest.useFakeTimers();
-        const start =
-            fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input");
-        if (!start) {
-            throw new Error("start input missing");
-        }
-        start.value = "4";
-        start.dispatchEvent(new Event("input", { bubbles: true }));
-        jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].audioSegments[0].startSeconds).toBe(4);
-        jest.useRealTimers();
-
-        const del =
-            detailBody()?.querySelector<HTMLElement>(".vst-detail-delete");
-        del?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        // The last segment is gone → fall back to the clip's audio panel.
-        expect(getSelection()).toEqual({ kind: "audio", clipIdx: 0 });
-        expect(savedClips(saveSpy)[0].audioSegments).toEqual([]);
-    });
-
-    const twoSegments = [
-        {
-            source: { data: "data:audio/wav;base64,QUJD", fileName: "a.wav" },
-            startSeconds: 1,
-            trimStartSeconds: 0,
-            lengthSeconds: 2,
-        },
-        {
-            source: { data: "data:audio/wav;base64,REVG", fileName: "b.wav" },
-            startSeconds: 4,
-            trimStartSeconds: 0,
-            lengthSeconds: 2,
-        },
-    ];
-
-    it("uses the segment rail to swap one active editor with segment-specific keys", () => {
-        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
-
-        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
-            1,
-        );
-        expect(
-            segRow(1).classList.contains("vst-detail-repeating-editor-active"),
-        ).toBe(true);
-        expect(
-            detailBody()?.querySelector(".vst-detail-delete-segment"),
-        ).not.toBeNull();
-        expect(
-            segRow(1).querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="seg-1-start"]',
-            ),
-        ).not.toBeNull();
-
-        document
-            .querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[0]
-            ?.click();
-        expect(getSelection()).toEqual({
-            kind: "audio-segment",
-            clipIdx: 0,
-            segIdx: 0,
-        });
-        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
-            1,
-        );
-        expect(
-            segRow(0).classList.contains("vst-detail-repeating-editor-active"),
-        ).toBe(true);
-        expect(
-            segRow(0).querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="seg-0-start"]',
-            ),
-        ).not.toBeNull();
-    });
-
-    it("clamps a segment's Start/Length only to the clip bounds (overlap allowed)", () => {
-        // seg0 [1,3], seg1 [4,6] in a 10s clip — segments live on their own
-        // lanes, so neighbours impose no walls.
-        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
-
-        const s1 = segRow(1).querySelector<HTMLInputElement>(
-            'input[data-vst-focus-key="seg-1-start"]',
-        );
-        expect(s1?.min).toBe("0");
-
-        // Typing a Start INSIDE seg0's span is allowed as-is.
-        jest.useFakeTimers();
-        if (!s1) {
-            throw new Error("start input missing");
-        }
-        s1.value = "2";
-        s1.dispatchEvent(new Event("input", { bubbles: true }));
-        jest.advanceTimersByTime(200);
-        let segs = savedClips(saveSpy)[0].audioSegments;
-        expect(segs[1].startSeconds).toBe(2);
-
-        // seg0's Length may extend across seg1, clamped only at the clip end.
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        const l0 = segRow(0).querySelector<HTMLInputElement>(
-            'input[data-vst-focus-key="seg-0-length"]',
-        );
-        if (!l0) {
-            throw new Error("length input missing");
-        }
-        l0.value = "12";
-        l0.dispatchEvent(new Event("input", { bubbles: true }));
-        jest.advanceTimersByTime(200);
-        segs = savedClips(saveSpy)[0].audioSegments;
-        // start 1 in a 10s clip → length clamps to 9 (clip end), not seg1.
-        expect(segs[0].startSeconds).toBe(1);
-        expect(segs[0].lengthSeconds).toBe(9);
-        jest.useRealTimers();
-    });
-
-    it("selects a segment through its rail tab", () => {
-        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        document
-            .querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[1]
-            ?.click();
-        expect(getSelection()).toEqual({
-            kind: "audio-segment",
-            clipIdx: 0,
-            segIdx: 1,
-        });
-        expect(
-            segRow(1).classList.contains("vst-detail-repeating-editor-active"),
-        ).toBe(true);
-    });
-
-    it("deletes one segment via the shared rail delete button", () => {
-        setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);
-        setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
-        const observedSelections: ReturnType<typeof getSelection>[] = [];
-        const stopObserving = subscribeSelection((selection) =>
-            observedSelections.push(selection),
-        );
-        const bodyBeforeDelete = detailBody();
-        if (!bodyBeforeDelete) {
-            throw new Error("dock body missing");
-        }
-        bodyBeforeDelete.scrollTop = 140;
-        bodyBeforeDelete
-            .querySelector<HTMLElement>(
-                '.vst-segment-tab[aria-pressed="true"] .vst-detail-delete-segment',
-            )
-            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        stopObserving();
-        const segs = savedClips(saveSpy)[0].audioSegments;
-        expect(segs).toHaveLength(1);
-        expect(segs[0].startSeconds).toBe(1); // the surviving first segment
-        expect(getSelection()).toEqual({
-            kind: "audio-segment",
-            clipIdx: 0,
-            segIdx: 0,
-        });
-        expect(observedSelections).not.toContainEqual({ kind: "none" });
-        expect(detailBody()?.scrollTop).toBe(140);
-        expect(document.querySelectorAll(".vst-detail-seg-row")).toHaveLength(
-            1,
-        );
-        expect(segRow(0)).not.toBeNull();
     });
 
     it("edits the clip's major prompt (debounced) through saveClips", () => {
@@ -3354,49 +2916,6 @@ describe("createTimelineDetailStrip", () => {
             expect(document.activeElement).toBe(end);
         });
 
-        it("re-displays an audio-segment Length capped by its start", () => {
-            setup([
-                {
-                    duration: 10,
-                    stages: [{}],
-                    audioSegments: [
-                        {
-                            source: {
-                                data: "data:audio/wav;base64,QUJD",
-                                fileName: "a.wav",
-                            },
-                            startSeconds: 8,
-                            trimStartSeconds: 0,
-                            lengthSeconds: 1,
-                        },
-                    ],
-                },
-            ]);
-            wireLiveRenders();
-            setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-            const len = fieldByLabel(
-                "Length (s)",
-            ).querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="seg-0-length"]',
-            );
-            if (!len) {
-                throw new Error("length input missing");
-            }
-            commitNumber(len, "5");
-            // Length capped at clipDur - start = 10 - 8 = 2.
-            expect(savedClips(saveSpy)[0].audioSegments[0].lengthSeconds).toBe(
-                2,
-            );
-            const after = fieldByLabel(
-                "Length (s)",
-            ).querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="seg-0-length"]',
-            );
-            expect(after).toBe(len);
-            expect(after?.value).toBe("2");
-            expect(document.activeElement).toBe(len);
-        });
-
         it("re-displays a retake Length capped by its start", () => {
             setup([
                 {
@@ -3772,55 +3291,6 @@ describe("createTimelineDetailStrip", () => {
             expect(
                 detailBody()?.querySelector(".vst-detail-add-retake"),
             ).not.toBeNull();
-        });
-
-        it("opens Base Audio or Segments according to the audio selection", () => {
-            setup([
-                {
-                    duration: 10,
-                    stages: [{}],
-                    audioSegments: twoSegments,
-                },
-            ]);
-            setSelection({ kind: "audio", clipIdx: 0 });
-            expect(crumbText()).toBe("Audio · Clip 0");
-            const base = detail()?.querySelector<HTMLElement>(
-                '[data-vst-accordion-key="base-audio"]',
-            );
-            expect(base?.classList.contains("input-group-open")).toBe(true);
-            expect(base?.querySelector(".vst-detail-audio")).not.toBeNull();
-            const segments = detail()?.querySelector<HTMLElement>(
-                '[data-vst-repeater-key="audio-segments"]',
-            );
-            expect(segments).not.toBeNull();
-            expect(segments?.classList.contains("input-group-closed")).toBe(
-                true,
-            );
-            expect(
-                segments?.querySelectorAll(
-                    ":scope > .input-group-content > .vst-detail-repeating-group",
-                ),
-            ).toHaveLength(2);
-            expect(
-                detail()?.querySelector(
-                    ".vst-detail-repeating-group .input-group-header",
-                ),
-            ).not.toBeNull();
-            expect(
-                detail()?.querySelector(".vst-detail-add-segment"),
-            ).not.toBeNull();
-
-            setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
-            expect(
-                detail()
-                    ?.querySelector('[data-vst-accordion-key="base-audio"]')
-                    ?.classList.contains("input-group-closed"),
-            ).toBe(true);
-            expect(
-                detail()
-                    ?.querySelector('[data-vst-repeater-key="audio-segments"]')
-                    ?.classList.contains("input-group-open"),
-            ).toBe(true);
         });
 
         it("lists references above IC-LoRAs using the shared selector rails", () => {
@@ -4565,17 +4035,6 @@ describe("createTimelineDetailStrip", () => {
                     stages: [{}, {}],
                     refs: [{ source: "Base", frame: 1 }],
                     windows: [{ start: 1, duration: 2, prompt: "w" }],
-                    audioSegments: [
-                        {
-                            source: {
-                                data: "data:audio/wav;base64,QUJD",
-                                fileName: "a.wav",
-                            },
-                            startSeconds: 1,
-                            trimStartSeconds: 0,
-                            lengthSeconds: 2,
-                        },
-                    ],
                 },
             ]);
         });
@@ -4696,12 +4155,6 @@ describe("createTimelineDetailStrip", () => {
                 () => setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 }),
                 () => setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 }),
                 () => setSelection({ kind: "audio", clipIdx: 0 }),
-                () =>
-                    setSelection({
-                        kind: "audio-segment",
-                        clipIdx: 0,
-                        segIdx: 0,
-                    }),
                 () => setSelection({ kind: "prompt-major", clipIdx: 0 }),
                 () =>
                     setSelection({

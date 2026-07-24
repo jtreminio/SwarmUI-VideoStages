@@ -98,8 +98,6 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         deleteWindowEntry: selectionOperations.deleteWindowEntry,
         createRetake: selectionOperations.createRetake,
         removeRetake: selectionOperations.removeRetake,
-        addAudioSegment: selectionOperations.addAudioSegment,
-        removeAudioSegment: selectionOperations.removeAudioSegment,
         addStage: selectionOperations.addStage,
         deleteStage: selectionOperations.deleteStage,
         selectStage: selectionOperations.selectStage,

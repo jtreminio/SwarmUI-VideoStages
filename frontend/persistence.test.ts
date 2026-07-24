@@ -17,6 +17,7 @@ import {
     mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
+import { getVideoStagesHostBridge } from "./host";
 import {
     __resetPersistenceForTests,
     dispatchDocumentCommand,
@@ -45,7 +46,7 @@ describe("persistence", () => {
         jest.restoreAllMocks();
     });
 
-    describe("strict v3 collection decoding", () => {
+    describe("strict collection decoding", () => {
         const decode = (document: unknown) =>
             decodeStoredDocument(JSON.stringify(document), {
                 width: 1024,
@@ -54,10 +55,10 @@ describe("persistence", () => {
             });
 
         it.each([
-            ["missing clips", { schemaVersion: 3 }],
-            ["non-array clips", { schemaVersion: 3, clips: {} }],
-            ["null clip item", { schemaVersion: 3, clips: [null] }],
-            ["scalar clip item", { schemaVersion: 3, clips: ["clip"] }],
+            ["missing clips", { schemaVersion: 5 }],
+            ["non-array clips", { schemaVersion: 5, clips: {} }],
+            ["null clip item", { schemaVersion: 5, clips: [null] }],
+            ["scalar clip item", { schemaVersion: 5, clips: ["clip"] }],
         ])("rejects %s", (_label, document) => {
             expect(decode(document)).toBeNull();
         });
@@ -69,11 +70,6 @@ describe("persistence", () => {
             ["clip stage item", { clips: [{ stages: [null] }] }],
             ["clip refs", { clips: [{ refs: {} }] }],
             ["clip ref item", { clips: [{ refs: [1] }] }],
-            ["clip audioSegments", { clips: [{ audioSegments: {} }] }],
-            [
-                "clip audio-segment item",
-                { clips: [{ audioSegments: ["segment"] }] },
-            ],
             ["clip icLoras", { clips: [{ icLoras: {} }] }],
             ["clip IC-LoRA item", { clips: [{ icLoras: [false] }] }],
             ["stage LoRAs", { clips: [{ stages: [{ loras: {} }] }] }],
@@ -92,22 +88,35 @@ describe("persistence", () => {
         ])("rejects a malformed present %s collection", (_label, partial) => {
             expect(
                 decode({
-                    schemaVersion: 3,
+                    schemaVersion: 5,
                     clips: [],
                     ...partial,
                 }),
             ).toBeNull();
         });
 
+        it("rejects an older schema version and notices the user once", () => {
+            const showError = jest
+                .spyOn(getVideoStagesHostBridge(), "showError")
+                .mockImplementation(() => {});
+
+            expect(decode({ schemaVersion: 4, clips: [] })).toBeNull();
+            expect(decode({ schemaVersion: 4, clips: [] })).toBeNull();
+
+            expect(showError).toHaveBeenCalledTimes(1);
+            expect(showError.mock.calls[0][0]).toContain(
+                "created by an older version",
+            );
+        });
+
         it("accepts omitted optional collections without inventing stored items", () => {
-            const decoded = decode({ schemaVersion: 3, clips: [{}] });
+            const decoded = decode({ schemaVersion: 5, clips: [{}] });
 
             expect(decoded).not.toBeNull();
             expect(decoded?.clips).toHaveLength(1);
             expect(decoded?.clips[0]).toMatchObject({
                 stages: [],
                 refs: [],
-                audioSegments: [],
                 icLoras: [],
             });
             expect(decoded?.audioTracks).toEqual([]);
@@ -115,7 +124,7 @@ describe("persistence", () => {
 
         it("round-trips an explicit IC-LoRA Drive Media kind contract", () => {
             const decoded = decode({
-                schemaVersion: 3,
+                schemaVersion: 5,
                 clips: [
                     {
                         icLoras: [
@@ -206,7 +215,6 @@ describe("persistence", () => {
                     reuseAudio: false,
                     uploadedAudio: null,
                     sourceVideo: null,
-                    audioSegments: [],
                     retake: null,
                     refs: [
                         {
@@ -267,25 +275,6 @@ describe("persistence", () => {
                             startSeconds: 2,
                             lengthSeconds: 4,
                         },
-                        audioSegments: [
-                            {
-                                source: {
-                                    data: "data:audio/wav;base64,SEGMENT",
-                                    fileName: "segment.wav",
-                                },
-                                startSeconds: 1,
-                                trimStartSeconds: 0.5,
-                                lengthSeconds: 2,
-                                volume: 0.7,
-                            },
-                            {
-                                source: "audio0",
-                                startSeconds: 0,
-                                trimStartSeconds: 0,
-                                lengthSeconds: 1,
-                                volume: 1,
-                            },
-                        ],
                         refs: [
                             minimalRef({
                                 frame: 8,
@@ -340,7 +329,6 @@ describe("persistence", () => {
                 clips: Array<{
                     uploadedAudio: unknown;
                     sourceVideo: unknown;
-                    audioSegments: Array<{ source: unknown; volume: number }>;
                     refs: Array<{
                         uploadedImage: unknown;
                         frame: number;
@@ -365,16 +353,6 @@ describe("persistence", () => {
                 duration: 4,
                 uploadedAudio: null,
                 sourceVideo: null,
-                audioSegments: [
-                    {
-                        source: null,
-                        startSeconds: 1,
-                        trimStartSeconds: 0.5,
-                        lengthSeconds: 2,
-                        volume: 0.7,
-                    },
-                    { source: "audio0" },
-                ],
                 refs: [
                     {
                         uploadedImage: null,
@@ -462,18 +440,6 @@ describe("persistence", () => {
                                 },
                             }),
                         ],
-                        audioSegments: [
-                            {
-                                source: {
-                                    data: "data:audio/wav;base64,REFRESHME",
-                                    fileName: "segment.wav",
-                                },
-                                startSeconds: 1,
-                                trimStartSeconds: 0.5,
-                                lengthSeconds: 2,
-                                volume: 0.6,
-                            },
-                        ],
                     }),
                 ],
             };
@@ -495,15 +461,6 @@ describe("persistence", () => {
                         frame: 12,
                         fromEnd: true,
                         uploadedImage: null,
-                    },
-                ],
-                audioSegments: [
-                    {
-                        source: null,
-                        startSeconds: 1,
-                        trimStartSeconds: 0.5,
-                        lengthSeconds: 2,
-                        volume: 0.6,
                     },
                 ],
             });
@@ -690,9 +647,9 @@ describe("persistence", () => {
             expect(getClips()[0].stages[0].model).toBe(model.value);
         });
 
-        it("preserves unknown v3 architecture identities for diagnostics and repair", () => {
+        it("preserves unknown architecture identities for diagnostics and repair", () => {
             mountVideoStagesData({
-                schemaVersion: 3,
+                schemaVersion: 5,
                 clips: [
                     {
                         architecture: "removed-architecture",

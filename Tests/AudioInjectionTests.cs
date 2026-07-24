@@ -66,6 +66,26 @@ public class AudioInjectionTests
         ["FileName"] = fileName
     };
 
+    /// <summary>A root timeline audio lane; planning projects it onto every clip it overlaps.</summary>
+    private static JObject MakeAudioTrack(
+        double timelineStartSeconds,
+        double timelineLengthSeconds) => new()
+    {
+        ["Id"] = "track-seg",
+        ["Source"] = new JObject
+        {
+            ["Kind"] = "Upload",
+            ["Reference"] = "seg.wav",
+            ["UploadedAudio"] = MakeUploadedAudio(fileName: "seg.wav"),
+        },
+        ["Spans"] = new JArray(new JObject
+        {
+            ["TimelineStartSeconds"] = timelineStartSeconds,
+            ["TimelineLengthSeconds"] = timelineLengthSeconds,
+            ["SourceStartSeconds"] = 0.0,
+        }),
+    };
+
     private static WorkflowGenerator CreateInjectorGenerator(JObject workflow)
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
@@ -307,14 +327,9 @@ public class AudioInjectionTests
 
         JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
         clip["Duration"] = 10.0;
-        clip["AudioSegments"] = new JArray(
-            new JObject
-            {
-                ["StartSeconds"] = 1.0,
-                ["LengthSeconds"] = 2.0,
-                ["Source"] = MakeUploadedAudio(fileName: "seg.wav"),
-            });
-        string stagesJson = MakeRootConfig(clip).ToString();
+        JObject root = MakeRootConfig(clip);
+        root["AudioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
+        string stagesJson = root.ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =
@@ -470,18 +485,12 @@ public class AudioInjectionTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        // No Duration -> ClipSpec.Frames is null -> the combiner can't build a clip-length silent bed,
-        // so injecting the (short) combined track would mismatch the video latent; the guard must keep
-        // the segment on the mux-only path.
+        // No Duration -> ClipSpec.Frames is null -> the clip has no resolvable timeline window, so the
+        // root audio lane stays pending and never reaches the clip; nothing conditions generation.
         JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
-        clip["AudioSegments"] = new JArray(
-            new JObject
-            {
-                ["StartSeconds"] = 1.0,
-                ["LengthSeconds"] = 2.0,
-                ["Source"] = MakeUploadedAudio(fileName: "seg.wav"),
-            });
-        string stagesJson = MakeRootConfig(clip).ToString();
+        JObject root = MakeRootConfig(clip);
+        root["AudioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
+        string stagesJson = root.ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
         (JObject workflow, WorkflowGenerator _) =

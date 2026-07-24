@@ -75,7 +75,7 @@ const mountRootDefaults = (): void => {
 
 const makeClipsJson = (count: number, duration = 2): string =>
     JSON.stringify({
-        schemaVersion: 3,
+        schemaVersion: 5,
         clips: Array.from({ length: count }, () => ({
             architecture: "ltx2",
             modelProfileId: "ltx-2.3",
@@ -230,7 +230,7 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountState(
             JSON.stringify({
-                schemaVersion: 3,
+                schemaVersion: 5,
                 clips: [
                     { duration: 2, stages: [{}], refs: [] },
                     { duration: 4, stages: [{}], refs: [] },
@@ -368,7 +368,7 @@ describe("videoStagesTimeline", () => {
     it("+ Clip copies the previous clip's base settings and mirrors the prior join", async () => {
         mountState(
             JSON.stringify({
-                schemaVersion: 3,
+                schemaVersion: 5,
                 clips: [
                     {
                         duration: 2,
@@ -425,7 +425,7 @@ describe("videoStagesTimeline", () => {
 
     it("adds the first clip after the backend catalog resolves even when the video-model dropdown is absent", async () => {
         document.getElementById("input_videomodel")?.remove();
-        mountState(JSON.stringify({ schemaVersion: 3, clips: [] }));
+        mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
         __resetArchitectureCatalogForTests();
 
         const architecture = testArchitectureCatalog().architectures[0];
@@ -608,7 +608,7 @@ describe("videoStagesTimeline", () => {
 
     it("undoes and redoes hues and prompt-window IDs through the repository", () => {
         mountEnabledToggle();
-        mountState(JSON.stringify({ schemaVersion: 3, clips: [] }));
+        mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
         saveClips(
             [
                 minimalClip({
@@ -772,7 +772,7 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountVideoStagesData(
             JSON.stringify({
-                schemaVersion: 3,
+                schemaVersion: 5,
                 clips: [{ duration: 10, stages: [{}], refs: [] }],
             }),
         );

@@ -37,19 +37,29 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         JObject sourced = MakeSourcedClip(models);
         sourced["Stages"] = new JArray();
-        sourced["AudioSegments"] = new JArray(new JObject
+        JObject root = MakeRootConfig(512, 512, sourced);
+        root["AudioTracks"] = new JArray(new JObject
         {
-            ["StartSeconds"] = 0.1,
-            ["TrimStartSeconds"] = 0.0,
-            ["LengthSeconds"] = 0.2,
+            ["Id"] = "track-overlay",
             ["Source"] = new JObject
             {
-                ["Data"] = "data:audio/wav;base64,QUJD",
-                ["FileName"] = "overlay.wav",
+                ["Kind"] = "Upload",
+                ["Reference"] = "overlay.wav",
+                ["UploadedAudio"] = new JObject
+                {
+                    ["Data"] = "data:audio/wav;base64,QUJD",
+                    ["FileName"] = "overlay.wav",
+                },
             },
+            ["Spans"] = new JArray(new JObject
+            {
+                ["TimelineStartSeconds"] = 0.1,
+                ["TimelineLengthSeconds"] = 0.2,
+                ["SourceStartSeconds"] = 0.0,
+            }),
         });
 
-        (JObject workflow, WorkflowGenerator generator) = GenerateSourcedFlow(models, sourced);
+        (JObject workflow, WorkflowGenerator generator) = GenerateSourcedRootFlow(models, root);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(SamplerNodesOrdered(bridge));

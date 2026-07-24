@@ -340,46 +340,6 @@ export const reduceDocumentCommand = (
                 ? success(document, VALUE_CAPABILITIES)
                 : failure(document, "missing-target");
         }
-        case "audio-segment.add": {
-            const clip = findClip(document, command.clipId);
-            if (!clip) return failure(document, "missing-target");
-            const invalid = invalidNewEntity(document, command.segment);
-            if (invalid) return invalid;
-            if (
-                !addBefore(
-                    clip.audioSegments,
-                    clone(command.segment),
-                    command.beforeSegmentId,
-                )
-            ) {
-                return failure(clone(source), "missing-target");
-            }
-            return success(document, STRUCTURE);
-        }
-        case "audio-segment.remove": {
-            const clip = findClip(document, command.clipId);
-            return clip && removeById(clip.audioSegments, command.segmentId)
-                ? success(document, REMOVE_STRUCTURE)
-                : failure(document, "missing-target");
-        }
-        case "audio-segment.move": {
-            const clip = findClip(document, command.clipId);
-            return clip &&
-                moveBefore(
-                    clip.audioSegments,
-                    command.segmentId,
-                    command.beforeSegmentId,
-                )
-                ? success(document, MOVE_STRUCTURE)
-                : failure(document, "missing-target");
-        }
-        case "audio-segment.patch": {
-            const clip = findClip(document, command.clipId);
-            return clip &&
-                patchById(clip.audioSegments, command.segmentId, command.patch)
-                ? success(document, VALUE)
-                : failure(document, "missing-target");
-        }
         case "prompt-window.add": {
             const clip = findClip(document, command.clipId);
             if (!clip) return failure(document, "missing-target");

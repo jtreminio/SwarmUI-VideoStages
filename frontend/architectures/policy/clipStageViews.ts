@@ -60,8 +60,6 @@ const scopedFeatureSupport = (
         case "clipAudio":
         case "audioReuse":
             return capability.clip.includes("audio-sources");
-        case "audioSegments":
-            return capability.clip.includes("audio-segments");
         case "stageLoras":
             return (
                 capability.stage.includes("lora") &&

@@ -12,13 +12,12 @@ public class AudioPlanCompilerComponentTests
     {
         AudioPlanComponentResult<AudioBaseSourcePlan> baseSource = AudioBaseSourcePlanCompiler.Compile(clip);
         AudioPlanComponentResult<AudioLengthPlan> length = AudioLengthPlanCompiler.Compile(clip, baseSource.Plan);
-        AudioPlanComponentResult<AudioSegmentPlan> segments = AudioSegmentPlanCompiler.Compile(clip, baseSource.Plan);
 
         AudioPlan assembled = new(
             baseSource.Plan,
             length.Plan,
-            segments.Plan,
-            [.. baseSource.Diagnostics, .. length.Diagnostics, .. segments.Diagnostics]);
+            new([]),
+            [.. baseSource.Diagnostics, .. length.Diagnostics]);
 
         Assert.Equal(Serialize(assembled), Serialize(AudioPlanCompiler.Compile(clip)));
     }
@@ -32,21 +31,19 @@ public class AudioPlanCompilerComponentTests
     }
 
     [Fact]
-    public void Segment_component_and_facade_preserve_sorted_windows()
+    public void Segment_component_preserves_sorted_windows()
     {
-        ClipSpec clip = Clip(
-            source: Constants.AudioSourceUpload,
-            uploadedAudio: Upload(),
-            segments:
-            [
-                new(Upload("data:audio/wav;base64,VEhSRUU="), 3, 1, 2),
-                new(null, 1, 0.5, 1, AceStepFunSource: "audio2"),
-            ]);
+        ClipSpec clip = Clip(source: Constants.AudioSourceUpload, uploadedAudio: Upload());
         AudioBaseSourcePlan baseSource = AudioBaseSourcePlanCompiler.Compile(clip).Plan;
-        AudioPlanComponentResult<AudioSegmentPlan> component = AudioSegmentPlanCompiler.Compile(clip, baseSource);
-        AudioPlan facade = AudioPlanCompiler.Compile(clip);
+        AudioPlanComponentResult<AudioSegmentPlan> component = AudioSegmentPlanCompiler.Compile(
+            [
+                new(AudioSegmentSourceKind.Upload, null, 3, 1, 2,
+                    new("data:audio/wav;base64,VEhSRUU=", "clip.wav")),
+                new(AudioSegmentSourceKind.AceStepFun, 2, 1, 0.5, 1, null),
+            ],
+            baseSource);
 
-        Assert.Equal(Serialize(component.Plan), Serialize(facade.Segments));
+        Assert.Empty(AudioPlanCompiler.Compile(clip).Segments.Items);
         Assert.Equal([1, 3], component.Plan.Items.Select(item => item.StartSeconds));
         Assert.Equal(AudioSegmentSourceKind.AceStepFun, component.Plan.Items[0].SourceKind);
         Assert.Equal(AudioSegmentSourceKind.Upload, component.Plan.Items[1].SourceKind);
@@ -72,12 +69,7 @@ public class AudioPlanCompilerComponentTests
             source: "unrecognized",
             audioLength: true,
             controlNetLength: true,
-            reuse: true,
-            segments:
-            [
-                new(null, -1, 0, 1),
-                new(null, 0, 0, 1),
-            ]);
+            reuse: true);
 
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
         Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
@@ -86,10 +78,20 @@ public class AudioPlanCompilerComponentTests
         [
             "audio.source.unknown_defaults_to_native",
             "audio.length.controlnet_overrides_audio",
+        ],
+            plan.Diagnostics.Select(diagnostic => diagnostic.Code));
+        Assert.Equal(
+        [
             "audio.segment.ignored_invalid_window",
             "audio.segment.ignored_no_source",
         ],
-            plan.Diagnostics.Select(diagnostic => diagnostic.Code));
+            AudioSegmentPlanCompiler.Compile(
+                [
+                    new(AudioSegmentSourceKind.Upload, null, -1, 0, 1, null),
+                    new(AudioSegmentSourceKind.Upload, null, 0, 0, 1, null),
+                ],
+                AudioBaseSourcePlanCompiler.Compile(clip).Plan)
+                .Diagnostics.Select(diagnostic => diagnostic.Code));
         Assert.Equal(
         [
             "audio.length.controlnet_owner_has_no_source",
@@ -110,7 +112,6 @@ public class AudioPlanCompilerComponentTests
         bool reuse = false,
         IReadOnlyList<StageSpec> stages = null,
         UploadedMediaSpec uploadedAudio = null,
-        IReadOnlyList<AudioSegmentSpec> segments = null,
         IReadOnlyList<IcLoraSpec> icLoras = null) => new(
             Id: 0,
             Frames: 241,
@@ -122,8 +123,7 @@ public class AudioPlanCompilerComponentTests
             ReuseAudio: reuse,
             UploadedAudio: uploadedAudio,
             ImageRefs: [],
-            Stages: stages ?? [Stage(0)],
-            AudioSegments: segments);
+            Stages: stages ?? [Stage(0)]);
 
     private static StageSpec Stage(int index) => new(
         Id: index,

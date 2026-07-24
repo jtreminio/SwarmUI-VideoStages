@@ -45,17 +45,15 @@ export const renderDetailShell = (options: {
         const key =
             options.selection.kind === "ref"
                 ? "references"
-                : options.selection.kind === "audio-segment"
-                  ? "audio-segments"
-                  : options.selection.kind === "audio-track"
-                    ? "audio-tracks"
-                    : options.selection.kind === "audio-track-span"
-                      ? "audio-track-spans"
-                      : options.selection.kind === "prompt-minor"
-                        ? "relay-prompts"
-                        : options.selection.kind === "ic-lora"
-                          ? "ic-loras"
-                          : null;
+                : options.selection.kind === "audio-track"
+                  ? "audio-tracks"
+                  : options.selection.kind === "audio-track-span"
+                    ? "audio-track-spans"
+                    : options.selection.kind === "prompt-minor"
+                      ? "relay-prompts"
+                      : options.selection.kind === "ic-lora"
+                        ? "ic-loras"
+                        : null;
         const target =
             options.selection.kind === "retake"
                 ? options.detail.querySelector<HTMLElement>(

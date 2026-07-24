@@ -21,6 +21,13 @@ public class AudioPlanCompilerTests
     private static UploadedMediaSpec Upload(string data = "data:audio/wav;base64,QUJD") =>
         new(data, "clip.wav");
 
+    private static AudioBaseSourcePlan Base(bool hasConfiguredTrack) => new(
+        AudioBaseSourceKind.Upload,
+        Constants.AudioSourceUpload,
+        AceStepFunTrack: null,
+        hasConfiguredTrack,
+        UploadedMedia: null);
+
     private static ClipSpec Clip(
         string source = Constants.AudioSourceNative,
         bool audioLength = false,
@@ -28,7 +35,6 @@ public class AudioPlanCompilerTests
         bool reuse = false,
         IReadOnlyList<StageSpec> stages = null,
         UploadedMediaSpec uploadedAudio = null,
-        IReadOnlyList<AudioSegmentSpec> segments = null,
         IReadOnlyList<IcLoraSpec> icLoras = null) => new(
             Id: 0,
             Frames: 241,
@@ -40,8 +46,7 @@ public class AudioPlanCompilerTests
             ReuseAudio: reuse,
             UploadedAudio: uploadedAudio,
             ImageRefs: [],
-            Stages: stages ?? [Stage(0)],
-            AudioSegments: segments);
+            Stages: stages ?? [Stage(0)]);
 
     [Theory]
     [InlineData(Constants.AudioSourceNative, (int)AudioBaseSourceKind.Native)]
@@ -128,37 +133,46 @@ public class AudioPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_segments_mix_over_a_configured_base_track()
+    public void Compile_leaves_segments_to_the_timeline_projection()
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(
             source: Constants.AudioSourceUpload,
-            uploadedAudio: Upload(),
-            segments:
-            [
-                new(Upload(), StartSeconds: 4, TrimStartSeconds: 0, LengthSeconds: 1, Volume: 0.4),
-                new(null, StartSeconds: 1, TrimStartSeconds: 0.5, LengthSeconds: 2, AceStepFunSource: "audio3", Volume: 0.7)
-            ]));
+            uploadedAudio: Upload()));
 
-        Assert.Equal([1, 4], plan.Segments.Items.Select(item => item.StartSeconds));
-        Assert.Equal(AudioSegmentSourceKind.AceStepFun, plan.Segments.Items[0].SourceKind);
-        Assert.Equal(3, plan.Segments.Items[0].AceStepFunTrack);
-        Assert.Equal(0.7, plan.Segments.Items[0].Volume);
-        Assert.Equal(AudioSegmentSourceKind.Upload, plan.Segments.Items[1].SourceKind);
-        Assert.Equal(0.4, plan.Segments.Items[1].Volume);
-        Assert.Equal("data:audio/wav;base64,QUJD", plan.Segments.Items[1].UploadedMedia.Data);
-        Assert.Equal("clip.wav", plan.Segments.Items[1].UploadedMedia.FileName);
+        Assert.Empty(plan.Segments.Items);
+    }
+
+    [Fact]
+    public void Compile_segments_mix_over_a_configured_base_track()
+    {
+        AudioSegmentPlan plan = AudioSegmentPlanCompiler.Compile(
+            [
+                new(AudioSegmentSourceKind.Upload, null, 4, 0, 1,
+                    new("data:audio/wav;base64,QUJD", "clip.wav"), 0.4),
+                new(AudioSegmentSourceKind.AceStepFun, 3, 1, 0.5, 2, null, 0.7),
+            ],
+            Base(hasConfiguredTrack: true)).Plan;
+
+        Assert.Equal([1, 4], plan.Items.Select(item => item.StartSeconds));
+        Assert.Equal(AudioSegmentSourceKind.AceStepFun, plan.Items[0].SourceKind);
+        Assert.Equal(3, plan.Items[0].AceStepFunTrack);
+        Assert.Equal(0.7, plan.Items[0].Volume);
+        Assert.Equal(AudioSegmentSourceKind.Upload, plan.Items[1].SourceKind);
+        Assert.Equal(0.4, plan.Items[1].Volume);
+        Assert.Equal("data:audio/wav;base64,QUJD", plan.Items[1].UploadedMedia.Data);
+        Assert.Equal("clip.wav", plan.Items[1].UploadedMedia.FileName);
     }
 
     [Fact]
     public void Compile_segments_without_a_base_use_preserve_windows()
     {
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(
-            source: Constants.AudioSourceUpload,
-            uploadedAudio: null,
-            segments: [new(Upload(), StartSeconds: 1, TrimStartSeconds: 0, LengthSeconds: 2)]));
+        AudioPlanComponentResult<AudioSegmentPlan> result = AudioSegmentPlanCompiler.Compile(
+            [new(AudioSegmentSourceKind.Upload, null, 1, 0, 2,
+                new("data:audio/wav;base64,QUJD", "clip.wav"))],
+            Base(hasConfiguredTrack: false));
 
-        Assert.Single(plan.Segments.Items);
-        Assert.Contains(plan.Diagnostics, d => d.Code == "audio.segments.preserve_windowed_no_base");
+        Assert.Single(result.Plan.Items);
+        Assert.Contains(result.Diagnostics, d => d.Code == "audio.segments.preserve_windowed_no_base");
     }
 
     [Fact]

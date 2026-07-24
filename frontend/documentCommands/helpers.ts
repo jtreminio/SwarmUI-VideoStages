@@ -1,6 +1,5 @@
 import { collectAuthoringEntityIds } from "../identity";
 import type {
-    CanonicalAudioSegment,
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
@@ -64,7 +63,6 @@ type AuthoringEntity =
     | CanonicalClip
     | CanonicalStage
     | CanonicalRefImage
-    | CanonicalAudioSegment
     | CanonicalPromptWindow
     | CanonicalRetake
     | CanonicalAudioTrack
@@ -76,7 +74,6 @@ const candidateIds = (entity: AuthoringEntity): string[] => {
             entity.id,
             ...entity.stages.map((stage) => stage.id),
             ...entity.refs.map((ref) => ref.id),
-            ...entity.audioSegments.map((segment) => segment.id),
             ...entity.promptWindows.map((window) => window.id),
             ...(entity.retake ? [entity.retake.id] : []),
         ];

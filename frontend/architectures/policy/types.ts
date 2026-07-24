@@ -14,7 +14,6 @@ export type AuthoringFeature =
     | "promptRelay"
     | "clipAudio"
     | "audioReuse"
-    | "audioSegments"
     | "stageLoras"
     | "icLora"
     | "hdr"

@@ -136,23 +136,6 @@ public sealed record IcLoraSpec(
 );
 
 /// <summary>
-/// One overlay audio piece on a clip, in addition to its base audio source.
-/// <c>Source</c> is an uploaded audio blob; <c>StartSeconds</c> is where the piece begins inside the
-/// clip; <c>TrimStartSeconds</c> is how far into the source file playback starts; <c>LengthSeconds</c> is
-/// how long it plays; and <c>Volume</c> is its relative loudness before mixing: 1 is unchanged,
-/// lower is quieter, and higher is louder. All values are normalized at parse time. The runtime
-/// mixes each segment additively over the base audio.
-/// </summary>
-public sealed record AudioSegmentSpec(
-    UploadedMediaSpec Source,
-    double StartSeconds,
-    double TrimStartSeconds,
-    double LengthSeconds,
-    string AceStepFunSource = null,
-    double Volume = 1
-);
-
-/// <summary>
 /// One root-authored audio segment positioned on the final multi-clip timeline. Planning projects
 /// this interval onto every clip it intersects, advancing <see cref="SourceStartSeconds"/> at each
 /// seam so every clip receives the correct source slice.
@@ -201,7 +184,6 @@ public sealed record ClipSpec(
     UploadedMediaSpec UploadedAudio,
     IReadOnlyList<ImageRefSpec> ImageRefs,
     IReadOnlyList<StageSpec> Stages,
-    IReadOnlyList<AudioSegmentSpec> AudioSegments = null,
     IReadOnlyList<LoraRef> Loras = null,
     IReadOnlyList<PromptWindowSpec> PromptWindows = null,
     // Cross-clip continuity at THIS clip's outgoing boundary (clip N -> N+1): "cut" (hard concat),

@@ -11,13 +11,7 @@ import {
     type TimelineUnit,
     truncate,
 } from "../timelineDetail";
-import type {
-    AudioSegment,
-    AudioTrack,
-    Clip,
-    PromptWindow,
-    RefImage,
-} from "../types";
+import type { AudioTrack, Clip, PromptWindow, RefImage } from "../types";
 import { roundToTenth } from "../utils";
 import {
     audioSegmentWaveBarHeights,
@@ -174,77 +168,6 @@ const audioFlagChips = (clip: Clip): string => {
         : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
 };
 
-const renderAudioSegmentBlock = (
-    segment: AudioSegment,
-    clipIdx: number,
-    segmentIdx: number,
-    durationSeconds: number,
-): string => {
-    const start = clamp(segment.startSeconds, 0, durationSeconds);
-    const end = clamp(
-        segment.startSeconds + segment.lengthSeconds,
-        start,
-        durationSeconds,
-    );
-    const name =
-        typeof segment.source === "string"
-            ? segment.source
-            : segment.source?.fileName;
-    const labelText = name || "audio segment";
-    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSegmentWaveBarHeights(clipIdx, segmentIdx, 28)
-        .map((height) => `<span style="height:${height}%"></span>`)
-        .join("");
-    return renderWindowSpan({
-        className: "vst-audio-seg",
-        extraClassName: `vst-audio-seg-tone-${segmentIdx % 5}`,
-        dataAttrs: `data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segmentIdx}"`,
-        edgeAttr: "data-vst-audio-seg-edge",
-        labelClass: "vst-audio-label",
-        label: labelText,
-        title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-        ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx}`,
-        startSeconds: segment.startSeconds,
-        lengthSeconds: segment.lengthSeconds,
-        durationSeconds,
-        decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`,
-    });
-};
-
-const renderAudioSegmentLanes = (
-    clip: Clip,
-    clipIdx: number,
-    durationSeconds: number,
-    startPx: number,
-    widthPx: number,
-    canCreate: boolean,
-): string => {
-    const place = (laneIdx: number): string =>
-        `left:${startPx}px;width:${widthPx}px;--vst-audio-lane-idx:${laneIdx}`;
-    const blankLane = (laneIdx: number): string =>
-        canCreate
-            ? `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" ` +
-              `style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>`
-            : "";
-    if (durationSeconds <= 0) {
-        return blankLane(0);
-    }
-    const segments = clip.audioSegments ?? [];
-    const lanes = segments.map(
-        (segment, segmentIdx) =>
-            `<div class="vst-audio-seg-lane" style="${place(segmentIdx)}">` +
-            renderAudioSegmentBlock(
-                segment,
-                clipIdx,
-                segmentIdx,
-                durationSeconds,
-            ) +
-            `</div>`,
-    );
-    lanes.push(blankLane(segments.length));
-    return lanes.join("");
-};
-
 const renderTimelineAudioSegmentBlock = (
     track: AudioTrack,
     trackIdx: number,
@@ -312,7 +235,7 @@ export const renderAudioTrackRow = (
     clips: Clip[],
     layouts: RegionLayout[],
     capabilities?: CapabilityViewResolver,
-    audioTracks?: AudioTrack[],
+    audioTracks: AudioTrack[] = [],
     pxPerSecond = 1,
 ): string => {
     const baseSegments = layouts
@@ -373,52 +296,21 @@ export const renderAudioTrackRow = (
         0,
     );
     const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlaySegments =
-        audioTracks === undefined
-            ? layouts
-                  .map((layout) => {
-                      const clip = clips[layout.index];
-                      if (!clip) {
-                          return "";
-                      }
-                      const canCreate =
-                          capabilities?.forClip(clip).decision("audioSegments")
-                              .supported ?? true;
-                      return renderAudioSegmentLanes(
-                          clip,
-                          layout.index,
-                          clip.duration || 0,
-                          layout.startPx,
-                          clipInnerWidth(layout.widthPx),
-                          canCreate,
-                      );
-                  })
-                  .join("")
-            : renderTimelineAudioSegmentLanes(
-                  audioTracks,
-                  totalSeconds,
-                  totalWidthPx,
-              );
-    const laneCount =
-        audioTracks === undefined
-            ? Math.max(
-                  1,
-                  ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1),
-              )
-            : Math.max(1, audioTracks.length + 1);
+    const overlaySegments = renderTimelineAudioSegmentLanes(
+        audioTracks,
+        totalSeconds,
+        totalWidthPx,
+    );
+    const laneCount = Math.max(1, audioTracks.length + 1);
     const laneTags = [headTag("src", "Clip", { active: true })];
     for (let i = 0; i < laneCount; i++) {
         const blank = i === laneCount - 1;
         laneTags.push(
-            headTag(
-                "seg",
-                blank ? "+" : `S${audioTracks === undefined ? i + 1 : i}`,
-                {
-                    active: !blank,
-                    muted: blank,
-                    style: `--vst-audio-lane-idx:${i}`,
-                },
-            ),
+            headTag("seg", blank ? "+" : `S${i}`, {
+                active: !blank,
+                muted: blank,
+                style: `--vst-audio-lane-idx:${i}`,
+            }),
         );
     }
     return (

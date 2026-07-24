@@ -104,18 +104,6 @@ const maximalClip = (): Clip =>
             startSeconds: 1,
             lengthSeconds: 4,
         },
-        audioSegments: [
-            {
-                source: {
-                    data: "data:audio/wav;base64,BBBB",
-                    fileName: "s.wav",
-                },
-                startSeconds: 0.5,
-                trimStartSeconds: 0.2,
-                lengthSeconds: 1,
-                volume: 1,
-            },
-        ],
         retake: { startSeconds: 1, lengthSeconds: 1, strength: 0.7 },
         refs: [
             {
@@ -182,8 +170,6 @@ describe("serialize storage completeness guard", () => {
         // Every optional container is present, so the nested projections above
         // are genuinely exercised.
         expect(stored.icLoras.length).toBeGreaterThan(0);
-        expect(stored.audioSegments.length).toBeGreaterThan(0);
-        expect(stored.audioSegments[0].volume).toBe(1);
         expect(stored.refs.length).toBeGreaterThan(0);
         expect(stored.stages.length).toBeGreaterThan(0);
         expect(stored.stages[0].loras.length).toBeGreaterThan(0);

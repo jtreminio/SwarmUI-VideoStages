@@ -20,7 +20,6 @@ import {
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
-import { normalizeAudioSegments } from "./normalizationAudio";
 import {
     normalizePromptWindows,
     normalizeRetake,
@@ -119,7 +118,6 @@ export const buildDefaultClip = (
         clipLengthFromControlNet: false,
         reuseAudio: false,
         uploadedAudio: null,
-        audioSegments: [],
         prompt: "",
         promptWindows: [],
         retake: null,
@@ -242,7 +240,6 @@ export const normalizeClip = (
         clipLengthFromControlNet,
         reuseAudio: !!rawClip.reuseAudio,
         uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
-        audioSegments: normalizeAudioSegments(rawClip.audioSegments, duration),
         prompt: `${rawClip.prompt ?? ""}`,
         promptWindows: normalizePromptWindows(rawClip),
         retake: normalizeRetake(rawClip.retake, duration),

@@ -4,7 +4,6 @@
  * stable so existing imports do not need to know the decomposition.
  */
 export {
-    normalizeAudioSegments,
     normalizeAudioTrackSpan,
     normalizeAudioTracks,
 } from "./normalizationAudio";
