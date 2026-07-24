@@ -991,6 +991,20 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseConfig_FlattenedStagesIncludePerIcLoraStrengths()
+    {
+        JObject stage = MakeStage("model-a");
+        stage["IcLoraStrengths"] = new JArray(0.25, 0.75);
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [stage])));
+
+        WorkflowGenerator parser = BuildParser(json);
+
+        StageSpec flattened = Assert.Single(FlattenedActiveStages(parser));
+        Assert.Equal([0.25, 0.75], flattened.IcLoraStrengths);
+    }
+
+    [Fact]
     public void ParseConfig_PadsMissingRefStrengthsToMatchReferenceCount()
     {
         JObject stage = MakeStage("model-a");

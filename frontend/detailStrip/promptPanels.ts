@@ -96,7 +96,7 @@ const buildRelayPromptSection = (
             sectionClass: "vst-detail-relay-section",
             open,
             items: windows.map((window, index) => ({
-                label: `R${index + 1}`,
+                label: `R${index}`,
                 focusKey: `relay-tab-${index}`,
                 title: `Relay prompt ${roundToTenth(window.start)}–${roundToTenth(window.start + window.duration)} seconds`,
                 active: index === activeWindowIdx,
@@ -122,7 +122,7 @@ const buildRelayPromptSection = (
                 title:
                     activeWindowIdx === null
                         ? "No relay prompt to delete"
-                        : `Delete relay prompt ${activeWindowIdx + 1}`,
+                        : `Delete relay prompt ${activeWindowIdx}`,
                 className: "vst-detail-delete-relay",
             },
             editor,

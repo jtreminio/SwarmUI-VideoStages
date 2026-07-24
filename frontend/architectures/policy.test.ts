@@ -241,7 +241,7 @@ describe("catalog-backed authoring policy", () => {
             stageIdx: 0,
         });
         expect(detailBreadcrumb(selection, [clip])).toBe(
-            "Clip 1 · Source only",
+            "Clip 0 · Source only",
         );
     });
 

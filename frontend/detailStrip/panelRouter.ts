@@ -100,54 +100,54 @@ export const detailBreadcrumb = (
     switch (selection.kind) {
         case "clip":
             return clips[selection.clipIdx]?.stages.length === 0
-                ? `Clip ${selection.clipIdx + 1} · Source only`
-                : `Clip ${selection.clipIdx + 1} · ${stageChipLabel(selection.stageIdx)}`;
+                ? `Clip ${selection.clipIdx} · Source only`
+                : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
         case "ref":
-            return `Ref ${selection.refIdx + 1} · Clip ${selection.clipIdx + 1}`;
+            return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
         case "ic-lora":
-            return `IC-LoRA ${selection.entryIdx + 1} · Clip ${selection.clipIdx + 1}`;
+            return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
         case "audio":
-            return `Audio · Clip ${selection.clipIdx + 1}`;
+            return `Audio · Clip ${selection.clipIdx}`;
         case "audio-segment": {
             const segment =
                 clips[selection.clipIdx]?.audioSegments?.[selection.segIdx];
             if (!segment) {
-                return `Audio segment · Clip ${selection.clipIdx + 1}`;
+                return `Audio segment · Clip ${selection.clipIdx}`;
             }
             const start = roundToTenth(segment.startSeconds);
             const end = roundToTenth(
                 segment.startSeconds + segment.lengthSeconds,
             );
-            return `Audio segment · Clip ${selection.clipIdx + 1} · ${start}–${end} s`;
+            return `Audio segment · Clip ${selection.clipIdx} · ${start}–${end} s`;
         }
         case "audio-track":
             return `Audio track ${selection.trackIdx + 1}`;
         case "audio-track-span":
             return `Audio track ${selection.trackIdx + 1} · Span ${selection.spanIdx + 1}`;
         case "boundary":
-            return `Boundary · Clip ${selection.leftClipIdx + 1} → ${selection.leftClipIdx + 2}`;
+            return `Boundary · Clip ${selection.leftClipIdx} → ${selection.leftClipIdx + 1}`;
         case "prompt-major":
-            return `Prompts · Clip ${selection.clipIdx + 1}`;
+            return `Prompts · Clip ${selection.clipIdx}`;
         case "prompt-minor": {
             const window =
                 clips[selection.clipIdx]?.promptWindows?.[selection.windowIdx];
             if (!window) {
-                return `Relay · Clip ${selection.clipIdx + 1}`;
+                return `Relay · Clip ${selection.clipIdx}`;
             }
             const start = roundToTenth(window.start);
             const end = roundToTenth(window.start + window.duration);
-            return `Relay ${start}–${end}s · Clip ${selection.clipIdx + 1}`;
+            return `Relay ${start}–${end}s · Clip ${selection.clipIdx}`;
         }
         case "retake": {
             const retake = clips[selection.clipIdx]?.retake;
             if (!retake) {
-                return `Retake · Clip ${selection.clipIdx + 1}`;
+                return `Retake · Clip ${selection.clipIdx}`;
             }
             const start = roundToTenth(retake.startSeconds);
             const end = roundToTenth(
                 retake.startSeconds + retake.lengthSeconds,
             );
-            return `Retake · Clip ${selection.clipIdx + 1} · ${start}–${end} s`;
+            return `Retake · Clip ${selection.clipIdx} · ${start}–${end} s`;
         }
         default:
             return "Timeline settings";

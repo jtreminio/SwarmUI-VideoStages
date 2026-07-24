@@ -118,6 +118,11 @@ export const buildSourceVideoSection = (
         });
     };
 
+    const hint = document.createElement("small");
+    hint.className = "vst-detail-field-hint";
+    hint.textContent =
+        "Use an existing video file as this clip instead of generating it.";
+    col.appendChild(hint);
     col.appendChild(
         buildMediaPickRow(
             "Video file",
@@ -133,11 +138,6 @@ export const buildSourceVideoSection = (
         ),
     );
     if (!source) {
-        const hint = document.createElement("small");
-        hint.className = "vst-detail-field-hint";
-        hint.textContent =
-            "Use an existing video file as this clip instead of generating it.";
-        col.appendChild(hint);
         return wrap;
     }
 

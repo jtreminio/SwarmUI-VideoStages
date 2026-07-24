@@ -222,6 +222,7 @@ describe("persistence", () => {
                             skipped: false,
                             control: 1,
                             controlNetStrength: 0.7,
+                            icLoraStrengths: [],
                             refStrengths: [0.8],
                             upscale: 1,
                             upscaleMethod: "latentmodel-test.safetensors",

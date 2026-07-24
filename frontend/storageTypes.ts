@@ -24,6 +24,7 @@ export const STORED_STAGE_KEYS = [
     "skipped",
     "control",
     "controlNetStrength",
+    "icLoraStrengths",
     "refStrengths",
     "upscale",
     "upscaleMethod",

@@ -1,6 +1,10 @@
 import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
 import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
-import { buildCheckbox, buildField, buildNumber } from "../detailWidgets";
+import {
+    buildField,
+    buildNumber,
+    type SectionHeaderAction,
+} from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip } from "../types";
@@ -14,7 +18,8 @@ export const buildClipColumn = (
     clipIdx: number,
 ): HTMLElement => {
     const column = document.createElement("div");
-    column.className = "vst-detail-col vst-detail-clip";
+    column.className =
+        "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
 
     const sourced = !!clip.sourceVideo;
     const lengthDerived =
@@ -50,19 +55,29 @@ export const buildClipColumn = (
         durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);
-    column.appendChild(
-        buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
-            context.commit((clips) => {
-                const target = clips[clipIdx];
-                if (target) {
-                    target.skipped = value;
-                    reconcileArchitectureIncomingIcLoraDrives(
-                        clips,
-                        context.generatedEntryMode(),
-                    );
-                }
-            });
-        }),
-    );
     return column;
 };
+
+export const buildClipSkipAction = (
+    context: DetailStripContext,
+    clip: Clip,
+    clipIdx: number,
+): SectionHeaderAction => ({
+    label: "⏭︎",
+    title: clip.skipped ? "Re-enable clip" : "Skip clip",
+    className: "vst-detail-skip-clip",
+    active: clip.skipped === true,
+    onClick: () => {
+        context.commit((clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+                target.skipped = !target.skipped;
+                reconcileArchitectureIncomingIcLoraDrives(
+                    clips,
+                    context.generatedEntryMode(),
+                );
+            }
+        });
+        context.render();
+    },
+});

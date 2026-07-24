@@ -50,6 +50,19 @@ export const normalizeStageControlNetStrengthValue = (value: unknown): number =>
         STAGE_CONTROLNET_STRENGTH_STEP,
     );
 
+export const normalizeStageIcLoraStrengths = (
+    rawStrengths: unknown,
+    icLoraCount: number,
+    fallbackStrength = STAGE_CONTROLNET_STRENGTH_DEFAULT,
+): number[] => {
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    return Array.from({ length: icLoraCount }, (_, index) =>
+        normalizeStageControlNetStrengthValue(
+            rawValues[index] ?? fallbackStrength,
+        ),
+    );
+};
+
 export const buildDefaultStageRefStrengths = (
     refCount: number,
     defaultStrength = STAGE_REF_STRENGTH_DEFAULT,
@@ -123,6 +136,9 @@ export const buildDefaultStage = (
         controlNetStrength: previousStage
             ? previousStage.controlNetStrength
             : STAGE_CONTROLNET_STRENGTH_DEFAULT,
+        icLoraStrengths: previousStage
+            ? [...previousStage.icLoraStrengths]
+            : [],
         refStrengths: buildDefaultStageRefStrengths(refCount),
         upscale: previousStage ? previousStage.upscale : defaults.upscale,
         upscaleMethod: previousStage
@@ -173,6 +189,20 @@ export const removeRefAt = (clip: Clip, refIdx: number): boolean => {
         }
     }
     return true;
+};
+
+export const appendIcLoraStrengthToClip = (clip: Clip): void => {
+    for (const stage of clip.stages) {
+        stage.icLoraStrengths.push(STAGE_CONTROLNET_STRENGTH_DEFAULT);
+    }
+};
+
+export const removeIcLoraStrengthAt = (clip: Clip, entryIdx: number): void => {
+    for (const stage of clip.stages) {
+        if (entryIdx < stage.icLoraStrengths.length) {
+            stage.icLoraStrengths.splice(entryIdx, 1);
+        }
+    }
 };
 
 export const getReferenceFrameMax = (
@@ -260,6 +290,11 @@ export const normalizeStage = (
             readRawStageProp(rawStage, "controlNetStrength") ??
                 fallback.controlNetStrength,
         ),
+        icLoraStrengths: Array.isArray(rawStage.icLoraStrengths)
+            ? rawStage.icLoraStrengths.map(
+                  normalizeStageControlNetStrengthValue,
+              )
+            : [...fallback.icLoraStrengths],
         refStrengths: normalizeStageRefStrengths(
             rawStage.refStrengths,
             refCount,

@@ -649,7 +649,7 @@ describe("videoStagesTimeline", () => {
         await Promise.resolve();
 
         expect(sel?.hidden).toBe(false);
-        expect(sel?.textContent).toBe("clip 2");
+        expect(sel?.textContent).toBe("clip 1");
     });
 
     it("renders no playhead (removed until an existing-video workflow needs it)", () => {

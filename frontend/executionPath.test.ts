@@ -279,27 +279,27 @@ describe("projectVideoExecutionPath", () => {
             upscaledStageCount: 1,
             icLoraCount: 1,
             loraCount: 1,
-            majorPromptClipNumbers: [1],
+            majorPromptClipNumbers: [0],
             relayPromptCount: 1,
-            retakeClipNumbers: [1],
+            retakeClipNumbers: [0],
             references: [
                 expect.objectContaining({ frame: 7, fromEnd: false }),
                 expect.objectContaining({ frame: 4, fromEnd: true }),
             ],
             audio: {
                 segmentCount: 1,
-                lengthFromAudioClipNumbers: [1],
-                lengthFromControlNetClipNumbers: [2],
+                lengthFromAudioClipNumbers: [0],
+                lengthFromControlNetClipNumbers: [1],
             },
         });
         expect(summary.features.audio.clips[0].label).toBe(
-            "Clip 1: AceStepFun track 2 audio",
+            "Clip 0: AceStepFun track 2 audio",
         );
         expect(
             summary.features.references.map((reference) => reference.label),
         ).toEqual([
-            "Clip 1: host image at frame 7",
-            "Clip 1: uploaded image at 4 frames from end",
+            "Clip 0: host image at frame 7",
+            "Clip 0: uploaded image at 4 frames from end",
         ]);
         expect(summary.labels).toEqual(
             expect.arrayContaining([
@@ -336,7 +336,7 @@ describe("projectVideoExecutionPath", () => {
         });
         expect(summary.clips[0]).toMatchObject({
             kind: "skipped",
-            label: "Clip 1: skipped · LTX Video 2.3",
+            label: "Clip 0: skipped · LTX Video 2.3",
         });
         expect(summary.features.upscaledStageCount).toBe(0);
     });
@@ -747,7 +747,7 @@ describe("projectVideoExecutionPath", () => {
                     strength: 1,
                 },
             }),
-            expected: [1],
+            expected: [0],
         },
         {
             name: "global refine retake executes after its skipped prefix",
@@ -760,7 +760,7 @@ describe("projectVideoExecutionPath", () => {
                 },
             }),
             context: { entryPoint: "global-refine-video" },
-            expected: [1],
+            expected: [0],
         },
         {
             name: "source-only retake has no stage to execute it",
@@ -805,8 +805,8 @@ describe("projectVideoExecutionPath", () => {
 
         expect(summary.boundaries).toEqual([
             expect.objectContaining({
-                leftClipNumber: 1,
-                rightClipNumber: 4,
+                leftClipNumber: 0,
+                rightClipNumber: 3,
                 kind: "continue",
                 requested: "continue",
                 effective: "continue",
@@ -926,8 +926,8 @@ describe("projectVideoExecutionPath", () => {
         );
 
         expect(summary.features.references).toMatchObject([
-            { clipNumber: 1, frame: 3, source: REF_SOURCE_UPLOAD },
-            { clipNumber: 2, frame: 6, source: REF_SOURCE_UPLOAD },
+            { clipNumber: 0, frame: 3, source: REF_SOURCE_UPLOAD },
+            { clipNumber: 1, frame: 6, source: REF_SOURCE_UPLOAD },
         ]);
         expect(summary.labels).toContain("2 frame references");
     });
@@ -943,9 +943,9 @@ describe("projectVideoExecutionPath", () => {
         );
 
         expect(summary.features).toMatchObject({
-            majorPromptClipNumbers: [1, 2, 3],
-            majorPromptOverrideClipNumbers: [2],
-            majorPromptInheritedClipNumbers: [1, 3],
+            majorPromptClipNumbers: [0, 1, 2],
+            majorPromptOverrideClipNumbers: [1],
+            majorPromptInheritedClipNumbers: [0, 2],
         });
         expect(summary.labels).toContain(
             "Major prompts: 1 clip override, 2 inherit global",
@@ -982,14 +982,14 @@ describe("projectVideoExecutionPath", () => {
 
         expect(summary.features.audio.clips).toEqual([
             expect.objectContaining({
-                label: "Clip 1: AceStepFun track 2 audio",
+                label: "Clip 0: AceStepFun track 2 audio",
                 reusesStageAudio: true,
                 savesTrack: true,
                 lengthFromAudio: true,
                 segmentCount: 1,
             }),
             expect.objectContaining({
-                label: "Clip 2: ControlNet audio",
+                label: "Clip 1: ControlNet audio",
                 reusesStageAudio: false,
                 lengthFromControlNet: true,
             }),

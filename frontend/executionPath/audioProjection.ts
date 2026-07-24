@@ -175,9 +175,9 @@ export const projectClipAudio = (
               )
             : null;
         return {
-            clipNumber: index + 1,
+            clipNumber: index,
             source: clip.audioSource,
-            label: `Clip ${index + 1}: ${audioSourceLabel(clip.audioSource)} audio`,
+            label: `Clip ${index}: ${audioSourceLabel(clip.audioSource)} audio`,
             lengthFromAudio: clip.clipLengthFromAudio === true,
             lengthFromControlNet: clip.clipLengthFromControlNet === true,
             reusesStageAudio:

@@ -134,6 +134,7 @@ const maximalClip = (): Clip =>
                 skipped: false,
                 control: 0.5,
                 controlNetStrength: 0.7,
+                icLoraStrengths: [],
                 refStrengths: [0.8],
                 upscale: 1,
                 upscaleMethod: "latentmodel-a.safetensors",

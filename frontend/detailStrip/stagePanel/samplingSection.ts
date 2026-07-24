@@ -23,12 +23,6 @@ export const appendStageDenoisingSection = (
             (target, value) => {
                 target.steps = Math.round(value);
             },
-            {
-                help:
-                    "How many denoising steps this stage runs. More steps can " +
-                    "add detail but take longer; there are diminishing returns " +
-                    "past the model's sweet spot.",
-            },
         ),
     );
     fields.appendChild(
@@ -41,12 +35,6 @@ export const appendStageDenoisingSection = (
             defaults.cfgScaleStep,
             (target, value) => {
                 target.cfgScale = value;
-            },
-            {
-                help:
-                    "How strongly generation follows the prompt. Higher sticks " +
-                    "closer to the prompt but can look over-cooked; lower is " +
-                    "looser and more natural.",
             },
         ),
     );
@@ -110,9 +98,6 @@ export const appendStageSamplerSchedulerSection = ({
                     target.sampler = value;
                 }),
         ),
-        undefined,
-        "The sampling algorithm used to denoise each step. Leave at the " +
-            "model default unless you have a reason to change it.",
     );
     const samplerState = stageCapabilities.authoringState("sampler", true);
     if (!samplerState.enabled) {
@@ -131,9 +116,6 @@ export const appendStageSamplerSchedulerSection = ({
                     target.scheduler = value;
                 }),
         ),
-        undefined,
-        "Controls how the noise level is spaced across the steps. Leave at " +
-            "the model default unless you have a reason to change it.",
     );
     const schedulerState = stageCapabilities.authoringState("scheduler", true);
     if (!schedulerState.enabled) {

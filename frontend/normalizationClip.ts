@@ -35,6 +35,7 @@ import {
     getReferenceFrameMax,
     normalizeRef,
     normalizeStage,
+    normalizeStageIcLoraStrengths,
 } from "./normalizationStage";
 import { snapDurationToFps } from "./renderUtils";
 import type { BoundaryOut, Clip, RootDefaults, Stage } from "./types";
@@ -204,6 +205,13 @@ export const normalizeClip = (
             (entry) => entry.id === architecture,
         ) || architecture === "none",
     );
+    for (const stage of stages) {
+        stage.icLoraStrengths = normalizeStageIcLoraStrengths(
+            stage.icLoraStrengths,
+            icLoras.length,
+            stage.controlNetStrength,
+        );
+    }
     const clipLengthFromAudio =
         canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet =

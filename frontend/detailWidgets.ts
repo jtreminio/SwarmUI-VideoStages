@@ -38,7 +38,7 @@ export const appendHelp = (
     btn.addEventListener("click", (event) => {
         showHostPopover(key, event);
     });
-    labelEl.appendChild(btn);
+    labelEl.insertBefore(btn, labelEl.firstChild);
     const pop = document.createElement("div");
     pop.className = "sui-popover sui-info-popover";
     pop.id = `popover_${key}`;
@@ -75,6 +75,25 @@ const wireNumericInput = (
     input.addEventListener("change", () => apply(true));
 };
 
+const wireUnboundedNumericInput = (
+    input: HTMLInputElement,
+    fallback: number,
+    onChange: (value: number) => void,
+): void => {
+    const apply = (normalize: boolean): void => {
+        const parsed = Number.parseFloat(input.value);
+        const next = Number.isFinite(parsed) ? parsed : fallback;
+        onChange(next);
+        if (normalize) {
+            input.value = `${next}`;
+        }
+    };
+    input.removeAttribute("min");
+    input.removeAttribute("max");
+    input.addEventListener("input", () => apply(false));
+    input.addEventListener("change", () => apply(true));
+};
+
 const boxClassFor = (control: HTMLElement): string | null => {
     if (control.classList.contains("auto-dropdown")) {
         return "auto-dropdown-box";
@@ -86,6 +105,15 @@ const boxClassFor = (control: HTMLElement): string | null => {
         return "auto-text-box";
     }
     return null;
+};
+
+const buildFieldLabel = (label: string): HTMLLabelElement => {
+    const labelEl = document.createElement("label");
+    const text = document.createElement("span");
+    text.className = "auto-input-name vst-detail-field-label";
+    text.textContent = label;
+    labelEl.appendChild(text);
+    return labelEl;
 };
 
 export const buildField = (
@@ -105,11 +133,7 @@ export const buildField = (
     if (boxClass) {
         row.classList.add(boxClass);
     }
-    const labelEl = document.createElement("label");
-    const text = document.createElement("span");
-    text.className = "auto-input-name vst-detail-field-label";
-    text.textContent = label;
-    labelEl.appendChild(text);
+    const labelEl = buildFieldLabel(label);
     if (help) {
         appendHelp(labelEl, row, label, help);
     }
@@ -179,6 +203,20 @@ export const buildNumber = (
     return input;
 };
 
+export const buildUnboundedNumber = (
+    value: number,
+    step: number,
+    onChange: (value: number) => void,
+): HTMLInputElement => {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.className = "auto-number vst-refs-num";
+    input.step = `${step}`;
+    input.value = `${value}`;
+    wireUnboundedNumericInput(input, value, onChange);
+    return input;
+};
+
 export const buildSlider = (
     label: string,
     value: number,
@@ -193,6 +231,7 @@ export const buildSlider = (
         sliderMin?: number;
         sliderMax?: number;
         numberStep?: number | "any";
+        allowNumberOutOfRange?: boolean;
     },
 ): HTMLElement => {
     const holder = document.createElement("div");
@@ -213,7 +252,11 @@ export const buildSlider = (
     );
     if (number) {
         number.step = `${opts?.numberStep ?? step}`;
-        wireNumericInput(number, value, min, max, onChange);
+        if (opts?.allowNumberOutOfRange) {
+            wireUnboundedNumericInput(number, value, onChange);
+        } else {
+            wireNumericInput(number, value, min, max, onChange);
+        }
     }
     if (opts?.title) {
         holder.title = opts.title;
@@ -250,12 +293,10 @@ export const buildCheckbox = (
     input.dataset.name = label;
     input.checked = checked;
     input.addEventListener("change", () => onChange(input.checked));
-    const text = document.createElement("span");
-    text.className = "auto-input-name vst-detail-field-label";
-    text.textContent = label;
-    row.append(text, input);
+    const labelEl = buildFieldLabel(label);
+    row.append(labelEl, input);
     if (opts?.help) {
-        appendHelp(text, row, label, opts.help);
+        appendHelp(labelEl, row, label, opts.help);
     }
     if (opts?.disabled) {
         row.classList.add("vst-audio-disabled");
@@ -465,6 +506,87 @@ export interface AccordionSectionSpec {
     flattenContent?: boolean;
 }
 
+export interface SectionHeaderAction {
+    label: string;
+    title: string;
+    className?: string;
+    active?: boolean;
+    onClick: () => void;
+}
+
+const appendSectionHeaderAction = (
+    target: HTMLElement,
+    actionSpec: SectionHeaderAction,
+): void => {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className =
+        `basic-button vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
+    action.textContent = actionSpec.label;
+    action.title = actionSpec.title;
+    action.setAttribute("aria-label", actionSpec.title);
+    action.setAttribute("aria-pressed", `${actionSpec.active === true}`);
+    action.classList.toggle("vst-btn-skip-active", actionSpec.active === true);
+    action.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        actionSpec.onClick();
+    });
+    target.appendChild(action);
+};
+
+export interface StaticSectionSpec {
+    key: string;
+    label: string;
+    content: HTMLElement | DocumentFragment;
+    className?: string;
+    flattenContent?: boolean;
+    headerAction?: SectionHeaderAction;
+}
+
+/**
+ * Native SwarmUI input group that is always open. It keeps the same header and
+ * content structure as an accordion group, but deliberately omits the
+ * shrinkable class, disclosure symbol, button role, and toggle listeners.
+ */
+export const buildStaticSection = (
+    spec: StaticSectionSpec,
+): {
+    section: HTMLElement;
+    heading: HTMLElement;
+    content: HTMLElement;
+} => {
+    const section = document.createElement("div");
+    section.className =
+        `input-group input-group-open vst-detail-section vst-detail-static-section ${spec.className ?? ""}`.trim();
+    section.dataset.vstStaticKey = spec.key;
+
+    const header = document.createElement("span");
+    header.className =
+        "input-group-header input-group-noshrink vst-detail-section-header";
+    const labelWrap = document.createElement("span");
+    labelWrap.className = "header-label-wrap";
+    const heading = document.createElement("span");
+    heading.className = "header-label";
+    heading.textContent = spec.label;
+    const spacer = document.createElement("span");
+    spacer.className = "header-label-spacer";
+    labelWrap.append(heading, spacer);
+    if (spec.headerAction) {
+        const actions = document.createElement("span");
+        actions.className = "vst-detail-repeating-group-actions";
+        appendSectionHeaderAction(actions, spec.headerAction);
+        labelWrap.appendChild(actions);
+    }
+    header.appendChild(labelWrap);
+
+    const content = document.createElement("div");
+    content.className = "input-group-content vst-detail-section-content";
+    appendSectionContent(content, spec.content, spec.flattenContent === true);
+    section.append(header, content);
+    return { section, heading, content };
+};
+
 /**
  * Native SwarmUI sidebar group with a wired shrinkable header. Sibling
  * VideoStages sections form a progressive accordion: opening one closes the
@@ -546,13 +668,7 @@ export interface RepeatingGroupItem {
     onDelete?: () => void;
     deleteTitle?: string;
     deleteDisabled?: boolean;
-    headerAction?: {
-        label: string;
-        title: string;
-        className?: string;
-        active?: boolean;
-        onClick: () => void;
-    };
+    headerAction?: SectionHeaderAction;
 }
 
 export interface RepeatingGroupAddAction {
@@ -575,7 +691,11 @@ export interface RepeatingEditorSpec {
     editor?: HTMLElement;
     sectionClass?: string;
     open?: boolean;
+    defaultActiveIndex?: number | null;
 }
+
+const rememberedRepeaterItems = new Map<string, number>();
+const forceOpenRepeaterKeys = new Set<string>();
 
 /**
  * Canonical repeating-child section: one native outer SwarmUI accordion group,
@@ -586,11 +706,41 @@ export const buildRepeatingEditor = (
 ): {
     section: HTMLElement;
     heading: HTMLElement;
+    content: HTMLElement;
     editor: HTMLElement | null;
 } => {
+    const explicitActiveIndex = spec.items.findIndex(
+        (item) => item.active === true,
+    );
+    const rememberedIndex = rememberedRepeaterItems.get(spec.key);
+    const validRememberedIndex =
+        rememberedIndex !== undefined &&
+        rememberedIndex >= 0 &&
+        rememberedIndex < spec.items.length
+            ? rememberedIndex
+            : null;
+    if (rememberedIndex !== undefined && validRememberedIndex === null) {
+        rememberedRepeaterItems.delete(spec.key);
+        forceOpenRepeaterKeys.delete(spec.key);
+    }
+    const forceOpen =
+        forceOpenRepeaterKeys.has(spec.key) && validRememberedIndex !== null;
+    const activeIndex = forceOpen
+        ? validRememberedIndex
+        : explicitActiveIndex >= 0
+          ? explicitActiveIndex
+          : (validRememberedIndex ?? spec.defaultActiveIndex ?? null);
+    if (explicitActiveIndex >= 0 && !forceOpen) {
+        rememberedRepeaterItems.set(spec.key, explicitActiveIndex);
+    } else if (activeIndex !== null) {
+        rememberedRepeaterItems.set(spec.key, activeIndex);
+    }
+    if (forceOpen) {
+        forceOpenRepeaterKeys.delete(spec.key);
+    }
     const children = document.createDocumentFragment();
     spec.items.forEach((item, index) => {
-        const active = item.active === true;
+        const active = index === activeIndex;
         const group = document.createElement("div");
         group.className = `input-group vst-detail-repeating-group ${
             active ? "input-group-open" : "input-group-closed"
@@ -618,23 +768,7 @@ export const buildRepeatingEditor = (
         const actions = document.createElement("span");
         actions.className = "vst-detail-repeating-group-actions";
         if (item.headerAction) {
-            const action = document.createElement("button");
-            action.type = "button";
-            action.className =
-                `basic-button vst-btn-tiny vst-detail-repeating-group-action ${item.headerAction.className ?? ""}`.trim();
-            action.textContent = item.headerAction.label;
-            action.title = item.headerAction.title;
-            action.setAttribute("aria-label", item.headerAction.title);
-            action.classList.toggle(
-                "vst-btn-skip-active",
-                item.headerAction.active === true,
-            );
-            action.addEventListener("click", (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                item.headerAction?.onClick();
-            });
-            actions.appendChild(action);
+            appendSectionHeaderAction(actions, item.headerAction);
         }
         const onDelete = item.onDelete ?? item.onShiftDelete;
         if (onDelete) {
@@ -673,6 +807,7 @@ export const buildRepeatingEditor = (
             event.preventDefault();
             event.stopPropagation();
             if (!active && item.onSelect) {
+                rememberedRepeaterItems.set(spec.key, index);
                 item.onSelect();
                 return;
             }
@@ -691,6 +826,11 @@ export const buildRepeatingEditor = (
                 }
             }
             setAccordionOpen(group, opening);
+            if (opening) {
+                rememberedRepeaterItems.set(spec.key, index);
+            } else if (rememberedRepeaterItems.get(spec.key) === index) {
+                rememberedRepeaterItems.delete(spec.key);
+            }
         };
         header.addEventListener("click", activateOrToggle);
         header.addEventListener("keydown", (event) => {
@@ -712,6 +852,8 @@ export const buildRepeatingEditor = (
     add.disabled = spec.add.disabled === true;
     add.addEventListener("click", (event) => {
         event.preventDefault();
+        rememberedRepeaterItems.set(spec.key, spec.items.length);
+        forceOpenRepeaterKeys.add(spec.key);
         spec.add.onClick();
     });
     children.appendChild(add);
@@ -720,7 +862,7 @@ export const buildRepeatingEditor = (
         label: spec.label,
         content: children,
         counter: spec.items.length,
-        open: spec.open,
+        open: forceOpen || spec.open,
         className:
             `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim(),
     });
@@ -728,6 +870,7 @@ export const buildRepeatingEditor = (
     return {
         section: built.section,
         heading: built.heading,
+        content: built.content,
         editor: spec.editor ?? null,
     };
 };

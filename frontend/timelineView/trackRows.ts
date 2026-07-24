@@ -197,7 +197,7 @@ const renderAudioSegmentBlock = (
         labelClass: "vst-audio-label",
         label: labelText,
         title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-        ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx + 1}`,
+        ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx}`,
         startSeconds: segment.startSeconds,
         lengthSeconds: segment.lengthSeconds,
         durationSeconds,
@@ -291,7 +291,7 @@ export const renderAudioTrackRow = (
                 : "";
             const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
             return (
-                `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index + 1}">` +
+                `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}">` +
                 `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +
                 audioFlagChips(clip) +
                 body +
@@ -390,7 +390,7 @@ export const renderReferencesTrackRow = (
                         `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""}` +
                         ` · frame ${frame} · ${formatTimeLabel(time, unit, fps)}` +
                         ` · click to edit, drag to move · Shift+click to delete`;
-                    const label = `Edit reference ${refIdx + 1} (${source}${isEnd ? ", from end" : ""})`;
+                    const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
                     return (
                         `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}">` +
                         `<span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeHtml(frameLabel)}</span></span>` +

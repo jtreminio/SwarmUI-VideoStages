@@ -113,7 +113,7 @@ const clipOptions = (
         { value: "", label: openLabel },
         ...state.clips.map((clip, index) => ({
             value: clip.id as string,
-            label: `Clip ${index + 1}`,
+            label: `Clip ${index}`,
         })),
     ];
     if (selectedId && !state.clips.some((clip) => clip.id === selectedId)) {

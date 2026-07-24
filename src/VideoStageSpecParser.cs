@@ -104,6 +104,7 @@ internal static class VideoStageSpecParser
                 stageIndex,
                 isTextToVideoRootWorkflow),
             ControlNetStrength: ParseControlNetStrength(stage, location),
+            IcLoraStrengths: ParseIcLoraStrengths(stage),
             ImageRefStrengths: ParseRefStrengths(stage, clipRefCount),
             ImageRefWasExplicit: VideoStagesJsonReader.HasProperty(stage, "ImageReference"),
             Loras: VideoStageResourceParser.ParseLoras(stage));
@@ -121,6 +122,36 @@ internal static class VideoStageSpecParser
             Constants.DefaultStageControlNetStrength,
             location);
         return ClampUnitOrDefault(value, Constants.DefaultStageControlNetStrength);
+    }
+
+    private static IReadOnlyList<double> ParseIcLoraStrengths(JObject stage)
+    {
+        if (JsonUtil.Get(stage, "IcLoraStrengths") is not JArray array)
+        {
+            return [];
+        }
+        List<double> strengths = [];
+        foreach (JToken entry in array)
+        {
+            if (entry.Type is JTokenType.Float or JTokenType.Integer)
+            {
+                strengths.Add(ClampUnitOrDefault(
+                    entry.Value<double>(),
+                    Constants.DefaultStageControlNetStrength));
+            }
+            else if (entry.Type == JTokenType.String
+                && double.TryParse(
+                    $"{entry}".Trim(),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double parsed))
+            {
+                strengths.Add(ClampUnitOrDefault(
+                    parsed,
+                    Constants.DefaultStageControlNetStrength));
+            }
+        }
+        return strengths.AsReadOnly();
     }
 
     private static IReadOnlyList<double> ParseRefStrengths(JObject stage, int clipRefCount)

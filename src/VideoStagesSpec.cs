@@ -45,6 +45,7 @@ public sealed record StageSpec(
     int ClipStageIndex = 0,
     int ClipStageRawIndex = 0,
     double? ControlNetStrength = null,
+    IReadOnlyList<double> IcLoraStrengths = null,
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
     IReadOnlyList<LoraRef> Loras = null,

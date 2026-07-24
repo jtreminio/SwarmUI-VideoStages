@@ -21,6 +21,7 @@ export const appendStageReferenceGuideSection = ({
     clip,
     clipIdx,
     stage,
+    stageIdx,
     fields,
     debouncedCommit,
 }: StagePanelBindings): void => {
@@ -47,7 +48,7 @@ export const appendStageReferenceGuideSection = ({
                     ? stage.refStrengths[refIdx]
                     : STAGE_REF_STRENGTH_MAX;
             const refSlider = buildSlider(
-                `R${refIdx}`,
+                `Reference R${refIdx}`,
                 current,
                 STAGE_REF_STRENGTH_MIN,
                 STAGE_REF_STRENGTH_MAX,
@@ -83,27 +84,26 @@ export const appendStageReferenceGuideSection = ({
 
     if (clip.icLoras.length === 0) return;
     const icDecision = context.capabilities().forClip(clip).decision("icLora");
-    const guideStrength = buildSlider(
-        "IC-LoRA Guide Strength",
-        stage.controlNetStrength,
-        STAGE_CONTROLNET_STRENGTH_MIN,
-        STAGE_CONTROLNET_STRENGTH_MAX,
-        STAGE_CONTROLNET_STRENGTH_STEP,
-        (value) => {
-            debouncedCommit("controlnet", (target) => {
-                target.controlNetStrength = value;
-            });
-        },
-        {
-            help:
-                "How strongly this stage is conditioned by the clip's " +
-                "IC-LoRA drive video/guides. Higher follows the guide more " +
-                "closely; lower gives the model more freedom.",
-        },
-    );
-    tagFocus(guideStrength, "controlnet");
-    fields.appendChild(guideStrength);
-    if (!icDecision.supported) {
-        disableCapabilityControls(guideStrength, icDecision);
-    }
+    clip.icLoras.forEach((entry, entryIdx) => {
+        if (entry.stage >= 0 && entry.stage !== stageIdx) {
+            return;
+        }
+        const guideStrength = buildSlider(
+            `IC-LoRA Strength ${entryIdx}`,
+            stage.icLoraStrengths[entryIdx] ?? stage.controlNetStrength,
+            STAGE_CONTROLNET_STRENGTH_MIN,
+            STAGE_CONTROLNET_STRENGTH_MAX,
+            STAGE_CONTROLNET_STRENGTH_STEP,
+            (value) => {
+                debouncedCommit(`ic-lora-strength-${entryIdx}`, (target) => {
+                    target.icLoraStrengths[entryIdx] = value;
+                });
+            },
+        );
+        tagFocus(guideStrength, `ic-lora-strength-${entryIdx}`);
+        fields.appendChild(guideStrength);
+        if (!icDecision.supported) {
+            disableCapabilityControls(guideStrength, icDecision);
+        }
+    });
 };

@@ -35,7 +35,7 @@ const persistedCapabilityIssues = (
             diagnostics.push(
                 issue(
                     `architecture.unsupported.${key}`,
-                    `${label} is persisted on Clip ${clipIdx + 1}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+                    `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
                     clipIdx,
                 ),
             );
@@ -158,7 +158,7 @@ export const deriveArchitectureDiagnostics = (
                 diagnostics.push(
                     issue(
                         "architecture.source-only-requires-none",
-                        `Source-only Clip ${clipIdx + 1} must use architecture and profile 'none'.`,
+                        `Source-only Clip ${clipIdx} must use architecture and profile 'none'.`,
                         clipIdx,
                     ),
                 );
@@ -172,7 +172,7 @@ export const deriveArchitectureDiagnostics = (
             diagnostics.push(
                 issue(
                     "architecture.unknown",
-                    `Clip ${clipIdx + 1} uses unknown architecture '${clip.architecture}'. Its persisted settings were preserved, but generation is blocked.`,
+                    `Clip ${clipIdx} uses unknown architecture '${clip.architecture}'. Its persisted settings were preserved, but generation is blocked.`,
                     clipIdx,
                 ),
             );
@@ -196,7 +196,7 @@ export const deriveArchitectureDiagnostics = (
                 diagnostics.push(
                     issue(
                         "architecture.entry-mode-unsupported",
-                        `Clip ${clipIdx + 1} cannot start from the current ${generatedEntryMode} host entry with architecture '${architecture.id}'.`,
+                        `Clip ${clipIdx} cannot start from the current ${generatedEntryMode} host entry with architecture '${architecture.id}'.`,
                         clipIdx,
                     ),
                 );
@@ -210,7 +210,7 @@ export const deriveArchitectureDiagnostics = (
                 diagnostics.push(
                     issue(
                         "architecture.model-unknown",
-                        `Clip ${clipIdx + 1} Stage ${stageIdx + 1} model '${stage.model}' is not in the architecture catalog.`,
+                        `Clip ${clipIdx} Stage ${stageIdx} model '${stage.model}' is not in the architecture catalog.`,
                         clipIdx,
                     ),
                 );
@@ -231,8 +231,8 @@ export const deriveArchitectureDiagnostics = (
                     issue(
                         "architecture.mixed-stage",
                         sourceOnly
-                            ? `Source-only Clip ${clipIdx + 1} has dormant stages from multiple architectures; Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`
-                            : `Clip ${clipIdx + 1} is locked to '${clip.architecture}', but Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
+                            ? `Source-only Clip ${clipIdx} has dormant stages from multiple architectures; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`
+                            : `Clip ${clipIdx} is locked to '${clip.architecture}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
                         clipIdx,
                     ),
                 );
@@ -246,7 +246,7 @@ export const deriveArchitectureDiagnostics = (
                 diagnostics.push(
                     issue(
                         "architecture.profile-mismatch",
-                        `Clip ${clipIdx + 1} Stage ${stageIdx + 1} profile identity does not match model '${stage.model}'.`,
+                        `Clip ${clipIdx} Stage ${stageIdx} profile identity does not match model '${stage.model}'.`,
                         clipIdx,
                     ),
                 );
@@ -264,7 +264,7 @@ export const deriveArchitectureDiagnostics = (
                 diagnostics.push(
                     issue(
                         "architecture.unsupported.stage-loras-profile",
-                        `Clip ${clipIdx + 1} Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
+                        `Clip ${clipIdx} Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
                         clipIdx,
                     ),
                 );
@@ -285,7 +285,7 @@ export const deriveArchitectureDiagnostics = (
             diagnostics.push(
                 issue(
                     "architecture.cross-boundary-cut-only",
-                    `Clip ${left.clipIdx + 1} → ${right.clipIdx + 1} crosses architectures; '${left.clip.boundaryOut}' is preserved for repair, but only cut can execute.`,
+                    `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' is preserved for repair, but only cut can execute.`,
                     left.clipIdx,
                 ),
             );
@@ -300,7 +300,7 @@ export const deriveArchitectureDiagnostics = (
             diagnostics.push(
                 issue(
                     "architecture.boundary-unsupported",
-                    `Clip ${left.clipIdx + 1} architecture '${left.clip.architecture}' does not support '${left.clip.boundaryOut}' boundaries.`,
+                    `Clip ${left.clipIdx} architecture '${left.clip.architecture}' does not support '${left.clip.boundaryOut}' boundaries.`,
                     left.clipIdx,
                 ),
             );

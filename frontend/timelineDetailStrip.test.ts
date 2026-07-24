@@ -225,23 +225,6 @@ const fieldByLabel = (label: string): HTMLElement => {
     return row;
 };
 
-const checkboxByLabel = (label: string): HTMLInputElement => {
-    const rows = Array.from(
-        document.querySelectorAll<HTMLElement>(
-            ".vst-detail .vst-detail-field-check",
-        ),
-    );
-    const row = rows.find(
-        (r) =>
-            r.querySelector(".vst-detail-field-label")?.textContent === label,
-    );
-    const input = row?.querySelector<HTMLInputElement>("input[type=checkbox]");
-    if (!input) {
-        throw new Error(`checkbox not found: ${label}`);
-    }
-    return input;
-};
-
 const savedClips = (
     spy: jest.SpiedFunction<typeof persistence.saveClips>,
 ): Clip[] => spy.mock.calls[spy.mock.calls.length - 1][0] as Clip[];
@@ -366,7 +349,7 @@ describe("createTimelineDetailStrip", () => {
     it("renders the clip/stage columns when a stage chip is clicked", () => {
         const body = setup([{ duration: 4, stages: [{}, {}] }]);
         clickRegionStageChip(body, 0, 1);
-        expect(crumbText()).toBe("Clip 1 · S1");
+        expect(crumbText()).toBe("Clip 0 · S1");
         expect(activeRailLabel()).toBe("S1");
         expect(detailBody()?.querySelector(".vst-detail-clip")).not.toBeNull();
         expect(
@@ -394,6 +377,94 @@ describe("createTimelineDetailStrip", () => {
         );
         expect(activeRailLabel()).toBe("S1");
         expect(sliderNumberByLabel("Steps").value).toBe("9");
+    });
+
+    it("omits help popovers from the basic stage sampling fields", () => {
+        setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        for (const text of [
+            "Model",
+            "Steps",
+            "CFG Scale",
+            "Sampler",
+            "Scheduler",
+        ]) {
+            const label = Array.from(
+                detailBody()?.querySelectorAll<HTMLElement>(
+                    ".vst-detail-params .auto-input-name",
+                ) ?? [],
+            ).find((candidate) => candidate.textContent === text);
+            expect(label).not.toBeUndefined();
+            expect(
+                label
+                    ?.closest(".vst-detail-field, .vst-stage-slider")
+                    ?.querySelector(".info-popover-button"),
+            ).toBeNull();
+        }
+    });
+
+    it("uses zero-based Ref labels and opens each newly added reference", () => {
+        setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        document
+            .querySelector<HTMLButtonElement>(".vst-detail-add-ref")
+            ?.click();
+        document
+            .querySelector<HTMLButtonElement>(".vst-detail-add-ref")
+            ?.click();
+        const groups = document.querySelectorAll<HTMLElement>(
+            ".vst-detail-ref-section .vst-detail-repeating-group",
+        );
+        expect(groups).toHaveLength(2);
+        expect(groups[0].querySelector(".header-label")?.textContent).toBe(
+            "Ref0",
+        );
+        expect(groups[1].querySelector(".header-label")?.textContent).toBe(
+            "Ref1",
+        );
+        expect(groups[0].classList.contains("input-group-closed")).toBe(true);
+        expect(groups[1].classList.contains("input-group-open")).toBe(true);
+        expect(sliderNumberByLabel("Reference R0")).not.toBeNull();
+        expect(sliderNumberByLabel("Reference R1")).not.toBeNull();
+    });
+
+    it("places Count from clip end help before its label", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                refs: [{ source: "Upload", frame: 0 }],
+            },
+        ]);
+        setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
+        const row = Array.from(
+            detailBody()?.querySelectorAll<HTMLElement>(
+                ".vst-detail-field-check",
+            ) ?? [],
+        ).find((candidate) =>
+            candidate.textContent?.includes("Count from clip end"),
+        );
+        const label = row?.querySelector<HTMLElement>("label");
+        expect(label?.firstElementChild?.textContent).toBe("?");
+        expect(label?.lastElementChild?.textContent).toBe(
+            "Count from clip end",
+        );
+    });
+
+    it("places the source-video explanation at the top of its group", () => {
+        setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const content = detailBody()?.querySelector<HTMLElement>(
+            ".vst-detail-source-col",
+        );
+        expect(content?.firstElementChild?.textContent).toBe(
+            "Use an existing video file as this clip instead of generating it.",
+        );
+        expect(
+            content?.firstElementChild?.classList.contains(
+                "vst-detail-field-hint",
+            ),
+        ).toBe(true);
     });
 
     it("shows Control/Upscale only on refine stages", () => {
@@ -430,13 +501,13 @@ describe("createTimelineDetailStrip", () => {
             ),
         ).map((el) => el.textContent);
 
-    it("hides IC-LoRA Guide Strength when the clip has no IC-LoRAs", () => {
+    it("hides IC-LoRA strengths when the clip has no IC-LoRAs", () => {
         setup([{ duration: 4, stages: [{}], controlNetLora: "" }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(controlNetLabels()).not.toContain("IC-LoRA Guide Strength");
+        expect(controlNetLabels()).not.toContain("IC-LoRA Strength 0");
     });
 
-    it("shows IC-LoRA Guide Strength when the clip has an IC-LoRA", () => {
+    it("shows a zero-based strength for each IC-LoRA in the stage", () => {
         setup([
             {
                 duration: 4,
@@ -447,11 +518,43 @@ describe("createTimelineDetailStrip", () => {
                         driveSource: "ControlNet 1",
                         driveData: "visual",
                     },
+                    {
+                        lora: "some-other-cnet-lora",
+                        driveSource: "ControlNet 2",
+                        driveData: "visual",
+                    },
                 ],
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(controlNetLabels()).toContain("IC-LoRA Guide Strength");
+        expect(controlNetLabels()).toEqual(
+            expect.arrayContaining([
+                "IC-LoRA Strength 0",
+                "IC-LoRA Strength 1",
+            ]),
+        );
+    });
+
+    it("persists IC-LoRA strengths independently by zero-based entry index", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [
+                    { lora: "first.safetensors", driveData: "visual" },
+                    { lora: "second.safetensors", driveData: "visual" },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        jest.useFakeTimers();
+        const second = sliderNumberByLabel("IC-LoRA Strength 1");
+        second.value = "0.3";
+        second.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        expect(savedClips(saveSpy)[0].stages[0].icLoraStrengths).toEqual([
+            0.8, 0.3,
+        ]);
     });
 
     it("adds an IC-LoRA entry with defaults via the add button", () => {
@@ -951,9 +1054,9 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const skip = checkboxByLabel("Skip this clip");
-        skip.checked = true;
-        skip.dispatchEvent(new Event("change", { bubbles: true }));
+        document
+            .querySelector<HTMLButtonElement>(".vst-detail-skip-clip")
+            ?.click();
 
         expect(savedClips(saveSpy)[1].icLoras[0].driveSource).toBe("Upload");
     });
@@ -1195,7 +1298,7 @@ describe("createTimelineDetailStrip", () => {
     it("clears the selection to none on Escape", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(crumbText()).toBe("Clip 1 · S0");
+        expect(crumbText()).toBe("Clip 0 · S0");
         detail()?.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
         );
@@ -1214,7 +1317,7 @@ describe("createTimelineDetailStrip", () => {
         search.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
         );
-        expect(crumbText()).toBe("Clip 1 · S0");
+        expect(crumbText()).toBe("Clip 0 · S0");
     });
 
     it("shift+clicking a region stage chip deletes the stage", () => {
@@ -1269,7 +1372,7 @@ describe("createTimelineDetailStrip", () => {
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedClips(saveSpy)[0].stages).toHaveLength(2);
         expect(activeRailLabel()).toBe("S1");
-        expect(crumbText()).toBe("Clip 1 · S1");
+        expect(crumbText()).toBe("Clip 0 · S1");
         expect(
             document.querySelector<HTMLButtonElement>(
                 ".vst-detail-delete-stage",
@@ -1461,7 +1564,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        expect(crumbText()).toBe("Retake · Clip 1 · 2–5 s");
+        expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
         expect(
             fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input")
                 ?.value,
@@ -1531,7 +1634,7 @@ describe("createTimelineDetailStrip", () => {
                 'input[data-vst-focus-key="retake-start"]',
             ),
         ).not.toBeNull();
-        expect(crumbText()).toBe("Retake · Clip 1 · 2–5 s");
+        expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
     });
 
     it("removes the retake without leaving or collapsing its section", () => {
@@ -1567,7 +1670,7 @@ describe("createTimelineDetailStrip", () => {
     it("keeps the empty single-instance Retake section selectable", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        expect(crumbText()).toBe("Retake · Clip 1");
+        expect(crumbText()).toBe("Retake · Clip 0");
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
         expect(
             detail()
@@ -1601,6 +1704,33 @@ describe("createTimelineDetailStrip", () => {
         ).toBe(true);
     });
 
+    it("uses zero-based LoRA labels and opens the newly added LoRA", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [
+                    { loras: [{ name: "lora-x.safetensors", weight: 0.5 }] },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        document
+            .querySelector<HTMLButtonElement>(".vst-stage-lora-add")
+            ?.click();
+        const groups = document.querySelectorAll<HTMLElement>(
+            ".vst-stage-lora-entry",
+        );
+        expect(groups).toHaveLength(2);
+        expect(groups[0].querySelector(".header-label")?.textContent).toBe(
+            "LoRA 0",
+        );
+        expect(groups[1].querySelector(".header-label")?.textContent).toBe(
+            "LoRA 1",
+        );
+        expect(groups[0].classList.contains("input-group-closed")).toBe(true);
+        expect(groups[1].classList.contains("input-group-open")).toBe(true);
+    });
+
     it("renders a LoRA row with a name select and a weight input", () => {
         setup([
             {
@@ -1620,10 +1750,17 @@ describe("createTimelineDetailStrip", () => {
         // Name renders at input font size (via .vst-audio-select), not the
         // small 3xs label size.
         expect(nameSelect?.classList.contains("vst-audio-select")).toBe(true);
-        const weight = row?.querySelector<HTMLInputElement>(
-            "input.auto-slider-number",
-        );
+        const weight =
+            row?.querySelector<HTMLInputElement>("input.auto-number");
         expect(weight?.value).toBe("0.7");
+        expect(weight?.step).toBe("0.05");
+        expect(weight?.hasAttribute("min")).toBe(false);
+        expect(weight?.hasAttribute("max")).toBe(false);
+        expect(row?.querySelector("input.auto-slider-range")).toBeNull();
+        expect(fieldByLabel("Weight").classList).toContain("auto-number-box");
+        expect(
+            fieldByLabel("Weight").querySelector(".info-popover-button"),
+        ).toBeNull();
         expect(
             detailBody()?.querySelector(".vst-stage-lora-remove"),
         ).not.toBeNull();
@@ -1655,6 +1792,27 @@ describe("createTimelineDetailStrip", () => {
         jest.advanceTimersByTime(200);
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedClips(saveSpy)[0].stages[0].loras[0].weight).toBe(0.4);
+    });
+
+    it("allows a negative LoRA weight through the number input", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [
+                    { loras: [{ name: "lora-x.safetensors", weight: 1 }] },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        jest.useFakeTimers();
+        const weight = document.querySelector<HTMLInputElement>(
+            '.vst-detail input[data-vst-focus-key="stage-0-lora-0-weight"]',
+        );
+        if (!weight) throw new Error("lora weight input missing");
+        weight.value = "-2.5";
+        weight.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        expect(savedClips(saveSpy)[0].stages[0].loras[0].weight).toBe(-2.5);
     });
 
     it("removes a LoRA row (flush-first) through saveClips", () => {
@@ -1706,7 +1864,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        for (const label of ["Steps", "CFG Scale", "R0", "Weight"]) {
+        for (const label of ["Steps", "CFG Scale", "Reference R0"]) {
             expect(
                 sliderNumberByLabel(label)
                     .closest(".vst-stage-slider")
@@ -1777,7 +1935,7 @@ describe("createTimelineDetailStrip", () => {
             { duration: 4, stages: [{}] },
         ]);
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
-        expect(crumbText()).toBe("Clip 2 · S0");
+        expect(crumbText()).toBe("Clip 1 · S0");
 
         const clips = persistence.getClips().slice(0, 1);
         persistence.saveClips(clips, { notifyDomChange: false });
@@ -1833,7 +1991,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 1 });
-        expect(crumbText()).toBe("Ref 2 · Clip 1");
+        expect(crumbText()).toBe("Ref1 · Clip 0");
         expect(document.querySelectorAll(".vst-detail-ref-row")).toHaveLength(
             1,
         );
@@ -2001,7 +2159,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "audio", clipIdx: 0 });
-        expect(crumbText()).toBe("Audio · Clip 1");
+        expect(crumbText()).toBe("Audio · Clip 0");
         const select =
             fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
                 "select",
@@ -2105,7 +2263,7 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "audio", clipIdx: 0 });
 
-        expect(crumbText()).toBe("Audio · Clip 1");
+        expect(crumbText()).toBe("Audio · Clip 0");
         expect(
             fieldByLabel("Audio Source").querySelector<HTMLSelectElement>(
                 "select",
@@ -2119,6 +2277,23 @@ describe("createTimelineDetailStrip", () => {
             segRow(0).classList.contains("vst-detail-repeating-editor-active"),
         ).toBe(true);
         expect(document.querySelectorAll(".vst-segment-tab")).toHaveLength(2);
+        const segmentSection = detail()?.querySelector<HTMLElement>(
+            '[data-vst-repeater-key="audio-segments"]',
+        );
+        expect(
+            segmentSection?.querySelector(
+                ":scope > .input-group-header .header-label",
+            )?.textContent,
+        ).toBe("Audio Segments");
+        const segmentContent = segmentSection?.querySelector<HTMLElement>(
+            ":scope > .input-group-content",
+        );
+        expect(segmentContent?.firstElementChild?.classList).toContain(
+            "vst-detail-note",
+        );
+        expect(segmentContent?.firstElementChild?.textContent).toBe(
+            "Overlaid additively over the base audio; overlapping segments mix together.",
+        );
         expect(
             document
                 .querySelectorAll<HTMLButtonElement>(".vst-segment-tab")[0]
@@ -2155,7 +2330,7 @@ describe("createTimelineDetailStrip", () => {
 
         // Selecting the base track restores the first segment as the default editor.
         setSelection({ kind: "audio", clipIdx: 0 });
-        expect(crumbText()).toBe("Audio · Clip 1");
+        expect(crumbText()).toBe("Audio · Clip 0");
         expect(
             segRow(0).classList.contains("vst-detail-repeating-editor-active"),
         ).toBe(true);
@@ -2180,7 +2355,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 0 });
-        expect(crumbText()).toBe("Audio segment · Clip 1 · 2–5 s");
+        expect(crumbText()).toBe("Audio segment · Clip 0 · 2–5 s");
         expect(
             fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input")
                 ?.value,
@@ -2475,7 +2650,7 @@ describe("createTimelineDetailStrip", () => {
     it("edits the clip's major prompt (debounced) through saveClips", () => {
         setup([{ duration: 5, stages: [{}] }]);
         setSelection({ kind: "prompt-major", clipIdx: 0 });
-        expect(crumbText()).toBe("Prompts · Clip 1");
+        expect(crumbText()).toBe("Prompts · Clip 0");
         jest.useFakeTimers();
         const editor =
             document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
@@ -2920,7 +3095,7 @@ describe("createTimelineDetailStrip", () => {
             expect(savedClips(saveSpy)[0].promptWindows[0].duration).toBe(3);
             expect(refreshSpy).toHaveBeenCalled();
             // The value-derived breadcrumb was synced WITHOUT a rebuild.
-            expect(crumbText()).toBe("Relay 1–4s · Clip 1");
+            expect(crumbText()).toBe("Relay 1–4s · Clip 0");
         });
 
         it("keeps focus and the same node on a first Duration change", () => {
@@ -3060,7 +3235,7 @@ describe("createTimelineDetailStrip", () => {
             expect(after).toBe(begin); // same node — no rebuild
             expect(after?.value).toBe("3"); // shows the clamped stored value
             expect(document.activeElement).toBe(begin); // focus intact
-            expect(crumbText()).toBe("Relay 3–8s · Clip 1");
+            expect(crumbText()).toBe("Relay 3–8s · Clip 0");
         });
 
         it("re-displays a relay End clamped to the minimum duration", () => {
@@ -3249,7 +3424,12 @@ describe("createTimelineDetailStrip", () => {
                 ".vst-detail-repeating-group .input-group-header",
             ),
         ).not.toBeNull();
-        expect(crumbText()).toBe("Prompts · Clip 1");
+        expect(
+            relayHead?.querySelector(
+                ':scope > .input-group-content > [data-vst-repeater-item="0"] .header-label',
+            )?.textContent,
+        ).toBe("R0");
+        expect(crumbText()).toBe("Prompts · Clip 0");
     });
 
     it("applies a resolution preset from the settings panel", () => {
@@ -3369,7 +3549,7 @@ describe("createTimelineDetailStrip", () => {
             setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("R0");
+            const range = rangeByLabel("Reference R0");
             // pointerdown latches the drag; streamed inputs sync range → number
             // → our onChange (host enableSliderForBox wiring is live in tests).
             pointer(range, "pointerdown");
@@ -3381,7 +3561,7 @@ describe("createTimelineDetailStrip", () => {
             // is NOT rebuilt out from under the drag gesture.
             jest.advanceTimersByTime(1000);
             expect(saveSpy).not.toHaveBeenCalled();
-            expect(rangeByLabel("R0")).toBe(range);
+            expect(rangeByLabel("Reference R0")).toBe(range);
             jest.useRealTimers();
         });
 
@@ -3389,7 +3569,7 @@ describe("createTimelineDetailStrip", () => {
             setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("R0");
+            const range = rangeByLabel("Reference R0");
             pointer(range, "pointerdown");
             range.value = "0.4";
             range.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3408,7 +3588,7 @@ describe("createTimelineDetailStrip", () => {
             setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("R0");
+            const range = rangeByLabel("Reference R0");
             pointer(range, "pointerdown");
             range.value = "0.4";
             range.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3443,17 +3623,35 @@ describe("createTimelineDetailStrip", () => {
     });
 
     describe("dock groups & collapse", () => {
-        it("renders clip concerns as progressive native accordion sections", () => {
+        it("keeps Clip fields visible above progressive native accordion sections", () => {
             setup([{ duration: 4, stages: [{}, {}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
 
             const clipCol = detailBody()?.querySelector(".vst-detail-clip");
             expect(clipCol).not.toBeNull();
             expect(
+                clipCol?.closest('[data-vst-accordion-key="clip"]'),
+            ).toBeNull();
+            expect(clipCol?.classList.contains("input-group-content")).toBe(
+                true,
+            );
+            expect(
                 clipCol
-                    ?.closest(".vst-detail-section")
-                    ?.classList.contains("input-group-closed"),
-            ).toBe(true);
+                    ?.closest(".vst-detail-clip-section")
+                    ?.querySelector(".vst-detail-skip-clip"),
+            ).not.toBeNull();
+            const clipSection = clipCol?.closest<HTMLElement>(
+                '[data-vst-static-key="clip"]',
+            );
+            expect(clipSection?.classList.contains("input-group")).toBe(true);
+            expect(clipSection?.classList.contains("input-group-open")).toBe(
+                true,
+            );
+            expect(
+                clipSection?.querySelector(
+                    ":scope > .input-group-header.input-group-shrinkable",
+                ),
+            ).toBeNull();
 
             const stagesSection = detailBody()?.querySelector<HTMLElement>(
                 '[data-vst-repeater-key="stages"]',
@@ -3491,7 +3689,7 @@ describe("createTimelineDetailStrip", () => {
             expect(
                 retakeSec?.querySelector(
                     ":scope > .input-group-header .header-label",
-                )?.firstChild?.textContent,
+                )?.lastChild?.textContent,
             ).toBe("Retake");
             expect(
                 retakeSec?.querySelector(".info-popover-button"),
@@ -3510,7 +3708,7 @@ describe("createTimelineDetailStrip", () => {
                 },
             ]);
             setSelection({ kind: "audio", clipIdx: 0 });
-            expect(crumbText()).toBe("Audio · Clip 1");
+            expect(crumbText()).toBe("Audio · Clip 0");
             const base = detail()?.querySelector<HTMLElement>(
                 '[data-vst-accordion-key="base-audio"]',
             );
@@ -3689,28 +3887,47 @@ describe("createTimelineDetailStrip", () => {
             document.removeEventListener("click", hostDelegatedToggle);
         });
 
-        it("keeps Clip open when Skip this clip changes", () => {
+        it("places every info popover button before its field or section label", () => {
+            setup([{ duration: 4, stages: [{}, {}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+            const buttons = Array.from(
+                detailBody()?.querySelectorAll<HTMLElement>(
+                    ".info-popover-button",
+                ) ?? [],
+            );
+            expect(buttons.length).toBeGreaterThan(0);
+            for (const button of buttons) {
+                expect(button.parentElement?.firstElementChild).toBe(button);
+            }
+        });
+
+        it("keeps the permanent Clip fields visible when its skip button changes", () => {
             setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const clip = detailBody()?.querySelector<HTMLElement>(
-                '[data-vst-accordion-key="clip"]',
+            const clip =
+                detailBody()?.querySelector<HTMLElement>(".vst-detail-clip");
+            expect(clip).not.toBeNull();
+            expect(
+                detailBody()?.querySelector('[data-vst-accordion-key="clip"]'),
+            ).toBeNull();
+            const skip = detailBody()?.querySelector<HTMLButtonElement>(
+                ".vst-detail-clip-section > .input-group-header .vst-detail-skip-clip",
             );
-            const stages = detailBody()?.querySelector<HTMLElement>(
-                '[data-vst-repeater-key="stages"]',
-            );
-            clip?.querySelector<HTMLElement>(
-                ":scope > .input-group-header",
-            )?.click();
-            expect(clip?.classList.contains("input-group-open")).toBe(true);
-            expect(stages?.classList.contains("input-group-closed")).toBe(true);
-
-            const skip = checkboxByLabel("Skip this clip");
-            skip.checked = true;
-            skip.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(skip?.getAttribute("aria-pressed")).toBe("false");
+            skip?.click();
 
             expect(savedClips(saveSpy)[0].skipped).toBe(true);
-            expect(clip?.classList.contains("input-group-open")).toBe(true);
-            expect(stages?.classList.contains("input-group-closed")).toBe(true);
+            expect(
+                detailBody()?.querySelector(".vst-detail-clip"),
+            ).not.toBeNull();
+            expect(
+                detailBody()
+                    ?.querySelector(".vst-detail-skip-clip")
+                    ?.getAttribute("aria-pressed"),
+            ).toBe("true");
+            expect(
+                detailBody()?.classList.contains("vst-detail-clip-skipped"),
+            ).toBe(true);
         });
 
         it("width-collapses the dock via the header chevron", () => {
@@ -3778,8 +3995,19 @@ describe("createTimelineDetailStrip", () => {
                 { duration: 4, stages: [{}] },
             ]);
             setSelection({ kind: "boundary", leftClipIdx: 0 });
-            expect(crumbText()).toBe("Boundary · Clip 1 → 2");
+            expect(crumbText()).toBe("Boundary · Clip 0 → 1");
             expect(boundarySelect().value).toBe("cut");
+            expect(
+                detailBody()?.querySelector(".vst-detail-boundary"),
+            ).not.toBeNull();
+            expect(
+                detailBody()?.querySelector('[data-vst-static-key="boundary"]'),
+            ).not.toBeNull();
+            expect(
+                detailBody()?.querySelector(
+                    '[data-vst-static-key="boundary"] > .input-group-header.input-group-shrinkable',
+                ),
+            ).toBeNull();
         });
 
         it("live-applies the join mode through saveClips", () => {
@@ -3887,7 +4115,7 @@ describe("createTimelineDetailStrip", () => {
                 { duration: 4, stages: [{}] },
             ]);
             setSelection({ kind: "boundary", leftClipIdx: 0 });
-            expect(crumbText()).toBe("Boundary · Clip 1 → 2");
+            expect(crumbText()).toBe("Boundary · Clip 0 → 1");
             // Drop the second clip: boundary 0 no longer has a follower.
             const clips = persistence.getClips();
             clips.splice(1, 1);

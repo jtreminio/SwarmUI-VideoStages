@@ -46,9 +46,9 @@ export const buildRefSection = (
             sectionClass: "vst-detail-ref-section",
             open,
             items: clip.refs.map((_, refIdx) => ({
-                label: `R${refIdx + 1}`,
+                label: `Ref${refIdx}`,
                 focusKey: `reference-tab-${refIdx}`,
-                title: `Edit reference image ${refIdx + 1}`,
+                title: `Edit reference image ${refIdx}`,
                 active: refIdx === activeRefIdx,
                 className: "vst-ref-tab",
                 onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
@@ -67,7 +67,7 @@ export const buildRefSection = (
                 title:
                     activeRefIdx === null
                         ? "No reference image to delete"
-                        : `Delete reference image ${activeRefIdx + 1}`,
+                        : `Delete reference image ${activeRefIdx}`,
                 className: "vst-detail-delete-ref",
             },
             editor,

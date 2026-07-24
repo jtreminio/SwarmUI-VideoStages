@@ -83,6 +83,7 @@ const STAGE_PATCH_KEYS = [
     "skipped",
     "control",
     "controlNetStrength",
+    "icLoraStrengths",
     "refStrengths",
     "upscale",
     "upscaleMethod",

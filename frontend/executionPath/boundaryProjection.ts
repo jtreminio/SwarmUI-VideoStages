@@ -77,15 +77,15 @@ export const projectBoundaries = (
                 ? title
                 : `${requested} → cut (${fallbackDescription})`;
         return {
-            leftClipNumber: left.index + 1,
-            rightClipNumber: right.index + 1,
+            leftClipNumber: left.index,
+            rightClipNumber: right.index,
             kind: requested,
             requested,
             effective,
             fallback,
             overlapFrames,
             carryAudio,
-            label: `Clip ${left.index + 1} → ${right.index + 1}: ${result}`,
+            label: `Clip ${left.index} → ${right.index}: ${result}`,
         };
     });
 };

@@ -160,15 +160,7 @@ export const appendStageModelSection = ({
             context.render();
         },
     );
-    const modelField = buildField(
-        "Model",
-        modelSelect,
-        undefined,
-        stageIdx === 0
-            ? "Stage 0 establishes the clip architecture. Choosing a model " +
-                  "from another architecture converts the whole clip in one undoable change."
-            : "Later stages are locked to the architecture established by Stage 0.",
-    );
+    const modelField = buildField("Model", modelSelect);
     modelField.classList.add("vst-detail-span-2");
     fields.appendChild(modelField);
 };

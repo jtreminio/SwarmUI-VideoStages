@@ -97,10 +97,12 @@ export interface Stage {
     skipped: boolean;
     control: number;
     /**
-     * Architecture-neutral per-stage guide strength. The persisted field name
-     * is retained for v3 schema stability; LTX maps it to IC-LoRA conditioning.
+     * Legacy stage-wide IC-LoRA strength retained as the fallback for documents
+     * authored before per-guide strengths were introduced.
      */
     controlNetStrength: number;
+    /** Per-stage strength for each clip IC-LoRA, aligned by IC-LoRA index. */
+    icLoraStrengths: number[];
     refStrengths: number[];
     upscale: number;
     upscaleMethod: string;

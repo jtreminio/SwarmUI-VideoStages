@@ -6,7 +6,7 @@ import type { VideoStagesConfig } from "./types";
 import { isRecord, safeJsonParse } from "./utils";
 
 export const refineNeedsExtraStageMessage = (skipCount: number): string =>
-    `Refine Video needs Clip 1 to have at least one active stage after Stage ${skipCount - 1} ` +
+    `Refine Video needs Clip 0 to have at least one active stage after Stage ${skipCount - 1} ` +
     `(for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
 
 export const countActiveStagesInMetadataClip0 = (
@@ -51,7 +51,7 @@ export const hasRefinementWorkToDo = (
 
 export const refineVideoButton = (): void => {
     const description =
-        "Re-runs VideoStages using this video as the source for Clip 1 (skips the first N stage samplers, " +
+        "Re-runs VideoStages using this video as the source for Clip 0 (skips the first N stage samplers, " +
         "where N is read from the source video's metadata). Requires an extra stage beyond those.";
     getVideoStagesHostBridge().registerRefineVideoButton(
         (src: string): void => {

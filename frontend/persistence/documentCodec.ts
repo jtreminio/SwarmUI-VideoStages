@@ -137,6 +137,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 skipped: stage.skipped,
                 control: stage.control,
                 controlNetStrength: stage.controlNetStrength,
+                icLoraStrengths: stage.icLoraStrengths,
                 refStrengths: stage.refStrengths,
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
@@ -229,6 +230,13 @@ const hasValidStoredCollections = (
         for (const stage of stages) {
             if (
                 !hasArrayOfRecords(stage, "loras") ||
+                (Object.hasOwn(stage, "icLoraStrengths") &&
+                    (!Array.isArray(stage.icLoraStrengths) ||
+                        !stage.icLoraStrengths.every(
+                            (strength: unknown) =>
+                                typeof strength === "number" &&
+                                Number.isFinite(strength),
+                        ))) ||
                 (Object.hasOwn(stage, "refStrengths") &&
                     (!Array.isArray(stage.refStrengths) ||
                         !stage.refStrengths.every(

@@ -28,6 +28,7 @@ const stage = (id: string): CanonicalStage => ({
     skipped: false,
     control: 0.5,
     controlNetStrength: 1,
+    icLoraStrengths: [],
     refStrengths: [0.5],
     upscale: 1,
     upscaleMethod: "pixel-lanczos",

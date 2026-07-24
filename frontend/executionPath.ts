@@ -113,7 +113,7 @@ export const projectVideoExecutionPath = (
     }));
     const activeEntries = entries.filter(isExecutable);
     const clips = entries.map(({ clip, index, stages }) =>
-        describeClip(clip, index + 1, stages, context),
+        describeClip(clip, index, stages, context),
     );
     const shape = describeShape(
         activeEntries.map(({ stages }) => stages.length),
@@ -138,24 +138,24 @@ export const projectVideoExecutionPath = (
                     ? `${plural(frame, "frame")} from end`
                     : `frame ${frame}`;
                 return {
-                    clipNumber: index + 1,
+                    clipNumber: index,
                     frame,
                     fromEnd: reference.fromEnd,
                     source: reference.source,
-                    label: `Clip ${index + 1}: ${referenceSourceLabel(reference)} at ${position}`,
+                    label: `Clip ${index}: ${referenceSourceLabel(reference)} at ${position}`,
                 };
             }),
     );
     const audioClips = projectClipAudio(activeEntries, context.catalog);
     const sourceVideoClipNumbers = activeEntries
         .filter(({ clip }) => clip.sourceVideo !== null)
-        .map(({ index }) => index + 1);
+        .map(({ index }) => index);
     const sourceVideoOnlyClipNumbers = activeEntries
         .filter(
             ({ clip, stages }) =>
                 clip.sourceVideo !== null && stages.length === 0,
         )
-        .map(({ index }) => index + 1);
+        .map(({ index }) => index);
     const upscaledStageCount = activeEntries.reduce(
         (total, { clip, stages }) =>
             total +
@@ -195,11 +195,11 @@ export const projectVideoExecutionPath = (
     const hasGlobalPrompt = `${context.globalPrompt ?? ""}`.trim().length > 0;
     const majorPromptOverrideClipNumbers = activeEntries
         .filter(({ clip }) => clip.prompt.trim().length > 0)
-        .map(({ index }) => index + 1);
+        .map(({ index }) => index);
     const majorPromptInheritedClipNumbers = hasGlobalPrompt
         ? activeEntries
               .filter(({ clip }) => clip.prompt.trim().length === 0)
-              .map(({ index }) => index + 1)
+              .map(({ index }) => index)
         : [];
     const majorPromptClipNumbers = [
         ...majorPromptOverrideClipNumbers,
@@ -222,7 +222,7 @@ export const projectVideoExecutionPath = (
                 (clip.sourceVideo !== null ||
                     context.entryPoint === "global-refine-video"),
         )
-        .map(({ index }) => index + 1);
+        .map(({ index }) => index);
     const lengthFromAudioClipNumbers = audioClips
         .filter((clip) => clip.lengthFromAudio)
         .map((clip) => clip.clipNumber);

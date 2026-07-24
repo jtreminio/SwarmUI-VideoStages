@@ -212,14 +212,14 @@ export const renderBoundarySeams = (
         const targetNumber =
             capability?.rightClipIdx === null ||
             capability?.rightClipIdx === undefined
-                ? i + 1
-                : capability.rightClipIdx + 1;
+                ? i
+                : capability.rightClipIdx;
         const fallback =
             value === effective
                 ? ""
                 : ` Requested ${label}; effective ${effectiveLabel}.`;
-        const title = `Boundary clip ${leftClipIdx + 1} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
-        const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}.${fallback} Click to edit.`;
+        const title = `Boundary clip ${leftClipIdx} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
+        const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
         seams.push(
             `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
                 `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
@@ -272,7 +272,7 @@ const renderRegions = (
                   ? "This clip already has a retake window"
                   : "Retakes are not supported by this clip architecture";
             return (
-                `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` +
+                `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +
                 renderRetakeRegionShade(clip, layout.durationSeconds) +
                 renderKeyframes(
@@ -283,7 +283,7 @@ const renderRegions = (
                     unit,
                 ) +
                 `<div class="vst-region-head">` +
-                `<span class="vst-region-name">Clip ${layout.index + 1}</span>` +
+                `<span class="vst-region-name">Clip ${layout.index}</span>` +
                 renderStageChips(clip, layout.index) +
                 `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` +
                 skippedChip +

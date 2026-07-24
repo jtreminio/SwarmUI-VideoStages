@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
-import { buildCheckbox, buildField, buildMediaPickRow } from "./detailWidgets";
+import {
+    buildCheckbox,
+    buildField,
+    buildMediaPickRow,
+    buildRepeatingEditor,
+    buildStaticSection,
+} from "./detailWidgets";
 
 type MutableGlobal = typeof globalThis & {
     doPopover?: (id: string, e?: Event) => void;
@@ -46,6 +52,10 @@ describe("buildField help popovers", () => {
         // Bold field name + the help text (text only, no markup injection).
         expect(popover?.querySelector("b")?.textContent).toBe("Control");
         expect(popover?.textContent).toContain("Regeneration strength.");
+        expect(button?.parentElement?.firstElementChild).toBe(button);
+        expect(
+            button?.nextElementSibling?.classList.contains("auto-input-name"),
+        ).toBe(true);
     });
 
     it("routes the button click to the host doPopover with the popover's id", () => {
@@ -84,9 +94,7 @@ describe("buildField help popovers", () => {
             help: "Carry the previous clip's audio.",
         });
         expect(check.tagName).toBe("DIV");
-        expect(check.children[0]?.classList.contains("auto-input-name")).toBe(
-            true,
-        );
+        expect(check.children[0]?.tagName).toBe("LABEL");
         expect(check.children[1]?.classList.contains("auto-checkbox")).toBe(
             true,
         );
@@ -98,13 +106,21 @@ describe("buildField help popovers", () => {
         expect(check.querySelector(".sui-popover")?.id).toMatch(
             /^popover_vst_reuse-audio_\d+$/,
         );
-        // SwarmUI nests the help button inside the label span.
+        // Checkbox fields use the same label geometry as every other field.
         expect(
             check.querySelector(".auto-input-name")?.firstChild?.textContent,
         ).toBe("Reuse Audio");
-        expect(check.querySelector(".auto-input-name")?.textContent).toBe(
-            "Reuse Audio?",
-        );
+        expect(
+            check.querySelector("label")?.firstElementChild?.textContent,
+        ).toBe("?");
+        expect(
+            check.querySelector("label")?.firstElementChild?.classList,
+        ).toContain("info-popover-button");
+        expect(
+            check
+                .querySelector("label")
+                ?.lastElementChild?.classList.contains("auto-input-name"),
+        ).toBe(true);
     });
 });
 
@@ -162,5 +178,86 @@ describe("buildMediaPickRow", () => {
         expect(
             row.querySelector<HTMLInputElement>('input[type="file"]'),
         ).not.toBeNull();
+    });
+});
+
+describe("native detail groups", () => {
+    it("builds an always-open input group without accordion behavior", () => {
+        const content = document.createElement("div");
+        content.textContent = "Permanent fields";
+        const built = buildStaticSection({
+            key: "static-test",
+            label: "Clip",
+            content,
+            headerAction: {
+                label: "⏭︎",
+                title: "Skip clip",
+                onClick: () => {},
+            },
+        });
+        expect(built.section.classList.contains("input-group")).toBe(true);
+        expect(built.section.classList.contains("input-group-open")).toBe(true);
+        expect(built.section.dataset.vstStaticKey).toBe("static-test");
+        expect(
+            built.section.querySelector(".input-group-shrinkable"),
+        ).toBeNull();
+        expect(
+            built.section
+                .querySelector(":scope > .input-group-header")
+                ?.classList.contains("input-group-noshrink"),
+        ).toBe(true);
+        expect(built.section.querySelector(".auto-symbol")).toBeNull();
+        expect(built.content.hidden).toBe(false);
+        expect(
+            built.section.querySelector(".vst-detail-repeating-group-action"),
+        ).not.toBeNull();
+    });
+
+    it("opens the newly appended child through the shared repeater pattern", () => {
+        const host = document.createElement("div");
+        const items = ["LoRA 0"];
+        const render = (): void => {
+            host.replaceChildren(
+                buildRepeatingEditor({
+                    key: "shared-add-test",
+                    label: "LoRAs",
+                    open: true,
+                    defaultActiveIndex: 0,
+                    items: items.map((label) => {
+                        const editor = document.createElement("div");
+                        editor.textContent = `${label} editor`;
+                        return { label, editor };
+                    }),
+                    add: {
+                        title: "Add LoRA",
+                        className: "test-add",
+                        onClick: () => {
+                            items.push(`LoRA ${items.length}`);
+                            render();
+                        },
+                    },
+                    remove: {
+                        title: "Delete LoRA",
+                        className: "test-remove",
+                    },
+                }).section,
+            );
+        };
+        render();
+        host.querySelector<HTMLButtonElement>(".test-add")?.click();
+        const children = host.querySelectorAll<HTMLElement>(
+            ".vst-detail-repeating-group",
+        );
+        expect(children).toHaveLength(2);
+        expect(children[0].classList.contains("input-group-closed")).toBe(true);
+        expect(children[1].classList.contains("input-group-open")).toBe(true);
+        expect(children[1].querySelector(".header-label")?.textContent).toBe(
+            "LoRA 1",
+        );
+        expect(
+            children[1].querySelector<HTMLElement>(
+                ".vst-detail-repeating-group-content",
+            )?.hidden,
+        ).toBe(false);
     });
 });

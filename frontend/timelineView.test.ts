@@ -742,7 +742,7 @@ describe("renderTimeline (DOM)", () => {
         renderTimeline(body, [makeClip(2, 1, 0)], { selectedIndex: 0 });
         const sel = body.querySelector<HTMLElement>("[data-vst-readout-sel]");
         expect(sel?.hidden).toBe(false);
-        expect(sel?.textContent).toBe("clip 1");
+        expect(sel?.textContent).toBe("clip 0");
     });
 
     it("bounds the audio waveform bar count (min 8, cap 400)", () => {
@@ -878,10 +878,10 @@ describe("renderTimeline (DOM)", () => {
             "R -6",
         );
         expect(marks[0].getAttribute("aria-label")).toBe(
-            "Edit reference 1 (Refiner)",
+            "Edit reference 0 (Refiner)",
         );
         expect(marks[1].getAttribute("aria-label")).toBe(
-            "Edit reference 2 (Base, from end)",
+            "Edit reference 1 (Base, from end)",
         );
     });
 
@@ -1012,7 +1012,7 @@ describe("authoring diagnostics", () => {
         const item = document.querySelector<HTMLElement>(
             '[data-vst-diagnostic="retake-frame-references-unsupported"]',
         );
-        expect(item?.textContent).toContain("Clip 1:");
+        expect(item?.textContent).toContain("Clip 0:");
         expect(item?.textContent).toContain(
             "Retake and references cannot run together.",
         );

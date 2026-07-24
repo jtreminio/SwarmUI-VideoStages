@@ -265,7 +265,7 @@ export const buildAudioSegmentSection = (
             : "Overlaid additively over the base audio; overlapping segments mix together.";
     const built = buildRepeatingEditor({
         key: "audio-segments",
-        label: "Segments",
+        label: "Audio Segments",
         sectionClass: "vst-detail-audio-segments",
         open,
         items: segments.map((_, segIdx) => ({
@@ -296,6 +296,6 @@ export const buildAudioSegmentSection = (
         },
         editor,
     });
-    built.section.appendChild(note);
+    built.content.insertBefore(note, built.content.firstChild);
     return built.section;
 };

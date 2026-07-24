@@ -151,6 +151,44 @@ public class PlanningCompilerComponentTests
         Assert.Equal(ImageReferenceSourceKind.Upload, Assert.Single(references).SourceKind);
     }
 
+    [Fact]
+    public void IcLoraPlanCompiler_UsesPerEntryStageStrengths()
+    {
+        StageSpec stage = Stage(11) with
+        {
+            ControlNetStrength = 0.6,
+            IcLoraStrengths = [0.2, 0.9],
+        };
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            IcLoras =
+            [
+                new IcLoraSpec(
+                    IcLoraWeights.AutoModelToken,
+                    Constants.ControlNetSourceOne,
+                    1,
+                    1,
+                    Constants.IcLoraControlCanny,
+                    null,
+                    DriveData: IcLoraDriveData.Visual),
+                new IcLoraSpec(
+                    IcLoraWeights.AutoModelToken,
+                    Constants.ControlNetSourceTwo,
+                    1,
+                    1,
+                    Constants.IcLoraControlDepth,
+                    null,
+                    DriveData: IcLoraDriveData.Visual),
+            ],
+        };
+
+        var plans = IcLoraPlanCompiler.Compile(clip, stage);
+
+        Assert.Equal(2, plans.Length);
+        Assert.Equal(0.2, plans[0].GuideStrength);
+        Assert.Equal(0.9, plans[1].GuideStrength);
+    }
+
     [Theory]
     [InlineData(2, "Upload", "none", null, (int)IcLoraDriveData.None, "ltx2.ic-lora.stage-target-invalid")]
     [InlineData(-1, "future-source", "none", null, (int)IcLoraDriveData.Visual, "ltx2.ic-lora.drive-source-unsupported")]

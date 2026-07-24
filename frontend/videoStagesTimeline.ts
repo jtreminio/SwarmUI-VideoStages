@@ -145,7 +145,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             }
             selEl.hidden = sel === null;
             dotEl.hidden = sel === null;
-            selEl.textContent = sel === null ? "" : `clip ${sel + 1}`;
+            selEl.textContent = sel === null ? "" : `clip ${sel}`;
         });
     };
 

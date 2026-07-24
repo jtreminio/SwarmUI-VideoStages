@@ -187,7 +187,13 @@ internal static class IcLoraPlanCompiler
             double? guideStrength = null;
             if (contract.ConsumesVisual && input.HasInput)
             {
-                if (stage.ControlNetStrength is double stageStrength)
+                if (
+                    stage.IcLoraStrengths is { } strengths &&
+                    index < strengths.Count)
+                {
+                    guideStrength = strengths[index];
+                }
+                else if (stage.ControlNetStrength is double stageStrength)
                 {
                     guideStrength = stageStrength;
                 }

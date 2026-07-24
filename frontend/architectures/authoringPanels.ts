@@ -1,5 +1,6 @@
 import type { DetailStripContext } from "../detailStrip/context";
 import { buildRepeatingEditor } from "../detailWidgets";
+import { removeIcLoraStrengthAt } from "../normalizationStage";
 import { setSelection } from "../selection";
 import type { Clip, RootDefaults } from "../types";
 import { buildIcLorasSection as buildLtx2IcLorasSection } from "./ltx2/icLoraPanel";
@@ -44,7 +45,7 @@ const persistedIcLoraRemovalPanel = (
     if (entryIdx !== null) {
         const entry = clip.icLoras[entryIdx];
         const label = document.createElement("span");
-        label.textContent = entry.lora || `IC-LoRA ${entryIdx + 1}`;
+        label.textContent = entry.lora || `IC-LoRA ${entryIdx}`;
         content.appendChild(label);
     }
     return buildRepeatingEditor({
@@ -53,9 +54,9 @@ const persistedIcLoraRemovalPanel = (
         sectionClass: "vst-detail-iclora-section",
         open,
         items: clip.icLoras.map((_, index) => ({
-            label: `IC${index + 1}`,
+            label: `IC${index}`,
             focusKey: `ic-lora-tab-${index}`,
-            title: `Inspect persisted IC-LoRA ${index + 1}`,
+            title: `Inspect persisted IC-LoRA ${index}`,
             active: index === entryIdx,
             onSelect: () =>
                 setSelection({
@@ -69,6 +70,7 @@ const persistedIcLoraRemovalPanel = (
                         const target = clips[clipIdx];
                         if (!target?.icLoras[index]) return null;
                         target.icLoras.splice(index, 1);
+                        removeIcLoraStrengthAt(target, index);
                         return target.icLoras.length > 0
                             ? {
                                   kind: "ic-lora",
@@ -95,7 +97,7 @@ const persistedIcLoraRemovalPanel = (
             title:
                 entryIdx === null
                     ? "No IC-LoRA to delete"
-                    : `Delete persisted IC-LoRA ${entryIdx + 1}`,
+                    : `Delete persisted IC-LoRA ${entryIdx}`,
             className: "vst-detail-delete-iclora",
         },
         editor: content,

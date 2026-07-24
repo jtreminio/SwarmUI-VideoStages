@@ -3,7 +3,7 @@ import {
     buildField,
     buildOptionSelect,
     buildRepeatingEditor,
-    buildSlider,
+    buildUnboundedNumber,
     type OptionSpec,
 } from "../detailWidgets";
 import { preserveSelectedOption } from "../selectOption";
@@ -47,11 +47,8 @@ export const buildStageLorasSection = (
         );
         editor.appendChild(buildField("Model", select));
 
-        const weight = buildSlider(
-            "Weight",
+        const weight = buildUnboundedNumber(
             lora.weight,
-            -10,
-            10,
             LORA_WEIGHT_STEP,
             (value) => {
                 context.debouncedCommit(
@@ -65,22 +62,14 @@ export const buildStageLorasSection = (
                     },
                 );
             },
-            {
-                sliderMin: -2,
-                sliderMax: 2,
-                help: "How strongly this LoRA affects this stage. Negative values invert its effect.",
-            },
         );
-        weight
-            .querySelector<HTMLInputElement>("input.auto-slider-number")
-            ?.setAttribute(
-                "data-vst-focus-key",
-                `stage-${stageIdx}-lora-${loraIdx}-weight`,
-            );
-        editor.appendChild(weight);
+        weight.setAttribute(
+            "data-vst-focus-key",
+            `stage-${stageIdx}-lora-${loraIdx}-weight`,
+        );
+        editor.appendChild(buildField("Weight", weight));
         return {
-            label: `LoRA ${loraIdx + 1}`,
-            active: loraIdx === 0,
+            label: `LoRA ${loraIdx}`,
             groupClassName: "vst-stage-lora-entry",
             editor,
             onDelete: () => {
@@ -96,11 +85,11 @@ export const buildStageLorasSection = (
                     { rebuildAfterSelect: true },
                 );
             },
-            deleteTitle: `Delete LoRA ${loraIdx + 1}`,
+            deleteTitle: `Delete LoRA ${loraIdx}`,
         };
     });
     const built = buildRepeatingEditor({
-        key: `stage-${stageIdx}-loras`,
+        key: `clip-${clipIdx}-stage-${stageIdx}-loras`,
         label: "LoRAs",
         sectionClass: "vst-stage-loras",
         // Stage LoRAs do not have their own timeline selection kind. Structural
@@ -108,6 +97,7 @@ export const buildStageLorasSection = (
         // the nested editor open while it still has items instead of resetting
         // it to the hard-coded closed state on every rebuild.
         open: items.length > 0,
+        defaultActiveIndex: items.length > 0 ? 0 : null,
         items,
         add: {
             title:

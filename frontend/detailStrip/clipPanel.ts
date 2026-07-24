@@ -1,9 +1,9 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
-import { buildAccordionSection } from "../detailWidgets";
+import { buildStaticSection } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
 import type { Clip, TimelineSelection } from "../types";
 import { disableCapabilityControls } from "./capabilityUi";
-import { buildClipColumn } from "./clipBasics";
+import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
 import type { DetailStripContext } from "./context";
 import { buildRefSection } from "./refPanel";
 import { buildRetakeSection } from "./retakePanel";
@@ -28,17 +28,19 @@ export const buildClipBody = (
     const { clipIdx } = selection;
     const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
+    body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
     const stage = clip.stages[stageIdx];
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
 
     body.appendChild(
-        buildAccordionSection({
+        buildStaticSection({
             key: "clip",
             label: "Clip",
+            className: "vst-detail-clip-section",
             content: buildClipColumn(context, clip, clipIdx),
-            open: false,
             flattenContent: true,
+            headerAction: buildClipSkipAction(context, clip, clipIdx),
         }).section,
     );
     let stageEditor: HTMLElement | undefined;

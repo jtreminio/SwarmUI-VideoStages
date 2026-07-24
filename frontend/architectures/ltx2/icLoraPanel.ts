@@ -18,6 +18,10 @@ import {
     IC_LORA_STRENGTH_MIN,
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
+import {
+    appendIcLoraStrengthToClip,
+    removeIcLoraStrengthAt,
+} from "../../normalizationStage";
 import { getClips } from "../../persistence/repository";
 import { setSelection } from "../../selection";
 import { preserveSelectedOption } from "../../selectOption";
@@ -74,9 +78,9 @@ export const buildIcLorasSection = (
             sectionClass: "vst-detail-iclora-section",
             open,
             items: clip.icLoras.map((_, index) => ({
-                label: `IC${index + 1}`,
+                label: `IC${index}`,
                 focusKey: `ic-lora-tab-${index}`,
-                title: `Edit IC-LoRA ${index + 1}`,
+                title: `Edit IC-LoRA ${index}`,
                 active: index === entryIdx,
                 className: "vst-iclora-tab",
                 onSelect: () =>
@@ -93,6 +97,7 @@ export const buildIcLorasSection = (
                                 return null;
                             }
                             target.icLoras.splice(index, 1);
+                            removeIcLoraStrengthAt(target, index);
                             return target.icLoras.length > 0
                                 ? {
                                       kind: "ic-lora",
@@ -132,6 +137,7 @@ export const buildIcLorasSection = (
                                 lora: IC_LORA_AUTO,
                             }),
                         );
+                        appendIcLoraStrengthToClip(target);
                         return {
                             kind: "ic-lora",
                             clipIdx,
@@ -144,7 +150,7 @@ export const buildIcLorasSection = (
                 title:
                     entryIdx === null
                         ? "No IC-LoRA to delete"
-                        : `Delete IC-LoRA ${entryIdx + 1}`,
+                        : `Delete IC-LoRA ${entryIdx}`,
                 className: "vst-detail-delete-iclora",
             },
             editor,

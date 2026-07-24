@@ -1949,6 +1949,15 @@
     STAGE_CONTROLNET_STRENGTH_MAX,
     STAGE_CONTROLNET_STRENGTH_STEP
   );
+  var normalizeStageIcLoraStrengths = (rawStrengths, icLoraCount, fallbackStrength = STAGE_CONTROLNET_STRENGTH_DEFAULT) => {
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    return Array.from(
+      { length: icLoraCount },
+      (_, index) => normalizeStageControlNetStrengthValue(
+        rawValues[index] ?? fallbackStrength
+      )
+    );
+  };
   var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => Array.from({ length: refCount }, () => defaultStrength);
   var normalizeStageRefStrengths = (rawStrengths, refCount) => {
     const strengths = [];
@@ -1994,6 +2003,7 @@
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
       controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
+      icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : [],
       refStrengths: buildDefaultStageRefStrengths(refCount),
       upscale: previousStage ? previousStage.upscale : defaults.upscale,
       upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
@@ -2030,6 +2040,18 @@
       }
     }
     return true;
+  };
+  var appendIcLoraStrengthToClip = (clip) => {
+    for (const stage of clip.stages) {
+      stage.icLoraStrengths.push(STAGE_CONTROLNET_STRENGTH_DEFAULT);
+    }
+  };
+  var removeIcLoraStrengthAt = (clip, entryIdx) => {
+    for (const stage of clip.stages) {
+      if (entryIdx < stage.icLoraStrengths.length) {
+        stage.icLoraStrengths.splice(entryIdx, 1);
+      }
+    }
   };
   var getReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
     const defaults = getRootDefaults2();
@@ -2093,6 +2115,9 @@
       controlNetStrength: normalizeStageControlNetStrengthValue(
         readRawStageProp(rawStage, "controlNetStrength") ?? fallback.controlNetStrength
       ),
+      icLoraStrengths: Array.isArray(rawStage.icLoraStrengths) ? rawStage.icLoraStrengths.map(
+        normalizeStageControlNetStrengthValue
+      ) : [...fallback.icLoraStrengths],
       refStrengths: normalizeStageRefStrengths(
         rawStage.refStrengths,
         refCount
@@ -2271,6 +2296,13 @@
         (entry) => entry.id === architecture
       ) || architecture === "none"
     );
+    for (const stage of stages) {
+      stage.icLoraStrengths = normalizeStageIcLoraStrengths(
+        stage.icLoraStrengths,
+        icLoras.length,
+        stage.controlNetStrength
+      );
+    }
     const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet = hasArchitectureSlotSourcedIcLora(architecture, icLoras) && !clipLengthFromAudio && !!rawClip.clipLengthFromControlNet;
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
@@ -2936,6 +2968,7 @@
           skipped: stage.skipped,
           control: stage.control,
           controlNetStrength: stage.controlNetStrength,
+          icLoraStrengths: stage.icLoraStrengths,
           refStrengths: stage.refStrengths,
           upscale: stage.upscale,
           upscaleMethod: stage.upscaleMethod,
@@ -3003,7 +3036,9 @@
       }
       const stages = Array.isArray(clip.stages) ? clip.stages : [];
       for (const stage of stages) {
-        if (!hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
+        if (!hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        )) || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
         ))) {
           return false;
@@ -3533,6 +3568,7 @@
       stage.modelProfileId = target.modelProfileId;
       if (!supportsReferences) {
         stage.refStrengths = [];
+        stage.icLoraStrengths = [];
       }
       if (!supportsNormalLoras && stage.loras.length > 0) {
         removedStageLoras += stage.loras.length;
@@ -3667,6 +3703,7 @@
     "skipped",
     "control",
     "controlNetStrength",
+    "icLoraStrengths",
     "refStrengths",
     "upscale",
     "upscaleMethod",
@@ -5111,7 +5148,7 @@
   };
 
   // frontend/refineVideoButton.ts
-  var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs Clip 1 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
+  var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs Clip 0 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
   var countActiveStagesInMetadataClip0 = (videostagesJson) => {
     const parsed = safeJsonParse(videostagesJson, null);
     if (!isRecord(parsed)) {
@@ -5145,7 +5182,7 @@
     return activeStages.length > skipCount;
   };
   var refineVideoButton = () => {
-    const description = "Re-runs VideoStages using this video as the source for Clip 1 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.";
+    const description = "Re-runs VideoStages using this video as the source for Clip 0 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.";
     getVideoStagesHostBridge().registerRefineVideoButton(
       (src) => {
         const host = getVideoStagesHostBridge();
@@ -5221,7 +5258,7 @@
         diagnostics.push(
           issue(
             `architecture.unsupported.${key}`,
-            `${label} is persisted on Clip ${clipIdx + 1}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+            `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
             clipIdx
           )
         );
@@ -5314,7 +5351,7 @@
           diagnostics.push(
             issue(
               "architecture.source-only-requires-none",
-              `Source-only Clip ${clipIdx + 1} must use architecture and profile 'none'.`,
+              `Source-only Clip ${clipIdx} must use architecture and profile 'none'.`,
               clipIdx
             )
           );
@@ -5325,7 +5362,7 @@
         diagnostics.push(
           issue(
             "architecture.unknown",
-            `Clip ${clipIdx + 1} uses unknown architecture '${clip.architecture}'. Its persisted settings were preserved, but generation is blocked.`,
+            `Clip ${clipIdx} uses unknown architecture '${clip.architecture}'. Its persisted settings were preserved, but generation is blocked.`,
             clipIdx
           )
         );
@@ -5345,7 +5382,7 @@
           diagnostics.push(
             issue(
               "architecture.entry-mode-unsupported",
-              `Clip ${clipIdx + 1} cannot start from the current ${generatedEntryMode} host entry with architecture '${architecture.id}'.`,
+              `Clip ${clipIdx} cannot start from the current ${generatedEntryMode} host entry with architecture '${architecture.id}'.`,
               clipIdx
             )
           );
@@ -5358,7 +5395,7 @@
           diagnostics.push(
             issue(
               "architecture.model-unknown",
-              `Clip ${clipIdx + 1} Stage ${stageIdx + 1} model '${stage.model}' is not in the architecture catalog.`,
+              `Clip ${clipIdx} Stage ${stageIdx} model '${stage.model}' is not in the architecture catalog.`,
               clipIdx
             )
           );
@@ -5372,7 +5409,7 @@
           diagnostics.push(
             issue(
               "architecture.mixed-stage",
-              sourceOnly ? `Source-only Clip ${clipIdx + 1} has dormant stages from multiple architectures; Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.` : `Clip ${clipIdx + 1} is locked to '${clip.architecture}', but Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
+              sourceOnly ? `Source-only Clip ${clipIdx} has dormant stages from multiple architectures; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.` : `Clip ${clipIdx} is locked to '${clip.architecture}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
               clipIdx
             )
           );
@@ -5381,7 +5418,7 @@
           diagnostics.push(
             issue(
               "architecture.profile-mismatch",
-              `Clip ${clipIdx + 1} Stage ${stageIdx + 1} profile identity does not match model '${stage.model}'.`,
+              `Clip ${clipIdx} Stage ${stageIdx} profile identity does not match model '${stage.model}'.`,
               clipIdx
             )
           );
@@ -5393,7 +5430,7 @@
           diagnostics.push(
             issue(
               "architecture.unsupported.stage-loras-profile",
-              `Clip ${clipIdx + 1} Stage ${stageIdx + 1}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
+              `Clip ${clipIdx} Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
               clipIdx
             )
           );
@@ -5408,7 +5445,7 @@
         diagnostics.push(
           issue(
             "architecture.cross-boundary-cut-only",
-            `Clip ${left.clipIdx + 1} → ${right.clipIdx + 1} crosses architectures; '${left.clip.boundaryOut}' is preserved for repair, but only cut can execute.`,
+            `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' is preserved for repair, but only cut can execute.`,
             left.clipIdx
           )
         );
@@ -5419,7 +5456,7 @@
         diagnostics.push(
           issue(
             "architecture.boundary-unsupported",
-            `Clip ${left.clipIdx + 1} architecture '${left.clip.architecture}' does not support '${left.clip.boundaryOut}' boundaries.`,
+            `Clip ${left.clipIdx} architecture '${left.clip.architecture}' does not support '${left.clip.boundaryOut}' boundaries.`,
             left.clipIdx
           )
         );
@@ -6100,10 +6137,10 @@
       const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
       const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
       const effectiveLabel = BOUNDARY_LABEL[effective];
-      const targetNumber = capability?.rightClipIdx === null || capability?.rightClipIdx === void 0 ? i + 1 : capability.rightClipIdx + 1;
+      const targetNumber = capability?.rightClipIdx === null || capability?.rightClipIdx === void 0 ? i : capability.rightClipIdx;
       const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
-      const title = `Boundary clip ${leftClipIdx + 1} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
-      const ariaLabel = `Clip ${leftClipIdx + 1} outgoing boundary: ${label}.${fallback} Click to edit.`;
+      const title = `Boundary clip ${leftClipIdx} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
+      const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
       seams.push(
         `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
       );
@@ -6127,13 +6164,13 @@
     const canAddRetake = retakeSupported && !clip.retake;
     const retakeLaneAttrs = canAddRetake ? " data-vst-retake-add" : retakeSupported ? " data-vst-retake-full" : ' data-vst-capability-disabled="retake"';
     const retakeLaneTitle = canAddRetake ? "Click empty space to add a retake window" : retakeSupported ? "This clip already has a retake window" : "Retakes are not supported by this clip architecture";
-    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
+    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
       clip,
       layout.index,
       layout.durationSeconds,
       fps,
       unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index + 1}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
       clip,
       layout.index,
       layout.durationSeconds
@@ -6278,7 +6315,7 @@
   // frontend/timelineView/toolbar.ts
   var renderDiagnosticPanel = (diagnostics = []) => {
     const content = diagnostics.map(
-      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx + 1}:</strong> `}${escapeAttr(item.message)}</div>`
+      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeAttr(item.message)}</div>`
     ).join("");
     return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
   };
@@ -6290,7 +6327,7 @@
     const rawSelected = options?.selectedIndex;
     const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
     const selectedHidden = selectedIndex === null ? " hidden" : "";
-    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex + 1}` : ""}</span></span>`;
+    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
     const dimsExplicit = options?.dimsExplicit === true;
@@ -6482,7 +6519,7 @@
       labelClass: "vst-audio-label",
       label: labelText,
       title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx + 1}`,
+      ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx}`,
       startSeconds: segment.startSeconds,
       lengthSeconds: segment.lengthSeconds,
       durationSeconds,
@@ -6531,7 +6568,7 @@
       const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
       const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index + 1}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
+      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
         clip,
         layout.index,
         clip.duration || 0,
@@ -6593,7 +6630,7 @@
         const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
         const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
         const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete`;
-        const label = `Edit reference ${refIdx + 1} (${source}${isEnd ? ", from end" : ""})`;
+        const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
         return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
       }).join("");
       return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be removed"}">${marks}</div>`;
@@ -7347,7 +7384,7 @@
     btn.addEventListener("click", (event) => {
       showHostPopover(key, event);
     });
-    labelEl.appendChild(btn);
+    labelEl.insertBefore(btn, labelEl.firstChild);
     const pop = document.createElement("div");
     pop.className = "sui-popover sui-info-popover";
     pop.id = `popover_${key}`;
@@ -7376,6 +7413,20 @@
     input2.addEventListener("input", () => apply(false));
     input2.addEventListener("change", () => apply(true));
   };
+  var wireUnboundedNumericInput = (input2, fallback, onChange) => {
+    const apply = (normalize) => {
+      const parsed = Number.parseFloat(input2.value);
+      const next = Number.isFinite(parsed) ? parsed : fallback;
+      onChange(next);
+      if (normalize) {
+        input2.value = `${next}`;
+      }
+    };
+    input2.removeAttribute("min");
+    input2.removeAttribute("max");
+    input2.addEventListener("input", () => apply(false));
+    input2.addEventListener("change", () => apply(true));
+  };
   var boxClassFor = (control) => {
     if (control.classList.contains("auto-dropdown")) {
       return "auto-dropdown-box";
@@ -7388,6 +7439,14 @@
     }
     return null;
   };
+  var buildFieldLabel = (label) => {
+    const labelEl = document.createElement("label");
+    const text = document.createElement("span");
+    text.className = "auto-input-name vst-detail-field-label";
+    text.textContent = label;
+    labelEl.appendChild(text);
+    return labelEl;
+  };
   var buildField = (label, control, hint, help) => {
     const row = document.createElement("div");
     row.className = "auto-input vst-detail-field";
@@ -7398,11 +7457,7 @@
     if (boxClass) {
       row.classList.add(boxClass);
     }
-    const labelEl = document.createElement("label");
-    const text = document.createElement("span");
-    text.className = "auto-input-name vst-detail-field-label";
-    text.textContent = label;
-    labelEl.appendChild(text);
+    const labelEl = buildFieldLabel(label);
     if (help) {
       appendHelp(labelEl, row, label, help);
     }
@@ -7441,6 +7496,15 @@
     wireNumericInput(input2, value, min, max, onChange);
     return input2;
   };
+  var buildUnboundedNumber = (value, step, onChange) => {
+    const input2 = document.createElement("input");
+    input2.type = "number";
+    input2.className = "auto-number vst-refs-num";
+    input2.step = `${step}`;
+    input2.value = `${value}`;
+    wireUnboundedNumericInput(input2, value, onChange);
+    return input2;
+  };
   var buildSlider = (label, value, min, max, step, onChange, opts) => {
     const holder = document.createElement("div");
     holder.className = "vst-stage-slider auto-input-flex-wide";
@@ -7460,7 +7524,11 @@
     );
     if (number) {
       number.step = `${opts?.numberStep ?? step}`;
-      wireNumericInput(number, value, min, max, onChange);
+      if (opts?.allowNumberOutOfRange) {
+        wireUnboundedNumericInput(number, value, onChange);
+      } else {
+        wireNumericInput(number, value, min, max, onChange);
+      }
     }
     if (opts?.title) {
       holder.title = opts.title;
@@ -7490,12 +7558,10 @@
     input2.dataset.name = label;
     input2.checked = checked;
     input2.addEventListener("change", () => onChange(input2.checked));
-    const text = document.createElement("span");
-    text.className = "auto-input-name vst-detail-field-label";
-    text.textContent = label;
-    row.append(text, input2);
+    const labelEl = buildFieldLabel(label);
+    row.append(labelEl, input2);
     if (opts?.help) {
-      appendHelp(text, row, label, opts.help);
+      appendHelp(labelEl, row, label, opts.help);
     }
     if (opts?.disabled) {
       row.classList.add("vst-audio-disabled");
@@ -7645,6 +7711,49 @@
     target.classList.add(...Array.from(source.classList));
     target.append(...Array.from(source.childNodes));
   };
+  var appendSectionHeaderAction = (target, actionSpec) => {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = `basic-button vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
+    action.textContent = actionSpec.label;
+    action.title = actionSpec.title;
+    action.setAttribute("aria-label", actionSpec.title);
+    action.setAttribute("aria-pressed", `${actionSpec.active === true}`);
+    action.classList.toggle("vst-btn-skip-active", actionSpec.active === true);
+    action.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      actionSpec.onClick();
+    });
+    target.appendChild(action);
+  };
+  var buildStaticSection = (spec) => {
+    const section = document.createElement("div");
+    section.className = `input-group input-group-open vst-detail-section vst-detail-static-section ${spec.className ?? ""}`.trim();
+    section.dataset.vstStaticKey = spec.key;
+    const header = document.createElement("span");
+    header.className = "input-group-header input-group-noshrink vst-detail-section-header";
+    const labelWrap = document.createElement("span");
+    labelWrap.className = "header-label-wrap";
+    const heading = document.createElement("span");
+    heading.className = "header-label";
+    heading.textContent = spec.label;
+    const spacer = document.createElement("span");
+    spacer.className = "header-label-spacer";
+    labelWrap.append(heading, spacer);
+    if (spec.headerAction) {
+      const actions = document.createElement("span");
+      actions.className = "vst-detail-repeating-group-actions";
+      appendSectionHeaderAction(actions, spec.headerAction);
+      labelWrap.appendChild(actions);
+    }
+    header.appendChild(labelWrap);
+    const content = document.createElement("div");
+    content.className = "input-group-content vst-detail-section-content";
+    appendSectionContent(content, spec.content, spec.flattenContent === true);
+    section.append(header, content);
+    return { section, heading, content };
+  };
   var buildAccordionSection = (spec) => {
     const section = document.createElement("div");
     section.className = `input-group vst-detail-section ${spec.open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
@@ -7694,10 +7803,31 @@
     section.append(header, content);
     return { section, heading, content };
   };
+  var rememberedRepeaterItems = /* @__PURE__ */ new Map();
+  var forceOpenRepeaterKeys = /* @__PURE__ */ new Set();
   var buildRepeatingEditor = (spec) => {
+    const explicitActiveIndex = spec.items.findIndex(
+      (item) => item.active === true
+    );
+    const rememberedIndex = rememberedRepeaterItems.get(spec.key);
+    const validRememberedIndex = rememberedIndex !== void 0 && rememberedIndex >= 0 && rememberedIndex < spec.items.length ? rememberedIndex : null;
+    if (rememberedIndex !== void 0 && validRememberedIndex === null) {
+      rememberedRepeaterItems.delete(spec.key);
+      forceOpenRepeaterKeys.delete(spec.key);
+    }
+    const forceOpen = forceOpenRepeaterKeys.has(spec.key) && validRememberedIndex !== null;
+    const activeIndex = forceOpen ? validRememberedIndex : explicitActiveIndex >= 0 ? explicitActiveIndex : validRememberedIndex ?? spec.defaultActiveIndex ?? null;
+    if (explicitActiveIndex >= 0 && !forceOpen) {
+      rememberedRepeaterItems.set(spec.key, explicitActiveIndex);
+    } else if (activeIndex !== null) {
+      rememberedRepeaterItems.set(spec.key, activeIndex);
+    }
+    if (forceOpen) {
+      forceOpenRepeaterKeys.delete(spec.key);
+    }
     const children = document.createDocumentFragment();
     spec.items.forEach((item, index) => {
-      const active = item.active === true;
+      const active = index === activeIndex;
       const group = document.createElement("div");
       group.className = `input-group vst-detail-repeating-group ${active ? "input-group-open" : "input-group-closed"} ${item.groupClassName ?? ""}`.trim();
       const header = document.createElement("span");
@@ -7722,22 +7852,7 @@
       const actions = document.createElement("span");
       actions.className = "vst-detail-repeating-group-actions";
       if (item.headerAction) {
-        const action = document.createElement("button");
-        action.type = "button";
-        action.className = `basic-button vst-btn-tiny vst-detail-repeating-group-action ${item.headerAction.className ?? ""}`.trim();
-        action.textContent = item.headerAction.label;
-        action.title = item.headerAction.title;
-        action.setAttribute("aria-label", item.headerAction.title);
-        action.classList.toggle(
-          "vst-btn-skip-active",
-          item.headerAction.active === true
-        );
-        action.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          item.headerAction?.onClick();
-        });
-        actions.appendChild(action);
+        appendSectionHeaderAction(actions, item.headerAction);
       }
       const onDelete = item.onDelete ?? item.onShiftDelete;
       if (onDelete) {
@@ -7772,6 +7887,7 @@
         event.preventDefault();
         event.stopPropagation();
         if (!active && item.onSelect) {
+          rememberedRepeaterItems.set(spec.key, index);
           item.onSelect();
           return;
         }
@@ -7786,6 +7902,11 @@
           }
         }
         setAccordionOpen(group, opening);
+        if (opening) {
+          rememberedRepeaterItems.set(spec.key, index);
+        } else if (rememberedRepeaterItems.get(spec.key) === index) {
+          rememberedRepeaterItems.delete(spec.key);
+        }
       };
       header.addEventListener("click", activateOrToggle);
       header.addEventListener("keydown", (event) => {
@@ -7806,6 +7927,8 @@
     add.disabled = spec.add.disabled === true;
     add.addEventListener("click", (event) => {
       event.preventDefault();
+      rememberedRepeaterItems.set(spec.key, spec.items.length);
+      forceOpenRepeaterKeys.add(spec.key);
       spec.add.onClick();
     });
     children.appendChild(add);
@@ -7814,13 +7937,14 @@
       label: spec.label,
       content: children,
       counter: spec.items.length,
-      open: spec.open,
+      open: forceOpen || spec.open,
       className: `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim()
     });
     built.section.dataset.vstRepeaterKey = spec.key;
     return {
       section: built.section,
       heading: built.heading,
+      content: built.content,
       editor: spec.editor ?? null
     };
   };
@@ -8438,7 +8562,7 @@
     note.textContent = segments.length === 0 ? "No overlay segments." : "Overlaid additively over the base audio; overlapping segments mix together.";
     const built = buildRepeatingEditor({
       key: "audio-segments",
-      label: "Segments",
+      label: "Audio Segments",
       sectionClass: "vst-detail-audio-segments",
       open,
       items: segments.map((_, segIdx) => ({
@@ -8463,7 +8587,7 @@
       },
       editor
     });
-    built.section.appendChild(note);
+    built.content.insertBefore(note, built.content.firstChild);
     return built.section;
   };
 
@@ -8719,7 +8843,9 @@
   var buildBoundaryBody = (ctx, sel, clips) => {
     const { leftClipIdx } = sel;
     const body = document.createElement("div");
-    body.className = "vst-detail-form-body vst-detail-boundary";
+    body.className = "vst-detail-body";
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-form-body vst-detail-boundary";
     const clip = clips[leftClipIdx];
     const value = clip?.boundaryOut ?? "cut";
     const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
@@ -8749,16 +8875,16 @@
       });
       ctx.render();
     });
-    body.appendChild(
+    fields.appendChild(
       buildField(
-        `Join · Clip ${leftClipIdx + 1} → ${capability.rightClipIdx === null ? leftClipIdx + 2 : capability.rightClipIdx + 1}`,
+        `Join · Clip ${leftClipIdx} → ${capability.rightClipIdx === null ? leftClipIdx + 1 : capability.rightClipIdx}`,
         select2,
         void 0,
         "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
       )
     );
     if (!capability.modes.includes(value) && capability.reason) {
-      body.appendChild(
+      fields.appendChild(
         buildCapabilityNotice({
           supported: false,
           reason: capability.reason,
@@ -8798,7 +8924,7 @@
           ctx.render();
         }
       );
-      body.appendChild(
+      fields.appendChild(
         buildField(
           "Overlap",
           overlapSelect,
@@ -8806,7 +8932,7 @@
           "How many frames the two clips share at the join. For continue this is the frozen context handed to the next clip; for crossfade it is the length of the dissolve. A clip too short for the overlap falls back to a cut."
         )
       );
-      body.appendChild(
+      fields.appendChild(
         buildCheckbox(
           "Continue outgoing audio into next clip",
           clip?.boundaryOutCarryAudio === true,
@@ -8877,8 +9003,17 @@
         info.textContent = text;
       }
     }
-    body.appendChild(info);
-    return wrapForm("boundary", "Boundary", body);
+    fields.appendChild(info);
+    body.appendChild(
+      buildStaticSection({
+        key: "boundary",
+        label: "Boundary",
+        className: "vst-detail-boundary-section",
+        content: fields,
+        flattenContent: true
+      }).section
+    );
+    return body;
   };
 
   // frontend/architectures/ltx2/icLoraAutoDownload.ts
@@ -8985,9 +9120,9 @@
         sectionClass: "vst-detail-iclora-section",
         open,
         items: clip.icLoras.map((_, index) => ({
-          label: `IC${index + 1}`,
+          label: `IC${index}`,
           focusKey: `ic-lora-tab-${index}`,
-          title: `Edit IC-LoRA ${index + 1}`,
+          title: `Edit IC-LoRA ${index}`,
           active: index === entryIdx,
           className: "vst-iclora-tab",
           onSelect: () => setSelection({
@@ -9003,6 +9138,7 @@
                   return null;
                 }
                 target.icLoras.splice(index, 1);
+                removeIcLoraStrengthAt(target, index);
                 return target.icLoras.length > 0 ? {
                   kind: "ic-lora",
                   clipIdx,
@@ -9032,6 +9168,7 @@
                   lora: IC_LORA_AUTO
                 })
               );
+              appendIcLoraStrengthToClip(target);
               return {
                 kind: "ic-lora",
                 clipIdx,
@@ -9041,7 +9178,7 @@
           }
         },
         remove: {
-          title: entryIdx === null ? "No IC-LoRA to delete" : `Delete IC-LoRA ${entryIdx + 1}`,
+          title: entryIdx === null ? "No IC-LoRA to delete" : `Delete IC-LoRA ${entryIdx}`,
           className: "vst-detail-delete-iclora"
         },
         editor
@@ -9479,7 +9616,7 @@
     if (entryIdx !== null) {
       const entry = clip.icLoras[entryIdx];
       const label = document.createElement("span");
-      label.textContent = entry.lora || `IC-LoRA ${entryIdx + 1}`;
+      label.textContent = entry.lora || `IC-LoRA ${entryIdx}`;
       content.appendChild(label);
     }
     return buildRepeatingEditor({
@@ -9488,9 +9625,9 @@
       sectionClass: "vst-detail-iclora-section",
       open,
       items: clip.icLoras.map((_, index) => ({
-        label: `IC${index + 1}`,
+        label: `IC${index}`,
         focusKey: `ic-lora-tab-${index}`,
-        title: `Inspect persisted IC-LoRA ${index + 1}`,
+        title: `Inspect persisted IC-LoRA ${index}`,
         active: index === entryIdx,
         onSelect: () => setSelection({
           kind: "ic-lora",
@@ -9503,6 +9640,7 @@
               const target = clips[clipIdx];
               if (!target?.icLoras[index]) return null;
               target.icLoras.splice(index, 1);
+              removeIcLoraStrengthAt(target, index);
               return target.icLoras.length > 0 ? {
                 kind: "ic-lora",
                 clipIdx,
@@ -9525,7 +9663,7 @@
         }
       },
       remove: {
-        title: entryIdx === null ? "No IC-LoRA to delete" : `Delete persisted IC-LoRA ${entryIdx + 1}`,
+        title: entryIdx === null ? "No IC-LoRA to delete" : `Delete persisted IC-LoRA ${entryIdx}`,
         className: "vst-detail-delete-iclora"
       },
       editor: content
@@ -9579,7 +9717,7 @@
   var DURATION_STEP = 0.1;
   var buildClipColumn = (context, clip, clipIdx) => {
     const column = document.createElement("div");
-    column.className = "vst-detail-col vst-detail-clip";
+    column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
     const sourced = !!clip.sourceVideo;
     const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || sourced;
     const durationInput = buildNumber(
@@ -9607,22 +9745,27 @@
       durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);
-    column.appendChild(
-      buildCheckbox("Skip this clip", clip.skipped === true, (value) => {
-        context.commit((clips) => {
-          const target = clips[clipIdx];
-          if (target) {
-            target.skipped = value;
-            reconcileArchitectureIncomingIcLoraDrives(
-              clips,
-              context.generatedEntryMode()
-            );
-          }
-        });
-      })
-    );
     return column;
   };
+  var buildClipSkipAction = (context, clip, clipIdx) => ({
+    label: "⏭︎",
+    title: clip.skipped ? "Re-enable clip" : "Skip clip",
+    className: "vst-detail-skip-clip",
+    active: clip.skipped === true,
+    onClick: () => {
+      context.commit((clips) => {
+        const target = clips[clipIdx];
+        if (target) {
+          target.skipped = !target.skipped;
+          reconcileArchitectureIncomingIcLoraDrives(
+            clips,
+            context.generatedEntryMode()
+          );
+        }
+      });
+      context.render();
+    }
+  });
 
   // frontend/imageSource.ts
   var buildImageSourceOptions = (currentValue = "") => {
@@ -9661,9 +9804,9 @@
       sectionClass: "vst-detail-ref-section",
       open,
       items: clip.refs.map((_, refIdx) => ({
-        label: `R${refIdx + 1}`,
+        label: `Ref${refIdx}`,
         focusKey: `reference-tab-${refIdx}`,
-        title: `Edit reference image ${refIdx + 1}`,
+        title: `Edit reference image ${refIdx}`,
         active: refIdx === activeRefIdx,
         className: "vst-ref-tab",
         onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
@@ -9677,7 +9820,7 @@
         onClick: () => ctx.addRefEntry(clipIdx)
       },
       remove: {
-        title: activeRefIdx === null ? "No reference image to delete" : `Delete reference image ${activeRefIdx + 1}`,
+        title: activeRefIdx === null ? "No reference image to delete" : `Delete reference image ${activeRefIdx}`,
         className: "vst-detail-delete-ref"
       },
       editor
@@ -10117,6 +10260,10 @@
         return "render";
       });
     };
+    const hint = document.createElement("small");
+    hint.className = "vst-detail-field-hint";
+    hint.textContent = "Use an existing video file as this clip instead of generating it.";
+    col.appendChild(hint);
     col.appendChild(
       buildMediaPickRow(
         "Video file",
@@ -10132,10 +10279,6 @@
       )
     );
     if (!source) {
-      const hint = document.createElement("small");
-      hint.className = "vst-detail-field-hint";
-      hint.textContent = "Use an existing video file as this clip instead of generating it.";
-      col.appendChild(hint);
       return wrap;
     }
     const info = document.createElement("small");
@@ -10253,11 +10396,8 @@
         `stage-${stageIdx}-lora-${loraIdx}-model`
       );
       editor.appendChild(buildField("Model", select2));
-      const weight = buildSlider(
-        "Weight",
+      const weight = buildUnboundedNumber(
         lora.weight,
-        -10,
-        10,
         LORA_WEIGHT_STEP,
         (value) => {
           context.debouncedCommit(
@@ -10269,21 +10409,15 @@
               }
             }
           );
-        },
-        {
-          sliderMin: -2,
-          sliderMax: 2,
-          help: "How strongly this LoRA affects this stage. Negative values invert its effect."
         }
       );
-      weight.querySelector("input.auto-slider-number")?.setAttribute(
+      weight.setAttribute(
         "data-vst-focus-key",
         `stage-${stageIdx}-lora-${loraIdx}-weight`
       );
-      editor.appendChild(weight);
+      editor.appendChild(buildField("Weight", weight));
       return {
-        label: `LoRA ${loraIdx + 1}`,
-        active: loraIdx === 0,
+        label: `LoRA ${loraIdx}`,
         groupClassName: "vst-stage-lora-entry",
         editor,
         onDelete: () => {
@@ -10299,11 +10433,11 @@
             { rebuildAfterSelect: true }
           );
         },
-        deleteTitle: `Delete LoRA ${loraIdx + 1}`
+        deleteTitle: `Delete LoRA ${loraIdx}`
       };
     });
     const built = buildRepeatingEditor({
-      key: `stage-${stageIdx}-loras`,
+      key: `clip-${clipIdx}-stage-${stageIdx}-loras`,
       label: "LoRAs",
       sectionClass: "vst-stage-loras",
       // Stage LoRAs do not have their own timeline selection kind. Structural
@@ -10311,6 +10445,7 @@
       // the nested editor open while it still has items instead of resetting
       // it to the hard-coded closed state on every rebuild.
       open: items.length > 0,
+      defaultActiveIndex: items.length > 0 ? 0 : null,
       items,
       add: {
         title: defaults.loraValues.length > 0 ? "Add a LoRA to this stage" : "No LoRAs are available",
@@ -10486,12 +10621,7 @@ The conversion is one undoable change.`;
         context.render();
       }
     );
-    const modelField = buildField(
-      "Model",
-      modelSelect,
-      void 0,
-      stageIdx === 0 ? "Stage 0 establishes the clip architecture. Choosing a model from another architecture converts the whole clip in one undoable change." : "Later stages are locked to the architecture established by Stage 0."
-    );
+    const modelField = buildField("Model", modelSelect);
     modelField.classList.add("vst-detail-span-2");
     fields.appendChild(modelField);
   };
@@ -10502,6 +10632,7 @@ The conversion is one undoable change.`;
     clip,
     clipIdx,
     stage,
+    stageIdx,
     fields,
     debouncedCommit
   }) => {
@@ -10519,7 +10650,7 @@ The conversion is one undoable change.`;
       clip.refs.forEach((ref, refIdx) => {
         const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
         const refSlider = buildSlider(
-          `R${refIdx}`,
+          `Reference R${refIdx}`,
           current,
           STAGE_REF_STRENGTH_MIN,
           STAGE_REF_STRENGTH_MAX,
@@ -10556,26 +10687,28 @@ The conversion is one undoable change.`;
     }
     if (clip.icLoras.length === 0) return;
     const icDecision = context.capabilities().forClip(clip).decision("icLora");
-    const guideStrength = buildSlider(
-      "IC-LoRA Guide Strength",
-      stage.controlNetStrength,
-      STAGE_CONTROLNET_STRENGTH_MIN,
-      STAGE_CONTROLNET_STRENGTH_MAX,
-      STAGE_CONTROLNET_STRENGTH_STEP,
-      (value) => {
-        debouncedCommit("controlnet", (target) => {
-          target.controlNetStrength = value;
-        });
-      },
-      {
-        help: "How strongly this stage is conditioned by the clip's IC-LoRA drive video/guides. Higher follows the guide more closely; lower gives the model more freedom."
+    clip.icLoras.forEach((entry, entryIdx) => {
+      if (entry.stage >= 0 && entry.stage !== stageIdx) {
+        return;
       }
-    );
-    tagFocus(guideStrength, "controlnet");
-    fields.appendChild(guideStrength);
-    if (!icDecision.supported) {
-      disableCapabilityControls(guideStrength, icDecision);
-    }
+      const guideStrength = buildSlider(
+        `IC-LoRA Strength ${entryIdx}`,
+        stage.icLoraStrengths[entryIdx] ?? stage.controlNetStrength,
+        STAGE_CONTROLNET_STRENGTH_MIN,
+        STAGE_CONTROLNET_STRENGTH_MAX,
+        STAGE_CONTROLNET_STRENGTH_STEP,
+        (value) => {
+          debouncedCommit(`ic-lora-strength-${entryIdx}`, (target) => {
+            target.icLoraStrengths[entryIdx] = value;
+          });
+        }
+      );
+      tagFocus(guideStrength, `ic-lora-strength-${entryIdx}`);
+      fields.appendChild(guideStrength);
+      if (!icDecision.supported) {
+        disableCapabilityControls(guideStrength, icDecision);
+      }
+    });
   };
 
   // frontend/detailStrip/stagePanel/samplingSection.ts
@@ -10591,9 +10724,6 @@ The conversion is one undoable change.`;
         defaults.stepsStep,
         (target, value) => {
           target.steps = Math.round(value);
-        },
-        {
-          help: "How many denoising steps this stage runs. More steps can add detail but take longer; there are diminishing returns past the model's sweet spot."
         }
       )
     );
@@ -10607,9 +10737,6 @@ The conversion is one undoable change.`;
         defaults.cfgScaleStep,
         (target, value) => {
           target.cfgScale = value;
-        },
-        {
-          help: "How strongly generation follows the prompt. Higher sticks closer to the prompt but can look over-cooked; lower is looser and more natural."
         }
       )
     );
@@ -10661,9 +10788,7 @@ The conversion is one undoable change.`;
         (value) => commit((target) => {
           target.sampler = value;
         })
-      ),
-      void 0,
-      "The sampling algorithm used to denoise each step. Leave at the model default unless you have a reason to change it."
+      )
     );
     const samplerState = stageCapabilities.authoringState("sampler", true);
     if (!samplerState.enabled) {
@@ -10679,9 +10804,7 @@ The conversion is one undoable change.`;
         (value) => commit((target) => {
           target.scheduler = value;
         })
-      ),
-      void 0,
-      "Controls how the noise level is spaced across the steps. Leave at the model default unless you have a reason to change it."
+      )
     );
     const schedulerState = stageCapabilities.authoringState("scheduler", true);
     if (!schedulerState.enabled) {
@@ -10913,16 +11036,18 @@ The conversion is one undoable change.`;
     const { clipIdx } = selection2;
     const stageIdx = selection2.kind === "clip" ? selection2.stageIdx : 0;
     const clip = clips[clipIdx];
+    body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
     const stage = clip.stages[stageIdx];
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
     body.appendChild(
-      buildAccordionSection({
+      buildStaticSection({
         key: "clip",
         label: "Clip",
+        className: "vst-detail-clip-section",
         content: buildClipColumn(context, clip, clipIdx),
-        open: false,
-        flattenContent: true
+        flattenContent: true,
+        headerAction: buildClipSkipAction(context, clip, clipIdx)
       }).section
     );
     let stageEditor;
@@ -11134,7 +11259,7 @@ The conversion is one undoable change.`;
       sectionClass: "vst-detail-relay-section",
       open,
       items: windows.map((window3, index) => ({
-        label: `R${index + 1}`,
+        label: `R${index}`,
         focusKey: `relay-tab-${index}`,
         title: `Relay prompt ${roundToTenth(window3.start)}–${roundToTenth(window3.start + window3.duration)} seconds`,
         active: index === activeWindowIdx,
@@ -11154,7 +11279,7 @@ The conversion is one undoable change.`;
         onClick: () => ctx.addPromptWindow(clipIdx)
       },
       remove: {
-        title: activeWindowIdx === null ? "No relay prompt to delete" : `Delete relay prompt ${activeWindowIdx + 1}`,
+        title: activeWindowIdx === null ? "No relay prompt to delete" : `Delete relay prompt ${activeWindowIdx}`,
         className: "vst-detail-delete-relay"
       },
       editor: editor2
@@ -11342,7 +11467,7 @@ The conversion is one undoable change.`;
       { value: "", label: openLabel },
       ...state.clips.map((clip, index) => ({
         value: clip.id,
-        label: `Clip ${index + 1}`
+        label: `Clip ${index}`
       }))
     ];
     if (selectedId && !state.clips.some((clip) => clip.id === selectedId)) {
@@ -11849,51 +11974,51 @@ The conversion is one undoable change.`;
   var detailBreadcrumb = (selection2, clips) => {
     switch (selection2.kind) {
       case "clip":
-        return clips[selection2.clipIdx]?.stages.length === 0 ? `Clip ${selection2.clipIdx + 1} · Source only` : `Clip ${selection2.clipIdx + 1} · ${stageChipLabel(selection2.stageIdx)}`;
+        return clips[selection2.clipIdx]?.stages.length === 0 ? `Clip ${selection2.clipIdx} · Source only` : `Clip ${selection2.clipIdx} · ${stageChipLabel(selection2.stageIdx)}`;
       case "ref":
-        return `Ref ${selection2.refIdx + 1} · Clip ${selection2.clipIdx + 1}`;
+        return `Ref${selection2.refIdx} · Clip ${selection2.clipIdx}`;
       case "ic-lora":
-        return `IC-LoRA ${selection2.entryIdx + 1} · Clip ${selection2.clipIdx + 1}`;
+        return `IC-LoRA ${selection2.entryIdx} · Clip ${selection2.clipIdx}`;
       case "audio":
-        return `Audio · Clip ${selection2.clipIdx + 1}`;
+        return `Audio · Clip ${selection2.clipIdx}`;
       case "audio-segment": {
         const segment = clips[selection2.clipIdx]?.audioSegments?.[selection2.segIdx];
         if (!segment) {
-          return `Audio segment · Clip ${selection2.clipIdx + 1}`;
+          return `Audio segment · Clip ${selection2.clipIdx}`;
         }
         const start = roundToTenth(segment.startSeconds);
         const end = roundToTenth(
           segment.startSeconds + segment.lengthSeconds
         );
-        return `Audio segment · Clip ${selection2.clipIdx + 1} · ${start}–${end} s`;
+        return `Audio segment · Clip ${selection2.clipIdx} · ${start}–${end} s`;
       }
       case "audio-track":
         return `Audio track ${selection2.trackIdx + 1}`;
       case "audio-track-span":
         return `Audio track ${selection2.trackIdx + 1} · Span ${selection2.spanIdx + 1}`;
       case "boundary":
-        return `Boundary · Clip ${selection2.leftClipIdx + 1} → ${selection2.leftClipIdx + 2}`;
+        return `Boundary · Clip ${selection2.leftClipIdx} → ${selection2.leftClipIdx + 1}`;
       case "prompt-major":
-        return `Prompts · Clip ${selection2.clipIdx + 1}`;
+        return `Prompts · Clip ${selection2.clipIdx}`;
       case "prompt-minor": {
         const window2 = clips[selection2.clipIdx]?.promptWindows?.[selection2.windowIdx];
         if (!window2) {
-          return `Relay · Clip ${selection2.clipIdx + 1}`;
+          return `Relay · Clip ${selection2.clipIdx}`;
         }
         const start = roundToTenth(window2.start);
         const end = roundToTenth(window2.start + window2.duration);
-        return `Relay ${start}–${end}s · Clip ${selection2.clipIdx + 1}`;
+        return `Relay ${start}–${end}s · Clip ${selection2.clipIdx}`;
       }
       case "retake": {
         const retake = clips[selection2.clipIdx]?.retake;
         if (!retake) {
-          return `Retake · Clip ${selection2.clipIdx + 1}`;
+          return `Retake · Clip ${selection2.clipIdx}`;
         }
         const start = roundToTenth(retake.startSeconds);
         const end = roundToTenth(
           retake.startSeconds + retake.lengthSeconds
         );
-        return `Retake · Clip ${selection2.clipIdx + 1} · ${start}–${end} s`;
+        return `Retake · Clip ${selection2.clipIdx} · ${start}–${end} s`;
       }
       default:
         return "Timeline settings";
@@ -13899,7 +14024,7 @@ The conversion is one undoable change.`;
         }
         selEl.hidden = sel === null;
         dotEl.hidden = sel === null;
-        selEl.textContent = sel === null ? "" : `clip ${sel + 1}`;
+        selEl.textContent = sel === null ? "" : `clip ${sel}`;
       });
     };
     const addClipAfterCatalog = async () => {

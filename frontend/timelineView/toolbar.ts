@@ -45,7 +45,7 @@ export const renderDiagnosticPanel = (
         .map(
             (item) =>
                 `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeHtml(item.code)}">` +
-                `${item.clipIdx === undefined ? "" : `<strong>Clip ${item.clipIdx + 1}:</strong> `}` +
+                `${item.clipIdx === undefined ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}` +
                 `${escapeHtml(item.message)}</div>`,
         )
         .join("");
@@ -79,7 +79,7 @@ export const renderTimelineHeader = (
         `<span class="vst-readout" data-vst-readout>` +
         `<span title="Sequence total">${totalLabel} total</span>` +
         `<span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span>` +
-        `<span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex + 1}` : ""}</span>` +
+        `<span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span>` +
         `</span>`;
 
     const width = Math.max(0, Math.round(options?.width ?? 0));

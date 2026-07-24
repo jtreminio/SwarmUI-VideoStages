@@ -7,8 +7,8 @@ import {
     buildCheckbox,
     buildField,
     buildOptionSelect,
+    buildStaticSection,
     type OptionSpec,
-    wrapForm,
 } from "../detailWidgets";
 import { getState } from "../persistence";
 import { formatOverlapSeconds, safeFps } from "../timelineDetail";
@@ -24,7 +24,9 @@ export const buildBoundaryBody = (
 ): HTMLElement => {
     const { leftClipIdx } = sel;
     const body = document.createElement("div");
-    body.className = "vst-detail-form-body vst-detail-boundary";
+    body.className = "vst-detail-body";
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-form-body vst-detail-boundary";
     const clip = clips[leftClipIdx];
     const value: BoundaryOut = clip?.boundaryOut ?? "cut";
     const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
@@ -58,9 +60,9 @@ export const buildBoundaryBody = (
         });
         ctx.render();
     });
-    body.appendChild(
+    fields.appendChild(
         buildField(
-            `Join · Clip ${leftClipIdx + 1} → ${capability.rightClipIdx === null ? leftClipIdx + 2 : capability.rightClipIdx + 1}`,
+            `Join · Clip ${leftClipIdx} → ${capability.rightClipIdx === null ? leftClipIdx + 1 : capability.rightClipIdx}`,
             select,
             undefined,
             "How this clip joins the next one. Cut: hard concatenation. " +
@@ -70,7 +72,7 @@ export const buildBoundaryBody = (
         ),
     );
     if (!capability.modes.includes(value) && capability.reason) {
-        body.appendChild(
+        fields.appendChild(
             buildCapabilityNotice({
                 supported: false,
                 reason: capability.reason,
@@ -115,7 +117,7 @@ export const buildBoundaryBody = (
                 ctx.render();
             },
         );
-        body.appendChild(
+        fields.appendChild(
             buildField(
                 "Overlap",
                 overlapSelect,
@@ -126,7 +128,7 @@ export const buildBoundaryBody = (
                     "short for the overlap falls back to a cut.",
             ),
         );
-        body.appendChild(
+        fields.appendChild(
             buildCheckbox(
                 "Continue outgoing audio into next clip",
                 clip?.boundaryOutCarryAudio === true,
@@ -223,7 +225,17 @@ export const buildBoundaryBody = (
             info.textContent = text;
         }
     }
-    body.appendChild(info);
+    fields.appendChild(info);
 
-    return wrapForm("boundary", "Boundary", body);
+    body.appendChild(
+        buildStaticSection({
+            key: "boundary",
+            label: "Boundary",
+            className: "vst-detail-boundary-section",
+            content: fields,
+            flattenContent: true,
+        }).section,
+    );
+
+    return body;
 };

@@ -39,7 +39,8 @@
     flex-direction: row;
     align-items: stretch;
     height: 100%;
-    min-height: 240px;
+    max-height: calc(100dvh - 7.5rem);
+    min-height: min(240px, calc(100dvh - 7.5rem));
 }
 /* Green enable check on the bottom-bar "Timeline" tab selector. Lives outside
    .vst-timeline, so only host theme vars are available here. */
@@ -1664,6 +1665,10 @@
     overflow-y: auto;
     overflow-x: hidden;
     margin-bottom: 10px;
+    padding: 0 10px 10px;
+}
+.vst-detail-clip-skipped > * {
+    opacity: 0.45;
 }
 .vst-detail-section-content .input-group-open {
     margin-bottom: 0;

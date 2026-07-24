@@ -138,6 +138,7 @@ export const planArchitectureConversion = (
         stage.modelProfileId = target.modelProfileId;
         if (!supportsReferences) {
             stage.refStrengths = [];
+            stage.icLoraStrengths = [];
         }
         if (!supportsNormalLoras && stage.loras.length > 0) {
             removedStageLoras += stage.loras.length;

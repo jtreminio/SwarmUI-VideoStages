@@ -9,6 +9,7 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     skipped: false,
     control: 1,
     controlNetStrength: 0.8,
+    icLoraStrengths: [],
     refStrengths: [],
     upscale: 1,
     upscaleMethod: "latentmodel-test.safetensors",
