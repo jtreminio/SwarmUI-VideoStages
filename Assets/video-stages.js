@@ -3016,6 +3016,43 @@
     }));
     return JSON.stringify(out);
   };
+  var isTransientBrowserMedia = (media) => {
+    const data = media?.data.trim().toLowerCase() ?? "";
+    return data.startsWith("data:") || data.startsWith("blob:");
+  };
+  var serializeStateForDurableStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const durable = structuredClone(state);
+    for (const clip of durable.clips) {
+      if (isTransientBrowserMedia(clip.uploadedAudio)) {
+        clip.uploadedAudio = null;
+      }
+      if (clip.sourceVideo && isTransientBrowserMedia({ data: clip.sourceVideo.data })) {
+        clip.sourceVideo = null;
+      }
+      for (const segment of clip.audioSegments) {
+        if (typeof segment.source === "object" && isTransientBrowserMedia(segment.source)) {
+          segment.source = null;
+        }
+      }
+      for (const ref of clip.refs) {
+        if (isTransientBrowserMedia(ref.uploadedImage)) {
+          ref.uploadedImage = null;
+        }
+      }
+      for (const icLora of clip.icLoras) {
+        if (isTransientBrowserMedia(icLora.driveMedia)) {
+          icLora.driveMedia = null;
+        }
+      }
+    }
+    for (const track of durable.audioTracks ?? []) {
+      if (isTransientBrowserMedia(track.source.uploadedAudio)) {
+        track.source.uploadedAudio = null;
+      }
+    }
+    return serializeStateForStorage(durable);
+  };
   var hasArrayOfRecords = (owner, key) => {
     if (!Object.hasOwn(owner, key)) {
       return true;
@@ -4874,6 +4911,9 @@
       }
       revalidate();
       syncedToken = cachedToken;
+      if (canonical) {
+        deps.writeDurable?.(canonical);
+      }
       notify({ origin: "external" });
       return true;
     };
@@ -4992,7 +5032,107 @@
     }
   };
 
+  // frontend/persistence/durableAuthoringState.ts
+  var DURABLE_AUTHORING_KEY = "videostages_authoring_state_v1";
+  var DURABLE_AUTHORING_VERSION = 1;
+  var isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
+  var readPrompt = (value) => {
+    if (!isRecord(value) || typeof value.prompt !== "string") {
+      return null;
+    }
+    if (!Array.isArray(value.windows)) {
+      return null;
+    }
+    const windows = [];
+    for (const window2 of value.windows) {
+      if (!isRecord(window2) || typeof window2.prompt !== "string" || !isFiniteNumber(window2.start) || !isFiniteNumber(window2.duration)) {
+        return null;
+      }
+      windows.push({
+        prompt: window2.prompt,
+        start: window2.start,
+        duration: window2.duration
+      });
+    }
+    return { prompt: value.prompt, windows };
+  };
+  var loadDurableAuthoringState = () => {
+    try {
+      const raw = localStorage.getItem(DURABLE_AUTHORING_KEY);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      if (!isRecord(parsed) || parsed.version !== DURABLE_AUTHORING_VERSION || typeof parsed.document !== "string" || !Array.isArray(parsed.prompts)) {
+        return null;
+      }
+      const prompts = [];
+      for (const prompt of parsed.prompts) {
+        const normalized = readPrompt(prompt);
+        if (!normalized) {
+          return null;
+        }
+        prompts.push(normalized);
+      }
+      return { document: parsed.document, prompts };
+    } catch (error) {
+      videoStagesDebugLog(
+        "persistence",
+        "durable authoring state read failed",
+        { error }
+      );
+      return null;
+    }
+  };
+  var saveDurableAuthoringState = (state) => {
+    try {
+      const snapshot = {
+        document: serializeStateForDurableStorage(state),
+        prompts: state.clips.map((clip) => ({
+          prompt: clip.prompt,
+          windows: clip.promptWindows.map((window2) => ({
+            prompt: window2.prompt,
+            start: window2.start,
+            duration: window2.duration
+          }))
+        }))
+      };
+      const stored = {
+        version: DURABLE_AUTHORING_VERSION,
+        ...snapshot
+      };
+      localStorage.setItem(DURABLE_AUTHORING_KEY, JSON.stringify(stored));
+      return snapshot;
+    } catch (error) {
+      console.warn(
+        "VideoStages: durable authoring state could not be saved.",
+        error
+      );
+      videoStagesDebugLog(
+        "persistence",
+        "durable authoring state write failed",
+        { error }
+      );
+      return null;
+    }
+  };
+  var clearDurableAuthoringState = () => {
+    try {
+      localStorage.removeItem(DURABLE_AUTHORING_KEY);
+    } catch {
+    }
+  };
+
   // frontend/persistence/carrierAdapter.ts
+  var BOOT_CARRIER_PROTECTION_MS = 2e3;
+  var hydrationComplete = false;
+  var hydratedDataInput = null;
+  var hydratedPromptInput = null;
+  var hydratedSnapshot = null;
+  var hydratedPromptCarrierValue = null;
+  var pendingHydratedPrompts = null;
+  var protectOverriddenBootCarrier = false;
+  var bootCarrierProtectionDeadline = 0;
   var overlayPromptAndUiState = (clips) => {
     ensureClipEntityIdentities(clips);
     const { sections, windows } = parseClipPrompts(
@@ -5031,7 +5171,88 @@
     overlayPromptAndUiState(clips);
     return createRootConfig(resolveRootDims(inheritedDims(), {}), clips);
   };
+  var applyPendingHydratedPrompts = () => {
+    if (!pendingHydratedPrompts || !getPromptInput()) {
+      return;
+    }
+    writeClipPrompts(pendingHydratedPrompts);
+    hydratedPromptCarrierValue = getPromptInput()?.value ?? null;
+    pendingHydratedPrompts = null;
+  };
+  var restoreDurableSnapshot = (snapshot) => {
+    const decoded = decodeStoredDocument(snapshot.document, inheritedDims());
+    if (!decoded || snapshot.prompts.length !== decoded.clips.length) {
+      return false;
+    }
+    writeDataParam(snapshot.document);
+    hydratedSnapshot = snapshot;
+    pendingHydratedPrompts = snapshot.prompts;
+    applyPendingHydratedPrompts();
+    return true;
+  };
+  var writeDurable = (state) => {
+    const saved = saveDurableAuthoringState(state);
+    if (saved) {
+      hydratedSnapshot = saved;
+    }
+  };
+  var releaseBootCarrierProtection = () => {
+    protectOverriddenBootCarrier = false;
+    bootCarrierProtectionDeadline = 0;
+  };
+  var ensureHydratedCarrier = () => {
+    const dataInput = getDataInput();
+    if (!dataInput) {
+      return;
+    }
+    if (hydrationComplete) {
+      const promptInput = getPromptInput();
+      if (dataInput !== hydratedDataInput) {
+        hydratedDataInput = dataInput;
+      }
+      if (promptInput !== hydratedPromptInput) {
+        hydratedPromptInput = promptInput;
+      }
+      const protectingBootCarrier = protectOverriddenBootCarrier && Date.now() <= bootCarrierProtectionDeadline;
+      if (!protectingBootCarrier) {
+        protectOverriddenBootCarrier = false;
+      }
+      if (protectingBootCarrier && hydratedSnapshot && dataInput.value !== hydratedSnapshot.document) {
+        restoreDurableSnapshot(hydratedSnapshot);
+      }
+      if (protectingBootCarrier && hydratedSnapshot && promptInput && promptInput.value !== hydratedPromptCarrierValue) {
+        pendingHydratedPrompts = hydratedSnapshot.prompts;
+      }
+      applyPendingHydratedPrompts();
+      return;
+    }
+    hydrationComplete = true;
+    hydratedDataInput = dataInput;
+    hydratedPromptInput = getPromptInput();
+    const durable = loadDurableAuthoringState();
+    if (durable && restoreDurableSnapshot(durable)) {
+      protectOverriddenBootCarrier = true;
+      bootCarrierProtectionDeadline = Date.now() + BOOT_CARRIER_PROTECTION_MS;
+      return;
+    }
+    if (durable) {
+      clearDurableAuthoringState();
+    }
+    const existing = readDataParam();
+    if (!existing) {
+      return;
+    }
+    const state = parse(existing);
+    if (state) {
+      writeDurable(state);
+    }
+  };
+  var readDataParam2 = () => {
+    ensureHydratedCarrier();
+    return readDataParam();
+  };
   var writeQuiet = (state, serialized) => {
+    releaseBootCarrierProtection();
     ensureAuthoringDocumentIdentity(state);
     assignMissingHues(state.clips);
     writeDataParam(serialized);
@@ -5042,17 +5263,22 @@
       }))
     );
     saveUiState(state.clips);
+    writeDurable(state);
   };
   var timelineCarrierAdapter = {
-    readToken: () => `${readStateToken()}\0${readInheritedDimsSignature()}`,
-    readDataParam,
+    readToken: () => {
+      ensureHydratedCarrier();
+      return `${readStateToken()}\0${readInheritedDimsSignature()}`;
+    },
+    readDataParam: readDataParam2,
     parse,
     parseEmpty,
     serialize: serializeStateForStorage,
     writeQuiet,
+    writeDurable,
     notifyHost: notifyCarrierChanged
   };
-  var dataCarrierNeedsCanonicalIdRepair = () => storedDocumentNeedsCanonicalIdRepair(readDataParam());
+  var dataCarrierNeedsCanonicalIdRepair = () => storedDocumentNeedsCanonicalIdRepair(readDataParam2());
 
   // frontend/persistence/repository.ts
   var store = createTimelineStore({
@@ -12788,7 +13014,12 @@ The conversion is one undoable change.`;
       unsubscribe = subscribeSelection(onSelectionChanged);
       render();
     };
-    return { attach, render, dispose };
+    return {
+      attach,
+      render,
+      flushPending: () => draftQueue.flush(),
+      dispose
+    };
   };
 
   // frontend/timelineHistory.ts
@@ -12856,6 +13087,7 @@ The conversion is one undoable change.`;
     let paramRefreshCleanup = null;
     const onInputChanged = () => options.syncFromCarrier();
     const onEnabledToggled = () => options.refresh();
+    const onPageExit = () => options.flushPending();
     const bindInput = () => {
       const input2 = getPromptInput();
       if (!input2 || input2 === boundInput) return;
@@ -12888,6 +13120,10 @@ The conversion is one undoable change.`;
       bindToggle();
       document.removeEventListener("keydown", onKeydown);
       document.addEventListener("keydown", onKeydown);
+      window.removeEventListener("pagehide", onPageExit);
+      window.addEventListener("pagehide", onPageExit);
+      window.removeEventListener("beforeunload", onPageExit);
+      window.addEventListener("beforeunload", onPageExit);
       if (!inputSyncInterval) {
         inputSyncInterval = setInterval(
           options.syncFromCarrier,
@@ -12913,6 +13149,8 @@ The conversion is one undoable change.`;
       paramRefreshCleanup?.();
       paramRefreshCleanup = null;
       document.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("pagehide", onPageExit);
+      window.removeEventListener("beforeunload", onPageExit);
     };
     return { bind, dispose };
   };
@@ -13990,6 +14228,7 @@ The conversion is one undoable change.`;
     const hostLifecycle = createTimelineHostLifecycle({
       refresh: () => refresh(),
       syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
+      flushPending: () => detailStrip.flushPending(),
       undo: () => history.undo(),
       redo: () => history.redo()
     });

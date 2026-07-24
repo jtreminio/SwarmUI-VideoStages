@@ -187,6 +187,60 @@ export const serializeStateForStorage = (state: VideoStagesConfig): string => {
     return JSON.stringify(out);
 };
 
+const isTransientBrowserMedia = (
+    media: { data: string } | null | undefined,
+): boolean => {
+    const data = media?.data.trim().toLowerCase() ?? "";
+    return data.startsWith("data:") || data.startsWith("blob:");
+};
+
+/**
+ * Durable browser storage deliberately excludes embedded upload payloads.
+ * The normal Data carrier still receives the complete runtime document so a
+ * generation can use newly selected media until the page is reloaded.
+ */
+export const serializeStateForDurableStorage = (
+    state: VideoStagesConfig,
+): string => {
+    ensureAuthoringDocumentIdentity(state);
+    const durable = structuredClone(state);
+    for (const clip of durable.clips) {
+        if (isTransientBrowserMedia(clip.uploadedAudio)) {
+            clip.uploadedAudio = null;
+        }
+        if (
+            clip.sourceVideo &&
+            isTransientBrowserMedia({ data: clip.sourceVideo.data })
+        ) {
+            clip.sourceVideo = null;
+        }
+        for (const segment of clip.audioSegments) {
+            if (
+                typeof segment.source === "object" &&
+                isTransientBrowserMedia(segment.source)
+            ) {
+                segment.source = null;
+            }
+        }
+        for (const ref of clip.refs) {
+            if (isTransientBrowserMedia(ref.uploadedImage)) {
+                ref.uploadedImage = null;
+            }
+        }
+        for (const icLora of clip.icLoras) {
+            if (isTransientBrowserMedia(icLora.driveMedia)) {
+                icLora.driveMedia = null;
+            }
+        }
+    }
+    for (const track of durable.audioTracks ?? []) {
+        if (isTransientBrowserMedia(track.source.uploadedAudio)) {
+            track.source.uploadedAudio = null;
+        }
+    }
+    return serializeStateForStorage(durable);
+};
+
 const hasArrayOfRecords = (
     owner: Record<string, unknown>,
     key: string,

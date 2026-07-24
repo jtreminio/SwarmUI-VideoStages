@@ -82,6 +82,8 @@ export interface StoreDeps {
     serialize(state: VideoStagesConfig): string;
     /** Write BOTH carriers without dispatching host change events. */
     writeQuiet(state: VideoStagesConfig, serialized: string): void;
+    /** Mirror a valid external carrier edit into extension-owned storage. */
+    writeDurable?(state: VideoStagesConfig): void;
     /** Dispatch the deferred host change events for both carriers. */
     notifyHost(): void;
 }
@@ -307,6 +309,9 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         }
         revalidate();
         syncedToken = cachedToken;
+        if (canonical) {
+            deps.writeDurable?.(canonical);
+        }
         notify({ origin: "external" });
         return true;
     };

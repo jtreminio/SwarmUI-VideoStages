@@ -33,6 +33,7 @@ interface Harness {
     deps: StoreDeps;
     parseCalls: string[];
     writeQuietCalls: VideoStagesConfig[];
+    writeDurableCalls: VideoStagesConfig[];
     notifyHostCalls: number[];
     onNotifyHost: (() => void) | null;
 }
@@ -42,6 +43,7 @@ const makeHarness = (): Harness => {
     const harness = {} as Harness;
     const parseCalls: string[] = [];
     const writeQuietCalls: VideoStagesConfig[] = [];
+    const writeDurableCalls: VideoStagesConfig[] = [];
     const notifyHostCalls: number[] = [];
     const deps: StoreDeps = {
         readToken: () =>
@@ -79,6 +81,9 @@ const makeHarness = (): Harness => {
             carrier.data = serialized;
             carrier.prompt = state.clips.map((clip) => clip.prompt).join("|");
         },
+        writeDurable: (state: VideoStagesConfig): void => {
+            writeDurableCalls.push(structuredClone(state));
+        },
         notifyHost: (): void => {
             notifyHostCalls.push(notifyHostCalls.length + 1);
             harness.onNotifyHost?.();
@@ -89,6 +94,7 @@ const makeHarness = (): Harness => {
     harness.deps = deps;
     harness.parseCalls = parseCalls;
     harness.writeQuietCalls = writeQuietCalls;
+    harness.writeDurableCalls = writeDurableCalls;
     harness.notifyHostCalls = notifyHostCalls;
     harness.onNotifyHost = null;
     return harness;
@@ -359,6 +365,8 @@ describe("createTimelineStore", () => {
             expect(h.store.syncFromCarrier()).toBe(true);
             expect(seen).toEqual([{ origin: "external" }]);
             expect(h.store.getState().width).toBe(512);
+            expect(h.writeDurableCalls).toHaveLength(1);
+            expect(h.writeDurableCalls[0].width).toBe(512);
         });
 
         it("still notifies when a getState() read raced the external change", () => {

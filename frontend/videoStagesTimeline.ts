@@ -107,6 +107,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const hostLifecycle = createTimelineHostLifecycle({
         refresh: () => refresh(),
         syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
+        flushPending: () => detailStrip.flushPending(),
         undo: () => history.undo(),
         redo: () => history.redo(),
     });

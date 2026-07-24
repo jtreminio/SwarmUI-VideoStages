@@ -26,8 +26,10 @@ import {
     saveClips,
     saveState,
     serializeClipsForStorage,
+    serializeStateForDurableStorage,
     serializeStateForStorage,
 } from "./persistence";
+import { resetTimelineCarrierAdapterForTests } from "./persistence/carrierAdapter";
 import { decodeStoredDocument } from "./persistence/documentCodec";
 import type { StoredClip } from "./storageTypes";
 import { REF_SOURCE_BASE, type VideoStagesConfig } from "./types";
@@ -243,6 +245,157 @@ describe("persistence", () => {
             expect(JSON.stringify(serialized)).not.toContain("prompt");
             expect(JSON.stringify(serialized)).not.toContain("hue");
         });
+
+        it("keeps authored structure while removing embedded browser media from the durable document", () => {
+            const state: VideoStagesConfig = {
+                width: 1024,
+                height: 1024,
+                fps: 24,
+                dimsExplicit: false,
+                clips: [
+                    minimalClip({
+                        duration: 4,
+                        uploadedAudio: {
+                            data: "data:audio/wav;base64,BASE",
+                            fileName: "base.wav",
+                        },
+                        sourceVideo: {
+                            data: "blob:http://example/source",
+                            fileName: "source.mp4",
+                            fps: 30,
+                            durationSeconds: 12,
+                            startSeconds: 2,
+                            lengthSeconds: 4,
+                        },
+                        audioSegments: [
+                            {
+                                source: {
+                                    data: "data:audio/wav;base64,SEGMENT",
+                                    fileName: "segment.wav",
+                                },
+                                startSeconds: 1,
+                                trimStartSeconds: 0.5,
+                                lengthSeconds: 2,
+                                volume: 0.7,
+                            },
+                            {
+                                source: "audio0",
+                                startSeconds: 0,
+                                trimStartSeconds: 0,
+                                lengthSeconds: 1,
+                                volume: 1,
+                            },
+                        ],
+                        refs: [
+                            minimalRef({
+                                frame: 8,
+                                fromEnd: true,
+                                uploadFileName: "reference.png",
+                                uploadedImage: {
+                                    data: "data:image/png;base64,REFERENCE",
+                                    fileName: "reference.png",
+                                },
+                            }),
+                        ],
+                        icLoras: [
+                            {
+                                lora: "guide.safetensors",
+                                preset: "custom",
+                                driveSource: "Upload",
+                                driveData: "visual",
+                                driveMediaKinds: ["video"],
+                                stage: 0,
+                                strength: 0.8,
+                                attentionStrength: 0.9,
+                                controlType: "canny",
+                                driveMedia: {
+                                    data: "data:video/mp4;base64,GUIDE",
+                                    fileName: "guide.mp4",
+                                },
+                            },
+                        ],
+                    }),
+                ],
+                audioTracks: [
+                    {
+                        source: {
+                            kind: "Upload",
+                            reference: "track-ref",
+                            uploadedAudio: {
+                                data: "data:audio/wav;base64,TRACK",
+                                fileName: "track.wav",
+                            },
+                        },
+                        spans: [],
+                    },
+                ],
+            };
+
+            const runtime = JSON.parse(
+                serializeStateForStorage(state),
+            ) as Record<string, unknown>;
+            const durable = JSON.parse(
+                serializeStateForDurableStorage(state),
+            ) as {
+                clips: Array<{
+                    uploadedAudio: unknown;
+                    sourceVideo: unknown;
+                    audioSegments: Array<{ source: unknown; volume: number }>;
+                    refs: Array<{
+                        uploadedImage: unknown;
+                        frame: number;
+                        fromEnd: boolean;
+                    }>;
+                    icLoras: Array<{
+                        driveMedia: unknown;
+                        lora: string;
+                        strength: number;
+                    }>;
+                }>;
+                audioTracks: Array<{
+                    source: { uploadedAudio: unknown; reference: string };
+                }>;
+            };
+
+            expect(JSON.stringify(runtime)).toContain("BASE");
+            expect(JSON.stringify(durable)).not.toMatch(
+                /BASE|SEGMENT|REFERENCE|GUIDE|TRACK|blob:http/,
+            );
+            expect(durable.clips[0]).toMatchObject({
+                duration: 4,
+                uploadedAudio: null,
+                sourceVideo: null,
+                audioSegments: [
+                    {
+                        source: null,
+                        startSeconds: 1,
+                        trimStartSeconds: 0.5,
+                        lengthSeconds: 2,
+                        volume: 0.7,
+                    },
+                    { source: "audio0" },
+                ],
+                refs: [
+                    {
+                        uploadedImage: null,
+                        frame: 8,
+                        fromEnd: true,
+                    },
+                ],
+                icLoras: [
+                    {
+                        driveMedia: null,
+                        lora: "guide.safetensors",
+                        strength: 0.8,
+                    },
+                ],
+            });
+            expect(durable.audioTracks[0].source).toEqual({
+                kind: "Upload",
+                reference: "track-ref",
+                uploadedAudio: null,
+            });
+        });
     });
 
     describe("round-trips through the Data param + prompt box", () => {
@@ -280,6 +433,189 @@ describe("persistence", () => {
                 "a red fox",
                 "a bear",
             ]);
+        });
+
+        it("restores durable authoring data after a simulated browser reload but leaves uploads detached", () => {
+            const state: VideoStagesConfig = {
+                width: 1024,
+                height: 1024,
+                fps: 24,
+                dimsExplicit: false,
+                clips: [
+                    minimalClip({
+                        duration: 6,
+                        prompt: "durable clip prompt",
+                        promptWindows: [
+                            {
+                                prompt: "window prompt",
+                                start: 1,
+                                duration: 2,
+                            },
+                        ],
+                        refs: [
+                            minimalRef({
+                                frame: 12,
+                                fromEnd: true,
+                                uploadedImage: {
+                                    data: "data:image/png;base64,REFRESHME",
+                                    fileName: "reference.png",
+                                },
+                            }),
+                        ],
+                        audioSegments: [
+                            {
+                                source: {
+                                    data: "data:audio/wav;base64,REFRESHME",
+                                    fileName: "segment.wav",
+                                },
+                                startSeconds: 1,
+                                trimStartSeconds: 0.5,
+                                lengthSeconds: 2,
+                                volume: 0.6,
+                            },
+                        ],
+                    }),
+                ],
+            };
+            saveState(state, { notifyDomChange: false });
+            expect(dataInput().value).toContain("REFRESHME");
+
+            getTimelineStore().resetForTests();
+            resetTimelineCarrierAdapterForTests(false);
+            mountVideoStagesData("");
+            mountPromptBox("global prompt restored by SwarmUI");
+
+            const reloaded = getState();
+            expect(reloaded.clips).toHaveLength(1);
+            expect(reloaded.clips[0]).toMatchObject({
+                duration: 6,
+                prompt: "durable clip prompt",
+                refs: [
+                    {
+                        frame: 12,
+                        fromEnd: true,
+                        uploadedImage: null,
+                    },
+                ],
+                audioSegments: [
+                    {
+                        source: null,
+                        startSeconds: 1,
+                        trimStartSeconds: 0.5,
+                        lengthSeconds: 2,
+                        volume: 0.6,
+                    },
+                ],
+            });
+            expect(reloaded.clips[0].promptWindows).toMatchObject([
+                {
+                    prompt: "window prompt",
+                    start: 1,
+                    duration: 2,
+                },
+            ]);
+            expect(dataInput().value).not.toContain("REFRESHME");
+            expect(promptEl().value).toContain(
+                "<videoclip[0]>durable clip prompt",
+            );
+            expect(promptEl().value).toContain(
+                "<videoclip[0]:1-3>window prompt",
+            );
+
+            mountPromptBox("global prompt restored by SwarmUI");
+            getTimelineStore().syncFromCarrier();
+
+            expect(promptEl().value).toContain(
+                "<videoclip[0]>durable clip prompt",
+            );
+            expect(promptEl().value).toContain(
+                "<videoclip[0]:1-3>window prompt",
+            );
+
+            mountVideoStagesData({ clips: [] });
+            mountPromptBox("global prompt restored by SwarmUI");
+            getTimelineStore().syncFromCarrier();
+
+            expect(dataInput().value).not.toContain('"clips":[]');
+            expect(getState().clips[0]).toMatchObject({
+                duration: 6,
+                prompt: "durable clip prompt",
+            });
+
+            dataInput().remove();
+            promptEl().remove();
+            mountVideoStagesData("");
+            mountPromptBox("global prompt restored by SwarmUI");
+            getTimelineStore().syncFromCarrier();
+
+            expect(dataInput().value).not.toBe("");
+            expect(getState().clips[0]).toMatchObject({
+                duration: 6,
+                prompt: "durable clip prompt",
+            });
+        });
+
+        it("mirrors a valid external host or preset change into the durable reload source", () => {
+            expect(getState().clips).toEqual([]);
+            const external = {
+                width: 1024,
+                height: 1024,
+                fps: 24,
+                dimsExplicit: false,
+                clips: [minimalClip({ duration: 9 })],
+            };
+            dataInput().value = serializeStateForStorage(external);
+            promptEl().value =
+                "global prompt\n<videoclip[0]>external preset prompt";
+
+            expect(getTimelineStore().syncFromCarrier()).toBe(true);
+
+            getTimelineStore().resetForTests();
+            resetTimelineCarrierAdapterForTests(false);
+            mountVideoStagesData({ clips: [] });
+            mountPromptBox("global prompt");
+
+            expect(getState().clips[0]).toMatchObject({
+                duration: 9,
+                prompt: "external preset prompt",
+            });
+        });
+
+        it("accepts a genuinely new host value after bootstrap protection expires", () => {
+            const now = jest.spyOn(Date, "now").mockReturnValue(1_000);
+            saveState(
+                {
+                    width: 1024,
+                    height: 1024,
+                    fps: 24,
+                    dimsExplicit: false,
+                    clips: [minimalClip({ duration: 6, prompt: "durable" })],
+                },
+                { notifyDomChange: false },
+            );
+
+            getTimelineStore().resetForTests();
+            resetTimelineCarrierAdapterForTests(false);
+            mountVideoStagesData("");
+            mountPromptBox("global prompt");
+            expect(getState().clips[0].duration).toBe(6);
+
+            now.mockReturnValue(3_001);
+            dataInput().value = serializeStateForStorage({
+                width: 1024,
+                height: 1024,
+                fps: 24,
+                dimsExplicit: false,
+                clips: [minimalClip({ duration: 9 })],
+            });
+            promptEl().value =
+                "global prompt\n<videoclip[0]>new external prompt";
+
+            expect(getTimelineStore().syncFromCarrier()).toBe(true);
+            expect(getState().clips[0]).toMatchObject({
+                duration: 9,
+                prompt: "new external prompt",
+            });
         });
 
         it("dispatches stable-ID commands through the repository facade", () => {

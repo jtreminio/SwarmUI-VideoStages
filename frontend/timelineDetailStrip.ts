@@ -32,6 +32,7 @@ export interface TimelineDetailStrip {
      */
     attach(body: HTMLElement, dock: HTMLElement): void;
     render(meta?: UpdateMeta): void;
+    flushPending(): void;
     dispose(): void;
 }
 
@@ -299,7 +300,12 @@ export const createTimelineDetailStrip = (
         render();
     };
 
-    return { attach, render, dispose };
+    return {
+        attach,
+        render,
+        flushPending: () => draftQueue.flush(),
+        dispose,
+    };
 };
 
 import { createCapabilityViewResolver } from "./architectures/policy";

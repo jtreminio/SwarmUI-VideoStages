@@ -150,6 +150,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
     beforeEach(() => {
+        persistence.__resetPersistenceForTests();
         resetSelectionForTests();
         saveSpy = jest
             .spyOn(persistence, "saveClips")

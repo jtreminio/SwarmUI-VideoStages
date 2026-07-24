@@ -1,5 +1,6 @@
 export {
     serializeClipsForStorage,
+    serializeStateForDurableStorage,
     serializeStateForStorage,
 } from "./persistence/documentCodec";
 export type {

@@ -14,6 +14,7 @@ import { isVideoStagesEnabled } from "../swarmInputs";
 import type { Clip, VideoStagesConfig } from "../types";
 import {
     dataCarrierNeedsCanonicalIdRepair,
+    resetTimelineCarrierAdapterForTests,
     timelineCarrierAdapter,
 } from "./carrierAdapter";
 
@@ -38,6 +39,7 @@ export const getTimelineStore = (): TimelineStore => store;
 
 export const __resetPersistenceForTests = (): void => {
     store.resetForTests();
+    resetTimelineCarrierAdapterForTests();
 };
 
 export const getState = (): VideoStagesConfig => store.getState();

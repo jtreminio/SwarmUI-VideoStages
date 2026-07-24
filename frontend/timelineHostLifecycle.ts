@@ -15,6 +15,7 @@ export interface TimelineHostLifecycle {
 export const createTimelineHostLifecycle = (options: {
     refresh: () => void;
     syncFromCarrier: () => void;
+    flushPending: () => void;
     undo: () => boolean;
     redo: () => boolean;
 }): TimelineHostLifecycle => {
@@ -25,6 +26,7 @@ export const createTimelineHostLifecycle = (options: {
 
     const onInputChanged = (): void => options.syncFromCarrier();
     const onEnabledToggled = (): void => options.refresh();
+    const onPageExit = (): void => options.flushPending();
 
     const bindInput = (): void => {
         const input = getPromptInput();
@@ -64,6 +66,10 @@ export const createTimelineHostLifecycle = (options: {
         bindToggle();
         document.removeEventListener("keydown", onKeydown);
         document.addEventListener("keydown", onKeydown);
+        window.removeEventListener("pagehide", onPageExit);
+        window.addEventListener("pagehide", onPageExit);
+        window.removeEventListener("beforeunload", onPageExit);
+        window.addEventListener("beforeunload", onPageExit);
         if (!inputSyncInterval) {
             inputSyncInterval = setInterval(
                 options.syncFromCarrier,
@@ -91,6 +97,8 @@ export const createTimelineHostLifecycle = (options: {
         paramRefreshCleanup?.();
         paramRefreshCleanup = null;
         document.removeEventListener("keydown", onKeydown);
+        window.removeEventListener("pagehide", onPageExit);
+        window.removeEventListener("beforeunload", onPageExit);
     };
 
     return { bind, dispose };
