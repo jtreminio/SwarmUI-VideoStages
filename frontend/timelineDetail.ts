@@ -25,12 +25,6 @@ export const keyframeTimeSeconds = (
     return Math.min(Math.max(raw, 0), duration);
 };
 
-export const keyframeLeftPercent = (time: number, duration: number): number => {
-    const dur = Math.max(0, duration || 0);
-    const fraction = dur > 0 ? (time || 0) / dur : 0;
-    return Math.min(100, Math.max(0, fraction * 100));
-};
-
 export const formatTimeLabel = (
     seconds: number,
     unit: TimelineUnit,

@@ -1,4 +1,4 @@
-import { isArchitectureHdrFeature } from "./architectures/behaviorRegistry";
+import { clipHasActiveHdr } from "./architectures/behaviorRegistry";
 import {
     CONDITIONAL_RULE_CODES,
     conditionalRule,
@@ -27,17 +27,6 @@ export interface AuthoringDiagnosticContext {
 }
 
 export { activeStageCount } from "./clipSemantics";
-
-const clipHasActiveHdr = (clip: Clip): boolean =>
-    clip.icLoras.some(
-        (entry) =>
-            isArchitectureHdrFeature(clip.architecture, entry) &&
-            clip.stages.some(
-                (stage, rawStageIdx) =>
-                    stage.skipped !== true &&
-                    (entry.stage < 0 || entry.stage === rawStageIdx),
-            ),
-    );
 
 const diagnostic = (
     severity: AuthoringDiagnosticSeverity,

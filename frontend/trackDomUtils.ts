@@ -6,7 +6,7 @@ import { clamp } from "./constants";
 import { getClips, saveClips } from "./persistence";
 import type { UpdateOrigin } from "./store";
 import { readStateToken } from "./swarmInputs";
-import { DEFAULT_PX_PER_SECOND } from "./timelineView";
+import { DEFAULT_PX_PER_SECOND } from "./timelineView/layout";
 import type { Clip } from "./types";
 
 /** The timeline body's live px-per-second (its zoom), with the default fallback. */
@@ -33,13 +33,75 @@ export const parseIntAttr = (
 export const clipDurationOf = (clip: Clip | undefined): number =>
     clip ? Math.max(0, clip.duration || 0) : 0;
 
-/** Left offset of a span inside its clip lane, as a CSS percentage. */
-export const leftPct = (start: number, duration: number): number =>
-    duration > 0 ? (clamp(start, 0, duration) / duration) * 100 : 0;
+export interface SpanGeometryOptions {
+    /**
+     * Output unit. `"percent"` is relative to the lane duration; `"px"` scales
+     * by `pxPerSecond`.
+     */
+    unit?: "percent" | "px";
+    pxPerSecond?: number;
+    /** Minimum rendered width, in output units (e.g. a 2px hairline floor). */
+    minWidth?: number;
+    /**
+     * Keep `left`/`width` inside the lane. Defaults to true for percent output,
+     * because an unclamped percentage span renders outside its lane.
+     */
+    clampOutput?: boolean;
+}
 
-/** Width of a span inside its clip lane, as a CSS percentage. */
-export const widthPct = (length: number, duration: number): number =>
-    duration > 0 ? (clamp(length, 0, duration) / duration) * 100 : 0;
+export interface SpanGeometry {
+    /** Input span clamped into `[0, duration]`. */
+    startSeconds: number;
+    endSeconds: number;
+    left: number;
+    width: number;
+    /** True when the clamped span has no extent, so there is nothing to draw. */
+    empty: boolean;
+}
+
+/**
+ * The single span → left/width projection for every timeline lane. Edge
+ * behaviour that used to differ per call site (pixel vs percentage output, the
+ * minimum-width floor, and the output clamp) is expressed as explicit options.
+ */
+export const spanGeometry = (
+    startSeconds: number,
+    lengthSeconds: number,
+    durationSeconds: number,
+    options: SpanGeometryOptions = {},
+): SpanGeometry => {
+    const duration = Math.max(0, durationSeconds || 0);
+    const rawStart = startSeconds || 0;
+    const start = clamp(rawStart, 0, duration);
+    const end = clamp(rawStart + (lengthSeconds || 0), start, duration);
+    const percent = (options.unit ?? "percent") === "percent";
+    const scale = percent
+        ? duration > 0
+            ? 100 / duration
+            : 0
+        : (options.pxPerSecond ?? 0);
+    let left = start * scale;
+    let width = (end - start) * scale;
+    if (options.clampOutput ?? percent) {
+        const bound = percent ? 100 : Number.MAX_SAFE_INTEGER;
+        left = clamp(left, 0, bound);
+        width = clamp(width, 0, bound - left);
+    }
+    if (options.minWidth !== undefined) {
+        width = Math.max(options.minWidth, width);
+    }
+    return {
+        startSeconds: start,
+        endSeconds: end,
+        left,
+        width,
+        empty: end <= start,
+    };
+};
+
+/** Left offset of a point inside its lane, as a CSS percentage. */
+export const keyframeLeftPercent = (time: number, duration: number): number =>
+    spanGeometry(time, 0, duration).left;
 
 /**
  * True when the carriers changed since `sourceToken` was captured (the

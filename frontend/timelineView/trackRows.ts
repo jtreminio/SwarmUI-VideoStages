@@ -1,16 +1,16 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { isAceStepFunAudioSource } from "../audioSource";
-import { clamp, mediaPreviewSrc } from "../constants";
+import { mediaPreviewSrc } from "../constants";
 import {
     audioSourceBadge,
     escapeHtml,
     formatTimeLabel,
-    keyframeLeftPercent,
     keyframeTimeSeconds,
     refSourceLabel,
     type TimelineUnit,
     truncate,
 } from "../timelineDetail";
+import { keyframeLeftPercent, spanGeometry } from "../trackDomUtils";
 import type { AudioTrack, Clip, PromptWindow, RefImage } from "../types";
 import { roundToTenth } from "../utils";
 import {
@@ -39,14 +39,17 @@ const promptWindowGeom = (
     window: PromptWindow,
     pxPerSecond: number,
 ): PromptWindowGeom => {
-    const duration = Math.max(0, layout.durationSeconds);
-    const startSec = clamp(window.start, 0, duration);
-    const endSec = clamp(window.start + window.duration, startSec, duration);
+    const geometry = spanGeometry(
+        window.start,
+        window.duration,
+        layout.durationSeconds,
+        { unit: "px", pxPerSecond, minWidth: 2 },
+    );
     return {
-        startSec,
-        endSec,
-        leftPx: startSec * pxPerSecond,
-        widthPx: Math.max(2, (endSec - startSec) * pxPerSecond),
+        startSec: geometry.startSeconds,
+        endSec: geometry.endSeconds,
+        leftPx: geometry.left,
+        widthPx: geometry.width,
         active: `${window.prompt ?? ""}`.trim() !== "",
     };
 };
@@ -181,10 +184,9 @@ const renderTimelineAudioSegmentBlock = (
     ) {
         return "";
     }
-    const start = clamp(span.timelineStartSeconds, 0, totalSeconds);
-    const end = clamp(
-        span.timelineStartSeconds + span.timelineLengthSeconds,
-        start,
+    const { startSeconds: start, endSeconds: end } = spanGeometry(
+        span.timelineStartSeconds,
+        span.timelineLengthSeconds,
         totalSeconds,
     );
     const labelText =

@@ -1,10 +1,9 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { clipHueCss } from "../clipColor";
-import { clamp, mediaPreviewSrc } from "../constants";
+import { mediaPreviewSrc } from "../constants";
 import {
     escapeHtml,
     formatTimeLabel,
-    keyframeLeftPercent,
     keyframeTimeSeconds,
     refSourceLabel,
     shortModelName,
@@ -12,6 +11,7 @@ import {
     stageChipTitle,
     type TimelineUnit,
 } from "../timelineDetail";
+import { keyframeLeftPercent, spanGeometry } from "../trackDomUtils";
 import type { BoundaryOut, Clip, RefImage } from "../types";
 import { roundToTenth } from "../utils";
 import type { RegionLayout } from "./layout";
@@ -62,17 +62,14 @@ const renderRetakeRegionShade = (
     if (!retake || durationSeconds <= 0) {
         return "";
     }
-    const start = clamp(retake.startSeconds, 0, durationSeconds);
-    const end = clamp(
-        retake.startSeconds + retake.lengthSeconds,
-        start,
+    const { left, width, empty } = spanGeometry(
+        retake.startSeconds,
+        retake.lengthSeconds,
         durationSeconds,
     );
-    if (end <= start) {
+    if (empty) {
         return "";
     }
-    const left = (start / durationSeconds) * 100;
-    const width = ((end - start) / durationSeconds) * 100;
     return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
 };
 
@@ -85,10 +82,9 @@ const renderRetakeOverlay = (
     if (!retake || durationSeconds <= 0) {
         return "";
     }
-    const start = clamp(retake.startSeconds, 0, durationSeconds);
-    const end = clamp(
-        retake.startSeconds + retake.lengthSeconds,
-        start,
+    const { startSeconds: start, endSeconds: end } = spanGeometry(
+        retake.startSeconds,
+        retake.lengthSeconds,
         durationSeconds,
     );
     const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;

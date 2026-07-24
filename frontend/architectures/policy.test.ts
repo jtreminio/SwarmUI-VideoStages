@@ -4,9 +4,11 @@ import {
     testArchitectureCatalog,
 } from "../__test_helpers__/architectureFixtures";
 import {
+    hdrIcLoraFixture,
     minimalClip,
     minimalRef,
     minimalStage,
+    sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
 import {
     clampDetailSelection,
@@ -145,6 +147,84 @@ describe("catalog-backed authoring policy", () => {
         const eligible = createCapabilityViewResolver(models).forClip(clip);
         expect(eligible.decision("promptRelay").supported).toBe(true);
         expect(eligible.decision("audioReuse").supported).toBe(true);
+    });
+
+    it("disables the retake control on a text-to-video clip", () => {
+        const models = catalog();
+        const view = createCapabilityViewResolver(models).forClip(
+            minimalClip(),
+        );
+
+        expect(view.decision("retake")).toMatchObject({
+            supported: false,
+            reason: "Retake requires source footage.",
+        });
+        // Absent and unsupported: never offered for authoring.
+        expect(view.authoringState("retake", false)).toMatchObject({
+            visible: false,
+            enabled: false,
+        });
+        // Persisted and unsupported: still visible so it can be removed.
+        expect(view.authoringState("retake", true)).toMatchObject({
+            visible: true,
+            enabled: false,
+        });
+
+        // An explicit global Refine Video invocation supplies the footage.
+        expect(
+            createCapabilityViewResolver(models, { globalRefineMode: true })
+                .forClip(minimalClip())
+                .decision("retake").supported,
+        ).toBe(true);
+    });
+
+    it("routes the retake/reference exclusion through the same decision", () => {
+        const models = catalog();
+        const sourced = minimalClip({ sourceVideo: sourceVideoFixture() });
+        expect(
+            createCapabilityViewResolver(models)
+                .forClip(sourced)
+                .decision("retake").supported,
+        ).toBe(true);
+
+        sourced.refs = [minimalRef()];
+        expect(
+            createCapabilityViewResolver(models)
+                .forClip(sourced)
+                .decision("retake"),
+        ).toMatchObject({
+            supported: false,
+            reason: "Retake and frame references are mutually exclusive.",
+        });
+    });
+
+    it("routes timeline HDR uniformity through the same decision", () => {
+        const models = catalog();
+        const hdr = minimalClip({ icLoras: [hdrIcLoraFixture()] });
+        const plain = minimalClip();
+
+        expect(
+            createCapabilityViewResolver(models, {
+                timelineClips: [hdr, plain],
+            })
+                .forClip(hdr)
+                .decision("hdr"),
+        ).toMatchObject({
+            supported: false,
+            reason: "HDR must be uniform across the timeline.",
+        });
+        expect(
+            createCapabilityViewResolver(models, {
+                timelineClips: [hdr, structuredClone(hdr)],
+            })
+                .forClip(hdr)
+                .decision("hdr").supported,
+        ).toBe(true);
+        // Without the timeline context the rule stays inert.
+        expect(
+            createCapabilityViewResolver(models).forClip(hdr).decision("hdr")
+                .supported,
+        ).toBe(true);
     });
 
     it("compacts skipped clips while preserving requested joins behind an effective cut", () => {

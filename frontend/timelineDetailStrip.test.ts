@@ -201,9 +201,9 @@ const sliderNumberByLabel = (label: string): HTMLInputElement => {
     return input;
 };
 
-const fieldByLabel = (label: string): HTMLElement => {
+const fieldByLabel = (label: string, scope = ".vst-detail"): HTMLElement => {
     const rows = Array.from(
-        document.querySelectorAll<HTMLElement>(".vst-detail .vst-detail-field"),
+        document.querySelectorAll<HTMLElement>(`${scope} .vst-detail-field`),
     );
     const row = rows.find(
         (r) =>
@@ -219,6 +219,19 @@ const fieldByLabel = (label: string): HTMLElement => {
 const savedClips = (
     spy: jest.SpiedFunction<typeof persistence.saveClips>,
 ): Clip[] => spy.mock.calls[spy.mock.calls.length - 1][0] as Clip[];
+
+const retakeFieldByLabel = (label: string): HTMLElement =>
+    fieldByLabel(label, ".vst-detail-retake-col");
+
+/** Retakes are only authorable on a sourced clip (`retake-source-required`). */
+const RETAKE_SOURCE = {
+    data: "data:video/mp4;base64,AA==",
+    fileName: "base.mp4",
+    fps: 24,
+    durationSeconds: 10,
+    startSeconds: 0,
+    lengthSeconds: 10,
+};
 
 describe("createTimelineDetailStrip", () => {
     let strip: TimelineDetailStrip | null = null;
@@ -1504,7 +1517,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("shows a + Retake button on a clip without a retake and creates+selects one", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        setup([{ duration: 4, stages: [{}], sourceVideo: RETAKE_SOURCE }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLElement>(
             ".vst-detail-add-retake",
@@ -1526,6 +1539,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
+                sourceVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
@@ -1540,21 +1554,25 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 0.6 },
+                sourceVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
         expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
         expect(
-            fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input")
-                ?.value,
+            retakeFieldByLabel("Start (s)").querySelector<HTMLInputElement>(
+                "input",
+            )?.value,
         ).toBe("2");
         expect(
-            fieldByLabel("Length (s)").querySelector<HTMLInputElement>("input")
-                ?.value,
+            retakeFieldByLabel("Length (s)").querySelector<HTMLInputElement>(
+                "input",
+            )?.value,
         ).toBe("3");
         expect(sliderNumberByLabel("Strength").value).toBe("0.6");
         expect(
-            detail()?.querySelector(".vst-detail-note")?.textContent,
+            detail()?.querySelector(".vst-detail-retake-col .vst-detail-note")
+                ?.textContent,
         ).toContain("Applies when refining a base video");
         expect(
             detailBody()?.querySelector(".vst-detail-delete")?.textContent,
@@ -1567,12 +1585,15 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
+                sourceVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
         jest.useFakeTimers();
         const start =
-            fieldByLabel("Start (s)").querySelector<HTMLInputElement>("input");
+            retakeFieldByLabel("Start (s)").querySelector<HTMLInputElement>(
+                "input",
+            );
         if (!start) {
             throw new Error("start input missing");
         }
@@ -1588,6 +1609,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
+                sourceVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
@@ -1622,6 +1644,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
+                sourceVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
@@ -1647,7 +1670,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("keeps the empty single-instance Retake section selectable", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        setup([{ duration: 4, stages: [{}], sourceVideo: RETAKE_SOURCE }]);
         setSelection({ kind: "retake", clipIdx: 0 });
         expect(crumbText()).toBe("Retake · Clip 0");
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
@@ -2914,11 +2937,12 @@ describe("createTimelineDetailStrip", () => {
                         lengthSeconds: 1,
                         strength: 1,
                     },
+                    sourceVideo: RETAKE_SOURCE,
                 },
             ]);
             wireLiveRenders();
             setSelection({ kind: "retake", clipIdx: 0 });
-            const len = fieldByLabel(
+            const len = retakeFieldByLabel(
                 "Length (s)",
             ).querySelector<HTMLInputElement>(
                 'input[data-vst-focus-key="retake-length"]',
@@ -2928,7 +2952,7 @@ describe("createTimelineDetailStrip", () => {
             }
             commitNumber(len, "5");
             expect(savedClips(saveSpy)[0].retake?.lengthSeconds).toBe(2);
-            const after = fieldByLabel(
+            const after = retakeFieldByLabel(
                 "Length (s)",
             ).querySelector<HTMLInputElement>(
                 'input[data-vst-focus-key="retake-length"]',
@@ -2948,12 +2972,13 @@ describe("createTimelineDetailStrip", () => {
                         lengthSeconds: 1,
                         strength: 1,
                     },
+                    sourceVideo: RETAKE_SOURCE,
                 },
             ]);
             wireLiveRenders();
             setSelection({ kind: "retake", clipIdx: 0 });
             jest.useFakeTimers();
-            const len = fieldByLabel(
+            const len = retakeFieldByLabel(
                 "Length (s)",
             ).querySelector<HTMLInputElement>(
                 'input[data-vst-focus-key="retake-length"]',
@@ -3206,7 +3231,13 @@ describe("createTimelineDetailStrip", () => {
 
     describe("dock groups & collapse", () => {
         it("keeps Clip fields visible above progressive native accordion sections", () => {
-            setup([{ duration: 4, stages: [{}, {}, {}] }]);
+            setup([
+                {
+                    duration: 4,
+                    stages: [{}, {}, {}],
+                    sourceVideo: RETAKE_SOURCE,
+                },
+            ]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
 
             const clipCol = detailBody()?.querySelector(".vst-detail-clip");

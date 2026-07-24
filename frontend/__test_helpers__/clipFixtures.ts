@@ -1,9 +1,37 @@
 import {
     type Clip,
+    type IcLora,
     REF_SOURCE_BASE,
     type RefImage,
+    type SourceVideo,
     type Stage,
 } from "../types";
+
+export const sourceVideoFixture = (
+    overrides: Partial<SourceVideo> = {},
+): SourceVideo => ({
+    data: "data:video/mp4;base64,AA==",
+    fileName: "base.mp4",
+    fps: 24,
+    durationSeconds: 2,
+    startSeconds: 0,
+    lengthSeconds: 2,
+    ...overrides,
+});
+
+export const hdrIcLoraFixture = (overrides: Partial<IcLora> = {}): IcLora => ({
+    lora: "ltx-ic-lora-hdr.safetensors",
+    preset: "hdr",
+    driveSource: "Upload",
+    driveData: "visual",
+    driveMediaKinds: ["image", "video"],
+    stage: -1,
+    strength: 1,
+    attentionStrength: 1,
+    controlType: "none",
+    driveMedia: null,
+    ...overrides,
+});
 
 export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     skipped: false,

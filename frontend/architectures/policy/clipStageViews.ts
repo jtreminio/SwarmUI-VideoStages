@@ -1,46 +1,98 @@
+import { isAllowedAudioSource } from "../../audioSource";
 import type { Clip, Stage } from "../../types";
+import { clipHasActiveHdr } from "../behaviorRegistry";
 import {
     CONDITIONAL_RULE_CODES,
+    type ConditionalRuleCode,
     conditionalRule,
     evaluateConditionalRule,
 } from "../conditionalRules";
 import type {
+    ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
     CapabilityRuleDecision,
 } from "../types";
-import { architectureReason, noArchitectureReason } from "./featureValues";
+import {
+    architectureReason,
+    noArchitectureReason,
+    upscaleModeForMethod,
+} from "./featureValues";
 import type {
     AuthoringFeature,
     CapabilityDecision,
+    CapabilityRuleScopeContext,
     ClipCapabilityView,
     StageCapabilityView,
 } from "./types";
 
 type ArchitectureLookup = ReadonlyMap<string, ArchitectureCatalogEntryDto>;
 
+/**
+ * Conditional rules that gate an authoring feature. Every consumer reaches
+ * these through `decision()`, so a control is disabled where it is authored
+ * instead of being enabled and then flagged by the error summary.
+ */
+const FEATURE_RULE_CODES: Partial<
+    Record<AuthoringFeature, readonly ConditionalRuleCode[]>
+> = {
+    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
+    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
+    retake: [
+        CONDITIONAL_RULE_CODES.retakeRequiresSource,
+        CONDITIONAL_RULE_CODES.retakeExcludesReferences,
+    ],
+    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr],
+};
+
 const conditionalRuleFor = (
     clip: Clip,
     feature: AuthoringFeature,
     descriptor: ArchitectureCatalogEntryDto,
+    scope: CapabilityRuleScopeContext,
 ): CapabilityRuleDecision | undefined => {
-    const code =
-        feature === "promptRelay"
-            ? CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength
-            : feature === "audioReuse"
-              ? CONDITIONAL_RULE_CODES.audioReuseRequiresStages
-              : null;
-    if (!code) return undefined;
-    const rule = conditionalRule(descriptor.rules, code);
-    return rule && evaluateConditionalRule(rule, { clip }) ? rule : undefined;
+    const codes = FEATURE_RULE_CODES[feature];
+    if (!codes) return undefined;
+    for (const code of codes) {
+        const rule = conditionalRule(descriptor.rules, code);
+        if (
+            rule &&
+            evaluateConditionalRule(rule, {
+                clip,
+                globalRefineMode: scope.globalRefineMode,
+                timelineClips: scope.timelineClips,
+                hasActiveHdr: clipHasActiveHdr,
+            })
+        ) {
+            return rule;
+        }
+    }
+    return undefined;
 };
 
-const scopedFeatureSupport = (
+/** Value-level narrowing for features whose support depends on the authored value. */
+export interface FeatureSupportScope {
+    capabilities: ArchitectureCapabilities;
+    /**
+     * Model-profile capability list. `undefined` means "no profile scoping" —
+     * the architecture-level answer stands.
+     */
+    profileCapabilities?: readonly string[];
+    /** Persisted audio source, when the caller needs the value checked too. */
+    audioSource?: string;
+    /** Persisted upscale method, when the caller needs the mode checked too. */
+    upscaleMethod?: string;
+}
+
+/**
+ * The single "does this capability set support feature X" predicate. Capability
+ * views, diagnostics, and architecture conversion all answer through it so they
+ * cannot disagree about what an architecture supports.
+ */
+export const architectureFeatureSupport = (
     feature: AuthoringFeature,
-    descriptor: ArchitectureCatalogEntryDto,
-    profileId: string,
+    scope: FeatureSupportScope,
 ): boolean => {
-    const capability = descriptor.capabilities;
-    const profile = descriptor.profiles.find((entry) => entry.id === profileId);
+    const capability = scope.capabilities;
     switch (feature) {
         case "multiStage":
             return capability.architecture.includes("multi-stage");
@@ -59,24 +111,48 @@ const scopedFeatureSupport = (
             return capability.clip.includes("prompt-relay");
         case "clipAudio":
         case "audioReuse":
-            return capability.clip.includes("audio-sources");
+            return (
+                capability.clip.includes("audio-sources") &&
+                (scope.audioSource === undefined ||
+                    isAllowedAudioSource(
+                        capability.audioSourceKinds,
+                        scope.audioSource,
+                    ))
+            );
         case "stageLoras":
             return (
                 capability.stage.includes("lora") &&
-                (profile === undefined ||
-                    profile.capabilities.includes("normal-lora"))
+                (scope.profileCapabilities === undefined ||
+                    scope.profileCapabilities.includes("normal-lora"))
             );
         case "icLora":
             return capability.stage.includes("ic-lora");
         case "hdr":
             return capability.stage.includes("hdr");
         case "upscale":
-            return capability.upscaleModes.length > 0;
+            return scope.upscaleMethod === undefined
+                ? capability.upscaleModes.length > 0
+                : capability.upscaleModes.includes(
+                      upscaleModeForMethod(scope.upscaleMethod),
+                  );
     }
 };
 
+const scopedFeatureSupport = (
+    feature: AuthoringFeature,
+    descriptor: ArchitectureCatalogEntryDto,
+    profileId: string,
+): boolean =>
+    architectureFeatureSupport(feature, {
+        capabilities: descriptor.capabilities,
+        profileCapabilities: descriptor.profiles.find(
+            (entry) => entry.id === profileId,
+        )?.capabilities,
+    });
+
 export const createClipStageCapabilityViews = (
     architectureById: ArchitectureLookup,
+    scope: CapabilityRuleScopeContext = {},
 ): {
     forClip(clip: Clip): ClipCapabilityView;
     forStage(clip: Clip, stage: Stage): StageCapabilityView;
@@ -100,6 +176,7 @@ export const createClipStageCapabilityViews = (
                 clip,
                 feature,
                 descriptor,
+                scope,
             );
             const supported =
                 scopedFeatureSupport(

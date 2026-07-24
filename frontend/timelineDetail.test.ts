@@ -6,7 +6,6 @@ import {
     escapeHtml,
     formatRulerLabel,
     formatTimeLabel,
-    keyframeLeftPercent,
     keyframeTimeSeconds,
     refSourceLabel,
     safeFps,
@@ -47,22 +46,6 @@ describe("keyframeTimeSeconds", () => {
 
     it("uses the 24fps default when fps is undefined", () => {
         expect(keyframeTimeSeconds(24, false, 5, undefined)).toBe(1);
-    });
-});
-
-describe("keyframeLeftPercent", () => {
-    it("returns 0 for a zero/invalid duration", () => {
-        expect(keyframeLeftPercent(2, 0)).toBe(0);
-        expect(keyframeLeftPercent(2, Number.NaN)).toBe(0);
-    });
-
-    it("clamps to 100 when time exceeds duration", () => {
-        expect(keyframeLeftPercent(10, 5)).toBe(100);
-    });
-
-    it("is proportional within the region", () => {
-        expect(keyframeLeftPercent(2.5, 5)).toBe(50);
-        expect(keyframeLeftPercent(0, 5)).toBe(0);
     });
 });
 

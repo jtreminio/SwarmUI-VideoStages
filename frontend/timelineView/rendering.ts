@@ -1,5 +1,5 @@
-import { clamp } from "../constants";
 import { escapeHtml } from "../timelineDetail";
+import { spanGeometry } from "../trackDomUtils";
 
 export const clipInnerWidth = (widthPx: number): number =>
     Math.max(1, widthPx - 2);
@@ -35,17 +35,14 @@ export const renderWindowSpan = (options: {
     durationSeconds: number;
     decoration?: string;
 }): string => {
-    const start = clamp(options.startSeconds, 0, options.durationSeconds);
-    const end = clamp(
-        options.startSeconds + options.lengthSeconds,
-        start,
+    const { left, width, empty } = spanGeometry(
+        options.startSeconds,
+        options.lengthSeconds,
         options.durationSeconds,
     );
-    if (end <= start) {
+    if (empty) {
         return "";
     }
-    const left = (start / options.durationSeconds) * 100;
-    const width = ((end - start) / options.durationSeconds) * 100;
     return (
         `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeHtml(options.title)}" aria-label="${escapeHtml(options.ariaLabel)}">` +
         `<span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` +

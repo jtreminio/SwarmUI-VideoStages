@@ -1,14 +1,12 @@
-import {
-    defaultAuthoringAudioSource,
-    isAllowedAudioSource,
-} from "../../audioSource";
+import { defaultAuthoringAudioSource } from "../../audioSource";
 import {
     IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
 } from "../../icLoraAuthoring";
 import type { Clip } from "../../types";
 import { isArchitectureHdrFeature } from "../behaviorRegistry";
-import { upscaleModeForMethod } from "../policy";
+import { architectureFeatureSupport } from "../policy/clipStageViews";
+import type { AuthoringFeature } from "../policy/types";
 import type {
     ArchitectureModelCatalog,
     ArchitectureRetargetPlan,
@@ -104,16 +102,18 @@ export const planArchitectureConversion = (
     const clip = structuredClone(source);
     const removals: string[] = [];
     const removedEntityIds: string[] = [];
-    const clipCapabilities = target.capabilities.clip;
-    const stageCapabilities = target.capabilities.stage;
-    const supportsMultipleStages =
-        target.capabilities.architecture.includes("multi-stage");
-    const supportsReferences =
-        clipCapabilities.includes("references") &&
-        stageCapabilities.includes("frame-references");
-    const supportsNormalLoras =
-        stageCapabilities.includes("lora") &&
-        target.profileCapabilities.includes("normal-lora");
+    const supports = (
+        feature: AuthoringFeature,
+        value?: { audioSource?: string; upscaleMethod?: string },
+    ): boolean =>
+        architectureFeatureSupport(feature, {
+            capabilities: target.capabilities,
+            profileCapabilities: target.profileCapabilities,
+            ...value,
+        });
+    const supportsMultipleStages = supports("multiStage");
+    const supportsReferences = supports("frameReferences");
+    const supportsNormalLoras = supports("stageLoras");
 
     clip.architecture = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
@@ -146,9 +146,7 @@ export const planArchitectureConversion = (
         }
         if (
             stage.upscale !== 1 &&
-            !target.capabilities.upscaleModes.includes(
-                upscaleModeForMethod(stage.upscaleMethod),
-            )
+            !supports("upscale", { upscaleMethod: stage.upscaleMethod })
         ) {
             removedUpscaleSettings++;
             stage.upscale = 1;
@@ -161,12 +159,12 @@ export const planArchitectureConversion = (
         removals.push("stage upscale settings");
     }
 
-    if (!stageCapabilities.includes("ic-lora") && clip.icLoras.length > 0) {
+    if (!supports("icLora") && clip.icLoras.length > 0) {
         removals.push(countLabel(clip.icLoras.length, "IC-LoRA"));
         clip.icLoras = [];
         clip.clipLengthFromControlNet = false;
-    } else if (stageCapabilities.includes("ic-lora")) {
-        if (!stageCapabilities.includes("hdr")) {
+    } else if (supports("icLora")) {
+        if (!supports("hdr")) {
             const hdrCount = clip.icLoras.filter((entry) =>
                 isArchitectureHdrFeature(source.architecture, entry),
             ).length;
@@ -197,41 +195,33 @@ export const planArchitectureConversion = (
         }
     }
 
-    if (!clipCapabilities.includes("retake") && clip.retake !== null) {
+    if (!supports("retake") && clip.retake !== null) {
         removals.push("retake");
         const id = ownId(clip.retake);
         if (id) removedEntityIds.push(id);
         clip.retake = null;
     }
-    if (!clipCapabilities.includes("prompts") && clip.prompt.trim()) {
+    if (!supports("majorPrompt") && clip.prompt.trim()) {
         removals.push("major prompt");
         clip.prompt = "";
     }
-    if (
-        !clipCapabilities.includes("prompt-relay") &&
-        clip.promptWindows.length > 0
-    ) {
+    if (!supports("promptRelay") && clip.promptWindows.length > 0) {
         removals.push(countLabel(clip.promptWindows.length, "relay prompt"));
         removedEntityIds.push(...collectIds(clip.promptWindows));
         clip.promptWindows = [];
     }
-    if (!clipCapabilities.includes("source-video") && clip.sourceVideo) {
+    if (!supports("sourceVideo") && clip.sourceVideo) {
         removals.push("source video");
         clip.sourceVideo = null;
     }
-    if (
-        !clipCapabilities.includes("audio-sources") ||
-        !isAllowedAudioSource(
-            target.capabilities.audioSourceKinds,
-            clip.audioSource,
-        )
-    ) {
+    if (!supports("clipAudio", { audioSource: clip.audioSource })) {
         const hasAudioSettings =
             clip.audioSource !== "Native" ||
             clip.uploadedAudio !== null ||
             clip.saveAudioTrack ||
             clip.clipLengthFromAudio ||
-            clip.reuseAudio;
+            clip.reuseAudio ||
+            clip.clipLengthFromControlNet;
         if (hasAudioSettings) {
             removals.push("clip audio source settings");
         }
@@ -242,6 +232,7 @@ export const planArchitectureConversion = (
         clip.saveAudioTrack = false;
         clip.clipLengthFromAudio = false;
         clip.reuseAudio = false;
+        clip.clipLengthFromControlNet = false;
     }
 
     return {

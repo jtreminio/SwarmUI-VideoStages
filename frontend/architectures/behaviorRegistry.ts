@@ -98,3 +98,15 @@ export const isArchitectureHdrFeature = (
     entry: IcLora,
 ): boolean =>
     architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
+
+/** True when the clip has an HDR IC-LoRA bound to at least one active stage. */
+export const clipHasActiveHdr = (clip: Clip): boolean =>
+    clip.icLoras.some(
+        (entry) =>
+            isArchitectureHdrFeature(clip.architecture, entry) &&
+            clip.stages.some(
+                (stage, rawStageIdx) =>
+                    stage.skipped !== true &&
+                    (entry.stage < 0 || entry.stage === rawStageIdx),
+            ),
+    );

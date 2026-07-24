@@ -23,6 +23,7 @@ import {
 import {
     isActivateKey,
     isStaleToken,
+    spanGeometry as laneSpanGeometry,
     livePxPerSecond,
     parseIntAttr,
 } from "./trackDomUtils";
@@ -117,8 +118,14 @@ const snapAudioMovedStart = (
     );
 };
 
-const pct = (seconds: number, total: number): string =>
-    `${total > 0 ? (seconds / total) * 100 : 0}%`;
+const spanStyle = (
+    start: number,
+    length: number,
+    total: number,
+): { left: string; width: string } => {
+    const geometry = laneSpanGeometry(start, length, total);
+    return { left: `${geometry.left}%`, width: `${geometry.width}%` };
+};
 
 /**
  * The timeline-wide audio track: each root audio track owns one lane spanning the whole
@@ -257,16 +264,23 @@ export const createTimelineAudioSegmentTrack =
                         const pps = livePxPerSecond(boundBody);
                         const delta = ctx.dx / pps;
                         if (edge === "right") {
-                            const length = rightLength(delta, pps);
-                            element.style.width = pct(length, total);
+                            element.style.width = spanStyle(
+                                press.start,
+                                rightLength(delta, pps),
+                                total,
+                            ).width;
                         } else if (edge === "left") {
                             const end = press.start + press.length;
                             const start = leftStart(delta, pps);
-                            element.style.left = pct(start, total);
-                            element.style.width = pct(end - start, total);
+                            const style = spanStyle(start, end - start, total);
+                            element.style.left = style.left;
+                            element.style.width = style.width;
                         } else {
-                            const start = movedStart(delta, pps);
-                            element.style.left = pct(start, total);
+                            element.style.left = spanStyle(
+                                movedStart(delta, pps),
+                                press.length,
+                                total,
+                            ).left;
                         }
                     },
                     onCommit: (ctx) => {
@@ -399,8 +413,9 @@ export const createTimelineAudioSegmentTrack =
                         ghost.className = "vst-audio-seg-ghost";
                         lane.appendChild(ghost);
                     }
-                    ghost.style.left = pct(start, total);
-                    ghost.style.width = pct(end - start, total);
+                    const style = spanStyle(start, end - start, total);
+                    ghost.style.left = style.left;
+                    ghost.style.width = style.width;
                 },
                 onCommit: (ctx) => {
                     boundBody.classList.remove("vst-audio-seg-dragging");

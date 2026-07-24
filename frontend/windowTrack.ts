@@ -31,10 +31,9 @@ import {
     clipDurationOf,
     isActivateKey,
     isStaleToken,
-    leftPct,
     livePxPerSecond,
     parseIntAttr,
-    widthPct,
+    spanGeometry,
 } from "./trackDomUtils";
 import type { Clip, TimelineSelection } from "./types";
 
@@ -230,19 +229,24 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
     let boundBody: HTMLElement | null = null;
     let unregister: (() => void) | null = null;
 
-    const leftStyle = (start: number, clipDur: number, pps: number): string =>
-        config.unit === "pct"
-            ? `${leftPct(start, clipDur)}%`
-            : `${start * pps}px`;
-
-    const widthStyle = (
+    const spanStyle = (
+        start: number,
         length: number,
         clipDur: number,
         pps: number,
-    ): string =>
-        config.unit === "pct"
-            ? `${widthPct(length, clipDur)}%`
-            : `${Math.max(2, length * pps)}px`;
+    ): { left: string; width: string } => {
+        const pct = config.unit === "pct";
+        const geometry = spanGeometry(start, length, clipDur, {
+            unit: pct ? "percent" : "px",
+            pxPerSecond: pps,
+            minWidth: pct ? undefined : 2,
+        });
+        const suffix = pct ? "%" : "px";
+        return {
+            left: `${geometry.left}${suffix}`,
+            width: `${geometry.width}${suffix}`,
+        };
+    };
 
     const moveTarget = (
         clip: Clip,
@@ -419,7 +423,12 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                     state.press.start + ctx.dx / pps,
                     pps,
                 );
-                state.el.style.left = leftStyle(start, state.clipDuration, pps);
+                state.el.style.left = spanStyle(
+                    start,
+                    state.press.length,
+                    state.clipDuration,
+                    pps,
+                ).left;
             },
             onCommit: (ctx) => {
                 body.classList.remove(config.draggingClass);
@@ -454,18 +463,16 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                     ctx.dx / pps,
                     pps,
                 );
-                if (state.edge === "left") {
-                    state.el.style.left = leftStyle(
-                        geom.start,
-                        state.clipDuration,
-                        pps,
-                    );
-                }
-                state.el.style.width = widthStyle(
+                const style = spanStyle(
+                    geom.start,
                     geom.length,
                     state.clipDuration,
                     pps,
                 );
+                if (state.edge === "left") {
+                    state.el.style.left = style.left;
+                }
+                state.el.style.width = style.width;
             },
             onCommit: (ctx) => {
                 body.classList.remove(config.draggingClass);
@@ -504,12 +511,9 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                     state.lane.appendChild(ghost);
                     state.ghost = ghost;
                 }
-                state.ghost.style.left = leftStyle(a, state.clipDuration, pps);
-                state.ghost.style.width = widthStyle(
-                    b - a,
-                    state.clipDuration,
-                    pps,
-                );
+                const ghostStyle = spanStyle(a, b - a, state.clipDuration, pps);
+                state.ghost.style.left = ghostStyle.left;
+                state.ghost.style.width = ghostStyle.width;
             },
             onCommit: (ctx) => {
                 body.classList.remove(config.draggingClass);

@@ -1,9 +1,14 @@
-import { audioSourceKind, isAllowedAudioSource } from "../audioSource";
+import { audioSourceKind } from "../audioSource";
 import { activeStageCount, isExecutableClip } from "../clipSemantics";
 import type { Clip } from "../types";
 import { isArchitectureHdrFeature } from "./behaviorRegistry";
 import { architectureSupportsClipStart } from "./conversion/entryModePolicy";
-import { upscaleModeForMethod } from "./policy";
+import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
+import {
+    architectureFeatureSupport,
+    createClipStageCapabilityViews,
+} from "./policy/clipStageViews";
+import type { AuthoringFeature } from "./policy/types";
 import type {
     ArchitectureCapabilities,
     ArchitectureModelCatalog,
@@ -28,8 +33,11 @@ const persistedCapabilityIssues = (
     capabilities: ArchitectureCapabilities,
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
-    const clipCapabilities = capabilities.clip;
-    const stageCapabilities = capabilities.stage;
+    const supports = (
+        feature: AuthoringFeature,
+        value?: { audioSource?: string; upscaleMethod?: string },
+    ): boolean =>
+        architectureFeatureSupport(feature, { capabilities, ...value });
     const unsupported = (active: boolean, key: string, label: string): void => {
         if (active) {
             diagnostics.push(
@@ -42,25 +50,22 @@ const persistedCapabilityIssues = (
         }
     };
     unsupported(
-        !capabilities.architecture.includes("multi-stage") &&
-            activeStageCount(clip) > 1,
+        !supports("multiStage") && activeStageCount(clip) > 1,
         "multi-stage",
         "Multiple active stages",
     );
     unsupported(
-        (!clipCapabilities.includes("references") ||
-            !stageCapabilities.includes("frame-references")) &&
-            clip.refs.length > 0,
+        !supports("frameReferences") && clip.refs.length > 0,
         "frame-references",
         "Frame references",
     );
     unsupported(
-        !stageCapabilities.includes("ic-lora") && clip.icLoras.length > 0,
+        !supports("icLora") && clip.icLoras.length > 0,
         "ic-lora",
         "IC-LoRA",
     );
     unsupported(
-        !stageCapabilities.includes("hdr") &&
+        !supports("hdr") &&
             clip.icLoras.some((entry) =>
                 isArchitectureHdrFeature(clip.architecture, entry),
             ),
@@ -68,28 +73,27 @@ const persistedCapabilityIssues = (
         "HDR",
     );
     unsupported(
-        !clipCapabilities.includes("retake") && clip.retake !== null,
+        !supports("retake") && clip.retake !== null,
         "retake",
         "Retake",
     );
     unsupported(
-        !clipCapabilities.includes("prompts") && clip.prompt.trim().length > 0,
+        !supports("majorPrompt") && clip.prompt.trim().length > 0,
         "major-prompt",
         "Major prompt",
     );
     unsupported(
-        !clipCapabilities.includes("source-video") && clip.sourceVideo !== null,
+        !supports("sourceVideo") && clip.sourceVideo !== null,
         "source-video",
         "Source video",
     );
     unsupported(
-        !clipCapabilities.includes("prompt-relay") &&
-            clip.promptWindows.length > 0,
+        !supports("promptRelay") && clip.promptWindows.length > 0,
         "prompt-relay",
         "Prompt relay",
     );
     unsupported(
-        !stageCapabilities.includes("lora") &&
+        !supports("stageLoras") &&
             clip.stages.some((stage) => stage.loras.length > 0),
         "stage-loras",
         "Stage LoRAs",
@@ -98,20 +102,14 @@ const persistedCapabilityIssues = (
         clip.stages.some(
             (stage) =>
                 stage.upscale !== 1 &&
-                !capabilities.upscaleModes.includes(
-                    upscaleModeForMethod(stage.upscaleMethod),
-                ),
+                !supports("upscale", { upscaleMethod: stage.upscaleMethod }),
         ),
         "upscale",
         "Stage upscaling",
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     unsupported(
-        (!clipCapabilities.includes("audio-sources") ||
-            !isAllowedAudioSource(
-                capabilities.audioSourceKinds,
-                clip.audioSource,
-            )) &&
+        !supports("clipAudio", { audioSource: clip.audioSource }) &&
             (sourceKind !== "Native" ||
                 clip.uploadedAudio !== null ||
                 clip.saveAudioTrack ||
@@ -136,6 +134,10 @@ export const deriveArchitectureDiagnostics = (
     const diagnostics: ArchitectureDiagnostic[] = [];
     const architectureById = new Map(
         catalog.architectures.map((entry) => [entry.id, entry]),
+    );
+    const boundaries = createBoundaryCapabilityViews(
+        architectureById,
+        createClipStageCapabilityViews(architectureById).forClip,
     );
     const modelByName = new Map(
         catalog.entries.map((entry) => [entry.value, entry]),
@@ -285,16 +287,22 @@ export const deriveArchitectureDiagnostics = (
             );
             continue;
         }
-        const descriptor = architectureById.get(left.clip.architecture);
+        const boundary = boundaries.forBoundary(
+            left.clip,
+            right.clip,
+            left.clipIdx,
+            right.clipIdx,
+        );
         if (
-            descriptor &&
-            descriptor.boundaryRules[left.clip.boundaryOut]?.support ===
-                "unsupported"
+            boundary.effective(left.clip.boundaryOut) !== left.clip.boundaryOut
         ) {
+            const reason = boundary.reason
+                ? ` ${boundary.reason}`
+                : ` Its requested value is preserved for repair, but only '${boundary.effective(left.clip.boundaryOut)}' can execute.`;
             diagnostics.push(
                 issue(
                     "architecture.boundary-unsupported",
-                    `Clip ${left.clipIdx} architecture '${left.clip.architecture}' does not support '${left.clip.boundaryOut}' boundaries.`,
+                    `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason}`,
                     left.clipIdx,
                 ),
             );

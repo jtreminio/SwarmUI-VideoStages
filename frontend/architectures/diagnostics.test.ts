@@ -3,7 +3,13 @@ import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
 } from "../__test_helpers__/architectureFixtures";
-import { minimalClip, minimalStage } from "../__test_helpers__/clipFixtures";
+import {
+    minimalClip,
+    minimalRef,
+    minimalStage,
+    sourceVideoFixture,
+} from "../__test_helpers__/clipFixtures";
+import type { Clip } from "../types";
 import { deriveArchitectureDiagnostics } from "./diagnostics";
 import type { ArchitectureModelCatalog } from "./types";
 
@@ -116,6 +122,43 @@ describe("architecture diagnostics", () => {
                 combinedCatalog(),
             ).map(({ code }) => code),
         ).toContain("architecture.cross-boundary-cut-only");
+    });
+
+    describe("persisted joins that only the boundary constraints reject", () => {
+        const codesFor = (right: Clip): string[] =>
+            deriveArchitectureDiagnostics(
+                [minimalClip({ boundaryOut: "continue" }), right],
+                combinedCatalog(),
+            ).map(({ code }) => code);
+
+        it("accepts a continue into a plain generated neighbour", () => {
+            expect(codesFor(minimalClip())).not.toContain(
+                "architecture.boundary-unsupported",
+            );
+        });
+
+        it("blocks a continue into a clip with no active stage", () => {
+            expect(
+                codesFor(
+                    minimalClip({
+                        stages: [minimalStage({ skipped: true })],
+                        sourceVideo: sourceVideoFixture(),
+                    }),
+                ),
+            ).toContain("architecture.boundary-unsupported");
+        });
+
+        it("blocks a continue into a sourced clip", () => {
+            expect(
+                codesFor(minimalClip({ sourceVideo: sourceVideoFixture() })),
+            ).toContain("architecture.boundary-unsupported");
+        });
+
+        it("blocks a continue into a first-frame reference", () => {
+            expect(
+                codesFor(minimalClip({ refs: [minimalRef({ frame: 1 })] })),
+            ).toContain("architecture.boundary-unsupported");
+        });
     });
 
     it("retains and diagnoses a persisted source-only architecture mismatch", () => {

@@ -17,12 +17,13 @@ import { getRootDefaults } from "./rootDefaults";
 import { activateSelection, setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
 import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
-import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
+import { keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
 import { SNAP_THRESHOLD_PX, snapPoint } from "./timelineSnap";
 import {
     commitClipMutation,
     isActivateKey,
+    keyframeLeftPercent,
     parseIntAttr,
 } from "./trackDomUtils";
 
