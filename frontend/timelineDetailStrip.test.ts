@@ -2220,6 +2220,92 @@ describe("createTimelineDetailStrip", () => {
         expect(segments[0].source.uploadedAudio).toBeNull();
     });
 
+    it("filters timeline-wide segments to the selected clip audio window", () => {
+        setup([
+            { duration: 3, stages: [{}] },
+            { duration: 4, stages: [{}] },
+        ]);
+        const state = persistence.getState();
+        state.audioTracks = [
+            {
+                id: "track-clip-0",
+                volume: 1,
+                source: {
+                    kind: "Upload",
+                    reference: "",
+                    uploadedAudio: null,
+                },
+                spans: [
+                    {
+                        id: "span-clip-0",
+                        firstClipId: null,
+                        lastClipId: null,
+                        timelineStartSeconds: 0,
+                        timelineLengthSeconds: 1,
+                        sourceStartSeconds: 0,
+                        clipStartOffsetSeconds: null,
+                        clipLengthSeconds: null,
+                    },
+                ],
+            },
+            {
+                id: "track-both",
+                volume: 1,
+                source: {
+                    kind: "Upload",
+                    reference: "",
+                    uploadedAudio: null,
+                },
+                spans: [
+                    {
+                        id: "span-both",
+                        firstClipId: null,
+                        lastClipId: null,
+                        timelineStartSeconds: 2,
+                        timelineLengthSeconds: 2,
+                        sourceStartSeconds: 0,
+                        clipStartOffsetSeconds: null,
+                        clipLengthSeconds: null,
+                    },
+                ],
+            },
+            {
+                id: "track-clip-1",
+                volume: 1,
+                source: {
+                    kind: "Upload",
+                    reference: "",
+                    uploadedAudio: null,
+                },
+                spans: [
+                    {
+                        id: "span-clip-1",
+                        firstClipId: null,
+                        lastClipId: null,
+                        timelineStartSeconds: 3,
+                        timelineLengthSeconds: 1,
+                        sourceStartSeconds: 0,
+                        clipStartOffsetSeconds: null,
+                        clipLengthSeconds: null,
+                    },
+                ],
+            },
+        ];
+        persistence.saveState(state, { notifyDomChange: false });
+        const visibleSegmentLabels = (): string[] =>
+            Array.from(
+                document.querySelectorAll<HTMLElement>(
+                    ".vst-audio-track-tab .header-label",
+                ),
+            ).map((label) => label.textContent ?? "");
+
+        setSelection({ kind: "audio", clipIdx: 0 });
+        expect(visibleSegmentLabels()).toEqual(["S0", "S1"]);
+
+        setSelection({ kind: "audio", clipIdx: 1 });
+        expect(visibleSegmentLabels()).toEqual(["S1", "S2"]);
+    });
+
     it("+ Add segment appends a default-length segment on its own lane (overlap allowed)", () => {
         // Existing segments [1,3] and [4,6]; the new one may overlap them.
         setup([{ duration: 10, stages: [{}], audioSegments: twoSegments }]);

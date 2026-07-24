@@ -220,12 +220,18 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             return;
         }
         // renderTimeline wipes the body's innerHTML, destroying the scroll
-        // container — without this, every state commit (drag-drop, edits)
-        // snaps a wide timeline back to the far left. External (host-side)
-        // replacements — loading a different config, prompt-box pastes — do
-        // NOT restore: the old position is meaningless for the new content.
-        const prevScrollLeft =
-            meta?.origin === "external" ? 0 : (scrollEl()?.scrollLeft ?? 0);
+        // container. Preserve both axes across internal commits (add, delete,
+        // drag, edits); otherwise a tall timeline snaps to its first row while
+        // a wide one snaps left. External host-side replacements intentionally
+        // reset because the old viewport is meaningless for new content.
+        const previousScrollElement = scrollEl();
+        const previousScroll =
+            meta?.origin === "external"
+                ? { left: 0, top: 0 }
+                : {
+                      left: previousScrollElement?.scrollLeft ?? 0,
+                      top: previousScrollElement?.scrollTop ?? 0,
+                  };
         try {
             const state = getState();
             const clips = state.clips;
@@ -259,7 +265,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 }),
                 capabilities: capabilities(),
             });
-            viewport.restoreScroll(prevScrollLeft);
+            viewport.restoreScroll(previousScroll);
             linking.reapplySelection(body, clips.length);
             detailStrip.render(meta);
             applySelectionHighlight(body);

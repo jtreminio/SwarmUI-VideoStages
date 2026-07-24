@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "../__test_helpers__/clipFixtures";
+import {
+    audioTrackIndicesForClipWindow,
+    clipTimelineWindow,
+} from "../documentQueries";
 import { normalizeAudioTracks } from "../normalization";
 import { serializeStateForStorage } from "../persistence";
 import { getSelection, resetSelectionForTests } from "../selection";
@@ -230,5 +234,85 @@ describe("timeline-wide audio segments panel", () => {
         render();
         expect(host.querySelector("input.auto-slider-range")).not.toBeNull();
         expect(host.querySelector("input.auto-slider-number")).not.toBeNull();
+    });
+
+    it("shows only timeline segments intersecting the selected clip window", () => {
+        const track = (
+            id: string,
+            start: number,
+            length: number,
+        ): NonNullable<VideoStagesConfig["audioTracks"]>[number] => ({
+            id,
+            volume: 1,
+            source: {
+                kind: "Upload",
+                reference: "",
+                uploadedAudio: null,
+            },
+            spans: [
+                {
+                    id: `span-${id}`,
+                    firstClipId: null,
+                    lastClipId: null,
+                    timelineStartSeconds: start,
+                    timelineLengthSeconds: length,
+                    sourceStartSeconds: 0,
+                    clipStartOffsetSeconds: null,
+                    clipLengthSeconds: null,
+                },
+            ],
+        });
+        state.audioTracks = [
+            track("clip-a-only", 0, 1),
+            track("crosses-boundary", 2, 2),
+            track("clip-b-only", 3, 1),
+            track("ends-at-boundary", 1, 2),
+            track("starts-at-timeline-end", 7, 1),
+        ];
+
+        expect(audioTrackIndicesForClipWindow(state, 0)).toEqual([0, 1, 3]);
+        expect(audioTrackIndicesForClipWindow(state, 1)).toEqual([1, 2]);
+
+        const clipOneIndices = audioTrackIndicesForClipWindow(state, 1);
+        host.replaceChildren(
+            buildAudioTracksPanel(
+                ctx,
+                state,
+                { kind: "none" },
+                {
+                    trackIndices: clipOneIndices,
+                    clipWindow: clipTimelineWindow(state.clips, 1) ?? undefined,
+                },
+            ),
+        );
+        expect(
+            Array.from(
+                host.querySelectorAll<HTMLElement>(
+                    ".vst-audio-track-tab .header-label",
+                ),
+            ).map((tab) => tab.textContent?.trim()),
+        ).toEqual(["S1", "S2"]);
+    });
+
+    it("adds a segment from a clip audio panel inside that clip's window", () => {
+        const window = clipTimelineWindow(state.clips, 1);
+        host.replaceChildren(
+            buildAudioTracksPanel(
+                ctx,
+                state,
+                { kind: "none" },
+                {
+                    trackIndices: [],
+                    clipWindow: window ?? undefined,
+                },
+            ),
+        );
+
+        host.querySelector<HTMLButtonElement>(".vst-audio-track-add")?.click();
+
+        expect(state.audioTracks?.[0].spans[0]).toMatchObject({
+            timelineStartSeconds: 3,
+            timelineLengthSeconds: 2,
+        });
     });
 });

@@ -22,7 +22,12 @@ export interface TimelineViewport {
     zoomFit(): void;
     setZoom(value: number): void;
     zoomWheel(factor: number, clientX: number): void;
-    restoreScroll(prevScrollLeft: number): void;
+    restoreScroll(previous: TimelineScrollPosition): void;
+}
+
+export interface TimelineScrollPosition {
+    left: number;
+    top: number;
 }
 
 export const createTimelineViewport = (options: {
@@ -85,23 +90,26 @@ export const createTimelineViewport = (options: {
         }
     };
 
-    const restoreScroll = (prevScrollLeft: number): void => {
-        if (prevScrollLeft > 0) {
+    const restoreScroll = (previous: TimelineScrollPosition): void => {
+        const fresh = options.scrollElement();
+        if (fresh && previous.left > 0) {
             const target =
                 lastRenderedPxPerSecond > 0 &&
                 lastRenderedPxPerSecond !== currentPxPerSecond
                     ? zoomAnchorScrollLeft(
                           zoomAnchorTime(
                               TRACK_HEADER_W_PX,
-                              prevScrollLeft,
+                              previous.left,
                               lastRenderedPxPerSecond,
                           ),
                           currentPxPerSecond,
                           TRACK_HEADER_W_PX,
                       )
-                    : prevScrollLeft;
-            const fresh = options.scrollElement();
-            if (fresh) fresh.scrollLeft = target;
+                    : previous.left;
+            fresh.scrollLeft = target;
+        }
+        if (fresh && previous.top > 0) {
+            fresh.scrollTop = previous.top;
         }
         lastRenderedPxPerSecond = currentPxPerSecond;
     };

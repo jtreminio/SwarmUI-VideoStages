@@ -23,6 +23,7 @@ import {
     buildSlider,
     clampStartLength,
 } from "../detailWidgets";
+import type { ClipTimelineWindow } from "../documentQueries";
 import { createEntityId } from "../identity";
 import { setSelection } from "../selection";
 import type {
@@ -281,8 +282,22 @@ const buildTrackEditor = (
 const addAudioTrack = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
+    clipWindow?: ClipTimelineWindow,
 ): number => {
     const total = Math.max(AUDIO_SEGMENT_MIN_LENGTH, timelineDuration(state));
+    const start = Math.min(
+        Math.max(0, clipWindow?.startSeconds ?? 0),
+        Math.max(0, total - AUDIO_SEGMENT_MIN_LENGTH),
+    );
+    const availableLength = Math.max(
+        AUDIO_SEGMENT_MIN_LENGTH,
+        Math.min(
+            total - start,
+            clipWindow
+                ? clipWindow.endSeconds - clipWindow.startSeconds
+                : total,
+        ),
+    );
     const nextIndex = state.audioTracks?.length ?? 0;
     ctx.commitState((next) => {
         next.audioTracks ??= [];
@@ -299,10 +314,10 @@ const addAudioTrack = (
                     id: createEntityId("audio_span"),
                     firstClipId: null,
                     lastClipId: null,
-                    timelineStartSeconds: 0,
+                    timelineStartSeconds: start,
                     timelineLengthSeconds: Math.min(
                         AUDIO_SEGMENT_DEFAULT_LENGTH,
-                        total,
+                        availableLength,
                     ),
                     sourceStartSeconds: 0,
                     clipStartOffsetSeconds: null,
@@ -314,6 +329,11 @@ const addAudioTrack = (
     return nextIndex;
 };
 
+export interface AudioTracksPanelOptions {
+    trackIndices?: readonly number[];
+    clipWindow?: ClipTimelineWindow;
+}
+
 export const buildAudioTracksPanel = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
@@ -321,8 +341,14 @@ export const buildAudioTracksPanel = (
         TimelineSelection,
         { kind: "none" | "audio-track" | "audio-track-span" }
     > = { kind: "none" },
+    options?: AudioTracksPanelOptions,
 ): HTMLElement => {
     const tracks = state.audioTracks ?? [];
+    const visibleTrackIndices = options?.trackIndices
+        ? options.trackIndices.filter(
+              (trackIndex) => trackIndex >= 0 && trackIndex < tracks.length,
+          )
+        : tracks.map((_, trackIndex) => trackIndex);
     const selectedTrackIndex =
         selection.kind === "audio-track" ||
         selection.kind === "audio-track-span"
@@ -330,18 +356,15 @@ export const buildAudioTracksPanel = (
             : null;
     const activeTrackIndex =
         selectedTrackIndex !== null &&
-        selectedTrackIndex >= 0 &&
-        selectedTrackIndex < tracks.length
+        visibleTrackIndices.includes(selectedTrackIndex)
             ? selectedTrackIndex
-            : tracks.length > 0
-              ? 0
-              : null;
+            : (visibleTrackIndices[0] ?? null);
     const built = buildRepeatingEditor({
         key: "audio-tracks",
         label: "Audio Segments",
         sectionClass: "vst-audio-tracks-panel",
         open: selectedTrackIndex !== null,
-        items: tracks.map((_, trackIndex) => ({
+        items: visibleTrackIndices.map((trackIndex) => ({
             label: `S${trackIndex}`,
             focusKey: `audio-track-tab-${trackIndex}`,
             title: `Edit audio segment ${trackIndex}`,
@@ -370,7 +393,7 @@ export const buildAudioTracksPanel = (
             label: "+ Add Audio Segment",
             className: "vst-audio-track-add",
             onClick: () => {
-                const trackIdx = addAudioTrack(ctx, state);
+                const trackIdx = addAudioTrack(ctx, state, options?.clipWindow);
                 setSelection({ kind: "audio-track", trackIdx });
                 ctx.render();
             },
@@ -397,7 +420,9 @@ export const buildAudioTracksPanel = (
     note.textContent =
         tracks.length === 0
             ? "No overlay segments."
-            : "Timeline-wide overlays are cut per clip during generation; overlapping segments mix together.";
+            : visibleTrackIndices.length === 0
+              ? "No overlay segments in this clip."
+              : "Timeline-wide overlays are cut per clip during generation; overlapping segments mix together.";
     built.content.insertBefore(note, built.content.firstChild);
     return built.section;
 };

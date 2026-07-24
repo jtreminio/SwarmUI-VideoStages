@@ -25,8 +25,10 @@ import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHos
 import {
     __resetPersistenceForTests,
     getClips,
+    getState,
     getTimelineStore,
     saveClips,
+    saveState,
 } from "./persistence";
 import { resetSelectionForTests, setSelection } from "./selection";
 import { clearUiStateForTests } from "./uiState";
@@ -298,6 +300,69 @@ describe("videoStagesTimeline", () => {
 
         expect(repaints).toBe(1);
         expect(regionCount()).toBe(2);
+    });
+
+    it("preserves both timeline scroll axes across add, drag, and delete commits", () => {
+        mountEnabledToggle();
+        mountState(makeClipsJson(1, 10));
+        timeline = videoStagesTimeline();
+        timeline.init();
+
+        const scroll = (): HTMLElement => {
+            const element = document.querySelector<HTMLElement>(".vst-scroll");
+            if (!element) {
+                throw new Error("timeline scroll container missing");
+            }
+            return element;
+        };
+        const commitAtCurrentViewport = (
+            mutate: (state: ReturnType<typeof getState>) => void,
+        ): void => {
+            scroll().scrollLeft = 120;
+            scroll().scrollTop = 140;
+            const next = structuredClone(getState());
+            mutate(next);
+            saveState(next, { origin: "audio-segment-track" });
+            expect(scroll().scrollLeft).toBe(120);
+            expect(scroll().scrollTop).toBe(140);
+        };
+
+        // Add.
+        commitAtCurrentViewport((state) => {
+            state.audioTracks ??= [];
+            state.audioTracks.push({
+                id: "track-scroll",
+                volume: 1,
+                source: {
+                    kind: "Upload",
+                    reference: "",
+                    uploadedAudio: null,
+                },
+                spans: [
+                    {
+                        id: "span-scroll",
+                        firstClipId: null,
+                        lastClipId: null,
+                        timelineStartSeconds: 2,
+                        timelineLengthSeconds: 2,
+                        sourceStartSeconds: 0,
+                        clipStartOffsetSeconds: null,
+                        clipLengthSeconds: null,
+                    },
+                ],
+            });
+        });
+        // Drag.
+        commitAtCurrentViewport((state) => {
+            const span = state.audioTracks?.[0]?.spans[0];
+            if (span) {
+                span.timelineStartSeconds = 4;
+            }
+        });
+        // Delete.
+        commitAtCurrentViewport((state) => {
+            state.audioTracks?.splice(0, 1);
+        });
     });
 
     it("+ Clip copies the previous clip's base settings and mirrors the prior join", async () => {

@@ -12,6 +12,10 @@ import {
     buildMediaPickRow,
     buildOptionSelect,
 } from "../detailWidgets";
+import {
+    audioTrackIndicesForClipWindow,
+    clipTimelineWindow,
+} from "../documentQueries";
 import { getState } from "../persistence";
 import type { Clip, TimelineSelection } from "../types";
 import { buildAudioSegmentSection } from "./audioSegmentPanel";
@@ -240,7 +244,22 @@ export const buildAudioBody = (
         }
         body.appendChild(segments);
     } else {
-        body.appendChild(buildAudioTracksPanel(ctx, getState()));
+        const state = getState();
+        body.appendChild(
+            buildAudioTracksPanel(
+                ctx,
+                state,
+                { kind: "none" },
+                {
+                    trackIndices: audioTrackIndicesForClipWindow(
+                        state,
+                        clipIdx,
+                    ),
+                    clipWindow:
+                        clipTimelineWindow(state.clips, clipIdx) ?? undefined,
+                },
+            ),
+        );
     }
 
     return body;
