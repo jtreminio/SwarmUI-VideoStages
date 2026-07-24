@@ -312,16 +312,12 @@ const addAudioTrack = (
             spans: [
                 {
                     id: createEntityId("audio_span"),
-                    firstClipId: null,
-                    lastClipId: null,
                     timelineStartSeconds: start,
                     timelineLengthSeconds: Math.min(
                         AUDIO_SEGMENT_DEFAULT_LENGTH,
                         availableLength,
                     ),
                     sourceStartSeconds: 0,
-                    clipStartOffsetSeconds: null,
-                    clipLengthSeconds: null,
                 },
             ],
         });

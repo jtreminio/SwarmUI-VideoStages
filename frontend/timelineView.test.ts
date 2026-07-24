@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
+import { renderTimeline } from "./timelineView";
 import {
     audioSegmentWaveBarHeights,
     clampPxPerSecond,
@@ -8,14 +9,15 @@ import {
     DEFAULT_PX_PER_SECOND,
     MAX_PX_PER_SECOND,
     MIN_PX_PER_SECOND,
-    renderAudioTrackRow,
-    renderBoundarySeams,
-    renderPromptTrackRow,
-    renderTimeline,
     waveBarHeights,
     zoomAnchorScrollLeft,
     zoomAnchorTime,
-} from "./timelineView";
+} from "./timelineView/layout";
+import { renderBoundarySeams } from "./timelineView/regionRenderer";
+import {
+    renderAudioTrackRow,
+    renderPromptTrackRow,
+} from "./timelineView/trackRows";
 import type { AudioTrack, BoundaryOut, Clip } from "./types";
 
 const audioTracks = (count: number): AudioTrack[] =>
@@ -29,13 +31,9 @@ const audioTracks = (count: number): AudioTrack[] =>
         spans: [
             {
                 id: `span-${index}`,
-                firstClipId: null,
-                lastClipId: null,
                 timelineStartSeconds: index * 0.5,
                 timelineLengthSeconds: 1,
                 sourceStartSeconds: 0,
-                clipStartOffsetSeconds: null,
-                clipLengthSeconds: null,
             },
         ],
     }));
@@ -1024,13 +1022,9 @@ describe("timeline-wide audio segment lanes", () => {
                     spans: [
                         {
                             id: "span-score",
-                            firstClipId: null,
-                            lastClipId: null,
                             timelineStartSeconds: 2,
                             timelineLengthSeconds: 4,
                             sourceStartSeconds: 1,
-                            clipStartOffsetSeconds: null,
-                            clipLengthSeconds: null,
                         },
                     ],
                 },

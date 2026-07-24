@@ -104,8 +104,7 @@ public class MultiClipCrossfadeMergerTests
                 clip.GetRawFPS()!.Value,
                 clip.Frames!.Value,
                 architectures?[i] ?? Ltx2ArchitectureModule.ArchitectureId,
-                i,
-                ArtifactOrigin.ClipAssembly));
+                i));
         }
         return artifacts;
     }

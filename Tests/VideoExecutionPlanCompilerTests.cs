@@ -471,7 +471,6 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Equal(BoundaryExecutionMode.Cut, plan.Boundaries[0].Effective);
         Assert.Equal(0, plan.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(0, plan.AudioTimeline.ClipWindows[0].OutgoingTrimFrames);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "boundary-frame-budget-reconciled");
     }

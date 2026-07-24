@@ -1373,8 +1373,7 @@ public class ArchitectureFoundationTests
             24,
             25,
             clip.Architecture.Id,
-            clip.ClipId,
-            ArtifactOrigin.StageOutput);
+            clip.ClipId);
 
     private sealed class FakeRegistry : IVideoArchitectureRegistry
     {
@@ -1588,8 +1587,7 @@ public class ArchitectureFoundationTests
                 24,
                 25,
                 architectureId,
-                request.Clip.ClipId,
-                ArtifactOrigin.StageOutput);
+                request.Clip.ClipId);
         }
 
         public void Dispose()

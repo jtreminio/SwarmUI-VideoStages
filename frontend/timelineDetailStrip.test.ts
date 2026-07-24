@@ -2226,13 +2226,9 @@ describe("createTimelineDetailStrip", () => {
                 spans: [
                     {
                         id: "span-clip-0",
-                        firstClipId: null,
-                        lastClipId: null,
                         timelineStartSeconds: 0,
                         timelineLengthSeconds: 1,
                         sourceStartSeconds: 0,
-                        clipStartOffsetSeconds: null,
-                        clipLengthSeconds: null,
                     },
                 ],
             },
@@ -2247,13 +2243,9 @@ describe("createTimelineDetailStrip", () => {
                 spans: [
                     {
                         id: "span-both",
-                        firstClipId: null,
-                        lastClipId: null,
                         timelineStartSeconds: 2,
                         timelineLengthSeconds: 2,
                         sourceStartSeconds: 0,
-                        clipStartOffsetSeconds: null,
-                        clipLengthSeconds: null,
                     },
                 ],
             },
@@ -2268,13 +2260,9 @@ describe("createTimelineDetailStrip", () => {
                 spans: [
                     {
                         id: "span-clip-1",
-                        firstClipId: null,
-                        lastClipId: null,
                         timelineStartSeconds: 3,
                         timelineLengthSeconds: 1,
                         sourceStartSeconds: 0,
-                        clipStartOffsetSeconds: null,
-                        clipLengthSeconds: null,
                     },
                 ],
             },

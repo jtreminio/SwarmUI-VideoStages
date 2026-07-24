@@ -23,11 +23,9 @@ import {
     createTimelineReferencesTrack,
     type TimelineReferencesTrack,
 } from "./timelineReferencesTrack";
-import {
-    computeRegionLayout,
-    renderReferencesTrackRow,
-    renderTimeline,
-} from "./timelineView";
+import { renderTimeline } from "./timelineView";
+import { computeRegionLayout } from "./timelineView/layout";
+import { renderReferencesTrackRow } from "./timelineView/trackRows";
 import type { Clip } from "./types";
 
 const PPS = 44;

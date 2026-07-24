@@ -6,7 +6,8 @@ import {
     createTimelineAudioTrack,
     type TimelineAudioTrack,
 } from "./timelineAudioTrack";
-import { computeRegionLayout, renderAudioTrackRow } from "./timelineView";
+import { computeRegionLayout } from "./timelineView/layout";
+import { renderAudioTrackRow } from "./timelineView/trackRows";
 import type { Clip } from "./types";
 
 const PPS = 44;

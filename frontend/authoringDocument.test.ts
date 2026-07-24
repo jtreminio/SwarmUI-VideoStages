@@ -202,13 +202,9 @@ describe("versioned authoring document identity", () => {
                         spans: [
                             {
                                 id: duplicate,
-                                firstClipId: duplicate,
-                                lastClipId: duplicate,
                                 timelineStartSeconds: null,
                                 timelineLengthSeconds: null,
                                 sourceStartSeconds: 0,
-                                clipStartOffsetSeconds: null,
-                                clipLengthSeconds: null,
                             },
                         ],
                     },
@@ -251,13 +247,9 @@ describe("versioned authoring document identity", () => {
         const stableWindow = nestedClip.promptWindows[1];
         const stableSpan = {
             id: "audio_span_legacy_0_0",
-            firstClipId: stableClip.id as string,
-            lastClipId: stableClip.id as string,
             timelineStartSeconds: null,
             timelineLengthSeconds: null,
             sourceStartSeconds: 0,
-            clipStartOffsetSeconds: null,
-            clipLengthSeconds: null,
         };
         const state = baseState([missingClip, nestedClip, stableClip], {
             audioTracks: [
@@ -270,13 +262,9 @@ describe("versioned authoring document identity", () => {
                     },
                     spans: [
                         {
-                            firstClipId: stableClip.id as string,
-                            lastClipId: stableClip.id as string,
                             timelineStartSeconds: 0,
                             timelineLengthSeconds: 1,
                             sourceStartSeconds: 0,
-                            clipStartOffsetSeconds: null,
-                            clipLengthSeconds: null,
                         },
                         stableSpan,
                     ],
@@ -296,7 +284,6 @@ describe("versioned authoring document identity", () => {
         expect(nestedClip.promptWindows[0].id).not.toBe(stableWindow.id);
         expect(stableSpan.id).toBe("audio_span_legacy_0_0");
         expect(state.audioTracks?.[0].spans[0].id).not.toBe(stableSpan.id);
-        expect(stableSpan.firstClipId).toBe("clip_legacy_0");
         expect(new Set(collectAuthoringEntityIds(state)).size).toBe(
             collectAuthoringEntityIds(state).length,
         );
@@ -377,23 +364,15 @@ describe("versioned authoring document identity", () => {
                         spans: [
                             {
                                 id: "span-a",
-                                firstClipId: "clip-nested",
-                                lastClipId: "clip-nested",
                                 timelineStartSeconds: null,
                                 timelineLengthSeconds: null,
                                 sourceStartSeconds: 0,
-                                clipStartOffsetSeconds: null,
-                                clipLengthSeconds: null,
                             },
                             {
                                 id: "span-b",
-                                firstClipId: "clip-nested",
-                                lastClipId: "clip-nested",
                                 timelineStartSeconds: 1,
                                 timelineLengthSeconds: 0.5,
                                 sourceStartSeconds: 0,
-                                clipStartOffsetSeconds: null,
-                                clipLengthSeconds: null,
                             },
                         ],
                     },
@@ -441,13 +420,9 @@ describe("versioned authoring document identity", () => {
                     spans: [
                         {
                             id: "span-voice",
-                            firstClipId: "clip-one",
-                            lastClipId: "clip-one",
                             timelineStartSeconds: null,
                             timelineLengthSeconds: null,
                             sourceStartSeconds: 0.5,
-                            clipStartOffsetSeconds: 1,
-                            clipLengthSeconds: 2,
                         },
                     ],
                 },
@@ -478,13 +453,9 @@ describe("versioned authoring document identity", () => {
                         spans: [
                             {
                                 id: "span-score",
-                                firstClipId: "clip-first",
-                                lastClipId: "clip-last",
                                 timelineStartSeconds: 0.5,
                                 timelineLengthSeconds: 3,
                                 sourceStartSeconds: 4,
-                                clipStartOffsetSeconds: null,
-                                clipLengthSeconds: null,
                             },
                         ],
                     },
@@ -497,8 +468,6 @@ describe("versioned authoring document identity", () => {
         const reloaded = getState();
         expect(reloaded.audioTracks).toEqual(state.audioTracks);
         expect(reloaded.audioTracks?.[0].spans[0]).toMatchObject({
-            firstClipId: "clip-first",
-            lastClipId: "clip-last",
             timelineStartSeconds: 0.5,
             timelineLengthSeconds: 3,
         });

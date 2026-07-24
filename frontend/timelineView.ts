@@ -29,36 +29,16 @@ import {
 } from "./timelineView/trackRows";
 import type { Clip } from "./types";
 
-export type {
-    RegionLayout,
-    RegionLayoutOptions,
-} from "./timelineView/layout";
 export {
-    audioSegmentWaveBarHeights,
     clampPxPerSecond,
     computeFitPxPerSecond,
-    computeRegionLayout,
     DEFAULT_PX_PER_SECOND,
-    MAX_PX_PER_SECOND,
-    MIN_PX_PER_SECOND,
     TRACK_HEADER_W_PX,
-    waveBarHeights,
     ZOOM_FACTOR,
     zoomAnchorScrollLeft,
     zoomAnchorTime,
 } from "./timelineView/layout";
-export {
-    BOUNDARY_GLYPH,
-    BOUNDARY_LABEL,
-    renderBoundarySeams,
-} from "./timelineView/regionRenderer";
-export type { RenderTimelineOptions } from "./timelineView/toolbar";
-export type { PromptWindowGeom } from "./timelineView/trackRows";
-export {
-    renderAudioTrackRow,
-    renderPromptTrackRow,
-    renderReferencesTrackRow,
-} from "./timelineView/trackRows";
+export { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "./timelineView/regionRenderer";
 
 const renderRulerTicks = (
     layouts: RegionLayout[],

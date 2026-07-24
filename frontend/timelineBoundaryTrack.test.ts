@@ -16,7 +16,8 @@ import {
     createTimelineBoundaryTrack,
     type TimelineBoundaryTrack,
 } from "./timelineBoundaryTrack";
-import { computeRegionLayout, renderBoundarySeams } from "./timelineView";
+import { computeRegionLayout } from "./timelineView/layout";
+import { renderBoundarySeams } from "./timelineView/regionRenderer";
 import type { BoundaryOut, Clip } from "./types";
 
 const PPS = 44;

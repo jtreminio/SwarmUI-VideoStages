@@ -374,15 +374,11 @@ export const createTimelineAudioSegmentTrack =
                     spans: [
                         {
                             id: createEntityId("audio_span"),
-                            firstClipId: null,
-                            lastClipId: null,
                             timelineStartSeconds: roundToTenth(geometry.start),
                             timelineLengthSeconds: roundToTenth(
                                 geometry.length,
                             ),
                             sourceStartSeconds: 0,
-                            clipStartOffsetSeconds: null,
-                            clipLengthSeconds: null,
                         },
                     ],
                 });

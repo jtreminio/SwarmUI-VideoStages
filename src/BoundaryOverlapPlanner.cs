@@ -20,8 +20,6 @@ internal sealed record BoundaryBudgetResolution(
 /// <summary>Owns all frame-budget reconciliation for typed timeline boundaries.</summary>
 internal static class BoundaryOverlapPlanner
 {
-    internal const int DefaultCrossfadeOverlapFrames = 8;
-
     /// <summary>
     /// Reconciles typed boundary windows against planned clip lengths. Unknown lengths remain
     /// provisional; known short clips shrink continue windows on the architecture-projected frame

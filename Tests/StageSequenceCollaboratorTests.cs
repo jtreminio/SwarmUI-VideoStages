@@ -134,7 +134,7 @@ public class StageSequenceCollaboratorTests
         state.CaptureStageOutput(stage);
         Assert.NotNull(state.Resolve(explicitStageGuide));
 
-        state.Reset();
+        state.BeginClip();
 
         Assert.Null(state.Resolve(explicitStageGuide));
     }

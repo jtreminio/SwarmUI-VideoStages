@@ -5,7 +5,7 @@ using SwarmUI.Utils;
 
 namespace VideoStages.Architectures.Ltx2;
 
-public class StageRefStore(WorkflowGenerator g)
+internal class StageRefStore(WorkflowGenerator g)
 {
     private const string Prefix = "videostages.";
 

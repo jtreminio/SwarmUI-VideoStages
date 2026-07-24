@@ -13,8 +13,6 @@ import type {
     CanonicalVideoStagesConfig,
 } from "../types";
 
-export type ChangeImpact = "value" | "structure" | "selection" | "capabilities";
-
 export type CommandFailure =
     | "missing-target"
     | "duplicate-id"
@@ -26,7 +24,6 @@ export type CommandFailure =
 export interface DocumentCommandResult {
     document: CanonicalVideoStagesConfig;
     applied: boolean;
-    impacts: readonly ChangeImpact[];
     failure?: CommandFailure;
 }
 

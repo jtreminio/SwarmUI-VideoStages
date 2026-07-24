@@ -1,3 +1,4 @@
+using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Tests;
@@ -24,7 +25,7 @@ internal static class BoundaryPlanFixture
             BoundaryExecutionMode mode = BoundaryPolicy.ParsePlanMode(raw, out bool known);
             int overlap = boundaryOverlapPrefs is not null && i < boundaryOverlapPrefs.Count
                 ? boundaryOverlapPrefs[i]
-                : BoundaryOverlapPlanner.DefaultCrossfadeOverlapFrames;
+                : Ltx2BoundaryPolicy.DefaultFrames;
             int continuityWindow = continueWindows is not null
                 && i < continueWindows.Count
                 && continueWindows[i] > 0

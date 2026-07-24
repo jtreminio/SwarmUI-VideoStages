@@ -84,8 +84,6 @@ describe("timeline-wide audio segments panel", () => {
             source: { kind: "Upload", uploadedAudio: null },
             spans: [
                 {
-                    firstClipId: null,
-                    lastClipId: null,
                     timelineStartSeconds: 0,
                     timelineLengthSeconds: 2,
                     sourceStartSeconds: 0,
@@ -146,13 +144,9 @@ describe("timeline-wide audio segments panel", () => {
                 spans: [
                     {
                         id: "span-upload",
-                        firstClipId: null,
-                        lastClipId: null,
                         timelineStartSeconds: 1,
                         timelineLengthSeconds: 5,
                         sourceStartSeconds: 0,
-                        clipStartOffsetSeconds: null,
-                        clipLengthSeconds: null,
                     },
                 ],
             },
@@ -179,13 +173,9 @@ describe("timeline-wide audio segments panel", () => {
                 spans: [
                     {
                         id: "span-score",
-                        firstClipId: null,
-                        lastClipId: null,
                         timelineStartSeconds: 2,
                         timelineLengthSeconds: 4.5,
                         sourceStartSeconds: 1,
-                        clipStartOffsetSeconds: null,
-                        clipLengthSeconds: null,
                     },
                 ],
             },
@@ -220,13 +210,9 @@ describe("timeline-wide audio segments panel", () => {
                 spans: [
                     {
                         id: "span-volume",
-                        firstClipId: null,
-                        lastClipId: null,
                         timelineStartSeconds: 0,
                         timelineLengthSeconds: 2,
                         sourceStartSeconds: 0,
-                        clipStartOffsetSeconds: null,
-                        clipLengthSeconds: null,
                     },
                 ],
             },
@@ -252,13 +238,9 @@ describe("timeline-wide audio segments panel", () => {
             spans: [
                 {
                     id: `span-${id}`,
-                    firstClipId: null,
-                    lastClipId: null,
                     timelineStartSeconds: start,
                     timelineLengthSeconds: length,
                     sourceStartSeconds: 0,
-                    clipStartOffsetSeconds: null,
-                    clipLengthSeconds: null,
                 },
             ],
         });

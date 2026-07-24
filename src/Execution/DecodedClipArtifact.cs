@@ -45,8 +45,7 @@ internal sealed record DecodedClipArtifact(
     int FramesPerSecond,
     int Frames,
     ArchitectureId ArchitectureId,
-    int ClipId,
-    ArtifactOrigin Origin)
+    int ClipId)
 {
     internal bool HasVideo => Video is not null;
 
@@ -106,8 +105,7 @@ internal sealed record DecodedClipArtifact(
             artifact.Media.Frames.Value,
             clip.Architecture?.Id ?? throw new InvalidOperationException(
                 $"Clip {clip.ClipId} has no resolved architecture identity."),
-            clip.ClipId,
-            artifact.Origin);
+            clip.ClipId);
         decoded.ValidateDecoded();
         return decoded;
     }

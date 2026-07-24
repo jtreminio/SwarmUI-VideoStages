@@ -69,7 +69,7 @@ internal sealed class LtxStageLatentAudioFactory(
         JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
         JToken latentLength = dynamicLengthFrames is null
             ? new JValue(frames)
-            : LtxFrameCountConnector.CloneConnection(dynamicLengthFrames);
+            : PathUtils.Clone(dynamicLengthFrames);
 
         EmptyLTXVLatentVideoNode emptyNode = bridge.AddNode(new EmptyLTXVLatentVideoNode());
         emptyNode.With(

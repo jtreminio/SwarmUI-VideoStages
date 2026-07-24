@@ -96,7 +96,7 @@ internal sealed class Ltx2ArchitectureModule :
         IReadOnlyList<ClipPlan> architectureClips,
         IReadOnlyList<ClipPlan> timelineClips,
         RootPlan root) =>
-        Ltx2VideoPlanValidationCompiler.Validate(architectureClips, timelineClips, root);
+        Ltx2ConditionalRulePolicySource.Validate(architectureClips, timelineClips, root);
 
     private static VideoModelProfileDescriptor Profile(string id, string displayName) =>
         new(

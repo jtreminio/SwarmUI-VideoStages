@@ -9,14 +9,10 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class ControlNetCapture(WorkflowGenerator g)
 {
-    private readonly ControlNetAudioCapture _audio = new(g);
     private readonly ControlNetFrameCountService _frameCounts = new(g);
 
     public void CaptureCoreVideoControlNetPreprocessors() =>
         new ControlNetCoreMediaCapture(g).Capture();
-
-    internal bool TryGetCapturedControlNetAudio(int index, out WGNodeData audio) =>
-        _audio.TryGetCapturedAudio(index, out audio);
 
     internal bool TryCreateCapturedControlImageFrameCount(
         int index,

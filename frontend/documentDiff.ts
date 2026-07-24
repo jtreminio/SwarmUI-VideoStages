@@ -119,13 +119,9 @@ const AUDIO_TRACK_PATCH_KEYS = [
 ] as const satisfies readonly (keyof CanonicalAudioTrack)[];
 
 const AUDIO_SPAN_PATCH_KEYS = [
-    "firstClipId",
-    "lastClipId",
     "timelineStartSeconds",
     "timelineLengthSeconds",
     "sourceStartSeconds",
-    "clipStartOffsetSeconds",
-    "clipLengthSeconds",
 ] as const satisfies readonly (keyof CanonicalAudioTrackSpan)[];
 
 type AssertClassified<T, U extends keyof T> = [Exclude<keyof T, U>] extends [

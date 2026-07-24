@@ -48,8 +48,6 @@ internal static class AudioTimelineTrackSpanProjector
 
             ImmutableArray<AudioTrackClipWindow>.Builder windows =
                 ImmutableArray.CreateBuilder<AudioTrackClipWindow>();
-            ImmutableArray<PendingAudioTrackSpan>.Builder pending =
-                ImmutableArray.CreateBuilder<PendingAudioTrackSpan>();
             ImmutableArray<AudioTrackSpanSpec> spans = track.Spans.IsDefault ? [] : track.Spans;
             if (spans.IsEmpty)
             {
@@ -58,14 +56,12 @@ internal static class AudioTimelineTrackSpanProjector
             }
             for (int spanIndex = 0; spanIndex < spans.Length; spanIndex++)
             {
-                ProjectSpan(trackId, spanIndex, spans[spanIndex], clipWindows, clipIndices, diagnostics, windows, pending);
+                ProjectSpan(trackId, spanIndex, spans[spanIndex], clipWindows, clipIndices, diagnostics, windows);
             }
             projectedTracks.Add(new(
                 trackId,
                 track.Source,
-                spans,
                 windows.ToImmutable(),
-                pending.ToImmutable(),
                 track.Volume));
         }
         return new(projectedTracks.ToImmutable(), diagnostics.ToImmutable());
@@ -78,8 +74,7 @@ internal static class AudioTimelineTrackSpanProjector
         ImmutableArray<AudioTimelineClipWindow> clipWindows,
         IReadOnlyDictionary<int, int> clipIndices,
         ImmutableArray<AudioTimelineDiagnostic>.Builder diagnostics,
-        ImmutableArray<AudioTrackClipWindow>.Builder destination,
-        ImmutableArray<PendingAudioTrackSpan>.Builder pending)
+        ImmutableArray<AudioTrackClipWindow>.Builder destination)
     {
         if (span is null)
         {
@@ -181,7 +176,6 @@ internal static class AudioTimelineTrackSpanProjector
             if (owner.TimelineStartSeconds is not double ownerStart)
             {
                 const string reason = "audio.timeline.span.unresolved_clip_relative_timing";
-                pending.Add(new(spanIndex, span, reason));
                 diagnostics.Add(new(
                     AudioTimelineDiagnosticSeverity.Warning,
                     reason,
@@ -195,13 +189,6 @@ internal static class AudioTimelineTrackSpanProjector
             requestedEnd = requestedStart + span.ClipLengthSeconds.Value;
         }
         double? sourceAnchor = requestedStart;
-        AudioTimelineSpanOwnership ownership = span.HasClipRelativeWindow
-            ? AudioTimelineSpanOwnership.ClipRelativeWindow
-            : span.HasClipRange
-            ? span.HasTimelineWindow
-                ? AudioTimelineSpanOwnership.ClipRangeAndTimelineWindow
-                : AudioTimelineSpanOwnership.ClipRange
-            : AudioTimelineSpanOwnership.TimelineWindow;
         List<AudioTrackClipWindow> projected = [];
         bool emitted = false;
         bool hadUnresolvedTiming = false;
@@ -227,15 +214,12 @@ internal static class AudioTimelineTrackSpanProjector
                 clip.ClipId,
                 start,
                 end - start,
-                span.SourceStartSeconds + (start - sourceAnchor.Value),
-                ownership,
-                clip.IsProvisional));
+                span.SourceStartSeconds + (start - sourceAnchor.Value)));
             emitted = true;
         }
         if (hadUnresolvedTiming)
         {
             const string reason = "audio.timeline.span.unresolved_clip_timing";
-            pending.Add(new(spanIndex, span, reason));
             diagnostics.Add(new(AudioTimelineDiagnosticSeverity.Warning,
                 reason,
                 "An audio span crosses clip timing that is not yet known.", trackId, spanIndex));

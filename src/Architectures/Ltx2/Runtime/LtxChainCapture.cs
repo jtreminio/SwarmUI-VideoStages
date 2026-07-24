@@ -9,6 +9,5 @@ internal sealed record LtxChainCapture(
     string AudioDecodeId,
     INodeOutput AudioVaeSource,
     MediaRef CurrentOutputMedia,
-    bool HasPostDecodeWrappers,
-    bool UseReusedAudio
+    bool HasPostDecodeWrappers
 );

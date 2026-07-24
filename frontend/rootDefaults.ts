@@ -6,7 +6,6 @@ import {
 import type { VideoArchitectureId } from "./architectures/types";
 import { ROOT_DIMENSION_MIN } from "./constants";
 import { getVideoStagesHostBridge } from "./host";
-import { utils } from "./hostDom";
 import {
     getDropdownOptions,
     getRootModelInput,
@@ -26,7 +25,7 @@ const rootVideoFpsInput = (): HTMLInputElement | null =>
 
 const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
     for (let i = 0; i < ids.length; i++) {
-        const el = utils.getInputElement(ids[i]);
+        const el = getVideoStagesHostBridge().getInput(ids[i]);
         if (el) {
             return el;
         }
@@ -52,7 +51,9 @@ export const getDefaultStageModel = (
             return modelName;
         }
     }
-    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
+    const videoModel = trimDomValue(
+        getVideoStagesHostBridge().getSelect("input_videomodel"),
+    );
     if (videoModel && supports(videoModel)) {
         return videoModel;
     }
@@ -71,9 +72,9 @@ export const readInheritedDimsSignature = (): string => {
 };
 
 export const getRootDefaults = (): RootDefaults => {
-    let model = utils.getSelectElement("input_videomodel");
+    let model = getVideoStagesHostBridge().getSelect("input_videomodel");
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
-        model = utils.getSelectElement("input_model");
+        model = getVideoStagesHostBridge().getSelect("input_model");
     }
     // The host's lora list can lead with a "(None)" sentinel; it's meaningless
     // in our add-a-lora lists and a freshly-added entry seeded with it would be
@@ -88,13 +89,17 @@ export const getRootDefaults = (): RootDefaults => {
     });
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
-    const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
-    const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
-    const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
+    const upscaleMethod = getVideoStagesHostBridge().getSelect(
+        "input_refinerupscalemethod",
+    );
+    const upscaleMethodValues =
+        getVideoStagesHostBridge().getSelectOptions(upscaleMethod).values;
+    const upscaleMethodLabels =
+        getVideoStagesHostBridge().getSelectOptions(upscaleMethod).labels;
     const modelCatalog = supportedArchitectureCatalog(
         buildArchitectureModelCatalog(
-            utils.getSelectValues(model),
-            utils.getSelectLabels(model),
+            getVideoStagesHostBridge().getSelectOptions(model).values,
+            getVideoStagesHostBridge().getSelectOptions(model).labels,
         ),
     );
     const models = {

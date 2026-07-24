@@ -63,13 +63,7 @@ const initTimeline = (): void => {
     }
 };
 
-const scheduleTimelineInit = (): void => {
-    if (!getVideoStagesHostBridge().addPostParamBuildStep(initTimeline)) {
-        setTimeout(scheduleTimelineInit, 200);
-    }
-};
-
-scheduleTimelineInit();
+getVideoStagesHostBridge().addPostParamBuildStep(initTimeline);
 registerVideoStagesPromptPrefix();
 refineVideoButton();
 injectTimelineTab();

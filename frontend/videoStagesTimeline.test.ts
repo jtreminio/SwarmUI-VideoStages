@@ -341,13 +341,9 @@ describe("videoStagesTimeline", () => {
                 spans: [
                     {
                         id: "span-scroll",
-                        firstClipId: null,
-                        lastClipId: null,
                         timelineStartSeconds: 2,
                         timelineLengthSeconds: 2,
                         sourceStartSeconds: 0,
-                        clipStartOffsetSeconds: null,
-                        clipLengthSeconds: null,
                     },
                 ],
             });

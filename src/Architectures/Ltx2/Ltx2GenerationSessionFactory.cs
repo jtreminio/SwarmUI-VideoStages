@@ -43,7 +43,7 @@ internal sealed class Ltx2GenerationSessionFactory(
 
     public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
     {
-        guideReferences.Reset();
+        guideReferences.BeginClip();
         if (context.OwnsGeneratedRoot)
         {
             audioTimeline.PrepareRootAudio(

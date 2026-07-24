@@ -71,13 +71,9 @@ describe("timeline-wide audio segment gestures", () => {
                       spans: [
                           {
                               id: "span-global",
-                              firstClipId: null,
-                              lastClipId: null,
                               timelineStartSeconds: 2,
                               timelineLengthSeconds: 3,
                               sourceStartSeconds: 1,
-                              clipStartOffsetSeconds: null,
-                              clipLengthSeconds: null,
                           },
                       ],
                   },
@@ -167,13 +163,9 @@ describe("timeline-wide audio segment gestures", () => {
             spans: [
                 {
                     id: "span-lower",
-                    firstClipId: null,
-                    lastClipId: null,
                     timelineStartSeconds: 1,
                     timelineLengthSeconds: 2,
                     sourceStartSeconds: 0,
-                    clipStartOffsetSeconds: null,
-                    clipLengthSeconds: null,
                 },
             ],
         });

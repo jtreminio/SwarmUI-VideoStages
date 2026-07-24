@@ -5,28 +5,19 @@ import {
 } from "./architectures/conversion/plan";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
 import {
-    ARCHITECTURE_CONVERSION,
-    ARCHITECTURE_CONVERSION_WITH_SELECTION,
     addBefore,
     clone,
-    combineImpacts,
     failure,
     findClip,
     findTrack,
     hasOwn,
     invalidNewEntity,
-    MOVE_STRUCTURE,
     moveBefore,
     patchById,
-    REMOVE_STRUCTURE,
     removeById,
-    STRUCTURE,
     success,
-    VALUE,
-    VALUE_CAPABILITIES,
 } from "./documentCommands/helpers";
 import type {
-    ChangeImpact,
     CommandFailure,
     DocumentCommand,
     DocumentCommandContext,
@@ -36,7 +27,6 @@ import type { CanonicalClip, CanonicalVideoStagesConfig } from "./types";
 
 export { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
 export type {
-    ChangeImpact,
     CommandFailure,
     DocumentCommand,
     DocumentCommandContext,
@@ -63,7 +53,6 @@ export const reduceDocumentCommand = (
     switch (command.type) {
         case "batch": {
             let current = document;
-            const impacts: (readonly ChangeImpact[])[] = [];
             for (const child of command.commands) {
                 const result = reduceDocumentCommand(current, child, context);
                 if (!result.applied) {
@@ -73,13 +62,12 @@ export const reduceDocumentCommand = (
                     );
                 }
                 current = result.document;
-                impacts.push(result.impacts);
             }
-            return success(current, combineImpacts(impacts));
+            return success(current);
         }
         case "root.patch": {
             Object.assign(document, clone(command.patch));
-            return success(document, VALUE_CAPABILITIES);
+            return success(document);
         }
         case "clip.add": {
             const invalid = invalidNewEntity(document, command.clip);
@@ -96,13 +84,13 @@ export const reduceDocumentCommand = (
             if (!addBefore(document.clips, addedClip, command.beforeClipId)) {
                 return failure(clone(source), "missing-target");
             }
-            return success(document, STRUCTURE);
+            return success(document);
         }
         case "clip.remove": {
             if (!removeById(document.clips, command.clipId)) {
                 return failure(document, "missing-target");
             }
-            return success(document, REMOVE_STRUCTURE);
+            return success(document);
         }
         case "clip.move": {
             if (
@@ -114,7 +102,7 @@ export const reduceDocumentCommand = (
             ) {
                 return failure(document, "missing-target");
             }
-            return success(document, MOVE_STRUCTURE);
+            return success(document);
         }
         case "clip.patch": {
             if (
@@ -139,7 +127,7 @@ export const reduceDocumentCommand = (
                 return failure(document, "architecture-invariant");
             }
             document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document, VALUE_CAPABILITIES);
+            return success(document);
         }
         case "clip.convert-architecture": {
             const clipIndex = document.clips.findIndex(
@@ -169,12 +157,7 @@ export const reduceDocumentCommand = (
             }
             document.clips[clipIndex] = converted;
             forceCrossArchitectureCutsForConversion(document.clips);
-            return success(
-                document,
-                conversion.selectionAffected
-                    ? ARCHITECTURE_CONVERSION_WITH_SELECTION
-                    : ARCHITECTURE_CONVERSION,
-            );
+            return success(document);
         }
         case "stage.add": {
             const clip = findClip(document, command.clipId);
@@ -200,7 +183,7 @@ export const reduceDocumentCommand = (
                 return failure(document, "architecture-invariant");
             }
             document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document, STRUCTURE);
+            return success(document);
         }
         case "stage.retarget-model": {
             const clip = findClip(document, command.clipId);
@@ -235,7 +218,7 @@ export const reduceDocumentCommand = (
                 return failure(document, "architecture-invariant");
             }
             document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document, VALUE_CAPABILITIES);
+            return success(document);
         }
         case "stage.remove": {
             const clip = findClip(document, command.clipId);
@@ -255,7 +238,7 @@ export const reduceDocumentCommand = (
                 return failure(document, "architecture-invariant");
             }
             document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document, REMOVE_STRUCTURE);
+            return success(document);
         }
         case "stage.move": {
             const clip = findClip(document, command.clipId);
@@ -281,7 +264,7 @@ export const reduceDocumentCommand = (
                 return failure(document, "architecture-invariant");
             }
             document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document, MOVE_STRUCTURE);
+            return success(document);
         }
         case "stage.patch": {
             const clip = findClip(document, command.clipId);
@@ -307,7 +290,7 @@ export const reduceDocumentCommand = (
                 return failure(document, "architecture-invariant");
             }
             document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document, VALUE_CAPABILITIES);
+            return success(document);
         }
         case "ref.add": {
             const clip = findClip(document, command.clipId);
@@ -319,25 +302,25 @@ export const reduceDocumentCommand = (
             ) {
                 return failure(clone(source), "missing-target");
             }
-            return success(document, STRUCTURE);
+            return success(document);
         }
         case "ref.remove": {
             const clip = findClip(document, command.clipId);
             return clip && removeById(clip.refs, command.refId)
-                ? success(document, REMOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "ref.move": {
             const clip = findClip(document, command.clipId);
             return clip &&
                 moveBefore(clip.refs, command.refId, command.beforeRefId)
-                ? success(document, MOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "ref.patch": {
             const clip = findClip(document, command.clipId);
             return clip && patchById(clip.refs, command.refId, command.patch)
-                ? success(document, VALUE_CAPABILITIES)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "prompt-window.add": {
@@ -354,12 +337,12 @@ export const reduceDocumentCommand = (
             ) {
                 return failure(clone(source), "missing-target");
             }
-            return success(document, STRUCTURE);
+            return success(document);
         }
         case "prompt-window.remove": {
             const clip = findClip(document, command.clipId);
             return clip && removeById(clip.promptWindows, command.windowId)
-                ? success(document, REMOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "prompt-window.move": {
@@ -370,14 +353,14 @@ export const reduceDocumentCommand = (
                     command.windowId,
                     command.beforeWindowId,
                 )
-                ? success(document, MOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "prompt-window.patch": {
             const clip = findClip(document, command.clipId);
             return clip &&
                 patchById(clip.promptWindows, command.windowId, command.patch)
-                ? success(document, VALUE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "retake.add": {
@@ -389,7 +372,7 @@ export const reduceDocumentCommand = (
             const invalid = invalidNewEntity(document, command.retake);
             if (invalid) return invalid;
             clip.retake = clone(command.retake);
-            return success(document, STRUCTURE);
+            return success(document);
         }
         case "retake.remove": {
             const clip = findClip(document, command.clipId);
@@ -397,7 +380,7 @@ export const reduceDocumentCommand = (
                 return failure(document, "missing-target");
             }
             clip.retake = null;
-            return success(document, REMOVE_STRUCTURE);
+            return success(document);
         }
         case "retake.patch": {
             const clip = findClip(document, command.clipId);
@@ -407,7 +390,7 @@ export const reduceDocumentCommand = (
             Object.assign(clip.retake, clone(command.patch), {
                 id: command.retakeId,
             });
-            return success(document, VALUE_CAPABILITIES);
+            return success(document);
         }
         case "audio-track.add": {
             const invalid = invalidNewEntity(document, command.track);
@@ -421,11 +404,11 @@ export const reduceDocumentCommand = (
             ) {
                 return failure(clone(source), "missing-target");
             }
-            return success(document, STRUCTURE);
+            return success(document);
         }
         case "audio-track.remove":
             return removeById(document.audioTracks, command.trackId)
-                ? success(document, REMOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         case "audio-track.move":
             return moveBefore(
@@ -433,7 +416,7 @@ export const reduceDocumentCommand = (
                 command.trackId,
                 command.beforeTrackId,
             )
-                ? success(document, MOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         case "audio-track.patch":
             return patchById(
@@ -441,7 +424,7 @@ export const reduceDocumentCommand = (
                 command.trackId,
                 command.patch,
             )
-                ? success(document, VALUE)
+                ? success(document)
                 : failure(document, "missing-target");
         case "audio-span.add": {
             const track = findTrack(document, command.trackId);
@@ -457,26 +440,26 @@ export const reduceDocumentCommand = (
             ) {
                 return failure(clone(source), "missing-target");
             }
-            return success(document, STRUCTURE);
+            return success(document);
         }
         case "audio-span.remove": {
             const track = findTrack(document, command.trackId);
             return track && removeById(track.spans, command.spanId)
-                ? success(document, REMOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "audio-span.move": {
             const track = findTrack(document, command.trackId);
             return track &&
                 moveBefore(track.spans, command.spanId, command.beforeSpanId)
-                ? success(document, MOVE_STRUCTURE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         case "audio-span.patch": {
             const track = findTrack(document, command.trackId);
             return track &&
                 patchById(track.spans, command.spanId, command.patch)
-                ? success(document, VALUE)
+                ? success(document)
                 : failure(document, "missing-target");
         }
         default:

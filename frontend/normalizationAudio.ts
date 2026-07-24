@@ -40,9 +40,6 @@ const normalizeAudioTrackSourceKind = (
     }
 };
 
-const normalizeClipEntityId = (value: unknown): string | null =>
-    normalizeOptionalEntityId(value) ?? null;
-
 export const normalizeAudioTrackSpan = (
     value: unknown,
 ): AudioTrackSpan | null => {
@@ -53,8 +50,6 @@ export const normalizeAudioTrackSpan = (
         normalizeOptionalNonNegative(value.sourceStartSeconds) ?? 0;
     return {
         id: normalizeOptionalEntityId(value.id),
-        firstClipId: normalizeClipEntityId(value.firstClipId),
-        lastClipId: normalizeClipEntityId(value.lastClipId),
         timelineStartSeconds: normalizeOptionalNonNegative(
             value.timelineStartSeconds,
         ),
@@ -62,10 +57,6 @@ export const normalizeAudioTrackSpan = (
             value.timelineLengthSeconds,
         ),
         sourceStartSeconds: sourceStart,
-        clipStartOffsetSeconds: normalizeOptionalNonNegative(
-            value.clipStartOffsetSeconds,
-        ),
-        clipLengthSeconds: normalizeOptionalPositive(value.clipLengthSeconds),
     };
 };
 

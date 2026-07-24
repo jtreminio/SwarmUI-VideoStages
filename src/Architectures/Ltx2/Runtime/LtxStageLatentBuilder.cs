@@ -180,7 +180,7 @@ internal sealed class LtxStageLatentBuilder
     private static JToken FrameCountToken(JArray framesConnection, int fallbackFrames) =>
         framesConnection is null
             ? new JValue(fallbackFrames)
-            : LtxFrameCountConnector.CloneConnection(framesConnection);
+            : PathUtils.Clone(framesConnection);
 
     private static bool ReferencesCurrentOutputPath(
         WGNodeData media,

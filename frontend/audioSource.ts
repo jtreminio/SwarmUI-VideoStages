@@ -1,9 +1,5 @@
 import { getVideoStagesHostBridge } from "./host";
-import {
-    preserveSelectedOption,
-    resolveSelectValue,
-    type SelectOption,
-} from "./selectOption";
+import { preserveSelectedOption, type SelectOption } from "./selectOption";
 
 export type AudioSourceOption = Pick<SelectOption, "value" | "label">;
 
@@ -146,8 +142,3 @@ export const buildAudioSourceOptions = (
     }));
     return options;
 };
-
-export const resolveAudioSourceValue = (
-    currentValue: string,
-    options: AudioSourceOption[],
-): string => resolveSelectValue(currentValue, options, AUDIO_SOURCE_NATIVE);

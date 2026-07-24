@@ -100,8 +100,7 @@ internal static class LtxPostVideoChainInspector
             AudioDecodeId: audioDecode?.Id,
             AudioVaeSource: audioVaeSource,
             CurrentOutputMedia: currentMedia.Clone(),
-            HasPostDecodeWrappers: !ReferenceEquals(currentMedia.Output.Node, decode),
-            UseReusedAudio: useReusedAudio);
+            HasPostDecodeWrappers: !ReferenceEquals(currentMedia.Output.Node, decode));
     }
 
     public static LtxChainCapture Rehydrate(
@@ -118,7 +117,6 @@ internal static class LtxPostVideoChainInspector
             AudioDecodeId: state.AudioDecodeNodeId,
             AudioVaeSource: audioVaeSource,
             CurrentOutputMedia: MediaRef.FromWGNodeData(state.CurrentOutputMedia, bridge),
-            HasPostDecodeWrappers: state.HasPostDecodeWrappers,
-            UseReusedAudio: state.UseReusedAudioLatent);
+            HasPostDecodeWrappers: state.HasPostDecodeWrappers);
     }
 }

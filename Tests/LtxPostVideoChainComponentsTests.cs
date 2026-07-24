@@ -43,7 +43,6 @@ public class LtxPostVideoChainComponentsTests
         Assert.Equal("6", inspected.AudioDecodeId);
         Assert.Equal("2", inspected.AudioVaeSource.Node.Id);
         Assert.False(inspected.HasPostDecodeWrappers);
-        Assert.True(inspected.UseReusedAudio);
     }
 
     [Fact]

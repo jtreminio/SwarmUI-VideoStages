@@ -48,8 +48,6 @@ public class AudioTimelinePlanningComponentsTests
 
         AudioTimelineClipWindowPlanningResult result = AudioTimelineClipWindowPlanner.Compile(video);
 
-        Assert.Equal([9, 0], result.ClipWindows.Select(window => window.OutgoingTrimFrames));
-        Assert.True(result.ClipWindows[0].IsProvisional);
         Assert.Equal(40d / Fps, result.ClipWindows[0].DurationSeconds!.Value, 8);
         Assert.Equal(40d / Fps, result.ClipWindows[1].TimelineStartSeconds!.Value, 8);
         Assert.Empty(result.Diagnostics);
@@ -72,9 +70,9 @@ public class AudioTimelinePlanningComponentsTests
     {
         ImmutableArray<AudioTimelineClipWindow> clipWindows =
         [
-            new(0, 0, 2, 2, 0, IsProvisional: false),
-            new(1, 2, 2, 2, 0, IsProvisional: false),
-            new(2, null, null, null, 0, IsProvisional: true),
+            new(0, 0, 2),
+            new(1, 2, 2),
+            new(2, null, null),
         ];
         ImmutableDictionary<int, int> clipIndices = ImmutableDictionary<int, int>.Empty
             .Add(0, 0)
@@ -98,10 +96,7 @@ public class AudioTimelinePlanningComponentsTests
         Assert.Equal([3d, 5d], score.Windows.Select(window => window.SourceStartSeconds));
 
         AudioTimelineTrackPlan pending = Assert.Single(result.Tracks.Where(track => track.TrackId == "pending"));
-        PendingAudioTrackSpan pendingSpan = Assert.Single(pending.PendingSpans);
         Assert.Empty(pending.Windows);
-        Assert.Same(pending.AuthoredSpans[0], pendingSpan.AuthoredSpan);
-        Assert.Equal("audio.timeline.span.unresolved_clip_relative_timing", pendingSpan.ReasonCode);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.span.unresolved_clip_relative_timing");
     }
@@ -111,8 +106,8 @@ public class AudioTimelinePlanningComponentsTests
     {
         ImmutableArray<AudioTimelineClipWindow> clipWindows =
         [
-            new(0, 0, 2, 2, 0, IsProvisional: false),
-            new(1, null, null, null, 0, IsProvisional: true),
+            new(0, 0, 2),
+            new(1, null, null),
         ];
         ImmutableDictionary<int, int> clipIndices = ImmutableDictionary<int, int>.Empty
             .Add(0, 0)
@@ -127,7 +122,6 @@ public class AudioTimelinePlanningComponentsTests
 
         AudioTimelineTrackPlan score = Assert.Single(result.Tracks);
         Assert.Empty(score.Windows);
-        Assert.Single(score.PendingSpans);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.span.unresolved_clip_timing");
     }
@@ -138,13 +132,13 @@ public class AudioTimelinePlanningComponentsTests
         AudioTimelineTrackSource source = new(AudioTimelineTrackSourceKind.External, "source.wav");
         ImmutableArray<AudioTimelineTrackPlan> tracks =
         [
-            new("first", source, [],
+            new("first", source,
             [
-                new("first", 0, 0, 0, 2, 0, AudioTimelineSpanOwnership.ClipRange, false),
-                new("first", 0, 0, 1, 1, 3, AudioTimelineSpanOwnership.ClipRange, false),
-            ], []),
-            new("second", source, [],
-            [new("second", 0, 0, 0.5, 1, 0, AudioTimelineSpanOwnership.TimelineWindow, false)], []),
+                new("first", 0, 0, 0, 2, 0),
+                new("first", 0, 0, 1, 1, 3),
+            ]),
+            new("second", source,
+            [new("second", 0, 0, 0.5, 1, 0)]),
         ];
 
         ImmutableArray<AudioTimelineDiagnostic> diagnostics = AudioTimelineValidationPlanner.Validate(tracks);

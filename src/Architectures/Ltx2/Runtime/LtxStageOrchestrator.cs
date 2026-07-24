@@ -161,12 +161,12 @@ internal sealed class LtxStageOrchestrator(
             && priorOutputPath is not null
             && JToken.DeepEquals(guidePath, priorOutputPath))
         {
-            return ResolveDefaultLocalGuideMedia(skipGuideReinjection: false, sourceMedia, postVideoChain);
+            return ResolveDefaultLocalGuideMedia(sourceMedia, postVideoChain);
         }
 
         if (LtxClipRefResolver.PrimaryGuideMatchesScaledSource(g, primaryGuideClipRef.Image, sourceMedia))
         {
-            return ResolveDefaultLocalGuideMedia(skipGuideReinjection: false, sourceMedia, postVideoChain);
+            return ResolveDefaultLocalGuideMedia(sourceMedia, postVideoChain);
         }
 
         return stageGuideMediaHelper.PrepareGuideMedia(primaryGuideClipRef.Image, sourceMedia, scaleToSourceSize: true);
@@ -191,15 +191,9 @@ internal sealed class LtxStageOrchestrator(
     }
 
     private WGNodeData ResolveDefaultLocalGuideMedia(
-        bool skipGuideReinjection,
         WGNodeData sourceMedia,
         LtxPostVideoChainCapture postVideoChain)
     {
-        if (skipGuideReinjection)
-        {
-            return null;
-        }
-
         if (postVideoChain is not null
             && stageGuideMediaHelper.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
         {

@@ -34,7 +34,7 @@ internal class StageRunner
         _artifactCapture = new StageRuntimeArtifactCapture(generator);
     }
 
-    public virtual RuntimeArtifact RunStage(
+    public RuntimeArtifact RunStage(
         StagePlan stage,
         int sectionId,
         StageRefStore.StageRef guideReference,

@@ -151,7 +151,7 @@ export const createDefaultVideoStagesHostBridge =
             isMulti: boolean,
         ) => {
             if (typeof promptTabComplete === "undefined") {
-                return false;
+                return;
             }
             promptTabComplete.registerPrefix(
                 prefix,
@@ -159,7 +159,6 @@ export const createDefaultVideoStagesHostBridge =
                 examples,
                 isMulti,
             );
-            return true;
         },
         addPostParamBuildStep: (step) => {
             if (
@@ -204,7 +203,7 @@ export const createDefaultVideoStagesHostBridge =
 
         registerRefineVideoButton: (onSelect, description) => {
             if (typeof registerMediaButton !== "function") {
-                return false;
+                return;
             }
             registerMediaButton(
                 "Refine Video",
@@ -213,7 +212,6 @@ export const createDefaultVideoStagesHostBridge =
                 ["video"],
                 true,
             );
-            return true;
         },
         getCurrentMediaMetadata: () =>
             typeof currentMetadataVal === "string" ? currentMetadataVal : null,

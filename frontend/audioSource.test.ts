@@ -6,7 +6,6 @@ import {
     buildSegmentAudioSourceOptions,
     canUseClipLengthFromAudio,
     isControlNetAudioSource,
-    resolveAudioSourceValue,
 } from "./audioSource";
 
 describe("audioSource", () => {
@@ -87,34 +86,6 @@ describe("audioSource", () => {
                 value: "audio2",
                 label: "AceStepFun Audio 2",
             });
-        });
-    });
-
-    describe("resolveAudioSourceValue", () => {
-        it("preserves the current value when it exists in the option set", () => {
-            const options = buildAudioSourceOptions();
-
-            expect(resolveAudioSourceValue("Upload", options)).toBe("Upload");
-        });
-
-        it("falls back to Native when the current value is unknown", () => {
-            const options = buildAudioSourceOptions();
-
-            expect(resolveAudioSourceValue("ghost", options)).toBe("Native");
-        });
-
-        it("falls back to Native for null/undefined input", () => {
-            const options = buildAudioSourceOptions();
-
-            expect(
-                resolveAudioSourceValue(null as unknown as string, options),
-            ).toBe("Native");
-            expect(
-                resolveAudioSourceValue(
-                    undefined as unknown as string,
-                    options,
-                ),
-            ).toBe("Native");
         });
     });
 

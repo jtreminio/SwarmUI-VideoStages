@@ -238,13 +238,9 @@ export const serializeStateForStorage = (state: VideoStagesConfig): string => {
         },
         spans: track.spans.map((span) => ({
             id: span.id,
-            firstClipId: span.firstClipId,
-            lastClipId: span.lastClipId,
             timelineStartSeconds: span.timelineStartSeconds,
             timelineLengthSeconds: span.timelineLengthSeconds,
             sourceStartSeconds: span.sourceStartSeconds,
-            clipStartOffsetSeconds: span.clipStartOffsetSeconds,
-            clipLengthSeconds: span.clipLengthSeconds,
             projection: timelineSpanProjection(canonical.clips, span),
         })),
     }));

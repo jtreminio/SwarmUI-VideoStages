@@ -1,7 +1,6 @@
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import { videoStagesDebugLog } from "./debugLog";
 import {
-    type ChangeImpact,
     type CommandFailure,
     type DocumentCommand,
     reduceDocumentCommand,
@@ -29,8 +28,6 @@ export interface UpdateMeta {
      * structure — the dock keeps its DOM (no rebuild) for these commits.
      */
     hint?: "value-only";
-    /** Domain invalidation categories emitted by atomic command dispatches. */
-    impacts?: readonly ChangeImpact[];
 }
 
 export type StoreSubscriber = (
@@ -53,7 +50,6 @@ export interface TimelineDispatchResult {
     applied: boolean;
     failure?: DispatchFailure;
     revision: number;
-    impacts: readonly ChangeImpact[];
 }
 
 /**
@@ -193,7 +189,6 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         origin: UpdateOrigin,
         notifyDomChange: boolean,
         hint?: UpdateMeta["hint"],
-        impacts?: readonly ChangeImpact[],
     ): string | null => {
         // Ordering is load-bearing: the host change events dispatched by
         // notifyHost() run our own carrier listeners SYNCHRONOUSLY, and those
@@ -227,11 +222,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         if (notifyDomChange) {
             deps.notifyHost();
         }
-        notify({
-            origin,
-            hint,
-            impacts: impacts ? [...impacts] : undefined,
-        });
+        notify({ origin, hint });
         return serialized;
     };
 
@@ -252,7 +243,6 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
                 applied: false,
                 failure: "stale-revision",
                 revision: documentRevision,
-                impacts: [],
             };
         }
 
@@ -265,16 +255,14 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
                 applied: false,
                 failure: reduced.failure,
                 revision: documentRevision,
-                impacts: [],
             };
         }
         // An empty diff batch is still a successful atomic dispatch, but it
         // must not rewrite carriers, advance the revision, or notify anyone.
-        if (reduced.impacts.length === 0) {
+        if (command.type === "batch" && command.commands.length === 0) {
             return {
                 applied: true,
                 revision: documentRevision,
-                impacts: [],
             };
         }
 
@@ -283,20 +271,17 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
             origin,
             notifyDomChange,
             hint,
-            reduced.impacts,
         );
         if (serialized === null) {
             return {
                 applied: false,
                 failure: "invalid-serialized-state",
                 revision: documentRevision,
-                impacts: [],
             };
         }
         return {
             applied: true,
             revision: documentRevision,
-            impacts: [...reduced.impacts],
         };
     };
 

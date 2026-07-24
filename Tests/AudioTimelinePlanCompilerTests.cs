@@ -66,7 +66,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal(1, overlayWindow.TimelineStartSeconds, 8);
         Assert.Equal(0.5, overlayWindow.DurationSeconds, 8);
         Assert.Equal(2, overlayWindow.SourceStartSeconds, 8);
-        Assert.Equal(AudioTimelineSpanOwnership.ClipRelativeWindow, overlayWindow.Ownership);
     }
 
     [Fact]
@@ -98,7 +97,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal(2, window.TimelineStartSeconds, 8);
         Assert.Equal(2, window.DurationSeconds, 8);
         Assert.Equal(3, window.SourceStartSeconds, 8);
-        Assert.Equal(AudioTimelineSpanOwnership.ClipRange, window.Ownership);
     }
 
     [Fact]
@@ -117,7 +115,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal([1.5d, 2d, 4d], windows.Select(window => window.TimelineStartSeconds));
         Assert.Equal([0.5d, 2d, 0.5d], windows.Select(window => window.DurationSeconds));
         Assert.Equal([10d, 10.5d, 12.5d], windows.Select(window => window.SourceStartSeconds));
-        Assert.All(windows, window => Assert.Equal(AudioTimelineSpanOwnership.TimelineWindow, window.Ownership));
     }
 
     [Fact]
@@ -135,8 +132,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal([1, 2], windows.Select(window => window.ClipId));
         Assert.Equal([2d, 4d], windows.Select(window => window.TimelineStartSeconds));
         Assert.Equal([2d, 0.5d], windows.Select(window => window.DurationSeconds));
-        Assert.All(windows, window => Assert.Equal(AudioTimelineSpanOwnership.ClipRangeAndTimelineWindow,
-            window.Ownership));
     }
 
     [Fact]
@@ -167,8 +162,6 @@ public class AudioTimelinePlanCompilerTests
             [Track("score", new AudioTrackSpanSpec(FirstClipId: 0, LastClipId: 2))]);
 
         AudioTimelineClipWindow[] clips = timeline.ClipWindows.ToArray();
-        Assert.Equal([9, 16, 0], clips.Select(clip => clip.OutgoingTrimFrames));
-        Assert.All(clips.Take(2), clip => Assert.True(clip.IsProvisional));
         Assert.Equal(40d / Fps, clips[0].DurationSeconds!.Value, 8);
         Assert.Equal(33d / Fps, clips[1].DurationSeconds!.Value, 8);
 
@@ -229,31 +222,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Contains("audio.timeline.span.invalid_timeline_window", codes);
         Assert.Contains("audio.timeline.clip_timing_unavailable", codes);
         Assert.Contains("audio.timeline.span.unresolved_clip_timing", codes);
-    }
-
-    [Fact]
-    public void Clip_relative_span_is_retained_as_pending_when_clip_timing_is_unknown()
-    {
-        AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(
-            Plan(Clip(8, frames: null)),
-            [Track("pending-overlay", new AudioTrackSpanSpec(
-                FirstClipId: 8,
-                LastClipId: 8,
-                SourceStartSeconds: 0.5,
-                ClipStartOffsetSeconds: 1.25,
-                ClipLengthSeconds: 2))]);
-
-        AudioTimelineTrackPlan track = Track(timeline, "pending-overlay");
-        Assert.Empty(track.Windows);
-        AudioTrackSpanSpec authored = Assert.Single(track.AuthoredSpans);
-        Assert.Equal(8, authored.FirstClipId);
-        Assert.Equal(8, authored.LastClipId);
-        Assert.Equal(1.25, authored.ClipStartOffsetSeconds);
-        Assert.Equal(2, authored.ClipLengthSeconds);
-        PendingAudioTrackSpan pending = Assert.Single(track.PendingSpans);
-        Assert.Equal(0, pending.SpanIndex);
-        Assert.Same(authored, pending.AuthoredSpan);
-        Assert.Equal("audio.timeline.span.unresolved_clip_relative_timing", pending.ReasonCode);
     }
 
     [Fact]

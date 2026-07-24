@@ -209,7 +209,6 @@ describe("createTimelineStore", () => {
             expect(result).toEqual({
                 applied: true,
                 revision: snapshot.revision + 1,
-                impacts: ["value", "capabilities"],
             });
             expect(h.writeQuietCalls).toHaveLength(1);
             expect(h.notifyHostCalls).toHaveLength(1);
@@ -234,7 +233,6 @@ describe("createTimelineStore", () => {
                 applied: false,
                 failure: "invalid-serialized-state",
                 revision: before.revision,
-                impacts: [],
             });
             expect(h.writeQuietCalls).toHaveLength(0);
             expect(h.notifyHostCalls).toHaveLength(0);
@@ -255,7 +253,6 @@ describe("createTimelineStore", () => {
                 applied: false,
                 failure: "missing-target",
                 revision: before.revision,
-                impacts: [],
             });
             expect(h.writeQuietCalls).toHaveLength(0);
             expect(h.notifyHostCalls).toHaveLength(0);
@@ -280,7 +277,6 @@ describe("createTimelineStore", () => {
             expect(result).toEqual({
                 applied: true,
                 revision: before.revision,
-                impacts: [],
             });
             expect(h.writeQuietCalls).toHaveLength(0);
             expect(h.notifyHostCalls).toHaveLength(0);
@@ -307,7 +303,6 @@ describe("createTimelineStore", () => {
                 applied: false,
                 failure: "stale-revision",
                 revision: stale.revision + 1,
-                impacts: [],
             });
             expect(h.writeQuietCalls).toHaveLength(0);
             expect(h.notifyHostCalls).toHaveLength(0);
@@ -338,7 +333,6 @@ describe("createTimelineStore", () => {
                 {
                     origin: "detail-strip",
                     hint: "value-only",
-                    impacts: ["value", "capabilities"],
                 },
             ]);
             expect(h.writeQuietCalls).toHaveLength(1);

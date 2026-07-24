@@ -50,14 +50,6 @@ internal sealed record AudioTrackSpec(
     ImmutableArray<AudioTrackSpanSpec> Spans,
     double Volume = 1);
 
-internal enum AudioTimelineSpanOwnership
-{
-    ClipRange,
-    TimelineWindow,
-    ClipRangeAndTimelineWindow,
-    ClipRelativeWindow,
-}
-
 internal enum AudioTimelineDiagnosticSeverity
 {
     Info,
@@ -75,17 +67,12 @@ internal sealed record AudioTimelineDiagnostic(
     int? ClipId = null);
 
 /// <summary>
-/// One final timeline clip interval. <see cref="OutgoingTrimFrames"/> is shared with the video
-/// merge: crossfade removes its effective overlap, while continue removes its overlap-plus-one
-/// continuity window. A non-cut boundary remains provisional until runtime validates it.
+/// One final timeline clip interval.
 /// </summary>
 internal sealed record AudioTimelineClipWindow(
     int ClipId,
     double? TimelineStartSeconds,
-    double? DurationSeconds,
-    double? AuthoredDurationSeconds,
-    int OutgoingTrimFrames,
-    bool IsProvisional);
+    double? DurationSeconds);
 
 /// <summary>
 /// A track/span projected onto one final clip. Source time advances with the final, trimmed timeline
@@ -97,21 +84,12 @@ internal sealed record AudioTrackClipWindow(
     int ClipId,
     double TimelineStartSeconds,
     double DurationSeconds,
-    double SourceStartSeconds,
-    AudioTimelineSpanOwnership Ownership,
-    bool IsProvisional);
-
-internal sealed record PendingAudioTrackSpan(
-    int SpanIndex,
-    AudioTrackSpanSpec AuthoredSpan,
-    string ReasonCode);
+    double SourceStartSeconds);
 
 internal sealed record AudioTimelineTrackPlan(
     string TrackId,
     AudioTimelineTrackSource Source,
-    ImmutableArray<AudioTrackSpanSpec> AuthoredSpans,
     ImmutableArray<AudioTrackClipWindow> Windows,
-    ImmutableArray<PendingAudioTrackSpan> PendingSpans,
     double Volume = 1);
 
 /// <summary>

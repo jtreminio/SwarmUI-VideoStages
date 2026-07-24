@@ -6,8 +6,6 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal static class LtxFrameCountConnector
 {
-    public static JArray CloneConnection(JArray connection) => PathUtils.Clone(connection);
-
     public static void ApplyToExistingSources(WorkflowGenerator g, JArray framesConnection)
     {
         if (framesConnection is null)
@@ -19,7 +17,7 @@ internal static class LtxFrameCountConnector
         {
             if (videoData["inputs"] is JObject videoInputs)
             {
-                videoInputs["length"] = CloneConnection(framesConnection);
+                videoInputs["length"] = PathUtils.Clone(framesConnection);
             }
         });
         g.RunOnNodesOfClass(LTXVEmptyLatentAudioNode.ClassType, (_, audioData) =>
@@ -43,6 +41,6 @@ internal static class LtxFrameCountConnector
         {
             key = "length";
         }
-        inputs[key] = CloneConnection(framesConnection);
+        inputs[key] = PathUtils.Clone(framesConnection);
     }
 }

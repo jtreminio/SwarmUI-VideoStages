@@ -4,11 +4,10 @@ import {
     type DetailDraftQueue,
 } from "./detailStrip/draftQueue";
 import { createDetailFocusSession } from "./detailStrip/focusSession";
-import { clampDetailSelection } from "./detailStrip/panelRouter";
 import {
-    createPanelSelectionSession,
-    isRenderedSelection,
-} from "./detailStrip/panelSelectionSession";
+    clampDetailSelection,
+    detailBreadcrumb,
+} from "./detailStrip/panelRouter";
 import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
@@ -49,23 +48,30 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     let renderImplementation: (meta?: UpdateMeta) => void = () => {};
     const render = (meta?: UpdateMeta): void => renderImplementation(meta);
 
-    const panelSelection = createPanelSelectionSession();
+    let renderedSelection: TimelineSelection | null = null;
     const focus = createDetailFocusSession({
         getDock: () => dockEl,
         isRendering: () => rendering,
         flushPending: () => draftQueue?.flush(),
     });
     const syncValueDerivedUi = (selection: TimelineSelection | null): void => {
-        if (!selection) {
+        if (!selection || !dockEl || !renderedSelection) {
             return;
         }
-        panelSelection.syncBreadcrumb(dockEl, getClips());
+        const breadcrumb =
+            dockEl.querySelector<HTMLElement>(".vst-detail-crumb");
+        if (breadcrumb) {
+            breadcrumb.textContent = detailBreadcrumb(
+                renderedSelection,
+                getClips(),
+            );
+        }
     };
     draftQueue = createDetailDraftQueue({
         focus,
         getDock: () => dockEl,
         isRendering: () => rendering,
-        getRenderedSelection: panelSelection.getRendered,
+        getRenderedSelection: () => renderedSelection,
         syncValueDerivedUi,
         render,
         setSelectionSilently: (selection) => {
@@ -120,12 +126,11 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         if (!dockEl) {
             return;
         }
-        const renderedSelection = panelSelection.getRendered();
         if (
             meta?.origin === "detail-strip" &&
             meta.hint === "value-only" &&
             renderedSelection &&
-            isRenderedSelection(panelSelection, getSelection())
+            isSameSelection(getSelection(), renderedSelection)
         ) {
             draftQueue.markCurrentSource();
             syncValueDerivedUi(renderedSelection);
@@ -157,17 +162,14 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
                 selection,
                 revealSelection,
             });
-            panelSelection.setRendered(selection);
+            renderedSelection = selection;
         } finally {
             rendering = false;
         }
     };
 
-    const onSelectionChanged = (selection: TimelineSelection): void => {
+    const onSelectionChanged = (): void => {
         if (suppressSelectionRender) {
-            return;
-        }
-        if (panelSelection.targetedReselect(selection, dockEl, getClips())) {
             return;
         }
         focus.beginSelectionSession();
@@ -230,7 +232,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             dockEl.innerHTML = "";
             dockEl = null;
         }
-        panelSelection.clear();
+        renderedSelection = null;
     };
 
     const attach = (body: HTMLElement, dock: HTMLElement): void => {

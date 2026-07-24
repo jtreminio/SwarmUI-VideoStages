@@ -17,11 +17,6 @@ internal sealed class StageGuideReferenceState(
     private readonly LtxStageReferenceCapture _referenceCapture = new(g);
     private StageRefStore.StageRef _previousStageRef;
 
-    public void Reset()
-    {
-        BeginClip();
-    }
-
     /// <summary>
     /// Starts a new clip-local guide namespace. Authored Stage&lt;N&gt; selectors use the stage
     /// number shown within their clip, so outputs from an earlier clip must never satisfy them.

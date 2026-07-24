@@ -90,13 +90,9 @@ const clip = (id: string): CanonicalClip => ({
 
 const span = (id: string): CanonicalAudioTrackSpan => ({
     id,
-    firstClipId: "clip-a",
-    lastClipId: "clip-a",
     timelineStartSeconds: null,
     timelineLengthSeconds: null,
     sourceStartSeconds: 0,
-    clipStartOffsetSeconds: null,
-    clipLengthSeconds: null,
 });
 
 const track = (id: string): CanonicalAudioTrack => ({
@@ -187,7 +183,7 @@ describe("diffDocuments", () => {
         const result = reduceDocumentCommand(before, command);
 
         expect(command).toEqual({ type: "batch", commands: [] });
-        expect(result).toMatchObject({ applied: true, impacts: [] });
+        expect(result).toMatchObject({ applied: true });
         expect(result.document).toEqual(before);
         expect(result.document).not.toBe(before);
     });
@@ -546,7 +542,6 @@ describe("diffDocuments", () => {
             name: "audio span",
             type: "audio-span.patch",
             mutate: (after: CanonicalVideoStagesConfig) => {
-                after.audioTracks[0].spans[0].lastClipId = "clip-c";
                 after.audioTracks[0].spans[0].timelineStartSeconds = 1;
                 after.audioTracks[0].spans[0].timelineLengthSeconds = 3;
             },

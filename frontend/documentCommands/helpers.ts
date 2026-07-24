@@ -9,41 +9,7 @@ import type {
     CanonicalStage,
     CanonicalVideoStagesConfig,
 } from "../types";
-import type {
-    ChangeImpact,
-    CommandFailure,
-    DocumentCommandResult,
-} from "./types";
-
-export const VALUE: readonly ChangeImpact[] = ["value"];
-export const VALUE_CAPABILITIES: readonly ChangeImpact[] = [
-    "value",
-    "capabilities",
-];
-export const STRUCTURE: readonly ChangeImpact[] = ["structure", "capabilities"];
-export const ARCHITECTURE_CONVERSION: readonly ChangeImpact[] = [
-    "value",
-    "structure",
-    "capabilities",
-];
-export const ARCHITECTURE_CONVERSION_WITH_SELECTION: readonly ChangeImpact[] = [
-    "value",
-    "structure",
-    "selection",
-    "capabilities",
-];
-export const REMOVE_STRUCTURE: readonly ChangeImpact[] = [
-    "structure",
-    "selection",
-    "capabilities",
-];
-export const MOVE_STRUCTURE: readonly ChangeImpact[] = ["structure"];
-const IMPACT_ORDER: readonly ChangeImpact[] = [
-    "value",
-    "structure",
-    "selection",
-    "capabilities",
-];
+import type { CommandFailure, DocumentCommandResult } from "./types";
 
 export const clone = <T>(value: T): T => structuredClone(value);
 
@@ -166,8 +132,7 @@ export const patchById = <T extends { id: string }>(
 
 export const success = (
     document: CanonicalVideoStagesConfig,
-    impacts: readonly ChangeImpact[],
-): DocumentCommandResult => ({ document, applied: true, impacts });
+): DocumentCommandResult => ({ document, applied: true });
 
 export const failure = (
     document: CanonicalVideoStagesConfig,
@@ -175,16 +140,8 @@ export const failure = (
 ): DocumentCommandResult => ({
     document,
     applied: false,
-    impacts: [],
     failure: reason,
 });
-
-export const combineImpacts = (
-    impacts: readonly (readonly ChangeImpact[])[],
-): readonly ChangeImpact[] => {
-    const included = new Set(impacts.flat());
-    return IMPACT_ORDER.filter((impact) => included.has(impact));
-};
 
 export const hasOwn = (value: object, key: PropertyKey): boolean =>
     Object.hasOwn(value, key);

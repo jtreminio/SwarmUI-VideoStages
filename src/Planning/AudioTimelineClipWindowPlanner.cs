@@ -39,7 +39,7 @@ internal static class AudioTimelineClipWindowPlanner
             diagnostics.Add(new(AudioTimelineDiagnosticSeverity.Error,
                 "audio.timeline.invalid_fps", "Timeline audio windows require a positive frames-per-second value."));
             return [.. videoPlan.Clips.Select(clip => new AudioTimelineClipWindow(
-                clip.ClipId, null, null, null, 0, IsProvisional: true))];
+                clip.ClipId, null, null))];
         }
 
         Dictionary<int, BoundaryPlan> outgoing = [];
@@ -62,12 +62,10 @@ internal static class AudioTimelineClipWindowPlanner
         foreach (ClipPlan clip in videoPlan.Clips)
         {
             int trimFrames = 0;
-            bool provisional = false;
             if (outgoing.TryGetValue(clip.ClipId, out BoundaryPlan boundary)
                 && boundary.Effective != BoundaryExecutionMode.Cut)
             {
                 trimFrames = BoundaryOverlapPlanner.EffectiveOverlapFrames(boundary);
-                provisional = boundary.RequiresRuntimeMergeValidation;
             }
 
             if (!canResolveFollowing || clip.Frames is not int frames || frames <= 0)
@@ -76,12 +74,11 @@ internal static class AudioTimelineClipWindowPlanner
                     "audio.timeline.clip_timing_unavailable",
                     $"Clip {clip.ClipId} has no usable frame count, so its timeline audio windows cannot be resolved.",
                     ClipId: clip.ClipId));
-                windows.Add(new(clip.ClipId, null, null, null, trimFrames, IsProvisional: true));
+                windows.Add(new(clip.ClipId, null, null));
                 canResolveFollowing = false;
                 continue;
             }
 
-            double authoredDuration = frames / (double)videoPlan.FramesPerSecond;
             int keptFrames = Math.Max(0, frames - trimFrames);
             if (trimFrames >= frames && trimFrames > 0)
             {
@@ -91,7 +88,7 @@ internal static class AudioTimelineClipWindowPlanner
                     ClipId: clip.ClipId));
             }
             double duration = keptFrames / (double)videoPlan.FramesPerSecond;
-            windows.Add(new(clip.ClipId, nextStart, duration, authoredDuration, trimFrames, provisional));
+            windows.Add(new(clip.ClipId, nextStart, duration));
             nextStart += duration;
         }
         return windows.ToImmutable();

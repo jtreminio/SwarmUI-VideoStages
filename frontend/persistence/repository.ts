@@ -112,7 +112,6 @@ const saveRequestedState = (
         willNotifyDom,
         commandCount: command.commands.length,
         revision: result.revision,
-        impacts: result.impacts,
     });
 };
 
@@ -138,7 +137,6 @@ export const dispatchDocumentCommand = (
         applied: result.applied,
         failure: result.failure,
         revision: result.revision,
-        impacts: result.impacts,
         willNotifyDom,
     });
     return result;

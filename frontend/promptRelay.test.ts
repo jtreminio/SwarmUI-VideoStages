@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
 import { normalizePromptWindows } from "./normalization";
 import { readGlobalPrompt } from "./swarmInputs";
-import { computeRegionLayout, renderPromptTrackRow } from "./timelineView";
+import { computeRegionLayout } from "./timelineView/layout";
+import { renderPromptTrackRow } from "./timelineView/trackRows";
 import type { Clip } from "./types";
 
 describe("normalizePromptWindows", () => {

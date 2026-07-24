@@ -4,7 +4,6 @@ import {
     testArchitectureCatalog,
 } from "./__test_helpers__/architectureFixtures";
 import {
-    type ChangeImpact,
     type DocumentCommand,
     reduceDocumentCommand,
 } from "./documentCommands";
@@ -87,13 +86,9 @@ const clip = (id: string): CanonicalClip => ({
 
 const span = (id: string): CanonicalAudioTrackSpan => ({
     id,
-    firstClipId: null,
-    lastClipId: null,
     timelineStartSeconds: 0,
     timelineLengthSeconds: 1,
     sourceStartSeconds: 0,
-    clipStartOffsetSeconds: null,
-    clipLengthSeconds: null,
 });
 
 const track = (id: string): CanonicalAudioTrack => ({
@@ -168,15 +163,13 @@ const apply = (
 };
 
 describe("reduceDocumentCommand", () => {
-    it("patches root settings on a clone and reports typed impacts", () => {
+    it("patches root settings on a clone", () => {
         const source = document();
         const result = reduceDocumentCommand(source, {
             type: "root.patch",
             patch: { width: 768, dimsExplicit: false },
         });
 
-        const impacts: readonly ChangeImpact[] = ["value", "capabilities"];
-        expect(result.impacts).toEqual(impacts);
         expect(result.document.width).toBe(768);
         expect(result.document.dimsExplicit).toBe(false);
         expect(source.width).toBe(1024);
@@ -464,7 +457,6 @@ describe("reduceDocumentCommand", () => {
             const result = reduceDocumentCommand(source, command);
             expect(result).toMatchObject({
                 applied: false,
-                impacts: [],
                 failure: "missing-target",
             });
             expect(result.document).toEqual(source);
@@ -551,12 +543,6 @@ describe("reduceDocumentCommand", () => {
         );
 
         expect(result.applied).toBe(true);
-        expect(result.impacts).toEqual([
-            "value",
-            "structure",
-            "selection",
-            "capabilities",
-        ]);
         expect(result.document.fps).toBe(30);
         expect(result.document.clips[0].stages[0]).toMatchObject({
             id: "stage-b",
@@ -588,7 +574,6 @@ describe("reduceDocumentCommand", () => {
 
         expect(result).toMatchObject({
             applied: false,
-            impacts: [],
             failure: "missing-target",
         });
         expect(result.document).toEqual(source);
@@ -668,12 +653,6 @@ describe("reduceDocumentCommand", () => {
         );
 
         expect(result.applied).toBe(true);
-        expect(result.impacts).toEqual([
-            "value",
-            "structure",
-            "selection",
-            "capabilities",
-        ]);
         const converted = result.document.clips[1];
         expect(converted).toMatchObject({
             id: "clip-b",
@@ -797,12 +776,6 @@ describe("reduceDocumentCommand", () => {
         );
 
         expect(result.applied).toBe(true);
-        expect(result.impacts).toEqual([
-            "value",
-            "structure",
-            "selection",
-            "capabilities",
-        ]);
         expect(result.document.clips[1].stages).toHaveLength(1);
         expect(result.document.clips[1].icLoras).toEqual([
             expect.objectContaining({

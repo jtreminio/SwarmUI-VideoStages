@@ -237,21 +237,14 @@ export interface AudioTrackSource {
 }
 
 /**
- * One addressable interval of a root audio track. Clip endpoints are inclusive
- * stable clip IDs; a missing first or last endpoint means timeline start or
- * timeline end. With both endpoints missing, a complete timeline start/length
- * owns the span. A timeline window and clip range may coexist (intersection);
- * a clip-relative window requires the same concrete clip at both endpoints.
+ * One addressable interval of a root audio track, expressed as a timeline
+ * seconds window plus the matching offset into the source audio.
  */
 export interface AudioTrackSpan {
     id?: string;
-    firstClipId: string | null;
-    lastClipId: string | null;
     timelineStartSeconds: number | null;
     timelineLengthSeconds: number | null;
     sourceStartSeconds: number;
-    clipStartOffsetSeconds: number | null;
-    clipLengthSeconds: number | null;
 }
 
 /**

@@ -45,8 +45,8 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        bool ok = new ControlNetCapture(generator)
-            .TryGetCapturedControlNetAudio(0, out WGNodeData audio);
+        bool ok = new ControlNetAudioCapture(generator)
+            .TryGetCapturedAudio(0, out WGNodeData audio);
 
         Assert.True(ok);
         Assert.NotNull(audio);
@@ -60,8 +60,8 @@ public class LtxControlNetAudioSourceTests
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
 
-        bool ok = new ControlNetCapture(generator)
-            .TryGetCapturedControlNetAudio(1, out WGNodeData audio);
+        bool ok = new ControlNetAudioCapture(generator)
+            .TryGetCapturedAudio(1, out WGNodeData audio);
 
         Assert.False(ok);
         Assert.Null(audio);
@@ -75,8 +75,8 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        bool ok = new ControlNetCapture(generator)
-            .TryGetCapturedControlNetAudio(0, out WGNodeData audio);
+        bool ok = new ControlNetAudioCapture(generator)
+            .TryGetCapturedAudio(0, out WGNodeData audio);
 
         Assert.False(ok);
         Assert.Null(audio);
@@ -94,14 +94,14 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.2"] =
             new JArray("701", 1).ToString(Formatting.None);
 
-        ControlNetCapture applicator = new(generator);
+        ControlNetAudioCapture applicator = new(generator);
 
-        Assert.True(applicator.TryGetCapturedControlNetAudio(0, out WGNodeData a0));
+        Assert.True(applicator.TryGetCapturedAudio(0, out WGNodeData a0));
         Assert.True(JToken.DeepEquals(a0.Path, new JArray("301", 1)));
 
-        Assert.False(applicator.TryGetCapturedControlNetAudio(1, out WGNodeData _));
+        Assert.False(applicator.TryGetCapturedAudio(1, out WGNodeData _));
 
-        Assert.True(applicator.TryGetCapturedControlNetAudio(2, out WGNodeData a2));
+        Assert.True(applicator.TryGetCapturedAudio(2, out WGNodeData a2));
         Assert.True(JToken.DeepEquals(a2.Path, new JArray("701", 1)));
     }
 
@@ -114,7 +114,7 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        bool ok = new ControlNetCapture(generator).TryGetCapturedControlNetAudio(0, out WGNodeData audio);
+        bool ok = new ControlNetAudioCapture(generator).TryGetCapturedAudio(0, out WGNodeData audio);
 
         Assert.True(ok);
         Assert.True(JToken.DeepEquals(audio.Path, new JArray("301", 1)));

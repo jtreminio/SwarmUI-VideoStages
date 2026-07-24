@@ -598,7 +598,6 @@ describe("persistence", () => {
             expect(result).toEqual({
                 applied: true,
                 revision: snapshot.revision + 1,
-                impacts: ["value", "capabilities"],
             });
             expect(getState().clips[0]).toMatchObject({
                 id: clipId,

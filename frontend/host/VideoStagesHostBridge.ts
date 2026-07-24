@@ -35,7 +35,7 @@ export interface VideoStagesHostBridge {
         description: string,
         examples: PromptPrefixExamples,
         isMulti: boolean,
-    ): boolean;
+    ): void;
     addPostParamBuildStep(step: () => void): boolean;
     addParamRefreshHook(hook: () => unknown): (() => void) | null;
 
@@ -46,7 +46,7 @@ export interface VideoStagesHostBridge {
     registerRefineVideoButton(
         onSelect: (src: string) => void,
         description: string,
-    ): boolean;
+    ): void;
     getCurrentMediaMetadata(): string | null;
     interpretMediaMetadata(metadata: string): string | null;
     showError(message: string): void;
